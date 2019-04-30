@@ -4,12 +4,12 @@ from __future__ import print_function
 import torch.utils.data
 from torch.utils.data import DataLoader
 
-def loader_factory(name, batch_size,
-                   shuffle=True,
-                   num_workers=1,
-                   collate_fn=None,
-                   sampler=None,
-                   **args):
+def loader_handmade(name, batch_size,
+                    shuffle=True,
+                    num_workers=1,
+                    collate_fn=None,
+                    sampler=None,
+                    **args):
     import iotools.datasets
     import iotools.collates
     import iotools.samplers
@@ -30,7 +30,12 @@ def loader_factory(name, batch_size,
                             num_workers = num_workers)
     return loader,ds.data_keys()
 
-def loader_from_config(cfg):
+def dataset_factory(cfg):
+    import iotools.datasets
+    params = cfg['iotool']['dataset']
+    return getattr(iotools.datasets, params['name']).create(params)
+    
+def loader_factory(cfg):
 
     params = cfg['iotool']
     batch_size   = int(params['batch_size'])
@@ -38,11 +43,9 @@ def loader_from_config(cfg):
     num_workers  = 1    if not 'num_workers' in params else int (params['num_workers'])
     collate_fn   = None if not 'collate_fn' in params  else str (params['collate_fn' ])
 
-    import iotools.datasets
     import iotools.collates
     import iotools.samplers
-    ds_cfg = cfg['iotool']['dataset']
-    ds = getattr(iotools.datasets,ds_cfg['name']).create(ds_cfg)
+    ds = dataset_factory(cfg)
     sampler = None
     if 'sampler' in cfg['iotool']:
         sam_cfg = cfg['iotool']['sampler']

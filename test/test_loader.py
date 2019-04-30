@@ -6,7 +6,7 @@ sys.path.insert(0, TOP_DIR)
 def main():
     # import
     import numpy as np
-    from iotools.loader_factory import loader_from_config
+    from iotools.factories import loader_factory
     # find config file
     cfg_file = sys.argv[1]
     if not os.path.isfile(cfg_file): cfg_file = os.path.join(TOP_DIR, 'config', sys.argv[1])
@@ -30,7 +30,7 @@ def main():
     
     # configure
     cfg = yaml.load(open(cfg_file,'r'),Loader=yaml.Loader)
-    loader,data_keys = loader_from_config(cfg)
+    loader,data_keys = loader_factory(cfg)
     if not quiet: print(len(loader),'batches loaded')
     if not quiet: print('keys:',data_keys)
     
