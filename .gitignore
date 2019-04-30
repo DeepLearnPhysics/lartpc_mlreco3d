@@ -6,7 +6,7 @@ weights
 *.root
 *.hdf5
 *.h5
-
+*.ipynb
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

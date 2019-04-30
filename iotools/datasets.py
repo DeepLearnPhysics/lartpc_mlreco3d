@@ -7,17 +7,17 @@ import numpy as np
 from torch.utils.data import Dataset
 import iotools.parsers
 
-def _list_files(data_dirs, flavour=None, limit_num_files=0):
+def _list_files(data_dirs, data_key=None, limit_num_files=0):
     """
     Args: data_dirs ... a list of data directories to find files (up to 10 files read from each dir)
-          flavour ..... a string that is required to be present in the filename
+          data_key ..... a string that is required to be present in the filename
           limit_num_files ... an integer limiting number of files to be taken per data directory 
     Return: list of files
     """
     files = []
     # Load files from each directory in data_dirs list
     for d in data_dirs:
-        file_list = [ os.path.join(d,f) for f in os.listdir(d) if flavour is None or flavour in f ]
+        file_list = [ os.path.join(d,f) for f in os.listdir(d) if data_key is None or data_key in f ]
         if limit_num_files: file_list = file_list[0:limit_num_files]
         files += file_list
     return files
@@ -30,15 +30,21 @@ class LArCVDataset(Dataset):
            can be configured with arbitrary number of parser functions where each function can take arbitrary number of
            LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
     """
-    def __init__(self, data_schema, data_dirs, flavour=None, limit_num_files=0):
+    def __init__(self, data_schema, data_dirs, data_key=None, limit_num_files=0):
         """
         Args: data_dirs ..... a list of data directories to find files (up to 10 files read from each dir)
               data_schema ... a dictionary of string <=> list of strings. The key is a unique name of a data chunk in a batch.
                               The list must be length >= 2: the first string names the parser function, and the rest of strings
                               identifies data keys in the input files.
-              flavour ..... a string that is required to be present in the filename
+              data_key ..... a string that is required to be present in the filename
               limit_num_files ... an integer limiting number of files to be taken per data directory 
         """
+
+        # Create file list
+        self._files = _list_files(data_dirs,data_key,limit_num_files)
+        if len(self._files)>10: print(len(self._files),'files loaded')
+        else:
+            for f in self._files: print('Loading file:',f)
         
         # Instantiate parsers
         self._data_keys = []
@@ -57,11 +63,6 @@ class LArCVDataset(Dataset):
                 self._trees[data_key] = None
         self._data_keys.append('index')
         
-        # Create file list
-        self._files = _list_files(data_dirs,flavour,limit_num_files)
-        if len(self._files)>10: print(len(self._files),'files loaded')
-        else:
-            for f in self._files: print('Loading file:',f)
         # Prepare TTrees and load files
         from ROOT import TChain
         self._entries = None
@@ -81,9 +82,9 @@ class LArCVDataset(Dataset):
     def create(cfg):
         data_dirs   = cfg['data_dirs']
         data_schema = cfg['schema']
-        flavour = None if not 'flavour' in cfg         else str(cfg['flavour'])
+        data_key = None if not 'data_key' in cfg         else str(cfg['data_key'])
         lns     = 0    if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
-        return LArCVDataset(data_dirs=data_dirs, data_schema=data_schema, flavour=flavour, limit_num_files=lns)
+        return LArCVDataset(data_dirs=data_dirs, data_schema=data_schema, data_key=data_key, limit_num_files=lns)
 
     def data_keys(self):
         return self._data_keys
