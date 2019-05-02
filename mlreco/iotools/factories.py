@@ -10,10 +10,10 @@ def loader_handmade(name, batch_size,
                     collate_fn=None,
                     sampler=None,
                     **args):
-    import iotools.datasets
-    import iotools.collates
-    import iotools.samplers
-    ds = getattr(iotools.datasets,name)(**args)
+    import mlreco.iotools.collates
+    import mlreco.iotools.samplers
+    import mlreco.iotools.datasets
+    ds = getattr(mlreco.iotools.datasets,name)(**args)
     if collate_fn is not None:
         collate_fn = getattr(iotools.collates,collate_fn)
         loader = DataLoader(ds,
@@ -31,27 +31,25 @@ def loader_handmade(name, batch_size,
     return loader,ds.data_keys()
 
 def dataset_factory(cfg):
-    import iotools.datasets
+    import mlreco.iotools.datasets
     params = cfg['iotool']['dataset']
-    return getattr(iotools.datasets, params['name']).create(params)
+    return getattr(mlreco.iotools.datasets, params['name']).create(params)
     
 def loader_factory(cfg):
-
     params = cfg['iotool']
     batch_size   = int(params['batch_size'])
     shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
     num_workers  = 1    if not 'num_workers' in params else int (params['num_workers'])
     collate_fn   = None if not 'collate_fn' in params  else str (params['collate_fn' ])
-
-    import iotools.collates
-    import iotools.samplers
+    import mlreco.iotools.collates
+    import mlreco.iotools.samplers
     ds = dataset_factory(cfg)
     sampler = None
     if 'sampler' in cfg['iotool']:
         sam_cfg = cfg['iotool']['sampler']
-        sampler = getattr(iotools.samplers,sam_cfg['name']).create(ds,sam_cfg)
+        sampler = getattr(mlreco.iotools.samplers,sam_cfg['name']).create(ds,sam_cfg)
     if collate_fn is not None:
-        collate_fn = getattr(iotools.collates,collate_fn)
+        collate_fn = getattr(mlreco.iotools.collates,collate_fn)
         loader = DataLoader(ds,
                             batch_size  = batch_size,
                             shuffle     = shuffle,

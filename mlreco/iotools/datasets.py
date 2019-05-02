@@ -5,7 +5,7 @@ import sys, os
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-import iotools.parsers
+import mlreco.iotools.parsers
 
 def _list_files(data_dirs, data_key=None, limit_num_files=0):
     """
@@ -54,10 +54,10 @@ class LArCVDataset(Dataset):
             if len(value) < 2:
                 print('iotools.datasets.schema contains a key %s with list length < 2!' % key)
                 raise ValueError
-            if not hasattr(iotools.parsers,value[0]):
+            if not hasattr(mlreco.iotools.parsers,value[0]):
                 print('The specified parser name %s does not exist!' % value[0])
             self._data_keys.append(key)
-            self._data_parsers.append((getattr(iotools.parsers,value[0]),value[1:]))
+            self._data_parsers.append((getattr(mlreco.iotools.parsers,value[0]),value[1:]))
             for data_key in value[1:]:
                 if data_key in self._trees: continue
                 self._trees[data_key] = None

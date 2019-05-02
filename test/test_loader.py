@@ -1,3 +1,6 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import division
 import os, sys, yaml, time
 TOP_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(TOP_DIR)
@@ -6,7 +9,7 @@ sys.path.insert(0, TOP_DIR)
 def main():
     # import
     import numpy as np
-    from iotools.factories import loader_factory
+    from mlreco.iotools.factories import loader_factory
     # find config file
     cfg_file = sys.argv[1]
     if not os.path.isfile(cfg_file): cfg_file = os.path.join(TOP_DIR, 'config', sys.argv[1])
@@ -19,7 +22,7 @@ def main():
     # check if csv should be made
     csv   = 'csv' in sys.argv
     if csv:
-        from utils.utils import CSVData
+        from mlreco.utils.utils import CSVData
         csv=CSVData('csv.txt')
     # check if batch is specified (1st integer value in sys.argv)
     MAX_BATCH_ID=20
