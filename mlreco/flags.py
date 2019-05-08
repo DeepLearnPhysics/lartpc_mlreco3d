@@ -16,13 +16,11 @@ class Flags:
     MODEL_NAME = ""
     TRAIN      = True
     DEBUG      = False
-    FULL = False
 
     # Flags for Sparse UResNet model
     URESNET_NUM_STRIDES = 3
     URESNET_FILTERS = 16
     SPATIAL_SIZE = 192
-    BN_MOMENTUM = 0.9
 
     # flags for train/inference
     COMPUTE_WEIGHT = False
@@ -30,27 +28,18 @@ class Flags:
     LEARNING_RATE  = 0.001
     GPUS           = [0]
     WEIGHT_PREFIX  = ''
-    NUM_POINT      = 2048
-    NUM_CHANNEL    = -1
     ITERATION      = 10000
     REPORT_STEP    = 100
     CHECKPOINT_STEP  = 500
 
     # flags for IO
-    IO_TYPE    = ''
-    INPUT_FILE = ''
     OUTPUT_FILE = ''
     MINIBATCH_SIZE = -1
     BATCH_SIZE = -1
     LOG_DIR    = ''
     MODEL_PATH = ''
     DATA_KEYS  = ''
-    SHUFFLE    = 1
-    LIMIT_NUM_SAMPLE = -1
-    NUM_THREADS = 1
     DATA_DIM = 3
-    PARTICLE = False
-    IO_CFG = ''
 
     def __init__(self, cfg):
         self._cfg = cfg
@@ -80,7 +69,6 @@ class Flags:
         self.MODEL_PATH = cfg['training']['model_path']
         self.DATA_KEYS  = cfg['iotool']['dataset']['schema'].keys()
         self.DATA_DIM = cfg['training']['data_dim']
-        self.PARTICLE = cfg['training']['particle']
         self.INPUT_KEYS = cfg['model']['network_input']
         self.LOSS_KEYS = cfg['model']['loss_input']
         if 'minibatch_size' in cfg['training']:
