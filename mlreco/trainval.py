@@ -10,10 +10,22 @@ import numpy as np
 
 
 class trainval(object):
-    def __init__(self, flags):
-        self._flags = flags
+    def __init__(self, cfg):
         self.tspent = {}
         self.tspent_sum = {}
+        self._model_config = cfg['model']
+        model_config = cfg['model']
+        training_config = cfg['training']
+        self._weight_prefix = training_config['weight_prefix']
+        self._batch_size = cfg['iotool']['batch_size']
+        self._minibatch_size = cfg['training']['minibatch_size']
+        self._gpus = cfg['training']['gpus']
+        self._input_keys = model_config['network_input']
+        self._loss_keys = model_config['loss_input']
+        self._train = training_config['train']
+        self._model_name = model_config['name']
+        self._learning_rate = training_config['learning_rate']
+        self._model_path = training_config['model_path']
 
     def backward(self):
         total_loss = 0.0
@@ -29,7 +41,7 @@ class trainval(object):
 
     def save_state(self, iteration):
         tstart = time.time()
-        filename = '%s-%d.ckpt' % (self._flags.WEIGHT_PREFIX, iteration)
+        filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
         torch.save({
             'global_step': iteration,
             'state_dict': self._net.state_dict(),
@@ -37,24 +49,24 @@ class trainval(object):
         }, filename)
         self.tspent['save'] = time.time() - tstart
 
-    def train_step(self, data_blob, epoch=None, batch_size=1):
+    def train_step(self, data_blob, epoch=None):
         tstart = time.time()
         self._loss = []  # Initialize loss accumulator
         res_combined = self.forward(data_blob,
-                                    epoch=epoch, batch_size=batch_size)
+                                    epoch=epoch)
         # Run backward once for all the previous forward
         self.backward()
         self.tspent['train'] = time.time() - tstart
         self.tspent_sum['train'] += self.tspent['train']
         return res_combined
 
-    def forward(self, data_blob, epoch=None, batch_size=1):
+    def forward(self, data_blob, epoch=None):
         """
         Run forward for
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
         """
         res_combined = {}
-        for idx in range(int(self._flags.BATCH_SIZE / (self._flags.MINIBATCH_SIZE * len(self._flags.GPUS)))):
+        for idx in range(int(self._batch_size / (self._minibatch_size * len(self._gpus)))):
             blob = {}
             for key in data_blob.keys():
                 blob[key] = data_blob[key][idx]
@@ -67,7 +79,7 @@ class trainval(object):
         # Average loss and acc over all the events in this batch
         for key in res_combined:
             # if key not in ['segmentation', 'softmax']:
-            res_combined[key] = np.array(res_combined[key]).sum() / batch_size
+            res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
         return res_combined
 
     def _forward(self, data_blob, epoch=None):
@@ -79,15 +91,15 @@ class trainval(object):
         For dense uresnet:
         data[0]: shape=(minibatch size, channel, spatial size, spatial size, spatial size)
         """
-        input_keys = self._flags.INPUT_KEYS
-        loss_keys = self._flags.LOSS_KEYS
-        with torch.set_grad_enabled(self._flags.TRAIN):
+        input_keys = self._input_keys
+        loss_keys = self._loss_keys
+        with torch.set_grad_enabled(self._train):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
             for key in data_blob:
                 data_blob[key] = [torch.as_tensor(d).cuda() for d in data_blob[key]]
             data = []
-            for i in range(len(self._flags.GPUS)):
+            for i in range(len(self._gpus)):
                 data.append([data_blob[key][i] for key in input_keys])
             tstart = time.time()
             segmentation = self._net(data)
@@ -95,7 +107,7 @@ class trainval(object):
             # If label is given, compute the loss
             if loss_keys:
                 loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
-                if self._flags.TRAIN:
+                if self._train:
                     self._loss.append(loss_acc['loss_seg'])
             self.tspent['forward'] = time.time() - tstart
             self.tspent_sum['forward'] += self.tspent['forward']
@@ -110,40 +122,40 @@ class trainval(object):
     def initialize(self):
         # To use DataParallel all the inputs must be on devices[0] first
         model = None
-        if self._flags.MODEL_NAME in models:
-            model, criterion = models[self._flags.MODEL_NAME]
-            self._criterion = criterion(self._flags).cuda()
+        if self._model_name in models:
+            model, criterion = models[self._model_name]
+            self._criterion = criterion(self._model_config).cuda()
         else:
             raise Exception("Unknown model name provided")
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
 
-        self._net = DataParallel(model(self._flags),
-                                      device_ids=self._flags.GPUS,
+        self._net = DataParallel(model(self._model_config),
+                                      device_ids=self._gpus,
                                       dense=False) # FIXME
 
-        if self._flags.TRAIN:
+        if self._train:
             self._net.train().cuda()
         else:
             self._net.eval().cuda()
 
-        self._optimizer = torch.optim.Adam(self._net.parameters(), lr=self._flags.LEARNING_RATE)
-        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._flags.MODEL_NAME else 0)
+        self._optimizer = torch.optim.Adam(self._net.parameters(), lr=self._learning_rate)
+        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
         iteration = 0
-        if self._flags.MODEL_PATH:
-            if not os.path.isfile(self._flags.MODEL_PATH):
-                raise ValueError('File not found: %s\n' % self._flags.MODEL_PATH)
-            print('Restoring weights from %s...' % self._flags.MODEL_PATH)
-            with open(self._flags.MODEL_PATH, 'rb') as f:
+        if self._model_path:
+            if not os.path.isfile(self._model_path):
+                raise ValueError('File not found: %s\n' % self._model_path)
+            print('Restoring weights from %s...' % self._model_path)
+            with open(self._model_path, 'rb') as f:
                 checkpoint = torch.load(f)
                 self._net.load_state_dict(checkpoint['state_dict'], strict=False)
-                if self._flags.TRAIN:
+                if self._train:
                     # This overwrites the learning rate, so reset the learning rate
                     self._optimizer.load_state_dict(checkpoint['optimizer'])
                     for g in self._optimizer.param_groups:
-                        g['lr'] = self._flags.LEARNING_RATE
+                        g['lr'] = self._learning_rate
                 iteration = checkpoint['global_step'] + 1
             print('Done.')
 
