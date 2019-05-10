@@ -210,7 +210,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, segmentation, data, label, weight):
+    def forward(self, segmentation, data, label, weight=None):
         """
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has only 1 element because UResNet returns only 1 element.

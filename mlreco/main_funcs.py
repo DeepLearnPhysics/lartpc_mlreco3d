@@ -162,7 +162,6 @@ def get_data_minibatched(handlers, flags):
 
 
 def train_loop(flags, handlers):
-    data_key, label_key, _ = flags.DATA_KEYS
     tsum, tsum_io = 0., 0.
     while handlers.iteration < flags.ITERATION:
         epoch = handlers.iteration / float(len(handlers.data_io))
