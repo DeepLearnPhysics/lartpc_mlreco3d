@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 from larcv import larcv
+from mlreco.utils.ppn import get_ppn_info
 
 
 def parse_sparse3d_scn(data):
@@ -54,16 +55,18 @@ def parse_tensor3d(data):
 
 def parse_particles(data):
     """
-    A function to retrieve particles gt points tensor from larcv::EventParticle object
+    A function to retrieve particles ground truth points tensor
     Args:
-        length 1 array of larcv::EventParticle
+        length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
     Return:
-        a numpy array with the shape (N,4) where 4=3+1 represents (x,y,z) coordinate and stored pixel value.
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N, 1) where 1 represents class of
+        the ground truth point (track vs shower).
     """
-    from larcv import larcv
-    particles_v = data[0].as_vector()
-    # num_point = event_tensor3d.as_vector().size()
-    # np_data   = np.zeros(shape=(num_point, 4), dtype=np.float32)
-    # larcv.fill_3d_pcloud(event_tensor3d, np_data)
-    part_info = get_ppn_info(particles_v, larcv.Voxel3DMeta(data[0].meta()))
-    return np_data
+    particles_v = data[1].as_vector()
+    part_info = get_ppn_info(particles_v, data[0].meta())
+    if part_info.shape[0] > 0:
+        return part_info[:, :-1], part_info[:, -1][:, None]
+    else:
+        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)

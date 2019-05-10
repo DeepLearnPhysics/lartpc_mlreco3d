@@ -6,15 +6,15 @@ from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLab
 
 
 class PPNUResNet(torch.nn.Module):
-    def __init__(self, flags):
+    def __init__(self, model_config):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
-        self._flags = flags
-        dimension = flags.DATA_DIM
+        self._model_config = model_config
+        dimension = model_config['data_dim']
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = flags.URESNET_FILTERS  # Unet number of features
-        nPlanes = [i*m for i in range(1, flags.URESNET_NUM_STRIDES+1)]  # UNet number of features per level
+        m = model_config['filters']  # Unet number of features
+        nPlanes = [i*m for i in range(1, model_config['num_strides']+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
         nInputFeatures = 1
 
@@ -33,7 +33,7 @@ class PPNUResNet(torch.nn.Module):
              ).add(scn.AddTable())
 
         self.input = scn.Sequential().add(
-           scn.InputLayer(dimension, flags.SPATIAL_SIZE, mode=3)).add(
+           scn.InputLayer(dimension, model_config['spatial_size'], mode=3)).add(
            scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
         # Encoding
@@ -42,13 +42,13 @@ class PPNUResNet(torch.nn.Module):
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
-        for i in range(self._flags.URESNET_NUM_STRIDES):
+        for i in range(model_config['num_strides']):
             module = scn.Sequential()
             for _ in range(reps):
                 block(module, nPlanes[i], nPlanes[i])
             self.encoding_block.add(module)
             module2 = scn.Sequential()
-            if i < self._flags.URESNET_NUM_STRIDES-1:
+            if i < model_config['num_strides']-1:
                 module2.add(
                     scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness)).add(
                     scn.Convolution(dimension, nPlanes[i], nPlanes[i+1],
@@ -59,7 +59,7 @@ class PPNUResNet(torch.nn.Module):
 
         # Decoding
         self.decoding_conv, self.decoding_blocks = scn.Sequential(), scn.Sequential()
-        for i in range(self._flags.URESNET_NUM_STRIDES-2, -1, -1):
+        for i in range(model_config['num_strides']-2, -1, -1):
             module1 = scn.Sequential().add(
                 scn.BatchNormLeakyReLU(nPlanes[i+1], leakiness=leakiness)).add(
                 scn.Deconvolution(dimension, nPlanes[i+1], nPlanes[i],
@@ -74,24 +74,24 @@ class PPNUResNet(torch.nn.Module):
            scn.BatchNormReLU(m)).add(
            scn.OutputLayer(dimension))
 
-        self.linear = torch.nn.Linear(m, flags.NUM_CLASS)
+        self.linear = torch.nn.Linear(m, model_config['num_classes'])
 
         # PPN stuff
-        self.half_stride = int(flags.URESNET_NUM_STRIDES/2)
+        self.half_stride = int(model_config['num_strides']/2.0)
         self.ppn1_conv = scn.SubmanifoldConvolution(dimension, nPlanes[-1], nPlanes[-1], 3, False)
         self.ppn1_scores = scn.SubmanifoldConvolution(dimension, nPlanes[-1], 2, 3, False)
 
         self.selection1 = Selection()
         self.selection2 = Selection()
         self.unpool1 = scn.Sequential()
-        for i in range(flags.URESNET_NUM_STRIDES-self.half_stride-1):
+        for i in range(model_config['num_strides']-self.half_stride-1):
             self.unpool1.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
 
         self.unpool2 = scn.Sequential()
         for i in range(self.half_stride):
             self.unpool2.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
 
-        middle_filters = int(m * self.half_stride * (self.half_stride + 1) / 2)
+        middle_filters = int(m * self.half_stride * (self.half_stride + 1) / 2.0)
         self.ppn2_conv = scn.SubmanifoldConvolution(dimension, middle_filters, middle_filters, 3, False)
         self.ppn2_scores = scn.SubmanifoldConvolution(dimension, middle_filters, 2, 3, False)
         self.multiply1 = Multiply()
@@ -115,10 +115,9 @@ class PPNUResNet(torch.nn.Module):
         use_encoding = False
 
         point_cloud, label = input
-        label = torch.reshape(label[point_cloud.size()[0]:, ...], (-1, self._flags.DATA_DIM+2))
-        # Now shape (num_label, 5) for 3 coords + point type + batch id
+        # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
-        label = torch.cat([label[:, 0:-2], label[:, -1][:, None]], dim=1)
+        label = label[:, :-1]
         coords = point_cloud[:, 0:-1].float()
         features = point_cloud[:, -1][:, None].float()
 
@@ -154,7 +153,7 @@ class PPNUResNet(torch.nn.Module):
         ppn1_scores = self.ppn1_scores(y)
         mask = self.selection1(ppn1_scores)
         attention = self.unpool1(mask)
-        if self._flags.TRAIN:
+        if self.training:
             with torch.no_grad():
                 attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.half_stride, label[:, -1][:, None]], dim=1).long())
                 # for b in range(self._flags.BATCH_SIZE):
@@ -171,13 +170,12 @@ class PPNUResNet(torch.nn.Module):
             y = feature_ppn[self.half_stride]
         else:
             y = feature_ppn2[self.half_stride]
-
         y = self.multiply1(y, attention)
         y = self.ppn2_conv(y)
         ppn2_scores = self.ppn2_scores(y)
         mask2 = self.selection2(ppn2_scores)
         attention2 = self.unpool2(mask2)
-        if self._flags.TRAIN:
+        if self.training:
             with torch.no_grad():
                 attention2 = self.add_labels2(attention2, label.long())
         if use_encoding:
@@ -200,9 +198,9 @@ class PPNUResNet(torch.nn.Module):
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
-    def __init__(self, flags, reduction='sum'):
+    def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._flags = flags
+        self._cfg = cfg
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
@@ -210,18 +208,18 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, segmentation, data, label, weight=None):
+    def forward(self, segmentation, label, particles, weight=None):
         """
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has only 1 element because UResNet returns only 1 element.
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
         weight can be None.
         """
-        assert len(segmentation[0]) == len(data)
-        assert len(data) == len(label)
+        assert len(segmentation[0]) == len(label)
+        assert len(particles) == len(label)
         if weight is not None:
-            assert len(data) == len(weight)
-        batch_ids = [d[:, -2] for d in data]
+            assert len(label) == len(weight)
+        batch_ids = [d[:, -2] for d in label]
         total_loss = 0
         total_acc = 0
         total_count = 0
@@ -229,11 +227,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         uresnet_loss, uresnet_acc = 0., 0.
-        for i in range(len(data)):
-            event_particles = label[i][data[i].shape[0]:].reshape((-1, self._flags.DATA_DIM+2))
+        for i in range(len(label)):
+            event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = data[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :-2]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)
@@ -246,7 +244,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 event_ppn2_scores = segmentation[2][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
                 event_segmentation = segmentation[3][i][batch_index]  # (N, num_classes)
-                event_label = label[i][:data[i].shape[0]][batch_index]  # (N, 1)
+                event_label = label[i][batch_index][:, -1][:, None]  # (N, 1)
 
                 # Loss for semantic segmentation
                 event_label = torch.squeeze(event_label, dim=-1).long()
@@ -266,54 +264,54 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 # PPN stuff
                 event_label = event_particles[event_particles[:, -1] == b][:, :-2]  # (N_gt, 3)
+                if event_label.size(0) > 0:
+                    # Mask: only consider pixels that were selected
+                    event_mask = segmentation[5][i][batch_index]
+                    event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
+                    # event_label = event_label[event_mask]
+                    # event_segmentation = event_segmentation[event_mask]
+                    event_pixel_pred = event_pixel_pred[event_mask]
+                    event_scores = event_scores[event_mask]
+                    event_data = event_data[event_mask]
+                    # Mask for PPN2
+                    event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
+                    event_ppn2_data = event_ppn2_data[event_ppn2_mask]
+                    event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
 
-                # Mask: only consider pixels that were selected
-                event_mask = segmentation[5][i][batch_index]
-                event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
-                # event_label = event_label[event_mask]
-                # event_segmentation = event_segmentation[event_mask]
-                event_pixel_pred = event_pixel_pred[event_mask]
-                event_scores = event_scores[event_mask]
-                event_data = event_data[event_mask]
-                # Mask for PPN2
-                event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
-                event_ppn2_data = event_ppn2_data[event_ppn2_mask]
-                event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
+                    # distance loss
+                    d = self.distances(event_label, event_pixel_pred)
+                    d_true = self.distances(event_label, event_data)
+                    positives = (d_true < 5).any(dim=0)
+                    loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
+                    total_class += loss_seg
+                    distances_positives = d[:, positives]
+                    if distances_positives.shape[1] > 0:
+                        d2, _ = torch.min(distances_positives, dim=0)
+                        loss_seg += d2.mean()
+                        total_distance += d2.mean()
 
-                # distance loss
-                d = self.distances(event_label, event_pixel_pred)
-                d_true = self.distances(event_label, event_data)
-                positives = (d_true < 5).any(dim=0)
-                loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
-                total_class += loss_seg
-                distances_positives = d[:, positives]
-                if distances_positives.shape[1] > 0:
-                    d2, _ = torch.min(distances_positives, dim=0)
-                    loss_seg += d2.mean()
-                    total_distance += d2.mean()
+                    # Accuracy
+                    predicted_labels = torch.argmax(event_scores, dim=-1)
+                    acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
-                # Accuracy
-                predicted_labels = torch.argmax(event_scores, dim=-1)
-                acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
+                    # Loss ppn1 & ppn2
+                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
+                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
+                    positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
+                    positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
+                    loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
+                    loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2.long()))
+                    predicted_labels_ppn1 = torch.argmax(event_ppn1_scores, dim=-1)
+                    predicted_labels_ppn2 = torch.argmax(event_ppn2_scores, dim=-1)
+                    acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
+                    acc_ppn2 = (predicted_labels_ppn2 == positives_ppn2.long()).sum().item() / float(predicted_labels_ppn2.nelement())
 
-                # Loss ppn1 & ppn2
-                d_true_ppn1 = self.distances(event_label/(2**(self._flags.URESNET_NUM_STRIDES-1)), event_ppn1_data)
-                d_true_ppn2 = self.distances(event_label/(2**(int(self._flags.URESNET_NUM_STRIDES/2))), event_ppn2_data)
-                positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
-                positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
-                loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
-                loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2.long()))
-                predicted_labels_ppn1 = torch.argmax(event_ppn1_scores, dim=-1)
-                predicted_labels_ppn2 = torch.argmax(event_ppn2_scores, dim=-1)
-                acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
-                acc_ppn2 = (predicted_labels_ppn2 == positives_ppn2.long()).sum().item() / float(predicted_labels_ppn2.nelement())
-
-                total_loss += (loss_seg + loss_seg_ppn1 + loss_seg_ppn2).float()
-                total_acc += acc
-                total_loss_ppn1 += loss_seg_ppn1
-                total_loss_ppn2 += loss_seg_ppn2
-                total_acc_ppn1 += acc_ppn1
-                total_acc_ppn2 += acc_ppn2
+                    total_loss_ppn1 += loss_seg_ppn1
+                    total_loss_ppn2 += loss_seg_ppn2
+                    total_acc_ppn1 += acc_ppn1
+                    total_acc_ppn2 += acc_ppn2
+                    total_loss += (loss_seg + loss_seg_ppn1 + loss_seg_ppn2).float()
+                    total_acc += acc
 
         return {
             'accuracy': uresnet_acc,
