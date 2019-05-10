@@ -243,7 +243,7 @@ def inference_loop(cfg, handlers):
     weights = glob.glob(cfg['training']['model_path'])
     print("Loading weights: ", weights)
     for weight in weights:
-        handlers.trainer._flags.MODEL_PATH = weight
+        cfg['training']['model_path'] = weight
         _ = handlers.trainer.initialize()
         handlers.iteration = 0
         while handlers.iteration < cfg['training']['iterations']:
