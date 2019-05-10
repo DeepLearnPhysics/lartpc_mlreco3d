@@ -4,6 +4,7 @@ from __future__ import print_function
 import numpy as np
 from larcv import larcv
 
+
 def parse_sparse3d_scn(data):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
@@ -36,7 +37,6 @@ def parse_sparse3d(data):
     np_data   = np.empty(shape=(num_point,4),dtype=np.float32)
     larcv.fill_3d_pcloud(event_tensor3d, np_data)
     return np_data
-
 
 
 def parse_tensor3d(data):

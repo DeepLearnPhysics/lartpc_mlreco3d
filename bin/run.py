@@ -6,8 +6,7 @@ import yaml
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
-import mlreco
-from mlreco.flags import Flags
+from mlreco.main_funcs import process_config
 
 
 def main():
@@ -20,8 +19,7 @@ def main():
 
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
 
-    flags = Flags(cfg)
-    flags.parse_args()
+    process_config(cfg)
 
 
 if __name__ == '__main__':
