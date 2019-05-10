@@ -4,10 +4,8 @@ from __future__ import print_function
 import torch
 import time
 import os
-import sys
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.models import models
-from mlreco.utils.utils import CSVData
 import numpy as np
 
 
@@ -68,8 +66,8 @@ class trainval(object):
                 res_combined[key].extend(res[key])
         # Average loss and acc over all the events in this batch
         for key in res_combined:
-            if key not in ['segmentation', 'softmax']:
-                res_combined[key] = np.array(res_combined[key]).sum() / batch_size
+            # if key not in ['segmentation', 'softmax']:
+            res_combined[key] = np.array(res_combined[key]).sum() / batch_size
         return res_combined
 
     def _forward(self, data_blob, epoch=None):

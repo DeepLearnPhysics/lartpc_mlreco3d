@@ -36,7 +36,8 @@ def parse_sparse3d(data):
     np_data   = np.empty(shape=(num_point,4),dtype=np.float32)
     larcv.fill_3d_pcloud(event_tensor3d, np_data)
     return np_data
-    
+
+
 
 def parse_tensor3d(data):
     """
@@ -46,5 +47,23 @@ def parse_tensor3d(data):
     Return:
         a numpy array of a dense 3d tensor object
     """
+    from larcv import larcv
+    event_tensor3d = data[0]
     return np.array(larcv.as_ndarray(event_tensor3d))
 
+
+def parse_particles(data):
+    """
+    A function to retrieve particles gt points tensor from larcv::EventParticle object
+    Args:
+        length 1 array of larcv::EventParticle
+    Return:
+        a numpy array with the shape (N,4) where 4=3+1 represents (x,y,z) coordinate and stored pixel value.
+    """
+    from larcv import larcv
+    particles_v = data[0].as_vector()
+    # num_point = event_tensor3d.as_vector().size()
+    # np_data   = np.zeros(shape=(num_point, 4), dtype=np.float32)
+    # larcv.fill_3d_pcloud(event_tensor3d, np_data)
+    part_info = get_ppn_info(particles_v, larcv.Voxel3DMeta(data[0].meta()))
+    return np_data
