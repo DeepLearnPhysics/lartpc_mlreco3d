@@ -10,6 +10,9 @@ import numpy as np
 
 
 class trainval(object):
+    """
+    Groups all relevant functions for forward/backward of a network.
+    """
     def __init__(self, cfg):
         self.tspent = {}
         self.tspent_sum = {}
@@ -49,18 +52,22 @@ class trainval(object):
         }, filename)
         self.tspent['save'] = time.time() - tstart
 
-    def train_step(self, data_blob, epoch=None):
+    def train_step(self, data_blob):
+        """
+        data_blob is the output of the function get_data_minibatched.
+        It is a dictionary where data_blob[key] = list of length
+        BATCH_SIZE / (MINIBATCH_SIZE * len(GPUS))
+        """
         tstart = time.time()
         self._loss = []  # Initialize loss accumulator
-        res_combined = self.forward(data_blob,
-                                    epoch=epoch)
+        res_combined = self.forward(data_blob)
         # Run backward once for all the previous forward
         self.backward()
         self.tspent['train'] = time.time() - tstart
         self.tspent_sum['train'] += self.tspent['train']
         return res_combined
 
-    def forward(self, data_blob, epoch=None):
+    def forward(self, data_blob):
         """
         Run forward for
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
@@ -70,8 +77,7 @@ class trainval(object):
             blob = {}
             for key in data_blob.keys():
                 blob[key] = data_blob[key][idx]
-            res = self._forward(blob,
-                                epoch=epoch)
+            res = self._forward(blob)
             for key in res.keys():
                 if key not in res_combined:
                     res_combined[key] = []
@@ -82,7 +88,7 @@ class trainval(object):
             res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
         return res_combined
 
-    def _forward(self, data_blob, epoch=None):
+    def _forward(self, data_blob):
         """
         data/label/weight are lists of size minibatch size.
         For sparse uresnet:

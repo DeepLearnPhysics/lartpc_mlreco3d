@@ -126,8 +126,13 @@ def prepare(cfg):
 
 def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         tsum, tsum_io, res, cfg, epoch):
-    report_step  = cfg['training']['report_step'] and ((handlers.iteration+1) % cfg['training']['report_step'] == 0)
+    """
+    Log relevant information to CSV files and stdout.
+    """
+    report_step  = cfg['training']['report_step'] and \
+                ((handlers.iteration+1) % cfg['training']['report_step'] == 0)
 
+    # FIXME do we need to average here?
     loss_seg = np.mean(res['loss_seg'])
     acc_seg  = np.mean(res['accuracy'])
     res_dict = {}
@@ -147,7 +152,6 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         if cfg['training']['train']:
             handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),
                                        (tmap['train'], tmap['save'], tsum_map['train'], tsum_map['save']))
-        # else:
         handlers.csv_logger.record(('tforward', 'tsave', 'tsumforward', 'tsumsave'),
                                    (tmap['forward'], tmap['save'], tsum_map['forward'], tsum_map['save']))
 
@@ -201,6 +205,10 @@ def get_data_minibatched(handlers, cfg):
 
 
 def train_loop(cfg, handlers):
+    """
+    Training loop. With optional minibatching as determined by the parameters
+    cfg['iotool']['batch_size'] vs cfg['training']['minibatch_size'].
+    """
     tsum, tsum_io = 0., 0.
     while handlers.iteration < cfg['training']['iterations']:
         epoch = handlers.iteration / float(len(handlers.data_io))
@@ -217,7 +225,7 @@ def train_loop(cfg, handlers):
         tsum_io += tspent_io
 
         # Train step
-        res = handlers.trainer.train_step(data_blob, epoch=float(epoch))
+        res = handlers.trainer.train_step(data_blob)
         # Save snapshot
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)
@@ -237,6 +245,13 @@ def train_loop(cfg, handlers):
 
 
 def inference_loop(cfg, handlers):
+    """
+    Inference loop. Loops over weight files specified in
+    cfg['training']['model_path']. For each weight file,
+    runs the inference cfg['training']['iterations'] times.
+    Note: Accuracy/loss will be per batch in the CSV log file, not per event.
+    Write an analysis function to do per-event analysis (TODO).
+    """
     tsum, tsum_io = 0., 0.
     # Metrics for each event
     # global_metrics = {}

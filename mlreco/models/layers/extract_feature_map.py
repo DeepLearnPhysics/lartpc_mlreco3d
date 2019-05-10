@@ -6,6 +6,9 @@ import sparseconvnet as scn
 
 
 class SelectionFeatures(torch.nn.Module):
+    """
+    Select scores above some threshold? FIXME
+    """
     def __init__(self, dimension, spatial_size):
         import sparseconvnet as scn
         super(SelectionFeatures, self).__init__()
