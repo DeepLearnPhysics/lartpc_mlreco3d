@@ -16,29 +16,35 @@ class DBScanFunction(torch.autograd.Function):
         """
         keep = (input, )  # Variables we keep for backward pass
         ctx.num_classes = num_classes  # Save this also (integer, not variable)
+        ctx.dim = dim
 
         data = input[:, :-num_classes]  # (N, dim + batch_index + feature)
         segmentation = input[:, -num_classes:]  # (N, num_classes)
-        class_index = torch.argmax(segmentation, dim=1)
-        keep += (class_index, )
+        class_index = torch.argmax(segmentation, dim=1)  # (N,)
+        batch_indices = torch.unique(data[:, dim])
+        keep += (class_index, batch_indices, )
 
-        # For each class, run DBScan and record clusters
         output = []
-        for class_id in range(num_classes):
-            mask = class_index == class_id
-            labels = dbscan(data[mask][:, :dim], epsilon, minPoints)
-            labels = labels.reshape((-1,))
-            keep += (labels, )
+        for b in batch_indices:
+            batch_index = data[:, dim] == b
+            # For each class, run DBScan and record clusters
+            for class_id in range(num_classes):
+                mask = class_index[batch_index] == class_id
+                labels = dbscan(data[batch_index][mask][:, :dim], epsilon, minPoints)
+                labels = labels.reshape((-1,))
+                keep += (labels, )
 
-            # Now loop over clusters identified by DBScan, append class_id
-            clusters = []
-            unique_labels, _ = torch.sort(torch.unique(labels))
-            for cluster_id in unique_labels:
-                if cluster_id >= 0:  # Ignore noise
-                    cluster = data[mask][labels == cluster_id]
-                    cluster = torch.nn.functional.pad(cluster, (0, 1, 0, 0), mode='constant', value=class_id)
-                    clusters.append(cluster)
-            output.extend(clusters)
+                # Now loop over clusters identified by DBScan, append class_id
+                clusters = []
+                unique_labels, _ = torch.sort(torch.unique(labels))
+                for cluster_id in unique_labels:
+                    if cluster_id >= 0:  # Ignore noise
+                        cluster = data[batch_index][mask][labels == cluster_id]
+                        # cluster = torch.cat([cluster[:, :-2], cluster[:, -1][:, None]], dim=1)
+                        # cluster = torch.nn.functional.pad(cluster, (0, 1, 0, 0), mode='constant', value=b)
+                        cluster = torch.nn.functional.pad(cluster, (0, 1, 0, 0), mode='constant', value=class_id)
+                        clusters.append(cluster)  # (N_cluster, dim + batch_id + feature + class_id)
+                output.extend(clusters)
 
         ctx.save_for_backward(*keep)
         return tuple(output)
@@ -50,29 +56,42 @@ class DBScanFunction(torch.autograd.Function):
         """
         input = ctx.saved_variables[0]
         segmentation = ctx.saved_variables[1]
+        batch_indices = ctx.saved_variables[2]
 
         # For each class retrieve dbscan labels from forward
-        labels = {}
-        cluster_ids = []
-        class_ids = []
-        for class_id in range(ctx.num_classes):
-            labels[class_id] = ctx.saved_variables[class_id+2]
-            cluster_ids.append(torch.sort(torch.unique(labels[class_id][labels[class_id]>=0]))[0])
-            class_ids.extend([class_id] * len(cluster_ids[-1]))
+        # We do similar loops as in forward to retrieve labels in same order
+        # as clusters were returned
+        labels = {}  # Indexed by batch id and class id
+        cluster_ids = []  # Unique cluster ids sorted, for each class/batch id
+        class_ids = []  # Contains class_id shape = (N,)
+        batch_ids = []  # Contains batch_id shape = (N,)
+        i = 0
+        for b in batch_indices:
+            for class_id in range(ctx.num_classes):
+                l = ctx.saved_variables[i+3]
+                labels[(b, class_id)] = l
+                cluster_ids.append(torch.sort(torch.unique(l[l>=0]))[0])
+                class_ids.extend([class_id] * len(cluster_ids[-1]))
+                batch_ids.extend([b] * len(cluster_ids[-1]))
+                i += 1
 
         cluster_ids = torch.cat(cluster_ids)
         # Gradient must have same shape as input, we start with zeros
         grad_input = input.clone().fill_(0.0)
+        # We know that the order of grad_cluster in grad_out corresponds
+        # to the order in labels, cluster_ids, class_ids and batch_ids
         for i, grad_cluster in enumerate(grad_out):
             class_id = class_ids[i]
+            batch_id = batch_ids[i]
             cluster_id = cluster_ids[i]
-            mask_class = segmentation == class_id
-            mask_cluster = labels[class_id] == cluster_id
+            batch_mask = input[:, ctx.dim] == batch_id  # Isolate this batch
+            mask_class = segmentation == class_id  # Isolate this class
+            mask_cluster = labels[(batch_id, class_id)] == cluster_id  # Isolate this cluster
             # We find the rows of input which belong to class_id,
             # then among these the rows which belong to cluster_id
             # Also we don't compute gradient for semantic segmentation scores
             # nor for class_id information (last column of grad_cluster)
-            grad_input[mask_class.nonzero()[mask_cluster].reshape((-1,)), :-ctx.num_classes] = grad_cluster[:, :-1]
+            grad_input[(batch_mask & mask_class).nonzero()[mask_cluster].reshape((-1,)), :-ctx.num_classes] = grad_cluster[:, :-1]
 
         # As many outputs as inputs to forward
         return grad_input, None, None, None, None
@@ -183,8 +202,8 @@ if __name__ == '__main__':
         [0.5, 0.5, 0.5, 0, 0.0003, 0.2, 0.8],
         [0.5, 0.6, 0.5, 0, 0.007, 0.3, 0.7],
         [1.0, 0.0, 2.0, 0, 0.02, 0.25, 0.75],
-        [0.7, 3.0, 0.2, 0, 0.015, 0.6, 0.4],
-        [0.9, 0.8, 0.7, 0, 0.1, 0.9, 0.1]
+        [0.7, 3.0, 0.2, 1, 0.015, 0.6, 0.4],
+        [0.9, 0.8, 0.7, 1, 0.1, 0.9, 0.1]
     ], requires_grad=True)
     labels0 = torch.tensor([
         [1, 1],
@@ -194,10 +213,10 @@ if __name__ == '__main__':
         [3, 3],
         [4, 4]
     ], dtype=torch.float)
-    print(data)
+    print('Data: ', data)
 
     clusters = wrapper(data)
-    print(clusters)
+    print('Clusters: ', clusters)
     cluster0 = layer0(clusters[0])
     cluster1 = layer1(clusters[1])
 
