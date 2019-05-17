@@ -33,7 +33,7 @@ class DBScanFunction(torch.autograd.Function):
                 labels = dbscan(data[batch_index][mask][:, :dim], epsilon, minPoints)
                 labels = labels.reshape((-1,))
                 keep += (labels, )
-
+                print(b, class_id)
                 # Now loop over clusters identified by DBScan, append class_id
                 clusters = []
                 unique_labels, _ = torch.sort(torch.unique(labels))
@@ -98,13 +98,13 @@ class DBScanFunction(torch.autograd.Function):
 
 
 class DBScan(torch.nn.Module):
-    def __init__(self, epsilon=0.5, minPoints=10, num_classes=5, dim=3):
+    def __init__(self, cfg):
         super(DBScan, self).__init__()
         self.function = DBScanFunction.apply
-        self.epsilon = epsilon
-        self.minPoints = minPoints
-        self.num_classes = num_classes
-        self.dim = dim
+        self.epsilon = cfg['epsilon']
+        self.minPoints = cfg['minPoints']
+        self.num_classes = cfg['num_classes']
+        self.dim = cfg['data_dim']
 
     def forward(self, x):
         """

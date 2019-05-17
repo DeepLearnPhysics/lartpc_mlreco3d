@@ -7,6 +7,7 @@ import os
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.models import models
 import numpy as np
+import re
 
 
 class trainval(object):
@@ -84,8 +85,8 @@ class trainval(object):
                 res_combined[key].extend(res[key])
         # Average loss and acc over all the events in this batch
         for key in res_combined:
-            # if key not in ['segmentation', 'softmax']:
-            res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
+            if key not in self._model_config['analysis_keys']:
+                res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
         return res_combined
 
     def _forward(self, data_blob):
@@ -117,12 +118,11 @@ class trainval(object):
                     self._loss.append(loss_acc['loss_seg'])
             self.tspent['forward'] = time.time() - tstart
             self.tspent_sum['forward'] += self.tspent['forward']
-            res = {
-                #'segmentation': [s.cpu().detach().numpy() for s in segmentation[0]],
-                #'softmax': [self._softmax(s).cpu().detach().numpy() for s in segmentation[0]],
-            }
+            res = {}
             for label in loss_acc:
                 res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
+            for key in self._model_config['analysis_keys']:
+                res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):
@@ -150,19 +150,37 @@ class trainval(object):
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
         iteration = 0
+        model_paths = []
         if self._model_path:
-            if not os.path.isfile(self._model_path):
-                raise ValueError('File not found: %s\n' % self._model_path)
-            print('Restoring weights from %s...' % self._model_path)
-            with open(self._model_path, 'rb') as f:
-                checkpoint = torch.load(f)
-                self._net.load_state_dict(checkpoint['state_dict'], strict=False)
-                if self._train:
-                    # This overwrites the learning rate, so reset the learning rate
-                    self._optimizer.load_state_dict(checkpoint['optimizer'])
-                    for g in self._optimizer.param_groups:
-                        g['lr'] = self._learning_rate
-                iteration = checkpoint['global_step'] + 1
-            print('Done.')
+            model_paths.append(('', self._model_path))
+        for module in self._model_config['modules']:
+            if self._model_config['modules'][module]['model_path']:
+                model_paths.append((module, self._model_config['modules'][module]['model_path']))
+
+        if model_paths:
+            for module, model_path in model_paths:
+                if not os.path.isfile(model_path):
+                    raise ValueError('File not found: %s\n' % model_path)
+                print('Restoring weights from %s...' % model_path)
+                with open(model_path, 'rb') as f:
+                    checkpoint = torch.load(f)
+                    # Edit checkpoint variable names
+
+                    for name in self._net.state_dict():
+                        other_name = re.sub(module + '.', '', name)
+                        # print(module, name, other_name, other_name in checkpoint['state_dict'])
+                        if other_name in checkpoint['state_dict']:
+                            checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+
+                    self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+
+                    if self._train:
+                        # This overwrites the learning rate, so reset the learning rate
+                        self._optimizer.load_state_dict(checkpoint['optimizer'])
+                        for g in self._optimizer.param_groups:
+                            g['lr'] = self._learning_rate
+                    if module == '':  # Root model sets iteration
+                        iteration = checkpoint['global_step'] + 1
+                print('Done.')
 
         return iteration

@@ -13,6 +13,7 @@ import itertools
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
+from mlreco import analysis
 
 
 class Handlers:
@@ -256,6 +257,7 @@ def inference_loop(cfg, handlers):
     # Metrics for each event
     # global_metrics = {}
     weights = glob.glob(cfg['training']['model_path'])
+    # if len(weights) > 0:
     print("Loading weights: ", weights)
     for weight in weights:
         cfg['training']['model_path'] = weight
@@ -285,8 +287,11 @@ def inference_loop(cfg, handlers):
             log(handlers, tstamp_iteration, tspent_io,
                 tspent_iteration, tsum, tsum_io,
                 res, cfg, epoch)
-            # Log metrics
+            # Log metrics/do analysis
             # TODO
+            for ana_script in cfg['model']['analysis']:
+                f = getattr(analysis, ana_script)
+                f(res)
             handlers.iteration += 1
 
     # Metrics
