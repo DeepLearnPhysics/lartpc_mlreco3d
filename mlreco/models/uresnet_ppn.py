@@ -220,9 +220,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         if weight is not None:
             assert len(label) == len(weight)
         batch_ids = [d[:, -2] for d in label]
-        total_loss = 0
-        total_acc = 0
-        total_count = 0
+        total_loss = 0.
+        total_acc = 0.
+        total_count = 0.
         total_distance, total_class = 0., 0.
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.

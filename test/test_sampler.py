@@ -1,10 +1,12 @@
-import os,sys
+import os
+import sys
 TOP_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(TOP_DIR)
 sys.path.insert(0, TOP_DIR)
 
-def main():
-    from iotools.samplers import RandomSequenceSampler
+
+def test_sampler():
+    from mlreco.iotools.samplers import RandomSequenceSampler
     import numpy as np
 
     data_size=100
@@ -20,6 +22,4 @@ def main():
     print('...remaining:',used.sum())
     print('...max reuse:',used2.max(),'for',used2.argmax())
     print('...average:',used3[np.where(used>0)].mean())
-
-if __name__ == '__main__':
-    main()
+    return True
