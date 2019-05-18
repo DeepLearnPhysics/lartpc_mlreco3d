@@ -187,6 +187,7 @@ class PPNUResNet(torch.nn.Module):
         z = self.ppn3_conv(z)
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
+        # FIXME wrt batch index
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
         return [[torch.cat([pixel_pred, scores], dim=1)],

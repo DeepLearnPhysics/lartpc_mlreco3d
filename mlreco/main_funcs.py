@@ -291,7 +291,7 @@ def inference_loop(cfg, handlers):
             # TODO
             for ana_script in cfg['model']['analysis']:
                 f = getattr(analysis, ana_script)
-                f(res)
+                f(data_blob, res, cfg['model'])
             handlers.iteration += 1
 
     # Metrics

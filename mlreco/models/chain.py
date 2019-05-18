@@ -25,11 +25,15 @@ class Chain(torch.nn.Module):
         clusters = self.dbscan(new_input)
         #c = torch.cat(clusters, dim=0)
         final = []
+        i = 0
         for cluster in clusters:
             if cluster[0, -1] == 0 or cluster[0, -1] == 1:
+                cluster = torch.nn.functional.pad(cluster, (0, 1, 0, 0), mode='constant', value=i)
                 final.append(cluster)
+                i += 1
         print(len(clusters), len(final))
-        final = torch.cat(final, dim=0)
+        if len(final) > 0:
+            final = torch.cat(final, dim=0)
         return x + [[final]]
 
 
