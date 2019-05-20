@@ -1,10 +1,42 @@
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import cdist
+from mlreco.utils import utils
 
 
-def track_clustering(data_blob, res, model_cfg):
-    print('res clusters', len(res['clusters']))
+def nms_numpy(im_proposals, im_scores, threshold, size):
+    dim = im_proposals.shape[-1]
+    coords = []
+    for d in range(dim):
+        coords.append(im_proposals[:, d] - size)
+    for d in range(dim):
+        coords.append(im_proposals[:, d] + size)
+    coords = np.array(coords)
+
+    areas = np.ones_like(coords[0])
+    areas = np.prod(coords[dim:] - coords[0:dim] + 1, axis=0)
+
+    order = im_scores.argsort()[::-1]
+    keep = []
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        xx = np.maximum(coords[:dim, i][:, np.newaxis], coords[:dim, order[1:]])
+        yy = np.minimum(coords[dim:, i][:, np.newaxis], coords[dim:, order[1:]])
+        w = np.maximum(0.0, yy - xx + 1)
+        inter = np.prod(w, axis=0)
+        ovr = inter / (areas[i] + areas[order[1:]] - inter)
+        inds = np.where(ovr <= threshold)[0]
+        order = order[inds + 1]
+
+    return keep
+
+
+def track_clustering(data_blob, res, cfg, idx):
+    # Create output CSV
+    csv_logger = utils.CSVData("%s/track_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
+
+    model_cfg = cfg['model']
     clusters = res['clusters'][0]  # (N1, 6)
     points = res['points'][0]  # (N, 5)
     segmentation = res['segmentation'][0]  # (N, 5)
@@ -12,6 +44,7 @@ def track_clustering(data_blob, res, model_cfg):
     clusters_label = data_blob['clusters_label'][0][0]  # (N1, 5)
     particles_label = data_blob['particles_label'][0][0]  # (N_gt, 5)
     data = data_blob['input_data'][0][0]
+    segmentation_label = data_blob['segment_label'][0][0]
 
     # print(points)
 
@@ -129,3 +162,35 @@ def track_clustering(data_blob, res, model_cfg):
         print("Overlaps: ", overlaps)
         print("Npix predicted: ", npix_predicted)
         print("Npix true: ", npix_true)
+
+        # Record in CSV everything
+        for i, point in enumerate(data[batch_index]):
+            csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'cluster_id', 'type'),
+                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), segmentation_label[segmentation_label[:, data_dim] == b][i, -1], -1, -1 ))
+            csv_logger.write()
+        for c, cluster in enumerate(final_clusters):
+            for point in cluster:
+                csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'type'),
+                                  (1, point[0], point[1], point[2], b, c, -1, -1, -1, -1))
+                csv_logger.write()
+        for c, cluster in enumerate(true_clusters):
+            for point in cluster:
+                csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'type'),
+                                  (2, point[0], point[1], point[2], b, c, -1, -1, -1, -1))
+        for point in event_points:
+            csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'type'),
+                              (3, point[0], point[1], point[2], b, -1, -1, -1, -1, -1))
+            csv_logger.write()
+        for point in event_clusters_label:
+            csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'type'),
+                              (4, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1))
+            csv_logger.write()
+        for point in event_particles_label:
+            csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'type', 'cluster_id', 'value', 'predicted_class', 'true_class'),
+                              (5, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1))
+            csv_logger.write()
+        # for point in segmentation:
+        #     csv_logger.record(('point_type', 'x', 'y', 'z', 'batch_id', 'class_id'),
+        #                       (6, point[0], point[1], point[2], b, np.argmax()))
+        #     csv_logger.write()
+        csv_logger.close()
