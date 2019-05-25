@@ -5,6 +5,13 @@ from mlreco.utils import utils
 
 
 def nms_numpy(im_proposals, im_scores, threshold, size):
+    """
+    Runs NMS algorithm on a list of predicted points and scores
+    Returns a boolean array of same length as points/scores
+    Parameters:
+        - threshold for overlap
+        - size = half side of square window defined around each point
+    """
     dim = im_proposals.shape[-1]
     coords = []
     for d in range(dim):
@@ -46,7 +53,7 @@ def track_clustering(data_blob, res, cfg, idx):
     data = data_blob['input_data'][0][0]
     segmentation_label = data_blob['segment_label'][0][0]
 
-    # print(points)
+    print("Predicted points: ", points)
 
     data_dim = 3  # model_cfg['data_dim']
     batch_ids = np.unique(data[:, data_dim])
@@ -74,13 +81,17 @@ def track_clustering(data_blob, res, cfg, idx):
         # 0) DBScan predicted pixels
         # print(event_points[:10])
         if event_points.shape[0] > 0:
-            db = DBSCAN(eps=1.0, min_samples=5).fit(event_points).labels_
-            print(np.unique(db))
-            dbscan_points = []
-            for label in np.unique(db):
-                dbscan_points.append(event_points[db == label].mean(axis=0))
-            dbscan_points = np.stack(dbscan_points)
-            print(dbscan_points.shape)
+            # db = DBSCAN(eps=1.0, min_samples=5).fit(event_points).labels_
+            # print(np.unique(db))
+            # dbscan_points = []
+            # for label in np.unique(db):
+            #     dbscan_points.append(event_points[db == label].mean(axis=0))
+            # dbscan_points = np.stack(dbscan_points)
+            # print(dbscan_points.shape)
+            print("Predicted points: ", event_points.shape)
+            keep = nms_numpy(event_points, event_scores, 0.1, 5)
+            dbscan_points = event_points[keep]
+            print("Remaining predicted points: ", dbscan_points.shape)
 
             # 1) Break algorithm
             print(len(event_clusters), np.unique(event_clusters[:, -1]))

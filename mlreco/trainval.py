@@ -85,7 +85,7 @@ class trainval(object):
                 res_combined[key].extend(res[key])
         # Average loss and acc over all the events in this batch
         for key in res_combined:
-            if key not in self._model_config['analysis_keys']:
+            if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
                 res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
         return res_combined
 
@@ -121,8 +121,9 @@ class trainval(object):
             res = {}
             for label in loss_acc:
                 res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
-            for key in self._model_config['analysis_keys']:
-                res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
+            if 'analysis_keys' in self._model_config:
+                for key in self._model_config['analysis_keys']:
+                    res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):
@@ -154,7 +155,7 @@ class trainval(object):
         if self._model_path:
             model_paths.append(('', self._model_path))
         for module in self._model_config['modules']:
-            if self._model_config['modules'][module]['model_path']:
+            if 'model_path' in self._model_config['modules'][module]:
                 model_paths.append((module, self._model_config['modules'][module]['model_path']))
 
         if model_paths:
