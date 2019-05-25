@@ -101,6 +101,7 @@ class PPNUResNet(torch.nn.Module):
         self.ppn3_conv = scn.SubmanifoldConvolution(dimension, nPlanes[0], nPlanes[0], 3, False)
         self.ppn3_pixel_pred = scn.SubmanifoldConvolution(dimension, nPlanes[0], dimension, 3, False)
         self.ppn3_scores = scn.SubmanifoldConvolution(dimension, nPlanes[0], 2, 3, False)
+        self.ppn3_type = scn.SubmanifoldConvolution(dimension, nPlanes[0], model_config['num_classes'], 3, False)
 
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
@@ -188,10 +189,12 @@ class PPNUResNet(torch.nn.Module):
         z = self.ppn3_conv(z)
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
+        ppn3_type = self.ppn3_type(z)
         # FIXME wrt batch index
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
-        return [[torch.cat([pixel_pred, scores], dim=1)],
+        point_type = ppn3_type.features
+        return [[torch.cat([pixel_pred, scores, point_type], dim=1)],
                 [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
                 [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
                 [x],
@@ -229,6 +232,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         uresnet_loss, uresnet_acc = 0., 0.
+        total_acc_type, total_loss_type = 0., 0.
+        data_dim = self._cfg['data_dim']
         for i in range(len(label)):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
@@ -240,8 +245,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 event_ppn2_data = segmentation[2][i][ppn2_batch_index][:, :-3]  # (N2, 3)
                 anchors = (event_data + 0.5).float()
 
-                event_pixel_pred = segmentation[0][i][batch_index][:, :-2] + anchors # (N, 3)
-                event_scores = segmentation[0][i][batch_index][:, -2:]  # (N, 2)
+                event_pixel_pred = segmentation[0][i][batch_index][:, :data_dim] + anchors # (N, 3)
+                event_scores = segmentation[0][i][batch_index][:, data_dim:(data_dim+2)]  # (N, 2)
+                event_types = segmentation[0][i][batch_index][:, (data_dim+2):]  # (N, num_classes)
                 event_ppn1_scores = segmentation[1][i][ppn1_batch_index][:, -2:]  # (N1, 2)
                 event_ppn2_scores = segmentation[2][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
@@ -266,6 +272,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 # PPN stuff
                 event_label = event_particles[event_particles[:, -1] == b][:, :-2]  # (N_gt, 3)
+                event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
                 if event_label.size(0) > 0:
                     # Mask: only consider pixels that were selected
                     event_mask = segmentation[5][i][batch_index]
@@ -274,6 +281,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     # event_segmentation = event_segmentation[event_mask]
                     event_pixel_pred = event_pixel_pred[event_mask]
                     event_scores = event_scores[event_mask]
+                    event_types = event_types[event_mask]
                     event_data = event_data[event_mask]
                     # Mask for PPN2
                     event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
@@ -292,7 +300,19 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         loss_seg += d2.mean()
                         total_distance += d2.mean()
 
-                    # Accuracy
+                        # Loss for point type
+                        labels = event_types_label[torch.argmin(distances_positives, dim=0)]
+                        loss_type = torch.mean(self.cross_entropy(event_types[positives].double(), labels.long()))
+
+                        # Accuracy for point type
+                        predicted_types = torch.argmax(event_types[positives], dim=-1)
+                        acc_type = (predicted_types == labels.long()).sum().item() / float(predicted_types.nelement())
+
+                        total_acc_type += acc_type
+                        total_loss_type += loss_type
+                        total_loss += loss_type.float()
+
+                    # Accuracy for scores
                     predicted_labels = torch.argmax(event_scores, dim=-1)
                     acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
@@ -327,5 +347,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             'loss_ppn1': total_loss_ppn1,
             'loss_ppn2': total_loss_ppn2,
             'acc_ppn1': total_acc_ppn1,
-            'acc_ppn2': total_acc_ppn2
+            'acc_ppn2': total_acc_ppn2,
+            'acc_ppn_type': total_acc_type,
+            'loss_type': total_loss_type
         }

@@ -21,6 +21,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
     gt_positions = []
     for particle in particle_v:
         pdg_code = particle.pdg_code()
+        prc = particle.creation_process()
+        # Skip particle under some conditions
         if (particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count):
             continue
         if pdg_code > 1000000000:  # skipping nucleus trackid
@@ -31,9 +33,21 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             # Skipping delta ray
             if particle.parent_pdg_code() == 13 and particle.creation_process() == "muIoni":
                 continue
-            gt_type = 1  # Shower
-        else:  # Track
-            gt_type = 2  # Track
+
+        # Determine point type
+        if (pdg_code == 2212):
+            gt_type = 0
+        elif pdg_code != 22 and pdg_code != 11:
+            gt_type = 1
+        elif pdg_code == 22:
+            gt_type = 2
+        else:
+            if prc == "primary" or prc == "nCapture" or prc == "conv":
+                gt_type = 2
+            elif prc == "muIoni" or prc == "hIoni":
+                gt_type = 3
+            elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
+                gt_type = 4
 
         # TODO deal with different 2d projections
         # Register start point
