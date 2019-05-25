@@ -289,9 +289,10 @@ def inference_loop(cfg, handlers):
                 res, cfg, epoch)
             # Log metrics/do analysis
             # TODO
-            for ana_script in cfg['model']['analysis']:
-                f = getattr(analysis, ana_script)
-                f(data_blob, res, cfg, handlers.iteration)
+            if 'analysis' in cfg['model']:
+                for ana_script in cfg['model']['analysis']:
+                    f = getattr(analysis, ana_script)
+                    f(data_blob, res, cfg, handlers.iteration)
             handlers.iteration += 1
 
     # Metrics

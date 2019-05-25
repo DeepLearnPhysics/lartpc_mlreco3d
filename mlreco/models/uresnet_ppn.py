@@ -6,9 +6,10 @@ from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLab
 
 
 class PPNUResNet(torch.nn.Module):
-    def __init__(self, model_config):
+    def __init__(self, cfg):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
+        model_config = cfg['modules']['uresnet_ppn']
         self._model_config = model_config
         dimension = model_config['data_dim']
         reps = 2  # Conv block repetition factor
@@ -201,7 +202,7 @@ class PPNUResNet(torch.nn.Module):
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg
+        self._cfg = cfg['modules']['uresnet_ppn']
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):

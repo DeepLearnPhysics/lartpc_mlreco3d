@@ -14,7 +14,7 @@ class Chain(torch.nn.Module):
         super(Chain, self).__init__()
         self.dbscan = DBScan(model_config['modules']['dbscan'])
         self.uresnet_ppn = PPNUResNet(model_config['modules']['uresnet_ppn'])
-        self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
+        # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, input):
         x = self.uresnet_ppn(input)
