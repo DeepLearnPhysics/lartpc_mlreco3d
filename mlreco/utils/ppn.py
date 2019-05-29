@@ -64,8 +64,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             y = (y - meta.min_y()) / meta.pixel_height()
             gt_positions.append([x, y, gt_type])
 
-        # Register end point
-        if gt_type == 2:
+        # Register end point (for tracks only)
+        if gt_type == 0 or gt_type == 1:
             x = particle.last_step().x()
             y = particle.last_step().y()
             z = particle.last_step().z()

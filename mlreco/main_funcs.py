@@ -14,6 +14,7 @@ from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
 from mlreco import analysis
+from mlreco.output_formatters import output
 
 
 class Handlers:
@@ -280,6 +281,11 @@ def inference_loop(cfg, handlers):
             # Store output if requested
             # if flags.OUTPUT_FILE:
             # TODO
+            if 'outputs' in cfg['model']:
+                # for output in cfg['model']['outputs']:
+                #     f = getattr(output_formatters, output)
+                #     f(data_blob, res, cfg)
+                output(cfg['model']['outputs'], data_blob, res, cfg, handlers.iteration)
 
             epoch = handlers.iteration / float(len(handlers.data_io))
             tspent_iteration = time.time() - tstart_iteration
