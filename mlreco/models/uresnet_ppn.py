@@ -291,8 +291,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     # distance loss
                     d = self.distances(event_label, event_pixel_pred)
                     d_true = self.distances(event_label, event_data)
-                    positives = (d_true < 5).any(dim=0)
+                    positives = (d_true < 5).any(dim=0)  # FIXME can be empty
+                    if positives.shape[0] == 0:
+                        continue
                     loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
+
                     total_class += loss_seg
                     distances_positives = d[:, positives]
                     if distances_positives.shape[1] > 0:
