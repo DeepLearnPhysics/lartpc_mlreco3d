@@ -274,6 +274,31 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 event_label = event_particles[event_particles[:, -1] == b][:, :-2]  # (N_gt, 3)
                 event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
                 if event_label.size(0) > 0:
+                    # Segmentation loss (predict positives)
+                    d = self.distances(event_label, event_pixel_pred)
+                    d_true = self.distances(event_label, event_data)
+                    positives = (d_true < 5).any(dim=0)  # FIXME can be empty
+                    if positives.shape[0] == 0:
+                        continue
+                    loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
+                    total_class += loss_seg
+
+                    # Accuracy for scores
+                    predicted_labels = torch.argmax(event_scores, dim=-1)
+                    acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
+
+                    # Loss ppn1 & ppn2 (predict positives)
+                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
+                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
+                    positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
+                    positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
+                    loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
+                    loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2.long()))
+                    predicted_labels_ppn1 = torch.argmax(event_ppn1_scores, dim=-1)
+                    predicted_labels_ppn2 = torch.argmax(event_ppn2_scores, dim=-1)
+                    acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
+                    acc_ppn2 = (predicted_labels_ppn2 == positives_ppn2.long()).sum().item() / float(predicted_labels_ppn2.nelement())
+
                     # Mask: only consider pixels that were selected
                     event_mask = segmentation[5][i][batch_index]
                     event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
@@ -284,20 +309,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     event_types = event_types[event_mask]
                     event_data = event_data[event_mask]
                     # Mask for PPN2
-                    event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
-                    event_ppn2_data = event_ppn2_data[event_ppn2_mask]
-                    event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
+                    # event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
+                    # event_ppn2_data = event_ppn2_data[event_ppn2_mask]
+                    # event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
 
-                    # distance loss
-                    d = self.distances(event_label, event_pixel_pred)
-                    d_true = self.distances(event_label, event_data)
-                    positives = (d_true < 5).any(dim=0)  # FIXME can be empty
-                    if positives.shape[0] == 0:
-                        continue
-                    loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
-
-                    total_class += loss_seg
-                    distances_positives = d[:, positives]
+                    # Distance loss
+                    positives = (d_true[:, event_mask] < 5).any(dim=0)
+                    distances_positives = d[:, event_mask][:, positives]
                     if distances_positives.shape[1] > 0:
                         d2, _ = torch.min(distances_positives, dim=0)
                         loss_seg += d2.mean()
@@ -314,22 +332,6 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         total_acc_type += acc_type
                         total_loss_type += loss_type
                         total_loss += loss_type.float()
-
-                    # Accuracy for scores
-                    predicted_labels = torch.argmax(event_scores, dim=-1)
-                    acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
-
-                    # Loss ppn1 & ppn2
-                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
-                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
-                    positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
-                    positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
-                    loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
-                    loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2.long()))
-                    predicted_labels_ppn1 = torch.argmax(event_ppn1_scores, dim=-1)
-                    predicted_labels_ppn2 = torch.argmax(event_ppn2_scores, dim=-1)
-                    acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
-                    acc_ppn2 = (predicted_labels_ppn2 == positives_ppn2.long()).sum().item() / float(predicted_labels_ppn2.nelement())
 
                     total_loss_ppn1 += loss_seg_ppn1
                     total_loss_ppn2 += loss_seg_ppn2
