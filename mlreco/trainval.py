@@ -84,9 +84,15 @@ class trainval(object):
                     res_combined[key] = []
                 res_combined[key].extend(res[key])
         # Average loss and acc over all the events in this batch
+        # Keys of format %s_count are special and used as counters
+        # e.g. for PPN when there are no particle labels in event
         for key in res_combined:
-            if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
-                res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
+            if "_count" not in key:
+                if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
+                    if key + "_count" not in res_combined:
+                        res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
+                    else:
+                        res_combined[key] = np.array(res_combined[key]).sum() / res_combined[key + '_count']
         return res_combined
 
     def _forward(self, data_blob):
@@ -111,16 +117,20 @@ class trainval(object):
             tstart = time.time()
             segmentation = self._net(data)
 
-            # If label is given, compute the loss
+            # Compute the loss
             if loss_keys:
                 loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
+
             self.tspent['forward'] = time.time() - tstart
             self.tspent_sum['forward'] += self.tspent['forward']
+
+            # Record results
             res = {}
             for label in loss_acc:
                 res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
+            # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
                     res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]

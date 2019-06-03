@@ -5,9 +5,10 @@ import torch
 
 
 class UResNet(torch.nn.Module):
-    def __init__(self, model_config):
+    def __init__(self, cfg):
         import sparseconvnet as scn
         super(UResNet, self).__init__()
+        model_config = cfg['modules']['uresnet']
         dimension = model_config['data_dim']
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
