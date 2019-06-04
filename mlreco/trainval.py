@@ -162,21 +162,20 @@ class trainval(object):
 
         iteration = 0
         model_paths = []
-        if self._model_path:
+        if self._model_path and self._model_path != '':
             model_paths.append(('', self._model_path))
         for module in self._model_config['modules']:
-            if 'model_path' in self._model_config['modules'][module]:
+            if 'model_path' in self._model_config['modules'][module] and self._model_config['modules'][module]['model_path'] != '':
                 model_paths.append((module, self._model_config['modules'][module]['model_path']))
 
         if model_paths:
             for module, model_path in model_paths:
                 if not os.path.isfile(model_path):
-                    raise ValueError('File not found: %s\n' % model_path)
+                    raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f)
                     # Edit checkpoint variable names
-
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
                         # print(module, name, other_name, other_name in checkpoint['state_dict'])
@@ -185,7 +184,10 @@ class trainval(object):
 
                     self._net.load_state_dict(checkpoint['state_dict'], strict=False)
 
-                    if self._train:
+                    # FIXME only restore optimizer for whole model?
+                    # To restore it partially we need to implement our own
+                    # version of optimizer.load_state_dict.
+                    if self._train and module == '':
                         # This overwrites the learning rate, so reset the learning rate
                         self._optimizer.load_state_dict(checkpoint['optimizer'])
                         for g in self._optimizer.param_groups:

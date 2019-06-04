@@ -6,7 +6,7 @@ import yaml
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
-from mlreco.main_funcs import process_config
+from mlreco.main_funcs import process_config, train, inference
 
 
 def main():
@@ -20,7 +20,10 @@ def main():
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
 
     process_config(cfg)
-
+    if cfg['training']['train']:
+        train(cfg)
+    else:
+        inference(cfg)
 
 if __name__ == '__main__':
     main()

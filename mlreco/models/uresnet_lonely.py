@@ -110,7 +110,9 @@ class UResNet(torch.nn.Module):
         x = self.output(x)
         x = self.linear(x)  # Output of UResNet
 
-        return [[x]]
+        return [[x],
+                [feature_ppn],
+                [feature_ppn2]]
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):

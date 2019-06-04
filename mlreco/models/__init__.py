@@ -3,7 +3,10 @@ from mlreco.models import uresnet_ppn_type
 from mlreco.models import uresnet_lonely
 from mlreco.models import uresnet
 from mlreco.models import chain
+from mlreco.models import uresnet_ppn_chain
 
+
+# Make some models available (not all of them, e.g. PPN is not standalone)
 models = {
     # Regular UResNet + PPN
     "uresnet_ppn": (uresnet_ppn.PPNUResNet, uresnet_ppn.SegmentationLoss),
@@ -14,5 +17,6 @@ models = {
     # Using our custom UResNet
     "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
     # Chain test for track clustering (w/ DBSCAN)
-    "chain": (chain.Chain, chain.ChainLoss)
+    "chain": (chain.Chain, chain.ChainLoss),
+    "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss)
 }
