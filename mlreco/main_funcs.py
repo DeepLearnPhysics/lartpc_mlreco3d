@@ -72,10 +72,30 @@ def process_config(cfg):
 
     pp = pprint.PrettyPrinter(indent=4)
     pp.pprint(cfg)
-    if cfg['training']['train']:
-        train(cfg)
-    else:
-        inference(cfg)
+
+
+def make_directories(cfg, loaded_iteration, handlers=None):
+    # Weight save directory
+    if cfg['training']['weight_prefix']:
+        save_dir = cfg['training']['weight_prefix'][0:cfg['training']['weight_prefix'].rfind('/')]
+        if save_dir and not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+
+    # Log save directory
+    if cfg['training']['log_dir']:
+        if not os.path.exists(cfg['training']['log_dir']):
+            os.mkdir(cfg['training']['log_dir'])
+        logname = '%s/train_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
+        if not cfg['training']['train']:
+            logname = '%s/inference_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
+        if handlers is not None:
+            handlers.csv_logger = utils.CSVData(logname)
+        # TODO log metrics
+        # if not flags.TRAIN:
+        #     handlers.metrics_logger = utils.CSVData('%s/metrics_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
+        #     handlers.pixels_logger = utils.CSVData('%s/pixels_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
+        #     handlers.michel_logger = utils.CSVData('%s/michel_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
+        #     handlers.michel_logger2 = utils.CSVData('%s/michel2_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
 
 
 def prepare(cfg):
@@ -103,26 +123,7 @@ def prepare(cfg):
     if cfg['training']['train']:
         handlers.iteration = loaded_iteration
 
-    # Weight save directory
-    if cfg['training']['weight_prefix']:
-        save_dir = cfg['training']['weight_prefix'][0:cfg['training']['weight_prefix'].rfind('/')]
-        if save_dir and not os.path.isdir(save_dir):
-            os.makedirs(save_dir)
-
-    # Log save directory
-    if cfg['training']['log_dir']:
-        if not os.path.exists(cfg['training']['log_dir']):
-            os.mkdir(cfg['training']['log_dir'])
-        logname = '%s/train_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
-        if not cfg['training']['train']:
-            logname = '%s/inference_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
-        handlers.csv_logger = utils.CSVData(logname)
-        # TODO log metrics
-        # if not flags.TRAIN:
-        #     handlers.metrics_logger = utils.CSVData('%s/metrics_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
-        #     handlers.pixels_logger = utils.CSVData('%s/pixels_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
-        #     handlers.michel_logger = utils.CSVData('%s/michel_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
-        #     handlers.michel_logger2 = utils.CSVData('%s/michel2_log-%07d.csv' % (flags.LOG_DIR, loaded_iteration))
+    make_directories(cfg, loaded_iteration, handlers=handlers)
     return handlers
 
 
@@ -184,7 +185,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         if handlers.train_logger: handlers.train_logger.flush()
 
 
-def get_data_minibatched(handlers, cfg):
+def get_data_minibatched(dataset, cfg):
     """
     Handles minibatching the data
     Returns a dictionary where
@@ -199,7 +200,7 @@ def get_data_minibatched(handlers, cfg):
                 data_blob[key] = []
             data_blob[key].append([])
         for j in range(len(cfg['training']['gpus'])):
-            blob = next(handlers.data_io_iter)
+            blob = next(dataset)
             for i, key in enumerate(cfg['data_keys']):
                 data_blob[key][-1].append(blob[i])
 
@@ -222,7 +223,7 @@ def train_loop(cfg, handlers):
                         ((handlers.iteration+1) % cfg['training']['checkpoint_step'] == 0)
 
         tio_start = time.time()
-        data_blob = get_data_minibatched(handlers, cfg)
+        data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
         tspent_io = time.time() - tio_start
         tsum_io += tspent_io
 
@@ -271,7 +272,7 @@ def inference_loop(cfg, handlers):
             # blob = next(handlers.data_io_iter)
 
             tio_start = time.time()
-            data_blob = get_data_minibatched(handlers, cfg)
+            data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
             tspent_io = time.time() - tio_start
             tsum_io += tspent_io
 
