@@ -29,6 +29,11 @@ class DBScanClusts(torch.nn.Module):
     def forward(self, x):
         # output clusters
         clusts = []
+        # none of this is differentiable.  Detach for call to numpy
+        x = x.detach()
+        # move to CPU if on gpu
+        if x.is_cuda:
+            x = x.cpu()
         bids = torch.unique(x[:,self.dim])
         data = x[:,:-self.num_classes]
         segmentation = x[:, -self.num_classes:]
