@@ -2,6 +2,94 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
+import numpy as np
+from sklearn.cluster import DBSCAN
+
+class DBScanClusts(torch.nn.Module):
+    """
+    DBSCAN Layer that uses sklearn's DBSCAN implementation
+    expects input that is of form
+        x, y, z, batch_id, features, classes
+        classes should be one-hot encoded
+    
+    forward:
+        INPUT:
+        x - torch.floatTensor 
+            x.shape = (N, dim + batch_index + feature + num_classes)
+        OUTPUT:
+        inds - list of torch.longTensor indices for each cluster
+    """
+    def __init__(self, cfg):
+        super(DBScanClusts, self).__init__()
+        self.epsilon = cfg['epsilon']
+        self.minPoints = cfg['minPoints']
+        self.num_classes = cfg['num_classes']
+        self.dim = cfg['data_dim']
+
+    def forward(self, x):
+        # output clusters
+        clusts = []
+        # none of this is differentiable.  Detach for call to numpy
+        x = x.detach()
+        # move to CPU if on gpu
+        if x.is_cuda:
+            x = x.cpu()
+        bids = torch.unique(x[:,self.dim])
+        data = x[:,:-self.num_classes]
+        segmentation = x[:, -self.num_classes:]
+        # loop over batch
+        for bid in bids:
+            # batch indices
+            binds = data[:,self.dim] == bid
+            # loop over classes
+            for c in range(self.num_classes):
+                cinds = segmentation[:,c] == 1
+                # batch = bid and class = c
+                bcinds = torch.all(torch.stack([binds, cinds]), dim=0)
+                selection = np.where(bcinds == 1)[0]
+                if len(selection) == 0:
+                    continue
+                # perform DBSCAN
+                sel_vox = data[bcinds, :self.dim]
+                res=DBSCAN(eps=self.epsilon,
+                           min_samples=self.minPoints,
+                           metric='euclidean'
+                          ).fit(sel_vox)
+                cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
+                clusts.extend(cls_idx)
+        
+        return clusts
+    
+class DBScan2(torch.nn.Module):
+    """
+    DBSCAN Layer that uses sklearn's DBSCAN implementation
+    expects input that is of form
+        x, y, z, batch_id, features, classes
+        classes should be one-hot encoded
+    
+    forward:
+        INPUT:
+        x - torch.floatTensor 
+            x.shape = (N, dim + batch_index + feature + num_classes)
+        OUTPUT:
+        same as DBScan module
+    """
+    def __init__(self, cfg):
+        super(DBScan2, self).__init__()
+        self.dbclusts = DBScanClusts(cfg)
+        self.num_classes = cfg['num_classes']
+    
+    def forward(self, x):
+        # get cluster index sets
+        clusts = self.dbclusts(x)
+        
+        ret = []
+        for cinds in clusts:
+            datac = x[cinds,:-self.num_classes]
+            labelc = torch.argmax(x[cinds, -self.num_classes:], dim=1)
+            ret.append(torch.cat([datac, labelc.double().view(-1,1)], dim=1))
+        
+        return ret
 
 
 class DBScanFunction(torch.autograd.Function):
