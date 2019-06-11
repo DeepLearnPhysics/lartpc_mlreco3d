@@ -4,6 +4,7 @@ from __future__ import print_function
 import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
+from mlreco.utils.gnn.primary import get_em_primary_info
 
 
 def parse_sparse3d_scn(data):
@@ -70,6 +71,25 @@ def parse_particles(data):
         return part_info[:, :-1], part_info[:, -1][:, None]
     else:
         return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+    
+
+def parse_em_primaries(data):
+    """
+    A function to retrieve primary ionization points from grond truth
+    Args:
+        length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N, 1) containing group id for the primary
+    """
+    particles_v = data[1].as_vector()
+    part_info = get_em_primary_info(particles_v, data[0].meta())
+    if part_info.shape[0] > 0:
+        return part_info[:, :-1], part_info[:, -1][:, None]
+    else:
+        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+    
 
 
 def parse_cluster3d(data):
