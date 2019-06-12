@@ -271,8 +271,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 uresnet_acc += acc
 
                 # PPN stuff
-                event_label = event_particles[event_particles[:, -1] == b][:, :-2]  # (N_gt, 3)
-                event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
+                event_label = event_particles[event_particles[:, -2] == b][:, :-2]  # (N_gt, 3)
+                event_types_label = event_particles[event_particles[:, -2] == b][:, -1]
                 if event_label.size(0) > 0:
                     # Segmentation loss (predict positives)
                     d = self.distances(event_label, event_pixel_pred)
