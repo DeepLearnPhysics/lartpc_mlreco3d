@@ -201,7 +201,6 @@ def get_data_minibatched(dataset, cfg):
             data_blob[key].append([])
         for j in range(len(cfg['training']['gpus'])):
             blob = next(dataset)
-            print(blob[0].shape, blob[1].shape)
             for i, key in enumerate(cfg['data_keys']):
                 data_blob[key][-1].append(blob[i])
 
@@ -239,9 +238,6 @@ def train_loop(cfg, handlers):
 
         # Store output if requested
         if 'outputs' in cfg['model']:
-            # for output in cfg['model']['outputs']:
-            #     f = getattr(output_formatters, output)
-            #     f(data_blob, res, cfg)
             output(cfg['model']['outputs'], data_blob, res, cfg, handlers.iteration)
 
         log(handlers, tstamp_iteration, tspent_io,
