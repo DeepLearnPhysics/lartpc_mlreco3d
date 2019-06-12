@@ -20,7 +20,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
     # from larcv import larcv
     gt_positions = []
     for particle in particle_v:
-        pdg_code = particle.pdg_code()
+        pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
         # Skip particle under some conditions
         if (particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count):
