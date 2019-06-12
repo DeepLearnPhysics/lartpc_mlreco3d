@@ -36,11 +36,9 @@ def uresnet_ppn(csv_logger, data_blob, res):
                               (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 6, scores[i, 1]))
             csv_logger.write()
         # 7 = PPN predictions after masking
-        print((res['mask']>0).sum())
         mask = (~(res['mask'] == 0)).any(axis=1)
         events = data_blob['input_data'][mask]
         scores = scores[mask]
-        print("Masked event:", events.shape)
         for i, row in enumerate(res['points'][mask]):
             event = events[i]
             csv_logger.record(('x', 'y', 'z', 'type', 'value'),
@@ -49,7 +47,6 @@ def uresnet_ppn(csv_logger, data_blob, res):
 
         scores_ppn1 = scipy.special.softmax(res['ppn1'][:, -2:], axis=1)
         scores_ppn2 = scipy.special.softmax(res['ppn2'][:, -2:], axis=1)
-        print((scores_ppn1[:, 1]>0.5).sum(), (scores_ppn2[:, 1]>0.5).sum())
     # 4 = UResNet prediction
     if 'segmentation' in res:
         predictions = np.argmax(res['segmentation'], axis=1)
