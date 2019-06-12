@@ -4,6 +4,12 @@ from __future__ import print_function
 import numpy as np
 import torch
 
+
+def round_decimals(val, digits):
+    factor = float(np.power(10, digits))
+    return int(val * factor+0.5) / factor
+
+
 # Compute moving average
 def moving_average(a, n=3) :
     ret = np.cumsum(a, dtype=float)
@@ -19,7 +25,7 @@ def progress_bar(count, total, message=''):
     """
     from IPython.display import HTML, display,clear_output
     return HTML("""
-        <progress 
+        <progress
             value='{count}'
             max='{total}',
             style='width: 30%'
@@ -70,4 +76,3 @@ class CSVData:
     def close(self):
         if self._str is not None:
             self._fout.close()
-

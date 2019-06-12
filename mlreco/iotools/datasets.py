@@ -1,9 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import sys, os
-import torch
-import numpy as np
+import os
 from torch.utils.data import Dataset
 import mlreco.iotools.parsers
 
@@ -11,7 +9,7 @@ def _list_files(data_dirs, data_key=None, limit_num_files=0):
     """
     Args: data_dirs ... a list of data directories to find files (up to 10 files read from each dir)
           data_key ..... a string that is required to be present in the filename
-          limit_num_files ... an integer limiting number of files to be taken per data directory 
+          limit_num_files ... an integer limiting number of files to be taken per data directory
     Return: list of files
     """
     files = []
@@ -26,7 +24,7 @@ class LArCVDataset(Dataset):
     """
     class: a generic interface for LArCV data files. This Dataset is designed to produce a batch of arbitrary number
            of data chunks (e.g. input data matrix, segmentation label, point proposal target, clustering labels, etc.).
-           Each data chunk is processed by parser functions defined in the iotools.parsers module. LArCVDataset object 
+           Each data chunk is processed by parser functions defined in the iotools.parsers module. LArCVDataset object
            can be configured with arbitrary number of parser functions where each function can take arbitrary number of
            LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
     """
@@ -37,7 +35,7 @@ class LArCVDataset(Dataset):
                               The list must be length >= 2: the first string names the parser function, and the rest of strings
                               identifies data keys in the input files.
               data_key ..... a string that is required to be present in the filename
-              limit_num_files ... an integer limiting number of files to be taken per data directory 
+              limit_num_files ... an integer limiting number of files to be taken per data directory
         """
 
         # Create file list
@@ -45,7 +43,7 @@ class LArCVDataset(Dataset):
         if len(self._files)>10: print(len(self._files),'files loaded')
         else:
             for f in self._files: print('Loading file:',f)
-        
+
         # Instantiate parsers
         self._data_keys = []
         self._data_parsers = []
@@ -62,7 +60,7 @@ class LArCVDataset(Dataset):
                 if data_key in self._trees: continue
                 self._trees[data_key] = None
         self._data_keys.append('index')
-        
+
         # Prepare TTrees and load files
         from ROOT import TChain
         self._entries = None
@@ -88,7 +86,7 @@ class LArCVDataset(Dataset):
 
     def data_keys(self):
         return self._data_keys
-            
+
     def __len__(self):
         return self._entries
 
@@ -112,5 +110,3 @@ class LArCVDataset(Dataset):
 
         result.append([idx])
         return tuple(result)
-
-
