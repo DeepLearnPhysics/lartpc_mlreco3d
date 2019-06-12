@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import torch.utils.data
 from torch.utils.data import DataLoader
+
 
 def loader_handmade(name, batch_size,
                     shuffle=True,
@@ -15,7 +15,7 @@ def loader_handmade(name, batch_size,
     import mlreco.iotools.datasets
     ds = getattr(mlreco.iotools.datasets,name)(**args)
     if collate_fn is not None:
-        collate_fn = getattr(iotools.collates,collate_fn)
+        collate_fn = getattr(mlreco.iotools.collates,collate_fn)
         loader = DataLoader(ds,
                             batch_size  = batch_size,
                             shuffle     = shuffle,
@@ -34,7 +34,7 @@ def dataset_factory(cfg):
     import mlreco.iotools.datasets
     params = cfg['iotool']['dataset']
     return getattr(mlreco.iotools.datasets, params['name']).create(params)
-    
+
 def loader_factory(cfg):
     params = cfg['iotool']
     batch_size   = int(params['batch_size'])
@@ -63,6 +63,3 @@ def loader_factory(cfg):
                             sampler     = sampler,
                             num_workers = num_workers)
     return loader,ds.data_keys()
-
-    
-    

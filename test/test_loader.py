@@ -6,7 +6,8 @@ TOP_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(TOP_DIR)
 sys.path.insert(0, TOP_DIR)
 
-def main():
+
+def test_loader():
     # import
     import numpy as np
     from mlreco.iotools.factories import loader_factory
@@ -30,13 +31,13 @@ def main():
         if not argv.isdigit(): continue
         MAX_BATCH_ID=int(argv)
         break
-    
+
     # configure
     cfg = yaml.load(open(cfg_file,'r'),Loader=yaml.Loader)
     loader,data_keys = loader_factory(cfg)
     if not quiet: print(len(loader),'batches loaded')
     if not quiet: print('keys:',data_keys)
-    
+
     # Loop
     tstart=time.time()
     tsum=0.
@@ -64,5 +65,4 @@ def main():
         if MAX_BATCH_ID>1:
             print('First iter:',t0,'[s] ... Average w/o first iter:',(tsum - t0)/(MAX_BATCH_ID-1),'[s]')
     if csv: csv.close()
-if __name__ == '__main__':
-    main()
+    return True
