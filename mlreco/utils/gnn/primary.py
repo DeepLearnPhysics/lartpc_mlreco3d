@@ -88,6 +88,10 @@ def assign_primaries(primaries, clusts, data):
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
     """
+    
+    primaries = primaries.cpu().detach().numpy()
+    data = data.cpu().detach().numpy()
+    
     #first remove compton-like clusters from list
     selection = filter_compton(clusts) # non-compton looking clusters
     selinds = np.where(selection)[0] # selected indices
@@ -123,7 +127,10 @@ def assign_primaries2(primaries, clusts, data):
     
     this version does not filter out compton clusters first
     """
-        
+    
+    primaries = primaries.cpu()
+    data = data.cpu()
+    
     labels = get_cluster_label(data, clusts)
     batches = get_cluster_batch(data, clusts)
     

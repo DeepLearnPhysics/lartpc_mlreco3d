@@ -8,7 +8,7 @@ import scipy as sp
 # TODO: add vertex orientation information
 
 
-def cluster_vtx_features(data, cs, cuda=False):
+def cluster_vtx_features(data, cs, cuda=True):
     """
     Cluster vertex features - center and energy
     returned as a pytorch tensor of size (n_clusts, 3)
@@ -39,23 +39,25 @@ def cluster_edge_feature(data, c1, c2):
     return out
 
 
-def cluster_edge_features(data, clusts, edge_index, cuda=False):
+def cluster_edge_features(data, clusts, edge_index, cuda=True):
     """
     Cluster edge features
     returned as a pytorch tensor of size (n_edges, 10)
     """
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
     e = torch.tensor([cluster_edge_feature(data, clusts[edge_index[0,k]], clusts[edge_index[1,k]]) for k in range(edge_index.shape[1])], dtype=torch.float, requires_grad=False)
     if cuda:
         e = e.cuda()
     return e
 
 
-def edge_assignment(edge_index, batches, groups, cuda=False):
+def edge_assignment(edge_index, batches, groups, cuda=True):
     """
     edge assignment as same group/different group
     """
     edge_assn = torch.tensor([np.logical_and(
-        batch[edge_index[0,k]] == batch[edge_index[1,k]],
+        batches[edge_index[0,k]] == batches[edge_index[1,k]],
         groups[edge_index[0,k]] == groups[edge_index[1,k]]) for k in range(edge_index.shape[1])], 
                              dtype=torch.float, requires_grad=False)
     if cuda:
