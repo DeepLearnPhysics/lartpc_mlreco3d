@@ -7,6 +7,8 @@ def get_cluster_label(data, clusts):
     get cluster label
     typically 5-types label or group
     """
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
     labels = []
     for c in clusts:
         v, cts = np.unique(data[c,4], return_counts=True)
@@ -18,6 +20,8 @@ def get_cluster_batch(data, clusts):
     """
     get cluster batch
     """
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
     batch = []
     for c in clusts:
         v, cts = np.unique(data[c,3], return_counts=True)
@@ -37,6 +41,8 @@ def get_cluster_center(data, clusts):
     get center of clusters
     """
     centers = []
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
     for c in clusts:
         x = get_cluster_voxels(data, c)
         centers.append(np.mean(x, axis=0))
@@ -44,7 +50,7 @@ def get_cluster_center(data, clusts):
     
 
 
-def form_clusters(data):
+def form_clusters(data, cuda=True):
     """
     input 5-types data
     returns DBScanned clusters
@@ -56,11 +62,14 @@ def form_clusters(data):
     
     dblayer = DBScanClusts(dbconfig)
     
-    t1 = torch.tensor(data)
+    t1 = data
     # want one-hot encoding of data[1][:,4]
-    labels = torch.tensor(data[:,4], dtype=torch.long).view(-1,1)
+    labels = data[:,4].long().view(-1,1)
     batch_size = t1.shape[0]
     y_onehot = torch.FloatTensor(batch_size, 5)
+    if cuda:
+        y_onehot = y_onehot.cuda()
+
     y_onehot.zero_()
     y_onehot = y_onehot.scatter(1, labels, 1)
     t = torch.cat([t1, y_onehot.double()], dim=1)

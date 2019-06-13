@@ -58,29 +58,29 @@ class BasicAttentionModel(torch.nn.Module):
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data[2], clusts, data[1])
         batch = get_cluster_batch(data[0], clusts)
-        edge_index = primary_bipartite_incidence(batch, primaries)
+        edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         
         # obtain vertex features
-        x = cluster_vtx_features(data[0], clusts)
+        x = cluster_vtx_features(data[0], clusts, cuda=True)
         # obtain edge features
-        e = cluster_edge_features(data[0], clusts, edge_index)
+        e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
         
         # go through layers
         x = self.attn1(x, edge_index)
         x = self.attn2(x, edge_index)
         x = self.attn3(x, edge_index)
         
-        xbatch = torch.tensor(batch)
+        xbatch = torch.tensor(batch).cuda()
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
         return e
     
     
 class EdgeLabelLoss(torch.nn.Module):
-    def __init__(self, cfg, lossfn=nn.MSELoss()):
+    def __init__(self, cfg, lossfn=torch.nn.MSELoss()):
         super(EdgeLabelLoss, self).__init__()
         self.lossfn = lossfn
         
-    def forward(self, edge_pred, data):
+    def forward(self, edge_pred, data0, data1, data2):
         """
         edge_pred:
             predicted edge weights from model forward
@@ -89,21 +89,31 @@ class EdgeLabelLoss(torch.nn.Module):
             data[1] - groups data
             data[2] - primary data
         """
+        data0 = data0[0]
+        data1 = data1[0]
+        data2 = data2[0]
         # first decide what true edges should be
         # need to form graph, then pass through GNN
-        clusts = form_clusters(data[0])
+        clusts = form_clusters(data0)
         
         # remove compton clusters
         selection = filter_compton(clusts) # non-compton looking clusters
         clusts = clusts[selection]
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[2], clusts, data[1])
-        batch = get_cluster_batch(data[0], clusts)
+        primaries = assign_primaries(data2, clusts, data1)
+        batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
-        group = get_cluster_label(data[1], clusts)
+        group = get_cluster_label(data1, clusts)
         
         # determine true assignments
-        edge_assn = edge_assignment(edge_index, batch, group)
+        edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
         
-        return self.lossfn(edge_assn, edge_pred)
+        total_loss = self.lossfn(edge_assn.view(-1), edge_pred.view(-1))
+        # TODO: compute accuracy of assignment
+        total_acc = torch.tensor(0)
+        
+        return {
+            'accuracy': total_acc,
+            'loss_seg': total_loss
+        }
