@@ -23,7 +23,10 @@ def output(output_formatters_list, data_blob, res, cfg, idx):
                 new_res = {}
                 if 'analysis_keys' in cfg['model']:
                     for key in cfg['model']['analysis_keys']:
-                        new_res[key] = res[key][j][data_index]
+                        if res[key][j].shape[0] == data_index.shape[0]:
+                            new_res[key] = res[key][j][data_index]
+                        else:  # assumes batch is in column 3
+                            new_res[key] = res[key][j][res[key][j][:, 3] == b]
 
                 csv_logger = utils.CSVData("%s/output-%.07d.csv" % (cfg['training']['log_dir'], event_id))
                 for output in output_formatters_list:
