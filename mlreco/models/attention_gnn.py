@@ -76,7 +76,7 @@ class BasicAttentionModel(torch.nn.Module):
     
     
 class EdgeLabelLoss(torch.nn.Module):
-    def __init__(self, cfg, lossfn=torch.nn.MSELoss()):
+    def __init__(self, cfg, lossfn=torch.nn.L1Loss(reduction='sum')):
         super(EdgeLabelLoss, self).__init__()
         self.lossfn = lossfn
         
