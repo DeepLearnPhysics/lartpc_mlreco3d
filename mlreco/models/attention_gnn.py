@@ -51,6 +51,11 @@ class BasicAttentionModel(torch.nn.Module):
         # need to form graph, then pass through GNN
         clusts = form_clusters(data[0])
         
+        # remove track-like particles
+        types = get_cluster_label(data[0], clusts)
+        selection = types > 1 # 0 or 1 are track-like
+        clusts = clusts[selection]
+        
         # remove compton clusters
         selection = filter_compton(clusts) # non-compton looking clusters
         clusts = clusts[selection]
@@ -95,6 +100,11 @@ class EdgeLabelLoss(torch.nn.Module):
         # first decide what true edges should be
         # need to form graph, then pass through GNN
         clusts = form_clusters(data0)
+        
+        # remove track-like particles
+        types = get_cluster_label(data0, clusts)
+        selection = types > 1 # 0 or 1 are track-like
+        clusts = clusts[selection]
         
         # remove compton clusters
         selection = filter_compton(clusts) # non-compton looking clusters
