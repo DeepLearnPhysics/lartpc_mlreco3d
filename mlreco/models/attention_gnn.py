@@ -10,6 +10,7 @@ from mlreco.utils.gnn.primary import assign_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment
+from mlreco.utils.gnn.evaluation import secondary_vox_matching_efficiency
 from mlreco.utils.groups import process_group_data
 
 class BasicAttentionModel(torch.nn.Module):
@@ -127,8 +128,9 @@ class EdgeLabelLoss(torch.nn.Module):
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
         
         total_loss = self.lossfn(edge_assn.view(-1), edge_pred.view(-1))
-        # TODO: compute accuracy of assignment
-        total_acc = torch.tensor(0)
+        
+        # compute accuracy of assignment
+        total_acc = torch.tensor(secondary_vox_matching_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         
         return {
             'accuracy': total_acc,
