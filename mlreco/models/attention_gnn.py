@@ -11,7 +11,6 @@ from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment
 from mlreco.utils.groups import process_group_data
-import numpy as np
 
 class BasicAttentionModel(torch.nn.Module):
     """
@@ -52,7 +51,7 @@ class BasicAttentionModel(torch.nn.Module):
         """
         # need to form graph, then pass through GNN
         clusts = form_clusters(data[0])
-
+        
         # remove track-like particles
         types = get_cluster_label(data[0], clusts)
         selection = types > 1 # 0 or 1 are track-like
@@ -63,7 +62,7 @@ class BasicAttentionModel(torch.nn.Module):
         clusts = clusts[selection]
         
         # process group data
-        data_grp = process_group_data(data[1], data[0])        
+        data_grp = process_group_data(data[1], data[0])
         
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data[2], clusts, data_grp)
@@ -105,7 +104,7 @@ class EdgeLabelLoss(torch.nn.Module):
         # first decide what true edges should be
         # need to form graph, then pass through GNN
         clusts = form_clusters(data0)
-
+        
         # remove track-like particles
         types = get_cluster_label(data0, clusts)
         selection = types > 1 # 0 or 1 are track-like
@@ -128,8 +127,7 @@ class EdgeLabelLoss(torch.nn.Module):
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
         
         total_loss = self.lossfn(edge_assn.view(-1), edge_pred.view(-1))
-        
-        # compute accuracy of assignment
+        # TODO: compute accuracy of assignment
         total_acc = torch.tensor(0)
         
         return {
