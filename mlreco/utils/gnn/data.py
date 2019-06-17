@@ -1,6 +1,6 @@
 # creates inputs to GNN networks
 import torch
-from mlreco.utils.gnn.cluster import get_cluster_center, get_cluster_voxels
+from mlreco.utils.gnn.cluster import get_cluster_centers, get_cluster_voxels, get_cluster_features, get_cluster_energies
 import numpy as np
 import scipy as sp
 
@@ -8,16 +8,28 @@ import scipy as sp
 # TODO: add vertex orientation information
 
 
-def cluster_vtx_features(data, cs, cuda=True):
+def cluster_vtx_features_old(data, cs, cuda=True):
     """
-    Cluster vertex features - center and energy
+    Cluster vertex features - center
     returned as a pytorch tensor of size (n_clusts, 3)
     optional flag to put features on gpu
     """
-    f = torch.tensor(get_cluster_center(data, cs), dtype=torch.float, requires_grad=False)
+    f = torch.tensor(np.concatenate((get_cluster_centers(data, cs), (get_cluster_energies(data, cs)).reshape(-1,1)), axis=1), dtype=torch.float, requires_grad=False)
     if cuda:
         f = f.cuda()
     return f
+
+def cluster_vtx_features(data, cs, cuda=True):
+    """
+    Cluster vertex features - center, orientation, and direction
+    returned as pytorch tensor of size (n_clusts, 15)
+    optional flag to put features on gpu
+    """
+    f = torch.tensor(get_cluster_features(data, cs), dtype=torch.float, requires_grad=False)
+    if cuda:
+        f = f.cuda()
+    return f
+    
 
 
 def cluster_edge_feature(data, c1, c2):

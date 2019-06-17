@@ -11,6 +11,9 @@ def assign_clusters(edge_index, edge_label, primaries, others, n):
         clust[i] = i
     for i in others:
         inds = edge_index[1,:] == i
+        if sum(inds) == 0:
+            clust[i] = -1
+            continue
         indmax = torch.argmax(edge_label[inds])
         clust[i] = edge_index[0,inds][indmax].item()
     return clust
