@@ -1,7 +1,7 @@
 import numpy as np
 import plotly.graph_objs as go
 
-def scatter_clusters(voxels, labels, clusters):
+def scatter_clusters(voxels, labels, clusters, markersize=5):
     """
     scatter plot of cluster voxels colored by cluster order
     - voxels is a list of voxel coordinates (Nx3-matrix)
@@ -11,11 +11,12 @@ def scatter_clusters(voxels, labels, clusters):
     # first build voxel set
     voxels = np.concatenate([voxels[c] for c in clusters], axis=0)
     vfeats = np.concatenate([labels[c] for c in clusters], axis=0)
+    _, cs = np.unique(vfeats, return_inverse=True)
     trace = go.Scatter3d(x=voxels[:,0], y=voxels[:,1], z=voxels[:,2],
                         mode='markers',
                         marker = dict(
-                            size = 5,
-                            color = vfeats,
+                            size = markersize,
+                            color = cs,
                             colorscale='Viridis',
                             opacity=0.8
                         ), 
