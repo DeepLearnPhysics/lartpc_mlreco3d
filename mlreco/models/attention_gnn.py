@@ -24,9 +24,9 @@ class BasicAttentionModel(torch.nn.Module):
         self.nheads = self.model_config['nheads']
         
         # # first layer increases number of features from 4 to 16
-        # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
+        self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
         # first layer increases number of features from 15 to 16
-        self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
+        # self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
         
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
@@ -74,8 +74,8 @@ class BasicAttentionModel(torch.nn.Module):
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         
         # obtain vertex features
-        x = cluster_vtx_features(data[0], clusts, cuda=True)
-        # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
+        # x = cluster_vtx_features(data[0], clusts, cuda=True)
+        x = cluster_vtx_features_old(data[0], clusts, cuda=True)
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
         # obtain edge features
@@ -100,12 +100,25 @@ class BasicAttentionModel(torch.nn.Module):
     
     
 class EdgeLabelLoss(torch.nn.Module):
-    def __init__(self, cfg, lossfn=torch.nn.L1Loss(reduction='sum'), balance=True):
+    def __init__(self, cfg):
         # torch.nn.MSELoss(reduction='sum')
         # torch.nn.L1Loss(reduction='sum')
         super(EdgeLabelLoss, self).__init__()
-        self.lossfn = lossfn
-        self.balance = balance
+        self.model_config = cfg['modules']['attention_gnn']
+        
+        if 'loss' in self.model_config:
+            if self.model_config['loss'] == 'L1':
+                self.lossfn = torch.nn.L1Loss(reduction='sum')
+            elif self.model_config['loss'] == 'L2':
+                self.lossfn = torch.nn.MSELoss(reduction='sum')
+        else:
+            self.lossfn = torch.nn.L1Loss(reduction='sum')
+        
+        if 'balance_classes' in self.model_config:
+            self.balance = self.model_config['balance_classes']
+        else:
+            # default behavior
+            self.balance = True
         
     def forward(self, edge_pred, data0, data1, data2):
         """
