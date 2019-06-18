@@ -5,8 +5,12 @@ import numpy as np
 import torch
 from torch.utils.data import Sampler
 
-class RandomSequenceSampler(Sampler):
-
+class AbstractBatchSampler(Sampler):
+    """
+    Samplers that inherit from this class should work out of the box.
+    Just define the __iter__ function
+    __init__ defines self._data_size and self._batch_size
+    """
     def __init__(self,data_size,batch_size):
         self._data_size  = int(data_size)
         if self._data_size < 0:
@@ -17,15 +21,27 @@ class RandomSequenceSampler(Sampler):
         if self._batch_size < 0 or self._batch_size > self._data_size:
             print(self.__class__.__name__,'received invalid batch size',batch_size,'for data size',self._data_size)
             raise ValueError
-        
+            
     def __len__(self):
-        return int(self._data_size/self._batch_size)
+        return self._data_size // self._batch_size
+    
 
+class RandomSequenceSampler(AbstractBatchSampler):
     def __iter__(self):
         starts = torch.randint(high=self._data_size - self._batch_size,
                                size=(len(self),))
         return iter(np.concatenate([np.arange(start,start+self._batch_size) for start in starts]))
-
+    
     @staticmethod
     def create(ds,cfg):
         return RandomSequenceSampler(len(ds),cfg['batch_size'])
+    
+    
+class SequentialBatchSampler(AbstractBatchSampler):
+    def __iter__(self):
+        starts = np.arange(0, self._data_size - self._batch_size, self._batch_size)
+        return iter(np.concatenate([np.arange(start,start+self._batch_size) for start in starts]))
+    
+    @staticmethod
+    def create(ds,cfg):
+        return SequentialBatchSampler(len(ds),cfg['batch_size'])
