@@ -2,24 +2,23 @@ import numpy as np
 import scipy
 
 
-def uresnet_ppn(csv_logger, data_blob, res, nms_score_threshold=0.6, window_size=4, score_threshold=0.9, **kwargs):
+def uresnet_ppn(csv_logger, data_blob, res, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
     """
     threshold, size: NMS parameters
     score_threshold: to filter based on score only (no NMS)
     """
     # FIXME assumes 3D for now
     if 'points' in res:
-        # print(res['points'])
-        scores = scipy.special.softmax(res['points'][:, 3:], axis=1)
+        scores = scipy.special.softmax(res['points'][:, 3:5], axis=1)
         # 3 = raw PPN predictions
         for i, row in enumerate(res['points']):
             event = data_blob['input_data'][i]
             if len(row) > 5:  # Includes prediction of point type
-                csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                                  (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 3, np.argmax(scipy.special.softmax(row[5:]))))
+                value = np.argmax(scipy.special.softmax(row[5:]))
             else:
-                csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                                  (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 3, scores[i, 1]))
+                value = scores[i, 1]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 3, value))
             csv_logger.write()
         # 5 = PPN predictions after NMS
         keep = nms_numpy(res['points'][:, :3], scores[:, 1], nms_score_threshold, window_size)
@@ -28,19 +27,23 @@ def uresnet_ppn(csv_logger, data_blob, res, nms_score_threshold=0.6, window_size
         for i, row in enumerate(res['points'][keep]):
             event = events[i]
             if len(row) > 5:
-                csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                                  (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 5, np.argmax(scipy.special.softmax(row[5:]))))
+                value = np.argmax(scipy.special.softmax(row[5:]))
             else:
-                csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                                  (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 5, scores[keep][i, 1]))
+                value = scores[keep][i, 1]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 5, value))
             csv_logger.write()
         # 6 = PPN predictions after score thresholding
         keep = scores[:, 1] > score_threshold
         events = data_blob['input_data'][keep]
         for i, row in enumerate(res['points'][keep]):
             event = events[i]
+            if len(row) > 5:
+                value = np.argmax(scipy.special.softmax(row[5:]))
+            else:
+                value = scores[keep][i, 1]
             csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 6, scores[keep][i, 1]))
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 6, value))
             csv_logger.write()
         # 7 = PPN predictions after masking
         mask = (~(res['mask'] == 0)).any(axis=1)
@@ -48,12 +51,31 @@ def uresnet_ppn(csv_logger, data_blob, res, nms_score_threshold=0.6, window_size
         scores = scores[mask]
         for i, row in enumerate(res['points'][mask]):
             event = events[i]
+            if len(row) > 5:
+                value = np.argmax(scipy.special.softmax(row[5:]))
+            else:
+                value = scores[i, 1]
             csv_logger.record(('x', 'y', 'z', 'type', 'value'),
-                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 7, scores[i, 1]))
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 7, value))
             csv_logger.write()
 
+        # Store PPN1 and PPN2 output
         scores_ppn1 = scipy.special.softmax(res['ppn1'][:, -2:], axis=1)
         scores_ppn2 = scipy.special.softmax(res['ppn2'][:, -2:], axis=1)
+        keep_ppn1 = scores_ppn1[:, 1] > 0.5
+        keep_ppn2 = scores_ppn2[:, 1] > 0.5
+        # 8 = PPN1
+        for i, row in enumerate(scores_ppn1[keep_ppn1]):
+            event = res['ppn1'][keep_ppn1][i, :3]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5, event[1] + 0.5, event[2] + 0.5, 8, scores_ppn1[keep_ppn1][i, 1]))
+            csv_logger.write()
+        # 9 = PPN2
+        for i, row in enumerate(scores_ppn2[keep_ppn2]):
+            event = res['ppn2'][keep_ppn2][i, :3]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5, event[1] + 0.5, event[2] + 0.5, 9, scores_ppn2[keep_ppn2][i, 1]))
+            csv_logger.write()
     # 4 = UResNet prediction
     if 'segmentation' in res:
         predictions = np.argmax(res['segmentation'], axis=1)

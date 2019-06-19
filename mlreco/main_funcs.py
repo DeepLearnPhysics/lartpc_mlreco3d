@@ -45,7 +45,9 @@ def inference(cfg):
 def process_config(cfg):
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
-    cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
+    # cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
+    cfg['training']['gpus'] = [int(i) for i in cfg['training']['gpus'].split(',')]
+    print(os.environ['CUDA_VISIBLE_DEVICES'], cfg['training']['gpus'])
 
     # Update seed
     if cfg['training']['seed'] < 0:
