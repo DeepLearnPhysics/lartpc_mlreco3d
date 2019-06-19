@@ -150,6 +150,38 @@ def assign_primaries2(primaries, clusts, data):
         assn.append(pinds[ind])
     return assn
 
-
+def assign_primaries3(primaries, clusts, data):
+    """
+    for each EM primary assign closest cluster that matches batch and group
+    data should contain groups of voxels
+    """
+    
+    #first remove compton-like clusters from list
+    selection = filter_compton(clusts) # non-compton looking clusters
+    selinds = np.where(selection)[0] # selected indices
+    cs2 = clusts[selinds]
+    # if everything looks compton, say no primaries
+    if len(cs2) < 1:
+        return []
+    
+    labels = get_cluster_label(data, cs2)
+    batches = get_cluster_batch(data, cs2)
+    
+    assn = []
+    for primary in primaries:
+        # get list of indices that match label and batch
+        pbatch = primary[3]
+        plabel = primary[4]
+        pselection = np.logical_and(labels == plabel, batches == pbatch)
+        pinds = np.where(pselection)[0] # indices to compare against
+        if len(pinds) < 1:
+            assn.append(-1)
+            continue
+        
+        scores = score_clusters_primary(cs2[pinds], data, labels[pinds], primary)
+        ind = np.argmin(scores)
+        # print(scores[ind])
+        assn.append(selinds[pinds[ind]])
+    return assn
 
 
