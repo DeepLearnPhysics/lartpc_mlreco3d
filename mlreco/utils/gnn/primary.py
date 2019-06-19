@@ -63,10 +63,10 @@ def score_cluster_primary(clust, data, clabel, primary):
     * whether label matches
     * distance from primary start
     """
-    l = primary[-1]
-    # check if primary label and cluster label agree
-    if l != clabel:
-        return np.inf
+    # l = primary[-1]
+    # # check if primary label and cluster label agree
+    # if l != clabel:
+    #    return np.inf
     # cluster voxel positions
     cx = data[clust, :3]
     # primary position
@@ -111,8 +111,9 @@ def assign_primaries(primaries, clusts, data):
     for primary in primaries:
         # get list of indices that match label and batch
         pbatch = primary[-2]
-        plabel = primary[-1]
-        pselection = np.logical_and(labels == plabel, batches == pbatch)
+        # plabel = primary[-1]
+        # pselection = np.logical_and(labels == plabel, batches == pbatch)
+        pselection = batches == pbatch
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
             continue
@@ -142,8 +143,9 @@ def assign_primaries2(primaries, clusts, data):
     for primary in primaries:
         # get list of indices that match label and batch
         pbatch = primary[-2]
-        plabel = primary[-1]
-        pselection = np.logical_and(labels == plabel, batches == pbatch)
+        # plabel = primary[-1]
+        # pselection = np.logical_and(labels == plabel, batches == pbatch)
+        pselection = batches == pbatch
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
             continue
