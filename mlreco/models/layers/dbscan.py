@@ -58,7 +58,7 @@ class DBScanClusts(torch.nn.Module):
                 cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
                 clusts.extend(cls_idx)
         
-        return clusts
+        return np.array(clusts)
     
 class DBScan2(torch.nn.Module):
     """
