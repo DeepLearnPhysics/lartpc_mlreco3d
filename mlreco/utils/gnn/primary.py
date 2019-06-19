@@ -34,15 +34,19 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=5, mi
             x = particle.first_step().x()
             y = particle.first_step().y()
             z = particle.first_step().z()
+            p_momentum = particle.p()
+            px = particle.px() / p_momentum
+            py = particle.py() / p_momentum
+            pz = particle.pz() / p_momentum
             if point_type == '3d':
                 x = (x - meta.min_x()) / meta.size_voxel_x()
                 y = (y - meta.min_y()) / meta.size_voxel_y()
                 z = (z - meta.min_z()) / meta.size_voxel_z()
-                gt_positions.append([x, y, z, pid])
+                gt_positions.append([x, y, z, px, py, pz, pid])
             else:
                 x = (x - meta.min_x()) / meta.pixel_width()
                 y = (y - meta.min_y()) / meta.pixel_height()
-                gt_positions.append([x, y, pid])
+                gt_positions.append([x, y, px, py, pz, pid])
 
     return np.array(gt_positions)
 
@@ -59,7 +63,7 @@ def score_cluster_primary(clust, data, clabel, primary):
     * whether label matches
     * distance from primary start
     """
-    l = primary[4]
+    l = primary[-1]
     # check if primary label and cluster label agree
     if l != clabel:
         return np.inf
@@ -106,8 +110,8 @@ def assign_primaries(primaries, clusts, data):
     assn = []
     for primary in primaries:
         # get list of indices that match label and batch
-        pbatch = primary[3]
-        plabel = primary[4]
+        pbatch = primary[-2]
+        plabel = primary[-1]
         pselection = np.logical_and(labels == plabel, batches == pbatch)
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
@@ -137,8 +141,8 @@ def assign_primaries2(primaries, clusts, data):
     assn = []
     for primary in primaries:
         # get list of indices that match label and batch
-        pbatch = primary[3]
-        plabel = primary[4]
+        pbatch = primary[-2]
+        plabel = primary[-1]
         pselection = np.logical_and(labels == plabel, batches == pbatch)
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
