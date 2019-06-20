@@ -49,8 +49,7 @@ class BasicAttentionModel(torch.nn.Module):
         """
         inputs data:
             data[0] - dbscan data
-            data[1] - groups data
-            data[2] - primary data
+            data[1] - primary data
         """
         # need to form graph, then pass through GNN
         clusts = form_clusters_new(data[0])
@@ -73,10 +72,10 @@ class BasicAttentionModel(torch.nn.Module):
         
         # process group data
         # data_grp = process_group_data(data[1], data[0])
-        data_grp = data[1]
+        # data_grp = data[1]
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[2], clusts, data_grp)
+        primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         
@@ -166,7 +165,7 @@ class EdgeLabelLoss(torch.nn.Module):
         data_grp = data1
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data2, clusts, data_grp)
+        primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
