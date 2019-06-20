@@ -33,9 +33,9 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
         if pdg_code == 11 or pdg_code == 22 or pdg_code == -11:  # Shower
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
-            # Skipping delta ray
-            if particle.parent_pdg_code() == 13 and particle.creation_process() == "muIoni":
-                continue
+            # # Skipping delta ray
+            # if (particle.parent_pdg_code() == 13 and prc == "muIoni") or prc == "hIoni":
+            #     continue
 
         # Determine point type
         if (pdg_code == 2212):
