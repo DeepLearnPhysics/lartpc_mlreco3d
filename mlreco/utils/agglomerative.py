@@ -29,7 +29,6 @@ def merge_diagram(f, edges):
         fij = fe[ei]
         pi = find_parent(parent, i)
         pj = find_parent(parent, j)
-        print(i, j, pi, pj)
         if pi == pj:
             # nothing to do
             continue
