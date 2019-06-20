@@ -29,6 +29,7 @@ def merge_diagram(f, edges):
         fij = fe[ei]
         pi = find_parent(parent, i)
         pj = find_parent(parent, j)
+        print(i, j, pi, pj)
         if pi == pj:
             # nothing to do
             continue
@@ -36,13 +37,13 @@ def merge_diagram(f, edges):
         bj = birth[pj] # birth of component containing j
         if bi < bj:
             # component with j merges
-            death[j] = fij
+            death[pj] = fij
             # merge components
             parent[pj] = pi
             pass
         else:
             # bj <= bi
-            death[i] = fij
+            death[pi] = fij
             # merge components
             parent[pi] = pj
     return birth, death
