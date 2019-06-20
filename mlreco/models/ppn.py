@@ -150,7 +150,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                 event_ppn2_scores = segmentation[2][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
                 # PPN stuff
-                event_label = event_particles[event_particles[:, -1] == b][:, :-2]  # (N_gt, 3)
+                event_label = event_particles[event_particles[:, -2] == b][:, :-2]  # (N_gt, 3)
                 # event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
                 # print(b, event_label.size())
                 if event_label.size(0) > 0:

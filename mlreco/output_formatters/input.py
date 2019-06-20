@@ -1,4 +1,4 @@
-def input(csv_logger, data_blob, res):
+def input(csv_logger, data_blob, res, **kwargs):
     # 0 = Event voxels and values
     if 'input_data' in data_blob:
         for row in data_blob['input_data']:
