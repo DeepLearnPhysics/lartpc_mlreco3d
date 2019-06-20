@@ -5,6 +5,8 @@ import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.gnn.primary import get_em_primary_info
+from mlreco.utils.dbscan import dbscan_types
+from mlreco.utils.groups import filter_duplicate_voxels, filter_nonimg_voxels
 
 
 def parse_sparse3d_scn(data):
@@ -91,6 +93,24 @@ def parse_em_primaries(data):
         return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
     
 
+def parse_dbscan(data):
+    """
+    A function to create dbscan tensor
+    Args:
+        length 1 array of larcv::EventSparseTensor3D
+    Return:
+        voxels - numpy array(int32) with shape (N,3) - coordinates
+        data   - numpy array(float32) with shape (N,1) - dbscan cluster. -1 if not assigned
+    """
+    np_voxels, np_types = parse_sparse3d_scn(data)
+    # now run dbscan on data
+    clusts = dbscan_types(np_voxels, np_types)
+    # start with no clusters assigned.
+    np_types.fill(-1)
+    for i, c in enumerate(clusts):
+        np_types[c] = i
+    return np_voxels, np_types
+    
 
 def parse_cluster3d(data):
     """
@@ -124,3 +144,44 @@ def parse_cluster3d(data):
     np_voxels = np.concatenate(clusters_voxels, axis=0)
     np_data = np.concatenate(clusters_data, axis=0)
     return np_voxels, np_data
+
+
+def parse_cluster3d_clean(data):
+    """
+    A function to retrieve clusters tensor.  Do the following cleaning:
+    1) lexicographically sort group data (images are lexicographically sorted)
+    2) remove voxels from group data that are not in image
+    3) choose only one group per voxel (by lexicographic order)
+    
+    Args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,1) where 1 is cluster id
+    """
+    grp_voxels, grp_data = parse_cluster3d([data[0]])
+    img_voxels, img_data = parse_sparse3d_scn([data[1]])
+    
+    # step 1: lexicographically sort group data
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm,:]
+    grp_data = grp_data[perm]
+    
+    # step 2: remove duplicates
+    sel1 = filter_duplicate_voxels(grp_voxels, usebatch=False)
+    inds1 = np.where(sel1)[0]
+    grp_voxels = grp_voxels[inds1,:]
+    grp_data = grp_data[inds1]
+    
+    # step 3: remove voxels not in image
+    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
+    inds2 = np.where(sel2)[0]
+    grp_voxels = grp_voxels[inds2,:]
+    grp_data = grp_data[inds2]
+    
+    return grp_voxels, grp_data
+    
+    
+    
+    
