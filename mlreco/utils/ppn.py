@@ -15,6 +15,9 @@ def contains(meta, point, point_type="3d"):
 
 
 def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=0.05):
+    """
+    Gets particle information for training ppn
+    """
     if point_type not in ["3d", "xy", "yz", "zx"]:
         raise Exception("Point type not supported in PPN I/O.")
     # from larcv import larcv
@@ -36,18 +39,18 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
 
         # Determine point type
         if (pdg_code == 2212):
-            gt_type = 0
+            gt_type = 0 # proton
         elif pdg_code != 22 and pdg_code != 11:
             gt_type = 1
         elif pdg_code == 22:
             gt_type = 2
         else:
             if prc == "primary" or prc == "nCapture" or prc == "conv":
-                gt_type = 2
+                gt_type = 2 # em shower
             elif prc == "muIoni" or prc == "hIoni":
-                gt_type = 3
+                gt_type = 3 # delta
             elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
-                gt_type = 4
+                gt_type = 4 # michel
 
         # TODO deal with different 2d projections
         # Register start point
@@ -80,3 +83,6 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
                 gt_positions.append([x, y, gt_type])
 
     return np.array(gt_positions)
+
+
+
