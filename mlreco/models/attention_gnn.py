@@ -61,7 +61,14 @@ class BasicAttentionModel(torch.nn.Module):
         #clusts = clusts[selection]
         
         # remove compton clusters
+        # if no cluster fits this condition, return
         selection = filter_compton(clusts) # non-compton looking clusters
+        if not len(selection):
+            e = torch.tensor([], requires_grad=True)
+            if data[0].is_cuda:
+                e.cuda()
+            return e
+        
         clusts = clusts[selection]
         
         # process group data
@@ -143,7 +150,15 @@ class EdgeLabelLoss(torch.nn.Module):
         # clusts = clusts[selection]
         
         # remove compton clusters
+        # if no cluster fits this condition, return
         selection = filter_compton(clusts) # non-compton looking clusters
+        if not len(selection):
+            total_loss = self.lossfn(edge_pred, edge_pred)
+            return {
+                'accuracy': 1.,
+                'loss_seg': total_loss
+            }
+        
         clusts = clusts[selection]
         
         # process group data
