@@ -5,6 +5,7 @@ import torch
 from mlreco.models.layers.dbscan import DBScan, DBScanClusts
 from mlreco.models.uresnet_ppn import PPNUResNet, SegmentationLoss
 from mlreco.models.attention_gnn import BasicAttentionModel
+from mlreco.utils.ppn import uresnet_ppn_point_selector
 
 # chain UResNet + PPN + DBSCAN + GNN for showers
 
