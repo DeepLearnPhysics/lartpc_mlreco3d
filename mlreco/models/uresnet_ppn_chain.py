@@ -2,8 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
+from .uresnet_lonely import UResNet, SegmentationLoss
+from .ppn import PPN, PPNLoss
 
 
 class Chain(torch.nn.Module):

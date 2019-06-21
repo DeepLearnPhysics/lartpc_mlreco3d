@@ -2,8 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.layers.dbscan import DBScan
-from mlreco.models.uresnet_ppn import PPNUResNet, SegmentationLoss
+from .layers.dbscan import DBScan
+from .uresnet_ppn import PPNUResNet, SegmentationLoss
 
 
 class Chain(torch.nn.Module):

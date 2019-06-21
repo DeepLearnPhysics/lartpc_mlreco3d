@@ -10,11 +10,11 @@ import numpy as np
 import torch
 import pprint
 import itertools
-from mlreco.trainval import trainval
-from mlreco.iotools.factories import loader_factory
-from mlreco.utils import utils
-from mlreco import analysis
-from mlreco.output_formatters import output
+from .trainval import trainval
+from .iotools.factories import loader_factory
+from .utils import utils
+from . import analysis
+from .output_formatters import output
 
 
 class Handlers:

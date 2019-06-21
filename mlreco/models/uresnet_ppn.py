@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLabels
+from .layers.extract_feature_map import Selection, Multiply, AddLabels
 
 
 class PPNUResNet(torch.nn.Module):

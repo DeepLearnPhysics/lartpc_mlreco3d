@@ -4,8 +4,8 @@ from __future__ import print_function
 import torch
 import time
 import os
-from mlreco.models import construct
-from mlreco.utils.data_parallel import DataParallel
+from .models import construct
+from .utils.data_parallel import DataParallel
 import numpy as np
 import re
 

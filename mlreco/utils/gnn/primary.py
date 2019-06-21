@@ -6,9 +6,9 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import scipy as sp
-from mlreco.utils.ppn import contains
-from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
-from mlreco.utils.gnn.compton import filter_compton
+from ..ppn import contains
+from .cluster import get_cluster_label, get_cluster_batch
+from .compton import filter_compton
 
 
 def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=0.05):

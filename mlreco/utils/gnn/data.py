@@ -1,6 +1,6 @@
 # creates inputs to GNN networks
 import torch
-from mlreco.utils.gnn.cluster import get_cluster_centers, get_cluster_voxels, get_cluster_features, get_cluster_energies
+from .cluster import get_cluster_centers, get_cluster_voxels, get_cluster_features, get_cluster_energies
 import numpy as np
 import scipy as sp
 
