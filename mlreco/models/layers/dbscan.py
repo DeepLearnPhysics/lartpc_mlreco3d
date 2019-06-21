@@ -26,7 +26,7 @@ class DBScanClusts(torch.nn.Module):
         self.num_classes = cfg['num_classes']
         self.dim = cfg['data_dim']
 
-    def forward(self, x):
+    def forward(self, x, onehot=True):
         # output clusters
         clusts = []
         # none of this is differentiable.  Detach for call to numpy
@@ -35,15 +35,24 @@ class DBScanClusts(torch.nn.Module):
         if x.is_cuda:
             x = x.cpu()
         bids = torch.unique(x[:,self.dim])
-        data = x[:,:-self.num_classes]
-        segmentation = x[:, -self.num_classes:]
+        if onehot:
+            data = x[:,:-self.num_classes]
+        else:
+            data = x[:,:-1]
+        if onehot:
+            segmentation = x[:, -self.num_classes:]
+        else:
+            segmentation = x[:,-1] # labels
         # loop over batch
         for bid in bids:
             # batch indices
             binds = data[:,self.dim] == bid
             # loop over classes
             for c in range(self.num_classes):
-                cinds = segmentation[:,c] == 1
+                if onehot:
+                    cinds = segmentation[:,c] == 1
+                else:
+                    cinds = segmentation == c
                 # batch = bid and class = c
                 bcinds = torch.all(torch.stack([binds, cinds]), dim=0)
                 selection = np.where(bcinds == 1)[0]
