@@ -40,10 +40,11 @@ class Chain(torch.nn.Module):
         
         # point selector from uresnet+ppn
         ppn_pts = uresnet_ppn_point_selector(pred_types, x)
+        em_sel = ppn_pts[:,-1] > 1 # select em points
         
         # pass into gnn
         # gnn_data = [five_types_data, particle_data]
-        gnn_data = [pred_types, torch.tensor(ppn_pts, dtype=torch.float)]
+        gnn_data = [pred_types, torch.tensor(ppn_pts[em_sel], dtype=torch.float)]
         
         gnn_out = self.gnn(gnn_data)
         
