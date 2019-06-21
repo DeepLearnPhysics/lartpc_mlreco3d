@@ -34,10 +34,9 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=5, mi
             x = particle.first_step().x()
             y = particle.first_step().y()
             z = particle.first_step().z()
-            p_momentum = particle.p()
-            px = particle.px() / p_momentum
-            py = particle.py() / p_momentum
-            pz = particle.pz() / p_momentum
+            px = particle.px()
+            py = particle.py()
+            pz = particle.pz()
             if point_type == '3d':
                 x = (x - meta.min_x()) / meta.size_voxel_x()
                 y = (y - meta.min_y()) / meta.size_voxel_y()
@@ -161,9 +160,10 @@ def assign_primaries3(primaries, clusts, data):
     """
     
     #first remove compton-like clusters from list
-    selection = filter_compton(clusts) # non-compton looking clusters
-    selinds = np.where(selection)[0] # selected indices
-    cs2 = clusts[selinds]
+    cs2 = clusts
+#     selection = filter_compton(clusts) # non-compton looking clusters
+#     selinds = np.where(selection)[0] # selected indices
+#     cs2 = clusts[selinds]
     # if everything looks compton, say no primaries
     if len(cs2) < 1:
         return []
@@ -174,8 +174,8 @@ def assign_primaries3(primaries, clusts, data):
     assn = []
     for primary in primaries:
         # get list of indices that match label and batch
-        pbatch = primary[3]
-        plabel = primary[4]
+        pbatch = primary[-2]
+        plabel = primary[-1]
         pselection = np.logical_and(labels == plabel, batches == pbatch)
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
@@ -185,7 +185,6 @@ def assign_primaries3(primaries, clusts, data):
         scores = score_clusters_primary(cs2[pinds], data, labels[pinds], primary)
         ind = np.argmin(scores)
         # print(scores[ind])
-        assn.append(selinds[pinds[ind]])
+#         assn.append(selinds[pinds[ind]])
+        assn.append(pinds[ind])
     return assn
-
-
