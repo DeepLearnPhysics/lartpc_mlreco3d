@@ -6,6 +6,8 @@ from mlreco.models import chain
 from mlreco.models import uresnet_ppn_chain
 from mlreco.models import attention_gnn
 from mlreco.models import chain_gnn
+from .factories import construct, model_dict
+
 
 
 # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -25,3 +27,4 @@ models = {
     "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
     "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
 }
+

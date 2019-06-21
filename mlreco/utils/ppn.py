@@ -16,8 +16,16 @@ def contains(meta, point, point_type="3d"):
         return point.x() >= meta.min_x() and point.x() <= meta.max_x() \
             and point.y() >= meta.min_y() and point.y() <= meta.max_y()
 
+def pass_particle(gt_type, start, end, energy_deposit, vox_count):
+    if (np.power((start.x()-end.x()),2) + np.power((start.y()-end.y()),2) + np.power((start.z()-end.z()),2)) < 6.25:
+        return True
+    if gt_type == 0: return vox_count<7 or energy_deposit < 50.
+    if gt_type == 1: return vox_count<7 or energy_deposit < 10.
+    if gt_type == 2: return vox_count<7 or energy_deposit < 1.
+    if gt_type == 3: return vox_count<5 or energy_deposit < 5.
+    if gt_type == 4: return vox_count<5 or energy_deposit < 5.
 
-def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=0.05):
+def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energy_deposit=10):
     """
     Gets particle information for training ppn
     """
@@ -26,19 +34,19 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
     # from larcv import larcv
     gt_positions = []
     for particle in particle_v:
-        pdg_code = particle.pdg_code()
+        pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
         # Skip particle under some conditions
-        if (particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count):
+        if particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count:
             continue
         if pdg_code > 1000000000:  # skipping nucleus trackid
             continue
-        if pdg_code == 11 or pdg_code == 22 or pdg_code == -11:  # Shower
+        if pdg_code == 11 or pdg_code == 22:  # Shower
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
-            # # Skipping delta ray
-            # if (particle.parent_pdg_code() == 13 and prc == "muIoni") or prc == "hIoni":
-            #     continue
+            # Skipping delta ray
+            #if particle.parent_pdg_code() == 13 and particle.creation_process() == "muIoni":
+            #    continue
 
         # Determine point type
         if (pdg_code == 2212):
@@ -55,6 +63,9 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
                 gt_type = 4 # michel
 
+        #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
+        #    continue
+                         
         # TODO deal with different 2d projections
         # Register start point
         x = particle.first_step().x()
@@ -62,7 +73,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
         z = particle.first_step().z()
         if point_type == '3d':
             x = (x - meta.min_x()) / meta.size_voxel_x()
-            y = (y - meta.min_y()) / meta.size_voxel_y()
+            y = (y - meta.min_y()) / meta.size_voxel_y() 
             z = (z - meta.min_z()) / meta.size_voxel_z()
             gt_positions.append([x, y, z, gt_type])
         else:
@@ -84,7 +95,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
                 x = (x - meta.min_x()) / meta.pixel_width()
                 y = (y - meta.min_y()) / meta.pixel_height()
                 gt_positions.append([x, y, gt_type])
-
+    
     return np.array(gt_positions)
 
 

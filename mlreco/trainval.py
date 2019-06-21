@@ -4,8 +4,8 @@ from __future__ import print_function
 import torch
 import time
 import os
+from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
-from mlreco.models import models
 import numpy as np
 import re
 
@@ -139,11 +139,10 @@ class trainval(object):
     def initialize(self):
         # To use DataParallel all the inputs must be on devices[0] first
         model = None
-        if self._model_name in models:
-            model, criterion = models[self._model_name]
-            self._criterion = criterion(self._model_config).cuda()
-        else:
-            raise Exception("Unknown model name provided")
+
+        model,criterion = construct(self._model_name)
+        self._criterion = criterion(self._model_config).cuda()
+
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
