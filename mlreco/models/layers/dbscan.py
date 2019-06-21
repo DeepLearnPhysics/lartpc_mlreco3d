@@ -61,13 +61,14 @@ class DBScanClusts(torch.nn.Module):
                 # perform DBSCAN
                 sel_vox = data[bcinds, :self.dim]
                 res=DBSCAN(eps=self.epsilon,
-                           min_samples=self.minPoints,
-                           metric='euclidean'
-                          ).fit(sel_vox)
+                                           min_samples=self.minPoints,
+                                           metric='euclidean'
+                                          ).fit(sel_vox)
                 cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
                 clusts.extend(cls_idx)
         
         return np.array(clusts)
+    
     
 class DBScan2(torch.nn.Module):
     """
