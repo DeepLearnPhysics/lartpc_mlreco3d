@@ -27,4 +27,4 @@ def dbscan_types(voxels, types, epsilon = 1.01, minpts = 3, typemin=2, typemax=5
                   ).fit(sel_vox)
         cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
         clusts.extend(cls_idx)
-    return clusts
+    return np.array(clusts)
