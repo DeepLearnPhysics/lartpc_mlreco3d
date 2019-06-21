@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from mlreco.models.layers.dbscan import DBScanClusts
 
 def get_cluster_label(data, clusts):
     """
@@ -122,34 +121,6 @@ def get_cluster_features(data, clusts, delta=0.0):
         feats.append(np.concatenate((center, B.flatten(), v0)))
     return np.array(feats)
         
-    
-
-def form_clusters(data, cuda=True):
-    """
-    input 5-types data
-    returns DBScanned clusters
-    """
-    dbconfig = {'epsilon' : 1.99,
-            'minPoints' : 1,
-            'num_classes': 5,
-            'data_dim' : 3}
-    
-    dblayer = DBScanClusts(dbconfig)
-    
-    t1 = data
-    # want one-hot encoding of data[1][:,4]
-    labels = data[:,4].long().view(-1,1)
-    batch_size = t1.shape[0]
-    y_onehot = torch.FloatTensor(batch_size, 5)
-    if cuda:
-        y_onehot = y_onehot.cuda()
-
-    y_onehot.zero_()
-    y_onehot = y_onehot.scatter(1, labels, 1)
-    t = torch.cat([t1, y_onehot.double()], dim=1)
-    
-    return dblayer(t)
-    
     
 def form_clusters_new(data):
     """
