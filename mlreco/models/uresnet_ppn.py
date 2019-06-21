@@ -219,6 +219,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
         weight can be None.
         """
+        segmentation = segmentation[0] # Fix for unknown reason
         assert len(segmentation[0]) == len(label)
         assert len(particles) == len(label)
         if weight is not None:
@@ -232,7 +233,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         uresnet_loss, uresnet_acc = 0., 0.
         data_dim = self._cfg['data_dim']
-
+        
+        # loop over gpus
         for i in range(len(label)):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
