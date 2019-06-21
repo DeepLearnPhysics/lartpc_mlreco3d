@@ -4,6 +4,7 @@ from __future__ import print_function
 import numpy as np
 import scipy
 from mlreco.utils.dbscan import dbscan_types
+import torch
 
 
 def contains(meta, point, point_type="3d"):
@@ -139,10 +140,10 @@ def group_points(ppn_pts, batch, label):
     return np.array(ppn_pts_new), np.array(batch_new), np.array(label_new)
 
 
-def uresnet_ppn_point_selector(data_blob, out, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
+def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
     """
     input: 
-        data_blob fed into ppn
+        data - 5-types sparse tensor
         out - ppn output
     output:
         [x,y,z,bid,label] of ppn-predicted points
@@ -179,7 +180,7 @@ def uresnet_ppn_point_selector(data_blob, out, nms_score_threshold=0.8, window_s
     points = points[maskinds]
     labels = pred_labels[maskinds]
     
-    data_in = data_blob['input_data'][0][0]
+    data_in = data.cpu().detach().numpy()
     voxels = data_in[:,:3]
     ppn_pts = voxels[maskinds] + 0.5 + points
     batch = data_in[maskinds,3]

@@ -17,12 +17,13 @@ class Chain(torch.nn.Module):
     4) GNN - to assign EM shower groups
     
     INPUT DATA:
-        "input_data", "particles_label"
+        just energy deposision data
+        "input_data": ["parse_sparse3d_scn", "sparse3d_data"],
     """
     def __init__(self, model_config):
         super(Chain, self).__init__()
         self.dbscan = DBScanClusts(model_config['modules']['dbscan'])
-        self.uresnet_ppn = PPNUResNet(model_config)
+        self.module = PPNUResNet(model_config)
         if 'attention_gnn' in model_config['modules']:
             self.gnn = BasicAttentionModel(model_config)
         else:
@@ -30,12 +31,23 @@ class Chain(torch.nn.Module):
         # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, data):
-        x = self.uresnet_ppn(data)
-        #print(input[0].shape)
-        #print(x[3][0].shape)
-        new_input = torch.cat([data[0].double(), x[3][0].double()], dim=1)
-        clusters = self.dbscan(new_input)
-        return x, clusters
+        x = self.module(data)
+        onehot_types = torch.argmax(x[3][0], 1).view(-1,1)
+        # get predicted 5-types data
+        pred_types = torch.cat([data[0][:,:4].double(), onehot_types.view(-1,1).double()], dim=1)
+        # cluster on 5-types data
+        clusters = self.dbscan(pred_types, onehot=False)
+        
+        # point selector from uresnet+ppn
+        ppn_pts = uresnet_ppn_point_selector(pred_types, x)
+        
+        # pass into gnn
+        # gnn_data = [five_types_data, particle_data]
+        gnn_data = [pred_types, torch.tensor(ppn_pts, dtype=torch.float)]
+        
+        gnn_out = self.gnn(gnn_data)
+        
+        return x, clusters, ppn_pts, gnn_data, gnn_out
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
