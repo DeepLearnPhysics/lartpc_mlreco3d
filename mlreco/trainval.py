@@ -174,7 +174,7 @@ class trainval(object):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f)
+                    checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
