@@ -119,7 +119,7 @@ def get_cluster_features(data, clusts, delta=0.0):
         # weight direction
         v0 = dirwt*v0
         # append, center, B.flatten(), v0
-        feats.append(np.concatenate((center, B.flatten(), v0)))
+        feats.append(np.concatenate((center, B.flatten(), v0, [len(x)])))
     return np.array(feats)
         
     
