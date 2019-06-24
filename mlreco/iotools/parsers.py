@@ -90,7 +90,7 @@ def parse_em_primaries(data):
     if part_info.shape[0] > 0:
         return part_info[:, :-1], part_info[:, -1][:, None]
     else:
-        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+        return np.empty(shape=(0, 6), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
     
 
 def parse_dbscan(data):
