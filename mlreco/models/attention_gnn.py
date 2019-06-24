@@ -10,7 +10,7 @@ from mlreco.utils.gnn.primary import assign_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import secondary_vox_matching_efficiency
+from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency
 from mlreco.utils.groups import process_group_data
 
 class BasicAttentionModel(torch.nn.Module):
@@ -23,10 +23,10 @@ class BasicAttentionModel(torch.nn.Module):
         self.model_config = cfg['modules']['attention_gnn']
         self.nheads = self.model_config['nheads']
         
-        # # first layer increases number of features from 4 to 16
-        self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
+        # first layer increases number of features from 4 to 16
+        # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
         # first layer increases number of features from 15 to 16
-        # self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
+        self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
         
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
@@ -80,8 +80,8 @@ class BasicAttentionModel(torch.nn.Module):
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         
         # obtain vertex features
-        # x = cluster_vtx_features(data[0], clusts, cuda=True)
-        x = cluster_vtx_features_old(data[0], clusts, cuda=True)
+        x = cluster_vtx_features(data[0], clusts, cuda=True)
+        # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
         # obtain edge features
@@ -196,10 +196,10 @@ class EdgeLabelLoss(torch.nn.Module):
             
             
         
-        total_loss = self.lossfn(edge_assn, edge_pred)
+        total_loss = self.lossfn(edge_pred, edge_assn)
         
         # compute accuracy of assignment
-        total_acc = torch.tensor(secondary_vox_matching_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        total_acc = torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         
         return {
             'accuracy': total_acc,
