@@ -5,9 +5,8 @@ from mlreco import output_formatters
 from mlreco.utils import utils
 
 
-def output(output_formatters_list, data_blob, res, cfg, idx):
+def output(output_formatters_list, data_blob, res, cfg, idx, **kwargs):
     event_id = 0
-    print(res)
     for i in range(len(data_blob['input_data'])):
         for j in range(len(data_blob['input_data'][i])):
             batch_idx = np.unique(data_blob['input_data'][i][j][:, -2])
@@ -31,6 +30,6 @@ def output(output_formatters_list, data_blob, res, cfg, idx):
                 csv_logger = utils.CSVData("%s/output-%.07d.csv" % (cfg['training']['log_dir'], event_id))
                 for output in output_formatters_list:
                     f = getattr(output_formatters, output)
-                    f(csv_logger, new_data_blob, new_res)
+                    f(csv_logger, new_data_blob, new_res, **kwargs)
                 csv_logger.close()
                 event_id += 1

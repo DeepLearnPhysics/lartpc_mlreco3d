@@ -7,6 +7,9 @@ def model_dict():
     from . import chain
     from . import uresnet_ppn_chain
     from . import attention_gnn
+    from . import chain_gnn
+    from . import node_attention_gnn
+    from . import node_econv_gnn
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -23,7 +26,13 @@ def model_dict():
         "chain": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Attention GNN
-        "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss)
+        "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
+        "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss),
+        # Node / Primary prediction GNNS
+        # Node attention GNN
+        "node_attention_gnn": (node_attention_gnn.NodeAttentionModel, node_attention_gnn.NodeLabelLoss),
+        # Node EConv GNN
+        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss)
     }
     
     return models
