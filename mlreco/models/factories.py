@@ -25,7 +25,12 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Attention GNN
         "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
-        "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
+        "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss),
+        # Node / Primary prediction GNNS
+        # Node attention GNN
+        "node_attention_gnn": (node_attention_gnn.NodeAttentionModel, node_attention_gnn.NodeLabelLoss),
+        # Node EConv GNN
+        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss)
     }
     
     return models
