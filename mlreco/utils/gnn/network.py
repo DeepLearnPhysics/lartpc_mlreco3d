@@ -11,4 +11,12 @@ def primary_bipartite_incidence(batches, primaries, cuda=True):
     if cuda:
         ret = ret.cuda()
     return ret
-    
+
+def complete_graph(batches, cuda=True):
+    """
+    incidence matrix of bipartite graph between primary clusters and non-primary clusters
+    """
+    ret = torch.tensor([[i, j] for i in np.arange(len(batches)) for j in np.arange(len(batches)) if (batches[i] == batches[j] and i != j)], dtype=torch.long, requires_grad=False).t().contiguous()
+    if cuda:
+        ret = ret.cuda()
+    return ret

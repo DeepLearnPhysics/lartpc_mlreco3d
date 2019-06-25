@@ -46,7 +46,7 @@ def process_config(cfg):
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
     cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
-    
+
     # Update seed
     if cfg['training']['seed'] < 0:
         import time
@@ -278,7 +278,6 @@ def inference_loop(cfg, handlers):
             tstart_iteration = time.time()
 
             # blob = next(handlers.data_io_iter)
-
             tio_start = time.time()
             data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
             tspent_io = time.time() - tio_start
