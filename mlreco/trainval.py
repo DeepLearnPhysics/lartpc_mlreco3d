@@ -181,7 +181,12 @@ class trainval(object):
                         if other_name in checkpoint['state_dict']:
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
-                    self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    
+                    if len(bad_keys.unexpected_keys) > 0:
+                        print("INCOMPATIBLE KEYS!")
+                        print(bad_keys.unexpected_keys)
+                        print("make sure your module is named ", module)
 
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own

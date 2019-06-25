@@ -6,7 +6,7 @@ import torch
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout
 import torch.nn.functional as F
 from torch_geometric.nn import MetaLayer, GATConv, AGNNConv
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, form_clusters_new
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
 from mlreco.utils.gnn.primary import assign_primaries
 from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.gnn.compton import filter_compton

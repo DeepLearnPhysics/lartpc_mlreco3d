@@ -14,7 +14,7 @@ class PPNUResNet(torch.nn.Module):
     def __init__(self, cfg):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg['modules']['uresnet_ppn']
+        model_config = cfg
         self._model_config = model_config
         dimension = model_config['data_dim']
         reps = 2  # Conv block repetition factor
