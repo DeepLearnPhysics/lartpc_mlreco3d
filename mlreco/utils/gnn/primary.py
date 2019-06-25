@@ -56,7 +56,7 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=5, mi
 ###
 
 
-def score_cluster_primary(clust, data, clabel, primary):
+def score_cluster_primary(clust, data, primary):
     """
     score how far off cluster is from primary trajectory
     * whether label matches
@@ -75,18 +75,18 @@ def score_cluster_primary(clust, data, clabel, primary):
     return d
 
 
-def score_clusters_primary(clusts, data, labels, primary):
+def score_clusters_primary(clusts, data, primary):
     """
     return cluster scores for an EM primary
     """
     n = len(clusts)
     scores = np.zeros(n)
     for i, c in enumerate(clusts):
-        scores[i] = score_cluster_primary(c, data, labels[i], primary)
+        scores[i] = score_cluster_primary(c, data, primary)
     return scores
 
 
-def assign_primaries(primaries, clusts, data):
+def assign_primaries(primaries, clusts, data, use_labels=False):
     """
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
@@ -103,24 +103,30 @@ def assign_primaries(primaries, clusts, data):
     if len(cs2) < 1:
         return []
     
-    labels = get_cluster_label(data, cs2)
+    if use_labels:
+        labels = get_cluster_label(data, cs2)
     batches = get_cluster_batch(data, cs2)
     
     assn = []
     for primary in primaries:
         # get list of indices that match label and batch
         pbatch = primary[-2]
-        # plabel = primary[-1]
-        # pselection = np.logical_and(labels == plabel, batches == pbatch)
-        pselection = batches == pbatch
+        if use_labels:
+            plabel = primary[-1]
+            pselection = np.logical_and(labels == plabel, batches == pbatch)
+        else:
+            pselection = batches == pbatch
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
             continue
         
-        scores = score_clusters_primary(cs2[pinds], data, labels[pinds], primary)
+        scores = score_clusters_primary(cs2[pinds], data, primary)
         ind = np.argmin(scores)
         # print(scores[ind])
         assn.append(selinds[pinds[ind]])
+        
+    # assignments may not be unique
+    assn = np.unique(assn)
     return assn
 
 
