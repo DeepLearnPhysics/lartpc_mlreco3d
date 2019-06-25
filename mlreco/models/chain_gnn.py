@@ -24,15 +24,15 @@ class Chain(torch.nn.Module):
     def __init__(self, model_config):
         super(Chain, self).__init__()
         self.dbscan = DBScanClusts(model_config['modules']['dbscan'])
-        self.module = PPNUResNet(model_config)
+        self.uresnet_ppn = PPNUResNet(model_config['modules']['uresnet_ppn'])
         if 'attention_gnn' in model_config['modules']:
-            self.gnn = BasicAttentionModel(model_config)
+            self.gnn = BasicAttentionModel(model_config['modules']['attention_gnn'])
         else:
             raise ValueError('No Valid GNN model provided')
         # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, data):
-        x = self.module(data)
+        x = self.uresnet_ppn(data)
         onehot_types = torch.argmax(x[3][0], 1).view(-1,1)
         # get predicted 5-types data
         pred_types = torch.cat([data[0][:,:4].double(), onehot_types.view(-1,1).double()], dim=1)

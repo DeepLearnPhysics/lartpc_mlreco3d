@@ -8,6 +8,8 @@ def model_dict():
     from . import uresnet_ppn_chain
     from . import attention_gnn
     from . import chain_gnn
+    from . import node_attention_gnn
+    from . import node_econv_gnn
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
