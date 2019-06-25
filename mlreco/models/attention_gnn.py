@@ -21,7 +21,12 @@ class BasicAttentionModel(torch.nn.Module):
     def __init__(self, cfg):
         super(BasicAttentionModel, self).__init__()
         
-        self.model_config = cfg
+        
+        if 'modules' in cfg:
+            self.model_config = cfg['modules']['attention_gnn']
+        else:
+            self.model_config = cfg
+            
         self.nheads = self.model_config['nheads']
         
         # first layer increases number of features from 4 to 16
@@ -79,7 +84,6 @@ class BasicAttentionModel(torch.nn.Module):
         primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
-        print("primaries: ", primaries)
         
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
@@ -87,9 +91,6 @@ class BasicAttentionModel(torch.nn.Module):
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
         # obtain edge features
-        print(type(data[0]), data[0].shape)
-        print(type(clusts), clusts.shape)
-        print(type(edge_index), edge_index.shape)
         e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
         
         # go through layers
@@ -174,6 +175,10 @@ class EdgeLabelLoss(torch.nn.Module):
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
+        
+        primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+        print("primaries (est):  ", primaries)
+        print("primaries (true): ", primaries_true)
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
