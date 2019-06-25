@@ -173,7 +173,7 @@ class trainval(object):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f)
+                    checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
@@ -181,7 +181,12 @@ class trainval(object):
                         if other_name in checkpoint['state_dict']:
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
-                    self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    
+                    if len(bad_keys.unexpected_keys) > 0:
+                        print("INCOMPATIBLE KEYS!")
+                        print(bad_keys.unexpected_keys)
+                        print("make sure your module is named ", module)
 
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own

@@ -5,10 +5,10 @@ import torch
 
 
 class UResNet(torch.nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg['modules']['uresnet_lonely']
+        model_config = cfg['modules'][name]
         self._model_config = model_config
         dimension = model_config['data_dim']
         reps = 2  # Conv block repetition factor
