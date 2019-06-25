@@ -25,8 +25,8 @@ class BasicAttentionModel(torch.nn.Module):
         
         # first layer increases number of features from 4 to 16
         # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
-        # first layer increases number of features from 15 to 16
-        self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
+        # first layer increases number of features from 16 to 16
+        self.attn1 = GATConv(16, 16, heads=self.nheads, concat=False)
         
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
@@ -78,6 +78,11 @@ class BasicAttentionModel(torch.nn.Module):
         primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
+        if not edge_index.shape[0]:
+            e = torch.tensor([], requires_grad=True)
+            if data[0].is_cuda:
+                e.cuda()
+            return e
         
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
@@ -168,6 +173,12 @@ class EdgeLabelLoss(torch.nn.Module):
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
+        if not edge_index.shape[0]:
+            total_loss = self.lossfn(edge_pred, edge_pred)
+            return {
+                'accuracy': 1.,
+                'loss_seg': total_loss
+            }
         group = get_cluster_label(data_grp, clusts)
         
         # determine true assignments
