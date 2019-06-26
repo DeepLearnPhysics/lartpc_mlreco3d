@@ -58,6 +58,26 @@ with open('lartpc_mlreco3d/config/test_uresnet.cfg', 'r') as f:
     cfg = yaml.load(f, Loader=yaml.Loader)
 ```
 
+# Reading a Log
+
+A quick example of how to read a training log, and plot something
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+fname = 'path/to/log.csv'
+df = pd.read_csv(fname)
+
+# plot moving average of accuracy over 10 iterations
+df.accuracy.rolling(10, min_periods=1).mean().plot()
+plt.ylabel("accuracy")
+plt.xlabel("iteration")
+plt.title("moving average of accuracy")
+plt.show()
+
+# list all column names
+print(df.columns.values)
+```
+
 
 # Repository Structure
 
