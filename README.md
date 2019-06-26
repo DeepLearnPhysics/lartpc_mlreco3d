@@ -42,6 +42,23 @@ TODO: describe configuration files in more detail
 
 This section has described how to use the contents of this repository to train variations of what has already been implemented.  To add your own models and analysis, you will want to know how to contribute to the `mlreco` module.
 
+## Using A Configuration File
+
+Most basic useage is to use the `run` script.  From the `lartpc_mlreco3d` folder:
+```bash
+nohup python3 bin/run.py train_gnn.cfg >> log_gnn.txt &
+```
+This will train a GNN specified in `config/train_gnn.cfg`, save checkpoints and logs to specified directories in the `cfg`, and output `stderr` and `stdout` to `log_gnn.txt`
+
+You can generally load a configuration file into a python dictionary using
+```python
+import yaml
+# Load configuration file
+with open('lartpc_mlreco3d/config/test_uresnet.cfg', 'r') as f:
+    cfg = yaml.load(f, Loader=yaml.Loader)
+```
+
+
 # Repository Structure
 
 The 'mlreco' module contains several submodules:
