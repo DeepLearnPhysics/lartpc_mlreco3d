@@ -63,16 +63,6 @@ class PPN(torch.nn.Module):
         if self.training:
             with torch.no_grad():
                 attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.half_stride, label[:, -1][:, None]], dim=1).long())
-                # for b in range(self._flags.BATCH_SIZE):
-                #     batch_index = attention.get_spatial_locations()[:, -1] == b
-                #     print(attention.features.shape, batch_index.shape)
-                #     if attention.features[batch_index].sum() == 0:
-                #         print(label[label[:, -1] == b])
-                #         print((label/2**self.half_stride).long()[label[:, -1] == b])
-                #         print(attention.features[batch_index])
-                #         print(attention.get_spatial_locations()[batch_index])
-                # print(attention.features[attention.get_spatial_locations()[:, -1] == 11].size())
-                # print(attention.features[attention.get_spatial_locations()[:, -1] == 11][attention.features[attention.get_spatial_locations()[:, -1] == 11]>0])
         if use_encoding:
             y = feature_ppn[self.half_stride]
         else:
@@ -94,7 +84,6 @@ class PPN(torch.nn.Module):
         z = self.ppn3_conv(z)
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
-        # FIXME wrt batch index
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
         return [[torch.cat([pixel_pred, scores], dim=1)],

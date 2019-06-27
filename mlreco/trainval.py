@@ -115,11 +115,11 @@ class trainval(object):
             for i in range(len(self._gpus)):
                 data.append([data_blob[key][i] for key in input_keys])
             tstart = time.time()
-            segmentation = self._net(data)
+            result = self._net(data)
 
             # Compute the loss
             if loss_keys:
-                loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
+                loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -133,7 +133,7 @@ class trainval(object):
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
-                    res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
+                    res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):

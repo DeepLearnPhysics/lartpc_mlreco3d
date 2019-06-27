@@ -48,15 +48,41 @@ def uresnet_ppn(csv_logger, data_blob, res, nms_score_threshold=0.8, window_size
         # 7 = PPN predictions after masking
         mask = (~(res['mask'] == 0)).any(axis=1)
         events = data_blob['input_data'][mask]
-        scores = scores[mask]
         for i, row in enumerate(res['points'][mask]):
             event = events[i]
             if len(row) > 5:
                 value = np.argmax(scipy.special.softmax(row[5:]))
             else:
-                value = scores[i, 1]
+                value = scores[mask][i, 1]
             csv_logger.record(('x', 'y', 'z', 'type', 'value'),
                               (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 7, value))
+            csv_logger.write()
+
+        # 10 = masking + score threshold
+        mask = ((~(res['mask'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
+        events = data_blob['input_data'][mask]
+        for i, row in enumerate(res['points'][mask]):
+            event = events[i]
+            if len(row) > 5:
+                value = np.argmax(scipy.special.softmax(row[5:]))
+            else:
+                value = scores[mask][i, 1]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 10, value))
+            csv_logger.write()
+
+        # 11 = masking + score threshold + NMS
+        mask = ((~(res['mask'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
+        keep = nms_numpy(res['points'][mask][:, :3], scores[mask][:, 1], nms_score_threshold, window_size)
+        events = data_blob['input_data'][mask][keep]
+        for i, row in enumerate(res['points'][mask][keep]):
+            event = events[i]
+            if len(row) > 5:
+                value = np.argmax(scipy.special.softmax(row[5:]))
+            else:
+                value = scores[mask][keep][i, 1]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 11, value))
             csv_logger.write()
 
         # Store PPN1 and PPN2 output
