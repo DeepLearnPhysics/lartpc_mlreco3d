@@ -7,7 +7,7 @@ import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout
 from torch_geometric.nn import MetaLayer, GATConv
 from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
-from mlreco.utils.gnn.primary import assign_primaries
+from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
@@ -106,9 +106,11 @@ class BasicAttentionModel(torch.nn.Module):
         
         xbatch = torch.tensor(batch).cuda()
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
-        print("max edge weight: ", torch.max(e.view(-1)))
-        print("min edge weight: ", torch.min(e.view(-1)))
-        return e
+        #print("max edge weight: ", torch.max(e.view(-1)))
+        #print("min edge weight: ", torch.min(e.view(-1)))
+        return {
+            'edge_pred': e
+        }
     
     
 class EdgeLabelLoss(torch.nn.Module):
@@ -132,15 +134,18 @@ class EdgeLabelLoss(torch.nn.Module):
             # default behavior
             self.balance = True
         
-    def forward(self, edge_pred, data0, data1, data2):
+    def forward(self, out, data0, data1, data2):
         """
-        edge_pred:
-            predicted edge weights from model forward
+        out:
+            dictionary output from GNN Model
+            keys:
+                'edge_pred': predicted edge weights from model forward
         data:
             data[0] - 5 types data
             data[1] - groups data
             data[2] - primary data
         """
+        edge_pred = out['edge_pred']
         data0 = data0[0]
         data1 = data1[0]
         data2 = data2[0]
@@ -177,8 +182,10 @@ class EdgeLabelLoss(torch.nn.Module):
         group = get_cluster_label(data_grp, clusts)
         
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
-        print("primaries (est):  ", primaries)
-        print("primaries (true): ", primaries_true)
+        primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
+        # set analysis keys
+        out['primary_fdr'] = [torch.tensor(primary_fdr)]
+        out['primary_acc'] = [torch.tensor(primary_acc)]
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
@@ -193,11 +200,11 @@ class EdgeLabelLoss(torch.nn.Module):
             # number in each class
             n0 = torch.sum(ind0).float()
             n1 = torch.sum(ind1).float()
-            print("n0 = ", n0, " n1 = ", n1)
+            #print("n0 = ", n0, " n1 = ", n1)
             # weights to balance classes
             w0 = n1 / (n0 + n1)
             w1 = n0 / (n0 + n1)
-            print("w0 = ", w0, " w1 = ", w1)
+            #print("w0 = ", w0, " w1 = ", w1)
             edge_assn[ind0] = w0 * edge_assn[ind0]
             edge_assn[ind1] = w1 * edge_assn[ind1]
             edge_pred = edge_pred.clone()
@@ -213,6 +220,8 @@ class EdgeLabelLoss(torch.nn.Module):
         total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         
         return {
+            'primary_fdr': primary_fdr,
+            'primary_acc': primary_acc,
             'accuracy': total_acc,
             'loss_seg': total_loss
         }
