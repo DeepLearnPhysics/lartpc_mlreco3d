@@ -78,6 +78,26 @@ plt.show()
 print(df.columns.values)
 ```
 
+## Analysis Keys
+
+Analysis Keys allow you to record additional data in a training log, with column headers sharing a name with the keys.
+
+To set analysis keys, you modify the model definition in the config:
+
+```yaml
+model:
+  analysis_keys:
+      primary_fdr: 'primary_fdr'
+      primary_acc: 'primary_acc'
+```
+The `primary_fdr` key will store `out['primary_fdr']` where `out` is the network output.  Note that if you use something mutable (like a dictionary) for network output (as above), you can also set keys in the loss.  If the output of the network is array-like instead of a dictionary, the config may look like this:
+```yaml
+model:
+  analysis_keys:
+      primary_fdr: 1
+      primary_acc: 2
+```
+now the `primary_fdr` key will store `out[1]` at each iteration.
 
 # Repository Structure
 
