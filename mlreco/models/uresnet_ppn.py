@@ -114,7 +114,6 @@ class PPNUResNet(torch.nn.Module):
         label contains segmentation labels for each point + coords of gt points
         """
         use_encoding = False
-
         point_cloud, label = input
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
@@ -191,14 +190,23 @@ class PPNUResNet(torch.nn.Module):
         # FIXME wrt batch index
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
-        return [[torch.cat([pixel_pred, scores], dim=1)],
-                [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
-                [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
-                [x],
-                [attention.features],
-                [attention2.features]]
+        if torch.cuda.is_available():
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
+        else:
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
 
-
+        return result
+            
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)

@@ -74,7 +74,7 @@ class trainval(object):
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
         """
         res_combined = {}
-        for idx in range(int(self._batch_size / (self._minibatch_size * len(self._gpus)))):
+        for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
             blob = {}
             for key in data_blob.keys():
                 blob[key] = data_blob[key][idx]
@@ -110,12 +110,19 @@ class trainval(object):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
             for key in data_blob:
-                data_blob[key] = [torch.as_tensor(d).cuda() for d in data_blob[key]]
+                data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
             data = []
-            for i in range(len(self._gpus)):
+            for i in range(max(1,len(self._gpus))):
                 data.append([data_blob[key][i] for key in input_keys])
             tstart = time.time()
+
+            if not torch.cuda.is_available():
+                data = data[0]
+                
             segmentation = self._net(data)
+
+            if not torch.cuda.is_available():
+                data = [data]
 
             # Compute the loss
             if loss_keys:
@@ -141,7 +148,7 @@ class trainval(object):
         model = None
 
         model,criterion = construct(self._model_name)
-        self._criterion = criterion(self._model_config).cuda()
+        self._criterion = criterion(self._model_config).cuda() if len(self._gpus) else criterion(self._model_config)
 
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
@@ -152,9 +159,9 @@ class trainval(object):
                                       dense=False) # FIXME
 
         if self._train:
-            self._net.train().cuda()
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
         else:
-            self._net.eval().cuda()
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
         self._optimizer = torch.optim.Adam(self._net.parameters(), lr=self._learning_rate)
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
@@ -173,7 +180,7 @@ class trainval(object):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f)
+                    checkpoint = torch.load(f,map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
