@@ -45,9 +45,7 @@ def inference(cfg):
 def process_config(cfg):
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
-    # cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
-    cfg['training']['gpus'] = [int(i) for i in cfg['training']['gpus'].split(',')]
-    print(os.environ['CUDA_VISIBLE_DEVICES'], cfg['training']['gpus'])
+    cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
 
     # Update seed
     if cfg['training']['seed'] < 0:
@@ -67,10 +65,6 @@ def process_config(cfg):
     # Check consistency
     if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * len(cfg['training']['gpus']))) == 0:
         raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
-
-    # Set random seed for reproducibility
-    np.random.seed(cfg['training']['seed'])
-    torch.manual_seed(cfg['training']['seed'])
 
     pp = pprint.PrettyPrinter(indent=4)
     pp.pprint(cfg)
@@ -101,7 +95,14 @@ def make_directories(cfg, loaded_iteration, handlers=None):
 
 
 def prepare(cfg):
-    torch.cuda.set_device(cfg['training']['gpus'][0])
+    # Set primary device
+    if len(cfg['training']['gpus']) > 0:
+        torch.cuda.set_device(cfg['training']['gpus'][0])
+        
+    # Set random seed for reproducibility
+    np.random.seed(cfg['training']['seed'])
+    torch.manual_seed(cfg['training']['seed'])
+
     handlers = Handlers()
 
     # IO configuration
@@ -277,7 +278,6 @@ def inference_loop(cfg, handlers):
             tstart_iteration = time.time()
 
             # blob = next(handlers.data_io_iter)
-
             tio_start = time.time()
             data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
             tspent_io = time.time() - tio_start

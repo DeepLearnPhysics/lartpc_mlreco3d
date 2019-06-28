@@ -3,14 +3,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
+import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout
 from torch_geometric.nn import MetaLayer, GATConv
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, form_clusters_new
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
 from mlreco.utils.gnn.primary import assign_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import secondary_vox_matching_efficiency
+from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency
 from mlreco.utils.groups import process_group_data
 
 class BasicAttentionModel(torch.nn.Module):
@@ -20,13 +21,18 @@ class BasicAttentionModel(torch.nn.Module):
     def __init__(self, cfg):
         super(BasicAttentionModel, self).__init__()
         
-        self.model_config = cfg['modules']['attention_gnn']
+        
+        if 'modules' in cfg:
+            self.model_config = cfg['modules']['attention_gnn']
+        else:
+            self.model_config = cfg
+            
         self.nheads = self.model_config['nheads']
         
-        # # first layer increases number of features from 4 to 16
-        self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
+        # first layer increases number of features from 4 to 16
+        # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
         # first layer increases number of features from 15 to 16
-        # self.attn1 = GATConv(15, 16, heads=self.nheads, concat=False)
+        self.attn1 = GATConv(16, 16, heads=self.nheads, concat=False)
         
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
@@ -49,8 +55,7 @@ class BasicAttentionModel(torch.nn.Module):
         """
         inputs data:
             data[0] - dbscan data
-            data[1] - groups data
-            data[2] - primary data
+            data[1] - primary data
         """
         # need to form graph, then pass through GNN
         clusts = form_clusters_new(data[0])
@@ -61,21 +66,28 @@ class BasicAttentionModel(torch.nn.Module):
         #clusts = clusts[selection]
         
         # remove compton clusters
+        # if no cluster fits this condition, return
         selection = filter_compton(clusts) # non-compton looking clusters
+        if not len(selection):
+            e = torch.tensor([], requires_grad=True)
+            if data[0].is_cuda:
+                e.cuda()
+            return e
+        
         clusts = clusts[selection]
         
         # process group data
         # data_grp = process_group_data(data[1], data[0])
-        data_grp = data[1]
+        # data_grp = data[1]
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[2], clusts, data_grp)
+        primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         
         # obtain vertex features
-        # x = cluster_vtx_features(data[0], clusts, cuda=True)
-        x = cluster_vtx_features_old(data[0], clusts, cuda=True)
+        x = cluster_vtx_features(data[0], clusts, cuda=True)
+        # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
         # obtain edge features
@@ -143,7 +155,15 @@ class EdgeLabelLoss(torch.nn.Module):
         # clusts = clusts[selection]
         
         # remove compton clusters
+        # if no cluster fits this condition, return
         selection = filter_compton(clusts) # non-compton looking clusters
+        if not len(selection):
+            total_loss = self.lossfn(edge_pred, edge_pred)
+            return {
+                'accuracy': 1.,
+                'loss_seg': total_loss
+            }
+        
         clusts = clusts[selection]
         
         # process group data
@@ -151,10 +171,14 @@ class EdgeLabelLoss(torch.nn.Module):
         data_grp = data1
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data2, clusts, data_grp)
+        primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
+        
+        primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+        print("primaries (est):  ", primaries)
+        print("primaries (true): ", primaries_true)
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
@@ -182,10 +206,11 @@ class EdgeLabelLoss(torch.nn.Module):
             
             
         
-        total_loss = self.lossfn(edge_assn, edge_pred)
+        total_loss = self.lossfn(edge_pred, edge_assn)
         
         # compute accuracy of assignment
-        total_acc = torch.tensor(secondary_vox_matching_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        # need to multiply by batch size to be accurate
+        total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         
         return {
             'accuracy': total_acc,
