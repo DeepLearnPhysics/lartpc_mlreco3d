@@ -4,8 +4,8 @@ from __future__ import print_function
 import torch
 import time
 import os
+from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
-from mlreco.models import models
 import numpy as np
 import re
 
@@ -139,11 +139,10 @@ class trainval(object):
     def initialize(self):
         # To use DataParallel all the inputs must be on devices[0] first
         model = None
-        if self._model_name in models:
-            model, criterion = models[self._model_name]
-            self._criterion = criterion(self._model_config).cuda()
-        else:
-            raise Exception("Unknown model name provided")
+
+        model,criterion = construct(self._model_name)
+        self._criterion = criterion(self._model_config).cuda()
+
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
@@ -174,7 +173,7 @@ class trainval(object):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f)
+                    checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
@@ -182,7 +181,12 @@ class trainval(object):
                         if other_name in checkpoint['state_dict']:
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
-                    self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    
+                    if len(bad_keys.unexpected_keys) > 0:
+                        print("INCOMPATIBLE KEYS!")
+                        print(bad_keys.unexpected_keys)
+                        print("make sure your module is named ", module)
 
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own
