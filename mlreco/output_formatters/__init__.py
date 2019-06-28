@@ -6,7 +6,7 @@ from mlreco.utils import utils
 
 
 def output(output_formatters_list, data_blob, res, cfg, idx, **kwargs):
-    event_id = 0
+    event_id = idx * cfg['iotool']['batch_size']
     for i in range(len(data_blob['input_data'])):
         for j in range(len(data_blob['input_data'][i])):
             batch_idx = np.unique(data_blob['input_data'][i][j][:, -2])
