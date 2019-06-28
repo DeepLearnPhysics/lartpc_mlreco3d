@@ -20,7 +20,7 @@ def main():
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
 
     process_config(cfg)
-    if cfg['training']['train']:
+    if cfg['trainval']['train']:
         train(cfg)
     else:
         inference(cfg)

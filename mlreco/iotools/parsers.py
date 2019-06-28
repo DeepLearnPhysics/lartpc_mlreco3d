@@ -56,7 +56,7 @@ def parse_tensor3d(data):
     return np.array(larcv.as_ndarray(event_tensor3d))
 
 
-def parse_particles(data):
+def parse_particle_points(data):
     """
     A function to retrieve particles ground truth points tensor
     Args:

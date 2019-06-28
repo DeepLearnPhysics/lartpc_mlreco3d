@@ -17,19 +17,21 @@ class trainval(object):
     def __init__(self, cfg):
         self.tspent = {}
         self.tspent_sum = {}
+        
         self._model_config = cfg['model']
-        model_config = cfg['model']
-        training_config = cfg['training']
-        self._weight_prefix = training_config['weight_prefix']
+        self._input_keys   = self._model_config['network_input']
+        self._loss_keys    = self._model_config['loss_input']
+        self._model_name   = self._model_config['name']
+
+        trainval_config = cfg['trainval']
+        self._weight_prefix  = trainval_config['weight_prefix']
+        self._minibatch_size = trainval_config['minibatch_size']
+        self._gpus           = trainval_config['gpus']
+        self._train          = trainval_config['train']
+        self._learning_rate  = trainval_config['learning_rate']
+        self._model_path     = trainval_config['model_path']
+        
         self._batch_size = cfg['iotool']['batch_size']
-        self._minibatch_size = cfg['training']['minibatch_size']
-        self._gpus = cfg['training']['gpus']
-        self._input_keys = model_config['network_input']
-        self._loss_keys = model_config['loss_input']
-        self._train = training_config['train']
-        self._model_name = model_config['name']
-        self._learning_rate = training_config['learning_rate']
-        self._model_path = training_config['model_path']
 
     def backward(self):
         total_loss = 0.0
@@ -107,19 +109,18 @@ class trainval(object):
         input_keys = self._input_keys
         loss_keys = self._loss_keys
         with torch.set_grad_enabled(self._train):
-            # Segmentation
-            # FIXME set requires_grad = false for labels/weights?
+            # Forward
             for key in data_blob:
                 data_blob[key] = [torch.as_tensor(d).cuda() for d in data_blob[key]]
             data = []
             for i in range(len(self._gpus)):
                 data.append([data_blob[key][i] for key in input_keys])
             tstart = time.time()
-            segmentation = self._net(data)
+            forward_return = self._net(data)
 
             # Compute the loss
             if loss_keys:
-                loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
+                loss_acc = self._criterion(forward_return, *tuple([data_blob[key] for key in loss_keys]))
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -133,7 +134,7 @@ class trainval(object):
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
-                    res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
+                    res[key] = [s.cpu().detach().numpy() for s in forward_return[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):
