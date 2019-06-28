@@ -98,7 +98,7 @@ def prepare(cfg):
     # Set primary device
     if len(cfg['training']['gpus']) > 0:
         torch.cuda.set_device(cfg['training']['gpus'][0])
-        
+
     # Set random seed for reproducibility
     np.random.seed(cfg['training']['seed'])
     torch.manual_seed(cfg['training']['seed'])
@@ -143,7 +143,8 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     acc_seg  = np.mean(res['accuracy'])
     res_dict = {}
     for key in res:
-        res_dict[key] = np.mean(res[key])
+        if key not in cfg['model']['analysis_keys']:
+            res_dict[key] = np.mean(res[key])
 
     mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
 

@@ -148,8 +148,7 @@ class trainval(object):
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
 
         self._net = DataParallel(model(self._model_config),
-                                      device_ids=self._gpus,
-                                      dense=False) # FIXME
+                                      device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda()
@@ -182,7 +181,7 @@ class trainval(object):
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
                     bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
-                    
+
                     if len(bad_keys.unexpected_keys) > 0:
                         print("INCOMPATIBLE KEYS!")
                         print(bad_keys.unexpected_keys)
