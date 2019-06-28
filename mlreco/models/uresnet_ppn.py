@@ -233,7 +233,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         uresnet_loss, uresnet_acc = 0., 0.
         data_dim = self._cfg['data_dim']
-        
+
         # loop over gpus
         for i in range(len(label)):
             event_particles = particles[i]
@@ -297,8 +297,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
                     # 5. Loss ppn1 & ppn2 (predict positives)
-                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
-                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
+                    event_label_ppn1 = torch.floor(event_label/(2**(self._cfg['num_strides']-1)))
+                    event_label_ppn2 = torch.floor(event_label/(2**(int(self._cfg['num_strides']/2))))
+                    d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
+                    d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
                     positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
                     positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
                     loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
