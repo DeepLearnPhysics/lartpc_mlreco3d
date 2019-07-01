@@ -4,7 +4,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout
+from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, GATConv
 from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
 from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
@@ -29,16 +29,26 @@ class BasicAttentionModel(torch.nn.Module):
             
         self.nheads = self.model_config['nheads']
         
+        # perform batch normalization at each step
+        self.bn0 = BatchNorm1d(16)
+        
         # first layer increases number of features from 4 to 16
         # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
         # first layer increases number of features from 15 to 16
         self.attn1 = GATConv(16, 16, heads=self.nheads, concat=False)
         
+        self.bn1 = BatchNorm1d(16)
+        
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
         
+        self.bn2 = BatchNorm1d(32)
+        
         # third layer increases number of features from 32 to 64
         self.attn3 = GATConv(32, 64, heads=self.nheads, concat=False)
+        
+        self.bn3 = BatchNorm1d(64)
+        self.bn_edge = BatchNorm1d(10)
     
         # final prediction layer
         self.edge_pred_mlp = Seq(Lin(138, 64), Dropout(p=0.2), LeakyReLU(0.12), Dropout(p=0.2), Lin(64, 16), LeakyReLU(0.12), Lin(16,1), Sigmoid())
@@ -87,20 +97,27 @@ class BasicAttentionModel(torch.nn.Module):
         
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
+        # batch normalization
+        x = self.bn0(x)
         # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
         # obtain edge features
         e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
+        # batch normalization
+        e = self.bn_edge(e)
         
         # go through layers
         x = self.attn1(x, edge_index)
+        x = self.bn1(x)
         #print("max x: ", torch.max(x.view(-1)))
         #print("min x: ", torch.min(x.view(-1)))
         x = self.attn2(x, edge_index)
+        x = self.bn2(x)
         #print("max x: ", torch.max(x.view(-1)))
         #print("min x: ", torch.min(x.view(-1)))
         x = self.attn3(x, edge_index)
+        x = self.bn3(x)
         #print("max x: ", torch.max(x.view(-1)))
         #print("min x: ", torch.min(x.view(-1)))
         
