@@ -194,13 +194,21 @@ class PPNUResNet(torch.nn.Module):
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
         point_type = ppn3_type.features
-        return [[torch.cat([pixel_pred, scores, point_type], dim=1)],
-                [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
-                [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
-                [x],
-                [attention.features],
-                [attention2.features]]
-
+        if torch.cuda.is_available():
+            result = [[torch.cat([pixel_pred, scores, point_type], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
+        else:
+            result = [[torch.cat([pixel_pred, scores, point_type], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
+        return result
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):

@@ -29,7 +29,9 @@ class AddLabels(torch.nn.Module):
         output.spatial_size = attention.spatial_size
         output.features = attention.features.new().resize_(1).expand_as(attention.features).fill_(1.0)
         output.features = output.features * attention.features
-        positions = attention.get_spatial_locations().cuda()
+        positions = attention.get_spatial_locations()
+        if torch.cuda.is_available():
+            positions = positions.cuda()
         # print(positions.max(), label.max())
         for l in label:
             index = (positions == l).all(dim=1)
@@ -98,8 +100,12 @@ class ExtractFeatureMap(torch.nn.Module):
         # with torch.no_grad():
         # TODO deal with batch id
         # print('expand', i, x.features.shape, x.spatial_size, x.get_spatial_locations().size())
-        feature_map = x.get_spatial_locations().cuda().float()
-        coords = y.get_spatial_locations().cuda().float()
+        if torch.cuda.is_available():
+            feature_map = x.get_spatial_locations().cuda().float()
+            coords = y.get_spatial_locations().cuda().float()
+        else:
+            feature_map = x.get_spatial_locations().float()
+            coords = y.get_spatial_locations().float()
         N1 = feature_map.size(0)
         N2 = coords.size(0)
 
