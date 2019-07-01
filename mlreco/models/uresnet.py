@@ -30,7 +30,9 @@ class UResNet(torch.nn.Module):
         point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
         shape of point_cloud[0] = (N, 4)
         """
+        print(len(input))
         point_cloud, = input
+        print(point_cloud.shape)
         coords = point_cloud[:, :-1].float()
         features = point_cloud[:, -1][:, None].float()
         x = self.sparseModel((coords, features))
