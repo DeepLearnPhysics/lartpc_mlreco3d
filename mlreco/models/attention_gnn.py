@@ -30,24 +30,19 @@ class BasicAttentionModel(torch.nn.Module):
         self.nheads = self.model_config['nheads']
         
         # perform batch normalization at each step
-        self.bn0 = BatchNorm1d(16)
+        self.bn_node = BatchNorm1d(16)
         
         # first layer increases number of features from 4 to 16
         # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
         # first layer increases number of features from 15 to 16
         self.attn1 = GATConv(16, 16, heads=self.nheads, concat=False)
         
-        self.bn1 = BatchNorm1d(16)
-        
         # second layer increases number of features from 16 to 32
         self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
-        
-        self.bn2 = BatchNorm1d(32)
         
         # third layer increases number of features from 32 to 64
         self.attn3 = GATConv(32, 64, heads=self.nheads, concat=False)
         
-        self.bn3 = BatchNorm1d(64)
         self.bn_edge = BatchNorm1d(10)
     
         # final prediction layer
@@ -98,7 +93,7 @@ class BasicAttentionModel(torch.nn.Module):
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
         # batch normalization
-        x = self.bn0(x)
+        x = self.bn_node(x)
         # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
         #print("max input: ", torch.max(x.view(-1)))
         #print("min input: ", torch.min(x.view(-1)))
@@ -109,22 +104,14 @@ class BasicAttentionModel(torch.nn.Module):
         
         # go through layers
         x = self.attn1(x, edge_index)
-        x = self.bn1(x)
-        #print("max x: ", torch.max(x.view(-1)))
-        #print("min x: ", torch.min(x.view(-1)))
+
         x = self.attn2(x, edge_index)
-        x = self.bn2(x)
-        #print("max x: ", torch.max(x.view(-1)))
-        #print("min x: ", torch.min(x.view(-1)))
+
         x = self.attn3(x, edge_index)
-        x = self.bn3(x)
-        #print("max x: ", torch.max(x.view(-1)))
-        #print("min x: ", torch.min(x.view(-1)))
         
         xbatch = torch.tensor(batch).cuda()
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
-        #print("max edge weight: ", torch.max(e.view(-1)))
-        #print("min edge weight: ", torch.min(e.view(-1)))
+
         return {
             'edge_pred': e
         }
@@ -201,8 +188,8 @@ class EdgeLabelLoss(torch.nn.Module):
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
         primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
         # set analysis keys
-        out['primary_fdr'] = [torch.tensor(primary_fdr)]
-        out['primary_acc'] = [torch.tensor(primary_acc)]
+        # out['primary_fdr'] = [torch.tensor(primary_fdr)]
+        # out['primary_acc'] = [torch.tensor(primary_acc)]
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
