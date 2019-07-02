@@ -34,7 +34,11 @@ class RandomSequenceSampler(AbstractBatchSampler):
     
     @staticmethod
     def create(ds,cfg):
-        return RandomSequenceSampler(len(ds),cfg['batch_size'])
+        if 'nEvents' in cfg:
+            nEvents = cfg['nEvents']
+        else:
+            nEvents = len(ds)
+        return RandomSequenceSampler(nEvents,cfg['batch_size'])
     
     
 class SequentialBatchSampler(AbstractBatchSampler):
@@ -44,4 +48,9 @@ class SequentialBatchSampler(AbstractBatchSampler):
     
     @staticmethod
     def create(ds,cfg):
-        return SequentialBatchSampler(len(ds),cfg['batch_size'])
+        if 'nEvents' in cfg:
+            nEvents = cfg['nEvents']
+        else:
+            nEvents = len(ds)
+        return SequentialBatchSampler(nEvents,cfg['batch_size'])
+    
