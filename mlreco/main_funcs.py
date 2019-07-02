@@ -45,8 +45,7 @@ def inference(cfg):
 def process_config(cfg):
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
-    cfg['training']['gpus'] = list(range(len(cfg['training']['gpus'].split(','))))
-
+    cfg['training']['gpus'] = list(range(len([int(a) for a in cfg['training']['gpus'].split(',') if a.isdigit()])))
     # Update seed
     if cfg['training']['seed'] < 0:
         import time
@@ -59,11 +58,11 @@ def process_config(cfg):
         raise ValueError('Cannot have both BATCH_SIZE (-bs) and MINIBATCH_SIZE (-mbs) negative values!')
     # Assign non-default values
     if cfg['iotool']['batch_size'] < 0:
-        cfg['iotool']['batch_size'] = int(cfg['training']['minibatch_size'] * len(cfg['training']['gpus']))
+        cfg['iotool']['batch_size'] = int(cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))
     if cfg['training']['minibatch_size'] < 0:
-        cfg['training']['minibatch_size'] = int(cfg['iotool']['batch_size'] / len(cfg['training']['gpus']))
+        cfg['training']['minibatch_size'] = int(cfg['iotool']['batch_size'] / max(1,len(cfg['training']['gpus'])))
     # Check consistency
-    if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * len(cfg['training']['gpus']))) == 0:
+    if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))) == 0:
         raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
 
     pp = pprint.PrettyPrinter(indent=4)
@@ -143,10 +142,12 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     acc_seg  = np.mean(res['accuracy'])
     res_dict = {}
     for key in res:
-        if key not in cfg['model']['analysis_keys']:
+        if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
             res_dict[key] = np.mean(res[key])
 
-    mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
+    mem = 0.
+    if torch.cuda.is_available():
+        mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
 
     # Report (logger)
     if handlers.csv_logger:
@@ -198,12 +199,12 @@ def get_data_minibatched(dataset, cfg):
     """
     data_blob = {}  # FIXME dictionary or list? Keys may not be ordered
 
-    for _ in range(int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * len(cfg['training']['gpus'])))):
+    for _ in range(int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus']))))):
         for key in cfg['data_keys']:
             if key not in data_blob:
                 data_blob[key] = []
             data_blob[key].append([])
-        for j in range(len(cfg['training']['gpus'])):
+        for j in range(max(1,len(cfg['training']['gpus']))):
             blob = next(dataset)
             for i, key in enumerate(cfg['data_keys']):
                 data_blob[key][-1].append(blob[i])

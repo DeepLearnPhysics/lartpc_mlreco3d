@@ -11,16 +11,15 @@ class PPNUResNet(torch.nn.Module):
     See `uresnet_ppn_chain` for a modular approach.
     Input: tuple (point_cloud, labels)
     """
-    def __init__(self, cfg):
+    def __init__(self, model_config):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg
-        self._model_config = model_config
-        dimension = model_config['data_dim']
+        self._model_config = model_config['modules']['uresnet_ppn']
+        dimension = self._model_config['data_dim']
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = model_config['filters']  # Unet number of features
-        nPlanes = [i*m for i in range(1, model_config['num_strides']+1)]  # UNet number of features per level
+        m = self._model_config['filters']  # Unet number of features
+        nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
         nInputFeatures = 1
 
@@ -39,7 +38,7 @@ class PPNUResNet(torch.nn.Module):
              ).add(scn.AddTable())
 
         self.input = scn.Sequential().add(
-           scn.InputLayer(dimension, model_config['spatial_size'], mode=3)).add(
+           scn.InputLayer(dimension, self._model_config['spatial_size'], mode=3)).add(
            scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
 
@@ -48,13 +47,13 @@ class PPNUResNet(torch.nn.Module):
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
-        for i in range(model_config['num_strides']):
+        for i in range(self._model_config['num_strides']):
             module = scn.Sequential()
             for _ in range(reps):
                 block(module, nPlanes[i], nPlanes[i])
             self.encoding_block.add(module)
             module2 = scn.Sequential()
-            if i < model_config['num_strides']-1:
+            if i < self._model_config['num_strides']-1:
                 module2.add(
                     scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness)).add(
                     scn.Convolution(dimension, nPlanes[i], nPlanes[i+1],
@@ -64,7 +63,7 @@ class PPNUResNet(torch.nn.Module):
 
         # Decoding
         self.decoding_conv, self.decoding_blocks = scn.Sequential(), scn.Sequential()
-        for i in range(model_config['num_strides']-2, -1, -1):
+        for i in range(self._model_config['num_strides']-2, -1, -1):
             module1 = scn.Sequential().add(
                 scn.BatchNormLeakyReLU(nPlanes[i+1], leakiness=leakiness)).add(
                 scn.Deconvolution(dimension, nPlanes[i+1], nPlanes[i],
@@ -79,17 +78,17 @@ class PPNUResNet(torch.nn.Module):
            scn.BatchNormReLU(m)).add(
            scn.OutputLayer(dimension))
 
-        self.linear = torch.nn.Linear(m, model_config['num_classes'])
+        self.linear = torch.nn.Linear(m, self._model_config['num_classes'])
 
         # PPN stuff
-        self.half_stride = int(model_config['num_strides']/2.0)
+        self.half_stride = int(self._model_config['num_strides']/2.0)
         self.ppn1_conv = scn.SubmanifoldConvolution(dimension, nPlanes[-1], nPlanes[-1], 3, False)
         self.ppn1_scores = scn.SubmanifoldConvolution(dimension, nPlanes[-1], 2, 3, False)
 
         self.selection1 = Selection()
         self.selection2 = Selection()
         self.unpool1 = scn.Sequential()
-        for i in range(model_config['num_strides']-self.half_stride-1):
+        for i in range(self._model_config['num_strides']-self.half_stride-1):
             self.unpool1.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
 
         self.unpool2 = scn.Sequential()
@@ -117,7 +116,6 @@ class PPNUResNet(torch.nn.Module):
         label contains segmentation labels for each point + coords of gt points
         """
         use_encoding = False  # Whether to use encoding or decoding path (PPN)
-
         point_cloud, label = input
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
@@ -185,14 +183,23 @@ class PPNUResNet(torch.nn.Module):
         # Batch index is implicit, assumed to be in correspondence with data
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
-        return [[torch.cat([pixel_pred, scores], dim=1)],
-                [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
-                [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
-                [x],
-                [attention.features],
-                [attention2.features]]
+        if torch.cuda.is_available():
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
+        else:
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
+                      [x],
+                      [attention.features],
+                      [attention2.features]]
 
-
+        return result
+            
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss function for UResNet + PPN
@@ -219,7 +226,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
         weight can be None.
         """
-        segmentation = segmentation[0] # Fix for unknown reason
+        #segmentation = segmentation[0] # Fix for unknown reason
         assert len(segmentation[0]) == len(label)
         assert len(particles) == len(label)
         if weight is not None:
