@@ -86,13 +86,19 @@ class PPN(torch.nn.Module):
         ppn3_scores = self.ppn3_scores(z)
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
-        return [[torch.cat([pixel_pred, scores], dim=1)],
-                [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
-                [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
-                [attention.features],
-                [attention2.features]]
-
-
+        if torch.cuda.is_available():
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
+                      [attention.features],
+                      [attention2.features]]
+        else:
+            result = [[torch.cat([pixel_pred, scores], dim=1)],
+                      [torch.cat([ppn1_scores.get_spatial_locations().float(), ppn1_scores.features], dim=1)],
+                      [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
+                      [attention.features],
+                      [attention2.features]]
+            
 class PPNLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(PPNLoss, self).__init__(reduction=reduction)
