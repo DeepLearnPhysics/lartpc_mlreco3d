@@ -18,13 +18,29 @@ class UResNet(torch.nn.Module):
     Configuration
     -------------
     num_strides : int
+        Depth of UResNet, also corresponds to how many times we down/upsample.
     filters : int
+        Number of filters in the first convolution of UResNet.
+        Will increase linearly with depth.
     num_classes : int
+        Should be number of classes (+1 if we include ghost points directly)
     data_dim : int
+        Dimension 2 or 3
     spatial_size : int
+        Size of the cube containing the data, e.g. 192, 512 or 768px.
     ghost : bool, optional
-            Whether to compute ghost mask separately or not
+        Whether to compute ghost mask separately or not. See SegmentationLoss
+        for more details.
+
+    Returns
+    -------
+    In order:
+    - segmentation scores (N, 5)
+    - feature map for PPN1
+    - feature map for PPN2
+    - if `ghost`, segmentation scores for deghosting (N, 2)
     """
+
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
@@ -45,6 +61,7 @@ class UResNet(torch.nn.Module):
         downsample = [kernel_size, 2]  # [filter size, filter stride]
         self.last = None
         leakiness = 0
+
         def block(m, a, b):
             # ResNet style blocks
             m.add(scn.ConcatTable()
@@ -146,6 +163,18 @@ class UResNet(torch.nn.Module):
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
+    """
+    Loss definition for UResNet.
+
+    For a regular flavor UResNet, it is a cross-entropy loss.
+    For deghosting, it depends on a configuration parameter `ghost`:
+    - If `ghost=True`, we first compute the cross-entropy loss on the ghost
+    point classification (weighted on the fly with sample statistics). Then we
+    compute a mask = all non-ghost points (based on true information in label)
+    and within this mask, compute a cross-entropy loss for the rest of classes.
+    - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
+    the number of classes, not counting the ghost point class.
+    """
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_lonely']
@@ -169,6 +198,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         Assumptions
         ===========
         The ghost label is the last one among the classes numbering.
+        If ghost = True, then num_classes should not count the ghost class.
         """
         assert len(segmentation[0]) == len(label)
         batch_ids = [d[:, -2] for d in label]
@@ -185,27 +215,31 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 if self._ghost:
                     event_ghost = segmentation[3][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
-                    mask_label = (event_label == self._num_classes-1).long()
-                    loss_mask = self.cross_entropy(event_ghost, mask_label)
-                    mask_loss += torch.mean(loss_mask)
+                    mask_label = (event_label == self._num_classes).long()
+                    # loss_mask = self.cross_entropy(event_ghost, mask_label)
+                    fraction = (mask_label == 1).sum().float() / ((mask_label == 0).sum() + (mask_label == 1).sum()).float()
+                    weight = torch.stack([fraction, 1. - fraction]).float()
+                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
+                    mask_loss += loss_mask #torch.mean(loss_mask)
 
                     predicted_mask = torch.argmax(event_ghost, dim=-1)
                     acc_mask = (predicted_mask == mask_label).sum().item() / float(predicted_mask.nelement())
                     mask_acc += acc_mask
 
                     # Now mask to compute the rest of UResNet loss
-                    mask = predicted_mask == 0
+                    mask = mask_label == 0
                     event_segmentation = event_segmentation[mask]
                     event_label = event_label[mask]
 
-                # Loss for semantic segmentation
-                loss_seg = self.cross_entropy(event_segmentation, event_label)
-                uresnet_loss += torch.mean(loss_seg)
+                if event_label.shape[0] > 0:  # FIXME how to handle empty mask?
+                    # Loss for semantic segmentation
+                    loss_seg = self.cross_entropy(event_segmentation, event_label)
+                    uresnet_loss += torch.mean(loss_seg)
 
-                # Accuracy for semantic segmentation
-                predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
-                uresnet_acc += acc
+                    # Accuracy for semantic segmentation
+                    predicted_labels = torch.argmax(event_segmentation, dim=-1)
+                    acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
+                    uresnet_acc += acc
 
         if self._ghost:
             results = {

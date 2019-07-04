@@ -116,6 +116,15 @@ def uresnet_ppn(csv_logger, data_blob, res,
                               (event[0], event[1], event[2], 4, row))
             csv_logger.write()
 
+    # 14 = Ghost predictions
+    if 'ghost' in res:
+        predictions = np.argmax(res['ghost'], axis=1)
+        for i, row in enumerate(predictions):
+            event = data_blob['input_data'][i]
+            csv_logger.record(('x', 'y', 'z', 'type', 'value'),
+                              (event[0], event[1], event[2], 14, row))
+            csv_logger.write()
+
     if 'segmentation' in res and 'points' in res and len(res['points'][0]) > 5:
         # 12 = masking + score threshold + filter PPN points of type X within N pixels of type X
         # 13 = masking + score threshold + filter PPN points of type X within N pixels of type X + NMS
