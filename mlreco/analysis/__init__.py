@@ -1,1 +1,2 @@
 from mlreco.analysis.track_clustering import track_clustering
+from mlreco.analysis.michel_reconstruction import michel_reconstruction
