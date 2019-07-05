@@ -31,6 +31,12 @@ class UResNet(torch.nn.Module):
     ghost : bool, optional
         Whether to compute ghost mask separately or not. See SegmentationLoss
         for more details.
+    reps : int, optional
+        Convolution block repetition factor
+    kernel_size : int, optional
+        Kernel size for the SC (sparse convolutions for down/upsample).
+    features: int, optional
+        How many features are given to the network initially.
 
     Returns
     -------
@@ -48,22 +54,20 @@ class UResNet(torch.nn.Module):
         self._model_config = model_config
 
         # Whether to compute ghost mask separately or not
-        self._ghost = False
-        if 'ghost' in self._model_config:
-            self._ghost = self._model_config['ghost']
+        self._ghost = self._model_config.get('ghost', False)
+
         dimension = self._model_config['data_dim']
-        reps = 2  # Conv block repetition factor
-        kernel_size = 2  # Use input_spatial_size method for other values?
+        reps = self._model_config.get('reps', 2)  # Conv block repetition factor
+        kernel_size = self._model_config.get('kernel_size', 2)
         m = self._model_config['filters']  # Unet number of features
         nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
-        nInputFeatures = 1
+        nInputFeatures = self._model_config.get('features', 1)
 
         downsample = [kernel_size, 2]  # [filter size, filter stride]
         self.last = None
         leakiness = 0
 
-        def block(m, a, b):
-            # ResNet style blocks
+        def block(m, a, b):  # ResNet style blocks
             m.add(scn.ConcatTable()
                   .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, False))
                   .add(scn.Sequential()
@@ -106,7 +110,7 @@ class UResNet(torch.nn.Module):
             self.decoding_conv.add(module1)
             module2 = scn.Sequential()
             for j in range(reps):
-                block(module2, nPlanes[i] * (2 if j==0 else 1), nPlanes[i])
+                block(module2, nPlanes[i] * (2 if j == 0 else 1), nPlanes[i])
             self.decoding_blocks.add(module2)
 
         self.output = scn.Sequential().add(
@@ -125,8 +129,8 @@ class UResNet(torch.nn.Module):
         label contains segmentation labels for each point + coords of gt points
         """
         point_cloud, = input
-        coords = point_cloud[:, 0:-1].float()
-        features = point_cloud[:, -1][:, None].float()
+        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
+        features = point_cloud[:, self._model_config['data_dim']:].float()
 
         x = self.input((coords, features))
         feature_maps = [x]
@@ -168,10 +172,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     For a regular flavor UResNet, it is a cross-entropy loss.
     For deghosting, it depends on a configuration parameter `ghost`:
+
     - If `ghost=True`, we first compute the cross-entropy loss on the ghost
     point classification (weighted on the fly with sample statistics). Then we
     compute a mask = all non-ghost points (based on true information in label)
     and within this mask, compute a cross-entropy loss for the rest of classes.
+
     - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
     the number of classes, not counting the ghost point class.
     """
@@ -179,9 +185,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_lonely']
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
-        self._ghost = False
-        if 'ghost' in self._cfg:
-            self._ghost = self._cfg['ghost']
+        self._ghost = self._cfg.get('ghost', False)
         self._num_classes = self._cfg['num_classes']
 
     def distances(self, v1, v2):
@@ -227,7 +231,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     mask_acc += acc_mask
 
                     # Now mask to compute the rest of UResNet loss
-                    mask = mask_label == 0
+                    mask = event_label < self._num_classes
                     event_segmentation = event_segmentation[mask]
                     event_label = event_label[mask]
 

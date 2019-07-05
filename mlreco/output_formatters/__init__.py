@@ -23,7 +23,8 @@ def output(output_formatters_list, data_blob, res, cfg, idx, **kwargs):
     """
     event_id = idx * cfg['iotool']['batch_size']
     num_forward = len(data_blob['input_data'])
-    assert num_forward == cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * len(cfg['training']['gpus']))
+    if len(cfg['training']['gpus']) > 0:
+        assert num_forward == cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * len(cfg['training']['gpus']))
     for i in range(num_forward):
         num_gpus = len(data_blob['input_data'][i])
         for j in range(num_gpus):

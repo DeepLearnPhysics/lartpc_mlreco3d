@@ -21,7 +21,7 @@ class PPNUResNet(torch.nn.Module):
         m = self._model_config['filters']  # Unet number of features
         nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
-        nInputFeatures = 1
+        nInputFeatures = self._model_config.get('features', 1)
 
         downsample = [kernel_size, 2]# downsample = [filter size, filter stride]
         self.last = None
@@ -120,8 +120,8 @@ class PPNUResNet(torch.nn.Module):
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
         label = label[:, :-1]
-        coords = point_cloud[:, 0:-1].float()
-        features = point_cloud[:, -1][:, None].float()
+        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
+        features = point_cloud[:, self._model_config['data_dim']:].float()
 
         # U-ResNet encoding
         x = self.input((coords, features))
@@ -199,7 +199,8 @@ class PPNUResNet(torch.nn.Module):
                       [attention2.features]]
 
         return result
-            
+
+
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss function for UResNet + PPN
@@ -246,7 +247,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)

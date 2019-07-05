@@ -9,15 +9,14 @@ class PPNUResNet(torch.nn.Module):
     def __init__(self, cfg):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg['modules']['uresnet_ppn_type']
-        self._model_config = model_config
-        dimension = model_config['data_dim']
+        self._model_config = cfg['modules']['uresnet_ppn_type']
+        dimension = self._model_config['data_dim']
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = model_config['filters']  # Unet number of features
-        nPlanes = [i*m for i in range(1, model_config['num_strides']+1)]  # UNet number of features per level
+        m = self._model_config['filters']  # Unet number of features
+        nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
-        nInputFeatures = 1
+        nInputFeatures = self._model_config.get('features', 1)
 
         downsample = [kernel_size, 2]# downsample = [filter size, filter stride]
         self.last = None
@@ -34,7 +33,7 @@ class PPNUResNet(torch.nn.Module):
              ).add(scn.AddTable())
 
         self.input = scn.Sequential().add(
-           scn.InputLayer(dimension, model_config['spatial_size'], mode=3)).add(
+           scn.InputLayer(dimension, self._model_config['spatial_size'], mode=3)).add(
            scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
         # Encoding
@@ -43,13 +42,13 @@ class PPNUResNet(torch.nn.Module):
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
-        for i in range(model_config['num_strides']):
+        for i in range(self._model_config['num_strides']):
             module = scn.Sequential()
             for _ in range(reps):
                 block(module, nPlanes[i], nPlanes[i])
             self.encoding_block.add(module)
             module2 = scn.Sequential()
-            if i < model_config['num_strides']-1:
+            if i < self._model_config['num_strides']-1:
                 module2.add(
                     scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness)).add(
                     scn.Convolution(dimension, nPlanes[i], nPlanes[i+1],
@@ -60,7 +59,7 @@ class PPNUResNet(torch.nn.Module):
 
         # Decoding
         self.decoding_conv, self.decoding_blocks = scn.Sequential(), scn.Sequential()
-        for i in range(model_config['num_strides']-2, -1, -1):
+        for i in range(self._model_config['num_strides']-2, -1, -1):
             module1 = scn.Sequential().add(
                 scn.BatchNormLeakyReLU(nPlanes[i+1], leakiness=leakiness)).add(
                 scn.Deconvolution(dimension, nPlanes[i+1], nPlanes[i],
@@ -75,17 +74,17 @@ class PPNUResNet(torch.nn.Module):
            scn.BatchNormReLU(m)).add(
            scn.OutputLayer(dimension))
 
-        self.linear = torch.nn.Linear(m, model_config['num_classes'])
+        self.linear = torch.nn.Linear(m, self._model_config['num_classes'])
 
         # PPN stuff
-        self.half_stride = int(model_config['num_strides']/2.0)
+        self.half_stride = int(self._model_config['num_strides']/2.0)
         self.ppn1_conv = scn.SubmanifoldConvolution(dimension, nPlanes[-1], nPlanes[-1], 3, False)
         self.ppn1_scores = scn.SubmanifoldConvolution(dimension, nPlanes[-1], 2, 3, False)
 
         self.selection1 = Selection()
         self.selection2 = Selection()
         self.unpool1 = scn.Sequential()
-        for i in range(model_config['num_strides']-self.half_stride-1):
+        for i in range(self._model_config['num_strides']-self.half_stride-1):
             self.unpool1.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
 
         self.unpool2 = scn.Sequential()
@@ -101,7 +100,7 @@ class PPNUResNet(torch.nn.Module):
         self.ppn3_conv = scn.SubmanifoldConvolution(dimension, nPlanes[0], nPlanes[0], 3, False)
         self.ppn3_pixel_pred = scn.SubmanifoldConvolution(dimension, nPlanes[0], dimension, 3, False)
         self.ppn3_scores = scn.SubmanifoldConvolution(dimension, nPlanes[0], 2, 3, False)
-        self.ppn3_type = scn.SubmanifoldConvolution(dimension, nPlanes[0], model_config['num_classes'], 3, False)
+        self.ppn3_type = scn.SubmanifoldConvolution(dimension, nPlanes[0], self._model_config['num_classes'], 3, False)
 
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
@@ -120,8 +119,8 @@ class PPNUResNet(torch.nn.Module):
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
         label = label[:, :-1]
-        coords = point_cloud[:, 0:-1].float()
-        features = point_cloud[:, -1][:, None].float()
+        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
+        features = point_cloud[:, self._model_config['data_dim']:].float()
 
         x = self.input((coords, features))
         feature_maps = [x]
@@ -210,6 +209,7 @@ class PPNUResNet(torch.nn.Module):
                       [attention2.features]]
         return result
 
+
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
@@ -247,7 +247,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)
