@@ -121,7 +121,7 @@ class PPNUResNet(torch.nn.Module):
         # Remove point type
         label = label[:, :-1]
         coords = point_cloud[:, 0:self._model_config['data_dim']].float()
-        features = point_cloud[:, self._model_config['data_dim']:].float()
+        features = point_cloud[:, self._model_config['data_dim']+1:].float()
 
         # U-ResNet encoding
         x = self.input((coords, features))

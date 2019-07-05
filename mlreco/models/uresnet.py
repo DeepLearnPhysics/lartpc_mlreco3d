@@ -32,7 +32,7 @@ class UResNet(torch.nn.Module):
         """
         point_cloud, = input
         coords = point_cloud[:, :self._model_config['data_dim']].float()
-        features = point_cloud[:, self._model_config['data_dim']:].float()
+        features = point_cloud[:, self._model_config['data_dim']+1:].float()
         x = self.sparseModel((coords, features))
         x = self.linear(x)
         return [[x]]
