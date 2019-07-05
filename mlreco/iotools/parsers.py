@@ -51,7 +51,7 @@ def parse_sparse3d(data):
         num_point = event_tensor3d.as_vector().size()
         if meta is None:
             meta = event_tensor3d.meta()
-            np_voxels = np.empty(shape=(num_point, 3), dtype=np.float32)
+            np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
             larcv.fill_3d_voxels(event_tensor3d, np_voxels)
             output.append(np_voxels)
         else:
