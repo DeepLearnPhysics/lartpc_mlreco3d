@@ -130,7 +130,7 @@ class UResNet(torch.nn.Module):
         """
         point_cloud, = input
         coords = point_cloud[:, 0:self._model_config['data_dim']].float()
-        features = point_cloud[:, self._model_config['data_dim']:].float()
+        features = point_cloud[:, self._model_config['data_dim']+1:].float()
 
         x = self.input((coords, features))
         feature_maps = [x]
