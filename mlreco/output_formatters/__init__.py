@@ -28,11 +28,12 @@ def output(output_formatters_list, data_blob, res, cfg, idx, **kwargs):
     for i in range(num_forward):
         num_gpus = len(data_blob['input_data'][i])
         for j in range(num_gpus):
-            batch_idx = np.unique(data_blob['input_data'][i][j][:, -2])
+            batch_idx = np.unique(data_blob['input_data'][i][j][:, 3])
             for b in batch_idx:
                 new_data_blob = {}
                 data_index = data_blob['input_data'][i][j][:, 3] == b
                 for key in data_blob:
+                    # 2D numpy array, assumes batch id is in column 3
                     if isinstance(data_blob[key][i][j], np.ndarray) and len(data_blob[key][i][j].shape) == 2:
                         new_data_blob[key] = data_blob[key][i][j][data_blob[key][i][j][:, 3] == b]
                     elif isinstance(data_blob[key][i][j], list):
