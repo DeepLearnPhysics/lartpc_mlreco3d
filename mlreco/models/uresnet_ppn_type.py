@@ -119,7 +119,7 @@ class PPNUResNet(torch.nn.Module):
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
         label = label[:, :-1]
-        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
+        coords = point_cloud[:, 0:self._model_config['data_dim']+1].float()
         features = point_cloud[:, self._model_config['data_dim']+1:].float()
 
         x = self.input((coords, features))
