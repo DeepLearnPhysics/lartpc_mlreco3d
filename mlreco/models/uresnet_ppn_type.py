@@ -17,7 +17,7 @@ class PPNUResNet(torch.nn.Module):
         num_classes = self._model_config.get('num_classes', 5)
         m = self._model_config.get('filters', 16)  # Unet number of features
         num_strides = self._model_config.get('num_strides', 5)
-        
+
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level

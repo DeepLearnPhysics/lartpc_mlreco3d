@@ -56,6 +56,7 @@ def test_model_construction(config):
 def test_model_train(config):
     """
     TODO should test whether a model can be trained.
-    Need to write a fixture to generate dummy input data.
+    Need to write a fixture to generate dummy input data. Maybe we need to
+    explicitly define 1 test / model instead of a fixture?
     """
     trainer = trainval(config)
