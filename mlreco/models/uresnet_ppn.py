@@ -21,7 +21,7 @@ class PPNUResNet(torch.nn.Module):
         m = self._model_config['filters']  # Unet number of features
         nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
-        nInputFeatures = 1
+        nInputFeatures = self._model_config.get('features', 1)
 
         downsample = [kernel_size, 2]# downsample = [filter size, filter stride]
         self.last = None
@@ -120,8 +120,8 @@ class PPNUResNet(torch.nn.Module):
         # Now shape (num_label, 5) for 3 coords + batch id + point type
         # Remove point type
         label = label[:, :-1]
-        coords = point_cloud[:, 0:-1].float()
-        features = point_cloud[:, -1][:, None].float()
+        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
+        features = point_cloud[:, self._model_config['data_dim']+1:].float()
 
         # U-ResNet encoding
         x = self.input((coords, features))
@@ -199,7 +199,8 @@ class PPNUResNet(torch.nn.Module):
                       [attention2.features]]
 
         return result
-            
+
+
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss function for UResNet + PPN
@@ -240,13 +241,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         uresnet_loss, uresnet_acc = 0., 0.
         data_dim = self._cfg['data_dim']
-        
+
         # loop over gpus
         for i in range(len(label)):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)
@@ -304,8 +305,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
                     # 5. Loss ppn1 & ppn2 (predict positives)
-                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
-                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
+                    event_label_ppn1 = torch.floor(event_label/(2**(self._cfg['num_strides']-1)))
+                    event_label_ppn2 = torch.floor(event_label/(2**(int(self._cfg['num_strides']/2))))
+                    d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
+                    d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
                     positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
                     positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
                     loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))

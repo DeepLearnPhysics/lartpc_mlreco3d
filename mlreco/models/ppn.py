@@ -63,16 +63,6 @@ class PPN(torch.nn.Module):
         if self.training:
             with torch.no_grad():
                 attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.half_stride, label[:, -1][:, None]], dim=1).long())
-                # for b in range(self._flags.BATCH_SIZE):
-                #     batch_index = attention.get_spatial_locations()[:, -1] == b
-                #     print(attention.features.shape, batch_index.shape)
-                #     if attention.features[batch_index].sum() == 0:
-                #         print(label[label[:, -1] == b])
-                #         print((label/2**self.half_stride).long()[label[:, -1] == b])
-                #         print(attention.features[batch_index])
-                #         print(attention.get_spatial_locations()[batch_index])
-                # print(attention.features[attention.get_spatial_locations()[:, -1] == 11].size())
-                # print(attention.features[attention.get_spatial_locations()[:, -1] == 11][attention.features[attention.get_spatial_locations()[:, -1] == 11]>0])
         if use_encoding:
             y = feature_ppn[self.half_stride]
         else:
@@ -94,7 +84,6 @@ class PPN(torch.nn.Module):
         z = self.ppn3_conv(z)
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
-        # FIXME wrt batch index
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
         if torch.cuda.is_available():
@@ -160,7 +149,20 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                 # event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
                 # print(b, event_label.size())
                 if event_label.size(0) > 0:
-                    ppn_count += 1
+                    # Mask: only consider pixels that were selected
+                    event_mask = segmentation[4][i][batch_index]
+                    event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
+                    # event_label = event_label[event_mask]
+                    # event_segmentation = event_segmentation[event_mask]
+                    event_pixel_pred = event_pixel_pred[event_mask]
+                    event_scores = event_scores[event_mask]
+                    # event_types = event_types[event_mask]
+                    event_data = event_data[event_mask]
+                    # Mask for PPN2
+                    event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
+                    event_ppn2_data = event_ppn2_data[event_ppn2_mask]
+                    event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
+
                     # Segmentation loss (predict positives)
                     d = self.distances(event_label, event_pixel_pred)
                     d_true = self.distances(event_label, event_data)
@@ -175,8 +177,10 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
                     # Loss ppn1 & ppn2 (predict positives)
-                    d_true_ppn1 = self.distances(event_label/(2**(self._cfg['num_strides']-1)), event_ppn1_data)
-                    d_true_ppn2 = self.distances(event_label/(2**(int(self._cfg['num_strides']/2))), event_ppn2_data)
+                    event_label_ppn1 = torch.floor(event_label/(2**(self._cfg['num_strides']-1)))
+                    event_label_ppn2 = torch.floor(event_label/(2**(int(self._cfg['num_strides']/2))))
+                    d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
+                    d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
                     positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)
                     positives_ppn2 = (d_true_ppn2 < 1).any(dim=0)
                     loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long()))
@@ -186,23 +190,10 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
                     acc_ppn2 = (predicted_labels_ppn2 == positives_ppn2.long()).sum().item() / float(predicted_labels_ppn2.nelement())
 
-                    # Mask: only consider pixels that were selected
-                    event_mask = segmentation[4][i][batch_index]
-                    event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
-                    # event_label = event_label[event_mask]
-                    # event_segmentation = event_segmentation[event_mask]
-                    event_pixel_pred = event_pixel_pred[event_mask]
-                    event_scores = event_scores[event_mask]
-                    # event_types = event_types[event_mask]
-                    event_data = event_data[event_mask]
-                    # Mask for PPN2
-                    # event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
-                    # event_ppn2_data = event_ppn2_data[event_ppn2_mask]
-                    # event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
-
                     # Distance loss
-                    positives = (d_true[:, event_mask] < 5).any(dim=0)
-                    distances_positives = d[:, event_mask][:, positives]
+                    # positives = (d_true[:, event_mask] < 5).any(dim=0)
+                    # distances_positives = d[:, event_mask][:, positives]
+                    distances_positives = d[:, positives]
                     if distances_positives.shape[1] > 0:
                         d2, _ = torch.min(distances_positives, dim=0)
                         loss_seg += d2.mean()
@@ -214,8 +205,9 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     total_acc_ppn2 += acc_ppn2
                     total_loss += (loss_seg + loss_seg_ppn1 + loss_seg_ppn2).float()
                     total_acc += acc
-                # else:
-                #     print("No particles !")
+                    ppn_count += 1
+                else:
+                    print("No particles !")
 
         ppn_results = {
             'ppn_acc': total_acc,

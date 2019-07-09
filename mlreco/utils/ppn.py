@@ -65,21 +65,26 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
 
         #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
         #    continue
-                         
+
         # TODO deal with different 2d projections
+        record = [pdg_code,
+                  particle.energy_deposit(),
+                  particle.num_voxels(),
+                  particle.energy_init(),
+                  particle.energy_deposit()]
         # Register start point
         x = particle.first_step().x()
         y = particle.first_step().y()
         z = particle.first_step().z()
         if point_type == '3d':
             x = (x - meta.min_x()) / meta.size_voxel_x()
-            y = (y - meta.min_y()) / meta.size_voxel_y() 
+            y = (y - meta.min_y()) / meta.size_voxel_y()
             z = (z - meta.min_z()) / meta.size_voxel_z()
-            gt_positions.append([x, y, z, gt_type])
+            gt_positions.append([x, y, z, gt_type] + record)
         else:
             x = (x - meta.min_x()) / meta.pixel_width()
             y = (y - meta.min_y()) / meta.pixel_height()
-            gt_positions.append([x, y, gt_type])
+            gt_positions.append([x, y, gt_type] + record)
 
         # Register end point (for tracks only)
         if gt_type == 0 or gt_type == 1:
@@ -90,14 +95,13 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
                 x = (x - meta.min_x()) / meta.size_voxel_x()
                 y = (y - meta.min_y()) / meta.size_voxel_y()
                 z = (z - meta.min_z()) / meta.size_voxel_z()
-                gt_positions.append([x, y, z, gt_type])
+                gt_positions.append([x, y, z, gt_type] + record)
             else:
                 x = (x - meta.min_x()) / meta.pixel_width()
                 y = (y - meta.min_y()) / meta.pixel_height()
-                gt_positions.append([x, y, gt_type])
-    
-    return np.array(gt_positions)
+                gt_positions.append([x, y, gt_type] + record)
 
+    return np.array(gt_positions)
 
 
 def nms_numpy(im_proposals, im_scores, threshold, size):
@@ -153,7 +157,7 @@ def group_points(ppn_pts, batch, label):
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
     """
-    input: 
+    input:
         data - 5-types sparse tensor
         out - ppn output
     output:
@@ -183,26 +187,26 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4
     scores = scores[mask]
     maskinds = np.where(mask)[0]
     keep = scores[:,1] > score_threshold
-    
+
     # NMS filter
     keep2 = nms_numpy(points[mask][keep], scores[keep,1], nms_score_threshold, window_size)
-    
+
     maskinds = maskinds[keep][keep2]
     points = points[maskinds]
     labels = pred_labels[maskinds]
-    
+
     data_in = data.cpu().detach().numpy()
     voxels = data_in[:,:3]
     ppn_pts = voxels[maskinds] + 0.5 + points
     batch = data_in[maskinds,3]
     label = pred_labels[maskinds]
-    
+
     # TODO: only return single point in voxel per batch per label
     ppn_pts, batch, label = group_points(ppn_pts, batch, label)
 
-    
+
     # Output should be in [x,y,z,bid,label] format
     pts_out = np.column_stack((ppn_pts, batch, label))
-    
+
     # return indices of points in input, offsets
     return pts_out
