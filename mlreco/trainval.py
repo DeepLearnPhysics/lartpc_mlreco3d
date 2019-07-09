@@ -118,15 +118,15 @@ class trainval(object):
 
             if not torch.cuda.is_available():
                 data = data[0]
-                
-            segmentation = self._net(data)
+
+            result = self._net(data)
 
             if not torch.cuda.is_available():
                 data = [data]
 
             # Compute the loss
             if loss_keys:
-                loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
+                loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -140,7 +140,7 @@ class trainval(object):
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
-                    res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
+                    res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):
@@ -155,8 +155,7 @@ class trainval(object):
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
 
         self._net = DataParallel(model(self._model_config),
-                                      device_ids=self._gpus,
-                                      dense=False) # FIXME
+                                      device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda() if len(self._gpus) else self._net.train()
@@ -189,7 +188,7 @@ class trainval(object):
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
                     bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
-                    
+
                     if len(bad_keys.unexpected_keys) > 0:
                         print("INCOMPATIBLE KEYS!")
                         print(bad_keys.unexpected_keys)
