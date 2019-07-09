@@ -138,7 +138,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)
@@ -166,7 +166,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     # event_types = event_types[event_mask]
                     event_data = event_data[event_mask]
                     # Mask for PPN2
-                    event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
+                    event_ppn2_mask = (~(segmentation[3][i][ppn2_batch_index] == 0)).any(dim=1)
                     event_ppn2_data = event_ppn2_data[event_ppn2_mask]
                     event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
 

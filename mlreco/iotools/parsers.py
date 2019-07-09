@@ -91,12 +91,12 @@ def parse_particle_points(data):
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
         a numpy array with the shape (N, 1) where 1 represents class of
-        the ground truth point (track vs shower).
+        the ground truth point.
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())
     if part_info.shape[0] > 0:
-        return part_info[:, :3], part_info[:, 3:]
+        return part_info[:, :3], part_info[:, 3][:, None]
     else:
         return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
 
@@ -111,7 +111,7 @@ def parse_particle_infos(data):
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
         a numpy array with the shape (N, C) where C represents class of
-        the ground truth point (track vs shower) + other infos.
+        the ground truth point + other infos.
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())
