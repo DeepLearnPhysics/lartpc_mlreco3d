@@ -9,20 +9,26 @@ class UResNet(torch.nn.Module):
         import sparseconvnet as scn
         super(UResNet, self).__init__()
         self._model_config = cfg['modules']['uresnet']
-        dimension = self._model_config['data_dim']
+
+        self._dimension = self._model_config.get('data_dim', 3)
+        num_strides = self._model_config.get('num_strides', 5)
+        spatial_size = self._model_config.get('spatial_size', 512)
+        num_classes = self._model_config.get('num_classes', 5)
+        m = self._model_config.get('filters', 16)  # Unet number of features
+        nInputFeatures = self._model_config.get('features', 1)
+
         reps = 2  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = self._model_config['filters']  # Unet number of features
-        nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
+        nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
-        nInputFeatures = model_config.get('features', 1)
+
         self.sparseModel = scn.Sequential().add(
-           scn.InputLayer(dimension, self._model_config['spatial_size'], mode=3)).add(
-           scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3, False)).add( # Kernel size 3, no bias
-           scn.UNet(dimension, reps, nPlanes, residual_blocks=True, downsample=[kernel_size, 2])).add(  # downsample = [filter size, filter stride]
+           scn.InputLayer(self._dimension, spatial_size, mode=3)).add(
+           scn.SubmanifoldConvolution(self._dimension, nInputFeatures, m, 3, False)).add( # Kernel size 3, no bias
+           scn.UNet(self._dimension, reps, nPlanes, residual_blocks=True, downsample=[kernel_size, 2])).add(  # downsample = [filter size, filter stride]
            scn.BatchNormReLU(m)).add(
-           scn.OutputLayer(dimension))
-        self.linear = torch.nn.Linear(m, self._model_config['num_classes'])
+           scn.OutputLayer(self._dimension))
+        self.linear = torch.nn.Linear(m, num_classes)
 
     def forward(self, input):
         """
@@ -31,8 +37,8 @@ class UResNet(torch.nn.Module):
         shape of point_cloud[0] = (N, 4)
         """
         point_cloud, = input
-        coords = point_cloud[:, :self._model_config['data_dim']].float()
-        features = point_cloud[:, self._model_config['data_dim']+1:].float()
+        coords = point_cloud[:, :self._dimension+1].float()
+        features = point_cloud[:, self._dimension+1:].float()
         x = self.sparseModel((coords, features))
         x = self.linear(x)
         return [[x]]
