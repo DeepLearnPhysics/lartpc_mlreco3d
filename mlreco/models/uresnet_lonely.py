@@ -50,19 +50,20 @@ class UResNet(torch.nn.Module):
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg['modules'][name]
-        self._model_config = model_config
+        self._model_config = cfg['modules'][name]
 
         # Whether to compute ghost mask separately or not
         self._ghost = self._model_config.get('ghost', False)
-
-        dimension = self._model_config['data_dim']
+        self._dimension = self._model_config.get('data_dim', 3)
         reps = self._model_config.get('reps', 2)  # Conv block repetition factor
         kernel_size = self._model_config.get('kernel_size', 2)
-        m = self._model_config['filters']  # Unet number of features
-        nPlanes = [i*m for i in range(1, self._model_config['num_strides']+1)]  # UNet number of features per level
+        num_strides = self._model_config.get('num_strides', 5)
+        m = self._model_config.get('filters', 16)  # Unet number of features
         nInputFeatures = self._model_config.get('features', 1)
+        spatial_size = self._model_config.get('spatial_size', 512)
+        num_classes = self._model_config.get('num_classes', 5)
 
+        nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
         self.last = None
         leakiness = 0
@@ -72,40 +73,40 @@ class UResNet(torch.nn.Module):
                   .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, False))
                   .add(scn.Sequential()
                     .add(scn.BatchNormLeakyReLU(a, leakiness=leakiness))
-                    .add(scn.SubmanifoldConvolution(dimension, a, b, 3, False))
+                    .add(scn.SubmanifoldConvolution(self._dimension, a, b, 3, False))
                     .add(scn.BatchNormLeakyReLU(b, leakiness=leakiness))
-                    .add(scn.SubmanifoldConvolution(dimension, b, b, 3, False)))
+                    .add(scn.SubmanifoldConvolution(self._dimension, b, b, 3, False)))
              ).add(scn.AddTable())
 
         self.input = scn.Sequential().add(
-           scn.InputLayer(dimension, self._model_config['spatial_size'], mode=3)).add(
-           scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
+           scn.InputLayer(self._dimension, spatial_size, mode=3)).add(
+           scn.SubmanifoldConvolution(self._dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
         # Encoding
         self.bn = scn.BatchNormLeakyReLU(nPlanes[0], leakiness=leakiness)
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
-        for i in range(self._model_config['num_strides']):
+        for i in range(num_strides):
             module = scn.Sequential()
             for _ in range(reps):
                 block(module, nPlanes[i], nPlanes[i])
             self.encoding_block.add(module)
             module2 = scn.Sequential()
-            if i < self._model_config['num_strides']-1:
+            if i < num_strides-1:
                 module2.add(
                     scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness)).add(
-                    scn.Convolution(dimension, nPlanes[i], nPlanes[i+1],
+                    scn.Convolution(self._dimension, nPlanes[i], nPlanes[i+1],
                         downsample[0], downsample[1], False))
             self.encoding_conv.add(module2)
         self.encoding = module
 
         # Decoding
         self.decoding_conv, self.decoding_blocks = scn.Sequential(), scn.Sequential()
-        for i in range(self._model_config['num_strides']-2, -1, -1):
+        for i in range(num_strides-2, -1, -1):
             module1 = scn.Sequential().add(
                 scn.BatchNormLeakyReLU(nPlanes[i+1], leakiness=leakiness)).add(
-                scn.Deconvolution(dimension, nPlanes[i+1], nPlanes[i],
+                scn.Deconvolution(self._dimension, nPlanes[i+1], nPlanes[i],
                     downsample[0], downsample[1], False))
             self.decoding_conv.add(module1)
             module2 = scn.Sequential()
@@ -115,9 +116,9 @@ class UResNet(torch.nn.Module):
 
         self.output = scn.Sequential().add(
            scn.BatchNormReLU(m)).add(
-           scn.OutputLayer(dimension))
+           scn.OutputLayer(self._dimension))
 
-        self.linear = torch.nn.Linear(m, self._model_config['num_classes'])
+        self.linear = torch.nn.Linear(m, num_classes)
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
 
@@ -129,8 +130,8 @@ class UResNet(torch.nn.Module):
         label contains segmentation labels for each point + coords of gt points
         """
         point_cloud, = input
-        coords = point_cloud[:, 0:self._model_config['data_dim']].float()
-        features = point_cloud[:, self._model_config['data_dim']+1:].float()
+        coords = point_cloud[:, 0:self._dimension+1].float()
+        features = point_cloud[:, self._dimension+1:].float()
 
         x = self.input((coords, features))
         feature_maps = [x]
@@ -184,9 +185,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_lonely']
-        self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
         self._ghost = self._cfg.get('ghost', False)
-        self._num_classes = self._cfg['num_classes']
+        self._num_classes = self._cfg.get('num_classes', 5)
+        self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
