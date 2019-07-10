@@ -8,11 +8,8 @@ os: linux
 
 language: python
 
-go:
-  - "1.11"
-
 python:
-  -"3.6"
+  -"3.6.7"
 
 addons:
   apt:
@@ -37,7 +34,7 @@ sudo: required
 matrix:
   include:
     - python: "3.6.7"
-
+    - go: "1.11"
 before_install:
   # Install Singularity
   - sudo chmod u+x .travis/*.sh
