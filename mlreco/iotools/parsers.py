@@ -118,7 +118,7 @@ def parse_particle_infos(data):
     if part_info.shape[0] > 0:
         return part_info[:, :3], part_info[:, 3:]
     else:
-        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 7), dtype=np.float32)
+        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 6), dtype=np.float32)
 
 
 def parse_em_primaries(data):
@@ -127,7 +127,7 @@ def parse_em_primaries(data):
     Args:
         length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
     Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        a numpy array with the shape (N,6) where 6 represents (x,y,z,px,py,pz)
         coordinate
         a numpy array with the shape (N, 1) containing group id for the primary
     """
