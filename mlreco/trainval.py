@@ -4,8 +4,8 @@ from __future__ import print_function
 import torch
 import time
 import os
+from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
-from mlreco.models import models
 import numpy as np
 import re
 
@@ -18,18 +18,19 @@ class trainval(object):
         self.tspent = {}
         self.tspent_sum = {}
         self._model_config = cfg['model']
-        model_config = cfg['model']
-        training_config = cfg['training']
-        self._weight_prefix = training_config['weight_prefix']
-        self._batch_size = cfg['iotool']['batch_size']
-        self._minibatch_size = cfg['training']['minibatch_size']
-        self._gpus = cfg['training']['gpus']
-        self._input_keys = model_config['network_input']
-        self._loss_keys = model_config['loss_input']
-        self._train = training_config['train']
-        self._model_name = model_config['name']
-        self._learning_rate = training_config['learning_rate']
-        self._model_path = training_config['model_path']
+        self._training_config = cfg['training']
+        self._iotool_config = cfg['iotool']
+
+        self._weight_prefix = self._training_config.get('weight_prefix', '')
+        self._batch_size = self._iotool_config.get('batch_size', 1)
+        self._minibatch_size = self._training_config.get('minibatch_size', -1)
+        self._gpus = self._training_config.get('gpus', [])
+        self._input_keys = self._model_config.get('network_input', [])
+        self._loss_keys = self._model_config.get('loss_input', [])
+        self._train = self._training_config.get('train', True)
+        self._model_name = self._model_config.get('name', '')
+        self._learning_rate = self._training_config.get('learning_rate', 0.001)
+        self._model_path = self._training_config.get('model_path', '')
 
     def backward(self):
         total_loss = 0.0
@@ -45,12 +46,13 @@ class trainval(object):
 
     def save_state(self, iteration):
         tstart = time.time()
-        filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
-        torch.save({
-            'global_step': iteration,
-            'state_dict': self._net.state_dict(),
-            'optimizer': self._optimizer.state_dict()
-        }, filename)
+        if len(self._weight_prefix) > 0:
+            filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
+            torch.save({
+                'global_step': iteration,
+                'state_dict': self._net.state_dict(),
+                'optimizer': self._optimizer.state_dict()
+            }, filename)
         self.tspent['save'] = time.time() - tstart
 
     def train_step(self, data_blob):
@@ -74,7 +76,7 @@ class trainval(object):
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
         """
         res_combined = {}
-        for idx in range(int(self._batch_size / (self._minibatch_size * len(self._gpus)))):
+        for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
             blob = {}
             for key in data_blob.keys():
                 blob[key] = data_blob[key][idx]
@@ -110,16 +112,23 @@ class trainval(object):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
             for key in data_blob:
-                data_blob[key] = [torch.as_tensor(d).cuda() for d in data_blob[key]]
+                data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
             data = []
-            for i in range(len(self._gpus)):
+            for i in range(max(1,len(self._gpus))):
                 data.append([data_blob[key][i] for key in input_keys])
             tstart = time.time()
-            segmentation = self._net(data)
+
+            if not torch.cuda.is_available():
+                data = data[0]
+
+            result = self._net(data)
+
+            if not torch.cuda.is_available():
+                data = [data]
 
             # Compute the loss
             if loss_keys:
-                loss_acc = self._criterion(segmentation, *tuple([data_blob[key] for key in loss_keys]))
+                loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -133,29 +142,27 @@ class trainval(object):
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
-                    res[key] = [s.cpu().detach().numpy() for s in segmentation[self._model_config['analysis_keys'][key]]]
+                    res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
             return res
 
     def initialize(self):
         # To use DataParallel all the inputs must be on devices[0] first
         model = None
-        if self._model_name in models:
-            model, criterion = models[self._model_name]
-            self._criterion = criterion(self._model_config).cuda()
-        else:
-            raise Exception("Unknown model name provided")
+
+        model,criterion = construct(self._model_name)
+        self._criterion = criterion(self._model_config).cuda() if len(self._gpus) else criterion(self._model_config)
+
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
         self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
 
         self._net = DataParallel(model(self._model_config),
-                                      device_ids=self._gpus,
-                                      dense=False) # FIXME
+                                      device_ids=self._gpus)
 
         if self._train:
-            self._net.train().cuda()
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
         else:
-            self._net.eval().cuda()
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
         self._optimizer = torch.optim.Adam(self._net.parameters(), lr=self._learning_rate)
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
@@ -174,7 +181,7 @@ class trainval(object):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights from %s...' % model_path)
                 with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f)
+                    checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
                         other_name = re.sub(module + '.', '', name)
@@ -182,7 +189,12 @@ class trainval(object):
                         if other_name in checkpoint['state_dict']:
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
-                    self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                    bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+
+                    if len(bad_keys.unexpected_keys) > 0:
+                        print("INCOMPATIBLE KEYS!")
+                        print(bad_keys.unexpected_keys)
+                        print("make sure your module is named ", module)
 
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own
