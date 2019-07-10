@@ -17,12 +17,12 @@ def test_loader(cfg_file, quiet=True, csv=False):
     import numpy as np
     from mlreco.iotools.factories import loader_factory
     # find config file
-    if not os.path.isfile(cfg_file):
+    if not os.path.isfile(str(cfg_file)):
         cfg_file = os.path.join(TOP_DIR, 'config', cfg_file)
     if not os.path.isfile(cfg_file):
         print(cfg_file, 'not found...')
-        sys.exit(1)
-
+        #sys.exit(1)
+        return 0
     if csv:
         from mlreco.utils.utils import CSVData
         csv = CSVData('csv.txt')
@@ -48,8 +48,7 @@ def test_loader(cfg_file, quiet=True, csv=False):
             print('Batch', batch_id)
             for data_id in range(len(data_keys)):
                 key = data_keys[data_id]
-                print('   ', key, np.shape(data[data_id]))
-            print(data[-1])
+                print('   ', key, np.shape(data[key]))
             print('Duration', titer, '[s]')
         if batch_id < 1:
             t0 = titer
@@ -66,3 +65,4 @@ def test_loader(cfg_file, quiet=True, csv=False):
             print('First iter:',t0,'[s] ... Average w/o first iter:',(tsum - t0)/(MAX_BATCH_ID-1),'[s]')
     if csv: csv.close()
     return True
+
