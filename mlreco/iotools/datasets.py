@@ -104,13 +104,10 @@ class LArCVDataset(Dataset):
             tree.GetEntry(idx)
         # Create data chunks
         result = {}
-        for index, (parser, data_keys) in enumerate(self._data_parsers):
-            data = [getattr(self._trees[key], key + '_branch') for key in data_keys]
+        for index, (parser, datatree_keys) in enumerate(self._data_parsers):
+            data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
             name = self._data_keys[index]
             result[name] = parser(data)
-            #result.append(parser(data))
 
-        #result.append([idx])
         result['index'] = [idx]
-        #return tuple(result)
         return result
