@@ -159,7 +159,7 @@ class EdgeLabelLoss(torch.nn.Module):
         if not len(selection):
             total_loss = self.lossfn(edge_pred, edge_pred)
             return {
-                'accuracy': 1.,
+                'accuracy': 0.,
                 'loss_seg': total_loss
             }
         
@@ -176,7 +176,7 @@ class EdgeLabelLoss(torch.nn.Module):
         if not edge_index.shape[0]:
             total_loss = self.lossfn(edge_pred, edge_pred)
             return {
-                'accuracy': 1.,
+                'accuracy': 0.,
                 'loss_seg': total_loss
             }
         group = get_cluster_label(data_grp, clusts)
