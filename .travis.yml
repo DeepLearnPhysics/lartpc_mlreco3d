@@ -36,7 +36,7 @@ sudo: required
 
 matrix:
   include:
-    - python: "3.6"
+    - python: "3.6.7"
 
 before_install:
   # Install Singularity
