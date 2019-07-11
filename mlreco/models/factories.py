@@ -23,7 +23,7 @@ def model_dict():
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
         # Chain test for track clustering (w/ DBSCAN)
-        "chain_track_clustering": (chain.Chain, chain.ChainLoss),
+        "chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Attention GNN
         "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
