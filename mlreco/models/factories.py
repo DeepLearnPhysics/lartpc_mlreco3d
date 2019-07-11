@@ -23,11 +23,10 @@ def model_dict():
         # Chain test for track clustering (w/ DBSCAN)
         "chain": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
-        # Attention GNN
-        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss),
-        "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
+        # Edge Model
+        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss)
     }
-    
+    # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
 
 def construct(name):
