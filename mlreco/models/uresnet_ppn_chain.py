@@ -10,6 +10,8 @@ class Chain(torch.nn.Module):
     """
     Run UResNet and use its encoding/decoding feature maps for PPN layers
     """
+    MODULES = ['ppn', 'uresnet_lonely']
+
     def __init__(self, model_config):
         super(Chain, self).__init__()
         self.ppn = PPN(model_config)

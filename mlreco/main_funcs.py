@@ -97,7 +97,7 @@ def prepare(cfg):
     # Set primary device
     if len(cfg['training']['gpus']) > 0:
         torch.cuda.set_device(cfg['training']['gpus'][0])
-        
+
     # Set random seed for reproducibility
     np.random.seed(cfg['training']['seed'])
     torch.manual_seed(cfg['training']['seed'])
@@ -142,12 +142,13 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     acc_seg  = np.mean(res['accuracy'])
     res_dict = {}
     for key in res:
-        res_dict[key] = np.mean(res[key])
+        if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
+            res_dict[key] = np.mean(res[key])
 
     mem = 0.
     if torch.cuda.is_available():
         mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
-        
+
     # Report (logger)
     if handlers.csv_logger:
         handlers.csv_logger.record(('iter', 'epoch', 'titer', 'tsumiter'),
@@ -198,16 +199,17 @@ def get_data_minibatched(dataset, cfg):
     """
     data_blob = {}  # FIXME dictionary or list? Keys may not be ordered
 
-    for _ in range(int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus']))))):
-        for key in cfg['data_keys']:
-            if key not in data_blob:
-                data_blob[key] = []
-            data_blob[key].append([])
-        for j in range(max(1,len(cfg['training']['gpus']))):
-            blob = next(dataset)
-            for i, key in enumerate(cfg['data_keys']):
-                data_blob[key][-1].append(blob[i])
+    num_proc_unit = max(1,len(cfg['training']['gpus']))
+    num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * num_proc_unit))
+    
+    for key in cfg['data_keys']:
+        data_blob[key] = [list() for _ in range(num_compute_cycle)]
 
+    for cycle in range(num_compute_cycle):
+        for gpu in range(num_proc_unit):
+            minibatch = next(dataset)
+            for key,element in minibatch.items():
+                data_blob.get(key)[cycle].append(element)
     return data_blob
 
 
