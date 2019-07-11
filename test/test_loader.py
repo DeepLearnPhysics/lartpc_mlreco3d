@@ -31,7 +31,10 @@ def test_loader(cfg_file, quiet=True, csv=False):
 
     # configure
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
-    loader, data_keys = loader_factory(cfg)
+    try:
+        loader, data_keys = loader_factory(cfg)
+    except FileNotFoundError:
+        pytest.skip('File not found to test the loader.')
     if not quiet: print(len(loader), 'batches loaded')
     if not quiet: print('keys:', data_keys)
 
