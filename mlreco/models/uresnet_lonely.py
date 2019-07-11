@@ -186,6 +186,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_lonely']
         self._ghost = self._cfg.get('ghost', False)
+        self._ghost_label = self._cfg.get('ghost_label', -1)
         self._num_classes = self._cfg.get('num_classes', 5)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
@@ -204,11 +205,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         ===========
         The ghost label is the last one among the classes numbering.
         If ghost = True, then num_classes should not count the ghost class.
+        If ghost_label > -1, then we perform only ghost segmentation.
         """
         assert len(segmentation[0]) == len(label)
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
         mask_loss, mask_acc = 0., 0.
+
         for i in range(len(label)):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
@@ -216,8 +219,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 event_segmentation = segmentation[0][i][batch_index]  # (N, num_classes)
                 event_label = label[i][batch_index][:, -1][:, None]  # (N, 1)
                 event_label = torch.squeeze(event_label, dim=-1).long()
+                if self._ghost_label > -1:
+                    event_label = (event_label == self._ghost_label).long()
 
-                if self._ghost:
+                elif self._ghost:
                     event_ghost = segmentation[3][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
