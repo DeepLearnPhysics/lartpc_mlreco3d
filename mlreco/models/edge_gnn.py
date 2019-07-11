@@ -34,7 +34,6 @@ class EdgeModel(torch.nn.Module):
     def __init__(self, cfg):
         super(EdgeModel, self).__init__()
         
-        
         if 'modules' in cfg:
             self.model_config = cfg['modules']['edge_model']
         else:
@@ -79,7 +78,7 @@ class EdgeModel(torch.nn.Module):
         primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
-        
+
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
         # obtain edge features
@@ -97,7 +96,7 @@ class EdgeLabelLoss(torch.nn.Module):
         # torch.nn.L1Loss(reduction='sum')
         super(EdgeLabelLoss, self).__init__()
         self.model_config = cfg['modules']['attention_gnn']
-        
+
         if 'loss' in self.model_config:
             if self.model_config['loss'] == 'L1':
                 self.lossfn = torch.nn.L1Loss(reduction='sum')
@@ -105,7 +104,7 @@ class EdgeLabelLoss(torch.nn.Module):
                 self.lossfn = torch.nn.MSELoss(reduction='sum')
         else:
             self.lossfn = torch.nn.L1Loss(reduction='sum')
-        
+
         if 'balance_classes' in self.model_config:
             self.balance = self.model_config['balance_classes']
         else:
@@ -131,12 +130,12 @@ class EdgeLabelLoss(torch.nn.Module):
         # need to form graph, then pass through GNN
         # clusts = form_clusters(data0)
         clusts = form_clusters_new(data0)
-        
+
         # remove track-like particles
         # types = get_cluster_label(data0, clusts)
         # selection = types > 1 # 0 or 1 are track-like
         # clusts = clusts[selection]
-        
+
         # remove compton clusters
         # if no cluster fits this condition, return
         selection = filter_compton(clusts) # non-compton looking clusters
@@ -146,19 +145,19 @@ class EdgeLabelLoss(torch.nn.Module):
                 'accuracy': 1.,
                 'loss_seg': total_loss
             }
-        
+
         clusts = clusts[selection]
-        
+
         # process group data
         # data_grp = process_group_data(data1, data0)
         data_grp = data1
-        
+
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
-        
+
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
         primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
         # set analysis keys
@@ -167,10 +166,10 @@ class EdgeLabelLoss(torch.nn.Module):
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
-        
+
         edge_assn = edge_assn.view(-1)
         edge_pred = edge_pred.view(-1)
-        
+
         if self.balance:
             # weight edges so that 0/1 labels appear equally often
             ind0 = edge_assn == 0
@@ -188,15 +187,15 @@ class EdgeLabelLoss(torch.nn.Module):
             edge_pred = edge_pred.clone()
             edge_pred[ind0] = w0 * edge_pred[ind0]
             edge_pred[ind1] = w1 * edge_pred[ind1]
-            
-            
-        
+
+
+
         total_loss = self.lossfn(edge_pred, edge_assn)
-        
+
         # compute accuracy of assignment
         # need to multiply by batch size to be accurate
         total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
-        
+
         return {
             'primary_fdr': primary_fdr,
             'primary_acc': primary_acc,
