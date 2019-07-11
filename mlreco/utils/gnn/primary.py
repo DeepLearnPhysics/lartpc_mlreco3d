@@ -11,20 +11,23 @@ from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
 from mlreco.utils.gnn.compton import filter_compton
 
 
-def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=0.05):
+def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energy_deposit=10):
+    """
+    Gets EM particle information for training GNN
+    """
     if point_type not in ["3d", "xy", "yz", "zx"]:
         raise Exception("Point type not supported in PPN I/O.")
     # from larcv import larcv
     gt_positions = []
     for pid, particle in enumerate(particle_v):
-        pdg_code = particle.pdg_code()
+        pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
         # Skip particle under some conditions
         if (particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count):
             continue
         if pdg_code > 1000000000:  # skipping nucleus trackid
             continue
-        if pdg_code == 11 or pdg_code == 22 or pdg_code == -11:  # Shower
+        if pdg_code == 11 or pdg_code == 22:  # Shower
             # we are now in EM primary
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
