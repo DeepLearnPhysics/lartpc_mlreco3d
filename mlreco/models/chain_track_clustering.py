@@ -2,8 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.layers.dbscan import DBScan
-from mlreco.models.uresnet_ppn import PPNUResNet, SegmentationLoss
+from mlreco.models.layers.dbscan import DBScan2
+# from mlreco.models.uresnet_ppn import PPNUResNet, SegmentationLoss
+from mlreco.models.uresnet_ppn_type import PPNUResNet, SegmentationLoss
 
 
 class Chain(torch.nn.Module):
@@ -14,28 +15,29 @@ class Chain(torch.nn.Module):
 
     def __init__(self, model_config):
         super(Chain, self).__init__()
-        self.dbscan = DBScan(model_config)
-        self.uresnet_ppn = PPNUResNet(model_config)
+        self.dbscan = DBScan2(model_config)
+        self.uresnet_ppn_type = PPNUResNet(model_config)
+        self._num_classes = model_config['modules']['uresnet_ppn_type']['num_classes']
         # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, input):
-        x = self.uresnet_ppn(input)
-        #print(input[0].shape)
-        #print(x[3][0].shape)
+        x = self.uresnet_ppn_type(input)
         new_input = torch.cat([input[0].double(), x[3][0].double()], dim=1)
-        #print(new_input[:10])
-        clusters = self.dbscan(new_input)
+        one_hot = torch.cat([new_input[:, :-5], torch.nn.functional.one_hot(torch.argmax(new_input[:, -self._num_classes:], dim=1), num_classes=self._num_classes).double()], dim=1)
+        clusters = self.dbscan(one_hot)
         #c = torch.cat(clusters, dim=0)
         final = []
         i = 0
+        # print("clusters", clusters[:10])
         for cluster in clusters:
             if cluster[0, -1] == 0 or cluster[0, -1] == 1:
                 cluster = torch.nn.functional.pad(cluster, (0, 1, 0, 0), mode='constant', value=i)
                 final.append(cluster)
                 i += 1
-        print(len(clusters), len(final))
+        # print(len(clusters), len(final))
         if len(final) > 0:
             final = torch.cat(final, dim=0)
+        # print(len(x))
         return x + [[final]]
 
 

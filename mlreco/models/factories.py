@@ -4,14 +4,14 @@ def model_dict():
     from . import uresnet_ppn_type
     from . import uresnet_lonely
     from . import uresnet
-    from . import chain
+    from . import chain_track_clustering
     from . import uresnet_ppn_chain
     from . import attention_gnn
     from . import chain_gnn
     from . import node_attention_gnn
     from . import node_econv_gnn
-    
-    
+
+
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
         # Regular UResNet + PPN
@@ -23,7 +23,7 @@ def model_dict():
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
         # Chain test for track clustering (w/ DBSCAN)
-        "chain": (chain.Chain, chain.ChainLoss),
+        "chain_track_clustering": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Attention GNN
         "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
@@ -34,7 +34,7 @@ def model_dict():
         # Node EConv GNN
         "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss)
     }
-    
+
     return models
 
 def construct(name):
