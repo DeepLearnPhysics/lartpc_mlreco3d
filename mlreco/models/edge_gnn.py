@@ -50,7 +50,7 @@ class EdgeModel(torch.nn.Module):
         else:
             model = edge_model_construct('basic_attention')
             
-        if 'model_cfg' in self.model_config
+        if 'model_cfg' in self.model_config:
             # construct with model parameters
             self.edge_predictor = model(self.model_config['model_cfg'])
         else:

@@ -16,15 +16,26 @@ class IterativeEdgeModel(torch.nn.Module):
         
         
         if 'modules' in cfg:
-            self.model_config = cfg['modules']['iter_gnn']
+            self.model_config = cfg['modules']['edge_model']
         else:
             self.model_config = cfg
             
-        # see line 151 in trainval.py
-        self.iter_gnn_cfg = model_config['edge_model']
-        # get model and loss fns
-        model, criterion = construct(self.iter_gnn_cfg)
-        self.iter_gnn = model(self.iter_gnn_cfg)
+        if 'remove_compton' in self.model_config:
+            self.remove_compton = self.model_config['remove_compton']
+        else:
+            self.remove_compton = True
+            
+        if 'name' in self.model_config:
+            # extract the actual model to use
+            model = edge_model_construct(self.model_config['name'])
+        else:
+            model = edge_model_construct('basic_attention')
+            
+        if 'model_cfg' in self.model_config:
+            # construct with model parameters
+            self.edge_predictor = model(self.model_config['model_cfg'])
+        else:
+            self.edge_predictor = model({})
         
         
     def forward(self, data):
@@ -42,21 +53,16 @@ class IterativeEdgeModel(torch.nn.Module):
         # need to form graph, then pass through GNN
         clusts = form_clusters_new(data[0])
         
-        # remove track-like particles
-        #types = get_cluster_label(data[0], clusts)
-        #selection = types > 1 # 0 or 1 are track-like
-        #clusts = clusts[selection]
-        
         # remove compton clusters
         # if no cluster fits this condition, return
-        selection = filter_compton(clusts) # non-compton looking clusters
-        if not len(selection):
-            e = torch.tensor([], requires_grad=True)
-            if data[0].is_cuda:
-                e.cuda()
-            return e
-        
-        clusts = clusts[selection]
+        if self.remove_compton:
+            selection = filter_compton(clusts) # non-compton looking clusters
+            if not len(selection):
+                e = torch.tensor([], requires_grad=True)
+                if data[0].is_cuda:
+                    e.cuda()
+                return e
+            clusts = clusts[selection]
         
         # process group data
         # data_grp = process_group_data(data[1], data[0])
