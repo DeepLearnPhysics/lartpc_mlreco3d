@@ -44,10 +44,17 @@ class EdgeModel(torch.nn.Module):
         else:
             self.remove_compton = True
             
-        # extract the actual model to use
-        model = edge_model_construct(self.model_config['name'])
-        # construct with model parameters
-        self.edge_predictor = model(self.model_config['model_cfg'])
+        if 'name' in self.model_config:
+            # extract the actual model to use
+            model = edge_model_construct(self.model_config['name'])
+        else:
+            model = edge_model_construct('basic_attention')
+            
+        if 'model_cfg' in self.model_config
+            # construct with model parameters
+            self.edge_predictor = model(self.model_config['model_cfg'])
+        else:
+            self.edge_predictor = model({})
         
         
     def forward(self, data):
