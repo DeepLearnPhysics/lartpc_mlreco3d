@@ -33,7 +33,10 @@ class BasicAttentionModel(torch.nn.Module):
         else:
             self.model_config = cfg
             
-        self.nheads = self.model_config['nheads']
+        if 'nheads' in self.model_config:
+            self.nheads = self.model_config['nheads']
+        else:
+            self.nheads = 3
         
         # perform batch normalization at each step
         self.bn_node = BatchNorm1d(16)
