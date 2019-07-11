@@ -45,9 +45,9 @@ class EdgeModel(torch.nn.Module):
             self.remove_compton = True
             
         # extract the actual model to use
-        model = edge_model_construct(model_config['name'])
+        model = edge_model_construct(self.model_config['name'])
         # construct with model parameters
-        self.edge_predictor = model(model_config['model_cfg'])
+        self.edge_predictor = model(self.model_config['model_cfg'])
         
         
     def forward(self, data):
@@ -83,9 +83,11 @@ class EdgeModel(torch.nn.Module):
         x = cluster_vtx_features(data[0], clusts, cuda=True)
         # obtain edge features
         e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
+        # get x batch
+        xbatch = torch.tensor(batch).cuda()
         
         # get output
-        outdict = self.edge_predictor(x, edge_index, e)
+        outdict = self.edge_predictor(x, edge_index, e, xbatch)
         
         return outdict
     
@@ -95,7 +97,7 @@ class EdgeLabelLoss(torch.nn.Module):
         # torch.nn.MSELoss(reduction='sum')
         # torch.nn.L1Loss(reduction='sum')
         super(EdgeLabelLoss, self).__init__()
-        self.model_config = cfg['modules']['attention_gnn']
+        self.model_config = cfg['modules']['edge_model']
 
         if 'loss' in self.model_config:
             if self.model_config['loss'] == 'L1':
@@ -104,6 +106,11 @@ class EdgeLabelLoss(torch.nn.Module):
                 self.lossfn = torch.nn.MSELoss(reduction='sum')
         else:
             self.lossfn = torch.nn.L1Loss(reduction='sum')
+            
+        if 'remove_compton' in self.model_config:
+            self.remove_compton = self.model_config['remove_compton']
+        else:
+            self.remove_compton = True
 
         if 'balance_classes' in self.model_config:
             self.balance = self.model_config['balance_classes']
@@ -138,13 +145,14 @@ class EdgeLabelLoss(torch.nn.Module):
 
         # remove compton clusters
         # if no cluster fits this condition, return
-        selection = filter_compton(clusts) # non-compton looking clusters
-        if not len(selection):
-            total_loss = self.lossfn(edge_pred, edge_pred)
-            return {
-                'accuracy': 1.,
-                'loss_seg': total_loss
-            }
+        if self.remove_compton:
+            selection = filter_compton(clusts) # non-compton looking clusters
+            if not len(selection):
+                total_loss = self.lossfn(edge_pred, edge_pred)
+                return {
+                    'accuracy': 1.,
+                    'loss_seg': total_loss
+                }
 
         clusts = clusts[selection]
 
@@ -160,9 +168,6 @@ class EdgeLabelLoss(torch.nn.Module):
 
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
         primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
-        # set analysis keys
-        # out['primary_fdr'] = [torch.tensor(primary_fdr)]
-        # out['primary_acc'] = [torch.tensor(primary_acc)]
         
         # determine true assignments
         edge_assn = edge_assignment(edge_index, batch, group, cuda=True)

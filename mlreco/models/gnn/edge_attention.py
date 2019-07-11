@@ -62,50 +62,19 @@ class BasicAttentionModel(torch.nn.Module):
         self.edge_predictor = MetaLayer(edge_pred_model, None, None)
         
         
-    def forward(self, data):
+    def forward(self, x, edge_index, e, xbatch):
         """
         inputs data:
-            data[0] - dbscan data
-            data[1] - primary data
+            x - vertex features
+            edge_index - graph edge list
+            e - edge features
+            xbatch - node batchid
         """
-        # need to form graph, then pass through GNN
-        clusts = form_clusters_new(data[0])
         
-        # remove track-like particles
-        #types = get_cluster_label(data[0], clusts)
-        #selection = types > 1 # 0 or 1 are track-like
-        #clusts = clusts[selection]
-        
-        # remove compton clusters
-        # if no cluster fits this condition, return
-        selection = filter_compton(clusts) # non-compton looking clusters
-        if not len(selection):
-            e = torch.tensor([], requires_grad=True)
-            if data[0].is_cuda:
-                e.cuda()
-            return e
-        
-        clusts = clusts[selection]
-        
-        # process group data
-        # data_grp = process_group_data(data[1], data[0])
-        # data_grp = data[1]
-        
-        # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[1], clusts, data[0])
-        batch = get_cluster_batch(data[0], clusts)
-        edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
-        
-        # obtain vertex features
-        x = cluster_vtx_features(data[0], clusts, cuda=True)
-        # batch normalization
+        # batch normalization of node features
         x = self.bn_node(x)
-        # x = cluster_vtx_features_old(data[0], clusts, cuda=True)
-        #print("max input: ", torch.max(x.view(-1)))
-        #print("min input: ", torch.min(x.view(-1)))
-        # obtain edge features
-        e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
-        # batch normalization
+        
+        # batch normalization of edge features
         e = self.bn_edge(e)
         
         # go through layers
@@ -115,7 +84,6 @@ class BasicAttentionModel(torch.nn.Module):
 
         x = self.attn3(x, edge_index)
         
-        xbatch = torch.tensor(batch).cuda()
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 
         return {

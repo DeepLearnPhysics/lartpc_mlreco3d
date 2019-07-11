@@ -24,7 +24,7 @@ def model_dict():
         "chain": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Attention GNN
-        "edge_gnn": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss),
+        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss),
         "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     }
     
