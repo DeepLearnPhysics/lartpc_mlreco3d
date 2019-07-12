@@ -5,6 +5,9 @@ import numpy as np
 import pytest
 
 
+N = 192
+
+
 @pytest.fixture(params=[1, 2])
 def event_tensor3d(request):
     """
@@ -14,7 +17,6 @@ def event_tensor3d(request):
     """
     from larcv import larcv
     import random
-    N = 192
     meta = larcv.Voxel3DMeta()
     xmin, ymin, zmin = random.uniform(-500, 500), random.uniform(-500, 500), random.uniform(-500, 500)
     meta.set(xmin, ymin, zmin,
@@ -84,7 +86,6 @@ def event_cluster3d(request):
     """
     from larcv import larcv
     import random
-    N = 192
     meta = larcv.Voxel3DMeta()
     xmin, ymin, zmin = random.uniform(-500, 500), random.uniform(-500, 500), random.uniform(-500, 500)
     meta.set(xmin, ymin, zmin,
@@ -137,7 +138,7 @@ def test_parse_tensor3d(event_tensor3d):
     from mlreco.iotools.parsers import parse_tensor3d
     output = parse_tensor3d(event_tensor3d)
     assert len(output.shape) == 4
-    assert output.shape[0] == 768
+    assert output.shape[0] == N
     assert output.shape[0] == output.shape[1]
     assert output.shape[0] == output.shape[2]
     assert output.shape[3] == len(event_tensor3d)
