@@ -123,12 +123,14 @@ class trainval(object):
 
             result = self._net(data)
 
+
             if not torch.cuda.is_available():
                 data = [data]
 
             # Compute the loss
             if loss_keys:
                 loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
+
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
