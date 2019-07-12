@@ -9,9 +9,21 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     Very simple algorithm to reconstruct Michel clusters from UResNet semantic
     segmentation output.
 
-    Assumptions
-    ===========
-    3D
+    Parameters
+    ----------
+    data_blob: dict
+        Input dictionary returned by iotools
+    res: dict
+        Results from the network, dictionary using `analysis_keys`
+    cfg: dict
+        Configuration
+    idx: int
+        Iteration number
+
+    Notes
+    -----
+    Assumes 3D
+    Stores result of this algorithm in a CSV file called michel_reconstruction*
     """
     # Create output CSV
     csv_logger = utils.CSVData("%s/michel_reconstruction-%.07d.csv" % (cfg['training']['log_dir'], idx))
@@ -28,11 +40,6 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     # First mask ghost points in predictions
     ghost_predictions = np.argmax(ghost_all, axis=1)
     mask = ghost_predictions == 0
-    # data_all = data_all[mask]  # (M, 5)
-    # label_all = label_all[mask]  # (M,)
-    # predictions_all = predictions_all[mask]  # (M, )
-    # segmentation_all = segmentation_all[mask]  # (M, 5)
-    # particles_all = particles_all[mask]
 
     # Loop over events
     batch_ids = np.unique(data_all[:, 3])

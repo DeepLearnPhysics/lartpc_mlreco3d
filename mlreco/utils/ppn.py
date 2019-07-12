@@ -8,6 +8,20 @@ import torch
 
 
 def contains(meta, point, point_type="3d"):
+    """
+    Decides whether a point is contained in the box defined by meta.
+
+    Parameters
+    ----------
+    meta: larcv::Voxel3DMeta or larcv::ImageMeta
+    point: larcv::Point3D or larcv::Point2D
+    point_type: str, optional
+        Has to be "3d" for 3D, otherwise anything else works for 2D.
+
+    Returns
+    -------
+    bool
+    """
     if point_type == '3d':
         return point.x() >= meta.min_x() and point.y() >= meta.min_y() \
             and point.z() >= meta.min_z() and point.x() <= meta.max_x() \
@@ -16,7 +30,28 @@ def contains(meta, point, point_type="3d"):
         return point.x() >= meta.min_x() and point.x() <= meta.max_x() \
             and point.y() >= meta.min_y() and point.y() <= meta.max_y()
 
+
 def pass_particle(gt_type, start, end, energy_deposit, vox_count):
+    """
+    Filters particles based on their type, voxel count and energy deposit.
+
+    Parameters
+    ----------
+    gt_type: int
+    start: larcv::Point3D
+    end: larcv::Point3D
+    energy_deposit: float
+    vox_count: int
+
+    Returns
+    -------
+    bool
+
+    Notes
+    -----
+    Made during DUNE Pi0 workshop (?), do we need to keep it here?
+    Assumes 3D
+    """
     if (np.power((start.x()-end.x()),2) + np.power((start.y()-end.y()),2) + np.power((start.z()-end.z()),2)) < 6.25:
         return True
     if gt_type == 0: return vox_count<7 or energy_deposit < 50.
@@ -25,9 +60,30 @@ def pass_particle(gt_type, start, end, energy_deposit, vox_count):
     if gt_type == 3: return vox_count<5 or energy_deposit < 5.
     if gt_type == 4: return vox_count<5 or energy_deposit < 5.
 
+
 def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energy_deposit=10):
     """
-    Gets particle information for training ppn
+    Gets particle points coordinates and informations for running PPN.
+
+    Parameters
+    ----------
+    particle_v:
+    meta: larcv::Voxel3DMeta or larcv::ImageMeta
+    point_type: str, optional
+    min_voxel_count: int, optional
+    min_energy_deposit: float, optional
+
+    Returns
+    -------
+    np.array
+        Array of points of shape (N, 10) where 10 = x,y,z + point type + pdg
+        code + energy deposit + num voxels + energy_init + energy_deposit
+
+    Notes
+    -----
+    We skip some particles under specific conditions (e.g. low energy deposit,
+    low voxel count, nucleus track, etc.)
+    For now in 2D we assume a specific 2d projection (plane).
     """
     if point_type not in ["3d", "xy", "yz", "zx"]:
         raise Exception("Point type not supported in PPN I/O.")
@@ -105,6 +161,25 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
 
 
 def nms_numpy(im_proposals, im_scores, threshold, size):
+    """
+    Runs NMS algorithm on a list of predicted points and scores.
+
+    Parameters
+    ----------
+    im_proposals: np.array
+        Shape (N, data_dim). Predicted points.
+    im_scores: np.array
+        Shape (N, 2). Predicted scores.
+    threshold: float
+        Threshold for overlap
+    size: int
+        Half side of square window defined around each point
+
+    Returns
+    -------
+    np.array
+        boolean array of same length as points/scores
+    """
     # TODO: looks like this doesn't account for batches
     dim = im_proposals.shape[-1]
     coords = []
@@ -136,6 +211,16 @@ def nms_numpy(im_proposals, im_scores, threshold, size):
 def group_points(ppn_pts, batch, label):
     """
     if there are multiple ppn points in a very similar location, return the average pos
+
+    Parameters
+    ----------
+    ppn_pts: np.array
+    batch: np.array
+    label: np.array
+
+    Returns
+    -------
+    np.array
     """
     ppn_pts_new = []
     batch_new = []
@@ -157,11 +242,16 @@ def group_points(ppn_pts, batch, label):
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
     """
-    input:
-        data - 5-types sparse tensor
-        out - ppn output
-    output:
-        [x,y,z,bid,label] of ppn-predicted points
+    Basic selection of PPN points.
+
+    Parameters
+    ----------
+    data - 5-types sparse tensor
+    out - ppn output
+
+    Returns
+    -------
+    [x,y,z,bid,label] of ppn-predicted points
     """
     # analysis_keys:
     #  segmentation: 3

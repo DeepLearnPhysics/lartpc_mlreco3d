@@ -5,44 +5,24 @@ from mlreco.utils import utils
 import scipy
 
 
-def nms_numpy(im_proposals, im_scores, threshold, size):
-    """
-    Runs NMS algorithm on a list of predicted points and scores
-    Returns a boolean array of same length as points/scores
-    Parameters:
-        - threshold for overlap
-        - size = half side of square window defined around each point
-    """
-    dim = im_proposals.shape[-1]
-    coords = []
-    for d in range(dim):
-        coords.append(im_proposals[:, d] - size)
-    for d in range(dim):
-        coords.append(im_proposals[:, d] + size)
-    coords = np.array(coords)
-
-    areas = np.ones_like(coords[0])
-    areas = np.prod(coords[dim:] - coords[0:dim] + 1, axis=0)
-
-    order = im_scores.argsort()[::-1]
-    keep = []
-    while order.size > 0:
-        i = order[0]
-        keep.append(i)
-        xx = np.maximum(coords[:dim, i][:, np.newaxis], coords[:dim, order[1:]])
-        yy = np.minimum(coords[dim:, i][:, np.newaxis], coords[dim:, order[1:]])
-        w = np.maximum(0.0, yy - xx + 1)
-        inter = np.prod(w, axis=0)
-        ovr = inter / (areas[i] + areas[order[1:]] - inter)
-        inds = np.where(ovr <= threshold)[0]
-        order = order[inds + 1]
-
-    return keep
-
-
 def track_clustering(data_blob, res, cfg, idx, debug=False):
     """
-    Track clustering on PPN+UResNet output. Based on
+    Track clustering on PPN+UResNet output.
+
+    Parameters
+    ----------
+    data_blob: dict
+        The input data dictionary from iotools.
+    res: dict
+        The output of the network, formatted using `analysis_keys`.
+    cfg: dict
+        Configuration.
+    debug: bool, optional
+        Whether to print some stats or not in the stdout.
+
+    Notes
+    -----
+    Based on
     - semantic segmentation output
     - point position and type predictions
     In addition, includes a break algorithm to break track clusters into
@@ -137,16 +117,28 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
                 # Cluster part around the points
                 remaining_cluster = cluster[~new_index]
                 # FIXME this might eliminate too small clusters?
+                # put a threshold here? sometimes clusters with 1px only
                 if new_cluster.shape[0] == 0:
                     continue
                 # Now dbscan on the main body of the cluster to find if we need
                 # to break it or not
-                db2 = DBSCAN(eps=1.0, min_samples=1).fit(new_cluster).labels_
+                db2 = DBSCAN(eps=exclusion_radius, min_samples=cfg['model']['modules']['dbscan']['minPoints']).fit(new_cluster).labels_
+                # All points were garbage
+                if (len(new_cluster[db2 == -1]) == len(new_cluster)):
+                    continue
                 # These are going to be the new bodies of predicted clusters
                 new_cluster_ids = np.unique(db2)
                 new_clusters = []
                 for c2 in new_cluster_ids:
-                    new_clusters.append([new_cluster[db2 == c2]])
+                    if c2 > -1:
+                        new_clusters.append([new_cluster[db2 == c2]])
+                # If some points were left by dbscan, put them in remaining
+                # cluster and assign them to closest cluster
+                if len(new_cluster[db2 == -1]) > 0:
+                    print(len(new_cluster[db2 == -1]), len(new_cluster))
+                    remaining_cluster = np.concatenate([remaining_cluster, new_cluster[db2 == -1]], axis=0)
+                    # effectively remove them from new_cluster for the argmin
+                    new_cluster[db2 == -1] = 100000
                 # Now assign remaining pixels in remaining_cluster based on
                 # their distance to the new clusters.
                 # First we find which point of new_cluster was closest
