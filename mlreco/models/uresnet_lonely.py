@@ -31,6 +31,9 @@ class UResNet(torch.nn.Module):
     ghost : bool, optional
         Whether to compute ghost mask separately or not. See SegmentationLoss
         for more details.
+    ghost_label: int, optional
+        If specified, then will collapse all classes other than ghost_label into
+        single non-ghost class and perform 2-classes segmentatiion (deghosting).
     reps : int, optional
         Convolution block repetition factor
     kernel_size : int, optional
@@ -40,11 +43,12 @@ class UResNet(torch.nn.Module):
 
     Returns
     -------
-    In order:
-    - segmentation scores (N, 5)
-    - feature map for PPN1
-    - feature map for PPN2
-    - if `ghost`, segmentation scores for deghosting (N, 2)
+    list
+        In order:
+        - segmentation scores (N, num_classes)
+        - feature maps of encoding path
+        - feature maps of decoding path
+        - if `ghost`, segmentation scores for deghosting (N, 2)
     """
 
     def __init__(self, cfg, name="uresnet_lonely"):
