@@ -11,13 +11,13 @@ class Chain(torch.nn.Module):
     """
     Extracts tracks clusters
     """
-    MODULES = ['dbscan', 'uresnet_ppn']
+    MODULES = ['dbscan', 'uresnet_ppn_type']
 
     def __init__(self, model_config):
         super(Chain, self).__init__()
         self.dbscan = DBScan2(model_config)
         self.uresnet_ppn_type = PPNUResNet(model_config)
-        self._num_classes = model_config['modules']['uresnet_ppn_type']['num_classes']
+        self._num_classes = model_config['modules']['uresnet_ppn_type'].get('num_classes', 5)
         # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, input):
