@@ -199,3 +199,32 @@ def assign_primaries3(primaries, clusts, data):
 #         assn.append(selinds[pinds[ind]])
         assn.append(pinds[ind])
     return assn
+
+
+def analyze_primaries(p_est, p_true):
+    """
+    Return some statistics on primary assignment
+    INPUTS:
+        p_est  - list of assigned primaries
+        p_true - list of true primaries
+    OUTPUTS:
+        fdr - false discovery rate
+        tdr - true discovery rate
+        acc - proportion of all primaries found
+    """
+    n_est = len(p_est)
+    n_true = len(p_true)
+    n_int = len(np.intersect1d(p_est, p_true))
+    n_out = n_est - n_int
+    tdr = n_int * 1.0 / n_est
+    fdr = n_out * 1.0 / n_est
+    acc = n_int * 1.0 / n_true
+    return fdr, tdr, acc
+    
+    
+    
+    
+    
+    
+    
+    

@@ -80,8 +80,8 @@ class LArCVDataset(Dataset):
     def create(cfg):
         data_dirs   = cfg['data_dirs']
         data_schema = cfg['schema']
-        data_key = None if not 'data_key' in cfg         else str(cfg['data_key'])
-        lns     = 0    if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
+        data_key    = None if not 'data_key'        in cfg else str(cfg['data_key'])
+        lns         = 0    if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
         return LArCVDataset(data_dirs=data_dirs, data_schema=data_schema, data_key=data_key, limit_num_files=lns)
 
     def data_keys(self):
@@ -103,10 +103,11 @@ class LArCVDataset(Dataset):
         for tree in self._trees.values():
             tree.GetEntry(idx)
         # Create data chunks
-        result = []
-        for parser, data_keys in self._data_parsers:
-            data = [getattr(self._trees[key], key + '_branch') for key in data_keys]
-            result.append(parser(data))
+        result = {}
+        for index, (parser, datatree_keys) in enumerate(self._data_parsers):
+            data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
+            name = self._data_keys[index]
+            result[name] = parser(data)
 
-        result.append([idx])
-        return tuple(result)
+        result['index'] = [idx]
+        return result
