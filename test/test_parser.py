@@ -14,18 +14,19 @@ def event_tensor3d(request):
     """
     from larcv import larcv
     import random
+    N = 192
     meta = larcv.Voxel3DMeta()
     xmin, ymin, zmin = random.uniform(-500, 500), random.uniform(-500, 500), random.uniform(-500, 500)
     meta.set(xmin, ymin, zmin,
-             xmin+230.4, ymin+230.4, zmin+230.4,
-             768, 768, 768)
+             xmin+N*0.3, ymin+N*0.3, zmin+N*0.3,
+             N, N, N)
 
     event_list = []
     for _ in range(request.param):
         data = np.concatenate([
-            np.random.random((10, 1)) * 230.4 + xmin,
-            np.random.random((10, 1)) * 230.4 + ymin,
-            np.random.random((10, 1)) * 230.4 + zmin,
+            np.random.random((10, 1)) * N * 0.3 + xmin,
+            np.random.random((10, 1)) * N * 0.3 + ymin,
+            np.random.random((10, 1)) * N * 0.3 + zmin,
             np.random.random((10, 1))
         ], axis=1).astype(np.float32)
         voxel_set = larcv.as_tensor3d(data, meta, -0.01)
@@ -83,11 +84,12 @@ def event_cluster3d(request):
     """
     from larcv import larcv
     import random
+    N = 192
     meta = larcv.Voxel3DMeta()
     xmin, ymin, zmin = random.uniform(-500, 500), random.uniform(-500, 500), random.uniform(-500, 500)
     meta.set(xmin, ymin, zmin,
-             xmin+230.4, ymin+230.4, zmin+230.4,
-             768, 768, 768)
+             xmin+N*0.3, ymin+N*0.3, zmin+N*0.3,
+             N, N, N)
 
     num_clusters = request.param
     event = larcv.EventClusterVoxel3D()
@@ -95,9 +97,9 @@ def event_cluster3d(request):
     for i in range(num_clusters):
         num_voxels = np.random.randint(low=5, high=20)
         data = np.concatenate([
-            np.random.random((num_voxels, 1)) * 230.4 + xmin,
-            np.random.random((num_voxels, 1)) * 230.4 + ymin,
-            np.random.random((num_voxels, 1)) * 230.4 + zmin,
+            np.random.random((num_voxels, 1)) * N * 0.3 + xmin,
+            np.random.random((num_voxels, 1)) * N * 0.3 + ymin,
+            np.random.random((num_voxels, 1)) * N * 0.3 + zmin,
             np.random.random((num_voxels, 1))
         ], axis=1).astype(np.float32)
         voxel_set = larcv.as_tensor3d(data, meta, -0.01)
