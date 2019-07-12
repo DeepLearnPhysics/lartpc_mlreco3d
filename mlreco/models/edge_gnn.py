@@ -86,12 +86,17 @@ class EdgeModel(torch.nn.Module):
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
 
+        # print(primaries)
+        
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, cuda=True)
         # obtain edge features
         e = cluster_edge_features(data[0], clusts, edge_index, cuda=True)
         # get x batch
         xbatch = torch.tensor(batch).cuda()
+        
+        # print(x.shape)
+        # print(torch.max(edge_index))
         
         # get output
         outdict = self.edge_predictor(x, edge_index, e, xbatch)
