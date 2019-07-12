@@ -199,16 +199,17 @@ def get_data_minibatched(dataset, cfg):
     """
     data_blob = {}  # FIXME dictionary or list? Keys may not be ordered
 
-    for _ in range(int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus']))))):
-        for key in cfg['data_keys']:
-            if key not in data_blob:
-                data_blob[key] = []
-            data_blob[key].append([])
-        for j in range(max(1,len(cfg['training']['gpus']))):
-            blob = next(dataset)
-            for i, key in enumerate(cfg['data_keys']):
-                data_blob[key][-1].append(blob[i])
+    num_proc_unit = max(1,len(cfg['training']['gpus']))
+    num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * num_proc_unit))
+    
+    for key in cfg['data_keys']:
+        data_blob[key] = [list() for _ in range(num_compute_cycle)]
 
+    for cycle in range(num_compute_cycle):
+        for gpu in range(num_proc_unit):
+            minibatch = next(dataset)
+            for key,element in minibatch.items():
+                data_blob.get(key)[cycle].append(element)
     return data_blob
 
 
