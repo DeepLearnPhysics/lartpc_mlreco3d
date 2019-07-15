@@ -39,22 +39,17 @@ class EdgeModel(torch.nn.Module):
         else:
             self.model_config = cfg
             
-        if 'remove_compton' in self.model_config:
-            self.remove_compton = self.model_config['remove_compton']
-        else:
-            self.remove_compton = True
+        
+        self.remove_compton = self.model_config.get('remove_compton', True)
             
-        if 'name' in self.model_config:
-            # extract the actual model to use
-            model = edge_model_construct(self.model_config['name'])
-        else:
-            model = edge_model_construct('basic_attention')
-            
-        if 'model_cfg' in self.model_config:
-            # construct with model parameters
-            self.edge_predictor = model(self.model_config['model_cfg'])
-        else:
-            self.edge_predictor = model({})
+        # extract the model to use
+        model = edge_model_construct(self.model_config.get('name', 'edge_only'))
+                     
+        # construct the model
+        self.edge_predictor = model(self.model_config.get('model_cfg', {})
+      
+        # check if primaries assignment should be thresholded
+        self.pmd = self.model_config.get('primary_max_dist', None)
         
         
     def forward(self, data):
@@ -82,7 +77,7 @@ class EdgeModel(torch.nn.Module):
             clusts = clusts[selection]
         
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[1], clusts, data[0])
+        primaries = assign_primaries(data[1], clusts, data[0], max_dist=self.pmd)
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
         if not edge_index.shape[0]:
@@ -134,6 +129,12 @@ class EdgeLabelLoss(torch.nn.Module):
         else:
             # default behavior
             self.balance = True
+            
+        # check if primaries assignment should be thresholded
+        if 'primary_max_dist' in self.model_config:
+            self.pmd = self.model_config['primary_max_dist']
+        else:
+            self.pmd=None
         
     def forward(self, out, data0, data1, data2):
         """
@@ -178,8 +179,9 @@ class EdgeLabelLoss(torch.nn.Module):
         data_grp = data1
 
         # form primary/secondary bipartite graph
-        primaries = assign_primaries(data2, clusts, data0)
+        primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
         batch = get_cluster_batch(data0, clusts)
+        batch_size = len(np.unique(batch))
         edge_index = primary_bipartite_incidence(batch, primaries)
         if not edge_index.shape[0]:
             total_loss = self.lossfn(edge_pred, edge_pred)
@@ -225,8 +227,8 @@ class EdgeLabelLoss(torch.nn.Module):
         total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
 
         return {
-            'primary_fdr': primary_fdr,
-            'primary_acc': primary_acc,
+            'primary_fdr': primary_fdr * batch_size,
+            'primary_acc': primary_acc * batch_size,
             'accuracy': total_acc,
             'loss_seg': total_loss
         }
