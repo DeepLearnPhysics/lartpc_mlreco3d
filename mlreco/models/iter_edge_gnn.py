@@ -51,6 +51,12 @@ class IterativeEdgeModel(torch.nn.Module):
         else:
             self.edge_predictor = model({})
             
+        # maximum number of iterations
+        if 'maxiter' in self.model_config:
+            self.maxiter = self.model_config['maxiter']
+        else:
+            self.maxiter = 5
+            
             
     def assign_clusters(self, edge_index, edge_pred, others, matched, thresh=0.5):
         """
@@ -113,7 +119,7 @@ class IterativeEdgeModel(torch.nn.Module):
         
         counter = 0
         
-        while (-1 in matched) and (counter < 2):
+        while (-1 in matched) and (counter < self.maxiter):
             
             print('iter ', counter)
             counter = counter + 1
