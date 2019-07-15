@@ -89,7 +89,7 @@ def score_clusters_primary(clusts, data, primary):
     return scores
 
 
-def assign_primaries(primaries, clusts, data, use_labels=False):
+def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
     """
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
@@ -125,6 +125,8 @@ def assign_primaries(primaries, clusts, data, use_labels=False):
         
         scores = score_clusters_primary(cs2[pinds], data, primary)
         ind = np.argmin(scores)
+        if max_dist and scores[ind] > max_dist:
+            continue
         # print(scores[ind])
         assn.append(selinds[pinds[ind]])
         
