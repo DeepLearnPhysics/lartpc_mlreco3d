@@ -6,13 +6,6 @@ import torch
 import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, GATConv
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
-from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
-from mlreco.utils.gnn.network import primary_bipartite_incidence
-from mlreco.utils.gnn.compton import filter_compton
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency
-from mlreco.utils.groups import process_group_data
 
 class BasicAttentionModel(torch.nn.Module):
     """
@@ -55,7 +48,7 @@ class BasicAttentionModel(torch.nn.Module):
         self.bn_edge = BatchNorm1d(10)
     
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64), Dropout(p=0.2), LeakyReLU(0.12), Dropout(p=0.2), Lin(64, 16), LeakyReLU(0.12), Lin(16,1), Sigmoid())
+        self.edge_pred_mlp = Seq(Lin(138, 64), Dropout(p=0.2), LeakyReLU(0.12), Lin(64, 16), Dropout(p=0.1), LeakyReLU(0.12), Lin(16,1), Sigmoid())
         
         def edge_pred_model(source, target, edge_attr, u, batch):
             out = torch.cat([source, target, edge_attr], dim=1)

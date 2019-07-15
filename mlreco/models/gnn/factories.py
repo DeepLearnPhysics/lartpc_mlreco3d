@@ -4,9 +4,13 @@ def edge_model_dict():
     """
     
     from . import edge_attention
+    from . import edge_only
+    from . import edge_node_only
     
     models = {
-        "basic_attention" : edge_attention.BasicAttentionModel
+        "basic_attention" : edge_attention.BasicAttentionModel,
+        "edge_only" : edge_only.EdgeOnlyModel,
+        "edge_node_only" : edge_node_only.EdgeNodeOnlyModel
     }
     
     return models
