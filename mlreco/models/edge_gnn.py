@@ -46,7 +46,7 @@ class EdgeModel(torch.nn.Module):
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
                      
         # construct the model
-        self.edge_predictor = model(self.model_config.get('model_cfg', {})
+        self.edge_predictor = model(self.model_config.get('model_cfg', {}))
       
         # check if primaries assignment should be thresholded
         self.pmd = self.model_config.get('primary_max_dist', None)
