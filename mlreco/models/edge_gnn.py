@@ -85,6 +85,11 @@ class EdgeModel(torch.nn.Module):
         primaries = assign_primaries(data[1], clusts, data[0])
         batch = get_cluster_batch(data[0], clusts)
         edge_index = primary_bipartite_incidence(batch, primaries, cuda=True)
+        if not edge_index.shape[0]:
+            e = torch.tensor([], requires_grad=True)
+            if data[0].is_cuda:
+                e.cuda()
+            return e
 
         # print(primaries)
         
@@ -176,6 +181,12 @@ class EdgeLabelLoss(torch.nn.Module):
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         edge_index = primary_bipartite_incidence(batch, primaries)
+        if not edge_index.shape[0]:
+            total_loss = self.lossfn(edge_pred, edge_pred)
+            return {
+                'accuracy': 0.,
+                'loss_seg': total_loss
+            }
         group = get_cluster_label(data_grp, clusts)
 
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
