@@ -112,7 +112,10 @@ class trainval(object):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
             for key in data_blob:
-                data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
+                if isinstance(data_blob[key][0], list):
+                    data_blob[key] = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key]]
+                else:
+                    data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
             data = []
             for i in range(max(1,len(self._gpus))):
                 data.append([data_blob[key][i] for key in input_keys])
@@ -142,7 +145,13 @@ class trainval(object):
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
-                    res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
+                    key_result = result[self._model_config['analysis_keys'][key]]
+                    import sparseconvnet as scn
+                    # Record feature maps
+                    if isinstance(key_result[0], list) and isinstance(key_result[0][0], scn.SparseConvNetTensor):
+                        res[key] = [[torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy() for s in layer] for layer in key_result]
+                    else:
+                        res[key] = [s.cpu().detach().numpy() for s in key_result]
             return res
 
     def initialize(self):

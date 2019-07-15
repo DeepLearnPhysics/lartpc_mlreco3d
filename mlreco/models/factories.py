@@ -10,7 +10,7 @@ def model_dict():
     from . import chain_gnn
     from . import node_attention_gnn
     from . import node_econv_gnn
-
+    from . import uresnet_clustering
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -32,13 +32,16 @@ def model_dict():
         # Node attention GNN
         "node_attention_gnn": (node_attention_gnn.NodeAttentionModel, node_attention_gnn.NodeLabelLoss),
         # Node EConv GNN
-        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss)
+        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss),
+        # Clustering
+        "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
     }
 
     return models
 
+
 def construct(name):
     models = model_dict()
-    if not name in models:
+    if name not in models:
         raise Exception("Unknown model name provided")
     return models[name]
