@@ -34,34 +34,24 @@ class IterativeEdgeModel(torch.nn.Module):
         else:
             self.model_config = cfg
             
-        if 'remove_compton' in self.model_config:
-            self.remove_compton = self.model_config['remove_compton']
-        else:
-            self.remove_compton = True
+        self.remove_compton = self.model_config.get('remove_compton', True)
             
-        if 'name' in self.model_config:
-            # extract the actual model to use
-            model = edge_model_construct(self.model_config['name'])
-        else:
-            model = edge_model_construct('basic_attention')
+        # extract the model to use
+        model = edge_model_construct(self.model_config.get('name', 'edge_only'))
             
-        if 'model_cfg' in self.model_config:
-            # construct with model parameters
-            self.edge_predictor = model(self.model_config['model_cfg'])
-        else:
-            self.edge_predictor = model({})
+        # construct the model
+        self.edge_predictor = model(self.model_config.get('model_cfg', {}))
             
         # maximum number of iterations
-        if 'maxiter' in self.model_config:
-            self.maxiter = self.model_config['maxiter']
-        else:
-            self.maxiter = 5
+        self.maxiter = self.mode_config.get('maxiter', 5)
             
-            
-    def assign_clusters(self, edge_index, edge_pred, others, matched, thresh=0.5):
+    
+    @staticmethod
+    def assign_clusters(edge_index, edge_pred, others, matched, thresh=0.5):
         """
         assigns clusters that have not been assigned to clusters that have been assigned
         """
+        found_match = False
         for i in others:
             inds = edge_index[1,:] == i
             if sum(inds) == 0:
@@ -69,10 +59,11 @@ class IterativeEdgeModel(torch.nn.Module):
             indmax = torch.argmax(edge_pred[inds])
             ei = np.where(inds.cpu().detach().numpy())[0][indmax]
             if edge_pred[ei] > thresh:
+                found_match = True
                 # we make an assignment
                 j = edge_index[0, ei]
                 matched[i] = matched[j]
-        return matched
+        return matched, found_match
         
         
     def forward(self, data):
@@ -118,10 +109,15 @@ class IterativeEdgeModel(torch.nn.Module):
         edge_pred = []
         
         counter = 0
+        found_match = True
         
-        while (-1 in matched) and (counter < self.maxiter):
+        while (-1 in matched) and (counter < self.maxiter) and found_match:
+            # continue until either:
+            # 1. everything is matched
+            # 2. we have exceeded the max number of iterations
+            # 3. we didn't find any matches
             
-            print('iter ', counter)
+            #print('iter ', counter)
             counter = counter + 1
             
             # get matched indices
@@ -146,7 +142,7 @@ class IterativeEdgeModel(torch.nn.Module):
             edge_pred.append(out['edge_pred'])
             edges.append(edge_index)
             
-            matched = self.assign_clusters(edge_index, out['edge_pred'], others, matched)
+            matched, found_match = self.assign_clusters(edge_index, out['edge_pred'], others, matched)
             
             print(edges)
             print(edge_pred)
@@ -154,7 +150,8 @@ class IterativeEdgeModel(torch.nn.Module):
         return {
             'edges': edges,
             'edge_pred': edge_pred,
-            'matched': matched
+            'matched': matched,
+            'n_iter': count 
         }
     
     
@@ -173,18 +170,13 @@ class IterEdgeLabelLoss(torch.nn.Module):
         else:
             self.lossfn = torch.nn.L1Loss(reduction='sum')
             
-        if 'remove_compton' in self.model_config:
-            self.remove_compton = self.model_config['remove_compton']
-        else:
-            self.remove_compton = True
+        self.remove_compton = self.model_config.get('remove_compton', True)
 
-        if 'balance_classes' in self.model_config:
-            self.balance = self.model_config['balance_classes']
-        else:
-            # default behavior
-            self.balance = True
+        self.balance_classes = self.model_config.get('balance_classes', True)
+        
             
-    def balance_classes(self, edge_assn, edge_pred):
+    @staticmethod
+    def balance_classes(edge_assn, edge_pred):
         # weight edges so that 0/1 labels appear equally often
         ind0 = edge_assn == 0
         ind1 = edge_assn == 1
@@ -241,6 +233,7 @@ class IterEdgeLabelLoss(torch.nn.Module):
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
+        batch_size = len(np.unique(batch))
         edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
 
@@ -271,8 +264,9 @@ class IterEdgeLabelLoss(torch.nn.Module):
         total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
 
         return {
-            'primary_fdr': primary_fdr,
-            'primary_acc': primary_acc,
+            'primary_fdr': primary_fdr * batch_size,
+            'primary_acc': primary_acc * batch_size,
             'accuracy': total_acc,
-            'loss_seg': total_loss
+            'loss_seg': total_loss,
+            'n_iter': out['n_iter']
         }
