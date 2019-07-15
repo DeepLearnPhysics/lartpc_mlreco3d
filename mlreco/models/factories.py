@@ -10,6 +10,8 @@ def model_dict():
     from . import chain_gnn
     from . import node_attention_gnn
     from . import node_econv_gnn
+    from . import discriminative_loss
+    from . import discriminative_multiLayerLoss
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -32,7 +34,11 @@ def model_dict():
         # Node attention GNN
         "node_attention_gnn": (node_attention_gnn.NodeAttentionModel, node_attention_gnn.NodeLabelLoss),
         # Node EConv GNN
-        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss)
+        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss),
+        # Discriminative Loss (Loss at Output)
+        "discriminative_loss": (discriminative_loss.UResNet, discriminative_loss.DiscriminativeLoss),
+        # Discriminative MultiLayer Loss (Loss at Decoding Layers)
+        "discriminative_multiLayerLoss": (discriminative_multiLayerLoss.UResNet, discriminative_multiLayerLoss.DiscriminativeLoss)
     }
     
     return models
