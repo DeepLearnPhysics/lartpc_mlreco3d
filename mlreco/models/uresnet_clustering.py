@@ -29,12 +29,6 @@ class UResNet(torch.nn.Module):
         Dimension 2 or 3
     spatial_size : int
         Size of the cube containing the data, e.g. 192, 512 or 768px.
-    ghost : bool, optional
-        Whether to compute ghost mask separately or not. See SegmentationLoss
-        for more details.
-    ghost_label: int, optional
-        If specified, then will collapse all classes other than ghost_label into
-        single non-ghost class and perform 2-classes segmentatiion (deghosting).
     reps : int, optional
         Convolution block repetition factor
     kernel_size : int, optional
@@ -49,7 +43,6 @@ class UResNet(torch.nn.Module):
         - segmentation scores (N, num_classes)
         - feature maps of encoding path
         - feature maps of decoding path
-        - if `ghost`, segmentation scores for deghosting (N, 2)
     """
 
     def __init__(self, cfg, name="uresnet_clustering"):
@@ -67,6 +60,7 @@ class UResNet(torch.nn.Module):
         nInputFeatures = self._model_config.get('features', 1)
         spatial_size = self._model_config.get('spatial_size', 512)
         num_classes = self._model_config.get('num_classes', 5)
+        self._N = self._model_config.get('num_cluster_conv', 0)
 
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
@@ -119,13 +113,26 @@ class UResNet(torch.nn.Module):
                 block(module2, nPlanes[i] * (2 if j == 0 else 1), nPlanes[i])
             self.decoding_blocks.add(module2)
 
+        # Clustering convolutions
+        if self._N > 0:
+            self.clustering_conv = scn.Sequential()
+            for i in range(num_strides-2, -1, -1):
+                conv = scn.Sequential()
+                for _ in range(N):
+                    conv.add(scn.SubmanifoldConvolution(self._dimension, nPlanes[i], nPlanes[i], 3, False))
+                    conv.add(scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness))
+                module = scn.Sequential()
+                module.add(scn.ConcatTable()
+                                         .add(scn.Identity())
+                                         .add(conv))
+                module.add(scn.AddTable())
+                self.clustering_conv.add(module)
+
         self.output = scn.Sequential().add(
            scn.BatchNormReLU(m)).add(
            scn.OutputLayer(self._dimension))
 
         self.linear = torch.nn.Linear(m, num_classes)
-        if self._ghost:
-            self.linear_ghost = torch.nn.Linear(m, 2)
 
     def forward(self, input):
         """
@@ -154,37 +161,21 @@ class UResNet(torch.nn.Module):
             x = self.concat([encoding_block, x])
             x = self.decoding_blocks[i](x)
             feature_ppn2.append(x)
+            if self._N > 0:
+                x = self.clustering_conv[i](x)
 
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
-        if self._ghost:
-            x_ghost = self.linear_ghost(x)
 
-        if self._ghost:
-            return [[x_seg],
-                    [feature_ppn],
-                    [feature_ppn2],
-                    [x_ghost]]
-        else:
-            return [[x_seg],
-                    [feature_ppn],
-                    [feature_ppn2]]
+        return [[x_seg],
+                [feature_ppn],
+                [feature_ppn2]]
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss definition for UResNet.
-
-    For a regular flavor UResNet, it is a cross-entropy loss.
-    For deghosting, it depends on a configuration parameter `ghost`:
-
-    - If `ghost=True`, we first compute the cross-entropy loss on the ghost
-    point classification (weighted on the fly with sample statistics). Then we
-    compute a mask = all non-ghost points (based on true information in label)
-    and within this mask, compute a cross-entropy loss for the rest of classes.
-
-    - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
-    the number of classes, not counting the ghost point class.
+    Instance clustering flavor
     """
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
@@ -198,18 +189,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._gamma = self._cfg.get('gamma', 0.001)
         self._intra_cluster_margin = self._cfg.get('intracluster_margin', 0.5)
         self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
-
-        # for i in range(self._depth):
-        #     self._downsample.append(
-        #         scn.
-        #     )
-        import sparseconvnet as scn
         self._dimension = self._cfg.get('data_dim', 3)
-        spatial_size = self._cfg.get('spatial_size', 512)
-        # with torch.no_grad():
-        #     self._input_layers = []
-        #     for i in range(self._depth):
-        #         self._input_layers.append(scn.InputLayer(dimension, spatial_size/2**i, mode=2))
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
@@ -221,21 +201,19 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
-
-        Assumptions
-        ===========
-        The ghost label is the last one among the classes numbering.
-        If ghost = True, then num_classes should not count the ghost class.
-        If ghost_label > -1, then we perform only ghost segmentation.
         """
         assert len(segmentation[0]) == len(label)
-        batch_ids = [d[:, -2] for d in label]
+        batch_ids = [d[0][:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
 
         cluster_intracluster_loss = 0.
         cluster_intercluster_loss = 0.
         cluster_reg_loss = 0.
         cluster_total_loss = 0.
+        cluster_intracluster_loss_per_class = [0.] * self._num_classes
+        cluster_intercluster_loss_per_class = [0.] * self._num_classes
+        cluster_reg_loss_per_class = [0.] * self._num_classes
+        cluster_total_loss_per_class = [0.] * self._num_classes
 
         for i in range(len(label)):
             max_depth = len(cluster_label[i])
@@ -243,10 +221,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 batch_index = batch_ids[i] == b
 
                 event_segmentation = segmentation[0][i][batch_index]  # (N, num_classes)
-                event_label = label[i][batch_index][:, -1][:, None]  # (N, 1)
+                event_label = label[i][0][batch_index][:, -1][:, None]  # (N, 1)
                 event_label = torch.squeeze(event_label, dim=-1).long()
-                # event_cluster_label_coords = cluster_label[i][batch_index][:, :3]
-                # event_cluster_label_id = cluster_label[i][batch_index][:, -1:]
+
+                # Reorder event_segmentation to match event_label
+                data_coords = segmentation[2][i][-1].get_spatial_locations()[batch_index][:, :-1]
+                perm = np.lexsort((data_coords[:, 2], data_coords[:, 1], data_coords[:, 0]))
+                event_segmentation = event_segmentation[perm]
 
                 # Loss for semantic segmentation
                 loss_seg = self.cross_entropy(event_segmentation, event_label)
@@ -258,82 +239,81 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 uresnet_acc += acc
 
                 # Loss for clustering
-                # FIXME move labels computing outside this loop
-                # print(self._depth, len(segmentation[1][i]), len(segmentation[2][i]))
-                # print(segmentation[1][i])
                 for j, feature_map in enumerate(segmentation[2][i]):
-                    # print(j)
-                    batch_index = feature_map.get_spatial_locations()[:, -1].cuda() == b.long()
+                    if torch.cuda.is_available():
+                        batch_index = feature_map.get_spatial_locations()[:, -1].cuda() == b.long()
+                    else:
+                        batch_index = feature_map.get_spatial_locations()[:, -1] == b.long()
                     hypercoordinates = feature_map.features[batch_index]
                     coordinates = feature_map.get_spatial_locations()[batch_index][:, :-1]
-                    # with torch.no_grad():
-                    #     clusters = self._input_layers[-(j+1)](((event_cluster_label_coords/2**(self._depth - j - 1)).long(), event_cluster_label_id.float()))
-                    # clusters_coordinates = clusters.get_spatial_locations()[:, :-1]
-                    # clusters_labels = clusters.features
                     clusters = cluster_label[i][-(j+1+(max_depth-self._depth))][cluster_label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
                     clusters_coordinates = clusters[:, :self._dimension]
                     clusters_labels = clusters[:, -1:]
-                    # assert clusters.spatial_size == feature_map.spatial_size
-                    # print(clusters.spatial_size, feature_map.spatial_size, self._input_layers[j])
-                    # print(clusters_coordinates, coordinates)
-                    # print(clusters_coordinates.size(), coordinates.size())
-                    # Sort coordinates in lexicographic order somehow?
-                    # perm = []
-                    # for coord in coordinates:
-                    #     idx = (clusters_coordinates == coord).all(dim=1).nonzero().reshape((-1,))
-                    #     perm.append(clusters_labels[idx])
-                    # clusters_labels = torch.cat(perm, dim=0)
-                    # print(clusters_labels)
-                    # perm = np.lexsort(np.flip(coordinates.cpu().detach().numpy().T, axis=1))
+                    semantic_labels = label[i][-(j+1+(max_depth-self._depth))][label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
+
+                    # Sort coordinates in lexicographic order
                     x = coordinates.cpu().detach().numpy()
                     perm = np.lexsort((x[:, 2], x[:, 1], x[:, 0]))
                     coordinates = coordinates[perm]
-                    # perm2 = np.lexsort(np.flip(clusters_coordinates.cpu().detach().numpy().T, axis=1))
-                    # print(clusters_coordinates[perm2])
 
-                    # Identify label clusters
-                    clusters_id = clusters_labels.unique()
-                    hyperclusters = []
-                    for c in clusters_id:
-                        cluster_idx = (clusters_labels == c).squeeze()
-                        hyperclusters.append(hypercoordinates[cluster_idx])
+                    # Loop over semantic classes
+                    for class_ in range(self._num_classes):
+                        class_index = semantic_labels[:, -1] == class_
 
-                    # Loop over clusters, define intra-cluster loss
-                    intra_cluster_loss = 0.
-                    means = []
-                    zero = torch.tensor(0.).cuda()
-                    C = len(hyperclusters)
-                    for cluster in hyperclusters:
-                        mean = cluster.mean(dim=0)
-                        means.append(mean)
-                        intra_cluster_loss += torch.max(((mean - cluster).pow(2).sum(dim=1) + 0.00001).sqrt() - self._intra_cluster_margin, zero).pow(2).mean()
-                    intra_cluster_loss /= C
-                    means = torch.stack(means)
+                        # Identify label clusters
+                        clusters_id = clusters_labels[class_index].unique()
+                        hyperclusters = []
+                        for c in clusters_id:
+                            cluster_idx = (clusters_labels[class_index] == c).squeeze()
+                            hyperclusters.append(hypercoordinates[class_index][cluster_idx])
 
-                    # Define inter-cluster loss
-                    d = torch.max(2 * self._inter_cluster_margin - self.distances(means, means), zero).pow(2)
-                    inter_cluster_loss = d[np.triu_indices(d.size(1), k=1)].sum() / (C * (C-1))
+                        # Loop over clusters, define intra-cluster loss
+                        intra_cluster_loss = 0.
+                        means = []
+                        zero = torch.tensor(0.)
+                        if torch.cuda.is_available(): zero = zero.cuda()
+                        C = len(hyperclusters)
+                        if C > 0:
+                            for cluster in hyperclusters:
+                                mean = cluster.mean(dim=0)
+                                means.append(mean)
+                                intra_cluster_loss += torch.max(((mean - cluster).pow(2).sum(dim=1) + 0.00001).sqrt() - self._intra_cluster_margin, zero).pow(2).mean()
+                            intra_cluster_loss /= C
+                            means = torch.stack(means)
 
-                    # Add regularization term
-                    # print(means)
-                    # print(hyperclusters)
-                    reg_loss = (means.pow(2).sum(dim=1) + 0.00001).sqrt().mean()
+                        # Define inter-cluster loss
+                        inter_cluster_loss = 0.
+                        if C > 1:
+                            d = torch.max(2 * self._inter_cluster_margin - self.distances(means, means), zero).pow(2)
+                            inter_cluster_loss = d[np.triu_indices(d.size(1), k=1)].sum() / (C * (C-1))
 
-                    # Compute final loss
-                    total_loss = self._alpha * intra_cluster_loss + self._beta * inter_cluster_loss + self._gamma * reg_loss
-                    # print(intra_cluster_loss, inter_cluster_loss, reg_loss, total_loss)
-                    cluster_intracluster_loss += intra_cluster_loss
-                    cluster_intercluster_loss += inter_cluster_loss
-                    cluster_reg_loss += reg_loss
-                    cluster_total_loss += total_loss
+                        # Add regularization term
+                        reg_loss = 0.
+                        if len(means) > 0:
+                            reg_loss = (means.pow(2).sum(dim=1) + 0.00001).sqrt().mean()
+
+                        # Compute final loss
+                        total_loss = self._alpha * intra_cluster_loss + self._beta * inter_cluster_loss + self._gamma * reg_loss
+                        cluster_intracluster_loss += self._alpha * intra_cluster_loss
+                        cluster_intercluster_loss += self._beta + inter_cluster_loss
+                        cluster_reg_loss += self._gamma * reg_loss
+                        cluster_total_loss += total_loss
+                        cluster_intracluster_loss_per_class[class_] += self._alpha * intra_cluster_loss
+                        cluster_intercluster_loss_per_class[class_] += self._beta + inter_cluster_loss
+                        cluster_reg_loss_per_class[class_] += self._gamma * reg_loss
+                        cluster_total_loss_per_class[class_] += total_loss
 
         batch_size = len(batch_ids[i].unique())
-        cluster_intracluster_loss /= batch_size
-        cluster_intercluster_loss /= batch_size
-        cluster_reg_loss /= batch_size
-        cluster_total_loss /= batch_size
+        cluster_intracluster_loss /= (batch_size * self._num_classes)
+        cluster_intercluster_loss /= (batch_size * self._num_classes)
+        cluster_reg_loss /= (batch_size * self._num_classes)
+        cluster_total_loss /= (batch_size * self._num_classes)
+        cluster_intracluster_loss_per_class = [x/batch_size for x in cluster_intracluster_loss_per_class]
+        cluster_intercluster_loss_per_class = [x/batch_size for x in cluster_intercluster_loss_per_class]
+        cluster_reg_loss_per_class = [x/batch_size for x in cluster_reg_loss_per_class]
+        cluster_total_loss_per_class = [x/batch_size for x in cluster_total_loss_per_class]
 
-        return {
+        results = {
             'accuracy': uresnet_acc,
             'loss_seg': uresnet_loss + cluster_total_loss,
             'uresnet_loss': uresnet_loss,
@@ -343,3 +323,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             'reg_loss': cluster_reg_loss,
             'total_cluster_loss': cluster_total_loss
         }
+
+        for class_ in range(self._num_classes):
+            results['intracluster_loss_%d' % class_] = cluster_intracluster_loss_per_class[class_]
+            results['intercluster_loss_%d' % class_] = cluster_intercluster_loss_per_class[class_]
+            results['reg_loss_%d' % class_] = cluster_reg_loss_per_class[class_]
+            results['total_cluster_loss_%d' % class_] = cluster_total_loss_per_class[class_]
+
+        return results
