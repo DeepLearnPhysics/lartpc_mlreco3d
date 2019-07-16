@@ -11,7 +11,7 @@ from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency
+from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency2
 from mlreco.utils.groups import process_group_data
 from .gnn import edge_model_construct
 
@@ -146,16 +146,17 @@ class IterativeEdgeModel(torch.nn.Module):
             edge_pred.append(out['edge_pred'])
             edges.append(edge_index)
             
-            matched, found_match = self.assign_clusters(edge_index, out['edge_pred'], others, matched)
+            matched, found_match = self.assign_clusters(edge_index, out['edge_pred'], others, matched, self.thresh)
             
-            print(edges)
-            print(edge_pred)
+            # print(edges)
+            # print(edge_pred)
+            print('num iterations: ', counter)
             
         return {
             'edges': edges,
             'edge_pred': edge_pred,
             'matched': matched,
-            'n_iter': count 
+            'n_iter': counter 
         }
     
     
@@ -176,7 +177,7 @@ class IterEdgeLabelLoss(torch.nn.Module):
             
         self.remove_compton = self.model_config.get('remove_compton', True)
 
-        self.balance_classes = self.model_config.get('balance_classes', True)
+        self.balance = self.model_config.get('balance_classes', True)
         
             
     @staticmethod
@@ -238,34 +239,46 @@ class IterEdgeLabelLoss(torch.nn.Module):
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
         batch_size = len(np.unique(batch))
-        edge_index = primary_bipartite_incidence(batch, primaries)
+        # edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
 
         primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
         primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
         
-        # determine true assignments
-        edge_index = out['edges'][0]
-        edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
+        niter = out['n_iter'] # number of iterations
+        total_loss = torch.tensor(0, dtype=torch.float).cuda()
+        for j in range(niter):
+            # determine true assignments
+            edge_index = out['edges'][j]
+            edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
 
-        edge_pred = out['edge_pred'][0]
-        print(edge_pred)
-        
-        print(edge_assn.shape)
-        print(edge_pred.shape)
-        edge_assn = edge_assn.view(-1)
-        edge_pred = edge_pred.view(-1)
-        print(edge_assn.shape)
-        print(edge_pred.shape)
+            edge_pred = out['edge_pred'][j]
+            # print(edge_pred)
 
-        if self.balance:
-            edge_assn, edge_pred = self.balance_classes(edge_assn, edge_pred)
+            # print(edge_assn.shape)
+            # print(edge_pred.shape)
+            edge_assn = edge_assn.view(-1)
+            edge_pred = edge_pred.view(-1)
+            # print(edge_assn.shape)
+            # print(edge_pred.shape)
 
-        total_loss = self.lossfn(edge_pred, edge_assn)
+            if self.balance:
+                edge_assn, edge_pred = self.balance_classes(edge_assn, edge_pred)
+
+            total_loss += self.lossfn(edge_pred, edge_assn)
 
         # compute accuracy of assignment
         # need to multiply by batch size to be accurate
-        total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        #total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        # use out['matched']
+        total_acc = batch_size * torch.tensor(
+            secondary_matching_vox_efficiency2(
+                out['matched'],
+                group,
+                primaries,
+                clusts
+            )
+        )
 
         return {
             'primary_fdr': primary_fdr * batch_size,
