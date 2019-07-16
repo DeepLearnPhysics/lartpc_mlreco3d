@@ -130,6 +130,11 @@ class IterativeEdgeModel(torch.nn.Module):
             others   = np.where(matched == -1)[0]
             
             edge_index = primary_bipartite_incidence(batch, assigned, cuda=True)
+            # check if there are any edges to predict
+            # also batch norm will fail on only 1 edge, so break if this is the case
+            if edge_index.shape[1] < 2:
+                counter -= 1
+                break
             
             # obtain vertex features
             x = cluster_vtx_features(data[0], clusts, cuda=True)
@@ -150,7 +155,7 @@ class IterativeEdgeModel(torch.nn.Module):
             
             # print(edges)
             # print(edge_pred)
-            print('num iterations: ', counter)
+        print('num iterations: ', counter)
             
         return {
             'edges': edges,
