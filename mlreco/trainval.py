@@ -140,7 +140,7 @@ class trainval(object):
             # Record results
             res = {}
             for label in loss_acc:
-                res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
+                res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
