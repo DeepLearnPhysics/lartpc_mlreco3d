@@ -43,7 +43,10 @@ class IterativeEdgeModel(torch.nn.Module):
         self.edge_predictor = model(self.model_config.get('model_cfg', {}))
             
         # maximum number of iterations
-        self.maxiter = self.mode_config.get('maxiter', 5)
+        self.maxiter = self.model_config.get('maxiter', np.inf)
+        
+        # threshold for matching
+        self.thresh = self.model_config.get('thresh', 0.9)
             
     
     @staticmethod
@@ -75,7 +78,8 @@ class IterativeEdgeModel(torch.nn.Module):
             dictionary with following keys:
                 edges     : list of edge_index tensors used for edge prediction
                 edge_pred : list of torch tensors with edge prediction weights
-                edge_cont : list of edge contractions at each step
+                matched   : numpy array of group for each cluster (identified by primary index)
+                n_iter    : number of iterations taken
             each list is of length k, where k is the number of times the iterative network is applied
         """
         # need to form graph, then pass through GNN
