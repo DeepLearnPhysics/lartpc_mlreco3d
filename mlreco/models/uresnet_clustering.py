@@ -118,7 +118,7 @@ class UResNet(torch.nn.Module):
             self.clustering_conv = scn.Sequential()
             for i in range(num_strides-2, -1, -1):
                 conv = scn.Sequential()
-                for _ in range(N):
+                for _ in range(self._N):
                     conv.add(scn.SubmanifoldConvolution(self._dimension, nPlanes[i], nPlanes[i], 3, False))
                     conv.add(scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness))
                 module = scn.Sequential()
