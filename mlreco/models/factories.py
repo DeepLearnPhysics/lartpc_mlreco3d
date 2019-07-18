@@ -25,7 +25,7 @@ def model_dict():
         "chain": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Edge Model
-        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss),
+        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeCELoss),
         # Iterative Edge Model
         "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeLabelLoss)
     }

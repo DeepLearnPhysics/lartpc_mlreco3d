@@ -43,6 +43,21 @@ def secondary_matching_vox_efficiency2(matched, group, primaries, clusters):
     int_vox = np.sum([len(clusters[i]) for i in others_matched if  group[i] == group[matched[i]]])
     return int_vox * 1.0 / tot_vox
 
+def secondary_matching_vox_efficiency3(edge_index, true_labels, pred_labels, primaries, clusters, n):
+    """
+    fraction of secondary voxels that are correctly assigned
+    pred_labels is N x C
+    """
+    # mask = np.array([(i not in primaries) for i in range(n)])
+    # others = np.arange(n)[mask]
+    others = np.array([i for i in range(n) if i not in primaries])
+    true_nodes = assign_clusters(edge_index, true_labels, primaries, others, n)
+    pred_labels = torch.argmax(pred_labels, 1) # get argmax predicted
+    pred_nodes = assign_clusters(edge_index, pred_labels, primaries, others, n)
+    tot_vox = np.sum([len(clusters[i]) for i in others])
+    int_vox = np.sum([len(clusters[i]) for i in others if true_nodes[i] == pred_nodes[i]])
+    return int_vox * 1.0 / tot_vox
+
 def primary_assign_vox_efficiency(true_nodes, pred_nodes, clusters):
     """
     fraction of secondary voxels that are correctly assigned

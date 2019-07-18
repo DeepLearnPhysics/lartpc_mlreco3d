@@ -48,7 +48,14 @@ class BasicAttentionModel(torch.nn.Module):
         self.bn_edge = BatchNorm1d(10)
     
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64), Dropout(p=0.2), LeakyReLU(0.12), Lin(64, 16), Dropout(p=0.1), LeakyReLU(0.12), Lin(16,1), Sigmoid())
+        self.edge_pred_mlp = Seq(Lin(138, 64),
+                                 Dropout(p=0.2),
+                                 LeakyReLU(0.12),
+                                 Lin(64, 16),
+                                 Dropout(p=0.1),
+                                 LeakyReLU(0.12),
+                                 Lin(16,2)
+                                )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
             out = torch.cat([source, target, edge_attr], dim=1)
