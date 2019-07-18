@@ -64,7 +64,7 @@ def cluster_edge_features(data, clusts, edge_index, cuda=True):
     return e
 
 
-def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float):
+def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, binary=False):
     """
     edge assignment as same group/different group
     """
@@ -72,6 +72,9 @@ def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float):
         batches[edge_index[0,k]] == batches[edge_index[1,k]],
         groups[edge_index[0,k]] == groups[edge_index[1,k]]) for k in range(edge_index.shape[1])], 
                              dtype=dtype, requires_grad=False)
+    if binary:
+        # transform to -1,+1 instead of 0,1
+        edge_assn = 2*edge_assn - 1
     if cuda:
         edge_assn = edge_assn.cuda()
     return edge_assn

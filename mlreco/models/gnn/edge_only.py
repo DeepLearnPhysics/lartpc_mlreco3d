@@ -20,10 +20,7 @@ class EdgeOnlyModel(torch.nn.Module):
         else:
             self.model_config = cfg
 
-        if 'leak' in self.model_config:
-            self.leak = self.model_config['leak']
-        else:
-            self.leak = 0.1
+        self.leak = self.model_config.get('leak', 0.1)
 
         self.bn_edge = BatchNorm1d(10)
         self.edge_pred_mlp = Seq(
@@ -37,7 +34,7 @@ class EdgeOnlyModel(torch.nn.Module):
             LeakyReLU(self.leak),
             Lin(32,16),
             LeakyReLU(self.leak),
-            Lin(16,2)
+            Lin(16,1)
         )
     
     def forward(self, x, edge_index, e, xbatch):

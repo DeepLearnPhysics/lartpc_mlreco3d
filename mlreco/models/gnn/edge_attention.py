@@ -25,11 +25,9 @@ class BasicAttentionModel(torch.nn.Module):
             self.model_config = cfg['modules']['attention_gnn']
         else:
             self.model_config = cfg
-            
-        if 'nheads' in self.model_config:
-            self.nheads = self.model_config['nheads']
-        else:
-            self.nheads = 3
+
+        self.nheads = self.model_config.get('nheads', 3)
+        self.leak = self.model_config.get('leak', 0.1)
         
         # perform batch normalization at each step
         self.bn_node = BatchNorm1d(16)
@@ -49,12 +47,14 @@ class BasicAttentionModel(torch.nn.Module):
     
         # final prediction layer
         self.edge_pred_mlp = Seq(Lin(138, 64),
-                                 Dropout(p=0.2),
-                                 LeakyReLU(0.12),
-                                 Lin(64, 16),
-                                 Dropout(p=0.1),
-                                 LeakyReLU(0.12),
-                                 Lin(16,2)
+                                 LeakyReLU(self.leak),
+                                 Lin(64, 32),
+                                 LeakyReLU(self.leak),
+                                 Lin(32, 16),
+                                 LeakyReLU(self.leak),
+                                 Lin(16,8),
+                                 LeakyReLU(self.leak),
+                                 Lin(8,1)
                                 )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
