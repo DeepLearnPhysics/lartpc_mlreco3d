@@ -192,6 +192,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._ghost = self._cfg.get('ghost', False)
         self._ghost_label = self._cfg.get('ghost_label', -1)
         self._num_classes = self._cfg.get('num_classes', 5)
+        self._alpha = self._cfg.get('alpha', 1.0)
+        self._beta = self._cfg.get('beta', 1.0)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
@@ -230,11 +232,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     event_ghost = segmentation[3][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
-                    # loss_mask = self.cross_entropy(event_ghost, mask_label)
-                    fraction = (mask_label == 1).sum().float() / ((mask_label == 0).sum() + (mask_label == 1).sum()).float()
-                    weight = torch.stack([fraction, 1. - fraction]).float()
-                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
-                    mask_loss += loss_mask #torch.mean(loss_mask)
+                    loss_mask = self.cross_entropy(event_ghost, mask_label)
+                    # fraction = (mask_label == 1).sum().float() / ((mask_label == 0).sum() + (mask_label == 1).sum()).float()
+                    # weight = torch.stack([fraction, 1. - fraction]).float()
+                    # loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
+                    # mask_loss += loss_mask
+                    mask_loss += torch.mean(loss_mask)
 
                     predicted_mask = torch.argmax(event_ghost, dim=-1)
                     acc_mask = (predicted_mask == mask_label).sum().item() / float(predicted_mask.nelement())
@@ -258,10 +261,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         if self._ghost:
             results = {
                 'accuracy': uresnet_acc,
-                'loss_seg': uresnet_loss + mask_loss,
+                'loss_seg': self._alpha * uresnet_loss + self._beta * mask_loss,
                 'mask_acc': mask_acc,
-                'mask_loss': mask_loss,
-                'uresnet_loss': uresnet_loss,
+                'mask_loss': self._beta * mask_loss,
+                'uresnet_loss': self._alpha * uresnet_loss,
                 'uresnet_acc': uresnet_acc
             }
         else:
