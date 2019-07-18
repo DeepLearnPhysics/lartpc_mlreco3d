@@ -34,7 +34,7 @@ class EdgeNodeOnlyModel(torch.nn.Module):
             LeakyReLU(self.leak),
             Lin(32,16),
             LeakyReLU(self.leak),
-            Lin(16,1)
+            Lin(16,2)
         )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
