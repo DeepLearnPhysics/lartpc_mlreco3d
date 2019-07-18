@@ -79,7 +79,7 @@ class EdgeConvModel(torch.nn.Module):
                                  LeakyReLU(self.leak),
                                  Lin(16,8),
                                  LeakyReLU(self.leak),
-                                 Lin(8,1)
+                                 Lin(8,2)
                                 )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
