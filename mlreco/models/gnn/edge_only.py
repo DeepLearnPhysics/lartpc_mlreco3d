@@ -37,8 +37,7 @@ class EdgeOnlyModel(torch.nn.Module):
             LeakyReLU(self.leak),
             Lin(32,16),
             LeakyReLU(self.leak),
-            Lin(16,1),
-            Sigmoid()
+            Lin(16,2)
         )
     
     def forward(self, x, edge_index, e, xbatch):

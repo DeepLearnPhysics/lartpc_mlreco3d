@@ -57,7 +57,12 @@ class NNConvModel(torch.nn.Module):
         self.layer2 = NNConv(ninput, noutput, self.nn2, aggr=self.aggr)
         
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64), LeakyReLU(self.leak), Lin(64, 16), LeakyReLU(self.leak), Lin(16,1), Sigmoid())
+        self.edge_pred_mlp = Seq(Lin(138, 64),
+                                 LeakyReLU(self.leak),
+                                 Lin(64, 16),
+                                 LeakyReLU(self.leak),
+                                 Lin(16,2)
+                                )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
             out = torch.cat([source, target, edge_attr], dim=1)
