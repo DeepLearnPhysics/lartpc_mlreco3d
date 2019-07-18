@@ -104,6 +104,120 @@ class EdgeModel(torch.nn.Module):
         return outdict
     
     
+class EdgeBinLoss(torch.nn.Module):
+    """
+    Edge loss based on cross entropy of prediction
+    """
+    def __init__(self, cfg):
+        # torch.nn.MSELoss(reduction='sum')
+        # torch.nn.L1Loss(reduction='sum')
+        super(EdgeBinLoss, self).__init__()
+        self.model_config = cfg['modules']['edge_model']
+            
+        self.remove_compton = self.model_config.get('remove_compton', True)
+        # self.balance = self.model_config.get('balance_classes', True)
+        self.pmd = self.model_config.get('primary_max_dist')
+        self.reduction = self.model_config.get('reduction', 'mean')
+        self.loss = self.model_config.get('loss', 'BCE')
+        self.weight = self.model_config.get('weight')
+        if self.loss == 'BCE':
+            self.sig = torch.nn.Sigmoid()
+            self.lossfn = torch.nn.BCELoss(reduction=self.reduction)
+        elif self.loss == 'BCELogit':
+            self.lossfn = torch.nn.BCEWithLogitsLoss(reduction=self.reduction)
+        elif self.loss == 'Hinge':
+            margin = self.model_config.get('margin', 1.0)
+            self.lossfn = torch.nn.HingeEmbeddingLoss(margin=margin, reduction=self.reduction)
+        elif self.loss == 'SoftMargin':
+            self.lossfn = torch.nn.SoftMarginLoss(reduction=self.reduction)
+        else:
+            raise Exception('unrecognized loss: ' + self.loss)
+        
+    def forward(self, out, data0, data1, data2):
+        """
+        out:
+            dictionary output from GNN Model
+            keys:
+                'edge_pred': predicted edge weights from model forward
+        data:
+            data[0] - 5 types data
+            data[1] - groups data
+            data[2] - primary data
+        """
+        edge_pred = out['edge_pred']
+        data0 = data0[0]
+        data1 = data1[0]
+        data2 = data2[0]
+        # first decide what true edges should be
+        # need to form graph, then pass through GNN
+        # clusts = form_clusters(data0)
+        clusts = form_clusters_new(data0)
+
+
+        # remove compton clusters
+        # if no cluster fits this condition, return
+        if self.remove_compton:
+            selection = filter_compton(clusts) # non-compton looking clusters
+            if not len(selection):
+                total_loss = self.lossfn(edge_pred, edge_pred)
+                return {
+                    'accuracy': 1.,
+                    'loss_seg': total_loss
+                }
+
+        clusts = clusts[selection]
+
+        # process group data
+        # data_grp = process_group_data(data1, data0)
+        data_grp = data1
+
+        # form primary/secondary bipartite graph
+        primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
+        batch = get_cluster_batch(data0, clusts)
+        batch_size = len(np.unique(batch))
+        edge_index = primary_bipartite_incidence(batch, primaries)
+        if not edge_index.shape[0]:
+            total_loss = self.lossfn(edge_pred, edge_pred)
+            return {
+                'accuracy': 0.,
+                'loss_seg': total_loss
+            }
+        group = get_cluster_label(data_grp, clusts)
+
+        primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+        primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
+        
+        # determine true assignments
+        if self.loss == 'BCE':
+            edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.float, binary=False)
+        else:
+            edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.float, binary=True)
+
+        edge_assn = edge_assn.view(-1)
+        edge_pred = edge_pred.view(-1)
+        if self.loss == 'BCE':
+            # apply sigmoid
+            edge_pred = self.sig(edge_pred)
+            
+        if self.loss == 'Hinge':
+            # because of silly HingeEmbeddingLoss definition.
+            edge_assn = -edge_assn
+
+
+        total_loss = self.lossfn(edge_pred, edge_assn)
+
+        # compute accuracy of assignment
+        # need to multiply by batch size to be accurate
+        total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+
+        return {
+            'primary_fdr': primary_fdr * batch_size,
+            'primary_acc': primary_acc * batch_size,
+            'accuracy': total_acc,
+            'loss_seg': total_loss
+        }
+    
+    
 class EdgeCELoss(torch.nn.Module):
     """
     Edge loss based on cross entropy of prediction
