@@ -7,10 +7,10 @@ def find_parent(parent, i):
     """
     find parent of index i
     """
-    if parent[i] == i:
-        return i
-    else:
-        return find_parent(parent, parent[i])
+    if i != parent[i]:
+        parent[i] = find_parent(parent, parent[i])
+    return parent[i]
+
 
 def merge_diagram(f, edges):
     """

@@ -79,7 +79,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
     # Log save directory
     if cfg['training']['log_dir']:
         if not os.path.exists(cfg['training']['log_dir']):
-            os.mkdir(cfg['training']['log_dir'])
+            os.makedirs(cfg['training']['log_dir'])
         logname = '%s/train_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
         if not cfg['training']['train']:
             logname = '%s/inference_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
