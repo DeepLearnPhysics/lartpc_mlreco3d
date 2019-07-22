@@ -15,9 +15,14 @@ def find_parent(parent, i):
     return parent[i]
 
 # union find
-def edge_labels_to_node_labels(positions, edges, edge_labels, threshold=0.5):
+def edge_labels_to_node_labels(positions, edges, edge_labels, threshold=0.5, node_len=None):
+    print('node_len', node_len)
+    print('max edge label', np.amax(edge_labels))
     on_edges = edges[np.where(edge_labels > threshold)[0]]
-    node_labels = np.arange(len(positions))
+    if node_len is not None:
+        node_labels = np.arange(node_len)
+    else:
+        node_labels = np.arange(len(positions))
     for a, b in on_edges:
         p1 = find_parent(node_labels, a)
         p2 = find_parent(node_labels, b)
