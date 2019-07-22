@@ -7,6 +7,7 @@ def model_dict():
     from . import chain
     from . import uresnet_ppn_chain
     from . import edge_gnn
+    from . import full_edge_gnn
     from . import iter_edge_gnn
     from . import chain_gnn
     
@@ -26,6 +27,8 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Edge Model
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeLabelLoss),
+        # Full Edge Model
+        "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
         # Iterative Edge Model
         "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeLabelLoss)
     }
