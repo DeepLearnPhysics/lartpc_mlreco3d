@@ -12,7 +12,9 @@ from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
 from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency
+from mlreco.utils.gnn.features.utils import edge_labels_to_node_labels
 from mlreco.utils.groups import process_group_data
+from mlreco.utils.metrics import SBD
 from .gnn import edge_model_construct
 
 from mlreco.utils.gnn.features.core import generate_graph
@@ -113,7 +115,16 @@ class FullEdgeChannelLoss(torch.nn.Module):
         # need to multiply by batch size to be accurate
         _, pred_inds = torch.max(edge_pred, 1)
         total_acc = (torch.max(batch[0]) + 1) * (pred_inds == edge_assn).sum().float()/len(edge_assn)
+        
+        print('edge_assn shape', edge_assn.cpu().numpy().flatten().shape)
+        print('pred_inds shape', pred_inds.cpu().detach().numpy().flatten().shape)
+        max_node = int(torch.max(edge_index[0]))
+        node_truth = edge_labels_to_node_labels(None, edge_index[0].cpu().numpy().T, edge_assn.cpu().numpy().flatten(), node_len=max_node)
+        node_preds = edge_labels_to_node_labels(None, edge_index[0].cpu().numpy().T, pred_inds.cpu().detach().numpy().flatten(), node_len=max_node)
+        sbd = SBD(node_preds, node_truth)
+        
         return {
+            'sbd': sbd,
             'accuracy': total_acc,
             'loss_seg': total_loss
         }
