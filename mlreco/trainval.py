@@ -123,12 +123,14 @@ class trainval(object):
 
             result = self._net(data)
 
+
             if not torch.cuda.is_available():
                 data = [data]
 
             # Compute the loss
             if loss_keys:
                 loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
+
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -138,7 +140,7 @@ class trainval(object):
             # Record results
             res = {}
             for label in loss_acc:
-                res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
+                res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:
