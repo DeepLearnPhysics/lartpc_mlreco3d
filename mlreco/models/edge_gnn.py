@@ -41,6 +41,7 @@ class EdgeModel(torch.nn.Module):
             
         
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
             
         # extract the model to use
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
@@ -67,7 +68,7 @@ class EdgeModel(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 if data[0].is_cuda:
@@ -116,6 +117,7 @@ class EdgeChannelLoss(torch.nn.Module):
         self.model_config = cfg['modules']['edge_model']
             
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
         self.pmd = self.model_config.get('primary_max_dist')
         
         self.reduction = self.model_config.get('reduction', 'mean')
@@ -155,7 +157,7 @@ class EdgeChannelLoss(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
@@ -217,6 +219,7 @@ class EdgeBinLoss(torch.nn.Module):
         self.model_config = cfg['modules']['edge_model']
             
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
         # self.balance = self.model_config.get('balance_classes', True)
         self.pmd = self.model_config.get('primary_max_dist')
         self.reduction = self.model_config.get('reduction', 'mean')
@@ -259,7 +262,7 @@ class EdgeBinLoss(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
