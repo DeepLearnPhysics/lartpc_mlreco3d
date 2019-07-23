@@ -151,7 +151,7 @@ class NodeLabelLoss(torch.nn.Module):
             total_loss = self.lossfn(node_pred, node_pred)
             return {
                 'accuracy': 1.,
-                'loss_seg': total_loss
+                'loss': total_loss
             }
         
         clusts = clusts[selection]
@@ -197,5 +197,5 @@ class NodeLabelLoss(torch.nn.Module):
         
         return {
             'accuracy': total_acc,
-            'loss_seg': total_loss
+            'loss': total_loss
         }
