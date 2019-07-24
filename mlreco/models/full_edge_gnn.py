@@ -40,7 +40,7 @@ class FullEdgeModel(torch.nn.Module):
         super(FullEdgeModel, self).__init__()
         
         if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
+            self.model_config = cfg['modules']['full_edge_model']
         else:
             self.model_config = cfg
             
@@ -82,7 +82,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
         # torch.nn.MSELoss(reduction='sum')
         # torch.nn.L1Loss(reduction='sum')
         super(FullEdgeChannelLoss, self).__init__()
-        self.model_config = cfg['modules']['edge_model']
+        self.model_config = cfg['modules']['full_edge_model']
             
         self.remove_compton = self.model_config.get('remove_compton', True)
         self.pmd = self.model_config.get('primary_max_dist')
