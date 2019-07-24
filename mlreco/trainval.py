@@ -18,18 +18,19 @@ class trainval(object):
         self.tspent = {}
         self.tspent_sum = {}
         self._model_config = cfg['model']
-        model_config = cfg['model']
-        training_config = cfg['training']
-        self._weight_prefix = training_config['weight_prefix']
-        self._batch_size = cfg['iotool']['batch_size']
-        self._minibatch_size = cfg['training']['minibatch_size']
-        self._gpus = cfg['training']['gpus']
-        self._input_keys = model_config['network_input']
-        self._loss_keys = model_config['loss_input']
-        self._train = training_config['train']
-        self._model_name = model_config['name']
-        self._learning_rate = training_config['learning_rate']
-        self._model_path = training_config['model_path']
+        self._training_config = cfg['training']
+        self._iotool_config = cfg['iotool']
+
+        self._weight_prefix = self._training_config.get('weight_prefix', '')
+        self._batch_size = self._iotool_config.get('batch_size', 1)
+        self._minibatch_size = self._training_config.get('minibatch_size', -1)
+        self._gpus = self._training_config.get('gpus', [])
+        self._input_keys = self._model_config.get('network_input', [])
+        self._loss_keys = self._model_config.get('loss_input', [])
+        self._train = self._training_config.get('train', True)
+        self._model_name = self._model_config.get('name', '')
+        self._learning_rate = self._training_config.get('learning_rate', 0.001)
+        self._model_path = self._training_config.get('model_path', '')
 
     def backward(self):
         total_loss = 0.0
@@ -45,12 +46,13 @@ class trainval(object):
 
     def save_state(self, iteration):
         tstart = time.time()
-        filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
-        torch.save({
-            'global_step': iteration,
-            'state_dict': self._net.state_dict(),
-            'optimizer': self._optimizer.state_dict()
-        }, filename)
+        if len(self._weight_prefix) > 0:
+            filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
+            torch.save({
+                'global_step': iteration,
+                'state_dict': self._net.state_dict(),
+                'optimizer': self._optimizer.state_dict()
+            }, filename)
         self.tspent['save'] = time.time() - tstart
 
     def train_step(self, data_blob):
@@ -121,12 +123,14 @@ class trainval(object):
 
             result = self._net(data)
 
+
             if not torch.cuda.is_available():
                 data = [data]
 
             # Compute the loss
             if loss_keys:
                 loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
+
                 if self._train:
                     self._loss.append(loss_acc['loss_seg'])
 
@@ -136,7 +140,7 @@ class trainval(object):
             # Record results
             res = {}
             for label in loss_acc:
-                res[label] = [loss_acc[label].cpu().item() if not isinstance(loss_acc[label], float) else loss_acc[label]]
+                res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
             # Use analysis keys to also get tensors
             if 'analysis_keys' in self._model_config:
                 for key in self._model_config['analysis_keys']:

@@ -11,20 +11,21 @@ class DBScanClusts(torch.nn.Module):
     expects input that is of form
         x, y, z, batch_id, features, classes
         classes should be one-hot encoded
-    
+
     forward:
         INPUT:
-        x - torch.floatTensor 
+        x - torch.floatTensor
             x.shape = (N, dim + batch_index + feature + num_classes)
         OUTPUT:
         inds - list of torch.longTensor indices for each cluster
     """
     def __init__(self, cfg):
         super(DBScanClusts, self).__init__()
-        self.epsilon = cfg['epsilon']
-        self.minPoints = cfg['minPoints']
-        self.num_classes = cfg['num_classes']
-        self.dim = cfg['data_dim']
+        self._cfg = cfg['modules']['dbscan']
+        self.epsilon = self._cfg.get('epsilon', 15)
+        self.minPoints = self._cfg.get('minPoints', 5)
+        self.num_classes = self._cfg.get('num_classes', 5)
+        self.dim = self._cfg.get('data_dim', 3)
 
     def forward(self, x, onehot=True):
         # output clusters
@@ -66,20 +67,20 @@ class DBScanClusts(torch.nn.Module):
                                           ).fit(sel_vox)
                 cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
                 clusts.extend(cls_idx)
-        
+
         return np.array(clusts)
-    
-    
+
+
 class DBScan2(torch.nn.Module):
     """
     DBSCAN Layer that uses sklearn's DBSCAN implementation
     expects input that is of form
         x, y, z, batch_id, features, classes
         classes should be one-hot encoded
-    
+
     forward:
         INPUT:
-        x - torch.floatTensor 
+        x - torch.floatTensor
             x.shape = (N, dim + batch_index + feature + num_classes)
         OUTPUT:
         same as DBScan module
@@ -87,18 +88,19 @@ class DBScan2(torch.nn.Module):
     def __init__(self, cfg):
         super(DBScan2, self).__init__()
         self.dbclusts = DBScanClusts(cfg)
-        self.num_classes = cfg['num_classes']
-    
+        self._cfg = cfg['modules']['dbscan']
+        self.num_classes = self._cfg.get('num_classes', 5)
+
     def forward(self, x):
         # get cluster index sets
         clusts = self.dbclusts(x)
-        
+
         ret = []
         for cinds in clusts:
             datac = x[cinds,:-self.num_classes]
             labelc = torch.argmax(x[cinds, -self.num_classes:], dim=1)
             ret.append(torch.cat([datac, labelc.double().view(-1,1)], dim=1))
-        
+
         return ret
 
 
@@ -199,10 +201,11 @@ class DBScan(torch.nn.Module):
     def __init__(self, cfg):
         super(DBScan, self).__init__()
         self.function = DBScanFunction.apply
-        self.epsilon = cfg['epsilon']
-        self.minPoints = cfg['minPoints']
-        self.num_classes = cfg['num_classes']
-        self.dim = cfg['data_dim']
+        self._cfg = cfg['modules']['dbscan']
+        self.epsilon = self._cfg.get('epsilon', 15)
+        self.minPoints = self._cfg.get('minPoints', 5)
+        self.num_classes = self._cfg.get('num_classes', 5)
+        self.dim = self._cfg.get('data_dim', 3)
 
     def forward(self, x):
         """
