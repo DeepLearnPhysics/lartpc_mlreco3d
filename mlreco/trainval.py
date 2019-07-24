@@ -89,12 +89,11 @@ class trainval(object):
         # Keys of format %s_count are special and used as counters
         # e.g. for PPN when there are no particle labels in event
         for key in res_combined:
-            if "_count" not in key:
-                if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
-                    if key + "_count" not in res_combined:
-                        res_combined[key] = np.array(res_combined[key]).sum() / self._batch_size
-                    else:
-                        res_combined[key] = np.array(res_combined[key]).sum() / res_combined[key + '_count']
+            if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
+                if "count" not in key:
+                    res_combined[key] = np.array(res_combined[key]).mean()
+                else:
+                    res_combined[key] = np.array(res_combined[key]).sum()
         return res_combined
 
     def _forward(self, data_blob):
@@ -132,7 +131,7 @@ class trainval(object):
                 loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
 
                 if self._train:
-                    self._loss.append(loss_acc['loss_seg'])
+                    self._loss.append(loss_acc['loss'])
 
             self.tspent['forward'] = time.time() - tstart
             self.tspent_sum['forward'] += self.tspent['forward']

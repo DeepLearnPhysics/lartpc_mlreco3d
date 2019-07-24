@@ -39,8 +39,7 @@ class EdgeModel(torch.nn.Module):
             self.model_config = cfg['modules']['edge_model']
         else:
             self.model_config = cfg
-            
-        #self.batch_size = cfg['iotool']['batch_size']
+        
         self.remove_compton = self.model_config.get('remove_compton', True)
         self.compton_thresh = self.model_config.get('compton_thresh', 30)
             
@@ -117,10 +116,6 @@ class EdgeChannelLoss(torch.nn.Module):
         super(EdgeChannelLoss, self).__init__()
         self.model_config = cfg['modules']['edge_model']
         
-        self.batch_size = self.model_config.get('batch_size')
-        if not self.batch_size:
-            raise Exception('batch_size should be set in model config')
-            
         self.remove_compton = self.model_config.get('remove_compton', True)
         self.compton_thresh = self.model_config.get('compton_thresh', 30)
         self.pmd = self.model_config.get('primary_max_dist')
@@ -167,7 +162,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
                     'accuracy': 1.,
-                    'loss_seg': total_loss
+                    'loss': total_loss
                 }
 
         clusts = clusts[selection]
@@ -184,7 +179,7 @@ class EdgeChannelLoss(torch.nn.Module):
             total_loss = self.lossfn(edge_pred, edge_pred)
             return {
                 'accuracy': 0.,
-                'loss_seg': total_loss
+                'loss': total_loss
             }
         group = get_cluster_label(data_grp, clusts)
 
@@ -201,22 +196,21 @@ class EdgeChannelLoss(torch.nn.Module):
 
         # compute accuracy of assignment
         # need to multiply by batch size to be accurate
-        total_acc = self.batch_size * torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+
+        total_acc = torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         
         ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts))
         
-        
-
         return {
-            'primary_fdr': primary_fdr * self.batch_size,
-            'primary_acc': primary_acc * self.batch_size,
-            'ARI': ari * self.batch_size,
-            'AMI': ami * self.batch_size,
-            'SBD': sbd * self.batch_size,
-            'purity': pur * self.batch_size,
-            'efficiency': eff * self.batch_size,
+            'primary_fdr': primary_fdr,
+            'primary_acc': primary_acc,
+            'ARI': ari,
+            'AMI': ami,
+            'SBD': sbd,
+            'purity': pur,
+            'efficiency': eff,
             'accuracy': total_acc,
-            'loss_seg': total_loss
+            'loss': total_loss
         }
     
     
@@ -280,7 +274,7 @@ class EdgeBinLoss(torch.nn.Module):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
                     'accuracy': 1.,
-                    'loss_seg': total_loss
+                    'loss': total_loss
                 }
 
         clusts = clusts[selection]
@@ -292,13 +286,12 @@ class EdgeBinLoss(torch.nn.Module):
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
         batch = get_cluster_batch(data0, clusts)
-        batch_size = len(np.unique(batch))
         edge_index = primary_bipartite_incidence(batch, primaries)
         if not edge_index.shape[0]:
             total_loss = self.lossfn(edge_pred, edge_pred)
             return {
                 'accuracy': 0.,
-                'loss_seg': total_loss
+                'loss': total_loss
             }
         group = get_cluster_label(data_grp, clusts)
 
@@ -326,13 +319,13 @@ class EdgeBinLoss(torch.nn.Module):
 
         # compute accuracy of assignment
         # need to multiply by batch size to be accurate
-        total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        total_acc = torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
 
         return {
-            'primary_fdr': primary_fdr * batch_size,
-            'primary_acc': primary_acc * batch_size,
+            'primary_fdr': primary_fdr,
+            'primary_acc': primary_acc,
             'accuracy': total_acc,
-            'loss_seg': total_loss
+            'loss': total_loss
         }
     
     
@@ -392,7 +385,7 @@ class EdgeLabelLoss(torch.nn.Module):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
                     'accuracy': 1.,
-                    'loss_seg': total_loss
+                    'loss': total_loss
                 }
 
         clusts = clusts[selection]
@@ -404,13 +397,12 @@ class EdgeLabelLoss(torch.nn.Module):
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
         batch = get_cluster_batch(data0, clusts)
-        batch_size = len(np.unique(batch))
         edge_index = primary_bipartite_incidence(batch, primaries)
         if not edge_index.shape[0]:
             total_loss = self.lossfn(edge_pred, edge_pred)
             return {
                 'accuracy': 0.,
-                'loss_seg': total_loss
+                'loss': total_loss
             }
         group = get_cluster_label(data_grp, clusts)
 
@@ -447,11 +439,11 @@ class EdgeLabelLoss(torch.nn.Module):
 
         # compute accuracy of assignment
         # need to multiply by batch size to be accurate
-        total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        total_acc = torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
 
         return {
-            'primary_fdr': primary_fdr * batch_size,
-            'primary_acc': primary_acc * batch_size,
+            'primary_fdr': primary_fdr,
+            'primary_acc': primary_acc,
             'accuracy': total_acc,
-            'loss_seg': total_loss
+            'loss': total_loss
         }

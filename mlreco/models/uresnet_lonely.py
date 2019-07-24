@@ -209,6 +209,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
         mask_loss, mask_acc = 0., 0.
+        count = 0
         for i in range(len(label)):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
@@ -246,18 +247,20 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
                     uresnet_acc += acc
 
+                count += 1
+
         if self._ghost:
             results = {
-                'accuracy': uresnet_acc,
-                'loss_seg': uresnet_loss + mask_loss,
-                'mask_acc': mask_acc,
-                'mask_loss': mask_loss,
-                'uresnet_loss': uresnet_loss,
-                'uresnet_acc': uresnet_acc
+                'accuracy': uresnet_acc/count,
+                'loss': (uresnet_loss + mask_loss)/count,
+                'mask_acc': mask_acc/count,
+                'mask_loss': mask_loss/count,
+                'uresnet_loss': uresnet_loss/count,
+                'uresnet_acc': uresnet_acc/count
             }
         else:
             results = {
-                'accuracy': uresnet_acc,
-                'loss_seg': uresnet_loss
+                'accuracy': uresnet_acc/count,
+                'loss': uresnet_loss/count
             }
         return results
