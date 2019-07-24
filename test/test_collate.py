@@ -12,14 +12,14 @@ def batch(request):
     num_products = request.param[1]
     res = []
     for _ in range(batch_size):
-        event = []
+        event = {}
         num_points = np.random.randint(low=0, high=100)
-        for _ in range(num_products):
+        for name in range(num_products):
             data = np.random.uniform(low=0.0, high=100.0, size=(num_points,))
-            event.append(data)
+            event[name]=data
         # Append index
         # TODO
-        res.append(tuple(event))
+        res.append(event)
     return res
 
 

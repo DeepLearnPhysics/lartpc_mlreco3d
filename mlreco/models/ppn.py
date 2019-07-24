@@ -9,40 +9,43 @@ class PPN(torch.nn.Module):
     def __init__(self, cfg):
         super(PPN, self).__init__()
         import sparseconvnet as scn
-        model_config = cfg['modules']['ppn']
-        self._model_config = model_config
-        dimension = model_config['data_dim']
+        self._model_config = cfg['modules']['ppn']
+
+        self._dimension = self._model_config.get('data_dim', 3)
+        num_strides = self._model_config.get('num_strides', 5)
+        m = self._model_config.get('filters', 16)  # Unet number of features
+        num_classes = self._model_config.get('num_classes', 5)
+
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = model_config['filters']  # Unet number of features
-        nPlanes = [i*m for i in range(1, model_config['num_strides']+1)]  # UNet number of features per level
+        nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]# downsample = [filter size, filter stride]
 
         # PPN stuff
-        self.half_stride = int(model_config['num_strides']/2.0)
-        self.ppn1_conv = scn.SubmanifoldConvolution(dimension, nPlanes[-1], nPlanes[-1], 3, False)
-        self.ppn1_scores = scn.SubmanifoldConvolution(dimension, nPlanes[-1], 2, 3, False)
+        self.half_stride = int(num_strides/2.0)
+        self.ppn1_conv = scn.SubmanifoldConvolution(self._dimension, nPlanes[-1], nPlanes[-1], 3, False)
+        self.ppn1_scores = scn.SubmanifoldConvolution(self._dimension, nPlanes[-1], 2, 3, False)
 
         self.selection1 = Selection()
         self.selection2 = Selection()
         self.unpool1 = scn.Sequential()
-        for i in range(model_config['num_strides']-self.half_stride-1):
-            self.unpool1.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
+        for i in range(num_strides-self.half_stride-1):
+            self.unpool1.add(scn.UnPooling(self._dimension, downsample[0], downsample[1]))
 
         self.unpool2 = scn.Sequential()
         for i in range(self.half_stride):
-            self.unpool2.add(scn.UnPooling(dimension, downsample[0], downsample[1]))
+            self.unpool2.add(scn.UnPooling(self._dimension, downsample[0], downsample[1]))
 
         middle_filters = int(m * self.half_stride * (self.half_stride + 1) / 2.0)
-        self.ppn2_conv = scn.SubmanifoldConvolution(dimension, middle_filters, middle_filters, 3, False)
-        self.ppn2_scores = scn.SubmanifoldConvolution(dimension, middle_filters, 2, 3, False)
+        self.ppn2_conv = scn.SubmanifoldConvolution(self._dimension, middle_filters, middle_filters, 3, False)
+        self.ppn2_scores = scn.SubmanifoldConvolution(self._dimension, middle_filters, 2, 3, False)
         self.multiply1 = Multiply()
         self.multiply2 = Multiply()
 
-        self.ppn3_conv = scn.SubmanifoldConvolution(dimension, nPlanes[0], nPlanes[0], 3, False)
-        self.ppn3_pixel_pred = scn.SubmanifoldConvolution(dimension, nPlanes[0], dimension, 3, False)
-        self.ppn3_scores = scn.SubmanifoldConvolution(dimension, nPlanes[0], 2, 3, False)
-        self.ppn3_type = scn.SubmanifoldConvolution(dimension, nPlanes[0], model_config['num_classes'], 3, False)
+        self.ppn3_conv = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], nPlanes[0], 3, False)
+        self.ppn3_pixel_pred = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], self._dimension, 3, False)
+        self.ppn3_scores = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], 2, 3, False)
+        self.ppn3_type = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], num_classes, 3, False)
 
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
@@ -98,11 +101,15 @@ class PPN(torch.nn.Module):
                       [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
                       [attention.features],
                       [attention2.features]]
-            
+        return result
+
+
 class PPNLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, reduction='sum'):
         super(PPNLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['ppn']
+        self._dimension = self._cfg.get('data_dim', 3)
+        self._num_strides = self._cfg.get('num_strides', 5)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
@@ -126,12 +133,12 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         total_distance, total_class = 0., 0.
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
-        data_dim = self._cfg['data_dim']
+        data_dim = self._dimension
         for i in range(len(label)):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :-2]  # (N, 3)
+                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = segmentation[1][i][:, -3] == b.float()
                 ppn2_batch_index = segmentation[2][i][:, -3] == b.float()
                 event_ppn1_data = segmentation[1][i][ppn1_batch_index][:, :-3]  # (N1, 3)
@@ -159,7 +166,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     # event_types = event_types[event_mask]
                     event_data = event_data[event_mask]
                     # Mask for PPN2
-                    event_ppn2_mask = (~(segmentation[4][i][ppn2_batch_index] == 0)).any(dim=1)
+                    event_ppn2_mask = (~(segmentation[3][i][ppn2_batch_index] == 0)).any(dim=1)
                     event_ppn2_data = event_ppn2_data[event_ppn2_mask]
                     event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
 
@@ -177,8 +184,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     acc = (predicted_labels == positives.long()).sum().item() / float(predicted_labels.nelement())
 
                     # Loss ppn1 & ppn2 (predict positives)
-                    event_label_ppn1 = torch.floor(event_label/(2**(self._cfg['num_strides']-1)))
-                    event_label_ppn2 = torch.floor(event_label/(2**(int(self._cfg['num_strides']/2))))
+                    event_label_ppn1 = torch.floor(event_label/(2**(self._num_strides-1)))
+                    event_label_ppn2 = torch.floor(event_label/(2**(int(self._num_strides/2))))
                     d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
                     d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
                     positives_ppn1 = (d_true_ppn1 < 1).any(dim=0)

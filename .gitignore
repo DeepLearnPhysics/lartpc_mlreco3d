@@ -1,6 +1,6 @@
 # typical files made in repo
-log
-weights
+log*
+weights*
 *.txt
 *.csv
 *.root
