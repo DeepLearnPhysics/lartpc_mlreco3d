@@ -146,17 +146,21 @@ def network_schematic(clusters, primaries, edges):
                         text = node_labels,
                         hoverinfo = 'text'
                         ))
+    
+    # Assert if there is edges to draw
+    draw_edges = bool(edges.shape[1])
 
     # Initialize the edges
-    edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in zip(edges[0], edges[1])])
-    graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
-                        mode = 'lines',
-                        name = 'edges',
-                        line = dict(
-                            color = 'rgba(50, 50, 50, 0.5)',
-                            width = 1
-                        ),
-                        hoverinfo = 'none'
-                        ))
+    if draw_edges:
+        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in zip(edges[0], edges[1])])
+        graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
+                            mode = 'lines',
+                            name = 'edges',
+                            line = dict(
+                                color = 'rgba(50, 50, 50, 0.5)',
+                                width = 1
+                            ),
+                            hoverinfo = 'none'
+                          ))
 
     return graph_data
