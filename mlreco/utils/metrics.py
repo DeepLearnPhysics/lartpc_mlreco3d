@@ -24,8 +24,17 @@ def unique_with_batch(label, bid):
     label = np.array(label)
     bid = np.array(bid)
     lb = np.stack((label, bid))
-    _, label2 = np.unqiqe(lb, axis=1, return_inverse=True)
-    return label2
+    _, label2, cts = np.unique(lb, axis=1, return_inverse=True, return_counts=True)
+    return label2, cts
+
+
+def unique_label(label):
+    """
+    transform label array into new label array where labels are between 0 and nlabels
+    """
+    label = np.array(label)
+    _, label2, cts = np.unique(label, return_inverse=True, return_counts=True)
+    return label2, cts
 
 
 def ARI(pred, truth, bid=None):
@@ -34,8 +43,8 @@ def ARI(pred, truth, bid=None):
     """
     from sklearn.metrics import adjusted_rand_score
     if bid:
-        pred = unique_with_batch(pred, bid)
-        truth = unique_with_batch(truth, bid)
+        pred, = unique_with_batch(pred, bid)
+        truth, = unique_with_batch(truth, bid)
     return adjusted_rand_score(pred, truth)
 
 
@@ -45,8 +54,8 @@ def AMI(pred, truth, bid=None):
     """
     from sklearn.metrics import adjusted_mutual_info_score
     if bid:
-        pred = unique_with_batch(pred, bid)
-        truth = unique_with_batch(truth, bid)
+        pred, = unique_with_batch(pred, bid)
+        truth, = unique_with_batch(truth, bid)
     return adjusted_mutual_info_score(pred, truth)
 
 
@@ -75,8 +84,8 @@ def SBD(pred, truth, bid=None):
     Compute the Symmetric Best Dice (SBD) Score for Instance Segmentation.
     '''
     if bid:
-        pred = unique_with_batch(pred, bid)
-        truth = unique_with_batch(truth, bid)
+        pred, = unique_with_batch(pred, bid)
+        truth, = unique_with_batch(truth, bid)
     pred_clusters, pred_counts = np.unique(pred, return_counts=True)
     truth_clusters, truth_counts = np.unique(truth, return_counts=True)
     
@@ -87,16 +96,69 @@ def SBD(pred, truth, bid=None):
     return sbd
 
 
+def contingency_table(a, b, na=None, nb=None):
+    """
+    build contingency table for a and b
+    assume a and b have labels between 0 and na and 0 and nb respectively
+    """
+    if not na:
+        na = np.max(a)
+    if not nb:
+        nb = np.max(b)
+    table = np.zeros((na, nb), dtype=np.int)
+    for i, j in zip(a,b):
+        table[i,j] += 1
+    return table
+
+
 def purity(pred, truth, bid=None):
     """
-    cluster purity
+    cluster purity:
+    intersection(pred, truth)/pred
+    number in [0,1] - 1 indicates everything in the cluster is in the same ground-truth cluster 
     """
-    pass
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    purities = table.max(axis=1) / pcts
+    return purities.mean()
 
 
 def efficiency(pred, truth, bid=None):
     """
-    cluster efficiency
+    cluster efficiency:
+    intersection(pred, truth)/truth
+    number in [0,1] - 1 indicates everything is found in cluster
     """
-    pass
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    efficiencies = table.max(axis=0) / tcts
+    return efficiencies.mean()
 
+def purity_efficiency(pred, truth, bid=None):
+    """
+    function that combines purity and efficiency calculation into one go
+    """
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    efficiencies = table.max(axis=0) / tcts
+    purities = table.max(axis=1) / pcts
+    return purities.mean(), efficiencies.mean()
+    
+    
+    
+    
