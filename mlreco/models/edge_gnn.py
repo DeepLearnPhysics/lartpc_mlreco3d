@@ -163,7 +163,7 @@ class EdgeChannelLoss(torch.nn.Module):
                     'loss': total_loss
                 }
 
-        clusts = clusts[selection]
+            clusts = clusts[selection]
 
         # process group data
         # data_grp = process_group_data(data1, data0)
@@ -266,7 +266,7 @@ class EdgeBinLoss(torch.nn.Module):
                     'loss': total_loss
                 }
 
-        clusts = clusts[selection]
+            clusts = clusts[selection]
 
         # process group data
         # data_grp = process_group_data(data1, data0)
@@ -377,7 +377,7 @@ class EdgeLabelLoss(torch.nn.Module):
                     'loss': total_loss
                 }
 
-        clusts = clusts[selection]
+            clusts = clusts[selection]
 
         # process group data
         # data_grp = process_group_data(data1, data0)
