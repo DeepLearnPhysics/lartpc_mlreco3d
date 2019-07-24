@@ -137,8 +137,6 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     report_step  = cfg['training']['report_step'] and \
                 ((handlers.iteration+1) % cfg['training']['report_step'] == 0)
 
-    loss = res['loss']
-    acc  = res['accuracy']
     res_dict = {}
     for key in res:
         if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
@@ -165,12 +163,12 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
         for key in res_dict:
             handlers.csv_logger.record((key,), (res_dict[key],))
-        handlers.csv_logger.record(('loss', 'acc'), (loss, acc))
         handlers.csv_logger.write()
 
     # Report (stdout)
     if report_step:
-        loss = utils.round_decimals(loss,   4)
+        acc   = utils.round_decimals(res['accuracy'], 4)
+        loss  = utils.round_decimals(res['loss'],     4)
         tmap  = handlers.trainer.tspent
         tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
         tabs  = utils.round_decimals(tmap['train'], 3)
