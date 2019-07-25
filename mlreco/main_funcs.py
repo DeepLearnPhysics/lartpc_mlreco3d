@@ -80,7 +80,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
     # Log save directory
     if cfg['training']['log_dir']:
         if not os.path.exists(cfg['training']['log_dir']):
-            os.mkdir(cfg['training']['log_dir'])
+            os.makedirs(cfg['training']['log_dir'])
         logname = '%s/train_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
         if not cfg['training']['train']:
             logname = '%s/inference_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
@@ -138,9 +138,6 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     report_step  = cfg['training']['report_step'] and \
                 ((handlers.iteration+1) % cfg['training']['report_step'] == 0)
 
-    # FIXME do we need to average here?
-    loss_seg = np.mean(res['loss_seg'])
-    acc_seg  = np.mean(res['accuracy'])
     res_dict = {}
     for key in res:
         if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
@@ -167,12 +164,12 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
         for key in res_dict:
             handlers.csv_logger.record((key,), (res_dict[key],))
-        handlers.csv_logger.record(('loss_seg', 'acc_seg'), (loss_seg, acc_seg))
         handlers.csv_logger.write()
 
     # Report (stdout)
     if report_step:
-        loss_seg = utils.round_decimals(loss_seg,   4)
+        acc   = utils.round_decimals(res['accuracy'], 4)
+        loss  = utils.round_decimals(res['loss'],     4)
         tmap  = handlers.trainer.tspent
         tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
         tabs  = utils.round_decimals(tmap['train'], 3)
@@ -184,7 +181,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         else:
             msg = 'Iter. %d (epoch %g) @ %s ... forward time %g%% (%g [s]) mem. %g GB \n'
             msg = msg % (handlers.iteration, epoch, tstamp_iteration, tfrac, tabs, mem)
-        msg += '   Segmentation: loss %g accuracy %g\n' % (loss_seg, acc_seg)
+        msg += '   Segmentation: loss %g accuracy %g\n' % (loss, acc)
         print(msg)
         sys.stdout.flush()
         if handlers.csv_logger: handlers.csv_logger.flush()
