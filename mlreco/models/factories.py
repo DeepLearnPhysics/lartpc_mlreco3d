@@ -6,12 +6,9 @@ def model_dict():
     from . import uresnet
     from . import chain
     from . import uresnet_ppn_chain
-    from . import attention_gnn
+    from . import edge_gnn
+    from . import iter_edge_gnn
     from . import chain_gnn
-    from . import node_attention_gnn
-    from . import node_econv_gnn
-    from . import discriminative_loss
-    from . import discriminative_multiLayerLoss
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -27,20 +24,12 @@ def model_dict():
         # Chain test for track clustering (w/ DBSCAN)
         "chain": (chain.Chain, chain.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
-        # Attention GNN
-        "attention_gnn": (attention_gnn.BasicAttentionModel, attention_gnn.EdgeLabelLoss),
-        "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss),
-        # Node / Primary prediction GNNS
-        # Node attention GNN
-        "node_attention_gnn": (node_attention_gnn.NodeAttentionModel, node_attention_gnn.NodeLabelLoss),
-        # Node EConv GNN
-        "node_econv_gnn": (node_econv_gnn.NodeEConvModel, node_econv_gnn.NodeLabelLoss),
-        # Discriminative Loss (Loss at Output)
-        "discriminative_loss": (discriminative_loss.UResNet, discriminative_loss.DiscriminativeLoss),
-        # Discriminative MultiLayer Loss (Loss at Decoding Layers)
-        "discriminative_multiLayerLoss": (discriminative_multiLayerLoss.UResNet, discriminative_multiLayerLoss.DiscriminativeLoss)
+        # Edge Model
+        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
+        # Iterative Edge Model
+        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeLabelLoss)
     }
-    
+    # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
 
 def construct(name):
