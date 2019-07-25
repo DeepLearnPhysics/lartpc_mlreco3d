@@ -74,7 +74,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
         from sklearn.decomposition import PCA
         import numpy.linalg as LA
         pca = PCA()
-        pos, axes, spos, epos = np.empty((0, 3)), np.empty((0, 3)), np.empty((0, 3)), np.empty((0, 3))
+        axes, spos, epos = np.empty((0, 3)), np.empty((0, 3)), np.empty((0, 3))
         curv = lambda vox, pid, norm :\
             np.sum([np.abs(np.dot((v-vox[pid])/LA.norm(v-vox[pid]), norm)) for i, v in enumerate(vox) if i != pid])
         for c in clusters:
@@ -83,7 +83,6 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
 
             # Get the mean and the principal axis from the PCA
             pca.fit(vox)
-            mean = np.mean(vox, axis=0)
             axis = np.array([pca.components_[0][i] for i in range(3)])
 
             # Order the point along the principal axis, get the end points
@@ -99,23 +98,26 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
             # Get the full length of the principal axis 
             pa_dist = pa_vals[start_id]-pa_vals[end_id]
 
-            # The point that determines the position of the cone is its center
-            mean_pa_val = np.dot(mean, axis)
-            corr = pa_dist/2-(mean_pa_val-pa_vals[end_id])
-            mean -= corr*axis
-
             # Append the cone parameters
-            pos = np.concatenate((pos, [mean]))
             axes = np.concatenate((axes, [2.*pa_dist*axis]))
+            
+        # Compute plotly's internal vector scale to undo it...
+        vector_scale = np.inf
+        for i, p in enumerate(spos):
+            u = axes[i]
+            if i > 0:
+                vector_scale = min(vector_scale, 2*LA.norm(p2-p) / (LA.norm(u2) + LA.norm(u)))
+            p2 = p
+            u2 = u
 
         # Add a graph with a cone per cluster
-        graph_data.append(go.Cone(x=pos[:,0], y=pos[:,1], z=pos[:,2],
+        graph_data.append(go.Cone(x=spos[:,0], y=spos[:,1], z=spos[:,2],
                                   u=axes[:,0], v=axes[:,1], w=axes[:,2],
                                   name = 'clusters',
                                   opacity=.5,
-                                  sizeref=1.,
+                                  sizeref=.5/vector_scale,
                                   showscale=False,
-                                  anchor='center'))
+                                  anchor='tip'))
 
         # Add a graph with the starting points
         graph_data.append(go.Scatter3d(x=spos[:,0], y=spos[:,1], z=spos[:,2],
@@ -124,6 +126,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
                                        marker = dict(
                                            symbol = 'circle',
                                            color = node_colors,
+                                           size = 5,
                                            colorscale = 'Viridis'
                                        ),
                                        text = node_labels,
