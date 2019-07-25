@@ -63,6 +63,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         batch_ids = [d[:, -2] for d in label]
         total_loss = 0
         total_acc = 0
+        count = 0
         # Loop over GPUS
         for i in range(len(segmentation)):
             for b in batch_ids[i].unique():
@@ -82,8 +83,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
                 acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
                 total_acc += acc
+                count += 1
 
         return {
-            'accuracy': total_acc,
-            'loss_seg': total_loss
+            'accuracy': total_acc/count,
+            'loss': total_loss/count
         }
