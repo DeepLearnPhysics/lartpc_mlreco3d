@@ -4,6 +4,7 @@ from __future__ import print_function
 import os
 from torch.utils.data import Dataset
 import mlreco.iotools.parsers
+import numpy as np
 
 def _list_files(data_dirs, data_key=None, limit_num_files=0):
     """
