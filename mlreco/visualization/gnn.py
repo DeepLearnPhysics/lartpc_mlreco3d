@@ -47,9 +47,9 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
     graph_data = []
     edge_vertices = []
     if mode == 'sphere':
-        # Define the node size
-        logn = np.array([np.log(len(c)) for c in clusters])
-        node_sizes = np.interp(logn, (logn.min(), logn.max()), (5, 50))
+        # Define the node size as a linear function of the amount of voxels in the cluster
+        sizes = np.array([len(c) for c in clusters])
+        node_sizes = sizes * 50./sizes.max()
         
         # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
         graph_data.append(go.Scatter3d(x = pos[:,0], y = pos[:,1], z = pos[:,2],
@@ -127,8 +127,8 @@ def network_schematic(clusters, primaries, edges):
     # Define the node features (label, size, color)
     node_labels = [str(i) for i in range(n)]
     
-    logn = np.array([np.log(len(c)) for c in clusters])
-    node_sizes = np.interp(logn, (logn.min(), logn.max()), (5, 50))
+    sizes = np.array([len(c) for c in clusters])
+    node_sizes = sizes * 50./sizes.max()
     
     node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
 
@@ -146,17 +146,21 @@ def network_schematic(clusters, primaries, edges):
                         text = node_labels,
                         hoverinfo = 'text'
                         ))
+    
+    # Assert if there is edges to draw
+    draw_edges = bool(edges.shape[1])
 
     # Initialize the edges
-    edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in zip(edges[0], edges[1])])
-    graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
-                        mode = 'lines',
-                        name = 'edges',
-                        line = dict(
-                            color = 'rgba(50, 50, 50, 0.5)',
-                            width = 1
-                        ),
-                        hoverinfo = 'none'
-                        ))
+    if draw_edges:
+        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in zip(edges[0], edges[1])])
+        graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
+                            mode = 'lines',
+                            name = 'edges',
+                            line = dict(
+                                color = 'rgba(50, 50, 50, 0.5)',
+                                width = 1
+                            ),
+                            hoverinfo = 'none'
+                          ))
 
     return graph_data
