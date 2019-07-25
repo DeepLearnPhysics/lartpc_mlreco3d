@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import sparseconvnet as scn
 
+from collections import defaultdict
 import sklearn.cluster as skc
 from sklearn.metrics import adjusted_rand_score
 
@@ -43,9 +44,10 @@ class UResNet(torch.nn.Module):
         point_cloud, = input
         coords = point_cloud[:, :-1].float()
         features = point_cloud[:, -1][:, None].float()
-        x = self.sparseModel((coords, features))
-        x = self.linear(x)
-        return [[x]]
+        emb = self.sparseModel((coords, features))
+        x = self.linear(emb)
+        return [[emb], 
+               [x]]
 
 
 class DiscriminativeLoss(torch.nn.Module):
@@ -104,7 +106,7 @@ class DiscriminativeLoss(torch.nn.Module):
             #index = (labels == c).squeeze(1).nonzero()
             #index = index.squeeze()
             index = (labels == c)
-            dists = torch.norm(features[index] - cluster_means[i],
+            dists = torch.norm(features[index] - cluster_means[i] + 1e-8,
                                p=self._cfg['norm'],
                                dim=1)
             hinge = torch.clamp(dists - margin, min=0)
@@ -135,7 +137,7 @@ class DiscriminativeLoss(torch.nn.Module):
             for i, c1 in enumerate(cluster_means):
                 for j, c2 in enumerate(cluster_means):
                     if i != j:
-                        dist = torch.norm(c1 - c2, p=self._cfg['norm'])
+                        dist = torch.norm(c1 - c2 + 1e-8, p=self._cfg['norm'])
                         hinge = torch.clamp(2.0 * margin - dist, min=0)
                         dist_loss += torch.pow(hinge, 2)
             dist_loss /= float((n_clusters - 1) * n_clusters)
@@ -152,7 +154,7 @@ class DiscriminativeLoss(torch.nn.Module):
         reg_loss = 0.0
         n_clusters, _ = cluster_means.shape
         for i in range(n_clusters):
-            reg_loss += torch.norm(cluster_means[i, :], p=self._cfg['norm'])
+            reg_loss += torch.norm(cluster_means[i, :] + 1e-8, p=self._cfg['norm'])
         reg_loss /= float(n_clusters)
         return reg_loss
 
@@ -175,7 +177,7 @@ class DiscriminativeLoss(torch.nn.Module):
             score = adjusted_rand_score(prediction, ground_truth)
             return score, prediction
 
-    def combine(self, features, labels):
+    def combine(self, features, labels, verbose=True):
         '''
         Wrapper function for combining different components of the loss function.
         Inputs:
@@ -196,7 +198,10 @@ class DiscriminativeLoss(torch.nn.Module):
 
         loss = self._cfg['alpha'] * loss_var + self._cfg[
             'beta'] * loss_dist + self._cfg['gamma'] * loss_reg
-        return loss
+        if verbose:
+            return [loss, loss_var, loss_dist, loss_reg]
+        else:
+            return [loss]
 
 
     def combine_multiclass(self, features, slabels, clabels):
@@ -218,7 +223,7 @@ class DiscriminativeLoss(torch.nn.Module):
             loss[i] = computed DLoss for semantic class <i>. 
             acc_segs (list): list of computed clustering accuracy for each semantic class. 
         '''
-        loss_segs, acc_segs = [], []
+        loss, acc_segs = defaultdict(list), []
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
             index = (slabels == sc)
@@ -232,10 +237,13 @@ class DiscriminativeLoss(torch.nn.Module):
                 # Need faster clustering (maybe switch to DBSCAN?) or faster
                 # estimates of clustering accuracy. 
                 acc = 0.0
-            loss_segs.append(self.combine(features[index],
-                            clabels[index]))
+            loss_blob = self.combine(features[index], clabels[index])
+            loss["total_loss"].append(loss_blob[0])
+            loss["var_loss"].append(loss_blob[1])
+            loss["dist_loss"].append(loss_blob[2])
+            loss["reg_loss"].append(loss_blob[3])
             acc_segs.append(acc)
-        return loss_segs, acc_segs
+        return loss, acc_segs
 
 
     def forward(self, out, semantic_labels, group_labels):
@@ -255,7 +263,8 @@ class DiscriminativeLoss(torch.nn.Module):
         clabels = group_labels[0][:, 4]
         batch_idx = semantic_labels[0][:, 3]
         embedding = out[0][0]
-        total_loss = []
+        #print(embedding)
+        loss = defaultdict(list)
         accuracy = []
         # Loop over each minibatch instance event
         for bidx in batch_idx.unique(sorted=True):
@@ -265,23 +274,39 @@ class DiscriminativeLoss(torch.nn.Module):
 
             # Computing the Discriminative Loss
             if self._cfg['multiclass']:
-                loss_segs, acc_segs = self.combine_multiclass(
+                loss_dict, acc_segs = self.combine_multiclass(
                     embedding_batch, slabels_batch, clabels_batch)
-                total_loss.append(
-                    sum(loss_segs) / float(len(loss_segs)))
+                loss["total_loss"].append(
+                    sum(loss_dict["total_loss"]) / float(len(loss_dict["total_loss"])))
+                loss["var_loss"].append(
+                    sum(loss_dict["var_loss"]) / float(len(loss_dict["var_loss"])))
+                loss["dist_loss"].append(
+                    sum(loss_dict["dist_loss"]) / float(len(loss_dict["dist_loss"])))
+                loss["reg_loss"].append(
+                    sum(loss_dict["reg_loss"]) / float(len(loss_dict["reg_loss"])))
                 accuracy.append(
                     torch.as_tensor(
                         sum(acc_segs) / float(len(acc_segs))))
             else:
-                total_loss.append(self.combine(embedding_batch, clabels_batch))
+                loss["total_loss"].append(self.combine(embedding_batch, clabels_batch))
                 acc, _ = self.acc_DUResNet(embedding_batch, clabels_batch)
                 accuracy.append(torch.as_tensor(acc))
 
-        total_loss = sum(total_loss)
+        total_loss = sum(loss["total_loss"])
+        var_loss = sum(loss["var_loss"])
+        dist_loss = sum(loss["dist_loss"])
+        reg_loss = sum(loss["reg_loss"])
         accuracy = sum(accuracy)
+
+        print("total = {}".format(total_loss))
+        print("Intra = {}".format(var_loss))
+        print("Inter = {}".format(dist_loss))
+        print("Reg = {}".format(reg_loss))
+
         return {
             "loss_seg": total_loss,
-            "accuracy": accuracy,
-            "uresnet_acc": torch.as_tensor(0.0),
-            "uresnet_loss": torch.as_tensor(0.0)
+            "var_loss": var_loss,
+            "dist_loss": dist_loss,
+            "reg_loss": reg_loss,
+            "accuracy": accuracy
         }

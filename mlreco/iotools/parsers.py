@@ -226,3 +226,33 @@ def parse_cluster3d_clean(data):
     grp_data = grp_data[inds2]
 
     return grp_voxels, grp_data
+
+
+def parse_sparse3d_scn_scales(data):
+    """
+    Retrieves sparse tensors at different spatial sizes.
+    Parameters
+    ----------
+    data: list
+        length 1 array of larcv::EventSparseTensor3D
+    Returns
+    -------
+    list of tuples
+    """
+    grp_voxels, grp_data = parse_sparse3d_scn(data)
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm]
+    grp_data = grp_data[perm]
+
+    spatial_size = data[0].meta().num_voxel_x()
+    max_depth = int(np.floor(np.log2(spatial_size))-1)
+    scales = []
+    for d in range(max_depth):
+        scale_voxels = np.floor(grp_voxels/2**d)#.astype(int)
+        scale_voxels, unique_indices = np.unique(scale_voxels, axis=0, return_index=True)
+        scale_data = grp_data[unique_indices]
+        # perm = np.lexsort(scale_voxels.T)
+        # scale_voxels = scale_voxels[perm]
+        # scale_data = scale_data[perm]
+        scales.append((scale_voxels, scale_data))
+    return scales
