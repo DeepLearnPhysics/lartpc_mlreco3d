@@ -103,5 +103,19 @@ def DBSCAN_cluster_metrics(edge_index, true_labels, pred_labels, primaries, clus
     sbd = SBD(pred_vox, true_vox)
     pur, eff = purity_efficiency(pred_vox, true_vox)
     return ari, ami, sbd, pur, eff
+
+
+def DBSCAN_cluster_metrics2(matched, clusters, group):
+    """
+    return ARI, AMI, SBD, purity, efficiency
+    of matching.  Use matched array
+    """
+    pred_vox = cluster_to_voxel_label(matched, clusters)
+    true_vox = cluster_to_voxel_label(group, clusters)
+    ari = ARI(pred_vox, true_vox)
+    ami = AMI(pred_vox, true_vox)
+    sbd = SBD(pred_vox, true_vox)
+    pur, eff = purity_efficiency(pred_vox, true_vox)
+    return ari, ami, sbd, pur, eff
     
     
