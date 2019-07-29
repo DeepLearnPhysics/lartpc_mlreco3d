@@ -191,15 +191,29 @@ class EdgeChannelLoss(torch.nn.Module):
 
         edge_assn = edge_assn.view(-1)
 
-
+        # total loss on batch
         total_loss = self.lossfn(edge_pred, edge_assn)
 
         # compute accuracy of assignment
-        # need to multiply by batch size to be accurate
-
-        total_acc = torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+        total_acc = torch.tensor(
+            secondary_matching_vox_efficiency3(
+                edge_index,
+                edge_assn,
+                edge_pred,
+                primaries,
+                clusts,
+                len(clusts)
+            )
+        )
         
-        ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts))
+        ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics(
+            edge_index,
+            edge_assn,
+            edge_pred,
+            primaries,
+            clusts,
+            len(clusts)
+        )
         
         return {
             'primary_fdr': primary_fdr,
