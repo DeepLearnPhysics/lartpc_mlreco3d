@@ -2,6 +2,7 @@ import numpy as np
 from mlreco.utils import utils
 from sklearn.cluster import DBSCAN
 from sklearn.manifold import TSNE
+from sklearn import metrics
 
 
 def instance_clustering(data_blob, res, cfg, idx):
@@ -9,13 +10,15 @@ def instance_clustering(data_blob, res, cfg, idx):
     Simple thresholding on uresnet clustering output for instance segmentation
     """
     csv_logger = utils.CSVData("%s/instance_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    csv_logger2 = utils.CSVData("%s/instance_clustering_metrics-%.07d.csv" % (cfg['training']['log_dir'], idx))
 
     model_cfg = cfg['model']
 
     segmentation_all = res['segmentation'][0]  # (N, 5)
     # predictions_all = np.argmax(segmentation_all, axis=1)
     # encoding_all = res['encoding'][0]  # len = depth + 1
-    decoding_all = res['decoding'][0]  # len = depth
+    # decoding_all = res['decoding'][0]  # len = depth
+    clustering_all = res['clustering'][0]
 
     data_all = data_blob['input_data'][0][0]
     label_all = data_blob['segment_label'][0][0]
@@ -26,6 +29,7 @@ def instance_clustering(data_blob, res, cfg, idx):
     depth = 5
     max_depth = len(clusters_label_all)
     num_classes = 5
+    tsne = TSNE(n_components=2)
     # Loop over batch index
     for b in batch_ids:
         batch_index = data_all[:, data_dim] == b
@@ -33,7 +37,7 @@ def instance_clustering(data_blob, res, cfg, idx):
         event_segmentation = segmentation_all[batch_index]
         event_label = label_all[0][batch_index][:, -1]
 
-        for d, feature_map in enumerate(decoding_all):
+        for d, feature_map in enumerate(clustering_all):
             event_feature_map = feature_map[feature_map[:, data_dim] == b]
             coords = event_feature_map[:, :data_dim]
             perm = np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0]))
@@ -45,11 +49,19 @@ def instance_clustering(data_blob, res, cfg, idx):
                 if np.count_nonzero(class_index) == 0:
                     continue
                 clusters_label = clusters_label_all[-(d+1+max_depth-depth)][class_index]
-                embedding = event_feature_map[class_index]
+                embedding = event_feature_map[perm][class_index]
                 # DBSCAN in high dimension embedding
-                predicted_clusters = DBSCAN(eps=5, min_samples=1).fit(embedding).labels_
+                predicted_clusters = DBSCAN(eps=20, min_samples=1).fit(embedding).labels_
                 predicted_clusters += cluster_count  # To avoid overlapping id
                 cluster_count += len(np.unique(predicted_clusters))
+
+                # Cluster similarity metrics
+                ARI = metrics.adjusted_rand_score(clusters_label[:, -1], predicted_clusters)
+                AMI = metrics.adjusted_mutual_info_score(clusters_label[:, -1], predicted_clusters)
+                csv_logger2.record(('class', 'batch_id', 'AMI', 'ARI'),
+                                   (class_, b, AMI, ARI))
+                csv_logger2.write()
+
                 for i, point in enumerate(clusters_label):
                     csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
                                       (1, point[0], point[1], point[2], point[3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
@@ -58,7 +70,7 @@ def instance_clustering(data_blob, res, cfg, idx):
                 print('Embedding size:', embedding.shape[1])
                 if embedding.shape[0] > 1:
                     print(d, class_, 'Starting TSNE')
-                    new_embedding = TSNE(n_components=2).fit_transform(embedding)
+                    new_embedding = tsne.fit_transform(embedding)
                     for i, point in enumerate(new_embedding):
                         csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
                                           (2, point[0], point[1], -1, clusters_label[i, 3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
@@ -76,3 +88,4 @@ def instance_clustering(data_blob, res, cfg, idx):
             csv_logger.write()
 
     csv_logger.close()
+    csv_logger2.close()
