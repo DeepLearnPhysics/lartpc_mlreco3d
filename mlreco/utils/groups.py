@@ -16,6 +16,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     return array that will filter out duplicate voxels
     Only first instance of voxel will appear
     Assume data[:4] = [x,y,z,batchid]
+    Assumes data is lexicographically sorted in x,y,z,batch order
     """
     # set number of cols to look at
     if usebatch:
@@ -67,7 +68,7 @@ def filter_nonimg_voxels(data_grp, data_img, usebatch=True):
         ret[igrp] = False
         igrp += 1
     return ret
-                  
+
 
 def filter_group_data(data_grp, data_img):
     """
@@ -80,19 +81,19 @@ def filter_group_data(data_grp, data_img):
     # step 1: lexicographically sort group data
     perm = np.lexsort(data_grp[:,:-1:].T)
     data_grp = data_grp[perm,:]
-    
+
     # step 2: remove duplicates
     sel1 = filter_duplicate_voxels(data_grp)
     inds1 = np.where(sel1)[0]
     data_grp = data_grp[inds1,:]
-    
+
     # step 3: remove voxels not in image
     sel2 = filter_nonimg_voxels(data_grp, data_img)
     inds2 = np.where(sel2)[0]
-    
+
     return perm[inds1[inds2]]
-    
-    
+
+
 def process_group_data(data_grp, data_img):
     """
     return processed group data
@@ -103,7 +104,7 @@ def process_group_data(data_grp, data_img):
     """
     data_grp_np = data_grp.cpu().detach().numpy()
     data_img_np = data_img.cpu().detach().numpy()
-    
+
     inds = filter_group_data(data_grp_np, data_img_np)
-    
+
     return data_grp[inds,:]
