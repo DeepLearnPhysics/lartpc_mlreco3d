@@ -232,7 +232,7 @@ class IterEdgeLabelLoss(torch.nn.Module):
                 total_loss = self.lossfn(edge_pred, edge_pred)
                 return {
                     'accuracy': 1.,
-                    'loss_seg': total_loss
+                    'loss': total_loss
                 }
 
         clusts = clusts[selection]
@@ -243,7 +243,6 @@ class IterEdgeLabelLoss(torch.nn.Module):
         # form primary/secondary bipartite graph
         primaries = assign_primaries(data2, clusts, data0)
         batch = get_cluster_batch(data0, clusts)
-        batch_size = len(np.unique(batch))
         # edge_index = primary_bipartite_incidence(batch, primaries)
         group = get_cluster_label(data_grp, clusts)
 
@@ -276,7 +275,7 @@ class IterEdgeLabelLoss(torch.nn.Module):
         # need to multiply by batch size to be accurate
         #total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
         # use out['matched']
-        total_acc = batch_size * torch.tensor(
+        total_acc = torch.tensor(
             secondary_matching_vox_efficiency2(
                 out['matched'],
                 group,
@@ -286,9 +285,9 @@ class IterEdgeLabelLoss(torch.nn.Module):
         )
 
         return {
-            'primary_fdr': primary_fdr * batch_size,
-            'primary_acc': primary_acc * batch_size,
+            'primary_fdr': primary_fdr,
+            'primary_acc': primary_acc,
             'accuracy': total_acc,
-            'loss_seg': total_loss,
+            'loss': total_loss,
             'n_iter': out['n_iter']
         }

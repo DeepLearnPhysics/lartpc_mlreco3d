@@ -38,9 +38,9 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         ppn_res = self.ppn_loss(segmentation[1:], label, particles)
         res = { **ppn_res, **uresnet_res }
         res['uresnet_acc'] = uresnet_res['accuracy']
-        res['uresnet_loss'] = uresnet_res['loss_seg']
+        res['uresnet_loss'] = uresnet_res['loss']
         # Don't forget to sum all losses
-        res['loss_seg'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
+        res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
                         ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
-                        + uresnet_res['loss_seg'].float()
+                        + uresnet_res['loss'].float()
         return res
