@@ -217,16 +217,13 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     print("No particles !")
 
         ppn_results = {
-            'ppn_acc': total_acc,
-            'ppn_loss': total_loss,
-            'loss_class': total_class,
-            'loss_distance': total_distance,
-            'loss_ppn1': total_loss_ppn1,
-            'loss_ppn2': total_loss_ppn2,
-            'acc_ppn1': total_acc_ppn1,
-            'acc_ppn2': total_acc_ppn2
+            'ppn_acc': total_acc/ppn_count,
+            'ppn_loss': total_loss/ppn_count,
+            'loss_class': total_class/ppn_count,
+            'loss_distance': total_distance/ppn_count,
+            'loss_ppn1': total_loss_ppn1/ppn_count,
+            'loss_ppn2': total_loss_ppn2/ppn_count,
+            'acc_ppn1': total_acc_ppn1/ppn_count,
+            'acc_ppn2': total_acc_ppn2/ppn_count
         }
-        ppn_results_keys = list(ppn_results.keys())
-        for key in ppn_results_keys:
-            ppn_results[key + '_count'] = ppn_count
         return ppn_results
