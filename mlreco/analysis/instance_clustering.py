@@ -5,30 +5,54 @@ from sklearn.manifold import TSNE
 from sklearn import metrics
 
 
-def instance_clustering(data_blob, res, cfg, idx):
+def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
     """
-    Simple thresholding on uresnet clustering output for instance segmentation
+    Simple DBSCAN on uresnet clustering output for instance segmentation
+
+    Parameters
+    ----------
+    data_blob: dict
+        Input dictionary returned by iotools
+    res: dict
+        Results from the network, dictionary using `analysis_keys`
+    cfg: dict
+        Configuration
+    idx: int
+        Iteration number
+
+    Input
+    -----
+    Requires the following analysis keys
+    - `segmentation`: output of UResNet segmentation (scores)
+    - `clustering`: coordinates in hyperspace, also output of the network
+    Requires the following data blob keys
+    - `input_data`
+    - `segment_label` UResNet 5 classes label
+    - `cluster_label`
+
+    Output
+    ------
+    Writes 2 CSV files:
+    - `instance_clustering-*` with the clustering predictions (point type 0 =
+    event data, point type 1 = predictions, point type 2 = T-SNE visualizations)
+    - `instance_clustering_metrics-*` with some event-wise metrics such as AMI and ARI.
     """
     csv_logger = utils.CSVData("%s/instance_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
     csv_logger2 = utils.CSVData("%s/instance_clustering_metrics-%.07d.csv" % (cfg['training']['log_dir'], idx))
 
-    model_cfg = cfg['model']
-
+    model_cfg = cfg['model']['modules']['uresnet_clustering']
     segmentation_all = res['segmentation'][0]  # (N, 5)
-    # predictions_all = np.argmax(segmentation_all, axis=1)
-    # encoding_all = res['encoding'][0]  # len = depth + 1
-    # decoding_all = res['decoding'][0]  # len = depth
     clustering_all = res['clustering'][0]
 
     data_all = data_blob['input_data'][0][0]
     label_all = data_blob['segment_label'][0][0]
     clusters_label_all = data_blob['cluster_label'][0][0]
 
-    data_dim = 3  # model_cfg['data_dim']
+    data_dim = model_cfg.get('data_dim', 3)
     batch_ids = np.unique(data_all[:, data_dim])
-    depth = 5
+    depth = model_cfg.get('num_strides', 5)
     max_depth = len(clusters_label_all)
-    num_classes = 5
+    num_classes = model_cfg.get('num_classes', 5)
     tsne = TSNE(n_components=2)
     # Loop over batch index
     for b in batch_ids:
@@ -67,15 +91,12 @@ def instance_clustering(data_blob, res, cfg, idx):
                                       (1, point[0], point[1], point[2], point[3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
                     csv_logger.write()
                 # TSNE to visualize embedding
-                print('Embedding size:', embedding.shape[1])
-                if embedding.shape[0] > 1:
-                    print(d, class_, 'Starting TSNE')
+                if compute_tnse and embedding.shape[0] > 1:
                     new_embedding = tsne.fit_transform(embedding)
                     for i, point in enumerate(new_embedding):
                         csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
                                           (2, point[0], point[1], -1, clusters_label[i, 3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
                         csv_logger.write()
-                    print('Done')
 
         # Record in CSV everything
         perm = np.lexsort((event_data[:, 2], event_data[:, 1], event_data[:, 0]))

@@ -197,6 +197,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
         self._dimension = self._cfg.get('data_dim', 3)
 
+        if isinstance(self._intra_cluster_margin, float):
+            self._intra_cluster_margin = [self._intra_cluster_margin] * self._depth
+        if isinstance(self._inter_cluster_margin, float):
+            self._inter_cluster_margin = [self._inter_cluster_margin] * self._depth
+
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
@@ -284,13 +289,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                                 mean = cluster.mean(dim=0)
                                 means.append(mean)
                                 # intra_cluster_loss += torch.max(((mean - cluster).pow(2).sum(dim=1) + 0.000000001).sqrt() - self._intra_cluster_margin, zero).pow(2).mean()
-                                intra_cluster_loss += torch.mean(torch.pow(torch.clamp(torch.norm(cluster-mean, dim=1)- self._intra_cluster_margin, min=0), 2))
+                                intra_cluster_loss += torch.mean(torch.pow(torch.clamp(torch.norm(cluster-mean, dim=1)- self._intra_cluster_margin[j], min=0), 2))
                             intra_cluster_loss /= C
                             means = torch.stack(means)
                         # Define inter-cluster loss
                         inter_cluster_loss = 0.
                         if C > 1:
-                            d = torch.max(2 * self._inter_cluster_margin - self.distances(means, means), zero).pow(2)
+                            d = torch.max(2 * self._inter_cluster_margin[j] - self.distances(means, means), zero).pow(2)
                             inter_cluster_loss = d[np.triu_indices(d.size(1), k=1)].sum() * 2.0 / (C * (C-1))
                         # Add regularization term
                         reg_loss = 0.

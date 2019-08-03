@@ -201,7 +201,7 @@ def get_data_minibatched(dataset, cfg):
 
     num_proc_unit = max(1,len(cfg['training']['gpus']))
     num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * num_proc_unit))
-    
+
     for key in cfg['data_keys']:
         data_blob[key] = [list() for _ in range(num_compute_cycle)]
 

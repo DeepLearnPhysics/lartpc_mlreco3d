@@ -23,7 +23,23 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     Notes
     -----
     Assumes 3D
-    Stores result of this algorithm in a CSV file called michel_reconstruction*
+
+    Input
+    -----
+    Requires the following analysis keys:
+    - `segmentation` output of UResNet
+    - `ghost` predictions of GhostNet
+    Requires the following input keys:
+    - `input_data`
+    - `segment_label`
+    - `particles_label` to get detailed information such as energy.
+    - `clusters_label` from `cluster3d_mcst` for true clusters informations
+
+    Output
+    ------
+    Writes 2 CSV files:
+    - `michel_reconstruction-*`
+    - `michel_reconstruction2-*`
     """
     # Create output CSV
     csv_logger = utils.CSVData("%s/michel_reconstruction-%.07d.csv" % (cfg['training']['log_dir'], idx))
