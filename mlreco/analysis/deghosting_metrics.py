@@ -5,6 +5,30 @@ from mlreco.utils import utils
 def deghosting_metrics(data_blob, res, cfg, idx):
     """
     Some useful metrics to measure deghosting performance
+
+    Parameters
+    ----------
+    data_blob: dict
+        Input dictionary returned by iotools
+    res: dict
+        Results from the network, dictionary using `analysis_keys`
+    cfg: dict
+        Configuration
+    idx: int
+        Iteration number
+
+    Input
+    -----
+    Requires the following analysis keys:
+    - `segmentation`
+    - `ghost` only if 5+2 types architecture for GhostNet
+    Requires the following input keys:
+    - `input_data`
+    - `segment_label`
+
+    Output
+    ------
+    Writes to a CSV file `deghosting_metrics-*`
     """
     csv_logger = utils.CSVData("%s/deghosting_metrics-%.07d.csv" % (cfg['training']['log_dir'], idx))
 
