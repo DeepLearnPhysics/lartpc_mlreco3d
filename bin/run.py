@@ -2,6 +2,7 @@
 import os
 import sys
 import yaml
+from os import environ
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
@@ -18,6 +19,9 @@ def main():
         sys.exit(1)
 
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
+
+    if environ.get('CUDA_VISIBLE_DEVICES') is not None and cfg['training']['gpus'] == '-1':
+        cfg['training']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
 
     process_config(cfg)
     if cfg['training']['train']:
