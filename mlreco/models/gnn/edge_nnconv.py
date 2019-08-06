@@ -26,19 +26,22 @@ class NNConvModel(torch.nn.Module):
         else:
             self.model_config = cfg
             
+            
+        self.node_in = self.model_config.get('node_feats', 16)
+        self.edge_in = self.model_config.get('edge_feats', 10)
         
         self.aggr = self.model_config.get('aggr', 'add')
         self.leak = self.model_config.get('leak', 0.1)
         
         # perform batch normalization
-        self.bn_node = BatchNorm1d(16)
-        self.bn_edge = BatchNorm1d(10)
+        self.bn_node = BatchNorm1d(self.node_in)
+        self.bn_edge = BatchNorm1d(self.edge_in)
         
         # go from 16 to 32 node features
-        ninput = 16
+        ninput = self.node_in
         noutput = 32
         self.nn1 = Seq(
-            Lin(10, ninput),
+            Lin(self.edge_in, ninput),
             LeakyReLU(self.leak),
             Lin(ninput, ninput*noutput),
             LeakyReLU(self.leak)
@@ -49,7 +52,7 @@ class NNConvModel(torch.nn.Module):
         ninput = 32
         noutput = 64
         self.nn2 = Seq(
-            Lin(10, ninput),
+            Lin(self.edge_in, ninput),
             LeakyReLU(self.leak),
             Lin(ninput, ninput*noutput),
             LeakyReLU(self.leak)
@@ -57,7 +60,7 @@ class NNConvModel(torch.nn.Module):
         self.layer2 = NNConv(ninput, noutput, self.nn2, aggr=self.aggr)
         
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64),
+        self.edge_pred_mlp = Seq(Lin(2*64 + self.edge_in, 64),
                                  LeakyReLU(self.leak),
                                  Lin(64, 32),
                                  LeakyReLU(self.leak),
@@ -85,10 +88,12 @@ class NNConvModel(torch.nn.Module):
             xbatch - node batchid
         """
         
-        # batch normalization of node features
-        x = self.bn_node(x)
-        # batch normalization of edge features
-        e = self.bn_edge(e)
+        x = x.view(-1,self.node_in)
+        e = e.view(-1,self.edge_in)
+        if self.edge_in > 1:
+            e = self.bn_edge(e)
+        if self.node_in > 1:
+            x = self.bn_node(x)
         
         # go through layers
         x = self.layer1(x, edge_index, e)
