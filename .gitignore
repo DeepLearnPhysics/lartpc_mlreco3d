@@ -11,6 +11,7 @@ weights*
 __pycache__/
 *.py[cod]
 *$py.class
+config
 
 # C extensions
 *.so

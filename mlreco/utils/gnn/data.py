@@ -64,7 +64,32 @@ def cluster_edge_features(data, clusts, edge_index, cuda=True):
     return e
 
 
-def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, binary=False):
+def edge_feature(data, i, j):
+    """
+    12-dimensional edge feature based on displacement between two voxels
+    """
+    xi = data[i,:3].flatten()
+    xj = data[j,:3].flatten()
+    disp = xj - xi
+    out = np.outer(disp, disp).flatten()
+    out = np.append(out, disp)
+    return out
+
+
+def edge_features(data, edge_index, cuda=True, device=None):
+    """
+    produce features for edges between single voxels
+    """
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
+    e = torch.tensor([edge_feature(data, edge_index[0,k], edge_index[1,k]) for k in range(edge_index.shape[1])], dtype=torch.float, requires_grad=False)
+    if cuda:
+        e = e.cuda()
+    if not device is None:
+        e = e.to(device)
+    return e
+
+def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, binary=False, device=None):
     """
     edge assignment as same group/different group
     
@@ -73,6 +98,10 @@ def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, b
     batches: torch tensor of batch id for each node
     groups: torch tensor of group ids for each node
     """
+    if isinstance(batches, torch.Tensor):
+        batches = batches.cpu().detach().numpy()
+    if isinstance(groups, torch.Tensor):
+        groups = groups.cpu().detach().numpy()
     edge_assn = torch.tensor([np.logical_and(
         batches[edge_index[0,k]] == batches[edge_index[1,k]],
         groups[edge_index[0,k]] == groups[edge_index[1,k]]) for k in range(edge_index.shape[1])], 
@@ -82,6 +111,8 @@ def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, b
         edge_assn = 2*edge_assn - 1
     if cuda:
         edge_assn = edge_assn.cuda()
+    if not device is None:
+        edge_assn = edge_assn.to(device)
     return edge_assn
     
     

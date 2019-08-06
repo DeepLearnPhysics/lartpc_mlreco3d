@@ -132,7 +132,7 @@ def parse_em_primaries(data):
         a numpy array with the shape (N, 1) containing group id for the primary
     """
     particles_v = data[1].as_vector()
-    part_info = get_em_primary_info(particles_v, data[0].meta())
+    part_info = get_em_primary_info(particles_v, data[0].meta(), min_voxel_count=30, min_energy_deposit=5)
     if part_info.shape[0] > 0:
         return part_info[:, :-1], part_info[:, -1][:, None]
     else:

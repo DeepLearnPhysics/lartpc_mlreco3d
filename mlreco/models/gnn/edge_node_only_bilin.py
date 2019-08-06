@@ -4,8 +4,45 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
+from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d, Bilinear
 from torch_geometric.nn import MetaLayer, GATConv
+
+class BilinEdgePredMLP(torch.nn.Module):
+    """
+    Model that uses bilinear layers to produce edge predictions
+    """
+    def __init__(self, node_in, edge_in, leak=0.0):
+        super(BilinEdgePredMLP, self).__init__()
+        self.bse = Bilinear(node_in, edge_in, 16, bias=True)
+        self.bte = Bilinear(node_in, edge_in, 16, bias=True)
+        self.bst = Bilinear(node_in, node_in, edge_in, bias=False)
+        self.bee = Bilinear(edge_in, edge_in, 16, bias=True)
+        
+        self.mlp = Seq(
+            Lin(3*16, 64),
+            LeakyReLU(leak),
+            Lin(64, 64),
+            LeakyReLU(leak),
+            Lin(64,32),
+            LeakyReLU(leak),
+            Lin(32,16),
+            LeakyReLU(leak),
+            Lin(16,2)
+        )
+        
+    def forward(self, source, target, edge_attr):
+        # two bilinear forms
+        x = self.bse(source, edge_attr)
+        y = self.bte(target, edge_attr)
+        
+        # trilinear form
+        z = self.bst(source, target)
+        z = self.bee(z, edge_attr)
+        
+        out = torch.cat([x, y, z], dim=1)
+        out = self.mlp(out)
+        return out
+         
 
 class EdgeNodeOnlyModel(torch.nn.Module):
     """
@@ -28,21 +65,14 @@ class EdgeNodeOnlyModel(torch.nn.Module):
         self.bn_node = BatchNorm1d(self.node_in)
         self.bn_edge = BatchNorm1d(self.edge_in)
         
-        self.edge_pred_mlp = Seq(
-            Lin(2*self.node_in + self.edge_in, 64),
-            LeakyReLU(self.leak),
-            Lin(64, 64),
-            LeakyReLU(self.leak),
-            Lin(64,32),
-            LeakyReLU(self.leak),
-            Lin(32,16),
-            LeakyReLU(self.leak),
-            Lin(16,2)
+        self.edge_pred_layer = BilinEdgePredMLP(
+            self.node_in,
+            self.edge_in,
+            leak = self.leak
         )
         
         def edge_pred_model(source, target, edge_attr, u, batch):
-            out = torch.cat([source, target, edge_attr], dim=1)
-            out = self.edge_pred_mlp(out)
+            out = self.edge_pred_layer(source, target, edge_attr)
             return out
         
         self.edge_predictor = MetaLayer(edge_pred_model, None, None)

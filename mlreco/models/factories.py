@@ -10,6 +10,7 @@ def model_dict():
     from . import full_edge_gnn
     from . import iter_edge_gnn
     from . import chain_gnn
+    from . import mst_gnn
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -29,6 +30,8 @@ def model_dict():
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
         # Full Edge Model
         "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
+        # MST edge model
+        "mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
         # Iterative Edge Model
         "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss)
     }
