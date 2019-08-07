@@ -11,6 +11,40 @@
 import numpy as np
 import torch
 
+def get_group_types(particle_v, meta, point_type="3d"):
+    """
+    Gets particle classes for voxel groups
+    """
+    if point_type not in ["3d", "xy", "yz", "zx"]:
+        raise Exception("Point type not supported in PPN I/O.")
+    # from larcv import larcv
+    gt_types = []
+    for particle in particle_v:
+        pdg_code = abs(particle.pdg_code())
+        prc = particle.creation_process()
+        
+        # Determine point type
+        if (pdg_code == 2212):
+            gt_type = 0 # proton
+        elif pdg_code != 22 and pdg_code != 11:
+            gt_type = 1
+        elif pdg_code == 22:
+            gt_type = 2
+        else:
+            if prc == "primary" or prc == "nCapture" or prc == "conv":
+                gt_type = 2 # em shower
+            elif prc == "muIoni" or prc == "hIoni":
+                gt_type = 3 # delta
+            elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
+                gt_type = 4 # michel
+            else:
+                gt_type = -1 # not well defined
+
+        gt_types.append(gt_type)
+        
+    return np.array(gt_types)
+
+
 def filter_duplicate_voxels(data, usebatch=True):
     """
     return array that will filter out duplicate voxels
