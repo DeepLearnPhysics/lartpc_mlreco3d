@@ -25,27 +25,30 @@ class EdgeNodeOnlyModel(torch.nn.Module):
 
         self.leak = self.model_config.get('leak', 0.1)
 
-        self.bn_node = BatchNorm1d(self.node_in)
-        self.bn_edge = BatchNorm1d(self.edge_in)
+
+        self.bn_node = BatchNorm1d(16)
+        self.bn_edge = BatchNorm1d(10)
+  
+        # final prediction layer
+        class EdgeModel(torch.nn.Module):
+            def __init__(self, leak):
+                super(EdgeModel, self).__init__()
+
+                self.edge_pred_mlp = Seq(Lin(42, 64),
+                                         LeakyReLU(leak),
+                                         Lin(64, 64),
+                                         LeakyReLU(leak),
+                                         Lin(64, 32),
+                                         LeakyReLU(leak),
+                                         Lin(32,16),
+                                         LeakyReLU(leak),
+                                         Lin(16,2)
+                                        )
+
+            def forward(self, src, dest, edge_attr, u, batch):
+                return self.edge_pred_mlp(torch.cat([src, dest, edge_attr], dim=1))
         
-        self.edge_pred_mlp = Seq(
-            Lin(2*self.node_in + self.edge_in, 64),
-            LeakyReLU(self.leak),
-            Lin(64, 64),
-            LeakyReLU(self.leak),
-            Lin(64,32),
-            LeakyReLU(self.leak),
-            Lin(32,16),
-            LeakyReLU(self.leak),
-            Lin(16,2)
-        )
-        
-        def edge_pred_model(source, target, edge_attr, u, batch):
-            out = torch.cat([source, target, edge_attr], dim=1)
-            out = self.edge_pred_mlp(out)
-            return out
-        
-        self.edge_predictor = MetaLayer(edge_pred_model, None, None)
+        self.edge_predictor = MetaLayer(EdgeModel(self.leak))
     
     def forward(self, x, edge_index, e, xbatch):
         
@@ -58,6 +61,4 @@ class EdgeNodeOnlyModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
         
-        return {
-            'edge_pred': e
-        }
+        return [[e]]
