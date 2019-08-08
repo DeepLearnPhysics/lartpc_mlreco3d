@@ -100,9 +100,9 @@ class EdgeModel(torch.nn.Module):
         # print(torch.max(edge_index))
         
         # get output
-        outdict = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, xbatch)
         
-        return outdict
+        return out
     
     
     
@@ -143,6 +143,7 @@ class EdgeChannelLoss(torch.nn.Module):
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
             em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
+        edge_ct = 0
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
         ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
@@ -151,6 +152,8 @@ class EdgeChannelLoss(torch.nn.Module):
             data0 = clusters[i]
             data1 = groups[i]
             data2 = primary[i]
+            
+            device = data0.device
 
             # first decide what true edges should be
             # need to form graph, then pass through GNN
@@ -189,7 +192,7 @@ class EdgeChannelLoss(torch.nn.Module):
             total_primary_acc += primary_acc
 
             # determine true assignments
-            edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.long)
+            edge_assn = edge_assignment(edge_index, batch, group, device=device, dtype=torch.long)
 
             edge_assn = edge_assn.view(-1)
 
@@ -221,6 +224,8 @@ class EdgeChannelLoss(torch.nn.Module):
             sbd += sbd0
             pur += pur0
             eff += eff0
+            
+            edge_ct += edge_index.shape[1]
 
         return {
             'primary_fdr': total_primary_fdr/ngpus,
@@ -231,7 +236,8 @@ class EdgeChannelLoss(torch.nn.Module):
             'purity': pur/ngpus,
             'efficiency': eff/ngpus,
             'accuracy': total_acc/ngpus,
-            'loss': total_loss/ngpus
+            'loss': total_loss/ngpus,
+            'edge_count': edge_ct
         }
     
     

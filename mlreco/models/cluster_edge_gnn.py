@@ -91,9 +91,9 @@ class EdgeModel(torch.nn.Module):
         xbatch = torch.tensor(batch).to(device)
         
         # get output
-        outdict = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, xbatch)
         
-        return outdict
+        return out
     
     
     
@@ -123,7 +123,7 @@ class EdgeChannelLoss(torch.nn.Module):
             raise Exception('unrecognized loss: ' + self.loss)
         
         
-    def forward(self, out, data0, data1):
+    def forward(self, out, clusters, groups):
         """
         out:
             dictionary output from GNN Model
@@ -133,74 +133,81 @@ class EdgeChannelLoss(torch.nn.Module):
             data[0] - DBSCAN data
             data[1] - groups data
         """
-        edge_pred = out['edge_pred']
-        data0 = data0[0]
-        data1 = data1[0]
-        
-        device = data0.device
-        
-        # first decide what true edges should be
-        # need to form graph, then pass through GNN
-        # clusts = form_clusters(data0)
-        clusts = form_clusters_new(data0)
+        edge_ct = 0
+        total_loss, total_acc = 0., 0.
+        ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
+        ngpus = len(clusters)
+        for i in range(ngpus):
+            edge_pred = out[0][i]
+            data0 = clusters[i]
+            data1 = groups[i]
+
+            device = data0.device
+
+            # first decide what true edges should be
+            # need to form graph, then pass through GNN
+            # clusts = form_clusters(data0)
+            clusts = form_clusters_new(data0)
 
 
-        # remove compton clusters
-        # if no cluster fits this condition, return
-        if self.remove_compton:
-            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
-            if not len(selection):
-                total_loss = self.lossfn(edge_pred, edge_pred)
-                return {
-                    'accuracy': 1.,
-                    'loss': total_loss
-                }
+            # remove compton clusters
+            # if no cluster fits this condition, return
+            if self.remove_compton:
+                selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
+                if not len(selection):
+                    ttotal_loss += self.lossfn(edge_pred, edge_pred)
+                    totalacc += 1.
+                    continue
 
-            clusts = clusts[selection]
+                clusts = clusts[selection]
 
-        # process group data
-        # data_grp = process_group_data(data1, data0)
-        data_grp = data1
+            # process group data
+            # data_grp = process_group_data(data1, data0)
+            data_grp = data1
 
-        # form graph
-        batch = get_cluster_batch(data0, clusts)
-        edge_index = complete_graph(batch, device=device)
-        
-        if not edge_index.shape[0]:
-            total_loss = self.lossfn(edge_pred, edge_pred)
-            return {
-                'accuracy': 0.,
-                'loss': total_loss
-            }
-        group = get_cluster_label(data_grp, clusts)
-        
-        # determine true assignments
-        edge_assn = edge_assignment(edge_index, batch, group, device=device, dtype=torch.long)
+            # form graph
+            batch = get_cluster_batch(data0, clusts)
+            edge_index = complete_graph(batch, device=device)
 
-        edge_assn = edge_assn.view(-1)
+            if not edge_index.shape[0]:
+                total_loss += self.lossfn(edge_pred, edge_pred)
+                totalacc += 1.
+                continue
+                
+            group = get_cluster_label(data_grp, clusts)
 
-        # total loss on batch
-        total_loss = self.lossfn(edge_pred, edge_assn)
-        
-        # compute assigned clusters
-        fe = edge_pred[1,:] - edge_pred[0,:]
-        cs = assign_clusters_UF(edge_index, fe, len(clusts), thresh=0.0)
-        
-        ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics2(
-            cs,
-            clusts,
-            group
-        )
-        
-        edge_ct = edge_index.shape[1]
+            # determine true assignments
+            edge_assn = edge_assignment(edge_index, batch, group, device=device, dtype=torch.long)
+
+            edge_assn = edge_assn.view(-1)
+
+            # total loss on batch
+            total_loss = self.lossfn(edge_pred, edge_assn)
+
+            # compute assigned clusters
+            fe = edge_pred[1,:] - edge_pred[0,:]
+            cs = assign_clusters_UF(edge_index, fe, len(clusts), thresh=0.0)
+
+            ari0, ami0, sbd0, pur0, eff0 = DBSCAN_cluster_metrics2(
+                cs,
+                clusts,
+                group
+            )
+            ari += ari0
+            ami += ami0
+            sbd += sbd0
+            pur += pur0
+            eff += eff0
+
+            edge_ct += edge_index.shape[1]
         
         return {
-            'ARI': ari,
-            'AMI': ami,
-            'SBD': sbd,
-            'purity': pur,
-            'efficiency': eff,
-            'accuracy': ari,
-            'loss': total_loss,
+            'ARI': ari/ngpus,
+            'AMI': ami/ngpus,
+            'SBD': sbd/ngpus,
+            'purity': pur/ngpus,
+            'efficiency': eff/ngpus,
+            'accuracy': total_acc/ngpus,
+            'loss': total_loss/ngpus,
             'edge_count': edge_ct
         }
