@@ -131,76 +131,74 @@ class EdgeChannelLoss(torch.nn.Module):
             raise Exception('unrecognized loss: ' + self.loss)
         
         
-    def forward(self, out, data0, data1, data2):
+    def forward(self, out, clusters, groups, primary):
         """
         out:
-            dictionary output from GNN Model
-            keys:
-                'edge_pred': predicted edge weights from model forward
+            array output from the DataParallel gather function
+            out[0] - predicted edge weights from model forward
         data:
-            data[0] - 5 types data
-            data[1] - groups data
-            data[2] - primary data
+            clusters - clusters data
+            groups - groups data
+            primary - primary data
         """
-        edge_pred = out['edge_pred']
-        data0 = data0[0]
-        data1 = data1[0]
-        data2 = data2[0]
-        # first decide what true edges should be
-        # need to form graph, then pass through GNN
-        # clusts = form_clusters(data0)
-        clusts = form_clusters_new(data0)
+        total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
+        ngpus = len(clusters)
+        for i in range(ngpus):
+            edge_pred = out[0][i]
+            data0 = clusters[i]
+            data1 = groups[i]
+            data2 = primary[i]
 
+            # first decide what true edges should be
+            # need to form graph, then pass through GNN
+            # clusts = form_clusters(data0)
+            clusts = form_clusters_new(data0)
 
-        # remove compton clusters
-        # if no cluster fits this condition, return
-        if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
-            if not len(selection):
-                total_loss = self.lossfn(edge_pred, edge_pred)
-                return {
-                    'accuracy': 1.,
-                    'loss': total_loss
-                }
+            # remove compton clusters
+            # if no cluster fits this condition, return
+            if self.remove_compton:
+                selection = filter_compton(clusts) # non-compton looking clusters
+                if not len(selection):
+                    total_loss += self.lossfn(edge_pred, edge_pred)
+                    total_acc += 1.
 
-            clusts = clusts[selection]
+                clusts = clusts[selection]
 
-        # process group data
-        # data_grp = process_group_data(data1, data0)
-        data_grp = data1
+            # process group data
+            # data_grp = process_group_data(data1, data0)
+            data_grp = data1
 
-        # form primary/secondary bipartite graph
-        primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
-        batch = get_cluster_batch(data0, clusts)
-        edge_index = primary_bipartite_incidence(batch, primaries)
-        if not edge_index.shape[0]:
-            total_loss = self.lossfn(edge_pred, edge_pred)
-            return {
-                'accuracy': 0.,
-                'loss': total_loss
-            }
-        group = get_cluster_label(data_grp, clusts)
+            # form primary/secondary bipartite graph
+            primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
+            batch = get_cluster_batch(data0, clusts)
+            edge_index = primary_bipartite_incidence(batch, primaries)
+            if not edge_index.shape[0]:
+                total_loss += self.lossfn(edge_pred, edge_pred)
+                total_acc += 1.
 
-        primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
-        primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
-        
-        # determine true assignments
-        edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.long)
+            group = get_cluster_label(data_grp, clusts)
 
-        edge_assn = edge_assn.view(-1)
+            primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
+            total_primary_fdr += primary_fdr
+            total_primary_acc += primary_acc
 
+            # determine true assignments
+            edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.long)
 
-        total_loss = self.lossfn(edge_pred, edge_assn)
+            edge_assn = edge_assn.view(-1)
 
-        # compute accuracy of assignment
-        # need to multiply by batch size to be accurate
-        total_acc = torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+            total_loss += self.lossfn(edge_pred, edge_assn)
+
+            # compute accuracy of assignment
+            # need to multiply by batch size to be accurate
+            total_acc += torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
 
         return {
-            'primary_fdr': primary_fdr,
-            'primary_acc': primary_acc,
-            'accuracy': total_acc,
-            'loss': total_loss
+            'primary_fdr': total_primary_fdr/ngpus,
+            'primary_acc': total_primary_acc/ngpus,
+            'accuracy': total_acc/ngpus,
+            'loss': total_loss/ngpus
         }
     
     
