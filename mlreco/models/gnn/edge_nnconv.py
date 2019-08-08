@@ -56,24 +56,25 @@ class NNConvModel(torch.nn.Module):
         )
         self.layer2 = NNConv(ninput, noutput, self.nn2, aggr=self.aggr)
         
-        # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64),
-                                 LeakyReLU(self.leak),
-                                 Lin(64, 32),
-                                 LeakyReLU(self.leak),
-                                 Lin(32, 16),
-                                 LeakyReLU(self.leak),
-                                 Lin(16,8),
-                                 LeakyReLU(self.leak),
-                                 Lin(8,2)
-                                )
+        class EdgeModel(torch.nn.Module):
+            def __init__(self, leak):
+                super(EdgeModel, self).__init__()
+
+                self.edge_pred_mlp = Seq(Lin(138, 64),
+                                         LeakyReLU(leak),
+                                         Lin(64, 32),
+                                         LeakyReLU(leak),
+                                         Lin(32, 16),
+                                         LeakyReLU(leak),
+                                         Lin(16,8),
+                                         LeakyReLU(leak),
+                                         Lin(8,2)
+                                        )
+
+            def forward(self, src, dest, edge_attr, u, batch):
+                return self.edge_pred_mlp(torch.cat([src, dest, edge_attr], dim=1))
         
-        def edge_pred_model(source, target, edge_attr, u, batch):
-            out = torch.cat([source, target, edge_attr], dim=1)
-            out = self.edge_pred_mlp(out)
-            return out
-        
-        self.edge_predictor = MetaLayer(edge_pred_model, None, None)
+        self.edge_predictor = MetaLayer(EdgeModel(self.leak))
         
         
     def forward(self, x, edge_index, e, xbatch):
@@ -97,6 +98,4 @@ class NNConvModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 
-        return {
-            'edge_pred': e
-        }
+        return [[e]]
