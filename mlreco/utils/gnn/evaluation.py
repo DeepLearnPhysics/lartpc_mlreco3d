@@ -21,6 +21,23 @@ def assign_clusters(edge_index, edge_label, primaries, others, n):
     return clust
 
 
+def assign_clusters_UF(edge_index, edge_wt, n, thresh=0.0):
+    """
+    assigns clusters using Union Find on edges
+    """
+    from topologylayer.functional.persistence import getClustsUF_raw
+    
+    edges = edge_index.detach().cpu().numpy()
+    edges = edges.T # transpose
+    edges = edges.flatten()
+    
+    val = edge_wt.detach().cpu().numpy()
+    
+    cs = getClustsUF_raw(edges, val, n, thresh)
+    un, cinds = np.unique(cs, return_inverse=True)
+    return cinds
+
+
 def secondary_matching_vox_efficiency(edge_index, true_labels, pred_labels, primaries, clusters, n):
     """
     fraction of secondary voxels that are correctly assigned
