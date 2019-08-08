@@ -58,7 +58,8 @@ class NNConvModel(torch.nn.Module):
             LeakyReLU(self.leak)
         )
         self.layer2 = NNConv(ninput, noutput, self.nn2, aggr=self.aggr)
-        
+
+        # final prediction layer
         class EdgeModel(torch.nn.Module):
             def __init__(self, leak):
                 super(EdgeModel, self).__init__()
