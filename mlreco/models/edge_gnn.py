@@ -139,7 +139,7 @@ class EdgeChannelLoss(torch.nn.Module):
         data:
             cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
-            em_primaries - n_gpus Mx1 tensor of (x, y, z) coordinates of origins of EM primaries
+            em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
         ngpus = len(clusters)
@@ -161,6 +161,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 if not len(selection):
                     total_loss += self.lossfn(edge_pred, edge_pred)
                     total_acc += 1.
+                    continue
 
                 clusts = clusts[selection]
 
@@ -175,6 +176,7 @@ class EdgeChannelLoss(torch.nn.Module):
             if not edge_index.shape[0]:
                 total_loss += self.lossfn(edge_pred, edge_pred)
                 total_acc += 1.
+                continue
 
             group = get_cluster_label(data_grp, clusts)
 
@@ -240,7 +242,7 @@ class EdgeBinLoss(torch.nn.Module):
         data:
             cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
-            em_primaries - n_gpus Mx1 tensor of (x, y, z) coordinates of origins of EM primaries
+            em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
         ngpus = len(clusters)
@@ -263,6 +265,7 @@ class EdgeBinLoss(torch.nn.Module):
                 if not len(selection):
                     total_loss += self.lossfn(edge_pred, edge_pred)
                     total_acc += 1.
+                    continue
 
                 clusts = clusts[selection]
 
@@ -277,6 +280,7 @@ class EdgeBinLoss(torch.nn.Module):
             if not edge_index.shape[0]:
                 total_loss += self.lossfn(edge_pred, edge_pred)
                 total_acc += 1.
+                continue
 
             group = get_cluster_label(data_grp, clusts)
 
@@ -346,7 +350,7 @@ class EdgeLabelLoss(torch.nn.Module):
         data:
             cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
-            em_primaries - n_gpus Mx1 tensor of (x, y, z) coordinates of origins of EM primaries
+            em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
         ngpus = len(clusters)
@@ -373,6 +377,7 @@ class EdgeLabelLoss(torch.nn.Module):
                 if not len(selection):
                     total_loss += self.lossfn(edge_pred, edge_pred)
                     total_acc += 1.
+                    continue
 
                 clusts = clusts[selection]
 
@@ -387,6 +392,7 @@ class EdgeLabelLoss(torch.nn.Module):
             if not edge_index.shape[0]:
                 total_loss += self.lossfn(edge_pred, edge_pred)
                 total_acc += 1.
+                continue
 
             group = get_cluster_label(data_grp, clusts)
 
