@@ -46,7 +46,7 @@ class BasicAttentionModel(torch.nn.Module):
         self.lin = torch.nn.ModuleList()
         for i in range(self.num_mp):
             self.attn.append(AGNNConv())
-            self.lin.append(Lin(2*self.node_in, 2*self.node_in))    
+            self.lin.append(Lin(2*self.node_in, 2*self.node_in))
     
         # final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
