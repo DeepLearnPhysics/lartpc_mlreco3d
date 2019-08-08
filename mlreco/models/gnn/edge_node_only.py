@@ -7,6 +7,8 @@ import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, GATConv
 
+from .edge_pred import EdgeModel, BilinEdgeModel
+
 class EdgeNodeOnlyModel(torch.nn.Module):
     """
     Model that runs edge weights + node weights through a MLP for predictions
@@ -26,29 +28,18 @@ class EdgeNodeOnlyModel(torch.nn.Module):
         self.leak = self.model_config.get('leak', 0.1)
 
 
-        self.bn_node = BatchNorm1d(16)
-        self.bn_edge = BatchNorm1d(10)
+        self.bn_node = BatchNorm1d(self.node_in)
+        self.bn_edge = BatchNorm1d(self.edge_in)
   
         # final prediction layer
-        class EdgeModel(torch.nn.Module):
-            def __init__(self, leak):
-                super(EdgeModel, self).__init__()
-
-                self.edge_pred_mlp = Seq(Lin(42, 64),
-                                         LeakyReLU(leak),
-                                         Lin(64, 64),
-                                         LeakyReLU(leak),
-                                         Lin(64, 32),
-                                         LeakyReLU(leak),
-                                         Lin(32,16),
-                                         LeakyReLU(leak),
-                                         Lin(16,2)
-                                        )
-
-            def forward(self, src, dest, edge_attr, u, batch):
-                return self.edge_pred_mlp(torch.cat([src, dest, edge_attr], dim=1))
-        
-        self.edge_predictor = MetaLayer(EdgeModel(self.leak))
+        pred_cfg = self.model_config.get('pred_model', 'basic')
+        if pred_cfg == 'basic':
+            self.edge_predictor = MetaLayer(EdgeModel(self.node_in, self.edge_in, self.leak))
+        elif pred_cfg == 'bilin':
+            self.edge_predictor = MetaLayer(BilinEdgeModel(self.node_in, self.edge_in, self.leak))
+        else:
+            raise Exception('unrecognized prediction model: ' + pred_cfg)
+            
     
     def forward(self, x, edge_index, e, xbatch):
         

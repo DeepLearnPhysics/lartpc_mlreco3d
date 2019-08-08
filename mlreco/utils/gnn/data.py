@@ -98,6 +98,9 @@ def cluster_edge_feature(data, c1, c2):
     out = np.append(out, disp)
     lend = np.linalg.norm(disp) # length of displacement
     out = np.append(out, lend)
+    if lend > 0:
+        disp = disp / lend
+    out = np.append(out, np.outer(disp, disp).flatten())
     return out
 
 
