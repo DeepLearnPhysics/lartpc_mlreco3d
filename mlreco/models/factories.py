@@ -11,6 +11,8 @@ def model_dict():
     from . import iter_edge_gnn
     from . import chain_gnn
     from . import mst_gnn
+    from . import cluster_edge_gnn
+    from . import cluster_dir_gnn
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -33,7 +35,11 @@ def model_dict():
         # MST edge model
         "mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
         # Iterative Edge Model
-        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss)
+        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss),
+        # full cluster model
+        "clust_edge_model": (cluster_edge_gnn.EdgeModel, cluster_edge_gnn.EdgeChannelLoss),
+        # direction model
+        "clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models

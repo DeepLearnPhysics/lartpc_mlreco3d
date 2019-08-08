@@ -4,6 +4,7 @@ def edge_model_dict():
     """
     
     from . import edge_attention
+    from . import edge_attention2
     from . import edge_only
     from . import edge_node_only
     from . import edge_node_only_bilin
@@ -13,6 +14,7 @@ def edge_model_dict():
     
     models = {
         "basic_attention" : edge_attention.BasicAttentionModel,
+        "basic_attention2": edge_attention2.BasicAttentionModel,
         "edge_only" : edge_only.EdgeOnlyModel,
         "edge_node_only" : edge_node_only.EdgeNodeOnlyModel,
         "edge_node_only_bilin": edge_node_only_bilin.EdgeNodeOnlyModel,
