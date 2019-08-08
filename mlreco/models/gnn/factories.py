@@ -7,7 +7,6 @@ def edge_model_dict():
     from . import edge_attention2
     from . import edge_only
     from . import edge_node_only
-    from . import edge_node_only_bilin
     from . import full_edge_node_only
     from . import edge_nnconv
     from . import edge_econv
@@ -17,7 +16,6 @@ def edge_model_dict():
         "basic_attention2": edge_attention2.BasicAttentionModel,
         "edge_only" : edge_only.EdgeOnlyModel,
         "edge_node_only" : edge_node_only.EdgeNodeOnlyModel,
-        "edge_node_only_bilin": edge_node_only_bilin.EdgeNodeOnlyModel,
         "full_edge_node_only" : full_edge_node_only.FullEdgeNodeOnlyModel,
         "nnconv" : edge_nnconv.NNConvModel,
         "econv" : edge_econv.EdgeConvModel
