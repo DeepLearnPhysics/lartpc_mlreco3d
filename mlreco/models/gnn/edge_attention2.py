@@ -29,7 +29,6 @@ class BasicAttentionModel(torch.nn.Module):
         else:
             self.model_config = cfg
 
-        self.nheads = self.model_config.get('nheads', 3)
         self.leak = self.model_config.get('leak', 0.1)
         
         self.node_in = self.model_config.get('node_feats', 16)
@@ -82,6 +81,4 @@ class BasicAttentionModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 
-        return {
-            'edge_pred': e
-        }
+        return [[e]]
