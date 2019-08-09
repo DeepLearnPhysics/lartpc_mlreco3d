@@ -7,8 +7,12 @@ def model_dict():
     from . import chain
     from . import uresnet_ppn_chain
     from . import edge_gnn
+    from . import full_edge_gnn
     from . import iter_edge_gnn
     from . import chain_gnn
+    #from . import mst_gnn
+    from . import cluster_edge_gnn
+    from . import cluster_dir_gnn
     
     
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -26,8 +30,16 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Edge Model
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
+        # Full Edge Model
+        "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
+        # MST edge model
+        #"mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
         # Iterative Edge Model
-        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss)
+        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss),
+        # full cluster model
+        "clust_edge_model": (cluster_edge_gnn.EdgeModel, cluster_edge_gnn.EdgeChannelLoss),
+        # direction model
+        "clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models

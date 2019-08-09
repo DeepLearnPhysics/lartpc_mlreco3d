@@ -36,6 +36,7 @@ class IterativeEdgeModel(torch.nn.Module):
             self.model_config = cfg
             
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
             
         # extract the model to use
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
@@ -48,12 +49,17 @@ class IterativeEdgeModel(torch.nn.Module):
         
         # threshold for matching
         self.thresh = self.model_config.get('thresh', 0.9)
+        
+        # check if primaries assignment should be thresholded
+        self.pmd = self.model_config.get('primary_max_dist', None)
             
     
     @staticmethod
     def assign_clusters(edge_index, edge_pred, others, matched, thresh=0.5):
         """
         assigns clusters that have not been assigned to clusters that have been assigned
+        
+        assume 2-channel output to edge_pred
         """
         found_match = False
         for i in others:
@@ -89,7 +95,7 @@ class IterativeEdgeModel(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 if data[0].is_cuda:
@@ -104,8 +110,7 @@ class IterativeEdgeModel(torch.nn.Module):
         # get x batch
         xbatch = torch.tensor(batch).cuda()
         
-        # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[1], clusts, data[0])
+        primaries = assign_primaries(data[1], clusts, data[0], max_dist=self.pmd)
         # keep track of who is matched. -1 is not matched
         matched = np.repeat(-1, len(clusts))
         matched[primaries] = primaries

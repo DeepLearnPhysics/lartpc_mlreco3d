@@ -12,6 +12,7 @@ from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
 from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency, secondary_matching_vox_efficiency3
+from mlreco.utils.gnn.evaluation import DBSCAN_cluster_metrics
 from mlreco.utils.groups import process_group_data
 from .gnn import edge_model_construct
 
@@ -38,9 +39,9 @@ class EdgeModel(torch.nn.Module):
             self.model_config = cfg['modules']['edge_model']
         else:
             self.model_config = cfg
-            
         
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
             
         # extract the model to use
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
@@ -67,7 +68,7 @@ class EdgeModel(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 if data[0].is_cuda:
@@ -99,9 +100,9 @@ class EdgeModel(torch.nn.Module):
         # print(torch.max(edge_index))
         
         # get output
-        outdict = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, xbatch)
         
-        return outdict
+        return out
     
     
     
@@ -114,8 +115,9 @@ class EdgeChannelLoss(torch.nn.Module):
         # torch.nn.L1Loss(reduction='sum')
         super(EdgeChannelLoss, self).__init__()
         self.model_config = cfg['modules']['edge_model']
-            
+        
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
         self.pmd = self.model_config.get('primary_max_dist')
         
         self.reduction = self.model_config.get('reduction', 'mean')
@@ -141,13 +143,17 @@ class EdgeChannelLoss(torch.nn.Module):
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
             em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
+        edge_ct = 0
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
+        ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
         for i in range(ngpus):
             edge_pred = out[0][i]
             data0 = clusters[i]
             data1 = groups[i]
             data2 = primary[i]
+            
+            device = data0.device
 
             # first decide what true edges should be
             # need to form graph, then pass through GNN
@@ -186,7 +192,7 @@ class EdgeChannelLoss(torch.nn.Module):
             total_primary_acc += primary_acc
 
             # determine true assignments
-            edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.long)
+            edge_assn = edge_assignment(edge_index, batch, group, device=device, dtype=torch.long)
 
             edge_assn = edge_assn.view(-1)
 
@@ -194,13 +200,44 @@ class EdgeChannelLoss(torch.nn.Module):
 
             # compute accuracy of assignment
             # need to multiply by batch size to be accurate
-            total_acc += torch.tensor(secondary_matching_vox_efficiency3(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+            total_acc += torch.tensor(
+                secondary_matching_vox_efficiency3(
+                    edge_index,
+                    edge_assn,
+                    edge_pred,
+                    primaries,
+                    clusts,
+                    len(clusts)
+                )
+            )
+            
+            ari0, ami0, sbd0, pur0, eff0 = DBSCAN_cluster_metrics(
+                edge_index,
+                edge_assn,
+                edge_pred,
+                primaries,
+                clusts,
+                len(clusts)
+            )
+            ari += ari0
+            ami += ami0
+            sbd += sbd0
+            pur += pur0
+            eff += eff0
+            
+            edge_ct += edge_index.shape[1]
 
         return {
             'primary_fdr': total_primary_fdr/ngpus,
             'primary_acc': total_primary_acc/ngpus,
+            'ARI': ari/ngpus,
+            'AMI': ami/ngpus,
+            'SBD': sbd/ngpus,
+            'purity': pur/ngpus,
+            'efficiency': eff/ngpus,
             'accuracy': total_acc/ngpus,
-            'loss': total_loss/ngpus
+            'loss': total_loss/ngpus,
+            'edge_count': edge_ct
         }
     
     
@@ -216,6 +253,7 @@ class EdgeBinLoss(torch.nn.Module):
         self.model_config = cfg['modules']['edge_model']
             
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
         # self.balance = self.model_config.get('balance_classes', True)
         self.pmd = self.model_config.get('primary_max_dist')
         self.reduction = self.model_config.get('reduction', 'mean')
