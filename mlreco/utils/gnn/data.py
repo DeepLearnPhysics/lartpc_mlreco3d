@@ -64,10 +64,19 @@ def cluster_edge_features(data, clusts, edge_index, cuda=True):
     return e
 
 
-def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, binary=False):
+def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, binary=False, device=None):
     """
     edge assignment as same group/different group
+    
+    inputs:
+    edge_index: torch tensor of edges
+    batches: torch tensor of batch id for each node
+    groups: torch tensor of group ids for each node
     """
+    if isinstance(batches, torch.Tensor):
+        batches = batches.cpu().detach().numpy()
+    if isinstance(groups, torch.Tensor):
+        groups = groups.cpu().detach().numpy()
     edge_assn = torch.tensor([np.logical_and(
         batches[edge_index[0,k]] == batches[edge_index[1,k]],
         groups[edge_index[0,k]] == groups[edge_index[1,k]]) for k in range(edge_index.shape[1])], 
@@ -75,7 +84,9 @@ def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, b
     if binary:
         # transform to -1,+1 instead of 0,1
         edge_assn = 2*edge_assn - 1
-    if cuda:
+    if not device is None:
+        edge_assn = edge_assn.to(device)
+    elif cuda:
         edge_assn = edge_assn.cuda()
     return edge_assn
     

@@ -27,7 +27,7 @@ def model_dict():
         # Edge Model
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
         # Iterative Edge Model
-        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeLabelLoss)
+        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss)
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
