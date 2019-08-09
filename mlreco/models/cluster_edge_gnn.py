@@ -35,7 +35,7 @@ class EdgeModel(torch.nn.Module):
         super(EdgeModel, self).__init__()
         
         if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
+            self.model_config = cfg['modules']['clust_edge_model']
         else:
             self.model_config = cfg
         
@@ -105,7 +105,7 @@ class EdgeChannelLoss(torch.nn.Module):
         # torch.nn.MSELoss(reduction='sum')
         # torch.nn.L1Loss(reduction='sum')
         super(EdgeChannelLoss, self).__init__()
-        self.model_config = cfg['modules']['edge_model']
+        self.model_config = cfg['modules']['clust_edge_model']
         
         self.remove_compton = self.model_config.get('remove_compton', True)
         self.compton_thresh = self.model_config.get('compton_thresh', 30)
