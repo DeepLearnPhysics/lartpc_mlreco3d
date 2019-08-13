@@ -42,6 +42,7 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
     clusters_label = data_blob['clusters_label'][0][0]  # (N1, 5)
     particles_label = data_blob['particles_label'][0][0]  # (N_gt, 5)
     data = data_blob['input_data'][0][0]  # shape (N, 5)
+    idx = data_blob['index'][0][0]
     segmentation_label = data_blob['segment_label'][0][0]  # shape (N, 5)
 
     data_dim = 3  # model_cfg['data_dim']
@@ -54,6 +55,7 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
     for b in batch_ids:
         event_clusters = clusters[clusters[:, data_dim] == b]
         batch_index = data[:, data_dim] == b
+        event_index = idx[int(b)][0]
         event_points = points[batch_index][:, :data_dim]
         event_scores = points[batch_index][:, data_dim:data_dim+2]
         event_data = data[:, :data_dim][batch_index]
@@ -205,20 +207,20 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
         # Record in CSV everything
         # Point in data and semantic class predictions/true information
         for i, point in enumerate(data[batch_index]):
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'cluster_id', 'point_type'),
-                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), segmentation_label[segmentation_label[:, data_dim] == b][i, -1], -1, -1))
+            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'cluster_id', 'point_type', 'idx'),
+                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), segmentation_label[segmentation_label[:, data_dim] == b][i, -1], -1, -1, event_index))
             csv_logger.write()
         # Predicted clusters
         for c, cluster in enumerate(final_clusters):
             for point in cluster:
-                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
-                                  (1, point[0], point[1], point[2], b, c, -1, -1, -1, -1))
+                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
+                                  (1, point[0], point[1], point[2], b, c, -1, -1, -1, -1, event_index))
                 csv_logger.write()
         # True clusters
         for c, cluster in enumerate(true_clusters):
             for point in cluster:
-                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
-                                  (2, point[0], point[1], point[2], b, c, -1, -1, -1, -1))
+                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
+                                  (2, point[0], point[1], point[2], b, c, -1, -1, -1, -1, event_index))
                 csv_logger.write()
         # for point in event_points:
         #     csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
@@ -230,12 +232,12 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
         #     csv_logger.write()
         # True PPN points
         for point in event_particles_label:
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'point_type', 'cluster_id', 'value', 'predicted_class', 'true_class'),
-                              (5, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1))
+            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'point_type', 'cluster_id', 'value', 'predicted_class', 'true_class', 'idx'),
+                              (5, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1, event_index))
             csv_logger.write()
         # Predicted PPN points
         for point in predicted_points:
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'predicted_class', 'value', 'true_class', 'cluster_id', 'point_type'),
-                              (6, point[0], point[1], point[2], b, np.argmax(point[-5:]), -1, -1, -1, -1))
+            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'predicted_class', 'value', 'true_class', 'cluster_id', 'point_type', 'idx'),
+                              (6, point[0], point[1], point[2], b, np.argmax(point[-5:]), -1, -1, -1, -1, event_index))
             csv_logger.write()
         csv_logger.close()

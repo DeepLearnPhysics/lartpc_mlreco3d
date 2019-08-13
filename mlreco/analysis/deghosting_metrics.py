@@ -25,6 +25,7 @@ def deghosting_metrics(data_blob, res, cfg, idx):
     Requires the following input keys:
     - `input_data`
     - `segment_label`
+    Assumes no minibatching
 
     Output
     ------
@@ -40,6 +41,7 @@ def deghosting_metrics(data_blob, res, cfg, idx):
     predictions_all = np.argmax(segmentation_all, axis=1)
     data_all = data_blob['input_data'][0][0]
     label_all = data_blob['segment_label'][0][0][:, -1]
+    idx_all = data_blob['index'][0][0]
 
     if ghost:
         ghost_all = res['ghost'][0]  # (N, 2)
@@ -52,11 +54,12 @@ def deghosting_metrics(data_blob, res, cfg, idx):
     num_classes = segmentation_all.shape[1]
     for b in batch_ids:
         batch_index = data_all[:, 3] == b
+        event_index = idx_all[int(b)][0]  # Assuming no minibatching here
         label = label_all[batch_index]
         num_ghost_points = np.count_nonzero(label == 5)
         num_nonghost_points = np.count_nonzero(label < 5)
-        csv_logger.record(('num_ghost_points', 'num_nonghost_points'),
-                          (num_ghost_points, num_nonghost_points))
+        csv_logger.record(('num_ghost_points', 'num_nonghost_points', 'idx'),
+                          (num_ghost_points, num_nonghost_points, event_index))
         if ghost:  # 5+2 type
             # Accuracy for ghost prediction
             # 0 = non ghost, 1 = ghost
@@ -79,7 +82,7 @@ def deghosting_metrics(data_blob, res, cfg, idx):
             ghost_false_positives, ghost_true_positives = [], []
             for c in range(num_classes):
                 class_mask = label == c
-                class_predictions = predictions_all[batch_index][mask[batch_index] & class_mask]
+                class_predictions = predictions_all[batch_index][class_mask]
                 # Fraction of pixels in this class predicted correctly
                 acc.append((class_predictions == c).sum() / float(class_predictions.shape[0]))
                 # Pixel counts
@@ -93,7 +96,7 @@ def deghosting_metrics(data_blob, res, cfg, idx):
                 # confusion matrix
                 for c2 in range(num_classes):
                     csv_logger.record(('confusion_%d_%d' % (c, c2),),
-                                      ((predictions_all[batch_index][class_mask] == c2).sum() / float(num_true_pix[-1]),))
+                                      (((class_predictions == c2) & (ghost_predictions[batch_index][class_mask] == 0)).sum(),))
             csv_logger.record(['acc_class%d' % c for c in range(num_classes)],
                               acc)
             csv_logger.record(['num_true_pix_class%d' % c for c in range(num_classes)],

@@ -45,6 +45,7 @@ def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
     clustering_all = res['clustering'][0]
 
     data_all = data_blob['input_data'][0][0]
+    idx_all = data_blob['index'][0][0]
     label_all = data_blob['segment_label'][0][0]
     clusters_label_all = data_blob['cluster_label'][0][0]
 
@@ -57,6 +58,7 @@ def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
     # Loop over batch index
     for b in batch_ids:
         batch_index = data_all[:, data_dim] == b
+        event_index = idx_all[int(b)][0]
         event_data = data_all[batch_index]
         event_segmentation = segmentation_all[batch_index]
         event_label = label_all[0][batch_index][:, -1]
@@ -82,20 +84,20 @@ def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
                 # Cluster similarity metrics
                 ARI = metrics.adjusted_rand_score(clusters_label[:, -1], predicted_clusters)
                 AMI = metrics.adjusted_mutual_info_score(clusters_label[:, -1], predicted_clusters)
-                csv_logger2.record(('class', 'batch_id', 'AMI', 'ARI'),
-                                   (class_, b, AMI, ARI))
+                csv_logger2.record(('class', 'batch_id', 'AMI', 'ARI', 'idx'),
+                                   (class_, b, AMI, ARI, event_index))
                 csv_logger2.write()
 
                 for i, point in enumerate(clusters_label):
-                    csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
-                                      (1, point[0], point[1], point[2], point[3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
+                    csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id', 'idx'),
+                                      (1, point[0], point[1], point[2], point[3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i], event_index))
                     csv_logger.write()
                 # TSNE to visualize embedding
-                if compute_tnse and embedding.shape[0] > 1:
+                if compute_tsne and embedding.shape[0] > 1:
                     new_embedding = tsne.fit_transform(embedding)
                     for i, point in enumerate(new_embedding):
-                        csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
-                                          (2, point[0], point[1], -1, clusters_label[i, 3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i]))
+                        csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id', 'idx'),
+                                          (2, point[0], point[1], -1, clusters_label[i, 3], d, -1, class_label[class_index][i, -1], clusters_label[i, -1], predicted_clusters[i], event_index))
                         csv_logger.write()
 
         # Record in CSV everything
@@ -104,8 +106,8 @@ def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
         event_segmentation = event_segmentation[perm]
         # Point in data and semantic class predictions/true information
         for i, point in enumerate(event_data):
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id'),
-                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), event_label[i], -1, -1))
+            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'true_cluster_id', 'predicted_cluster_id', 'idx'),
+                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), event_label[i], -1, -1, event_index))
             csv_logger.write()
 
     csv_logger.close()

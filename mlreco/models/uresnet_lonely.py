@@ -217,6 +217,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
         mask_loss, mask_acc = 0., 0.
+        ghost2ghost, nonghost2nonghost = 0., 0.
 
         for i in range(len(label)):
             for b in batch_ids[i].unique():
@@ -232,16 +233,33 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     event_ghost = segmentation[3][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
-                    loss_mask = self.cross_entropy(event_ghost, mask_label)
-                    # fraction = (mask_label == 1).sum().float() / ((mask_label == 0).sum() + (mask_label == 1).sum()).float()
-                    # weight = torch.stack([fraction, 1. - fraction]).float()
-                    # loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
-                    # mask_loss += loss_mask
-                    mask_loss += torch.mean(loss_mask)
+                    # loss_mask = self.cross_entropy(event_ghost, mask_label)
+                    num_ghost_points = (mask_label == 1).sum().float()
+                    num_nonghost_points = (mask_label == 0).sum().float()
+                    fraction = num_ghost_points / (num_ghost_points + num_nonghost_points)
+                    weight = torch.stack([fraction, 1. - fraction]).float()
+                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
+                    mask_loss += loss_mask
+                    # mask_loss += torch.mean(loss_mask)
 
-                    predicted_mask = torch.argmax(event_ghost, dim=-1)
-                    acc_mask = (predicted_mask == mask_label).sum().item() / float(predicted_mask.nelement())
-                    mask_acc += acc_mask
+                    # Accuracy of ghost mask: fraction of correcly predicted
+                    # points, whether ghost or nonghost
+                    with torch.no_grad():
+                        predicted_mask = torch.argmax(event_ghost, dim=-1)
+
+                        # Accuracy ghost2ghost = fraction of correcly predicted
+                        # ghost points as ghost points
+                        if float(num_ghost_points.item()) > 0:
+                            ghost2ghost += (predicted_mask[event_label == 5] == 1).sum().item() / float(num_ghost_points.item())
+
+                        # Accuracy noghost2noghost = fraction of correctly predicted
+                        # non ghost points as non ghost points
+                        if float(num_nonghost_points.item()) > 0:
+                            nonghost2nonghost += (predicted_mask[event_label < 5] == 0).sum().item() / float(num_nonghost_points.item())
+
+                        # Global ghost predictions accuracy
+                        acc_mask = predicted_mask.eq_(mask_label).sum().item() / float(predicted_mask.nelement())
+                        mask_acc += acc_mask
 
                     # Now mask to compute the rest of UResNet loss
                     mask = event_label < self._num_classes
@@ -254,9 +272,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation
-                    predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                    acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
-                    uresnet_acc += acc
+                    with torch.no_grad():
+                        predicted_labels = torch.argmax(event_segmentation, dim=-1)
+                        acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
+                        uresnet_acc += acc
 
         if self._ghost:
             results = {
@@ -265,7 +284,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 'mask_acc': mask_acc,
                 'mask_loss': self._beta * mask_loss,
                 'uresnet_loss': self._alpha * uresnet_loss,
-                'uresnet_acc': uresnet_acc
+                'uresnet_acc': uresnet_acc,
+                'ghost2ghost': ghost2ghost,
+                'nonghost2nonghost': nonghost2nonghost
             }
         else:
             results = {
