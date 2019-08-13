@@ -62,6 +62,7 @@ class UResNet(torch.nn.Module):
         num_classes = self._model_config.get('num_classes', 5)
         self._N = self._model_config.get('num_cluster_conv', 0)
         self._simpleN = self._model_config.get('simple_conv', True)
+        self._add_coordinates = self._model_config.get('cluster_add_coords', False)
 
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
@@ -120,12 +121,12 @@ class UResNet(torch.nn.Module):
             self.clustering_conv = scn.Sequential()
             for i in range(num_strides-2, -1, -1):
                 conv = scn.Sequential()
-                for _ in range(self._N):
+                for j in range(self._N):
                     if self._simpleN:
-                        conv.add(scn.SubmanifoldConvolution(self._dimension, nPlanes[i], nPlanes[i], 3, False))
+                        conv.add(scn.SubmanifoldConvolution(self._dimension, nPlanes[i] + (4 if j == 0 and self._add_coordinates else 0), nPlanes[i], 3, False))
                         conv.add(scn.BatchNormLeakyReLU(nPlanes[i], leakiness=leakiness))
                     else:
-                        block(conv, nPlanes[i], nPlanes[i])
+                        block(conv, nPlanes[i] + (4 if j == 0 and self._add_coordinates else 0), nPlanes[i])
                 self.clustering_conv.add(conv)
 
         outFeatures = m * (2 if self._N > 0 else 1)
@@ -164,6 +165,9 @@ class UResNet(torch.nn.Module):
             x = self.decoding_blocks[i](x)
             feature_ppn2.append(x)
             if self._N > 0:
+                # Optionally add 3D coordinates before N convolutions for clustering
+                if self._add_coordinates:
+                    x.features = torch.cat([x.get_spatial_locations(), x.features], dim=1)
                 x = self.clustering_conv[i](x)
             feature_clustering.append(x)
             if self._N > 0:
@@ -182,6 +186,25 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss definition for UResNet.
     Instance clustering flavor
+
+    Configuration
+    -------------
+    In addition to the network parameters, those specific to the loss include:
+
+    alpha: float
+        Weight for intracluster loss
+    beta: float
+        Weight for intercluster loss
+    gamma: float
+        Weight for regularization loss
+    delta: float
+        Weight for real distance loss
+    intracluster_margin: float
+        Margin for intracluster loss
+    intercluster_margin: float
+        Margin for intercluster loss
+    uresnet_weight: float
+        Weight for uresnet loss
     """
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
@@ -193,6 +216,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._alpha = self._cfg.get('alpha', 1)
         self._beta = self._cfg.get('beta', 1)
         self._gamma = self._cfg.get('gamma', 0.001)
+        self._delta = self._cfg.get('delta', 0.)
+        self._uresnet_weight = self._cfg.get('uresnet_weight', 1.0)
         self._intra_cluster_margin = self._cfg.get('intracluster_margin', 0.5)
         self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
         self._dimension = self._cfg.get('data_dim', 3)
@@ -220,11 +245,16 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         cluster_intracluster_loss = 0.
         cluster_intercluster_loss = 0.
         cluster_reg_loss = 0.
+        cluster_real_distance_loss = 0.
         cluster_total_loss = 0.
         cluster_intracluster_loss_per_class = [0.] * self._num_classes
         cluster_intercluster_loss_per_class = [0.] * self._num_classes
         cluster_reg_loss_per_class = [0.] * self._num_classes
+        cluster_real_distance_loss_per_class = [0.] * self._num_classes
         cluster_total_loss_per_class = [0.] * self._num_classes
+        accuracy = []
+        for j in range(self._depth):
+            accuracy.append([0.] * self._num_classes)
 
         for i in range(len(label)):
             max_depth = len(cluster_label[i])
@@ -246,41 +276,51 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 # Accuracy for semantic segmentation
                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
+                acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
                 uresnet_acc += acc
 
                 # Loss for clustering
+                # Loop first over feature maps, starting from coarsest one
+                # Note: We have to be careful with coordinates sorting.
                 for j, feature_map in enumerate(segmentation[3][i]):
                     if torch.cuda.is_available():
                         batch_index = feature_map.get_spatial_locations()[:, -1].cuda() == b.long()
                     else:
                         batch_index = feature_map.get_spatial_locations()[:, -1] == b.long()
                     hypercoordinates = feature_map.features[batch_index]
-                    # print("hypercoordinates", hypercoordinates[:, 0].sort())
                     coordinates = feature_map.get_spatial_locations()[batch_index][:, :-1]
-                    # print("coordinates0", coordinates)
                     clusters = cluster_label[i][-(j+1+(max_depth-self._depth))][cluster_label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
-                    clusters_coordinates = clusters[:, :self._dimension]
+                    # clusters_coordinates = clusters[:, :self._dimension]
                     clusters_labels = clusters[:, -1:]
                     semantic_labels = label[i][-(j+1+(max_depth-self._depth))][label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
                     # Sort coordinates in lexicographic order
                     x = coordinates.cpu().detach().numpy()
                     perm = np.lexsort((x[:, 2], x[:, 1], x[:, 0]))
                     coordinates = coordinates[perm]
+
                     # Loop over semantic classes
                     for class_ in range(self._num_classes):
                         class_index = semantic_labels[:, -1] == class_
 
-                        # Identify label clusters
+                        # 0. Identify label clusters
                         clusters_id = clusters_labels[class_index].unique()
-                        hyperclusters = []
+                        hyperclusters = []  # Hypercoordinates for each true cluster
+                        realclusters = []  # Real coordinates of centroids of each true cluster
                         for c in clusters_id:
-                            cluster_idx = (clusters_labels[class_index] == c).squeeze()
+                            cluster_idx = (clusters_labels[class_index] == c).squeeze(1)
                             hyperclusters.append(hypercoordinates[perm][class_index][cluster_idx])
+                            realclusters.append(coordinates[class_index][cluster_idx].float())
 
-                        # Loop over clusters, define intra-cluster loss
+                        # 1. Loop over clusters, define intra-cluster loss
+                        #
+                        # Also define real cluster loss = mean distance in real
+                        # coordinates from a point to the centroid of the
+                        # predicted cluster. This should avoid clustering
+                        # together points that are far away in the real life.
                         intra_cluster_loss = 0.
+                        real_distance_loss = 0.
                         means = []
+                        realmeans = []
                         zero = torch.tensor(0.)
                         if torch.cuda.is_available(): zero = zero.cuda()
                         C = len(hyperclusters)
@@ -288,29 +328,47 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                             for x, cluster in enumerate(hyperclusters):
                                 mean = cluster.mean(dim=0)
                                 means.append(mean)
+                                realmean = realclusters[x].mean(dim=0)
+                                realmeans.append(realmean)
                                 # intra_cluster_loss += torch.max(((mean - cluster).pow(2).sum(dim=1) + 0.000000001).sqrt() - self._intra_cluster_margin, zero).pow(2).mean()
                                 intra_cluster_loss += torch.mean(torch.pow(torch.clamp(torch.norm(cluster-mean, dim=1)- self._intra_cluster_margin[j], min=0), 2))
                             intra_cluster_loss /= C
                             means = torch.stack(means)
-                        # Define inter-cluster loss
+                            realmeans = torch.stack(realmeans)
+                            # Now compute real cluster loss
+                            for x, cluster in enumerate(hyperclusters):
+                                # Assign each point to a predicted centroid
+                                predicted_assignments = torch.argmin(self.distances(cluster, means), dim=1)
+                                # Distance to this centroid in real space
+                                real_distance_loss += torch.mean(torch.pow(torch.norm(realmeans[predicted_assignments] - realclusters[x], dim=1), 2))
+                            real_distance_loss /= C
+                            # compute accuracy based on this heuristic cluster
+                            # prediction assignments
+                            predicted_assignments = torch.argmin(self.distances(hypercoordinates[perm][class_index], means), dim=1)
+                            predicted_assignments = clusters_id[predicted_assignments]
+                            accuracy[j][class_] += predicted_assignments.eq_(clusters_labels[class_index].squeeze(1)).sum().item() / float(predicted_assignments.nelement())
+                        # 2. Define inter-cluster loss
                         inter_cluster_loss = 0.
                         if C > 1:
                             d = torch.max(2 * self._inter_cluster_margin[j] - self.distances(means, means), zero).pow(2)
                             inter_cluster_loss = d[np.triu_indices(d.size(1), k=1)].sum() * 2.0 / (C * (C-1))
-                        # Add regularization term
+                        # 3. Add regularization term
                         reg_loss = 0.
                         if C > 0:
                             # reg_loss = (means.pow(2).sum(dim=1) + 0.000000001).sqrt().mean()
                             reg_loss = torch.norm(means, dim=1).mean()
+
                         # Compute final loss
-                        total_loss = self._alpha * intra_cluster_loss + self._beta * inter_cluster_loss + self._gamma * reg_loss
+                        total_loss = self._alpha * intra_cluster_loss + self._beta * inter_cluster_loss + self._gamma * reg_loss + self._delta * real_distance_loss
                         cluster_intracluster_loss += self._alpha * intra_cluster_loss
                         cluster_intercluster_loss += self._beta * inter_cluster_loss
                         cluster_reg_loss += self._gamma * reg_loss
+                        cluster_real_distance_loss += self._delta * real_distance_loss
                         cluster_total_loss += total_loss
                         cluster_intracluster_loss_per_class[class_] += self._alpha * intra_cluster_loss
                         cluster_intercluster_loss_per_class[class_] += self._beta * inter_cluster_loss
                         cluster_reg_loss_per_class[class_] += self._gamma * reg_loss
+                        cluster_real_distance_loss_per_class[class_] += self._delta * real_distance_loss
                         cluster_total_loss_per_class[class_] += total_loss
                         # print(feature_map.features.shape, feature_map.spatial_size)
                         # print(j, class_, "Intra =", torch.tensor(self._alpha * intra_cluster_loss).item())
@@ -320,7 +378,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         # print(j, class_, "Inter =", torch.tensor(self._beta * inter_cluster_loss/float(self._num_classes)).item())
                         # print(j, class_, "Reg = ", torch.tensor(self._gamma * reg_loss/float(self._num_classes)).item())
 
-        # batch_size = len(batch_ids[i].unique())
+        batch_size = len(batch_ids[i].unique())
         # cluster_intracluster_loss /= self._num_classes
         # cluster_intercluster_loss /= self._num_classes
         # cluster_reg_loss /= self._num_classes
@@ -335,12 +393,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
         results = {
             'accuracy': uresnet_acc,
-            'loss_seg': uresnet_loss + cluster_total_loss,
-            'uresnet_loss': uresnet_loss,
+            'loss_seg': self._uresnet_weight * uresnet_loss + cluster_total_loss,
+            'uresnet_loss': self._uresnet_weight * uresnet_loss,
             'uresnet_acc': uresnet_acc,
             'intracluster_loss': cluster_intracluster_loss,
             'intercluster_loss': cluster_intercluster_loss,
             'reg_loss': cluster_reg_loss,
+            'real_distance_loss': cluster_real_distance_loss,
             'total_cluster_loss': cluster_total_loss
         }
 
@@ -348,6 +407,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             results['intracluster_loss_%d' % class_] = cluster_intracluster_loss_per_class[class_]
             results['intercluster_loss_%d' % class_] = cluster_intercluster_loss_per_class[class_]
             results['reg_loss_%d' % class_] = cluster_reg_loss_per_class[class_]
+            results['real_distance_loss_%d' % class_] = cluster_real_distance_loss_per_class[class_]
             results['total_cluster_loss_%d' % class_] = cluster_total_loss_per_class[class_]
+            for j in range(self._depth):
+                results['acc_%d_%d' % (j, class_)] = accuracy[j][class_] / float(batch_size)
 
         return results

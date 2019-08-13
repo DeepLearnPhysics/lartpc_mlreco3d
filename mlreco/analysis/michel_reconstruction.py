@@ -51,6 +51,7 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     predictions_all = np.argmax(segmentation_all, axis=1)
     ghost_all = res['ghost'][0]  # (N, 2)
     data_all = data_blob['input_data'][0][0]
+    idx_all = data_blob['index'][0][0]
     label_all = data_blob['segment_label'][0][0][:, -1]
     particles_all = data_blob['particles_label'][0][0]  # (N_particles, 4+C)
     clusters_all = data_blob['clusters_label'][0][0]
@@ -63,6 +64,7 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     batch_ids = np.unique(data_all[:, 3])
     for b in batch_ids:
         batch_index = data_all[:, 3] == b
+        event_index = idx_all[int(b)][0]
         data = data_all[batch_index]
         label = label_all[batch_index]
         clusters = clusters_all[clusters_all[:, 3] == b]
@@ -93,10 +95,10 @@ def michel_reconstruction(data_blob, res, cfg, idx):
         for cluster in np.unique(Michel_true_clusters):
             # print("True", np.count_nonzero(Michel_true_clusters == cluster))
             # TODO sum_pix
-            csv_logger_true.record(('batch_id', 'idx', 'event_idx', 'num_pix', 'sum_pix'),
+            csv_logger_true.record(('batch_id', 'idx', 'event_idx', 'num_pix', 'sum_pix', 'idx'),
                                    (b, idx, data_blob['index'][0][0][int(b)][0],
                                     np.count_nonzero(Michel_true_clusters == cluster),
-                                    clusters[clusters[:, -1] == 4][Michel_true_clusters == cluster][:, -3].sum()))
+                                    clusters[clusters[:, -1] == 4][Michel_true_clusters == cluster][:, -3].sum(), event_index))
             csv_logger_true.write()
         # e.g. deposited energy, creation energy
         # TODO retrieve particles information
@@ -181,11 +183,11 @@ def michel_reconstruction(data_blob, res, cfg, idx):
             csv_logger.record(('batch_id', 'idx', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
                                'pred_num_pix_true', 'pred_sum_pix_true',
                                'true_num_pix', 'true_sum_pix',
-                               'is_attached', 'is_edge', 'michel_true_energy'),
+                               'is_attached', 'is_edge', 'michel_true_energy', 'idx'),
                               (b, idx, data_blob['index'][0][0][int(b)][0], np.count_nonzero(current_index),
                                data_pred[(predictions==4).reshape((-1,)), ...][current_index][:, -1].sum(),
                                michel_pred_num_pix_true, michel_pred_sum_pix_true, michel_true_num_pix, michel_true_sum_pix,
-                               is_attached, is_edge, michel_true_energy))
+                               is_attached, is_edge, michel_true_energy, event_index))
             csv_logger.write()
     csv_logger.close()
     csv_logger_true.close()

@@ -18,7 +18,6 @@ from mlreco.output_formatters import output
 
 
 class Handlers:
-    sess         = None
     data_io      = None
     csv_logger   = None
     weight_io    = None
@@ -249,6 +248,11 @@ def train_loop(cfg, handlers):
         log(handlers, tstamp_iteration, tspent_io,
             tspent_iteration, tsum, tsum_io,
             res, cfg, epoch)
+        # Log metrics/do analysis
+        if 'analysis' in cfg['model']:
+            for ana_script in cfg['model']['analysis']:
+                f = getattr(analysis, ana_script)
+                f(data_blob, res, cfg, handlers.iteration)
 
         # Increment iteration counter
         handlers.iteration += 1
@@ -304,7 +308,6 @@ def inference_loop(cfg, handlers):
                 tspent_iteration, tsum, tsum_io,
                 res, cfg, epoch)
             # Log metrics/do analysis
-            # TODO
             if 'analysis' in cfg['model']:
                 for ana_script in cfg['model']['analysis']:
                     f = getattr(analysis, ana_script)
