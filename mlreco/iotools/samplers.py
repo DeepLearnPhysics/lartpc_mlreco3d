@@ -21,7 +21,7 @@ class AbstractBatchSampler(Sampler):
             raise ValueError('%s received invalid batch size %d for data size %s', (self.__class__.__name__, batch_size, str(self._data_size)))
 
     def __len__(self):
-        return self._data_size // self._batch_size
+        return self._data_size
 
 
 class RandomSequenceSampler(AbstractBatchSampler):
@@ -33,7 +33,8 @@ class RandomSequenceSampler(AbstractBatchSampler):
     @staticmethod
     def create(ds,cfg):
         return RandomSequenceSampler(len(ds),cfg['batch_size'])
-
+    
+    
 
 class SequentialBatchSampler(AbstractBatchSampler):
     def __iter__(self):

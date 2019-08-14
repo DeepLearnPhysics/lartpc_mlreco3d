@@ -5,6 +5,8 @@
 # TODO: weighted versions as well
 
 
+import numpy as np
+
 def degrees(edges):
     """
     return degrees of nodes
@@ -19,7 +21,7 @@ def degrees(edges):
             if k in degdict:
                 degdict[k] += 1
             else:
-                degdict[ik] = 0
+                degdict[k] = 1
     # finally know number of nodes
     n = len(degdict)
     degs = np.empty(n, dtype=np.int)

@@ -218,7 +218,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         uresnet_loss, uresnet_acc = 0., 0.
         mask_loss, mask_acc = 0., 0.
         ghost2ghost, nonghost2nonghost = 0., 0.
-
+        count = 0
         for i in range(len(label)):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
@@ -277,20 +277,22 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
                         uresnet_acc += acc
 
+                count += 1
+
         if self._ghost:
             results = {
-                'accuracy': uresnet_acc,
-                'loss_seg': self._alpha * uresnet_loss + self._beta * mask_loss,
-                'mask_acc': mask_acc,
-                'mask_loss': self._beta * mask_loss,
-                'uresnet_loss': self._alpha * uresnet_loss,
-                'uresnet_acc': uresnet_acc,
-                'ghost2ghost': ghost2ghost,
-                'nonghost2nonghost': nonghost2nonghost
+                'accuracy': uresnet_acc/count,
+                'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count,
+                'mask_acc': mask_acc / count,
+                'mask_loss': self._beta * mask_loss / count,
+                'uresnet_loss': self._alpha * uresnet_loss / count,
+                'uresnet_acc': uresnet_acc / count,
+                'ghost2ghost': ghost2ghost / count,
+                'nonghost2nonghost': nonghost2nonghost / count
             }
         else:
             results = {
-                'accuracy': uresnet_acc,
-                'loss_seg': uresnet_loss
+                'accuracy': uresnet_acc/count,
+                'loss': uresnet_loss/count
             }
         return results

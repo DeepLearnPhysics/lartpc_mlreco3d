@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/DeepLearnPhysics/lartpc_mlreco3d.svg?branch=develop)](https://travis-ci.org/DeepLearnPhysics/lartpc_mlreco3d)
+
 # A Machine Learning Pipeline for LArTPC Data
 
 This repository contains code used for training and running machine learning models on LArTPC data.
@@ -41,6 +43,63 @@ to store events in CSV format and run your custom analysis scripts (see folder `
 TODO: describe configuration files in more detail
 
 This section has described how to use the contents of this repository to train variations of what has already been implemented.  To add your own models and analysis, you will want to know how to contribute to the `mlreco` module.
+
+## Using A Configuration File
+
+Most basic useage is to use the `run` script.  From the `lartpc_mlreco3d` folder:
+```bash
+nohup python3 bin/run.py train_gnn.cfg >> log_gnn.txt &
+```
+This will train a GNN specified in `config/train_gnn.cfg`, save checkpoints and logs to specified directories in the `cfg`, and output `stderr` and `stdout` to `log_gnn.txt`
+
+You can generally load a configuration file into a python dictionary using
+```python
+import yaml
+# Load configuration file
+with open('lartpc_mlreco3d/config/test_uresnet.cfg', 'r') as f:
+    cfg = yaml.load(f, Loader=yaml.Loader)
+```
+
+# Reading a Log
+
+A quick example of how to read a training log, and plot something
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+fname = 'path/to/log.csv'
+df = pd.read_csv(fname)
+
+# plot moving average of accuracy over 10 iterations
+df.accuracy.rolling(10, min_periods=1).mean().plot()
+plt.ylabel("accuracy")
+plt.xlabel("iteration")
+plt.title("moving average of accuracy")
+plt.show()
+
+# list all column names
+print(df.columns.values)
+```
+
+## Analysis Keys
+
+Analysis Keys allow you to record additional data in a training log, with column headers sharing a name with the keys.
+
+To set analysis keys, you modify the model definition in the config:
+
+```yaml
+model:
+  analysis_keys:
+      primary_fdr: 'primary_fdr'
+      primary_acc: 'primary_acc'
+```
+The `primary_fdr` key will store `out['primary_fdr']` where `out` is the network output.  Note that if you use something mutable (like a dictionary) for network output (as above), you can also set keys in the loss.  If the output of the network is array-like instead of a dictionary, the config may look like this:
+```yaml
+model:
+  analysis_keys:
+      primary_fdr: 1
+      primary_acc: 2
+```
+now the `primary_fdr` key will store `out[1]` at each iteration.
 
 # Repository Structure
 
