@@ -120,7 +120,6 @@ def cluster_edge_features(data, clusts, edge_index, cuda=True, device=None):
         e = e.cuda()
     return e
 
-
 def edge_feature(data, i, j):
     """
     12-dimensional edge feature based on displacement between two voxels
@@ -171,9 +170,4 @@ def edge_assignment(edge_index, batches, groups, cuda=True, dtype=torch.float, b
     elif cuda:
         edge_assn = edge_assn.cuda()
     return edge_assn
-    
-    
-    
-    
-  
     

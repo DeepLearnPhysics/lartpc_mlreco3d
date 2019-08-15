@@ -24,7 +24,7 @@ class NNConvModel(torch.nn.Module):
         
         
         if 'modules' in cfg:
-            self.model_config = cfg['modules']['attention_gnn']
+            self.model_config = cfg['modules']['edge_nnconv']
         else:
             self.model_config = cfg
             
