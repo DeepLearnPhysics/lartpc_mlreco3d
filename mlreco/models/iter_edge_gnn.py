@@ -12,6 +12,7 @@ from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
 from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency2
+from mlreco.utils.gnn.evaluation import DBSCAN_cluster_metrics2
 from mlreco.utils.groups import process_group_data
 from .gnn import edge_model_construct
 
@@ -35,6 +36,7 @@ class IterativeEdgeModel(torch.nn.Module):
             self.model_config = cfg
             
         self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
             
         # extract the model to use
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
@@ -47,12 +49,17 @@ class IterativeEdgeModel(torch.nn.Module):
         
         # threshold for matching
         self.thresh = self.model_config.get('thresh', 0.9)
+        
+        # check if primaries assignment should be thresholded
+        self.pmd = self.model_config.get('primary_max_dist', None)
             
     
     @staticmethod
     def assign_clusters(edge_index, edge_pred, others, matched, thresh=0.5):
         """
         assigns clusters that have not been assigned to clusters that have been assigned
+        
+        assume 2-channel output to edge_pred
         """
         found_match = False
         for i in others:
@@ -88,12 +95,13 @@ class IterativeEdgeModel(torch.nn.Module):
         # remove compton clusters
         # if no cluster fits this condition, return
         if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
+            selection = filter_compton(clusts, self.compton_thresh) # non-compton looking clusters
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 if data[0].is_cuda:
-                    e.cuda()
+                    e = e.cuda()
                 return e
+
             clusts = clusts[selection]
         
 
@@ -102,8 +110,7 @@ class IterativeEdgeModel(torch.nn.Module):
         # get x batch
         xbatch = torch.tensor(batch).cuda()
         
-        # form primary/secondary bipartite graph
-        primaries = assign_primaries(data[1], clusts, data[0])
+        primaries = assign_primaries(data[1], clusts, data[0], max_dist=self.pmd)
         # keep track of who is matched. -1 is not matched
         matched = np.repeat(-1, len(clusts))
         matched[primaries] = primaries
@@ -144,27 +151,161 @@ class IterativeEdgeModel(torch.nn.Module):
             # print(torch.max(edge_index))
             # print(torch.min(edge_index))
         
-
             out = self.edge_predictor(x, edge_index, e, xbatch)
             
             # predictions for this edge set.
-            edge_pred.append(out['edge_pred'])
+            edge_pred.append(out[0][0])
             edges.append(edge_index)
             
-            matched, found_match = self.assign_clusters(edge_index, out['edge_pred'], others, matched, self.thresh)
+            #print(out[0][0].shape)
+
+            matched, found_match = self.assign_clusters(edge_index,
+                                                        out[0][0][:,1] - out[0][0][:,0],
+                                                        others,
+                                                        matched,
+                                                        self.thresh)
+
             
             # print(edges)
             # print(edge_pred)
-        print('num iterations: ', counter)
-            
+
+        #print('num iterations: ', counter)
+
+        matched = torch.tensor(matched)
+        counter = torch.tensor([counter])            
+        if data[0].is_cuda:
+            matched = matched.cuda()
+            counter = counter.cuda()
+
+        return [[edges],
+                [edge_pred],
+                [matched],
+                [counter]]
+
+    
+class IterEdgeChannelLoss(torch.nn.Module):
+    def __init__(self, cfg):
+        # torch.nn.MSELoss(reduction='sum')
+        # torch.nn.L1Loss(reduction='sum')
+        super(IterEdgeChannelLoss, self).__init__()
+        self.model_config = cfg['modules']['iter_edge_model']
+
+        self.remove_compton = self.model_config.get('remove_compton', True)
+        self.compton_thresh = self.model_config.get('compton_thresh', 30)
+        self.pmd = self.model_config.get('primary_max_dist')
+        
+        self.reduction = self.model_config.get('reduction', 'mean')
+        self.loss = self.model_config.get('loss', 'CE')
+        
+        if self.loss == 'CE':
+            self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
+        elif self.loss == 'MM':
+            p = self.model_config.get('p', 1)
+            margin = self.model_config.get('margin', 1.0)
+            self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
+        else:
+            raise Exception('unrecognized loss: ' + self.loss)
+        
+        
+    def forward(self, out, clusters, groups, primary):
+        """
+        out:
+            array output from the DataParallel gather function
+            out[0] - n_gpus tensors of edge indexes
+            out[1] - n_gpus tensors of predicted edge weights from model forward
+            out[2] - n_gpus arrays of group ids for each cluster
+            out[3] - n_gpus number of iterations
+        data:
+            cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
+            group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
+            em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
+        """
+        total_loss, total_acc, total_primary_fdr, total_primary_acc, total_iter = 0., 0., 0., 0., 0
+        total_ari, total_ami, total_sbd, total_pur, total_eff = 0., 0., 0., 0., 0.
+        ngpus = len(clusters)
+        for i in range(ngpus):
+            data0 = clusters[i]
+            data1 = groups[i]
+            data2 = primary[i]
+
+            clusts = form_clusters_new(data0)
+
+            # remove compton clusters
+            # if no cluster fits this condition, return
+            if self.remove_compton:
+                selection = filter_compton(clusts) # non-compton looking clusters
+                if not len(selection):
+                    edge_pred = out[1][i][0]
+                    total_loss += self.lossfn(edge_pred, edge_pred)
+                    total_acc += 1.
+
+            clusts = clusts[selection]
+
+            # process group data
+            data_grp = data1
+
+            # form primary/secondary bipartite graph
+            primaries = assign_primaries(data2, clusts, data0)
+            batch = get_cluster_batch(data0, clusts)
+            # edge_index = primary_bipartite_incidence(batch, primaries)
+            group = get_cluster_label(data_grp, clusts)
+
+            primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
+            total_primary_fdr += primary_fdr
+            total_primary_acc += primary_acc
+
+            niter = out[3][i][0] # number of iterations
+            total_iter += niter
+
+            # loop over iterations and add loss at each iter.
+            for j in range(niter):
+                # determine true assignments
+                edge_index = out[0][i][j]
+                edge_assn = edge_assignment(edge_index, batch, group, cuda=True, dtype=torch.long)
+
+                # get edge predictions (2 channels)
+                edge_pred = out[1][i][j]
+
+                edge_assn = edge_assn.view(-1)
+
+                total_loss += self.lossfn(edge_pred, edge_assn)
+
+            # compute accuracy of assignment
+            total_acc += secondary_matching_vox_efficiency2(
+                    out[2][i],
+                    group,
+                    primaries,
+                    clusts
+                )
+
+            # get clustering metrics
+            #print(out[2][i].shape)
+            ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics2(
+                out[2][i].cpu().numpy(),
+                clusts,
+                group
+            )
+            total_ari += ari
+            total_ami += ami
+            total_sbd += sbd
+            total_pur += pur
+            total_eff += eff
+
         return {
-            'edges': edges,
-            'edge_pred': edge_pred,
-            'matched': matched,
-            'n_iter': counter 
+            'primary_fdr': total_primary_fdr/ngpus,
+            'primary_acc': total_primary_acc/ngpus,
+            'ARI': ari/ngpus,
+            'AMI': ami/ngpus,
+            'SBD': sbd/ngpus,
+            'purity': pur/ngpus,
+            'efficiency': eff/ngpus,
+            'accuracy': total_acc/ngpus,
+            'loss': total_loss/ngpus,
+            'n_iter': total_iter
         }
-    
-    
+
+
 class IterEdgeLabelLoss(torch.nn.Module):
     def __init__(self, cfg):
         # torch.nn.MSELoss(reduction='sum')
@@ -206,88 +347,93 @@ class IterEdgeLabelLoss(torch.nn.Module):
         return edge_assn, edge_pred
         
         
-    def forward(self, out, data0, data1, data2):
+    def forward(self, out, clusters, groups, primary):
         """
         out:
-            dictionary output from GNN Model
-            keys:
-                'edge_pred': predicted edge weights from model forward
+            array output from the DataParallel gather function
+            out[0] - n_gpus tensors of edge indexes
+            out[1] - n_gpus tensors of predicted edge weights from model forward
+            out[2] - n_gpus arrays of group ids for each cluster
+            out[3] - n_gpus number of iterations
         data:
-            data[0] - 5 types data
-            data[1] - groups data
-            data[2] - primary data
+            cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
+            group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
+            em_primaries - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
         """
-        data0 = data0[0]
-        data1 = data1[0]
-        data2 = data2[0]
+        total_loss, total_acc, total_primary_fdr, total_primary_acc, total_iter = 0., 0., 0., 0., 0
+        ngpus = len(clusters)
+        for i in range(ngpus):
+            data0 = clusters[i]
+            data1 = groups[i]
+            data2 = primary[i]
 
-        clusts = form_clusters_new(data0)
+            clusts = form_clusters_new(data0)
 
-        # remove compton clusters
-        # if no cluster fits this condition, return
-        if self.remove_compton:
-            selection = filter_compton(clusts) # non-compton looking clusters
-            if not len(selection):
-                edge_pred = out['edge_pred'][0]
-                total_loss = self.lossfn(edge_pred, edge_pred)
-                return {
-                    'accuracy': 1.,
-                    'loss': total_loss
-                }
+            # remove compton clusters
+            # if no cluster fits this condition, return
+            if self.remove_compton:
+                selection = filter_compton(clusts) # non-compton looking clusters
+                if not len(selection):
+                    edge_pred = out[1][i]
+                    total_loss += self.lossfn(edge_pred, edge_pred)
+                    total_acc += 1.
+                    continue
 
-        clusts = clusts[selection]
+            clusts = clusts[selection]
 
-        # process group data
-        data_grp = data1
+            # process group data
+            data_grp = data1
 
-        # form primary/secondary bipartite graph
-        primaries = assign_primaries(data2, clusts, data0)
-        batch = get_cluster_batch(data0, clusts)
-        # edge_index = primary_bipartite_incidence(batch, primaries)
-        group = get_cluster_label(data_grp, clusts)
+            # form primary/secondary bipartite graph
+            primaries = assign_primaries(data2, clusts, data0)
+            batch = get_cluster_batch(data0, clusts)
+            # edge_index = primary_bipartite_incidence(batch, primaries)
+            group = get_cluster_label(data_grp, clusts)
 
-        primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
-        primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
-        
-        niter = out['n_iter'] # number of iterations
-        total_loss = torch.tensor(0, dtype=torch.float).cuda()
-        for j in range(niter):
-            # determine true assignments
-            edge_index = out['edges'][j]
-            edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
+            primaries_true = assign_primaries(data2, clusts, data1, use_labels=True)
+            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primaries, primaries_true)
+            total_primary_fdr += primary_fdr
+            total_primary_acc += primary_acc
 
-            edge_pred = out['edge_pred'][j]
-            # print(edge_pred)
+            niter = out[3][i][0] # number of iterations
+            total_iter += niter
+            for j in range(niter):
+                # determine true assignments
+                edge_index = out[0][i][j]
+                edge_assn = edge_assignment(edge_index, batch, group, cuda=True)
 
-            # print(edge_assn.shape)
-            # print(edge_pred.shape)
-            edge_assn = edge_assn.view(-1)
-            edge_pred = edge_pred.view(-1)
-            # print(edge_assn.shape)
-            # print(edge_pred.shape)
+                edge_pred = out[1][i][j]
+                # print(edge_pred)
 
-            if self.balance:
-                edge_assn, edge_pred = self.balance_classes(edge_assn, edge_pred)
+                # print(edge_assn.shape)
+                # print(edge_pred.shape)
+                edge_assn = edge_assn.view(-1)
+                edge_pred = edge_pred.view(-1)
+                # print(edge_assn.shape)
+                # print(edge_pred.shape)
 
-            total_loss += self.lossfn(edge_pred, edge_assn)
+                if self.balance:
+                    edge_assn, edge_pred = self.balance_classes(edge_assn, edge_pred)
 
-        # compute accuracy of assignment
-        # need to multiply by batch size to be accurate
-        #total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
-        # use out['matched']
-        total_acc = torch.tensor(
-            secondary_matching_vox_efficiency2(
-                out['matched'],
-                group,
-                primaries,
-                clusts
+                total_loss += self.lossfn(edge_pred, edge_assn)
+
+            # compute accuracy of assignment
+            # need to multiply by batch size to be accurate
+            #total_acc = (np.max(batch) + 1) * torch.tensor(secondary_matching_vox_efficiency(edge_index, edge_assn, edge_pred, primaries, clusts, len(clusts)))
+            # use out['matched']
+            total_acc += torch.tensor(
+                secondary_matching_vox_efficiency2(
+                    out[2][i],
+                    group,
+                    primaries,
+                    clusts
+                )
             )
-        )
 
         return {
-            'primary_fdr': primary_fdr,
-            'primary_acc': primary_acc,
-            'accuracy': total_acc,
-            'loss': total_loss,
-            'n_iter': out['n_iter']
+            'primary_fdr': total_primary_fdr/ngpus,
+            'primary_acc': total_primary_acc/ngpus,
+            'accuracy': total_acc/ngpus,
+            'loss': total_loss/ngpus,
+            'n_iter': total_iter
         }
