@@ -48,7 +48,7 @@ def output(output_formatters_list, data_blob, res, cfg, idx, **kwargs):
                         else:  # FIXME assumes batch is in column 3 otherwise
                             new_res[key] = res[key][idx][res[key][idx][:, 3] == b]
 
-                csv_logger = utils.CSVData("%s/output-%.07d.csv" % (cfg['training']['log_dir'], event_id))
+                csv_logger = utils.CSVData("%s/output-%.07d_%.07d.csv" % (cfg['training']['log_dir'], event_id, data_blob['index'][i][j][int(b)][0]))
                 for output in output_formatters_list:
                     f = getattr(output_formatters, output)
                     f(csv_logger, new_data_blob, new_res, **kwargs)
