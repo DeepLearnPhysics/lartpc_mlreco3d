@@ -44,6 +44,9 @@ class UResNet(torch.nn.Module):
         - feature maps of encoding path
         - feature maps of decoding path
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,)]
+    ]
 
     def __init__(self, cfg, name="uresnet_clustering"):
         super(UResNet, self).__init__()
@@ -206,6 +209,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     uresnet_weight: float
         Weight for uresnet loss
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn_scales", (int,)],
+        ["parse_cluster3d_scales", (int,)]
+    ]
+
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_clustering']
@@ -393,7 +401,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
         results = {
             'accuracy': uresnet_acc,
-            'loss_seg': self._uresnet_weight * uresnet_loss + cluster_total_loss,
+            'loss': self._uresnet_weight * uresnet_loss + cluster_total_loss,
             'uresnet_loss': self._uresnet_weight * uresnet_loss,
             'uresnet_acc': uresnet_acc,
             'intracluster_loss': cluster_intracluster_loss,
