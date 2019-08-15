@@ -50,6 +50,9 @@ class UResNet(torch.nn.Module):
         - feature maps of decoding path
         - if `ghost`, segmentation scores for deghosting (N, 2)
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,)]
+    ]
 
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
@@ -186,6 +189,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
     the number of classes, not counting the ghost point class.
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (int,)]
+    ]
+
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_lonely']

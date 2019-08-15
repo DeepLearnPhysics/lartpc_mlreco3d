@@ -12,6 +12,10 @@ class Chain(torch.nn.Module):
     Extracts tracks clusters
     """
     MODULES = ['dbscan', 'uresnet_ppn_type']
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,)],
+        ["parse_particle_points", (int,)]
+    ]
 
     def __init__(self, model_config):
         super(Chain, self).__init__()
@@ -42,6 +46,12 @@ class Chain(torch.nn.Module):
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (int,)],
+        ["parse_particle_points", (int,)],
+        ["parse_cluster3d_clean", (int,)]
+    ]
+
     def __init__(self, cfg):
         super(ChainLoss, self).__init__()
         self.loss = SegmentationLoss(cfg)
