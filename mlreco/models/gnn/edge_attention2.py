@@ -4,8 +4,9 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
+import torch
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
-from torch_geometric.nn import MetaLayer, GATConv
+from torch_geometric.nn import MetaLayer, GATConv, AGNNConv
 
 from .edge_pred import EdgeModel, BilinEdgeModel
 
@@ -28,31 +29,31 @@ class BasicAttentionModel(torch.nn.Module):
         else:
             self.model_config = cfg
 
-        self.nheads = self.model_config.get('nheads', 3)
         self.leak = self.model_config.get('leak', 0.1)
         
-        # perform batch normalization at each step
-        self.bn_node = BatchNorm1d(16)
+        self.node_in = self.model_config.get('node_feats', 16)
+        self.edge_in = self.model_config.get('edge_feats', 10)
         
-        # first layer increases number of features from 4 to 16
-        # self.attn1 = GATConv(4, 16, heads=self.nheads, concat=False)
-        # first layer increases number of features from 15 to 16
-        self.attn1 = GATConv(16, 16, heads=self.nheads, concat=False)
+        self.bn_node = BatchNorm1d(self.node_in)
+        self.bn_edge = BatchNorm1d(self.edge_in)
         
-        # second layer increases number of features from 16 to 32
-        self.attn2 = GATConv(16, 32, heads=self.nheads, concat=False)
+        self.num_mp = self.model_config.get('num_mp', 3)
         
-        # third layer increases number of features from 32 to 64
-        self.attn3 = GATConv(32, 64, heads=self.nheads, concat=False)
+        # first lift node features
+        self.lin0 = Lin(self.node_in, 2*self.node_in)
         
-        self.bn_edge = BatchNorm1d(10)
-
+        self.attn = torch.nn.ModuleList()
+        self.lin = torch.nn.ModuleList()
+        for i in range(self.num_mp):
+            self.attn.append(AGNNConv())
+            self.lin.append(Lin(2*self.node_in, 2*self.node_in))
+    
         # final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
         if pred_cfg == 'basic':
-            self.edge_predictor = MetaLayer(EdgeModel(64, self.edge_in, self.leak))
+            self.edge_predictor = MetaLayer(EdgeModel(2*self.node_in, self.edge_in, self.leak))
         elif pred_cfg == 'bilin':
-            self.edge_predictor = MetaLayer(BilinEdgeModel(64, self.edge_in, self.leak))
+            self.edge_predictor = MetaLayer(BilinEdgeModel(2*self.node_in, self.edge_in, self.leak))
         else:
             raise Exception('unrecognized prediction model: ' + pred_cfg)
         
@@ -73,11 +74,10 @@ class BasicAttentionModel(torch.nn.Module):
         e = self.bn_edge(e)
         
         # go through layers
-        x = self.attn1(x, edge_index)
-
-        x = self.attn2(x, edge_index)
-
-        x = self.attn3(x, edge_index)
+        x = self.lin0(x)
+        for i in range(self.num_mp):
+            x = self.attn[i](x, edge_index)
+            x = self.lin[i](x)
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 

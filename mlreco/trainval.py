@@ -103,7 +103,10 @@ class trainval(object):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
             for key in data_blob:
-                data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
+                if isinstance(data_blob[key][0], list):
+                    data_blob[key] = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key]]
+                else:
+                    data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
             data = []
             for i in range(max(1,len(self._gpus))):
                 data.append([data_blob[key][i] for key in input_keys])

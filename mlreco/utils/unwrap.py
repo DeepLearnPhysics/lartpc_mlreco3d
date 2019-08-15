@@ -1,12 +1,16 @@
 import numpy as np
 
 def unwrap_2d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
-
+    """
+    See unwrap_scn
+    """
     return unwrap_scn(data_blob, outputs, 2, main_key, data_keys, output_keys)
 
 
 def unwrap_3d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
-
+    """
+    See unwrap_scn
+    """
     return unwrap_scn(data_blob, outputs, 3, main_key, data_keys, output_keys)
 
 
@@ -14,15 +18,17 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     """
     Break down the data_blob and outputs dictionary into events for sparseconvnet formatted tensors.
     Need to account for: multi-gpu, minibatching, multiple outputs, batches.
-
-    Input
-    =====
-    data_blob: from I/O
-    res: results dictionary, output of trainval
-    data_dim: indicate the location of "batch id"
-    main_key: used to identify a unique set of batch ids to be parsed
-    data_keys: a list of string keys to specify, if needed, a subset of data to be returned
-    output_keys: a list of string keys to specify, if needed, a subset of output to be returned
+    INPUTS:
+        data_blob: a dictionary of array of array of minibatch data [key][num_minibatch][num_device]
+        outputs: results dictionary, output of trainval.forward, [key][num_minibatch*num_device]
+        data_dim: 2 for 2D, 3 for 3D,,, and indicate the location of "batch id"
+        main_key: used to identify a unique set of batch ids to be parsed
+        data_keys: a list of string keys to specify, if needed, a subset of data to be returned
+        output_keys: a list of string keys to specify, if needed, a subset of output to be returned
+    OUTPUT:
+        two un-wrapped arrays of dictionaries where array length = num_minibatch*num_device*minibatch_size
+    ASSUMES:
+        the shape of data_blob and outputs as explained above
     """
     if data_keys   is None: data_keys   = list(data_blob.keys())
     if output_keys is None: output_keys = list(outputs.keys()  )
