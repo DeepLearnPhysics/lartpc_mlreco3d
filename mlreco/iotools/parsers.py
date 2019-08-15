@@ -5,8 +5,8 @@ import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.gnn.primary import get_em_primary_info
-from mlreco.utils.dbscan import dbscan_types
-from mlreco.utils.groups import filter_duplicate_voxels, filter_nonimg_voxels
+from mlreco.utils.dbscan import dbscan_types, dbscan_groups
+from mlreco.utils.groups import get_group_types, filter_duplicate_voxels, filter_nonimg_voxels
 
 
 def parse_sparse3d_scn(data):
@@ -156,6 +156,29 @@ def parse_dbscan(data):
     for i, c in enumerate(clusts):
         np_types[c] = i
     return np_voxels, np_types
+
+
+def parse_dbscan_groups(data):
+    """
+    A function to create dbscan tensor
+    Args:
+        length 2 array of larcv::EventClusterVoxel3 and larcv::EventParticle
+    Return:
+        voxels - numpy array(int32) with shape (N,3) - coordinates
+        data   - numpy array(float32) with shape (N,1) - dbscan cluster. -1 if not assigned
+    """
+    np_voxels, np_groups = parse_cluster3d(data)
+    # get the particle types for each group
+    particles_v = data[1].as_vector()
+    part_types = get_group_types(particles_v, data[0].meta())
+    # now run dbscan on data
+    num_groups = data[0].as_vector().size()
+    clusts = dbscan_groups(np_voxels, np_groups, part_types)
+    # start with no clusters assigned.
+    np_groups.fill(-1)
+    for i, c in enumerate(clusts):
+        np_groups[c] = i
+    return np_voxels, np_groups
 
 
 def parse_cluster3d(data):
