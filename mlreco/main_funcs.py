@@ -52,11 +52,12 @@ def process_config(cfg):
     else:
         cfg['training']['seed'] = int(cfg['training']['seed'])
     # Update IO seed
-    if 'seed' not in cfg['iotool']['sampler'] or cfg['iotool']['sampler']['seed'] < 0:
-        import time
-        cfg['iotool']['sampler']['seed'] = int(time.time())
-    else:
-        cfg['iotool']['sample']['seed'] = int(cfg['iotool']['sampler']['seed'])
+    if 'sampler' in cfg['iotool']:
+        if 'seed' not in cfg['iotool']['sampler'] or cfg['iotool']['sampler']['seed'] < 0:
+            import time
+            cfg['iotool']['sampler']['seed'] = int(time.time())
+        else:
+            cfg['iotool']['sampler']['seed'] = int(cfg['iotool']['sampler']['seed'])
 
     # Batch size checker
     if cfg['iotool']['batch_size'] < 0 and cfg['training']['minibatch_size'] < 0:
