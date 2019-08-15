@@ -9,8 +9,14 @@ class PPNUResNet(torch.nn.Module):
     """
     Monolithic PPN + UResNet model.
     See `uresnet_ppn_chain` for a modular approach.
-    Input: tuple (point_cloud, labels)
+    Input: tuple
+    (point_cloud, labels)
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,)],
+        ["parse_particle_points", (int,)]
+    ]
+
     def __init__(self, model_config):
         super(PPNUResNet, self).__init__()
         import sparseconvnet as scn
@@ -215,6 +221,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     - cross-entropy loss for PPN3 scores predictions (px within 5px of gt point)
     - distance loss for PPN3 positions predictions
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (int,)],
+        ["parse_particle_points", (int,)]
+    ]
+
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['uresnet_ppn']
@@ -349,21 +360,24 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 else:
                     print("No particles !")
 
-        # print(ppn_count)
-        ppn_results = {
-            'ppn_acc': total_acc/ppn_count,
-            'ppn_loss': total_loss/ppn_count,
-            'loss_class': total_class/ppn_count,
-            'loss_distance': total_distance/ppn_count,
-            'loss_ppn1': total_loss_ppn1/ppn_count,
-            'loss_ppn2': total_loss_ppn2/ppn_count,
-            'acc_ppn1': total_acc_ppn1/ppn_count,
-            'acc_ppn2': total_acc_ppn2/ppn_count
+        results = {
+            'accuracy': uresnet_acc,
+            'loss': (uresnet_loss + total_loss),
+            'uresnet_acc': uresnet_acc,
+            'uresnet_loss': uresnet_loss,
+            'ppn_acc': total_acc,
+            'ppn_loss': total_loss,
+            'loss_class': total_class,
+            'loss_distance': total_distance,
+            'loss_ppn1': total_loss_ppn1,
+            'loss_ppn2': total_loss_ppn2,
+            'acc_ppn1': total_acc_ppn1,
+            'acc_ppn2': total_acc_ppn2
         }
-        return {
-            'accuracy': uresnet_acc/ppn_count,
-            'loss': (uresnet_loss + total_loss)/ppn_count,
-            'uresnet_acc': uresnet_acc/ppn_count,
-            'uresnet_loss': uresnet_loss/ppn_count,
-            **ppn_results
-        }
+        for key in results:
+            if not isinstance(results[key], torch.Tensor):
+                results[key] = torch.tensor(results[key])
+        if ppn_count > 0:
+            for key in results:
+                results[key] = results[key]/float(ppn_count)
+        return results
