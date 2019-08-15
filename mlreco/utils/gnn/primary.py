@@ -89,7 +89,7 @@ def score_clusters_primary(clusts, data, primary):
     return scores
 
 
-def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
+def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None, compton_thresh=0):
     """
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
@@ -99,7 +99,7 @@ def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
     data = data.cpu().detach().numpy()
     
     #first remove compton-like clusters from list
-    selection = filter_compton(clusts) # non-compton looking clusters
+    selection = filter_compton(clusts, compton_thresh) # non-compton looking clusters
     selinds = np.where(selection)[0] # selected indices
     cs2 = clusts[selinds]
     # if everything looks compton, say no primaries
