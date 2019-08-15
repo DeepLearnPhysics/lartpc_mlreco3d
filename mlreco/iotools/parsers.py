@@ -8,6 +8,36 @@ from mlreco.utils.gnn.primary import get_em_primary_info
 from mlreco.utils.dbscan import dbscan_types, dbscan_groups
 from mlreco.utils.groups import get_group_types, filter_duplicate_voxels, filter_nonimg_voxels
 
+def parse_sparse2d_scn(data):
+    """
+    A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
+    Returns the data in format to pass to SCN
+    Args:
+        array of larcv::EventSparseTensor3D
+    Return:
+        voxels - numpy array(int32) with shape (N,3) - coordinates
+        data   - numpy array(float32) with shape (N,C) - pixel values/channels
+    """
+    meta = None
+    output = []
+    np_voxels = None
+    for event_tensor2d in data:
+        
+        tensor2d=event_tensor2d.sparse_tensor_2d(0)
+        num_point = tensor2d.as_vector().size()
+        
+        if meta is None:
+            
+            meta = tensor2d.meta()
+            np_voxels = np.empty(shape=(num_point, 2), dtype=np.int32)
+            larcv.fill_2d_voxels(tensor2d, np_voxels)
+            
+        else:
+            assert meta == tensor2d.meta()
+        np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
+        larcv.fill_2d_pcloud(tensor2d, np_data)
+        output.append(np_data)
+    return np_voxels, np.concatenate(output, axis=-1)
 
 def parse_sparse3d_scn(data):
     """
