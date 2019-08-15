@@ -214,7 +214,21 @@ def parse_cluster3d(data):
     return np_voxels, np_data
 
 
-def parse_cluster3d_unique2(data):
+def parse_sparse3d_clean(data):
+    """
+    A function to retrieve clusters tensor.  Do the following cleaning:
+    1) lexicographically sort coordinates
+    2) choose only one group per voxel (by lexicographic order)
+    3) get labels from the image labels for each voxel in addition to groups
+
+    Args:
+        length 3 array of larcv::EventSparseTensor3D
+        Typically [sparse3d_mcst_reco, sparse3d_mcst_reco_group, sparse3d_fivetypes_reco]
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,3) where 3 is energy + cluster id + label
+    """
     img_voxels, img_data = parse_sparse3d_scn([data[0]])
     perm = np.lexsort(img_voxels.T)
     img_voxels = img_voxels[perm]
@@ -245,51 +259,7 @@ def parse_cluster3d_unique2(data):
     inds2 = np.where(sel2)[0]
     img_voxels = img_voxels[inds2]
     img_data = img_data[inds2]
-    #print(img_data.shape, grp_data.shape, label_data[label_data<5][:, None].shape)
     return grp_voxels, np.concatenate([img_data, grp_data, label_data[label_data<5][:, None]], axis=1)
-
-
-def parse_cluster3d_unique(data):
-    """
-    A function to retrieve clusters tensor.  Do the following cleaning:
-    1) lexicographically sort coordinates
-    2) choose only one group per voxel (by lexicographic order)
-    3) get labels from the image labels for each voxel in addition to groups
-
-    Args:
-        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
-        Typically [cluster3d_mcst_reco, sparse3d_fivetypes_true]
-    Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-        a numpy array with the shape (N,2) where 2 is cluster id + label
-    """
-    grp_voxels, grp_data = parse_cluster3d([data[0]])
-    perm = np.lexsort(grp_voxels.T)
-    grp_voxels = grp_voxels[perm]
-    grp_data = grp_data[perm]
-    grp_voxels, unique_indices = np.unique(grp_voxels, axis=0, return_index=True)
-    grp_data = grp_data[unique_indices]
-
-    img_voxels, img_data = parse_sparse3d_scn([data[1]])
-    perm = np.lexsort(img_voxels.T)
-    img_voxels = img_voxels[perm]
-    img_data = img_data[perm]
-    img_voxels, unique_indices = np.unique(img_voxels, axis=0, return_index=True)
-    img_data = img_data[unique_indices]
-
-    igrp, iimg = 0, 0
-    ngrp, nimg = grp_voxels.shape[0], img_voxels.shape[0]
-    ret = np.empty(shape=(ngrp, 1), dtype=img_data.dtype)
-    while igrp < ngrp and iimg < nimg:
-        if np.all(grp_voxels[igrp, :3] == img_voxels[iimg, :3]):
-            igrp += 1
-            iimg += 1
-            ret[igrp] = img_data[iimg]
-        else:
-            iimg += 1
-
-    return grp_voxels, np.concatenate([grp_data, ret], axis=1)
 
 
 def parse_cluster3d_clean(data):

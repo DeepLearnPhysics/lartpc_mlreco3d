@@ -65,8 +65,7 @@ parsers = {
     "parse_dbscan": (3, 1),
     "parse_dbscan_groups": (3, 1),
     "parse_cluster3d": (3, 1),
-    "parse_cluster3d_unique2": (3, 3),
-    "parse_cluster3d_unique": (3, 2),
+    "parse_sparse3d_clean": (3, 3),
     "parse_cluster3d_clean": (3, 1),
     "parse_cluster3d_scales": [(3, 1)]*5,
     "parse_sparse3d_scn_scales": [(3, 1)]*5
