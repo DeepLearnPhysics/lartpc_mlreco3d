@@ -135,4 +135,3 @@ def DBSCAN_cluster_metrics2(matched, clusters, group):
     pur, eff = purity_efficiency(pred_vox, true_vox)
     return ari, ami, sbd, pur, eff
     
-    

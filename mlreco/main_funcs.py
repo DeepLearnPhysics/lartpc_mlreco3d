@@ -18,7 +18,6 @@ from mlreco.output_formatters import output
 
 
 class Handlers:
-    sess         = None
     data_io      = None
     csv_logger   = None
     weight_io    = None
@@ -52,6 +51,13 @@ def process_config(cfg):
         cfg['training']['seed'] = int(time.time())
     else:
         cfg['training']['seed'] = int(cfg['training']['seed'])
+    # Update IO seed
+    if 'sampler' in cfg['iotool']:
+        if 'seed' not in cfg['iotool']['sampler'] or cfg['iotool']['sampler']['seed'] < 0:
+            import time
+            cfg['iotool']['sampler']['seed'] = int(time.time())
+        else:
+            cfg['iotool']['sampler']['seed'] = int(cfg['iotool']['sampler']['seed'])
 
     # Batch size checker
     if cfg['iotool']['batch_size'] < 0 and cfg['training']['minibatch_size'] < 0:
@@ -130,7 +136,7 @@ def prepare(cfg):
 
 
 def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
-        tsum, tsum_io, res, cfg, epoch):
+        tsum, tsum_io, res, cfg, epoch, first_id):
     """
     Log relevant information to CSV files and stdout.
     """
@@ -148,8 +154,8 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
     # Report (logger)
     if handlers.csv_logger:
-        handlers.csv_logger.record(('iter', 'epoch', 'titer', 'tsumiter'),
-                                   (handlers.iteration, epoch, tspent_iteration, tsum))
+        handlers.csv_logger.record(('iter', 'first_id', 'epoch', 'titer', 'tsumiter'),
+                                   (handlers.iteration, first_id, epoch, tspent_iteration, tsum))
         handlers.csv_logger.record(('tio', 'tsumio'),
                                    (tspent_io, tsum_io))
         handlers.csv_logger.record(('mem', ), (mem, ))
@@ -198,7 +204,7 @@ def get_data_minibatched(dataset, cfg):
 
     num_proc_unit = max(1,len(cfg['training']['gpus']))
     num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * num_proc_unit))
-    
+
     for key in cfg['data_keys']:
         data_blob[key] = [list() for _ in range(num_compute_cycle)]
 
@@ -227,6 +233,7 @@ def train_loop(cfg, handlers):
 
         tio_start = time.time()
         data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
+        first_id = np.array(data_blob['index']).reshape(-1)[0]
         tspent_io = time.time() - tio_start
         tsum_io += tspent_io
 
@@ -245,7 +252,12 @@ def train_loop(cfg, handlers):
 
         log(handlers, tstamp_iteration, tspent_io,
             tspent_iteration, tsum, tsum_io,
-            res, cfg, epoch)
+            res, cfg, epoch, first_id)
+        # Log metrics/do analysis
+        if 'analysis' in cfg['model']:
+            for ana_script in cfg['model']['analysis']:
+                f = getattr(analysis, ana_script)
+                f(data_blob, res, cfg, handlers.iteration)
 
         # Increment iteration counter
         handlers.iteration += 1
@@ -280,6 +292,7 @@ def inference_loop(cfg, handlers):
             # blob = next(handlers.data_io_iter)
             tio_start = time.time()
             data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
+            first_id = np.array(data_blob['index']).reshape(-1)[0]
             tspent_io = time.time() - tio_start
             tsum_io += tspent_io
 
@@ -299,9 +312,8 @@ def inference_loop(cfg, handlers):
 
             log(handlers, tstamp_iteration, tspent_io,
                 tspent_iteration, tsum, tsum_io,
-                res, cfg, epoch)
+                res, cfg, epoch, first_id)
             # Log metrics/do analysis
-            # TODO
             if 'analysis' in cfg['model']:
                 for ana_script in cfg['model']['analysis']:
                     f = getattr(analysis, ana_script)
