@@ -213,3 +213,14 @@ def test_parse_cluster3d_clean(event_cluster3d, event_tensor3d):
     assert output[0].shape[1] == 3
     assert output[1].shape[1] == 1
     assert output[0].shape[0] == output[1].shape[0]
+
+@pytest.mark.parametrize("event_tensor3d", [1], indirect=True)
+def test_parse_sparse3d_clean(event_tensor3d):
+    from mlreco.iotools.parsers import parse_sparse3d_clean
+    output = parse_sparse3d_clean([event_tensor3d[0]]*3)
+    assert len(output) == 2
+    assert len(output[0].shape) == 2
+    assert len(output[1].shape) == 2
+    assert output[0].shape[1] == 3
+    assert output[1].shape[1] == 3
+    assert output[0].shape[0] == output[1].shape[0]
