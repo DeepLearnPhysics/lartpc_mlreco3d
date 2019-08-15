@@ -14,7 +14,9 @@ This repository contains a framework to define, train, run, and evaluate machine
 
 ## Tests
 
-Obviously, you should test your code.  Ideally, we would have a unit testing framework that would make it easy for you to prove to others that you at least didn't break something.  This is currently a to-do.
+Obviously, you should test your code.  Ideally, we would have a unit testing framework that would make it easy for you to prove to others that you at least didn't break something.
+
+Use the command `CUDA_VISBLE_DEVICES='' pytest -rxXs` to run all the tests that are currently available (still work in progress).
 
 ## Documentation
 

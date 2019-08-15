@@ -15,7 +15,7 @@ def _list_files(data_dirs, data_key=None, limit_num_files=0):
     files = []
     # Load files from each directory in data_dirs list
     for d in data_dirs:
-        file_list = [ os.path.join(d,f) for f in os.listdir(d) if data_key is None or data_key in f ]
+        file_list = sorted([ os.path.join(d,f) for f in os.listdir(d) if data_key is None or data_key in f ])
         if limit_num_files: file_list = file_list[0:limit_num_files]
         files += file_list
     return files
