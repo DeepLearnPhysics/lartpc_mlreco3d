@@ -43,6 +43,9 @@ class MSTEdgeModel(torch.nn.Module):
         else:
             self.model_config = cfg
             
+        # only use points with EM segmentation label
+        self.em_only = self.model_config.get('em_only', False)
+            
         
         # Optional UResNet
         uresnet_cfg = self.model_config.get('uresnet_cfg')
@@ -96,6 +99,7 @@ class MSTEdgeModel(torch.nn.Module):
         """
         inputs data:
             data[0] - energy deposition data
+            data[1] - 5-types labels
         output:
         dictionary, with
             'edge_pred': torch.tensor with edge prediction weights
@@ -105,14 +109,22 @@ class MSTEdgeModel(torch.nn.Module):
         # get device
         dev = data[0].device
         
+        data0 = data[0]
+        
+        if self.em_only:
+            # select voxels with 5-types classification > 1
+            sel = data[1][:,-1] > 1
+            data0 = data0[sel,:]
+        
         # first get data
-        voxels = data[0][:,:3]
-        xbatch = data[0][:,3]
-        energy = data[0][:,-1]
+        voxels = data0[:,:3]
+        xbatch = data0[:,3]
+        energy = data0[:,-1]
+        
         
         # optionally pass data through transformation (scn UResNet)
         if self.transform_input:
-            x = self.transform(data[0])
+            x = self.transform(data0)
         else:
             x = energy.float()
         
@@ -128,12 +140,12 @@ class MSTEdgeModel(torch.nn.Module):
         e = edge_features(data[0], edge_index, cuda=False, device=dev)
         
         # get output
-        outdict = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, xbatch)
         
         return {
             'complex' : X,
             'edges'   : edge_index,
-            **outdict
+            'edge_pred' : out
         }
     
     
@@ -146,6 +158,9 @@ class MSTEdgeChannelLoss(torch.nn.Module):
         # torch.nn.L1Loss(reduction='sum')
         super(MSTEdgeChannelLoss, self).__init__()
         self.model_config = cfg['modules']['mst_edge_model']
+        
+        # only use points with EM segmentation label
+        self.em_only = self.model_config.get('em_only', False)
         
         # use MST only for edges
         self.mst = self.model_config.get('MST', True)
@@ -175,19 +190,21 @@ class MSTEdgeChannelLoss(torch.nn.Module):
             raise Exception('unrecognized loss: ' + self.loss)
         
         
-    def forward(self, out, data0):
+    def forward(self, out, data0, data1):
         """
         out : dictionary, with
             'edge_pred': torch.tensor with edge prediction weights
             'complex'  : simplicial complex of Freudenthal triangulation
             'edges'    : torch tensor with edges used
         data:
-            data[0] - groups data
+            data0 - groups data
+            data1 - 5-types data
         """
         dev = data0[0].device
         
         data_grps = data0[0]
-        edge_pred = out['edge_pred']
+        data_seg = data1[0]
+        edge_pred = out['edge_pred'][0][0]
         X = out['complex']
         edge_index = out['edges']
         
@@ -211,6 +228,11 @@ class MSTEdgeChannelLoss(torch.nn.Module):
         batches: torch tensor of batch id for each node
         groups: torch tensor of group ids for each node
         """
+        if self.em_only:
+            # select voxels with 5-types classification > 1
+            sel = data_seg[:,-1] > 1
+            data_grps = data_grps[sel,:]
+            
         batch = data_grps[:,-2] # get batch from data
         group = data_grps[:,-1] # get gouprs from data
         edge_assn = edge_assignment(active_edge_index, batch, group, cuda=False, dtype=torch.long, device=dev)
