@@ -83,7 +83,7 @@ class NodeAttentionModel(torch.nn.Module):
         x = self.prop2(x, edge_index)
         x = F.dropout(x, training=True)
         x = self.lin2(x)
-        return F.log_softmax(x, dim=1)
+        x = F.log_softmax(x, dim=1)
 
         '''
         x = self.attn1(x, edge_index)
@@ -91,10 +91,10 @@ class NodeAttentionModel(torch.nn.Module):
         x = self.attn3(x, edge_index)
 
         x = self.node_pred_mlp(x)
+        '''
 
         # return vertex features
-        return x
-        '''
+        return [[x]]
 
 class NodeLabelLoss(torch.nn.Module):
     def __init__(self, cfg):
@@ -111,77 +111,80 @@ class NodeLabelLoss(torch.nn.Module):
             # default behavior
             self.balance = True
 
-    def forward(self, node_pred, data0, data1):
+    def forward(self, out, clusters, primary):
         """
         node_pred:
-            predicted node type from model forward
+            out[0] - predicted node type from model forward
         data:
-            data[0] - 5 types data
-            data[1] - primary data
+            dbscan_label - dbscan data
+            em_primaries - primary data
         """
-        data0 = data0[0]
-        data1 = data1[0]
-        # first decide what true edges should be
-        # need to form graph, then pass through GNN
-        # clusts = form_clusters(data0)
-        clusts = form_clusters_new(data0)
+        total_loss, total_acc = 0., 0.
+        ngpus = len(clusters)
+        for i in range(ngpus):
+            node_pred = out[0][i]
+            data0 = clusters[i]
+            data1 = primary[i]
+            
+            # first decide what true edges should be
+            # need to form graph, then pass through GNN
+            # clusts = form_clusters(data0)
+            clusts = form_clusters_new(data0)
 
-        # remove track-like particles
-        # types = get_cluster_label(data0, clusts)
-        # selection = types > 1 # 0 or 1 are track-like
-        # clusts = clusts[selection]
+            # remove track-like particles
+            # types = get_cluster_label(data0, clusts)
+            # selection = types > 1 # 0 or 1 are track-like
+            # clusts = clusts[selection]
 
-        # remove compton clusters
-        # if no cluster fits this condition, return
-        selection = filter_compton(clusts) # non-compton looking clusters
-        if not len(selection):
-            total_loss = self.lossfn(node_pred, node_pred)
-            return {
-                'accuracy': 1.,
-                'loss': total_loss
-            }
+            # remove compton clusters
+            # if no cluster fits this condition, return
+            selection = filter_compton(clusts) # non-compton looking clusters
+            if not len(selection):
+                total_loss += self.lossfn(node_pred, node_pred)
+                total_acc += 1.
+                continue
 
-        clusts = clusts[selection]
+            clusts = clusts[selection]
 
-        # get the true node labels
-        primaries = assign_primaries(data1, clusts, data0)
-        #node_assn = torch.tensor([2*float(i in primaries)-1. for i in range(len(clusts))]) # must return -1 or 1
-        node_assn = torch.tensor([int(i in primaries) for i in range(len(clusts))]) # must return 0 or 1
-        if node_pred.is_cuda:
-            node_assn = node_assn.cuda()
+            # get the true node labels
+            primaries = assign_primaries(data1, clusts, data0)
+            #node_assn = torch.tensor([2*float(i in primaries)-1. for i in range(len(clusts))]) # must return -1 or 1
+            node_assn = torch.tensor([int(i in primaries) for i in range(len(clusts))]) # must return 0 or 1
+            if node_pred.is_cuda:
+                node_assn = node_assn.cuda()
 
-        node_assn = node_assn.view(-1)
-        #node_pred = node_pred.view(-1)
+            node_assn = node_assn.view(-1)
+            #node_pred = node_pred.view(-1)
 
-        weights = torch.tensor([1., 1.])
-        if node_pred.is_cuda:
-            weights = weights.cuda()
+            weights = torch.tensor([1., 1.])
+            if node_pred.is_cuda:
+                weights = weights.cuda()
 
-        if self.balance:
-            ind0 = node_assn == 0
-            ind1 = node_assn == 1
-            # number in each class
-            n0 = torch.sum(ind0).float()
-            n1 = torch.sum(ind1).float()
-            weights[0] = n1/(n0+n1)
-            weights[1] = n0/(n0+n1)
-            print('class sizes', n0, n1)
+            if self.balance:
+                ind0 = node_assn == 0
+                ind1 = node_assn == 1
+                # number in each class
+                n0 = torch.sum(ind0).float()
+                n1 = torch.sum(ind1).float()
+                weights[0] = n1/(n0+n1)
+                weights[1] = n0/(n0+n1)
+                print('class sizes', n0, n1)
 
-        #total_loss = self.lossfn(node_pred, node_assn)
-        print('weights', weights)
-        total_loss = F.nll_loss(node_pred, node_assn, weight=weights)
-        print(total_loss)
+            #total_loss = self.lossfn(node_pred, node_assn)
+            print('weights', weights)
+            total_loss += F.nll_loss(node_pred, node_assn, weight=weights)
+            print(total_loss)
 
-        # compute accuracy of assignment
-        preds = torch.argmin(node_pred, dim=1)
-        print(node_pred)
-        print(preds)
-        tot_vox = np.sum([len(c) for c in clusts])
-        int_vox = np.sum([len(clusts[i]) for i in range(len(clusts)) if node_assn[i] == preds[i]])
-        total_acc = int_vox * 1.0 / tot_vox
-        #total_acc = torch.tensor(primary_assign_vox_efficiency(node_assn, node_pred, clusts))
+            # compute accuracy of assignment
+            preds = torch.argmin(node_pred, dim=1)
+            print(node_pred)
+            print(preds)
+            tot_vox = np.sum([len(c) for c in clusts])
+            int_vox = np.sum([len(clusts[i]) for i in range(len(clusts)) if node_assn[i] == preds[i]])
+            total_acc += int_vox * 1.0 / tot_vox
+            #total_acc = torch.tensor(primary_assign_vox_efficiency(node_assn, node_pred, clusts))
 
         return {
-            'accuracy': total_acc,
-            'loss': total_loss
+            'accuracy': total_acc/ngpus,
+            'loss': total_loss/ngpus
         }

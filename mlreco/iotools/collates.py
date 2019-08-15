@@ -38,6 +38,16 @@ def CollateSparse(batch):
                                               np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
                                              axis=1 ) for batch_id,sample in enumerate(batch) ],
                                    axis=0)
+        elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+            result[key] = [
+                concat([
+                    concat( [ concat( [sample[key][depth][0],
+                                                np.full(shape=[len(sample[key][depth][0]),1], fill_value=batch_id, dtype=np.int32)],
+                                               axis=1 ) for batch_id, sample in enumerate(batch) ],
+                                     axis = 0),
+                    concat([sample[key][depth][1] for sample in batch], axis=0)
+                ], axis=1) for depth in range(len(batch[0][key]))
+            ]
         else:
             result[key] = [sample[key] for sample in batch]
     return result
