@@ -6,7 +6,8 @@ from mlreco.models import factories
 from mlreco.trainval import trainval
 import numpy as np
 import torch
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES']=''
 
 @pytest.fixture(params=factories.model_dict().keys())
 def config(request):

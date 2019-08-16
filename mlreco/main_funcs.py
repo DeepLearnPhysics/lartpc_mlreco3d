@@ -136,7 +136,7 @@ def prepare(cfg):
 
 
 def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
-        tsum, tsum_io, res, cfg, epoch):
+        tsum, tsum_io, res, cfg, epoch, first_id):
     """
     Log relevant information to CSV files and stdout.
     """
@@ -160,8 +160,8 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
     # Report (logger)
     if handlers.csv_logger:
-        handlers.csv_logger.record(('iter', 'epoch', 'titer', 'tsumiter'),
-                                   (handlers.iteration, epoch, tspent_iteration, tsum))
+        handlers.csv_logger.record(('iter', 'first_id', 'epoch', 'titer', 'tsumiter'),
+                                   (handlers.iteration, first_id, epoch, tspent_iteration, tsum))
         handlers.csv_logger.record(('tio', 'tsumio'),
                                    (tspent_io, tsum_io))
         handlers.csv_logger.record(('mem', ), (mem, ))
@@ -238,6 +238,7 @@ def train_loop(cfg, handlers):
 
         tio_start = time.time()
         data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
+        first_id = np.array(data_blob['index']).reshape(-1)[0]
         tspent_io = time.time() - tio_start
         tsum_io += tspent_io
 
@@ -257,7 +258,7 @@ def train_loop(cfg, handlers):
 
         log(handlers, tstamp_iteration, tspent_io,
             tspent_iteration, tsum, tsum_io,
-            res, cfg, epoch)
+            res, cfg, epoch, first_id)
         # Log metrics/do analysis
         if 'analysis' in cfg['model']:
             for ana_script in cfg['model']['analysis']:
@@ -298,6 +299,7 @@ def inference_loop(cfg, handlers):
             # blob = next(handlers.data_io_iter)
             tio_start = time.time()
             data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
+            first_id = np.array(data_blob['index']).reshape(-1)[0]
             tspent_io = time.time() - tio_start
             tsum_io += tspent_io
 
@@ -315,7 +317,7 @@ def inference_loop(cfg, handlers):
 
             log(handlers, tstamp_iteration, tspent_io,
                 tspent_iteration, tsum, tsum_io,
-                res, cfg, epoch)
+                res, cfg, epoch, first_id)
             # Log metrics/do analysis
             if 'analysis' in cfg['model']:
                 for ana_script in cfg['model']['analysis']:
