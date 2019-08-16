@@ -21,6 +21,9 @@ class AbstractBatchSampler(Sampler):
         if self._batch_size < 0 or self._batch_size > self._data_size:
             raise ValueError('%s received invalid batch size %d for data size %s', (self.__class__.__name__, batch_size, str(self._data_size)))
         # Use an independent random number generator for random sampling
+        if seed<0:
+            import time
+            seed=int(time.time())
         self._random = np.random.RandomState(seed=seed)
 
     def __len__(self):
@@ -34,7 +37,7 @@ class RandomSequenceSampler(AbstractBatchSampler):
 
     @staticmethod
     def create(ds, cfg):
-        return RandomSequenceSampler(len(ds), cfg['batch_size'], seed=cfg['seed'])
+        return RandomSequenceSampler(len(ds), cfg['batch_size'], seed=cfg.get('seed',-1))
 
 
 class SequentialBatchSampler(AbstractBatchSampler):
