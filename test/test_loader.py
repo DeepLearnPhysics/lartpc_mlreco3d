@@ -21,7 +21,6 @@ def test_loader(cfg_file, quiet=True, csv=False):
         cfg_file = os.path.join(TOP_DIR, 'config', cfg_file)
     if not os.path.isfile(cfg_file):
         print(cfg_file, 'not found...')
-        #sys.exit(1)
         return 0
     if csv:
         from mlreco.utils.utils import CSVData
