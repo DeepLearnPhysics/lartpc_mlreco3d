@@ -142,36 +142,32 @@ class UResNet(torch.nn.Module):
 
         x = self.input((coords, features))
         feature_maps = [x]
-        feature_ppn = [x]
+        #feature_ppn = [x]
         for i, layer in enumerate(self.encoding_block):
             x = self.encoding_block[i](x)
             feature_maps.append(x)
             x = self.encoding_conv[i](x)
-            feature_ppn.append(x)
+            #feature_ppn.append(x)
 
         # U-ResNet decoding
-        feature_ppn2 = [x]
+        #feature_ppn2 = [x]
         for i, layer in enumerate(self.decoding_conv):
             encoding_block = feature_maps[-i-2]
             x = layer(x)
             x = self.concat([encoding_block, x])
             x = self.decoding_blocks[i](x)
-            feature_ppn2.append(x)
-
+            #feature_ppn2.append(x)
+            
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
         if self._ghost:
             x_ghost = self.linear_ghost(x)
 
         if self._ghost:
-            return [[x_seg],
-                    [feature_ppn],
-                    [feature_ppn2],
-                    [x_ghost]]
+            return {'segmentation' : [x_seg],
+                    'ghost' : [x_ghost]}
         else:
-            return [[x_seg],
-                    [feature_ppn],
-                    [feature_ppn2]]
+            return {'segmentation' : [x_seg]}
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -208,9 +204,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, segmentation, label):
+    def forward(self, result, label):
         """
-        segmentation[0], label and weight are lists of size #gpus = batch_size.
+        result[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
 
@@ -220,7 +216,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         If ghost = True, then num_classes should not count the ghost class.
         If ghost_label > -1, then we perform only ghost segmentation.
         """
-        assert len(segmentation[0]) == len(label)
+        assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
         mask_loss, mask_acc = 0., 0.
@@ -230,14 +226,14 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
 
-                event_segmentation = segmentation[0][i][batch_index]  # (N, num_classes)
+                event_segmentation = result['segmentation'][i][batch_index]  # (N, num_classes)
                 event_label = label[i][batch_index][:, -1][:, None]  # (N, 1)
                 event_label = torch.squeeze(event_label, dim=-1).long()
                 if self._ghost_label > -1:
                     event_label = (event_label == self._ghost_label).long()
 
                 elif self._ghost:
-                    event_ghost = segmentation[3][i][batch_index]  # (N, 2)
+                    event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
                     # loss_mask = self.cross_entropy(event_ghost, mask_label)
