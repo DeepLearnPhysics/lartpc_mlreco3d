@@ -126,8 +126,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
         record = [pdg_code,
                   particle.energy_deposit(),
                   particle.num_voxels(),
-                  particle.energy_init(),
-                  particle.energy_deposit()]
+                  particle.energy_init()]
         # Register start point
         x = particle.first_step().x()
         y = particle.first_step().y()
