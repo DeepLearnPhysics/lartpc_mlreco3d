@@ -164,7 +164,7 @@ def test_parse_particle_infos(event_tensor3d, event_particles):
     assert len(output[0].shape) == 2
     assert len(output[1].shape) == 2
     assert output[0].shape[1] == 3
-    assert output[1].shape[1] == 6
+    assert output[1].shape[1] == 5
     assert output[0].shape[0] == output[1].shape[0]
 
 
