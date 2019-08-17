@@ -42,6 +42,7 @@ def inference(cfg):
 
 
 def process_config(cfg):
+    
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
     cfg['training']['gpus'] = list(range(len([int(a) for a in cfg['training']['gpus'].split(',') if a.isdigit()])))
@@ -71,6 +72,12 @@ def process_config(cfg):
     if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))) == 0:
         raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
 
+    # Report where config processed
+    import subprocess as sc
+    print('\nConfig processed at:',sc.getstatusoutput('uname -a')[1])
+    print('\n$CUDA_VISIBLE_DEVICES="%s"\n' % os.environ['CUDA_VISIBLE_DEVICES'])
+    # Report GPUs to be used (if any)
+    # Report configuations
     pp = pprint.PrettyPrinter(indent=4)
     pp.pprint(cfg)
 
@@ -100,6 +107,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
 
 
 def prepare(cfg):
+
     # Set primary device
     if len(cfg['training']['gpus']) > 0:
         torch.cuda.set_device(cfg['training']['gpus'][0])
