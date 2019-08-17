@@ -59,6 +59,4 @@ class FullEdgeNodeOnlyModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
         
-        return {
-            'edge_pred': e
-        }
+        return { 'edge_pred': [e] }

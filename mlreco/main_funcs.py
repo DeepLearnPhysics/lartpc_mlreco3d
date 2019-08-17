@@ -182,8 +182,12 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
         loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
         tmap  = handlers.trainer.tspent
-        tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
-        tabs  = utils.round_decimals(tmap['train'], 3)
+        if cfg['training']['train']:
+            tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
+            tabs  = utils.round_decimals(tmap['train'], 3)
+        else:
+            tfrac = utils.round_decimals(tmap['forward']/tspent_iteration*100., 2)
+            tabs  = utils.round_decimals(tmap['forward'], 3)
         epoch = utils.round_decimals(epoch, 2)
 
         if cfg['training']['train']:

@@ -179,10 +179,10 @@ class UResNet(torch.nn.Module):
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
 
-        return [[x_seg],
-                [feature_ppn],
-                [feature_ppn2],
-                [feature_clustering]]
+        return {'segmentation'     : [x_seg],
+                'ppn1_feature_enc' : [feature_ppn],
+                'ppn1_feature_dec' : [feature_ppn2],
+                'cluster_feature'  : [feature_clustering]}
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -240,13 +240,13 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2) + 0.000000001)
 
-    def forward(self, segmentation, label, cluster_label):
+    def forward(self, result, label, cluster_label):
         """
-        segmentation[0], label and weight are lists of size #gpus = batch_size.
+        result[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
         label[0] has shape (N, 1) where N is #pts across minibatch_size events.
         """
-        assert len(segmentation[0]) == len(label)
+        assert len(result['segmentation']) == len(label)
         batch_ids = [d[0][:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
 
@@ -269,12 +269,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
 
-                event_segmentation = segmentation[0][i][batch_index]  # (N, num_classes)
+                event_segmentation = result['segmentation'][i][batch_index]  # (N, num_classes)
                 event_label = label[i][0][batch_index][:, -1][:, None]  # (N, 1)
                 event_label = torch.squeeze(event_label, dim=-1).long()
 
                 # Reorder event_segmentation to match event_label
-                data_coords = segmentation[3][i][-1].get_spatial_locations()[batch_index][:, :-1]
+                data_coords = result['cluster_feature'][i][-1].get_spatial_locations()[batch_index][:, :-1]
                 perm = np.lexsort((data_coords[:, 2], data_coords[:, 1], data_coords[:, 0]))
                 event_segmentation = event_segmentation[perm]
 
@@ -290,7 +290,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 # Loss for clustering
                 # Loop first over feature maps, starting from coarsest one
                 # Note: We have to be careful with coordinates sorting.
-                for j, feature_map in enumerate(segmentation[3][i]):
+                for j, feature_map in enumerate(result['cluster_feature'][i]):
                     if torch.cuda.is_available():
                         batch_index = feature_map.get_spatial_locations()[:, -1].cuda() == b.long()
                     else:
