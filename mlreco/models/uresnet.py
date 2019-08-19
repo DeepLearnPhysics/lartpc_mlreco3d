@@ -41,7 +41,7 @@ class UResNet(torch.nn.Module):
         features = point_cloud[:, self._dimension+1:].float()
         x = self.sparseModel((coords, features))
         x = self.linear(x)
-        return [[x]]
+        return {"segmentation" : [x]}
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -49,7 +49,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
-    def forward(self, segmentation, label, weight=None):
+    def forward(self, outputs, label, weight=None):
         """
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -57,7 +57,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         where N is #pts across minibatch_size events.
         """
         # TODO Add weighting
-        assert len(segmentation[0]) == len(label)
+        segmentation = outputs['segmentation']
+        assert len(segmentation) == len(label)
         # if weight is not None:
         #     assert len(data) == len(weight)
         batch_ids = [d[:, -2] for d in label]
@@ -68,7 +69,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         for i in range(len(segmentation)):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_segmentation = segmentation[0][i][batch_index]
+                event_segmentation = segmentation[i][batch_index]
                 event_label = label[i][:, -1][batch_index]
                 event_label = torch.squeeze(event_label, dim=-1).long()
                 loss_seg = self.cross_entropy(event_segmentation, event_label)
@@ -84,7 +85,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
                 total_acc += acc
                 count += 1
-
+        
         return {
             'accuracy': total_acc/count,
             'loss': total_loss/count
