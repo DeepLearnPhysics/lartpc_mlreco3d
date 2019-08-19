@@ -70,7 +70,7 @@ class EdgeModel(torch.nn.Module):
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 e.to(device)
-                return e
+                return {'edge_pred':[e]}
 
             clusts = clusts[selection]
         
@@ -81,7 +81,7 @@ class EdgeModel(torch.nn.Module):
         if not edge_index.shape[0]:
             e = torch.tensor([], requires_grad=True)
             e.to(device)
-            return e
+            return {'edge_pred':[e]}
 
         # obtain vertex features
         x = cluster_vtx_features(data[0], clusts, device=device)
@@ -138,7 +138,7 @@ class EdgeChannelLoss(torch.nn.Module):
         ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
         for i in range(ngpus):
-            edge_pred = out[0][i]
+            edge_pred = out['edge_pred'][i]
             data0 = clusters[i]
             data1 = groups[i]
 

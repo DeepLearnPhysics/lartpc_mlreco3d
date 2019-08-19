@@ -52,4 +52,4 @@ class EdgeNodeOnlyModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
         
-        return [[e]]
+        return {'edge_pred':[e]}

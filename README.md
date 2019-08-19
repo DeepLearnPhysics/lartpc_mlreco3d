@@ -37,8 +37,8 @@ Typically in a configuration file you want to edit:
 * `gpus`
 
 
-If you want more, you can use `analysis_keys`, `analysis` (scripts) and `outputs` (formatters)
-to store events in CSV format and run your custom analysis scripts (see folder `analysis`).
+If you want more information stored, such as networ output tensors and post-processing outcomes, you can use `analysis` (scripts) and `outputs` (formatters)
+to store them in CSV format and run your custom analysis scripts (see folder `analysis`).
 
 TODO: describe configuration files in more detail
 
@@ -80,26 +80,46 @@ plt.show()
 print(df.columns.values)
 ```
 
-## Analysis Keys
+## Recording network output
+_This is a new feature added Aug. 2019, whch made `analysis_keys` feature obsolete._
 
-Analysis Keys allow you to record additional data in a training log, with column headers sharing a name with the keys.
-
-To set analysis keys, you modify the model definition in the config:
+`outputs` configuration block allows you to run scripts on input data and/or network outputs.
+It also supports storing your scripts output in a CSV file for offline analysis.
 
 ```yaml
 model:
-  analysis_keys:
-      primary_fdr: 'primary_fdr'
-      primary_acc: 'primary_acc'
+  outputs:
+      unwrapper: unwrapper_3d_scn
+      parsers:
+        - uresnet_ppn
 ```
-The `primary_fdr` key will store `out['primary_fdr']` where `out` is the network output.  Note that if you use something mutable (like a dictionary) for network output (as above), you can also set keys in the loss.  If the output of the network is array-like instead of a dictionary, the config may look like this:
+`parsers` is the list of functions that consume input data and network outputs to perform some analysis. Here, we specified `uresnet_ppn` which is defined under `mlreco/output_formatters/uresnet_ppn.py`. You can implement your custom functions and make them available under `mlreco.output_formatters` module (see `mlreco/output_formatters/__init__.py`).
+
+`unwrapper` specifies a function that _unwrapps_ the input data and network output. You can consider this as a pre-processing of data before calling `uresnet_ppn`. For instance, when we use `sparseconvnet` package, which is often done in this repository, multiple event tensors are combined into one torch tensor with _batch IDs_, which allows us to split the combined tensor into individual data element (e.g. an event). However, in the analysis stage, it is typical to run a function per event instead of many-events-combined single tensor. `unwrapper_3d_scn` (and there also exists `unwrapper_2d_scn`) unwrapps such tensors and make an array of data where each element corresponds to each data element (e.g. an event). `uresnet_ppn` can be written under such assumption and, therefore, in a simple manner (i.e. loop over events to apply analysis).
+
+By default, both unwrapper and analysis functions are given the full input data and network outputs.
+There are three additional (and optional) configuration options for the `outputs` section.
+
 ```yaml
 model:
-  analysis_keys:
-      primary_fdr: 1
-      primary_acc: 2
+  outputs:
+    unwrapper: unwrapper_3d_scn
+    parsers:
+      - uresnet_ppn
+    data_keys:
+      - input_data
+    output_keys:
+      - segmentation
+      - points
+      - mask_ppn2
+    main_key: input_data
 ```
-now the `primary_fdr` key will store `out[1]` at each iteration.
+The `data_keys` option specifies which key in the input data (to the network) should be processed.
+The `output_keys` option specifies which key in the output data (from the network) should be processed.
+They exist so that you may exclude some data that do not follow the format assumed by either an `unwrapper` or `parser` functions.
+Finally, `main_key` can be used to specify which one of input data tensor should be used to group batch IDs.
+Yes, that means `main_key` is a specific configuration for an unwrapper function, and probably the configuration key should be under unwrapper.
+This is to be fixed in future.    
 
 # Repository Structure
 

@@ -177,10 +177,10 @@ class IterativeEdgeModel(torch.nn.Module):
             matched = matched.cuda()
             counter = counter.cuda()
 
-        return [[edges],
-                [edge_pred],
-                [matched],
-                [counter]]
+        return {'edges':[edges],
+                'edge_pred':[edge_pred],
+                'matched':[matched],
+                'counter':[counter]}
 
     
 class IterEdgeChannelLoss(torch.nn.Module):
