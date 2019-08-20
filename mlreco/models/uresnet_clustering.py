@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
+import time
 
 
 class UResNet(torch.nn.Module):
@@ -66,6 +67,7 @@ class UResNet(torch.nn.Module):
         self._N = self._model_config.get('num_cluster_conv', 0)
         self._simpleN = self._model_config.get('simple_conv', True)
         self._add_coordinates = self._model_config.get('cluster_add_coords', False)
+        self._density_estimate = self._model_config.get('density_estimate', False)
 
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
@@ -138,6 +140,12 @@ class UResNet(torch.nn.Module):
            scn.OutputLayer(self._dimension))
 
         self.linear = torch.nn.Linear(outFeatures, num_classes)
+        if self._density_estimate:
+            self._density_layer = []
+            for i in range(num_strides-2, -1, -1):
+                self._density_layer.append(torch.nn.Linear(nPlanes[i], 2))
+            self._density_layer = torch.nn.Sequential(*self._density_layer)
+
 
     def forward(self, input):
         """
@@ -161,6 +169,7 @@ class UResNet(torch.nn.Module):
         # U-ResNet decoding
         feature_ppn2 = [x]
         feature_clustering = [x]
+        feature_density = []
         for i, layer in enumerate(self.decoding_conv):
             encoding_block = feature_maps[-i-2]
             x = layer(x)
@@ -173,16 +182,24 @@ class UResNet(torch.nn.Module):
                     x.features = torch.cat([x.get_spatial_locations(), x.features], dim=1)
                 x = self.clustering_conv[i](x)
             feature_clustering.append(x)
+            if self._density_estimate:
+                feature_density.append(self._density_layer[i](x.features))
             if self._N > 0:
                 x = self.concat([feature_clustering[-1], feature_ppn2[-1]])
 
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
-
-        return [[x_seg],
-                [feature_ppn],
-                [feature_ppn2],
-                [feature_clustering]]
+        if self._density_estimate:
+            return [[x_seg],
+                    [feature_ppn],
+                    [feature_ppn2],
+                    [feature_clustering],
+                    [feature_density]]
+        else:
+            return [[x_seg],
+                    [feature_ppn],
+                    [feature_ppn2],
+                    [feature_clustering]]
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -230,15 +247,40 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
         self._dimension = self._cfg.get('data_dim', 3)
 
+        # Density estimation configuration parameters
+        self._density_estimate = self._cfg.get('density_estimate', False)
+        self._density_weight = self._cfg.get('density_weight', 0.001)
+        self._target_densityA = self._cfg.get('target_density_intracluster', 0.9)
+        self._target_densityB = self._cfg.get('target_density_intercluster', 0.1)
+
         if isinstance(self._intra_cluster_margin, float):
             self._intra_cluster_margin = [self._intra_cluster_margin] * self._depth
         if isinstance(self._inter_cluster_margin, float):
             self._inter_cluster_margin = [self._inter_cluster_margin] * self._depth
 
     def distances(self, v1, v2):
+        """
+        Simple method to compute distances from points in v1 to points in v2.
+        """
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2) + 0.000000001)
+
+    def distances2(self, points):
+        """
+        Uses BLAS/LAPACK operations to efficienctly compute pairwise distances.
+        """
+        M = points
+        transpose  = M.permute([0, 2, 1])
+        zeros = torch.zeros(1, 1, 1)
+        if torch.cuda.is_available():
+            zeros = zeros.cuda()
+        inner_prod = torch.baddbmm(zeros, M, transpose, alpha=-2.0, beta=0.0)
+        squared    = torch.sum(torch.mul(M, M), dim=-1, keepdim=True)
+        squared_tranpose = squared.permute([0, 2, 1])
+        inner_prod += squared
+        inner_prod += squared_tranpose
+        return inner_prod
 
     def forward(self, segmentation, label, cluster_label):
         """
@@ -260,12 +302,16 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         cluster_reg_loss_per_class = [0.] * self._num_classes
         cluster_real_distance_loss_per_class = [0.] * self._num_classes
         cluster_total_loss_per_class = [0.] * self._num_classes
+        density_loss = 0.
         accuracy = []
         for j in range(self._depth):
             accuracy.append([0.] * self._num_classes)
 
         for i in range(len(label)):
             max_depth = len(cluster_label[i])
+            # for j, feature_map in enumerate(segmentation[3][i]):
+            #     hypercoordinates = feature_map.features
+            #     self.distances2(hypercoordinates)
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
 
@@ -305,6 +351,36 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     x = coordinates.cpu().detach().numpy()
                     perm = np.lexsort((x[:, 2], x[:, 1], x[:, 0]))
                     coordinates = coordinates[perm]
+                    hypercoordinates = hypercoordinates[perm]
+
+                    # Density estimate loss
+                    if self._density_estimate and j > 0:
+                        density_estimate = segmentation[4][i][j-1][batch_index][perm]
+                        radius = [5.0]
+                        clusters_id = clusters_labels.unique()
+                        lossA, lossB = 0., 0.
+                        distances = self.distances2(hypercoordinates[None,...][..., :3]).squeeze(0)
+                        for c in clusters_id:
+                            cluster_idx = (clusters_labels == c).squeeze(1)
+                            cluster = hypercoordinates[cluster_idx]
+                            estimate = density_estimate[cluster_idx]
+                            for r in radius:
+                                # d = (self.distances(cluster, hypercoordinates) < r)
+                                d = (distances < r)[cluster_idx, :]
+                                # d = self.radius(cluster, hypercoordinates, r)
+                                densityA = d[:, cluster_idx].sum(dim=1)
+                                densityB = d[:, ~cluster_idx].sum(dim=1)
+                                total = (densityA + densityB).float()
+                                densityA = densityA.float() / total
+                                densityB = densityB.float() / total
+                                lossA += torch.abs(estimate[:, 0] - densityA).sum()
+                                lossB += torch.abs(estimate[:, 1] - densityB).sum()
+                                lossA += torch.pow(torch.clamp(self._target_densityA - densityA, min=0), 2).mean()
+                                lossB += torch.pow(torch.clamp(densityB - self._target_densityB, min=0), 2).mean()
+
+                        lossA /= clusters_id.size(0) * len(radius)
+                        lossB /= clusters_id.size(0) * len(radius)
+                        density_loss += lossA + lossB
 
                     # Loop over semantic classes
                     for class_ in range(self._num_classes):
@@ -316,7 +392,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         realclusters = []  # Real coordinates of centroids of each true cluster
                         for c in clusters_id:
                             cluster_idx = (clusters_labels[class_index] == c).squeeze(1)
-                            hyperclusters.append(hypercoordinates[perm][class_index][cluster_idx])
+                            hyperclusters.append(hypercoordinates[class_index][cluster_idx])
                             realclusters.append(coordinates[class_index][cluster_idx].float())
 
                         # 1. Loop over clusters, define intra-cluster loss
@@ -352,7 +428,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                             real_distance_loss /= C
                             # compute accuracy based on this heuristic cluster
                             # prediction assignments
-                            predicted_assignments = torch.argmin(self.distances(hypercoordinates[perm][class_index], means), dim=1)
+                            predicted_assignments = torch.argmin(self.distances(hypercoordinates[class_index], means), dim=1)
                             predicted_assignments = clusters_id[predicted_assignments]
                             accuracy[j][class_] += predicted_assignments.eq_(clusters_labels[class_index].squeeze(1)).sum().item() / float(predicted_assignments.nelement())
                         # 2. Define inter-cluster loss
@@ -400,23 +476,24 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         # print("Reg = ", cluster_reg_loss.item())
 
         results = {
-            'accuracy': uresnet_acc,
-            'loss': self._uresnet_weight * uresnet_loss + cluster_total_loss,
-            'uresnet_loss': self._uresnet_weight * uresnet_loss,
-            'uresnet_acc': uresnet_acc,
-            'intracluster_loss': cluster_intracluster_loss,
-            'intercluster_loss': cluster_intercluster_loss,
-            'reg_loss': cluster_reg_loss,
-            'real_distance_loss': cluster_real_distance_loss,
-            'total_cluster_loss': cluster_total_loss
+            'accuracy': uresnet_acc / float(batch_size),
+            'loss': (self._uresnet_weight * uresnet_loss + cluster_total_loss + self._density_weight * density_loss) / float(batch_size),
+            'uresnet_loss': self._uresnet_weight * uresnet_loss / float(batch_size),
+            'uresnet_acc': uresnet_acc / float(batch_size),
+            'intracluster_loss': cluster_intracluster_loss / float(batch_size),
+            'intercluster_loss': cluster_intercluster_loss / float(batch_size),
+            'reg_loss': cluster_reg_loss / float(batch_size),
+            'real_distance_loss': cluster_real_distance_loss / float(batch_size),
+            'total_cluster_loss': cluster_total_loss / float(batch_size),
+            'density_loss': density_loss / float(batch_size),
         }
 
         for class_ in range(self._num_classes):
-            results['intracluster_loss_%d' % class_] = cluster_intracluster_loss_per_class[class_]
-            results['intercluster_loss_%d' % class_] = cluster_intercluster_loss_per_class[class_]
-            results['reg_loss_%d' % class_] = cluster_reg_loss_per_class[class_]
-            results['real_distance_loss_%d' % class_] = cluster_real_distance_loss_per_class[class_]
-            results['total_cluster_loss_%d' % class_] = cluster_total_loss_per_class[class_]
+            results['intracluster_loss_%d' % class_] = cluster_intracluster_loss_per_class[class_] / float(batch_size)
+            results['intercluster_loss_%d' % class_] = cluster_intercluster_loss_per_class[class_] / float(batch_size)
+            results['reg_loss_%d' % class_] = cluster_reg_loss_per_class[class_] / float(batch_size)
+            results['real_distance_loss_%d' % class_] = cluster_real_distance_loss_per_class[class_] / float(batch_size)
+            results['total_cluster_loss_%d' % class_] = cluster_total_loss_per_class[class_] / float(batch_size)
             for j in range(self._depth):
                 results['acc_%d_%d' % (j, class_)] = accuracy[j][class_] / float(batch_size)
 

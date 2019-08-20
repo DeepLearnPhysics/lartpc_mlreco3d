@@ -74,6 +74,7 @@ parsers = {
     "parse_sparse3d_scn_scales": [(3, 1)]*5
 }
 
+
 @pytest.mark.parametrize("N", [192])
 @pytest.mark.parametrize("num_voxels_low", [20])
 @pytest.mark.parametrize("num_voxels_high", [100])
