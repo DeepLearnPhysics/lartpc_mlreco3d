@@ -24,8 +24,9 @@ class Chain(torch.nn.Module):
     def forward(self, input):
         point_cloud, label = input
         x = self.uresnet_lonely((point_cloud,))
-        y = self.ppn((label, x[0][0], x[1][0], x[2][0]))
-        return [x[0]] + y
+        x['label'] = label
+        y = self.ppn(x)
+        return x.update(y)
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
@@ -42,14 +43,14 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         self.uresnet_loss = SegmentationLoss(cfg)
         self.ppn_loss = PPNLoss(cfg)
 
-    def forward(self, segmentation, label, particles):
-        uresnet_res = self.uresnet_loss([segmentation[0]], label)
-        ppn_res = self.ppn_loss(segmentation[1:], label, particles)
-        res = { **ppn_res, **uresnet_res }
-        res['uresnet_acc'] = uresnet_res['accuracy']
-        res['uresnet_loss'] = uresnet_res['loss']
+    def forward(self, result, label, particles):
+        uresnet_res = self.uresnet_loss(result, label)
+        ppn_res = self.ppn_loss(result, label, particles)
+        res = uresnet_res.update(ppn_res)
+        #res['uresnet_acc'] = uresnet_res['accuracy']
+        #res['uresnet_loss'] = uresnet_res['loss']
         # Don't forget to sum all losses
-        res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
-                        ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
-                        + uresnet_res['loss'].float()
+        #res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
+        #                ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
+        #                + uresnet_res['loss'].float()
         return res

@@ -11,6 +11,7 @@ def edge_model_dict():
     from . import edge_nnconv
     from . import edge_econv
     from . import edge_meta
+    from . import dir_meta
     
     models = {
         "basic_attention" : edge_attention.BasicAttentionModel,
@@ -20,7 +21,8 @@ def edge_model_dict():
         "full_edge_node_only" : full_edge_node_only.FullEdgeNodeOnlyModel,
         "nnconv" : edge_nnconv.NNConvModel,
         "econv" : edge_econv.EdgeConvModel,
-        "emeta" : edge_meta.EdgeMetaModel
+        "emeta" : edge_meta.EdgeMetaModel,
+        "dir_meta" : dir_meta.EdgeMetaModel
     }
     
     return models

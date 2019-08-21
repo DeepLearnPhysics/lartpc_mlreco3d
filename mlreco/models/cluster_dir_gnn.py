@@ -69,7 +69,7 @@ class EdgeModel(torch.nn.Module):
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 e.to(device)
-                return e
+                return {'edge_pred':[e]}
 
             clusts = clusts[selection]
         
@@ -80,7 +80,7 @@ class EdgeModel(torch.nn.Module):
         if not edge_index.shape[0]:
             e = torch.tensor([], requires_grad=True)
             e.to(device)
-            return e
+            return {'edge_pred':[e]}
 
         # obtain vertex directions
         x = cluster_vtx_dirs(data[0], clusts, device=device)
@@ -134,7 +134,7 @@ class EdgeChannelLoss(torch.nn.Module):
             data[0] - DBSCAN data
             data[1] - groups data
         """
-        edge_pred = out['edge_pred']
+        edge_pred = out[0][0]
         data0 = data0[0]
         data1 = data1[0]
         
