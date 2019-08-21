@@ -76,6 +76,7 @@ class trainval(object):
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
         """
         res_combined = {}
+        #for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
         for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
             blob = {}
             for key in data_blob.keys():
@@ -85,15 +86,6 @@ class trainval(object):
                 if key not in res_combined:
                     res_combined[key] = []
                 res_combined[key].extend(res[key])
-        # Average loss and acc over all the events in this batch
-        # Keys of format %s_count are special and used as counters
-        # e.g. for PPN when there are no particle labels in event
-        for key in res_combined:
-            if ('analysis_keys' not in self._model_config or key not in self._model_config['analysis_keys']):
-                if "count" not in key:
-                    res_combined[key] = np.array(res_combined[key]).mean()
-                else:
-                    res_combined[key] = np.array(res_combined[key]).sum()
         return res_combined
 
     def _forward(self, data_blob):
@@ -125,7 +117,6 @@ class trainval(object):
 
             result = self._net(data)
 
-
             if not torch.cuda.is_available():
                 data = [data]
 
@@ -144,15 +135,11 @@ class trainval(object):
             for label in loss_acc:
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
             # Use analysis keys to also get tensors
-            if 'analysis_keys' in self._model_config:
-                for key in self._model_config['analysis_keys']:
-                    key_result = result[self._model_config['analysis_keys'][key]]
-                    import sparseconvnet as scn
-                    # Record feature maps
-                    if isinstance(key_result[0], list) and isinstance(key_result[0][0], scn.SparseConvNetTensor):
-                        res[key] = [[torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy() for s in layer] for layer in key_result]
-                    else:
-                        res[key] = [s.cpu().detach().numpy() for s in key_result]
+            #if 'analysis_keys' in self._model_config:
+            #    for key in self._model_config['analysis_keys']:
+            #        res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
+            for key in result.keys():
+                res[key] = [s.cpu().detach().numpy() for s in result[key]]
             return res
 
     def initialize(self):

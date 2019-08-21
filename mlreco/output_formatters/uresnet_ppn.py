@@ -51,7 +51,7 @@ def uresnet_ppn(csv_logger, data_blob, res,
                               (event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 6, value))
             csv_logger.write()
         # 7 = PPN predictions after masking
-        mask = (~(res['mask'] == 0)).any(axis=1)
+        mask = (~(res['mask_ppn2'] == 0)).any(axis=1)
         events = data_blob['input_data'][mask]
         for i, row in enumerate(res['points'][mask]):
             event = events[i]
@@ -64,7 +64,7 @@ def uresnet_ppn(csv_logger, data_blob, res,
             csv_logger.write()
 
         # 10 = masking + score threshold
-        mask = ((~(res['mask'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
+        mask = ((~(res['mask_ppn2'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
         events = data_blob['input_data'][mask]
         for i, row in enumerate(res['points'][mask]):
             event = events[i]
@@ -77,7 +77,7 @@ def uresnet_ppn(csv_logger, data_blob, res,
             csv_logger.write()
 
         # 11 = masking + score threshold + NMS
-        mask = ((~(res['mask'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
+        mask = ((~(res['mask_ppn2'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
         keep = nms_numpy(res['points'][mask][:, :3], scores[mask][:, 1], nms_score_threshold, window_size)
         events = data_blob['input_data'][mask][keep]
         for i, row in enumerate(res['points'][mask][keep]):
@@ -128,7 +128,7 @@ def uresnet_ppn(csv_logger, data_blob, res,
     if 'segmentation' in res and 'points' in res and len(res['points'][0]) > 5:
         # 12 = masking + score threshold + filter PPN points of type X within N pixels of type X
         # 13 = masking + score threshold + filter PPN points of type X within N pixels of type X + NMS
-        mask = ((~(res['mask'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
+        mask = ((~(res['mask_ppn2'] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
         uresnet_predictions = np.argmax(res['segmentation'][mask], axis=1)
         num_classes = res['segmentation'].shape[1]
         ppn_type_predictions = np.argmax(scipy.special.softmax(res['points'][mask][:, 5:], axis=1), axis=1)
