@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-import time
 
 
 class UResNet(torch.nn.Module):
@@ -225,6 +224,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         Margin for intercluster loss
     uresnet_weight: float
         Weight for uresnet loss
+    density_weight: float
+        Weight for the density estimate loss.
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn_scales", (int,)],
@@ -252,11 +253,18 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._density_weight = self._cfg.get('density_weight', 0.001)
         self._target_densityA = self._cfg.get('target_density_intracluster', 0.9)
         self._target_densityB = self._cfg.get('target_density_intercluster', 0.1)
+        self._radius = self._cfg.get('radius', [2.0])
+        if not isinstance(self._radius, list):
+            raise Exception("Expected list for radius parameter.")
 
         if isinstance(self._intra_cluster_margin, float):
             self._intra_cluster_margin = [self._intra_cluster_margin] * self._depth
         if isinstance(self._inter_cluster_margin, float):
             self._inter_cluster_margin = [self._inter_cluster_margin] * self._depth
+        if isinstance(self._target_densityA, float) or isinstance(self._target_densityA, int):
+            self._target_densityA = [self._target_densityA] * len(self._radius)
+        if isinstance(self._target_densityB, float) or isinstance(self._target_densityB, int):
+            self._target_densityB = [self._target_densityB] * len(self._radius)
 
     def distances(self, v1, v2):
         """
@@ -268,7 +276,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     def distances2(self, points):
         """
-        Uses BLAS/LAPACK operations to efficienctly compute pairwise distances.
+        Uses BLAS/LAPACK operations to efficiently compute pairwise distances.
         """
         M = points
         transpose  = M.permute([0, 2, 1])
@@ -303,6 +311,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         cluster_real_distance_loss_per_class = [0.] * self._num_classes
         cluster_total_loss_per_class = [0.] * self._num_classes
         density_loss = 0.
+        density_lossA_estimate, density_lossA_target = 0., 0.
+        density_lossB_estimate, density_lossB_target = 0., 0.
+        density_accA = [0.] * len(self._radius)
+        density_accB = [0.] * len(self._radius)
         accuracy = []
         for j in range(self._depth):
             accuracy.append([0.] * self._num_classes)
@@ -356,31 +368,51 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     # Density estimate loss
                     if self._density_estimate and j > 0:
                         density_estimate = segmentation[4][i][j-1][batch_index][perm]
-                        radius = [5.0]
                         clusters_id = clusters_labels.unique()
-                        lossA, lossB = 0., 0.
+                        lossA_estimate, lossA_target, lossB_estimate, lossB_target = 0., 0., 0., 0.
+                        total_densityA = [0.] * len(self._radius)
+                        total_densityB = [0.] * len(self._radius)
                         distances = self.distances2(hypercoordinates[None,...][..., :3]).squeeze(0)
                         for c in clusters_id:
                             cluster_idx = (clusters_labels == c).squeeze(1)
                             cluster = hypercoordinates[cluster_idx]
                             estimate = density_estimate[cluster_idx]
-                            for r in radius:
+                            for k, r in enumerate(self._radius):
                                 # d = (self.distances(cluster, hypercoordinates) < r)
-                                d = (distances < r)[cluster_idx, :]
+                                d = (distances[cluster_idx, :] < r)
                                 # d = self.radius(cluster, hypercoordinates, r)
                                 densityA = d[:, cluster_idx].sum(dim=1)
                                 densityB = d[:, ~cluster_idx].sum(dim=1)
-                                total = (densityA + densityB).float()
-                                densityA = densityA.float() / total
-                                densityB = densityB.float() / total
-                                lossA += torch.abs(estimate[:, 0] - densityA).sum()
-                                lossB += torch.abs(estimate[:, 1] - densityB).sum()
-                                lossA += torch.pow(torch.clamp(self._target_densityA - densityA, min=0), 2).mean()
-                                lossB += torch.pow(torch.clamp(densityB - self._target_densityB, min=0), 2).mean()
+                                # total = (densityA + densityB).float()
+                                densityA = densityA.float() #/ total
+                                densityB = densityB.float() #/ total
+                                total_densityA[k] += densityA.mean()
+                                total_densityB[k] += densityB.mean()
+                                lossA_estimate += torch.pow(estimate[:, 0] - densityA, 2).mean()
+                                lossB_estimate += torch.pow(estimate[:, 1] - densityB, 2).mean()
+                                lossA_target += torch.pow(torch.clamp(self._target_densityA[k] - densityA, min=0), 2).mean()
+                                lossB_target += torch.pow(torch.clamp(densityB - self._target_densityB[k], min=0), 2).mean()
+                                # print("densityA", j, c, densityA.mean())
+                                #print(torch.clamp(self._target_densityA - densityA, min=0))
+                                #print("densityB", densityB)
+                                #print(torch.clamp(densityB - self._target_densityB, min=0))
 
-                        lossA /= clusters_id.size(0) * len(radius)
-                        lossB /= clusters_id.size(0) * len(radius)
-                        density_loss += lossA + lossB
+                        lossA_estimate /= clusters_id.size(0) * len(self._radius)
+                        lossA_target /= clusters_id.size(0) * len(self._radius)
+                        lossB_estimate /= clusters_id.size(0) * len(self._radius)
+                        lossB_target /= clusters_id.size(0) * len(self._radius)
+
+                        density_loss += lossA_estimate + lossA_target + lossB_estimate + lossB_target
+                        density_lossA_estimate += lossA_estimate
+                        density_lossB_estimate += lossB_estimate
+                        density_lossA_target += lossA_target
+                        density_lossB_target += lossB_target
+                        for k in range(len(self._radius)):
+                            total_densityA[k] /= clusters_id.size(0) * len(self._radius)
+                            density_accA[k] += total_densityA[k]
+                            total_densityB[k] /= clusters_id.size(0) * len(self._radius)
+                            density_accB[k] += total_densityB[k]
+                        # print(density_lossA_estimate, density_lossA_target, density_lossB_estimate, density_lossB_target)
 
                     # Loop over semantic classes
                     for class_ in range(self._num_classes):
@@ -485,8 +517,15 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             'reg_loss': cluster_reg_loss / float(batch_size),
             'real_distance_loss': cluster_real_distance_loss / float(batch_size),
             'total_cluster_loss': cluster_total_loss / float(batch_size),
-            'density_loss': density_loss / float(batch_size),
+            'density_loss': self._density_weight * density_loss / float(batch_size),
+            'density_lossA_estimate': self._density_weight * density_lossA_estimate / float(batch_size),
+            'density_lossB_estimate': self._density_weight * density_lossB_estimate / float(batch_size),
+            'density_lossA_target': self._density_weight * density_lossA_target / float(batch_size),
+            'density_lossB_target': self._density_weight * density_lossB_target / float(batch_size),
         }
+        for i, r in enumerate(self._radius):
+            results['density_accA_%.2f' % r] = density_accA[i] / float(batch_size)
+            results['density_accB_%.2f' % r] = density_accB[i] / float(batch_size)
 
         for class_ in range(self._num_classes):
             results['intracluster_loss_%d' % class_] = cluster_intracluster_loss_per_class[class_] / float(batch_size)
