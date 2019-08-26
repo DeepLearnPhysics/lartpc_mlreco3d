@@ -32,8 +32,17 @@ class trainval(object):
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._training_config.get('learning_rate') # deprecate to move to optimizer args
         self._model_path = self._training_config.get('model_path', '')
-        self._optim = self._training_config.get('optimizer', 'Adam')
-        self._optim_args = self._training_config.get('optimizer_args', {}) # default empty dict
+        
+        # optimizer
+        optim_cfg = self._training_config.get('optimizer')
+        if optim_cfg is not None:
+            self._optim = optim_cfg.get('name', 'Adam')
+            self._optim_args = optim_cfg.get('args', {}) # default empty dict
+        else:
+            # default
+            self._optim = 'Adam'
+            self._optim_args = {}
+            
         # handle learning rate being set in multiple locations
         if self._optim_args.get('lr') is not None:
             if self._learning_rate is not None:
@@ -45,6 +54,10 @@ class trainval(object):
             else:
                 # default
                 self._optim_args['lr'] = 0.001
+        
+        # learning rate scheduler
+        self._lr_scheduler = self._training_config.get('lr_scheduler')
+        self._lr_scheduler_args = self._training_config.get('lr_scheduler_args', {})
 
     def backward(self):
         total_loss = 0.0
@@ -178,6 +191,14 @@ class trainval(object):
         
         optim_class = eval('torch.optim.' + self._optim)
         self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+        
+        # learning rate scheduler
+        if self._lr_scheduler is not None:
+            scheduler_class = eval('torch.optim.lr_scheduler.', + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self.lr_scheduler_args)
+        else:
+            self._scheduler = None
+        
             
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
