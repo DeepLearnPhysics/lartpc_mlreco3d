@@ -56,8 +56,13 @@ class trainval(object):
                 self._optim_args['lr'] = 0.001
         
         # learning rate scheduler
-        self._lr_scheduler = self._training_config.get('lr_scheduler')
-        self._lr_scheduler_args = self._training_config.get('lr_scheduler_args', {})
+        schedule_cfg = self._training_config.get('lr_scheduler')
+        if schedule_cfg is not None:
+            self._lr_scheduler = schedule_cfg.get('name')
+            self._lr_scheduler_args = schedule_cfg.get('args', {})
+            # add mode: iteration or epoch
+        else:
+            self._lr_scheduler = None
 
     def backward(self):
         total_loss = 0.0
@@ -70,6 +75,9 @@ class trainval(object):
         total_loss.backward()
         # torch.nn.utils.clip_grad_norm_(self._net.parameters(), 1.0)
         self._optimizer.step()
+        # note that scheduler is stepped every iteration, not every epoch
+        if self._scheduler is not None:
+            self._scheduler.step()
 
     def save_state(self, iteration):
         tstart = time.time()
@@ -194,8 +202,8 @@ class trainval(object):
         
         # learning rate scheduler
         if self._lr_scheduler is not None:
-            scheduler_class = eval('torch.optim.lr_scheduler.', + self._lr_scheduler)
-            self._scheduler = scheduler_class(self._optimizer, **self.lr_scheduler_args)
+            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
         else:
             self._scheduler = None
         
