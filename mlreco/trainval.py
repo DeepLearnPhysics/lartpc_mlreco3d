@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import warnings
 import torch
 import time
 import os
@@ -29,8 +30,21 @@ class trainval(object):
         self._loss_keys = self._model_config.get('loss_input', [])
         self._train = self._training_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
-        self._learning_rate = self._training_config.get('learning_rate', 0.001)
+        self._learning_rate = self._training_config.get('learning_rate') # deprecate to move to optimizer args
         self._model_path = self._training_config.get('model_path', '')
+        self._optim = self._training_config.get('optimizer', 'Adam')
+        self._optim_args = self._training_config.get('optimizer_args', {}) # default empty dict
+        # handle learning rate being set in multiple locations
+        if self._optim_args.get('lr') is not None:
+            if self._learning_rate is not None:
+                    warnings.warn("Learning rate set in two locations.  Using rate in optimizer_args")  
+        else:
+            # just set learning rate
+            if self._learning_rate is not None:
+                self._optim_args['lr'] = self._learning_rate
+            else:
+                # default
+                self._optim_args['lr'] = 0.001
 
     def backward(self):
         total_loss = 0.0
@@ -161,7 +175,10 @@ class trainval(object):
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-        self._optimizer = torch.optim.Adam(self._net.parameters(), lr=self._learning_rate)
+        
+        optim_class = eval('torch.optim.' + self._optim)
+        self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+            
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
         iteration = 0
