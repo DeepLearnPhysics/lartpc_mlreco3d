@@ -51,7 +51,7 @@ class UResNet(torch.nn.Module):
         - if `ghost`, segmentation scores for deghosting (N, 2)
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
     def __init__(self, cfg, name="uresnet_lonely"):
@@ -190,7 +190,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     the number of classes, not counting the ghost point class.
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg, reduction='sum'):

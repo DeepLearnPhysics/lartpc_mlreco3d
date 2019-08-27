@@ -13,8 +13,8 @@ class Chain(torch.nn.Module):
     """
     MODULES = ['dbscan', 'uresnet_ppn_type']
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, model_config):
@@ -47,9 +47,9 @@ class Chain(torch.nn.Module):
 
 class ChainLoss(torch.nn.modules.loss._Loss):
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)],
-        ["parse_particle_points", (int,)],
-        ["parse_cluster3d_clean", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)],
+        ["parse_cluster3d_clean", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg):

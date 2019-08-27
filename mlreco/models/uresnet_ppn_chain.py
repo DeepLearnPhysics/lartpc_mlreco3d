@@ -11,8 +11,8 @@ class Chain(torch.nn.Module):
     Run UResNet and use its encoding/decoding feature maps for PPN layers
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
     MODULES = ['ppn', 'uresnet_lonely']
 
@@ -33,8 +33,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     Loss for UResNet + PPN chain
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg):
