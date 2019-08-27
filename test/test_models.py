@@ -75,7 +75,6 @@ parsers = {
 }
 
 
-@pytest.mark.parametrize("N", [192])
 @pytest.mark.parametrize("num_voxels_low", [20])
 @pytest.mark.parametrize("num_voxels_high", [100])
 def test_model_train(config, N, num_voxels_low, num_voxels_high):

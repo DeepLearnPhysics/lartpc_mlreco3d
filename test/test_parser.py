@@ -5,15 +5,12 @@ import numpy as np
 import pytest
 
 
-N = 192
-
-
 @pytest.fixture(params=[1, 2])
-def event_tensor3d(request):
+def event_tensor3d(request, N):
     """
     This fixture generates a list of larcv::EventSparseTensor3D.
 
-    Parameters: event count
+    Parameters: event count and image size
     """
     from larcv import larcv
     import random
@@ -78,11 +75,11 @@ def event_particles(request):
 
 
 @pytest.fixture(params=[4])
-def event_cluster3d(request):
+def event_cluster3d(request, N):
     """
     This fixture generates a larcv::EventClusterVoxel3D.
 
-    Parameters: number of clusters
+    Parameters: number of clusters and image size
     """
     from larcv import larcv
     import random
@@ -134,7 +131,9 @@ def test_parse_sparse3d(event_tensor3d):
     assert output.shape[0] > 0
 
 
-def test_parse_tensor3d(event_tensor3d):
+# event_tensor3d fixture also depends on the fixture N.
+# But, the value of N will be in agreement with N used to run event_tensor3d.
+def test_parse_tensor3d(event_tensor3d, N):
     from mlreco.iotools.parsers import parse_tensor3d
     output = parse_tensor3d(event_tensor3d)
     assert len(output.shape) == 4
@@ -213,6 +212,7 @@ def test_parse_cluster3d_clean(event_cluster3d, event_tensor3d):
     assert output[0].shape[1] == 3
     assert output[1].shape[1] == 1
     assert output[0].shape[0] == output[1].shape[0]
+
 
 @pytest.mark.parametrize("event_tensor3d", [1], indirect=True)
 def test_parse_sparse3d_clean(event_tensor3d):
