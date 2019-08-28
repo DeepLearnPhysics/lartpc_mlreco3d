@@ -44,12 +44,13 @@ def test_model_forward(config_simple, N, num_voxels_low, num_voxels_high):
     if not hasattr(loss, "INPUT_SCHEMA"):
         pytest.skip('No test defined for criterion of %s' % config['model']['name'])
 
-    loss_input = (output,) + generate_data(N, loss.INPUT_SCHEMA,
-                                                             num_voxels_low=num_voxels_low,
-                                                             num_voxels_high=num_voxels_high,
-                                                             voxels=voxels,
-                                                             loss=True)[0]
-    res = loss.forward(*loss_input)
+
+    loss_input = generate_data(N, loss.INPUT_SCHEMA,
+                                 num_voxels_low=num_voxels_low,
+                                 num_voxels_high=num_voxels_high,
+                                 voxels=voxels,
+                                 loss=True)[0]
+    res = loss.forward(output, *loss_input)
 
     res['loss'].backward()
 

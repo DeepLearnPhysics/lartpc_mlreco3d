@@ -191,8 +191,8 @@ class UResNet(torch.nn.Module):
 
         res = {
             'segmentation'     : [x_seg],
-            'ppn1_feature_enc' : [feature_ppn],
-            'ppn2_feature_dec' : [feature_ppn2],
+            'ppn_feature_enc' : [feature_ppn],
+            'ppn_feature_dec' : [feature_ppn2],
             'cluster_feature'  : [feature_clustering]
             }
 

@@ -64,7 +64,9 @@ def cluster_edge_dir(data, c1, c2):
     if lend > 0:
         disp = disp / lend
     B = np.outer(disp, disp)
-    return B.flatten()
+    out = B.flatten()
+    out = np.append(out, lend)
+    return out
 
 
 def cluster_edge_dirs(data, clusts, edge_index, cuda=True, device=None):
