@@ -69,7 +69,7 @@ class EdgeModel(torch.nn.Module):
             if not len(selection):
                 e = torch.tensor([], requires_grad=True)
                 e.to(device)
-                return e
+                return {'edge_pred':[e]}
 
             clusts = clusts[selection]
         
@@ -80,7 +80,7 @@ class EdgeModel(torch.nn.Module):
         if not edge_index.shape[0]:
             e = torch.tensor([], requires_grad=True)
             e.to(device)
-            return e
+            return {'edge_pred':[e]}
 
         # obtain vertex directions
         x = cluster_vtx_dirs(data[0], clusts, device=device)
