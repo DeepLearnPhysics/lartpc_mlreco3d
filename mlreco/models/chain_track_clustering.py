@@ -25,8 +25,12 @@ class Chain(torch.nn.Module):
         # self.keys = {'clusters': 5, 'segmentation': 3, 'points': 0}
 
     def forward(self, input):
+        """
+        Assumes single GPU/CPU.
+        No multi-GPU! (We select index 0 of x['segmentation'])
+        """
         x = self.uresnet_ppn_type(input)
-        new_input = torch.cat([input[0].double(), x[3][0].double()], dim=1)
+        new_input = torch.cat([input[0].double(), x['segmentation'][0].double()], dim=1)
         one_hot = torch.cat([new_input[:, :-5], torch.nn.functional.one_hot(torch.argmax(new_input[:, -self._num_classes:], dim=1), num_classes=self._num_classes).double()], dim=1)
         clusters = self.dbscan(one_hot)
         #c = torch.cat(clusters, dim=0)
@@ -42,7 +46,8 @@ class Chain(torch.nn.Module):
         if len(final) > 0:
             final = torch.cat(final, dim=0)
         # print(len(x))
-        return x + [[final]]
+        x['final'] = [final]
+        return x
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):

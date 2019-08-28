@@ -42,6 +42,7 @@ def inference(cfg):
 
 
 def process_config(cfg):
+
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
     cfg['training']['gpus'] = list(range(len([int(a) for a in cfg['training']['gpus'].split(',') if a.isdigit()])))
@@ -71,6 +72,12 @@ def process_config(cfg):
     if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))) == 0:
         raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
 
+    # Report where config processed
+    import subprocess as sc
+    print('\nConfig processed at:',sc.getstatusoutput('uname -a')[1])
+    print('\n$CUDA_VISIBLE_DEVICES="%s"\n' % os.environ['CUDA_VISIBLE_DEVICES'])
+    # Report GPUs to be used (if any)
+    # Report configuations
     pp = pprint.PrettyPrinter(indent=4)
     pp.pprint(cfg)
 
@@ -100,6 +107,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
 
 
 def prepare(cfg):
+
     # Set primary device
     if len(cfg['training']['gpus']) > 0:
         torch.cuda.set_device(cfg['training']['gpus'][0])
@@ -145,8 +153,17 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
     res_dict = {}
     for key in res:
-        if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
-            res_dict[key] = np.mean(res[key])
+        # Average loss and acc over all the events in this batch
+        # Keys of format %s_count are special and used as counters
+        # e.g. for PPN when there are no particle labels in event
+        #if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
+        if len(res[key]) == 0:
+            continue
+        if isinstance(res[key][0], float) or isinstance(res[key][0], int):
+            if "count" not in key:
+                res_dict[key] = np.mean([np.array(t).mean() for t in res[key]])
+            else:
+                res_dict[key] = np.sum(np.sum([np.array(t).sum() for t in res[key]]))
 
     mem = 0.
     if torch.cuda.is_available():
@@ -173,11 +190,15 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
 
     # Report (stdout)
     if report_step:
-        acc   = utils.round_decimals(res['accuracy'], 4)
-        loss  = utils.round_decimals(res['loss'],     4)
+        acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
+        loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
         tmap  = handlers.trainer.tspent
-        tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
-        tabs  = utils.round_decimals(tmap['train'], 3)
+        if cfg['training']['train']:
+            tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
+            tabs  = utils.round_decimals(tmap['train'], 3)
+        else:
+            tfrac = utils.round_decimals(tmap['forward']/tspent_iteration*100., 2)
+            tabs  = utils.round_decimals(tmap['forward'], 3)
         epoch = utils.round_decimals(epoch, 2)
 
         if cfg['training']['train']:
@@ -186,7 +207,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         else:
             msg = 'Iter. %d (epoch %g) @ %s ... forward time %g%% (%g [s]) mem. %g GB \n'
             msg = msg % (handlers.iteration, epoch, tstamp_iteration, tfrac, tabs, mem)
-        msg += '   Segmentation: loss %g accuracy %g\n' % (loss, acc)
+        msg += '   loss %g accuracy %g\n' % (loss, acc)
         print(msg)
         sys.stdout.flush()
         if handlers.csv_logger: handlers.csv_logger.flush()
@@ -207,7 +228,6 @@ def get_data_minibatched(dataset, cfg):
 
     for key in cfg['data_keys']:
         data_blob[key] = [list() for _ in range(num_compute_cycle)]
-
     for cycle in range(num_compute_cycle):
         for gpu in range(num_proc_unit):
             minibatch = next(dataset)
@@ -248,7 +268,8 @@ def train_loop(cfg, handlers):
 
         # Store output if requested
         if 'outputs' in cfg['model']:
-            output(cfg['model']['outputs'], data_blob, res, cfg, handlers.iteration)
+            output.output(data_blob, res, cfg['model']['outputs'], cfg['training']['log_dir'],
+                          handlers.iteration * cfg['iotool']['batch_size'])
 
         log(handlers, tstamp_iteration, tspent_io,
             tspent_iteration, tsum, tsum_io,
@@ -286,6 +307,7 @@ def inference_loop(cfg, handlers):
         _ = handlers.trainer.initialize()
         handlers.iteration = 0
         while handlers.iteration < cfg['training']['iterations']:
+
             tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             tstart_iteration = time.time()
 
@@ -305,10 +327,8 @@ def inference_loop(cfg, handlers):
 
             # Store output if requested
             if 'outputs' in cfg['model']:
-                # for output in cfg['model']['outputs']:
-                #     f = getattr(output_formatters, output)
-                #     f(data_blob, res, cfg)
-                output(cfg['model']['outputs'], data_blob, res, cfg, handlers.iteration)
+                output.output(data_blob, res, cfg['model']['outputs'], cfg['training']['log_dir'],
+                              handlers.iteration * cfg['iotool']['batch_size'])
 
             log(handlers, tstamp_iteration, tspent_io,
                 tspent_iteration, tsum, tsum_io,
