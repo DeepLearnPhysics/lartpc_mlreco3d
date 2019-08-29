@@ -44,9 +44,9 @@ class UResNet(torch.nn.Module):
         - feature maps of encoding path
         - feature maps of decoding path
     """
-#     INPUT_SCHEMA = [
-#         ["parse_sparse3d_scn", (float,)]
-#     ]
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,), (3, 1)]
+    ]
 
     def __init__(self, cfg, name="uresnet_clustering"):
         super(UResNet, self).__init__()
@@ -189,10 +189,17 @@ class UResNet(torch.nn.Module):
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
 
-        return {'segmentation'     : [x_seg],
-                'ppn1_feature_enc' : [feature_ppn],
-                'ppn1_feature_dec' : [feature_ppn2],
-                'cluster_feature'  : [feature_clustering]}
+        res = {
+            'segmentation'     : [x_seg],
+            'ppn_feature_enc' : [feature_ppn],
+            'ppn_feature_dec' : [feature_ppn2],
+            'cluster_feature'  : [feature_clustering]
+            }
+
+        if self._density_estimate:
+            res['density_feature'] = [feature_density]
+
+        return res
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -212,19 +219,25 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         Weight for regularization loss
     delta: float
         Weight for real distance loss
-    intracluster_margin: float
-        Margin for intracluster loss
-    intercluster_margin: float
-        Margin for intercluster loss
+    intracluster_margin: float or list
+        Margin for intracluster loss. If list, one value per depth level.
+    intercluster_margin: float or list
+        Margin for intercluster loss. If list, one value per depth level.
     uresnet_weight: float
         Weight for uresnet loss
     density_weight: float
-        Weight for the density estimate loss.
+        Weight for the density estimate loss. If a single value is provided,
+        will weight the overall density loss.  If a list is provided, it will
+        be weights for [overall density loss, density loss A, density loss B].
+    radius: list
+        Radius at which we compute neighbors density. List of float
+    target_density_intercluster: float or list
+    target_density_intracluster: float or list
     """
-#     INPUT_SCHEMA = [
-#         ["parse_sparse3d_scn_scales", (int,)],
-#         ["parse_cluster3d_scales", (int,)]
-#     ]
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn_scales", (int,), [(3, 1)]*5],
+        ["parse_cluster3d_scales", (int,), [(3, 1)]*5]
+    ]
 
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
@@ -238,27 +251,54 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._gamma = self._cfg.get('gamma', 0.001)
         self._delta = self._cfg.get('delta', 0.)
         self._uresnet_weight = self._cfg.get('uresnet_weight', 1.0)
-        self._intra_cluster_margin = self._cfg.get('intracluster_margin', 0.5)
-        self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
         self._dimension = self._cfg.get('data_dim', 3)
 
-        # Density estimation configuration parameters
-        self._density_estimate = self._cfg.get('density_estimate', False)
-        self._density_weight = self._cfg.get('density_weight', 0.001)
-        self._target_densityA = self._cfg.get('target_density_intracluster', 0.9)
-        self._target_densityB = self._cfg.get('target_density_intercluster', 0.1)
-        self._radius = self._cfg.get('radius', [2.0])
-        if not isinstance(self._radius, list):
-            raise Exception("Expected list for radius parameter.")
+        self._intra_cluster_margin = self._cfg.get('intracluster_margin', 0.5)
+        self._inter_cluster_margin = self._cfg.get('intercluster_margin', 1.5)
 
         if isinstance(self._intra_cluster_margin, float):
             self._intra_cluster_margin = [self._intra_cluster_margin] * self._depth
         if isinstance(self._inter_cluster_margin, float):
             self._inter_cluster_margin = [self._inter_cluster_margin] * self._depth
+        if isinstance(self._intra_cluster_margin, list) and len(self._intra_cluster_margin) != self._depth:
+            raise Exception("Expected list of size %d, got list of size %d for intracluster margin parameter." % (self._depth, self._intra_cluster_margin))
+        if isinstance(self._inter_cluster_margin, list) and len(self._inter_cluster_margin) != self._depth:
+            raise Exception("Expected list of size %d, got list of size %d for intercluster margin parameter." % (self._depth, self._inter_cluster_margin))
+
+        # Density estimation configuration parameters
+        self._density_estimate = self._cfg.get('density_estimate', False)
+        self._density_weight = self._cfg.get('density_weight', 0.001)
+        self._density_weightA = 1.
+        self._density_weightB = 1.
+        if isinstance(self._density_weight, list):
+            if len(self._density_weight) != 3:
+                raise Exception("Expected list of size 3, got list of size %d for density weight parameter." % len(self._density_weight))
+            self._density_weightA = self._density_weight[1]
+            self._density_weightB = self._density_weight[2]
+            self._density_weight = self._density_weight[0]
+
+        self._target_densityA = self._cfg.get('target_density_intracluster', 0.9)
+        self._target_densityB = self._cfg.get('target_density_intercluster', 0.1)
+
+        self._radius = self._cfg.get('radius', [2.0])
+        if not isinstance(self._radius, list):
+            raise Exception("Expected list for radius parameter.")
         if isinstance(self._target_densityA, float) or isinstance(self._target_densityA, int):
             self._target_densityA = [self._target_densityA] * len(self._radius)
         if isinstance(self._target_densityB, float) or isinstance(self._target_densityB, int):
             self._target_densityB = [self._target_densityB] * len(self._radius)
+        if isinstance(self._target_densityA, list) and len(self._target_densityA) != len(self._radius):
+            raise Exception("Expected list of size %d, got list of size %d for target densityA parameter." % (len(self._radius), len(self._target_densityA)))
+        if isinstance(self._target_densityB, list) and len(self._target_densityB) != len(self._radius):
+            raise Exception("Expected list of size %d, got list of size %d for target densityB parameter." % (len(self._radius), len(self._target_densityB)))
+
+    def distances(self, v1, v2):
+        """
+        Simple method to compute distances from points in v1 to points in v2.
+        """
+        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
+        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
+        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2) + 0.000000001)
 
     def distances2(self, points):
         """
@@ -275,7 +315,6 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         inner_prod += squared
         inner_prod += squared_tranpose
         return inner_prod
-
 
     def forward(self, result, label, cluster_label):
         """
@@ -354,7 +393,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                     # Density estimate loss
                     if self._density_estimate and j > 0:
-                        density_estimate = segmentation[4][i][j-1][batch_index][perm]
+                        density_estimate = result['density_feature'][i][j-1][batch_index][perm]
                         clusters_id = clusters_labels.unique()
                         lossA_estimate, lossA_target, lossB_estimate, lossB_target = 0., 0., 0., 0.
                         total_densityA = [0.] * len(self._radius)
@@ -375,7 +414,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                                 densityB = densityB.float() #/ total
                                 total_densityA[k] += densityA.mean()
                                 total_densityB[k] += densityB.mean()
-                                lossA_estimate += torch.pow(estimate[:, 0] - densityA, 2).mean()
+                                lossA_estimate += torch.pow(estimate[:, 0] - densityA, 2) .mean()
                                 lossB_estimate += torch.pow(estimate[:, 1] - densityB, 2).mean()
                                 lossA_target += torch.pow(torch.clamp(self._target_densityA[k] - densityA, min=0), 2).mean()
                                 lossB_target += torch.pow(torch.clamp(densityB - self._target_densityB[k], min=0), 2).mean()
@@ -389,7 +428,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         lossB_estimate /= clusters_id.size(0) * len(self._radius)
                         lossB_target /= clusters_id.size(0) * len(self._radius)
 
-                        density_loss += lossA_estimate + lossA_target + lossB_estimate + lossB_target
+                        density_loss += self._density_weightA * (lossA_estimate + lossA_target) + self._density_weightB * (lossB_estimate + lossB_target)
                         density_lossA_estimate += lossA_estimate
                         density_lossB_estimate += lossB_estimate
                         density_lossA_target += lossA_target
@@ -505,10 +544,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             'real_distance_loss': cluster_real_distance_loss / float(batch_size),
             'total_cluster_loss': cluster_total_loss / float(batch_size),
             'density_loss': self._density_weight * density_loss / float(batch_size),
-            'density_lossA_estimate': self._density_weight * density_lossA_estimate / float(batch_size),
-            'density_lossB_estimate': self._density_weight * density_lossB_estimate / float(batch_size),
-            'density_lossA_target': self._density_weight * density_lossA_target / float(batch_size),
-            'density_lossB_target': self._density_weight * density_lossB_target / float(batch_size),
+            'density_lossA_estimate': self._density_weight * self._density_weightA * density_lossA_estimate / float(batch_size),
+            'density_lossB_estimate': self._density_weight * self._density_weightB * density_lossB_estimate / float(batch_size),
+            'density_lossA_target': self._density_weight * self._density_weightA * density_lossA_target / float(batch_size),
+            'density_lossB_target': self._density_weight * self._density_weightB * density_lossB_target / float(batch_size),
         }
         for i, r in enumerate(self._radius):
             results['density_accA_%.2f' % r] = density_accA[i] / float(batch_size)

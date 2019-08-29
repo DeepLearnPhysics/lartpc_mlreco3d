@@ -1,0 +1,97 @@
+import pytest
+import os
+from mlreco.models import factories
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+
+@pytest.fixture(params=factories.model_dict().keys())
+def config_simple(request):
+    """
+    Fixture to generate a basic configuration dictionary given a model name.
+    """
+    model_name = request.param
+    model, criterion = factories.construct(model_name)
+    if 'chain' in model_name:
+        model_config = {
+            'name': model_name,
+            'modules': {}
+        }
+        for module in model.MODULES:
+            model_config['modules'][module] = {}
+    else:
+        model_config = {
+            'name': model_name,
+            'modules': {
+                model_name: {}
+            }
+        }
+    model_config['network_input'] = ['input_data', 'segment_label']
+    model_config['loss_input'] = ['segment_label']
+    iotool_config = {
+        'batch_size': 1
+    }
+    config = {
+        'iotool': iotool_config,
+        'training': {
+            'gpus': ''
+            },
+        'model': model_config
+    }
+    return config
+
+
+@pytest.fixture(params=factories.model_dict().keys())
+def config_full(request, tmp_path, data):
+    """
+    Fixture to generate a basic configuration dictionary given a model name.
+    """
+    model_name = request.param
+    model, criterion = factories.construct(model_name)
+    if 'chain' in model_name:
+        model_config = {
+            'name': model_name,
+            'modules': {}
+        }
+        for module in model.MODULES:
+            model_config['modules'][module] = {}
+    else:
+        model_config = {
+            'name': model_name,
+            'modules': {
+                model_name: {}
+            }
+        }
+    model_config['network_input'] = ['input_data', 'segment_label']
+    model_config['loss_input'] = ['segment_label']
+    iotool_config = {
+        'batch_size': 4,
+        'shuffle': False,
+        'num_workers': 1,
+        'collate_fn': 'CollateSparse',
+        'sampler': {
+            'name': 'RandomSequenceSampler',
+            'batch_size': 4
+        },
+        'dataset': {
+            'name': 'LArCVDataset',
+            'data_dirs': [os.path.join(tmp_path, '')],
+            'data_key': data,
+            'limit_num_files': 10
+        }
+    }
+    config = {
+        'iotool': iotool_config,
+        'training': {
+            'gpus': '',
+            'minibatch_size': -1,
+            'seed': 0,
+            'train': True,
+            'log_dir': os.path.join(tmp_path, ''),
+            'weight_prefix': os.path.join(tmp_path, "snapshot"),
+            'iterations': 1,
+            'checkpoint_step': 500,
+            'report_step': 1
+            },
+        'model': model_config
+    }
+    return config

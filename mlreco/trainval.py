@@ -8,6 +8,7 @@ import os
 from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
 import numpy as np
+from mlreco.utils.utils import to_numpy
 import re
 
 
@@ -174,7 +175,12 @@ class trainval(object):
             #    for key in self._model_config['analysis_keys']:
             #        res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
             for key in result.keys():
-                res[key] = [s.cpu().detach().numpy() for s in result[key]]
+                if len(result[key]) == 0:
+                    continue
+                if isinstance(result[key][0], list):
+                    res[key] = [[to_numpy(s) for s in x] for x in result[key]]
+                else:
+                    res[key] = [to_numpy(s) for s in result[key]]
             return res
 
     def initialize(self):
