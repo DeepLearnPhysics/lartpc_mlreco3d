@@ -70,23 +70,25 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 data_blob_element = {}
                 output_element    = {}
                 for key in data_keys:
+                    #print('Unwrapping input',key)
                     if isinstance(data_blob[key][i][j], np.ndarray) and len(data_blob[key][i][j].shape) == 2:
                         data_blob_element[key] = data_blob[key][i][j][data_blob[key][i][j][:, data_dim] == b]
                     elif isinstance(data_blob[key][i][j], list):
                         data_blob_element[key] = data_blob[key][i][j][int(b)]
+                        #print('skipping',key)
                 #print(outputs['segmentation'])
                 #print('---')
                 #print(outputs['segmentation'][output_index])
                 for key in output_keys:
+                    #print('Unwrapping output',key)
                     target = outputs[key][output_index]
                     if isinstance(target, np.ndarray):
                         if target.shape[0] == data_index.shape[0]:
                             output_element[key] = target[data_index]
                         else:
                             output_element[key] = target[target[:,data_dim] == b]
-                    elif isinstance(target, list):
-                        output_element[key] = target[int(b)]
-
+                    #elif isinstance(target, list) :
+                    #    output_element[key] = target[int(b)]
                 parsed_data_blob.append(data_blob_element)
                 parsed_outputs.append(output_element)
             output_index += 1
