@@ -6,6 +6,25 @@ from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLab
 
 
 class PPN(torch.nn.Module):
+    """
+    Point Prediction Network (PPN)
+
+    PPN is *not* a standalone network. It is an additional layer to go on top of
+    a UResNet-style network that provides feature maps on top of which PPN will
+    run some convolutions and predict point positions.
+
+    Configuration
+    -------------
+    num_strides : int
+        Depth of UResNet, also corresponds to how many times we down/upsample.
+    filters : int
+        Number of filters in the first convolution of UResNet.
+        Will increase linearly with depth.
+    num_classes : int
+        Should be number of classes (+1 if we include ghost points directly)
+    data_dim : int
+        Dimension 2 or 3
+    """
     def __init__(self, cfg):
         super(PPN, self).__init__()
         import sparseconvnet as scn
@@ -22,7 +41,8 @@ class PPN(torch.nn.Module):
         downsample = [kernel_size, 2]# downsample = [filter size, filter stride]
 
         # PPN stuff
-        self.half_stride = int(num_strides/2.0)
+        self.half_stride = int((num_strides-1)/2.0)
+        self.half_stride2 = int(num_strides/2.0)
         self.ppn1_conv = scn.SubmanifoldConvolution(self._dimension, nPlanes[-1], nPlanes[-1], 3, False)
         self.ppn1_scores = scn.SubmanifoldConvolution(self._dimension, nPlanes[-1], 2, 3, False)
 
@@ -53,8 +73,8 @@ class PPN(torch.nn.Module):
     def forward(self, input):
         use_encoding = False
         label = input['label']
-        ppn1_feature_enc = input['ppn1_feature_encoding']
-        ppn1_feature_dec = input['ppn1_feature_decoding']
+        ppn1_feature_enc = input['ppn_feature_enc']
+        ppn1_feature_dec = input['ppn_feature_dec']
         #label, x, feature_ppn, feature_ppn2 = input
         label = label[:, :-1]
 
@@ -70,9 +90,9 @@ class PPN(torch.nn.Module):
             with torch.no_grad():
                 attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.half_stride, label[:, -1][:, None]], dim=1).long())
         if use_encoding:
-            y = ppn1_feature_enc[self.half_stride]
+            y = ppn1_feature_enc[self.half_stride2]
         else:
-            y = ppn1_feature_dec[self.half_stride]
+            y = ppn1_feature_dec[self.half_stride2]
         y = self.multiply1(y, attention)
         y = self.ppn2_conv(y)
         ppn2_scores = self.ppn2_scores(y)
@@ -90,16 +110,18 @@ class PPN(torch.nn.Module):
         z = self.ppn3_conv(z)
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
+        ppn3_type = self.ppn3_type(z)
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
+        point_type = ppn3_type.features
         if torch.cuda.is_available():
-            result = {'points' : [torch.cat([pixel_pred, scores], dim=1)],
+            result = {'points' : [torch.cat([pixel_pred, scores, point_type], dim=1)],
                       'ppn1'  : [torch.cat([ppn1_scores.get_spatial_locations().cuda().float(), ppn1_scores.features], dim=1)],
                       'ppn2'  : [torch.cat([ppn2_scores.get_spatial_locations().cuda().float(), ppn2_scores.features], dim=1)],
                       'mask_ppn1'  : [attention.features],
                       'mask_ppn2' : [attention2.features]}
         else:
-            result = {'points' : [torch.cat([pixel_pred, scores], dim=1)],
+            result = {'points' : [torch.cat([pixel_pred, scores, point_type], dim=1)],
                       'ppn1'  : [torch.cat([ppn1_scores.get_spatial_locations().float(), ppn1_scores.features], dim=1)],
                       'ppn2'  : [torch.cat([ppn2_scores.get_spatial_locations().float(), ppn2_scores.features], dim=1)],
                       'mask_ppn1'  : [attention.features],
@@ -136,6 +158,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         total_distance, total_class = 0., 0.
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
+        total_acc_type, total_loss_type = 0., 0.
         data_dim = self._dimension
         for i in range(len(label)):
             event_particles = particles[i]
@@ -150,13 +173,13 @@ class PPNLoss(torch.nn.modules.loss._Loss):
 
                 event_pixel_pred = result['points'][i][batch_index][:, :data_dim] + anchors # (N, 3)
                 event_scores = result['points'][i][batch_index][:, data_dim:(data_dim+2)]  # (N, 2)
-                # event_types = result[0][i][batch_index][:, (data_dim+2):]  # (N, num_classes)
+                event_types = result['points'][i][batch_index][:, (data_dim+2):]  # (N, num_classes)
                 event_ppn1_scores = result['ppn1'][i][ppn1_batch_index][:, -2:]  # (N1, 2)
                 event_ppn2_scores = result['ppn2'][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
                 # PPN stuff
                 event_label = event_particles[event_particles[:, -2] == b][:, :-2]  # (N_gt, 3)
-                # event_types_label = event_particles[event_particles[:, -1] == b][:, data_dim+1]
+                event_types_label = event_particles[event_particles[:, -2] == b][:, -1]
                 # print(b, event_label.size())
                 if event_label.size(0) > 0:
                     # Mask: only consider pixels that were selected
@@ -166,7 +189,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     # event_segmentation = event_segmentation[event_mask]
                     event_pixel_pred = event_pixel_pred[event_mask]
                     event_scores = event_scores[event_mask]
-                    # event_types = event_types[event_mask]
+                    event_types = event_types[event_mask]
                     event_data = event_data[event_mask]
                     # Mask for PPN2
                     event_ppn2_mask = (~(result['mask_ppn1'][i][ppn2_batch_index] == 0)).any(dim=1)
@@ -209,6 +232,18 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         loss_seg += d2.mean()
                         total_distance += d2.mean()
 
+                        # Loss for point type
+                        labels = event_types_label[torch.argmin(distances_positives, dim=0)]
+                        loss_type = torch.mean(self.cross_entropy(event_types[positives].double(), labels.long()))
+
+                        # Accuracy for point type
+                        predicted_types = torch.argmax(event_types[positives], dim=-1)
+                        acc_type = (predicted_types == labels.long()).sum().item() / float(predicted_types.nelement())
+
+                        total_acc_type += acc_type
+                        total_loss_type += loss_type
+                        total_loss += loss_type.float()
+
                     total_loss_ppn1 += loss_seg_ppn1
                     total_loss_ppn2 += loss_seg_ppn2
                     total_acc_ppn1 += acc_ppn1
@@ -227,7 +262,9 @@ class PPNLoss(torch.nn.modules.loss._Loss):
             'loss_ppn1': total_loss_ppn1,
             'loss_ppn2': total_loss_ppn2,
             'acc_ppn1': total_acc_ppn1,
-            'acc_ppn2': total_acc_ppn2
+            'acc_ppn2': total_acc_ppn2,
+            'acc_ppn_type': total_acc_type,
+            'loss_type': total_loss_type
         }
         for key in ppn_results:
             if not isinstance(ppn_results[key], torch.Tensor):

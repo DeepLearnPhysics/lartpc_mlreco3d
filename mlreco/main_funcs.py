@@ -42,7 +42,7 @@ def inference(cfg):
 
 
 def process_config(cfg):
-    
+
     # Set GPUS to be used
     os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
     cfg['training']['gpus'] = list(range(len([int(a) for a in cfg['training']['gpus'].split(',') if a.isdigit()])))
@@ -157,10 +157,13 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         # Keys of format %s_count are special and used as counters
         # e.g. for PPN when there are no particle labels in event
         #if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
-        if "count" not in key:
-            res_dict[key] = np.mean([np.array(t).mean() for t in res[key]])
-        else:
-            res_dict[key] = np.sum(np.sum([np.array(t).sum() for t in res[key]]))
+        if len(res[key]) == 0:
+            continue
+        if isinstance(res[key][0], float) or isinstance(res[key][0], int):
+            if "count" not in key:
+                res_dict[key] = np.mean([np.array(t).mean() for t in res[key]])
+            else:
+                res_dict[key] = np.sum(np.sum([np.array(t).sum() for t in res[key]]))
 
     mem = 0.
     if torch.cuda.is_available():

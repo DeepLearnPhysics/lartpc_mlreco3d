@@ -3,6 +3,16 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import torch
+import sparseconvnet as scn
+
+
+def to_numpy(s):
+    if isinstance(s, torch.Tensor):
+        return s.cpu().detach().numpy()
+    elif isinstance(s, scn.SparseConvNetTensor):
+        return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
+    else:
+        raise Exception("Unknown return type %s" % type(s))
 
 
 def round_decimals(val, digits):
