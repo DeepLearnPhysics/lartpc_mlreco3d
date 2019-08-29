@@ -26,7 +26,7 @@ class Chain(torch.nn.Module):
 
     def forward(self, input):
         x = self.uresnet_ppn_type(input)
-        new_input = torch.cat([input[0].double(), x[3][0].double()], dim=1)
+        new_input = torch.cat([input[0].double(), x['segmentation'].double()], dim=1)
         one_hot = torch.cat([new_input[:, :-5], torch.nn.functional.one_hot(torch.argmax(new_input[:, -self._num_classes:], dim=1), num_classes=self._num_classes).double()], dim=1)
         clusters = self.dbscan(one_hot)
         #c = torch.cat(clusters, dim=0)
@@ -42,7 +42,8 @@ class Chain(torch.nn.Module):
         if len(final) > 0:
             final = torch.cat(final, dim=0)
         # print(len(x))
-        return x + [[final]]
+        return {'ppn_type': x,
+                'final'   : [final]}
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):

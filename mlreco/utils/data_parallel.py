@@ -26,9 +26,9 @@ class DataParallel(torch.nn.parallel.DataParallel):
     """
     def __init__(self, module, device_ids=None, output_device=None, dim=0):
         super(DataParallel, self).__init__(module,
-                                                device_ids=device_ids,
-                                                output_device=output_device,
-                                                dim=dim)
+                                           device_ids=device_ids,
+                                           output_device=output_device,
+                                           dim=dim)
 
     def scatter(self, inputs, kwargs, device_ids):
         """
@@ -67,12 +67,22 @@ class DataParallel(torch.nn.parallel.DataParallel):
         len(results) = number of outputs returned by network
         len(results[0]) = number of gpus
         """
-        results = []
-        num_outputs = len(outputs[0])
-        for i in range(num_outputs):
-            results.append([])
-        for output in outputs:  # Iterate over GPUs
-            network_outputs = gather([output], output_device, dim=self.dim)
+        if type(outputs[0]) == type(dict()):
+            results = {}
+            gathered = gather([outputs],output_device,dim=self.dim)
+            for key in gathered[0].keys(): results[key]=[]
+            for output in gathered:
+                for key in results.keys():
+                    results[key].extend(output[key])
+            return results
+
+        else:
+            results = []
+            num_outputs = len(outputs[0])        
             for i in range(num_outputs):
-                results[i].extend(network_outputs[i])
-        return results
+                results.append([])
+                for output in outputs:  # Iterate over GPUs
+                    network_outputs = gather([output], output_device, dim=self.dim)
+                for i in range(num_outputs):
+                    results[i].extend(network_outputs[i])
+            return results
