@@ -37,8 +37,8 @@ def instance_clustering(data_blob, res, cfg, idx, compute_tsne=False):
     event data, point type 1 = predictions, point type 2 = T-SNE visualizations)
     - `instance_clustering_metrics-*` with some event-wise metrics such as AMI and ARI.
     """
-    csv_logger = utils.CSVData("%s/instance_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
-    csv_logger2 = utils.CSVData("%s/instance_clustering_metrics-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    csv_logger = utils.CSVData("%s/instance_clustering-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
+    csv_logger2 = utils.CSVData("%s/instance_clustering_metrics-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
 
     model_cfg = cfg['model']['modules']['uresnet_clustering']
     segmentation_all = res['segmentation'][0]  # (N, 5)

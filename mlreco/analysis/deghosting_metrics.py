@@ -31,7 +31,7 @@ def deghosting_metrics(data_blob, res, cfg, idx):
     ------
     Writes to a CSV file `deghosting_metrics-*`
     """
-    csv_logger = utils.CSVData("%s/deghosting_metrics-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    csv_logger = utils.CSVData("%s/deghosting_metrics-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
 
     model_cfg = cfg['model']['modules']['uresnet_lonely']
 

@@ -44,14 +44,14 @@ def inference(cfg):
 def process_config(cfg):
 
     # Set GPUS to be used
-    os.environ['CUDA_VISIBLE_DEVICES'] = cfg['training']['gpus']
-    cfg['training']['gpus'] = list(range(len([int(a) for a in cfg['training']['gpus'].split(',') if a.isdigit()])))
+    os.environ['CUDA_VISIBLE_DEVICES'] = cfg['trainval']['gpus']
+    cfg['trainval']['gpus'] = list(range(len([int(a) for a in cfg['trainval']['gpus'].split(',') if a.isdigit()])))
     # Update seed
-    if cfg['training']['seed'] < 0:
+    if cfg['trainval']['seed'] < 0:
         import time
-        cfg['training']['seed'] = int(time.time())
+        cfg['trainval']['seed'] = int(time.time())
     else:
-        cfg['training']['seed'] = int(cfg['training']['seed'])
+        cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
     # Update IO seed
     if 'sampler' in cfg['iotool']:
         if 'seed' not in cfg['iotool']['sampler'] or cfg['iotool']['sampler']['seed'] < 0:
@@ -61,15 +61,15 @@ def process_config(cfg):
             cfg['iotool']['sampler']['seed'] = int(cfg['iotool']['sampler']['seed'])
 
     # Batch size checker
-    if cfg['iotool']['batch_size'] < 0 and cfg['training']['minibatch_size'] < 0:
+    if cfg['iotool']['batch_size'] < 0 and cfg['trainval']['minibatch_size'] < 0:
         raise ValueError('Cannot have both BATCH_SIZE (-bs) and MINIBATCH_SIZE (-mbs) negative values!')
     # Assign non-default values
     if cfg['iotool']['batch_size'] < 0:
-        cfg['iotool']['batch_size'] = int(cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))
-    if cfg['training']['minibatch_size'] < 0:
-        cfg['training']['minibatch_size'] = int(cfg['iotool']['batch_size'] / max(1,len(cfg['training']['gpus'])))
+        cfg['iotool']['batch_size'] = int(cfg['trainval']['minibatch_size'] * max(1,len(cfg['trainval']['gpus'])))
+    if cfg['trainval']['minibatch_size'] < 0:
+        cfg['trainval']['minibatch_size'] = int(cfg['iotool']['batch_size'] / max(1,len(cfg['trainval']['gpus'])))
     # Check consistency
-    if not (cfg['iotool']['batch_size'] % (cfg['training']['minibatch_size'] * max(1,len(cfg['training']['gpus'])))) == 0:
+    if not (cfg['iotool']['batch_size'] % (cfg['trainval']['minibatch_size'] * max(1,len(cfg['trainval']['gpus'])))) == 0:
         raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
 
     # Report where config processed
@@ -84,18 +84,18 @@ def process_config(cfg):
 
 def make_directories(cfg, loaded_iteration, handlers=None):
     # Weight save directory
-    if cfg['training']['weight_prefix']:
-        save_dir = cfg['training']['weight_prefix'][0:cfg['training']['weight_prefix'].rfind('/')]
+    if cfg['trainval']['weight_prefix']:
+        save_dir = cfg['trainval']['weight_prefix'][0:cfg['trainval']['weight_prefix'].rfind('/')]
         if save_dir and not os.path.isdir(save_dir):
             os.makedirs(save_dir)
 
     # Log save directory
-    if cfg['training']['log_dir']:
-        if not os.path.exists(cfg['training']['log_dir']):
-            os.makedirs(cfg['training']['log_dir'])
-        logname = '%s/train_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
-        if not cfg['training']['train']:
-            logname = '%s/inference_log-%07d.csv' % (cfg['training']['log_dir'], loaded_iteration)
+    if cfg['trainval']['log_dir']:
+        if not os.path.exists(cfg['trainval']['log_dir']):
+            os.makedirs(cfg['trainval']['log_dir'])
+        logname = '%s/train_log-%07d.csv' % (cfg['trainval']['log_dir'], loaded_iteration)
+        if not cfg['trainval']['train']:
+            logname = '%s/inference_log-%07d.csv' % (cfg['trainval']['log_dir'], loaded_iteration)
         if handlers is not None:
             handlers.csv_logger = utils.CSVData(logname)
         # TODO log metrics
@@ -109,23 +109,23 @@ def make_directories(cfg, loaded_iteration, handlers=None):
 def prepare(cfg):
 
     # Set primary device
-    if len(cfg['training']['gpus']) > 0:
-        torch.cuda.set_device(cfg['training']['gpus'][0])
+    if len(cfg['trainval']['gpus']) > 0:
+        torch.cuda.set_device(cfg['trainval']['gpus'][0])
 
     # Set random seed for reproducibility
-    np.random.seed(cfg['training']['seed'])
-    torch.manual_seed(cfg['training']['seed'])
+    np.random.seed(cfg['trainval']['seed'])
+    torch.manual_seed(cfg['trainval']['seed'])
 
     handlers = Handlers()
 
     # IO configuration
     # Batch size for I/O becomes minibatch size
     batch_size = cfg['iotool']['batch_size']
-    cfg['iotool']['batch_size'] = cfg['training']['minibatch_size']
+    cfg['iotool']['batch_size'] = cfg['trainval']['minibatch_size']
     handlers.data_io, cfg['data_keys'] = loader_factory(cfg)
     # TODO check that it does what we want (cycle through dataloader)
     # check on a small sample, check 1/ it cycles through and 2/ randomness
-    if cfg['training']['train']:
+    if cfg['trainval']['train']:
         handlers.data_io_iter = iter(cycle(handlers.data_io))
     else:
         handlers.data_io_iter = itertools.cycle(handlers.data_io)
@@ -136,7 +136,7 @@ def prepare(cfg):
 
     # Restore weights if necessary
     loaded_iteration = handlers.trainer.initialize()
-    if cfg['training']['train']:
+    if cfg['trainval']['train']:
         handlers.iteration = loaded_iteration
 
     make_directories(cfg, loaded_iteration, handlers=handlers)
@@ -148,8 +148,8 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
     """
     Log relevant information to CSV files and stdout.
     """
-    report_step  = cfg['training']['report_step'] and \
-                ((handlers.iteration+1) % cfg['training']['report_step'] == 0)
+    report_step  = cfg['trainval']['report_step'] and \
+                ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
 
     res_dict = {}
     for key in res:
@@ -177,7 +177,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
                                    (tspent_io, tsum_io))
         handlers.csv_logger.record(('mem', ), (mem, ))
         tmap, tsum_map = handlers.trainer.tspent, handlers.trainer.tspent_sum
-        if cfg['training']['train']:
+        if cfg['trainval']['train']:
             handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),
                                        (tmap['train'], tmap['save'], tsum_map['train'], tsum_map['save']))
         handlers.csv_logger.record(('tforward', 'tsave', 'tsumforward', 'tsumsave'),
@@ -193,7 +193,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
         acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
         loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
         tmap  = handlers.trainer.tspent
-        if cfg['training']['train']:
+        if cfg['trainval']['train']:
             tfrac = utils.round_decimals(tmap['train']/tspent_iteration*100., 2)
             tabs  = utils.round_decimals(tmap['train'], 3)
         else:
@@ -201,7 +201,7 @@ def log(handlers, tstamp_iteration, tspent_io, tspent_iteration,
             tabs  = utils.round_decimals(tmap['forward'], 3)
         epoch = utils.round_decimals(epoch, 2)
 
-        if cfg['training']['train']:
+        if cfg['trainval']['train']:
             msg = 'Iter. %d (epoch %g) @ %s ... train time %g%% (%g [s]) mem. %g GB \n'
             msg = msg % (handlers.iteration, epoch, tstamp_iteration, tfrac, tabs, mem)
         else:
@@ -223,8 +223,8 @@ def get_data_minibatched(dataset, cfg):
     """
     data_blob = {}  # FIXME dictionary or list? Keys may not be ordered
 
-    num_proc_unit = max(1,len(cfg['training']['gpus']))
-    num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['training']['minibatch_size'] * num_proc_unit))
+    num_proc_unit = max(1,len(cfg['trainval']['gpus']))
+    num_compute_cycle = int(cfg['iotool']['batch_size'] / (cfg['trainval']['minibatch_size'] * num_proc_unit))
 
     for key in cfg['data_keys']:
         data_blob[key] = [list() for _ in range(num_compute_cycle)]
@@ -238,18 +238,18 @@ def get_data_minibatched(dataset, cfg):
 
 def train_loop(cfg, handlers):
     """
-    Training loop. With optional minibatching as determined by the parameters
-    cfg['iotool']['batch_size'] vs cfg['training']['minibatch_size'].
+    Trainval loop. With optional minibatching as determined by the parameters
+    cfg['iotool']['batch_size'] vs cfg['trainval']['minibatch_size'].
     """
     tsum, tsum_io = 0., 0.
-    while handlers.iteration < cfg['training']['iterations']:
+    while handlers.iteration < cfg['trainval']['iterations']:
         epoch = handlers.iteration / float(len(handlers.data_io))
         tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
         tstart_iteration = time.time()
 
-        checkpt_step = cfg['training']['checkpoint_step'] and \
-                        cfg['training']['weight_prefix'] and \
-                        ((handlers.iteration+1) % cfg['training']['checkpoint_step'] == 0)
+        checkpt_step = cfg['trainval']['checkpoint_step'] and \
+                        cfg['trainval']['weight_prefix'] and \
+                        ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
 
         tio_start = time.time()
         data_blob = get_data_minibatched(handlers.data_io_iter, cfg)
@@ -268,7 +268,7 @@ def train_loop(cfg, handlers):
 
         # Store output if requested
         if 'outputs' in cfg['model']:
-            output.output(data_blob, res, cfg['model']['outputs'], cfg['training']['log_dir'],
+            output.output(data_blob, res, cfg['model']['outputs'], cfg['trainval']['log_dir'],
                           handlers.iteration * cfg['iotool']['batch_size'])
 
         log(handlers, tstamp_iteration, tspent_io,
@@ -291,22 +291,22 @@ def train_loop(cfg, handlers):
 def inference_loop(cfg, handlers):
     """
     Inference loop. Loops over weight files specified in
-    cfg['training']['model_path']. For each weight file,
-    runs the inference cfg['training']['iterations'] times.
+    cfg['trainval']['model_path']. For each weight file,
+    runs the inference cfg['trainval']['iterations'] times.
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
     tsum, tsum_io = 0., 0.
     # Metrics for each event
     # global_metrics = {}
-    weights = glob.glob(cfg['training']['model_path'])
+    weights = glob.glob(cfg['trainval']['model_path'])
     # if len(weights) > 0:
     print("Loading weights: ", weights)
     for weight in weights:
-        cfg['training']['model_path'] = weight
+        cfg['trainval']['model_path'] = weight
         _ = handlers.trainer.initialize()
         handlers.iteration = 0
-        while handlers.iteration < cfg['training']['iterations']:
+        while handlers.iteration < cfg['trainval']['iterations']:
 
             tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             tstart_iteration = time.time()
@@ -327,7 +327,7 @@ def inference_loop(cfg, handlers):
 
             # Store output if requested
             if 'outputs' in cfg['model']:
-                output.output(data_blob, res, cfg['model']['outputs'], cfg['training']['log_dir'],
+                output.output(data_blob, res, cfg['model']['outputs'], cfg['trainval']['log_dir'],
                               handlers.iteration * cfg['iotool']['batch_size'])
 
             log(handlers, tstamp_iteration, tspent_io,
