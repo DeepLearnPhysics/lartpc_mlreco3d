@@ -42,8 +42,8 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     - `michel_reconstruction2-*`
     """
     # Create output CSV
-    csv_logger = utils.CSVData("%s/michel_reconstruction-%.07d.csv" % (cfg['training']['log_dir'], idx))
-    csv_logger_true = utils.CSVData("%s/michel_reconstruction2-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    csv_logger = utils.CSVData("%s/michel_reconstruction-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
+    csv_logger_true = utils.CSVData("%s/michel_reconstruction2-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
 
     model_cfg = cfg['model']
 

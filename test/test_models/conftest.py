@@ -32,7 +32,7 @@ def config_simple(request):
     }
     config = {
         'iotool': iotool_config,
-        'training': {
+        'trainval': {
             'gpus': ''
             },
         'model': model_config
@@ -81,7 +81,7 @@ def config_full(request, tmp_path, data):
     }
     config = {
         'iotool': iotool_config,
-        'training': {
+        'trainval': {
             'gpus': '',
             'minibatch_size': -1,
             'seed': 0,

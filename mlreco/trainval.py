@@ -20,22 +20,22 @@ class trainval(object):
         self.tspent = {}
         self.tspent_sum = {}
         self._model_config = cfg['model']
-        self._training_config = cfg['training']
+        self._trainval_config = cfg['trainval']
         self._iotool_config = cfg['iotool']
 
-        self._weight_prefix = self._training_config.get('weight_prefix', '')
+        self._weight_prefix = self._trainval_config.get('weight_prefix', '')
         self._batch_size = self._iotool_config.get('batch_size', 1)
-        self._minibatch_size = self._training_config.get('minibatch_size', -1)
-        self._gpus = self._training_config.get('gpus', [])
+        self._minibatch_size = self._trainval_config.get('minibatch_size', -1)
+        self._gpus = self._trainval_config.get('gpus', [])
         self._input_keys = self._model_config.get('network_input', [])
         self._loss_keys = self._model_config.get('loss_input', [])
-        self._train = self._training_config.get('train', True)
+        self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
-        self._learning_rate = self._training_config.get('learning_rate') # deprecate to move to optimizer args
-        self._model_path = self._training_config.get('model_path', '')
+        self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
+        self._model_path = self._trainval_config.get('model_path', '')
         
         # optimizer
-        optim_cfg = self._training_config.get('optimizer')
+        optim_cfg = self._trainval_config.get('optimizer')
         if optim_cfg is not None:
             self._optim = optim_cfg.get('name', 'Adam')
             self._optim_args = optim_cfg.get('args', {}) # default empty dict
@@ -57,7 +57,7 @@ class trainval(object):
                 self._optim_args['lr'] = 0.001
         
         # learning rate scheduler
-        schedule_cfg = self._training_config.get('lr_scheduler')
+        schedule_cfg = self._trainval_config.get('lr_scheduler')
         if schedule_cfg is not None:
             self._lr_scheduler = schedule_cfg.get('name')
             self._lr_scheduler_args = schedule_cfg.get('args', {})
