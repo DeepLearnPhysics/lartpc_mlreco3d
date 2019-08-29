@@ -137,7 +137,7 @@ class EdgeChannelLoss(torch.nn.Module):
         """
         out:
             array output from the DataParallel gather function
-            out[0] - n_gpus tensors of predicted edge weights from model forward
+            out['edge_pred'] - n_gpus tensors of predicted edge weights from model forward
         data:
             cluster_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, cluster_id)
             group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
@@ -148,7 +148,7 @@ class EdgeChannelLoss(torch.nn.Module):
         ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
         for i in range(ngpus):
-            edge_pred = out[0][i]
+            edge_pred = out['edge_pred'][i]
             data0 = clusters[i]
             data1 = groups[i]
             data2 = primary[i]
