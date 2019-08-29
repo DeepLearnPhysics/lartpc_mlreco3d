@@ -57,7 +57,5 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         ppn_res = self.ppn_loss(result, label, particles)
         uresnet_res.update(ppn_res)
         # Don't forget to sum all losses
-        uresnet_res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
-                       ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
-                       + uresnet_res['loss'].float()
+        uresnet_res['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
         return uresnet_res
