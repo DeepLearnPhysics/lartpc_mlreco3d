@@ -15,6 +15,8 @@ def scatter_points(points, markersize=5, color='orange', colorscale=None, opacit
     OUTPUT:
      - go.Scatter3d object
     """
+    if hovertext is None and color is not None and not type(color) == type(str()):
+        hovertext = ['%.2f' % float(v) for v in color]
     trace = go.Scatter3d(x=points[:,0], y=points[:,1], z=points[:,2],
                          mode='markers',
                          marker = dict(
