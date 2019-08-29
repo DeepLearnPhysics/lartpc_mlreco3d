@@ -134,7 +134,7 @@ class EdgeChannelLoss(torch.nn.Module):
             data[0] - DBSCAN data
             data[1] - groups data
         """
-        edge_pred = out['edge_pred']
+        edge_pred = out[0][0]
         data0 = data0[0]
         data1 = data1[0]
         
