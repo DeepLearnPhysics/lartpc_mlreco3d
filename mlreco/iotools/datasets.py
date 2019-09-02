@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import os
+import os, glob
 from torch.utils.data import Dataset
 import mlreco.iotools.parsers
 
@@ -28,7 +28,7 @@ class LArCVDataset(Dataset):
            can be configured with arbitrary number of parser functions where each function can take arbitrary number of
            LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
     """
-    def __init__(self, data_schema, data_dirs, data_key=None, limit_num_files=0):
+    def __init__(self, data_schema, data_keys, limit_num_files=0):
         """
         Args: data_dirs ..... a list of data directories to find files (up to 10 files read from each dir)
               data_schema ... a dictionary of string <=> list of strings. The key is a unique name of a data chunk in a batch.
@@ -39,7 +39,15 @@ class LArCVDataset(Dataset):
         """
 
         # Create file list
-        self._files = _list_files(data_dirs,data_key,limit_num_files)
+        #self._files = _list_files(data_dirs,data_key,limit_num_files)
+        self._files = []
+        for key in data_keys:
+            fs = glob.glob(key)
+            for f in fs:
+                self._files.append(f)
+                if len(self._files) >= limit_num_files: break
+            if len(self._files) >= limit_num_files: break
+
         if len(self._files)>10: print(len(self._files),'files loaded')
         else:
             for f in self._files: print('Loading file:',f)
@@ -78,11 +86,10 @@ class LArCVDataset(Dataset):
 
     @staticmethod
     def create(cfg):
-        data_dirs   = cfg['data_dirs']
         data_schema = cfg['schema']
-        data_key    = None if not 'data_key'        in cfg else str(cfg['data_key'])
-        lns         = 0    if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
-        return LArCVDataset(data_dirs=data_dirs, data_schema=data_schema, data_key=data_key, limit_num_files=lns)
+        data_keys   = cfg['data_keys']
+        lnf         = 0    if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
+        return LArCVDataset(data_schema=data_schema, data_keys=data_keys, limit_num_files=lnf)
 
     def data_keys(self):
         return self._data_keys
@@ -109,5 +116,5 @@ class LArCVDataset(Dataset):
             name = self._data_keys[index]
             result[name] = parser(data)
 
-        result['index'] = [idx]
+        result['index'] = idx
         return result

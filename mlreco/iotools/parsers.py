@@ -411,7 +411,7 @@ def parse_particle_asis(data):
     """
     particles = data[0]
     clusters  = data[1]
-    assert particles.as_vector().size() == clusters.as_vector().size()
+    assert particles.as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
     
     meta = clusters.meta()
     

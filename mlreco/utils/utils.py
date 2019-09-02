@@ -4,7 +4,7 @@ from __future__ import print_function
 import numpy as np
 import torch
 import sparseconvnet as scn
-
+import time
 
 def to_numpy(s):
     if isinstance(s, torch.Tensor):
@@ -12,7 +12,7 @@ def to_numpy(s):
     elif isinstance(s, scn.SparseConvNetTensor):
         return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
     else:
-        raise Exception("Unknown return type %s" % type(s))
+        raise TypeError("Unknown return type %s" % type(s))
 
 
 def round_decimals(val, digits):
@@ -25,6 +25,7 @@ def moving_average(a, n=3) :
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
+
 
 # Decorative progress bar
 def progress_bar(count, total, message=''):
@@ -44,6 +45,7 @@ def progress_bar(count, total, message=''):
         </progress> {frac}% {message}
     """.format(count=count,total=total,frac=int(float(count)/float(total)*100.),message=message))
 
+
 # Memory usage print function
 def print_memory(msg=''):
     max_allocated = round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
@@ -51,6 +53,46 @@ def print_memory(msg=''):
     max_cached = round_decimals(torch.cuda.max_memory_cached()/1.e9, 3)
     cached = round_decimals(torch.cuda.memory_cached()/1.e9, 3)
     print(max_allocated, allocated, max_cached, cached, msg)
+
+
+# simple stopwatch class
+class stopwatch(object):
+    """
+    Simple stopwatch class to organize various time measurement.
+    Not very precise but good enough for a millisecond level precision
+    """
+    def __init__(self):
+        self._watch={}
+
+    def start(self,key):
+        """
+        Starts a stopwatch for a unique key
+        INPUT
+         - key can be any object but typically a string to tag a time measurement
+        """
+        self._watch[key] = [-1,time.time()]
+
+    def stop(self,key):
+        """
+        Stops a stopwatch for a unique key
+        INPUT
+         - key can be any object but typically a string to tag a time measurement
+        """
+        data = self._watch[key]
+        if data[0]<0 : data[0] = time.time() - data[1]
+
+    def time(self,key):
+        """
+        Returns the time recorded or past so far (if not stopped)
+        INPUT
+         - key can be any object but typically a string to tag a time measurement
+        """
+        if not key in self._watch: return 0
+        data = self._watch[key]
+        return data[0] if data[0]>0 else time.time() - data[1]
+
+
+    
 
 # Dumb class to organize output csv file
 class CSVData:
