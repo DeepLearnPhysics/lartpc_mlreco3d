@@ -100,7 +100,7 @@ def process_config(cfg):
 
 def make_directories(cfg, loaded_iteration, handlers=None):
     # Weight save directory
-    if 'trainva' in cfg:
+    if 'trainval' in cfg:
         if cfg['trainval']['weight_prefix']:
             save_dir = cfg['trainval']['weight_prefix'][0:cfg['trainval']['weight_prefix'].rfind('/')]
             if save_dir and not os.path.isdir(save_dir):
