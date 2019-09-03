@@ -21,10 +21,10 @@ def main():
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
 
     if environ.get('CUDA_VISIBLE_DEVICES') is not None and cfg['training']['gpus'] == '-1':
-        cfg['training']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
+        cfg['trainval']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
 
     process_config(cfg)
-    if cfg['training']['train']:
+    if cfg['trainval']['train']:
         train(cfg)
     else:
         inference(cfg)

@@ -20,6 +20,11 @@ class Chain(torch.nn.Module):
         super(Chain, self).__init__()
         self.ppn = PPN(model_config)
         self.uresnet_lonely = UResNet(model_config)
+        self._freeze_uresnet = model_config['modules']['uresnet_lonely'].get('freeze', False)
+
+        if self._freeze_uresnet:
+            for param in self.uresnet_lonely.parameters():
+                param.requires_grad = False
 
     def forward(self, input):
         """
@@ -27,12 +32,19 @@ class Chain(torch.nn.Module):
         No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
         """
         point_cloud, label = input
+        # if self._freeze_uresnet:
+        #     with torch.no_grad():
+        #         x = self.uresnet_lonely((point_cloud,))
+        # else:
+        #     x = self.uresnet_lonely((point_cloud,))
         x = self.uresnet_lonely((point_cloud,))
         x['label'] = label
         y = {}
         y.update(x)
         y['ppn_feature_enc'] = y['ppn_feature_enc'][0]
         y['ppn_feature_dec'] = y['ppn_feature_dec'][0]
+        if 'ghost' in y:
+            y['ghost'] = y['ghost'][0]
         z = self.ppn(y)
         x.update(z)
         return x
