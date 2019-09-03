@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/DeepLearnPhysics/lartpc_mlreco3d.svg?branch=develop)](https://travis-ci.org/DeepLearnPhysics/lartpc_mlreco3d)
+[![Build Status](https://travis-ci.com/DeepLearnPhysics/lartpc_mlreco3d.svg?branch=develop)](https://travis-ci.com/DeepLearnPhysics/lartpc_mlreco3d)
 
 # A Machine Learning Pipeline for LArTPC Data
 
