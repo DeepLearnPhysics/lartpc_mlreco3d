@@ -13,8 +13,8 @@ class PPNUResNet(torch.nn.Module):
     (point_cloud, labels)
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, model_config):
@@ -222,8 +222,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     - distance loss for PPN3 positions predictions
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg, reduction='sum'):

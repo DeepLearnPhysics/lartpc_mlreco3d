@@ -30,7 +30,7 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
     Stores all points and informations in a CSV file.
     """
     # Create output CSV
-    csv_logger = utils.CSVData("%s/track_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    csv_logger = utils.CSVData("%s/track_clustering-%.07d.csv" % (cfg['trainval']['log_dir'], idx))
 
     model_cfg = cfg['model']
     clusters = res['clusters'][0]  # (N1, 7) from dbscan

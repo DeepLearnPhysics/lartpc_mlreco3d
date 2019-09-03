@@ -51,7 +51,7 @@ class UResNet(torch.nn.Module):
         - if `ghost`, segmentation scores for deghosting (N, 2)
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
     def __init__(self, cfg, name="uresnet_lonely"):
@@ -142,32 +142,35 @@ class UResNet(torch.nn.Module):
 
         x = self.input((coords, features))
         feature_maps = [x]
-        #feature_ppn = [x]
+        feature_ppn = [x]
         for i, layer in enumerate(self.encoding_block):
             x = self.encoding_block[i](x)
             feature_maps.append(x)
             x = self.encoding_conv[i](x)
-            #feature_ppn.append(x)
+            feature_ppn.append(x)
 
         # U-ResNet decoding
-        #feature_ppn2 = [x]
+        feature_ppn2 = [x]
         for i, layer in enumerate(self.decoding_conv):
             encoding_block = feature_maps[-i-2]
             x = layer(x)
             x = self.concat([encoding_block, x])
             x = self.decoding_blocks[i](x)
-            #feature_ppn2.append(x)
-            
+            feature_ppn2.append(x)
+
         x = self.output(x)
         x_seg = self.linear(x)  # Output of UResNet
         if self._ghost:
             x_ghost = self.linear_ghost(x)
 
+        res = {
+            'segmentation': [x_seg],
+            'ppn_feature_enc' : [feature_ppn],
+            'ppn_feature_dec' : [feature_ppn2]
+        }
         if self._ghost:
-            return {'segmentation' : [x_seg],
-                    'ghost' : [x_ghost]}
-        else:
-            return {'segmentation' : [x_seg]}
+            res['ghost'] = [x_ghost]
+        return res
 
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
@@ -186,7 +189,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     the number of classes, not counting the ghost point class.
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg, reduction='sum'):

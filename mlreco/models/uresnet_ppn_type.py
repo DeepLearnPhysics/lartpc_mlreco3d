@@ -7,8 +7,8 @@ from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLab
 
 class PPNUResNet(torch.nn.Module):
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg):
@@ -222,8 +222,8 @@ class PPNUResNet(torch.nn.Module):
 
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg, reduction='sum'):
