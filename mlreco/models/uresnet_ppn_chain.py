@@ -11,8 +11,8 @@ class Chain(torch.nn.Module):
     Run UResNet and use its encoding/decoding feature maps for PPN layers
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
     MODULES = ['ppn', 'uresnet_lonely']
 
@@ -22,11 +22,20 @@ class Chain(torch.nn.Module):
         self.uresnet_lonely = UResNet(model_config)
 
     def forward(self, input):
+        """
+        Assumes single GPU/CPU.
+        No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
+        """
         point_cloud, label = input
         x = self.uresnet_lonely((point_cloud,))
         x['label'] = label
-        y = self.ppn(x)
-        return x.update(y)
+        y = {}
+        y.update(x)
+        y['ppn_feature_enc'] = y['ppn_feature_enc'][0]
+        y['ppn_feature_dec'] = y['ppn_feature_dec'][0]
+        z = self.ppn(y)
+        x.update(z)
+        return x
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
@@ -34,8 +43,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     Loss for UResNet + PPN chain
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,)],
-        ["parse_particle_points", (int,)]
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
     ]
 
     def __init__(self, cfg):
@@ -46,11 +55,7 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     def forward(self, result, label, particles):
         uresnet_res = self.uresnet_loss(result, label)
         ppn_res = self.ppn_loss(result, label, particles)
-        res = uresnet_res.update(ppn_res)
-        #res['uresnet_acc'] = uresnet_res['accuracy']
-        #res['uresnet_loss'] = uresnet_res['loss']
+        uresnet_res.update(ppn_res)
         # Don't forget to sum all losses
-        #res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
-        #                ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
-        #                + uresnet_res['loss'].float()
-        return res
+        uresnet_res['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
+        return uresnet_res
