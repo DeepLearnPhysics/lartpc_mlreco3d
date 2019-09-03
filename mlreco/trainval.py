@@ -133,11 +133,16 @@ class trainval(object):
         num_proc_unit = max(1,len(self._gpus))
         for key in data_blob: assert(len(data_blob[key]) == num_proc_unit)
 
-        with torch.set_grad_enabled(self._train):
+        loss_key_map = {}
+        for key in self._loss_keys:
+            loss_key_map[key] = len(loss_blob)
+            loss_blob.append([])
 
+        with torch.set_grad_enabled(self._train):
+            loss_data  = []
             for gpu in range(num_proc_unit):
                 train_data = []
-                loss_data  = []
+
                 for key in data_blob:
                     if key not in self._input_keys and key not in self._loss_keys:
                         continue
@@ -151,10 +156,9 @@ class trainval(object):
                     if key in self._input_keys:
                         train_data.append(data)
                     if key in self._loss_keys:
-                        loss_data.append(data)
+                        loss_blob[loss_key_map[key]].append(data)
                 train_blob.append(train_data)
-                loss_blob.append(loss_data)
-                
+
         return train_blob, loss_blob
 
 
