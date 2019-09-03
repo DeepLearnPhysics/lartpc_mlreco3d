@@ -252,11 +252,12 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
 
                     # Mask for PPN1 (coarsest)
-                    event_mask_ppn1 = result['ghost_mask1'][i][ppn1_batch_index].byte().reshape((-1,))
-                    event_ppn1_data = event_ppn1_data[event_mask_ppn1]
-                    event_ppn1_scores = event_ppn1_scores[event_mask_ppn1]
-                    if event_mask_ppn1.int().sum() == 0:
-                        continue
+                    if self._downsample_ghost:
+                        event_mask_ppn1 = result['ghost_mask1'][i][ppn1_batch_index].byte().reshape((-1,))
+                        event_ppn1_data = event_ppn1_data[event_mask_ppn1]
+                        event_ppn1_scores = event_ppn1_scores[event_mask_ppn1]
+                        if event_mask_ppn1.int().sum() == 0:
+                            continue
 
                     # Segmentation loss (predict positives)
                     d = self.distances(event_label, event_pixel_pred)

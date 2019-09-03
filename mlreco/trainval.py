@@ -5,6 +5,7 @@ import warnings
 import torch
 import time
 import os
+import mlreco.utils as utils
 from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
 import numpy as np
@@ -17,18 +18,19 @@ class trainval(object):
     Groups all relevant functions for forward/backward of a network.
     """
     def __init__(self, cfg):
-        self.tspent = {}
+        self._watch = utils.stopwatch()
         self.tspent_sum = {}
         self._model_config = cfg['model']
         self._trainval_config = cfg['trainval']
         self._iotool_config = cfg['iotool']
 
         self._weight_prefix = self._trainval_config.get('weight_prefix', '')
-        self._batch_size = self._iotool_config.get('batch_size', 1)
-        self._minibatch_size = self._trainval_config.get('minibatch_size', -1)
         self._gpus = self._trainval_config.get('gpus', [])
-        self._input_keys = self._model_config.get('network_input', [])
-        self._loss_keys = self._model_config.get('loss_input', [])
+        self._batch_size = self._iotool_config.get('batch_size', 1)
+        self._minibatch_size = self._iotool_config.get('minibatch_size')
+        self._input_keys  = self._model_config.get('network_input', [])
+        self._output_keys = self._model_config.get('keep_output',[])
+        self._loss_keys   = self._model_config.get('loss_input', [])
         self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
@@ -81,7 +83,7 @@ class trainval(object):
             self._scheduler.step()
 
     def save_state(self, iteration):
-        tstart = time.time()
+        self._watch.start('save')
         if len(self._weight_prefix) > 0:
             filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
             torch.save({
@@ -89,42 +91,145 @@ class trainval(object):
                 'state_dict': self._net.state_dict(),
                 'optimizer': self._optimizer.state_dict()
             }, filename)
-        self.tspent['save'] = time.time() - tstart
+        self._watch.stop('save')
 
-    def train_step(self, data_blob):
+
+    def get_data_minibatched(self,data_iter):
+        """
+        Reads data for one compute cycle of single/multi-cpu/gpu forward path
+        INPUT
+          - data_iter is an iterator to return a mini-batch of data (data per gpu per compute) by next(dataset)
+        OUTPUT
+          - Returns a data_blob.
+            The data_blob is a dictionary with a value being an array of mini batch data.
+        """
+
+        data_blob  = {}
+
+        num_proc_unit = max(1,len(self._gpus))
+
+        for gpu in range(num_proc_unit):
+            minibatch = next(data_iter)
+            for key in minibatch:
+                if not key in data_blob: data_blob[key]=[]
+                data_blob[key].append(minibatch[key])
+
+        return data_blob
+
+
+    def make_input_forward(self,data_blob):
+        """
+        Given one compute cycle amount of data (return of get_data_minibatched), forms appropriate format
+        to be used with torch DataParallel (i.e. multi-GPU training)
+        INPUT
+          - data_blob is a dictionary with a unique key-value where value is an array of length == # c/gpu to be used
+        OUTPUT
+          - Returns an input_blob and loss_blob.
+            The input_blob and loss_blob are array of array of array such as ...
+            len(input_blob) = number of compute cycles = batch_size / (minibatch_size * len(GPUs))
+        """
+        train_blob = []
+        loss_blob  = []
+        num_proc_unit = max(1,len(self._gpus))
+        for key in data_blob: assert(len(data_blob[key]) == num_proc_unit)
+
+        loss_key_map = {}
+        for key in self._loss_keys:
+            loss_key_map[key] = len(loss_blob)
+            loss_blob.append([])
+
+        with torch.set_grad_enabled(self._train):
+            loss_data  = []
+            for gpu in range(num_proc_unit):
+                train_data = []
+
+                for key in data_blob:
+                    if key not in self._input_keys and key not in self._loss_keys:
+                        continue
+                    data = None
+                    target = data_blob[key][gpu]
+                    if isinstance(target,list):
+                        #data = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key][gpu]]
+                        data = [torch.as_tensor(scale).cuda() if len(self._gpus) else torch.as_tensor(scale) for scale in target]
+                    else:
+                        data = torch.as_tensor(target).cuda() if len(self._gpus) else torch.as_tensor(target)
+                    if key in self._input_keys:
+                        train_data.append(data)
+                    if key in self._loss_keys:
+                        loss_blob[loss_key_map[key]].append(data)
+                train_blob.append(train_data)
+
+        return train_blob, loss_blob
+
+
+    def train_step(self, data_iter):
         """
         data_blob is the output of the function get_data_minibatched.
         It is a dictionary where data_blob[key] = list of length
         BATCH_SIZE / (MINIBATCH_SIZE * len(GPUS))
         """
-        tstart = time.time()
+
+        self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
-        res_combined = self.forward(data_blob)
+        data_blob,res_combined = self.forward(data_iter)
         # Run backward once for all the previous forward
         self.backward()
-        self.tspent['train'] = time.time() - tstart
-        self.tspent_sum['train'] += self.tspent['train']
-        return res_combined
+        self._watch.stop('train')
+        self.tspent_sum['train'] += self._watch.time('train')
+        return data_blob,res_combined
 
-    def forward(self, data_blob):
+    
+    def forward(self, data_iter):
         """
         Run forward for
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
         """
-        res_combined = {}
-        #for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
-        for idx in range(int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))):
-            blob = {}
-            for key in data_blob.keys():
-                blob[key] = data_blob[key][idx]
-            res = self._forward(blob)
+        self._watch.start('train')
+        self._watch.start('forward')
+        res_combined  = {}
+        data_combined = {}
+        num_forward = int(self._batch_size / (self._minibatch_size * max(1,len(self._gpus))))
+
+        for idx in range(num_forward):
+            self._watch.start('io')
+            input_data = self.get_data_minibatched(data_iter)
+            input_train, input_loss = self.make_input_forward(input_data)
+            self._watch.stop('io')
+            self.tspent_sum['io'] += self._watch.time('io')
+
+            res = self._forward(input_train, input_loss)
+
+            # here, contruct the unwrapped input and output
+            # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
+            # inside the unwrapper function, find all unique batch ids.
+            # unwrap the outcome
+            unwrapper = self._trainval_config.get('unwrapper',None)
+            if unwrapper is not None:            
+                try:
+                    unwrapper = getattr(utils,unwrapper)
+                except ImportError:
+                    msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
+                    print(msg % output_cfg['unwrapper'])
+                    raise ImportError
+                input_data, res = unwrapper(input_data, res)
+            else:
+                outputs = res_combined
+
             for key in res.keys():
                 if key not in res_combined:
                     res_combined[key] = []
                 res_combined[key].extend(res[key])
-        return res_combined
 
-    def _forward(self, data_blob):
+            for key in input_data.keys():
+                if key not in data_combined:
+                    data_combined[key] = []
+                data_combined[key].extend(input_data[key])
+
+        self._watch.stop('forward')
+        return data_combined, res_combined
+
+
+    def _forward(self, train_blob, loss_blob):
         """
         data/label/weight are lists of size minibatch size.
         For sparse uresnet:
@@ -133,48 +238,51 @@ class trainval(object):
         For dense uresnet:
         data[0]: shape=(minibatch size, channel, spatial size, spatial size, spatial size)
         """
-        input_keys = self._input_keys
-        loss_keys = self._loss_keys
+        loss_keys   = self._loss_keys
+        output_keys = self._output_keys
         with torch.set_grad_enabled(self._train):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
-            for key in data_blob:
-                if isinstance(data_blob[key][0], list):
-                    data_blob[key] = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key]]
-                else:
-                    data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
-            data = []
-            for i in range(max(1,len(self._gpus))):
-                data.append([data_blob[key][i] for key in input_keys])
-            tstart = time.time()
+            #for key in data_blob:
+            #    if isinstance(data_blob[key][0], list):
+            #        data_blob[key] = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key]]
+            #    else:
+            #        data_blob[key] = [torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in data_blob[key]]
+            #data = []
+            #for i in range(max(1,len(self._gpus))):
+            #    data.append([data_blob[key][i] for key in input_keys])
+
+            self._watch.start('forward')
 
             if not torch.cuda.is_available():
-                data = data[0]
+                train_blob = train_blob[0]
 
-            result = self._net(data)
+            result = self._net(train_blob)
 
             if not torch.cuda.is_available():
-                data = [data]
+                train_blob = [train_blob]
 
             # Compute the loss
-            if loss_keys:
-                loss_acc = self._criterion(result, *tuple([data_blob[key] for key in loss_keys]))
+            if len(self._loss_keys):
+                loss_acc = self._criterion(result, *tuple(loss_blob))
 
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
-            self.tspent['forward'] = time.time() - tstart
-            self.tspent_sum['forward'] += self.tspent['forward']
+            self._watch.stop('forward')
+            self.tspent_sum['forward'] += self._watch.time('forward')
 
             # Record results
             res = {}
             for label in loss_acc:
+                if len(output_keys) and not label in output_keys: continue
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
             # Use analysis keys to also get tensors
             #if 'analysis_keys' in self._model_config:
             #    for key in self._model_config['analysis_keys']:
             #        res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
             for key in result.keys():
+                if len(output_keys) and not key in output_keys: continue
                 if len(result[key]) == 0:
                     continue
                 if isinstance(result[key][0], list):
@@ -191,8 +299,7 @@ class trainval(object):
         self._criterion = criterion(self._model_config).cuda() if len(self._gpus) else criterion(self._model_config)
 
 
-        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['save'] = 0.
-        self.tspent['forward'] = self.tspent['train'] = self.tspent['save'] = 0.
+        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
 
         self._net = DataParallel(model(self._model_config),
                                       device_ids=self._gpus)
