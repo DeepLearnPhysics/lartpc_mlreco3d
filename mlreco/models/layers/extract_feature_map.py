@@ -3,20 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import sparseconvnet as scn
-
-
-class SelectionFeatures(torch.nn.Module):
-    """
-    Select scores above some threshold? FIXME
-    """
-    def __init__(self, dimension, spatial_size):
-        import sparseconvnet as scn
-        super(SelectionFeatures, self).__init__()
-        self.input_layer = scn.InputLayer(dimension, spatial_size, mode=3)
-
-    def forward(self, input):
-        print('selection features', len(input), input[0], input[1])
-        return input
+import numpy as np
 
 
 class AddLabels(torch.nn.Module):
@@ -76,55 +63,23 @@ class Selection(torch.nn.Module):
         return out_size
 
 
-class ExtractFeatureMap(torch.nn.Module):
-    def __init__(self, i, dimension, spatial_size):
-        """
-        i such that 2**i * small_spatial_size = big_spatial_size
-        spatial size of output
-        """
-        super(ExtractFeatureMap, self).__init__()
-        import sparseconvnet as scn
-        self.i = i
-        self.input_layer = scn.InputLayer(dimension, spatial_size, mode=3)
+class GhostMask(torch.nn.Module):
+    def __init__(self):
+        super(GhostMask, self).__init__()
 
-    def forward(self, x, y):
-        """
-        x is feature map with smallest spatial size
-        y is output feature map with biggest spatial size
-        x.features.shape = (N1, N_features)
-        x.get_spatial_locations().size() = (N1, 4) (dim + batch_id)
-        coords.size() = (N2, 4) in original image size (bigger spatial size)
-        Returns (N2, N_features)
-        """
-        # FIXME no grad?
-        # with torch.no_grad():
-        # TODO deal with batch id
-        # print('expand', i, x.features.shape, x.spatial_size, x.get_spatial_locations().size())
-        if torch.cuda.is_available():
-            feature_map = x.get_spatial_locations().cuda().float()
-            coords = y.get_spatial_locations().cuda().float()
-        else:
-            feature_map = x.get_spatial_locations().float()
-            coords = y.get_spatial_locations().float()
-        N1 = feature_map.size(0)
-        N2 = coords.size(0)
-
-        print('N1 = %d, N2 = %d, 2**i = %d' % (N1, N2, 2**self.i))
-        # shape (N1, N2, 4) for next 2 lines
-        feature_map_coords = (feature_map * (2**self.i))[:, None, :].expand(-1, N2, -1)
-        coords_adapted = coords[None, ...].expand(N1, -1, -1)
-        part1 = feature_map_coords <= coords_adapted
-        part1 = part1.all(dim=-1)
-        part2 = feature_map_coords + 2**self.i > coords_adapted
-        part2 = part2.all(dim=-1)
-        index = part1 & part2  # shape (N1, N2)
-        # Make sure that all pixels from original belong to 1 only in feature
-        print((index.long().sum(dim=0)>=1).long().sum())
-        print((index.long().sum(dim=0)!=1).long().sum())
-        print((index.long().sum(dim=1)!=1).long().sum())
-        final_features = torch.index_select(x.features, 0, torch.t(index).argmax(dim=1))
-        print(final_features.size())
-        final_coords = torch.index_select(feature_map, 0, torch.t(index).argmax(dim=1))
-        print(final_coords.size())
-
-        return self.input_layer((final_coords, final_features))
+    def forward(self, ghost_mask, coords, feature_map, factor=0.0):
+        output = scn.SparseConvNetTensor()
+        output.metadata = feature_map.metadata
+        output.spatial_size = feature_map.spatial_size
+        # First downsample the ghost mask
+        scale_coords, unique_indices = np.unique(np.concatenate([np.floor(coords[:, :-1]/2**factor), coords[:, -1:]], axis=1), axis=0, return_index=True)
+        perm2 = np.lexsort((scale_coords[:, 0], scale_coords[:, 1], scale_coords[:, 2], scale_coords[:, 3]))
+        scale_ghost_mask = ghost_mask[unique_indices][perm2]
+        # Now order the feature map and multiply with ghost mask
+        ppn1_coords = feature_map.get_spatial_locations()
+        perm = np.lexsort((ppn1_coords[:, 0], ppn1_coords[:, 1], ppn1_coords[:, 2], ppn1_coords[:, 3]))
+        # Reverse permutation
+        inv_perm = np.argsort(perm)
+        new_ghost_mask = scale_ghost_mask[:, None][inv_perm].float()
+        output.features = feature_map.features * new_ghost_mask
+        return output, new_ghost_mask
