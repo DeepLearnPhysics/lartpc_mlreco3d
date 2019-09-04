@@ -48,4 +48,4 @@ before_script:
 
 script:
   - singularity exec local.simg pip3 install pytest --user
-  - singularity exec local.simg pytest -rxXs
+  - singularity exec local.simg pytest test

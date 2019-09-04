@@ -1,11 +1,12 @@
+from mlreco.utils import CSVData
+import os
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import cdist
-from mlreco.utils import utils
 import scipy
 
 
-def track_clustering(data_blob, res, cfg, idx, debug=False):
+def track_clustering(cfg, data_blob, res, logdir, iteration):
     """
     Track clustering on PPN+UResNet output.
 
@@ -29,43 +30,47 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
     smaller clusters based on predicted points.
     Stores all points and informations in a CSV file.
     """
-    # Create output CSV
-    csv_logger = utils.CSVData("%s/track_clustering-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    method_cfg = cfg['post_processing']['track_clustering']
+    dbscan_cfg  = cfg['model']['modules']['dbscan']
+    data_dim = int(dbscan_cfg['data_dim'])
+    min_samples = int(dbscan_cfg['minPoints'])
 
-    model_cfg = cfg['model']
-    clusters = res['clusters'][0]  # (N1, 7) from dbscan
-    points = res['points'][0]  # (N, 5+c) ppn predictions 3 coords + 2 scores + classes scores for point type prediction
-    segmentation = res['segmentation'][0]  # (N, 5) uresnet predictions
-    mask = res['mask'][0]  # (N, 2)
-    # FIXME N1 >= N because some points might belong to several clusters?
-    # N1 == N if we use `parse_cluster3d_clean` instead of `parse_cluster3d`
-    clusters_label = data_blob['clusters_label'][0][0]  # (N1, 5)
-    particles_label = data_blob['particles_label'][0][0]  # (N_gt, 5)
-    data = data_blob['input_data'][0][0]  # shape (N, 5)
-    idx = data_blob['index'][0][0]
-    segmentation_label = data_blob['segment_label'][0][0]  # shape (N, 5)
+    debug                 = bool(method_cfg.get('debug',None))
+    score_threshold       = float(method_cfg.get('score_threshold',0.6))
+    threshold_association = float(method_cfg.get('threshold_association',3))
+    exclusion_radius      = float(method_cfg.get('exclusion_radius',5))
+    type_threshold        = float(method_cfg.get('type_threshold',2))
 
-    data_dim = 3  # model_cfg['data_dim']
-    batch_ids = np.unique(data[:, data_dim])
-    score_threshold = 0.6
-    threshold_association = 3
-    exclusion_radius = 5
-    type_threshold = 2
+    store_per_iteration = True
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
+    fout=None
+    if store_per_iteration:
+        fout=CSVData(os.path.join(logdir, 'track-clustering-iter-%07d.csv' % iteration))
+    
     # Loop over batch index
-    for b in batch_ids:
-        event_clusters = clusters[clusters[:, data_dim] == b]
-        batch_index = data[:, data_dim] == b
-        event_index = idx[int(b)][0]
-        event_points = points[batch_index][:, :data_dim]
-        event_scores = points[batch_index][:, data_dim:data_dim+2]
-        event_data = data[:, :data_dim][batch_index]
-        event_segmentation = segmentation[batch_index]
-        event_clusters_label = clusters_label[clusters_label[:, data_dim] == b]
-        event_particles_label = particles_label[particles_label[:, data_dim] == b]
-        event_mask = mask[batch_index]
-        anchors = (event_data + 0.5)
-        event_points = event_points + anchors
+    #for b in batch_ids:
+    for batch_index, data in enumerate(data_blob['input_data']):
 
+        if not store_per_iteration:
+            fout=CSVData(os.path.join(logdir, 'track-clustering-event-%07d.csv' % event_index))
+        
+        event_clusters = res['final'][batch_index]
+        event_index    = data_blob['index'][batch_index]
+        event_data     = data[:,:data_dim]
+        event_clusters_label  = data_blob['clusters_label'][batch_index]
+        event_particles_label = data_blob['particles_label'][batch_index]
+        event_segmentation    = res['segmentation'][batch_index]
+        event_segmentation_label = data_blob['segment_label'][batch_index]
+        points         = res['points'][batch_index]
+        event_xyz      = points[:, :data_dim]
+        event_scores   = points[:, data_dim:data_dim+2]
+        event_mask     = res['mask_ppn2'][batch_index]
+        
+        anchors = (event_data + 0.5)
+        event_xyz = event_xyz + anchors
+        
         dbscan_points = []
         predicted_points = []
 
@@ -76,17 +81,17 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
         # Now loop through semantic classes and look at ppn+uresnet predictions
         uresnet_predictions = np.argmax(event_segmentation[event_mask], axis=1)
         num_classes = event_segmentation.shape[1]
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][event_mask][:, 5:], axis=1), axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[event_mask][:, 5:], axis=1), axis=1)
         for c in range(num_classes):
             uresnet_points = uresnet_predictions == c
             ppn_points = ppn_type_predictions == c
             # We want to keep only points of type X within 2px of uresnet prediction of type X
-            d = scipy.spatial.distance.cdist(event_points[event_mask][ppn_points], event_data[event_mask][uresnet_points])
+            d = scipy.spatial.distance.cdist(event_xyz[event_mask][ppn_points], event_data[event_mask][uresnet_points])
             ppn_mask = (d < type_threshold).any(axis=1)
             # dbscan_points stores coordinates only
             # predicted_points stores everything for each point
-            dbscan_points.append(event_points[event_mask][ppn_points][ppn_mask])
-            pp = points[batch_index][event_mask][ppn_points][ppn_mask]
+            dbscan_points.append(event_xyz[event_mask][ppn_points][ppn_mask])
+            pp = points[event_mask][ppn_points][ppn_mask]
             pp[:, :3] += anchors[event_mask][ppn_points][ppn_mask]
             predicted_points.append(pp)
         dbscan_points = np.concatenate(dbscan_points, axis=0)
@@ -124,7 +129,7 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
                     continue
                 # Now dbscan on the main body of the cluster to find if we need
                 # to break it or not
-                db2 = DBSCAN(eps=exclusion_radius, min_samples=cfg['model']['modules']['dbscan']['minPoints']).fit(new_cluster).labels_
+                db2 = DBSCAN(eps=exclusion_radius, min_samples=min_samples).fit(new_cluster).labels_
                 # All points were garbage
                 if (len(new_cluster[db2 == -1]) == len(new_cluster)):
                     continue
@@ -206,38 +211,41 @@ def track_clustering(data_blob, res, cfg, idx, debug=False):
 
         # Record in CSV everything
         # Point in data and semantic class predictions/true information
-        for i, point in enumerate(data[batch_index]):
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'cluster_id', 'point_type', 'idx'),
-                              (0, point[0], point[1], point[2], point[3], point[4], np.argmax(event_segmentation[i]), segmentation_label[segmentation_label[:, data_dim] == b][i, -1], -1, -1, event_index))
-            csv_logger.write()
+        for i, point in enumerate(data):
+            fout.record(('type', 'x', 'y', 'z', 'batch_id', 'value', 'predicted_class', 'true_class', 'cluster_id', 'point_type', 'idx'),
+                        (0, point[0], point[1], point[2], batch_index, point[4], np.argmax(event_segmentation[i]), event_segmentation_label[i, -1], -1, -1, event_index))
+            fout.write()
         # Predicted clusters
         for c, cluster in enumerate(final_clusters):
             for point in cluster:
-                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
-                                  (1, point[0], point[1], point[2], b, c, -1, -1, -1, -1, event_index))
-                csv_logger.write()
+                fout.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
+                                  (1, point[0], point[1], point[2], batch_index, c, -1, -1, -1, -1, event_index))
+                fout.write()
         # True clusters
         for c, cluster in enumerate(true_clusters):
             for point in cluster:
-                csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
-                                  (2, point[0], point[1], point[2], b, c, -1, -1, -1, -1, event_index))
-                csv_logger.write()
-        # for point in event_points:
-        #     csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
-        #                       (3, point[0], point[1], point[2], b, -1, -1, -1, -1, -1))
-        #     csv_logger.write()
+                fout.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type', 'idx'),
+                                  (2, point[0], point[1], point[2], batch_index, c, -1, -1, -1, -1, event_index))
+                fout.write()
+        # for point in event_xyz:
+        #     fout.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
+        #                       (3, point[0], point[1], point[2], batch_index, -1, -1, -1, -1, -1))
+        #     fout.write()
         # for point in event_clusters_label:
-        #     csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
-        #                       (4, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1))
-        #     csv_logger.write()
+        #     fout.record(('type', 'x', 'y', 'z', 'batch_id', 'cluster_id', 'value', 'predicted_class', 'true_class', 'point_type'),
+        #                       (4, point[0], point[1], point[2], batch_index, point[4], -1, -1, -1, -1))
+        #     fout.write()
         # True PPN points
         for point in event_particles_label:
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'point_type', 'cluster_id', 'value', 'predicted_class', 'true_class', 'idx'),
-                              (5, point[0], point[1], point[2], b, point[4], -1, -1, -1, -1, event_index))
-            csv_logger.write()
+            fout.record(('type', 'x', 'y', 'z', 'batch_id', 'point_type', 'cluster_id', 'value', 'predicted_class', 'true_class', 'idx'),
+                              (5, point[0], point[1], point[2], batch_index, point[4], -1, -1, -1, -1, event_index))
+            fout.write()
         # Predicted PPN points
         for point in predicted_points:
-            csv_logger.record(('type', 'x', 'y', 'z', 'batch_id', 'predicted_class', 'value', 'true_class', 'cluster_id', 'point_type', 'idx'),
-                              (6, point[0], point[1], point[2], b, np.argmax(point[-5:]), -1, -1, -1, -1, event_index))
-            csv_logger.write()
-        csv_logger.close()
+            fout.record(('type', 'x', 'y', 'z', 'batch_id', 'predicted_class', 'value', 'true_class', 'cluster_id', 'point_type', 'idx'),
+                              (6, point[0], point[1], point[2], batch_index, np.argmax(point[-5:]), -1, -1, -1, -1, event_index))
+            fout.write()
+
+        if not store_per_iteration: fout.close()
+            
+    if store_per_iteration: fout.close()
