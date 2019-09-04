@@ -35,7 +35,7 @@ class trainval(object):
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
         self._model_path = self._trainval_config.get('model_path', '')
-        
+
         # optimizer
         optim_cfg = self._trainval_config.get('optimizer')
         if optim_cfg is not None:
@@ -45,11 +45,11 @@ class trainval(object):
             # default
             self._optim = 'Adam'
             self._optim_args = {}
-            
+
         # handle learning rate being set in multiple locations
         if self._optim_args.get('lr') is not None:
             if self._learning_rate is not None:
-                    warnings.warn("Learning rate set in two locations.  Using rate in optimizer_args")  
+                    warnings.warn("Learning rate set in two locations.  Using rate in optimizer_args")
         else:
             # just set learning rate
             if self._learning_rate is not None:
@@ -57,7 +57,7 @@ class trainval(object):
             else:
                 # default
                 self._optim_args['lr'] = 0.001
-        
+
         # learning rate scheduler
         schedule_cfg = self._trainval_config.get('lr_scheduler')
         if schedule_cfg is not None:
@@ -178,7 +178,7 @@ class trainval(object):
         self.tspent_sum['train'] += self._watch.time('train')
         return data_blob,res_combined
 
-    
+
     def forward(self, data_iter):
         """
         Run forward for
@@ -204,7 +204,7 @@ class trainval(object):
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
             unwrapper = self._trainval_config.get('unwrapper',None)
-            if unwrapper is not None:            
+            if unwrapper is not None:
                 try:
                     unwrapper = getattr(utils,unwrapper)
                 except ImportError:
@@ -309,18 +309,18 @@ class trainval(object):
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-        
+
         optim_class = eval('torch.optim.' + self._optim)
         self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
-        
+
         # learning rate scheduler
         if self._lr_scheduler is not None:
             scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
             self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
         else:
             self._scheduler = None
-        
-            
+
+
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
         iteration = 0
