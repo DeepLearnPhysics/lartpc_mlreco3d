@@ -6,8 +6,8 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize("data_size,batch_size", [(100, 10), (100, 1)])
-def test_sampler(data_size, batch_size):
+@pytest.mark.parametrize("data_size,minibatch_size", [(100, 10), (100, 1)])
+def test_sampler(data_size, minibatch_size):
     """
     Tests that RandomSequenceSampler runs.
     TODO: check that it runs *correctly*.
@@ -19,7 +19,7 @@ def test_sampler(data_size, batch_size):
     from mlreco.iotools.samplers import RandomSequenceSampler
     import numpy as np
 
-    s = RandomSequenceSampler(data_size, batch_size)
+    s = RandomSequenceSampler(data_size, minibatch_size)
     used = np.ones(shape=[data_size], dtype=np.int32)
     used2 = np.zeros(shape=[data_size], dtype=np.int32)
     used3 = np.array([v for v in range(data_size)])

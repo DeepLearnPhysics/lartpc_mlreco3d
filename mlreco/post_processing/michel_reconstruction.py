@@ -1,10 +1,10 @@
 import numpy as np
+import os
 from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import cdist
-from mlreco.utils import utils
+from mlreco.utils import CSVData
 
-
-def michel_reconstruction(data_blob, res, cfg, idx):
+def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
     """
     Very simple algorithm to reconstruct Michel clusters from UResNet semantic
     segmentation output.
@@ -41,40 +41,44 @@ def michel_reconstruction(data_blob, res, cfg, idx):
     - `michel_reconstruction-*`
     - `michel_reconstruction2-*`
     """
+    method_cfg = cfg['post_processing']['michel_reconstruction']
+    
     # Create output CSV
-    csv_logger = utils.CSVData("%s/michel_reconstruction-%.07d.csv" % (cfg['training']['log_dir'], idx))
-    csv_logger_true = utils.CSVData("%s/michel_reconstruction2-%.07d.csv" % (cfg['training']['log_dir'], idx))
+    store_per_iteration = True
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
 
-    model_cfg = cfg['model']
-
-    segmentation_all = res['segmentation'][0]  # (N, 5)
-    predictions_all = np.argmax(segmentation_all, axis=1)
-    ghost_all = res['ghost'][0]  # (N, 2)
-    data_all = data_blob['input_data'][0][0]
-    idx_all = data_blob['index'][0][0]
-    label_all = data_blob['segment_label'][0][0][:, -1]
-    particles_all = data_blob['particles_label'][0][0]  # (N_particles, 4+C)
-    clusters_all = data_blob['clusters_label'][0][0]
-
-    # First mask ghost points in predictions
-    ghost_predictions = np.argmax(ghost_all, axis=1)
-    mask = ghost_predictions == 0
+    fout_reco,fout_true=None,None
+    if store_per_iteration:
+        fout_reco=CSVData(os.path.join(logdir, 'michel-reconstruction-reco-iter-%07d.csv' % iteration))
+        fout_true=CSVData(os.path.join(logdir, 'michel-reconstruction-true-iter-%07d.csv' % iteration))
 
     # Loop over events
-    batch_ids = np.unique(data_all[:, 3])
-    for b in batch_ids:
-        batch_index = data_all[:, 3] == b
-        event_index = idx_all[int(b)][0]
-        data = data_all[batch_index]
-        label = label_all[batch_index]
-        clusters = clusters_all[clusters_all[:, 3] == b]
+    for batch_id,data in enumerate(data_blob['input_data']):
 
-        data_pred = data_all[mask & batch_index]  # coords
-        label_pred = label_all[mask & batch_index]  # labels
-        predictions = predictions_all[mask & batch_index]
-        segmentation = segmentation_all[mask & batch_index]
-        particles = particles_all[particles_all[:, 3] == b]
+        event_idx = data_blob['index'          ][batch_id]
+        
+        if not store_per_iteration:
+            fout_reco=CSVData(os.path.join(logdir, 'michel-reconstruction-reco-event-%07d.csv' % event_idx))
+            fout_true=CSVData(os.path.join(logdir, 'michel-reconstruction-true-event-%07d.csv' % event_idx))
+
+        # from input/labels
+        label       = data_blob['segment_label'  ][batch_id][:,-1]
+        clusters    = data_blob['clusters_label' ][batch_id]
+        particles   = data_blob['particles_label'][batch_id]
         Michel_particles = particles[particles[:, 4] == 4]
+
+        # from network output
+        segmentation = res['segmentation'][batch_id]
+        predictions  = np.argmax(segmentation,axis=1)
+        ghost_mask   = (np.argmax(res['ghost'][batch_id],axis=1) == 0)
+
+        data_pred    = data[ghost_mask]  # coords
+        label_pred   = label[ghost_mask]  # labels
+        predictions  = (np.argmax(segmentation,axis=1))[ghost_mask]
+        segmentation = segmentation[ghost_mask]
+
 
         # 0. Retrieve coordinates of true and predicted Michels
         # MIP_coords = data[(label == 1).reshape((-1,)), ...][:, :3]
@@ -95,11 +99,11 @@ def michel_reconstruction(data_blob, res, cfg, idx):
         for cluster in np.unique(Michel_true_clusters):
             # print("True", np.count_nonzero(Michel_true_clusters == cluster))
             # TODO sum_pix
-            csv_logger_true.record(('batch_id', 'idx', 'event_idx', 'num_pix', 'sum_pix', 'idx'),
-                                   (b, idx, data_blob['index'][0][0][int(b)][0],
-                                    np.count_nonzero(Michel_true_clusters == cluster),
-                                    clusters[clusters[:, -1] == 4][Michel_true_clusters == cluster][:, -3].sum(), event_index))
-            csv_logger_true.write()
+            fout_true.record(('batch_id', 'iteration', 'event_idx', 'num_pix', 'sum_pix'),
+                             (batch_id, iteration, event_idx,
+                              np.count_nonzero(Michel_true_clusters == cluster),
+                              clusters[clusters[:, -1] == 4][Michel_true_clusters == cluster][:, -3].sum()))
+            fout_true.write()
         # e.g. deposited energy, creation energy
         # TODO retrieve particles information
         # if Michel_coords.shape[0] > 0:
@@ -180,14 +184,20 @@ def michel_reconstruction(data_blob, res, cfg, idx):
                         closest_mc_id = closest_mc[np.bincount(closest_mc).argmax()]
                         michel_true_energy = Michel_particles[closest_mc_id, 7]
             # Record every predicted Michel cluster in CSV
-            csv_logger.record(('batch_id', 'idx', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
-                               'pred_num_pix_true', 'pred_sum_pix_true',
-                               'true_num_pix', 'true_sum_pix',
-                               'is_attached', 'is_edge', 'michel_true_energy', 'idx'),
-                              (b, idx, data_blob['index'][0][0][int(b)][0], np.count_nonzero(current_index),
-                               data_pred[(predictions==4).reshape((-1,)), ...][current_index][:, -1].sum(),
-                               michel_pred_num_pix_true, michel_pred_sum_pix_true, michel_true_num_pix, michel_true_sum_pix,
-                               is_attached, is_edge, michel_true_energy, event_index))
-            csv_logger.write()
-    csv_logger.close()
-    csv_logger_true.close()
+            fout_reco.record(('batch_id', 'iteration', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
+                              'pred_num_pix_true', 'pred_sum_pix_true',
+                              'true_num_pix', 'true_sum_pix',
+                              'is_attached', 'is_edge', 'michel_true_energy'),
+                             (batch_id, iteration, event_idx, np.count_nonzero(current_index),
+                              data_pred[(predictions==4).reshape((-1,)), ...][current_index][:, -1].sum(),
+                              michel_pred_num_pix_true, michel_pred_sum_pix_true, michel_true_num_pix, michel_true_sum_pix,
+                              is_attached, is_edge, michel_true_energy))
+            fout_reco.write()
+
+        if not store_per_iteration:
+            fout_reco.close()
+            fout_true.close()
+            
+    if store_per_iteration:
+        fout_reco.close()
+        fout_true.close()

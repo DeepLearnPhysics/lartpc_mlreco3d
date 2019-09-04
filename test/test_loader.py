@@ -31,11 +31,10 @@ def test_loader(cfg_file, quiet=True, csv=False):
     # configure
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
     try:
-        loader, data_keys = loader_factory(cfg)
+        loader = loader_factory(cfg)
     except FileNotFoundError:
         pytest.skip('File not found to test the loader.')
     if not quiet: print(len(loader), 'batches loaded')
-    if not quiet: print('keys:', data_keys)
 
     # Loop
     tstart = time.time()
@@ -45,9 +44,8 @@ def test_loader(cfg_file, quiet=True, csv=False):
         titer = time.time() - tstart
         if not quiet:
             print('Batch', batch_id)
-            for data_id in range(len(data_keys)):
-                key = data_keys[data_id]
-                print('   ', key, np.shape(data[key]))
+            for key, value in data.items():
+                print('   ', key, np.shape(value))
             print('Duration', titer, '[s]')
         if batch_id < 1:
             t0 = titer

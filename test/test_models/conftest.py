@@ -28,11 +28,12 @@ def config_simple(request):
     model_config['network_input'] = ['input_data', 'segment_label']
     model_config['loss_input'] = ['segment_label']
     iotool_config = {
-        'batch_size': 1
+        'batch_size': 1,
+        'minibatch_size': 1
     }
     config = {
         'iotool': iotool_config,
-        'training': {
+        'trainval': {
             'gpus': ''
             },
         'model': model_config
@@ -65,26 +66,25 @@ def config_full(request, tmp_path, data):
     model_config['loss_input'] = ['segment_label']
     iotool_config = {
         'batch_size': 4,
+        'minibatch_size': 4,
         'shuffle': False,
         'num_workers': 1,
         'collate_fn': 'CollateSparse',
         'sampler': {
             'name': 'RandomSequenceSampler',
-            'batch_size': 4
         },
         'dataset': {
             'name': 'LArCVDataset',
-            'data_dirs': [os.path.join(tmp_path, '')],
-            'data_key': data,
+            'data_keys': [os.path.join(tmp_path, data + '.root')],
             'limit_num_files': 10
         }
     }
     config = {
         'iotool': iotool_config,
-        'training': {
+        'trainval': {
             'gpus': '',
-            'minibatch_size': -1,
             'seed': 0,
+            'unwrapper': 'unwrap_3d_scn',
             'train': True,
             'log_dir': os.path.join(tmp_path, ''),
             'weight_prefix': os.path.join(tmp_path, "snapshot"),
