@@ -5,7 +5,9 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     # 0 = Event voxels and values
     if not 'input_data' in data_blob: return
 
-    threshold = 0. if cfg is None else cfg.get('threshold',0.)
+    method_cfg = cfg['post_processing']['store_input']
+
+    threshold = 0. if method_cfg is None else method_cfg.get('threshold',0.)
     
     index      = data_blob.get('index',None)
     input_dat  = data_blob.get('input_data',None)
@@ -15,9 +17,9 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     label_mcst = data_blob.get('cluster3d_mcst_true',None)
 
     store_per_iteration = True
-    if cfg is not None and cfg.get('store_method',None) is not None:
-        assert(cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = cfg['store_method'] == 'per-iteration'
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
     fout=None
     if store_per_iteration:
         fout=CSVData(os.path.join(logdir, 'input-iter-%07d.csv' % iteration))
@@ -38,7 +40,7 @@ def store_input(cfg, data_blob, res, logdir, iteration):
             
         # type 1 = Labels for PPN
         if label_ppn is not None: 
-            for row in label_ppn[data_index][mask]:
+            for row in label_ppn[data_index]:
                 fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],1,row[4]))
                 fout.write()
         # 2 = UResNet labels
@@ -48,18 +50,18 @@ def store_input(cfg, data_blob, res, logdir, iteration):
                 fout.write()
         # type 15 = group id, 16 = semantic labels, 17 = energy
         if label_cls is not None:
-            for row in label_cls[data_index][mask]:
+            for row in label_cls[data_index]:
                 fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],15,row[5]))
                 fout.write()
-            for row in label_cls[data_index][mask]:
+            for row in label_cls[data_index]:
                 fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],16,row[6]))
                 fout.write()
-            for row in label_cls[data_index][mask]:
+            for row in label_cls[data_index]:
                 fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],17,row[4]))
                 fout.write()
         # type 18 = cluster3d_mcst_true
         if label_mcst is not None:
-            for row in label_mcst[data_index][mask]:
+            for row in label_mcst[data_index]:
                 fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],19,row[4]))
                 fout.write()
 

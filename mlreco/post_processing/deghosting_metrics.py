@@ -32,10 +32,12 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
     Writes to a CSV file `deghosting_metrics-*`
     """
 
+    method_cfg = cfg['post_processing']['deghosting_metrics']
+
     csv_logger = utils.CSVData(os.path.join(logdir,"deghosting_metrics-iter-%.07d.csv" % iteration))
     for data_idx, tree_idx in enumerate(data_blob['index']):
 
-        deghosting_type = cfg['method']
+        deghosting_type = method_cfg['method']
         assert(deghosting_type in ['5+2','6','2'])
 
         label = data_blob['segment_label'][data_idx][:,-1]        

@@ -16,6 +16,8 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
     if not 'input_data' in data_blob: return
     if not 'points' in res: return
 
+    method_cfg = cfg['post_processing']['store_uresnet_ppn']
+
     index       = data_blob['index']
     input_dat   = data_blob.get('input_data',None)
     output_pts  = res.get('points',None)
@@ -26,9 +28,9 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
     output_ghost = res.get('ghost',None)
 
     store_per_iteration = True
-    if cfg is not None and cfg.get('store_method',None) is not None:
-        assert(cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = cfg['store_method'] == 'per-iteration'
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
     fout=None
     if store_per_iteration:
         fout=CSVData(os.path.join(logdir, 'uresnet-ppn-iter-%07d.csv' % iteration))

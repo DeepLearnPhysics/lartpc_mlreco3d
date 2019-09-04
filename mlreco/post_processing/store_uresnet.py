@@ -5,14 +5,17 @@ from mlreco.utils import CSVData
 def store_uresnet(cfg, data_blob, res, logdir, iteration):
     # UResNet prediction
     if not 'segmentation' in res: return
+
+    method_cfg = cfg['post_processing']['store_uresnet']
+    
     index        = data_blob['index']
     segment_data = res['segmentation']
     input_data   = data_blob['input_data']
 
     store_per_iteration = True
-    if cfg is not None and cfg.get('store_method',None) is not None:
-        assert(cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = cfg['store_method'] == 'per-iteration'
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
     fout=None
     if store_per_iteration:
         fout=CSVData(os.path.join(logdir, 'uresnet-segmentation-iter-%07d.csv' % iteration))
