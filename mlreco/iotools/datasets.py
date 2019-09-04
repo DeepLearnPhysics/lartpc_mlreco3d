@@ -36,10 +36,12 @@ class LArCVDataset(Dataset):
                 if len(self._files) >= limit_num_files: break
             if len(self._files) >= limit_num_files: break
 
-        if len(self._files)>10: print(len(self._files),'files loaded')
+        if len(self._files)<1:
+            raise FileNotFoundError
+        elif len(self._files)>10: print(len(self._files),'files loaded')
         else:
             for f in self._files: print('Loading file:',f)
-
+        
         # Instantiate parsers
         self._data_keys = []
         self._data_parsers = []
