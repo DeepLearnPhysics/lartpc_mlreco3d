@@ -201,7 +201,6 @@ def nms_numpy(im_proposals, im_scores, threshold, size):
         w = np.maximum(0.0, yy - xx + 1)
         inter = np.prod(w, axis=0)
         ovr = inter / (areas[i] + areas[order[1:]] - inter)
-        print(ovr)
         inds = np.where(ovr <= threshold)[0]
         order = order[inds + 1]
 
@@ -241,7 +240,7 @@ def group_points(ppn_pts, batch, label):
 
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
-                                    type_threshold=100, **kwargs):
+                                    type_threshold=100, entry=0, **kwargs):
     """
     Postprocessing of PPN points.
     Parameters
@@ -253,15 +252,15 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
     [x,y,z,bid,label] of ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = out['points'][0]#.cpu().detach().numpy()
-    mask = out['mask_ppn2'][0]#.cpu().detach().numpy()
+    points = out['points'][entry]#.cpu().detach().numpy()
+    mask = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
-    uresnet_predictions = np.argmax(out['segmentation'][0], -1)
+    uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
     scores = scipy.special.softmax(points[:, 3:5], axis=1)
 
     if 'ghost' in out:
-        mask_ghost = np.argmax(out['ghost'][0], axis=1) == 0
+        mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         points = points[mask_ghost]
         mask = mask[mask_ghost]
@@ -302,7 +301,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
     return np.column_stack((all_points, all_batch, all_labels))
 
 
-def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4, score_threshold=0.9, **kwargs):
+def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
+                               window_size=4, score_threshold=0.9, **kwargs):
     """
     Basic selection of PPN points.
 
@@ -322,12 +322,12 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4
     #  ppn1: 1
     #  ppn2: 2
     # FIXME assumes 3D for now
-    points = out[0][0].cpu().detach().numpy()
-    ppn1 = out[1][0].cpu().detach().numpy()
-    ppn2 = out[2][0].cpu().detach().numpy()
-    mask = out[5][0].cpu().detach().numpy()
+    points = out['points'][entry]#.cpu().detach().numpy()
+    #ppn1 = out['ppn1'][entry]#.cpu().detach().numpy()
+    #ppn2 = out[2][0].cpu().detach().numpy()
+    mask = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     # predicted type labels
-    pred_labels = torch.argmax(out[3][0],-1).cpu().detach().numpy()
+    pred_labels = np.argmax(out['segmentation'][entry], axis=-1)#.cpu().detach().numpy()
 
     scores = scipy.special.softmax(points[:, 3:5], axis=1)
     points = points[:,:3]
@@ -347,7 +347,7 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, window_size=4
     points = points[maskinds]
     labels = pred_labels[maskinds]
 
-    data_in = data.cpu().detach().numpy()
+    data_in = data#.cpu().detach().numpy()
     voxels = data_in[:,:3]
     ppn_pts = voxels[maskinds] + 0.5 + points
     batch = data_in[maskinds,3]
