@@ -13,7 +13,7 @@ import itertools
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
-from mlreco import analysis
+#from mlreco import analysis
 #from mlreco.output_formatters import output
 import mlreco.post_processing as post_processing
 
@@ -282,7 +282,7 @@ def train_loop(cfg, handlers):
         if 'post_processing' in cfg:
             for processor_name,processor_cfg in cfg['post_processing'].items():
                 processor = getattr(post_processing,str(processor_name))
-                processor(processor_cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
+                processor(cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
@@ -338,7 +338,7 @@ def inference_loop(cfg, handlers):
             if 'post_processing' in cfg:
                 for processor_name,processor_cfg in cfg['post_processing'].items():
                     processor = getattr(post_processing,str(processor_name))
-                    processor(processor_cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
+                    processor(cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

@@ -41,11 +41,14 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
     - `michel_reconstruction-*`
     - `michel_reconstruction2-*`
     """
+    method_cfg = cfg['post_processing']['michel_reconstruction']
+    
     # Create output CSV
     store_per_iteration = True
-    if cfg is not None and cfg.get('store_method',None) is not None:
-        assert(cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = cfg['store_method'] == 'per-iteration'
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
+
     fout_reco,fout_true=None,None
     if store_per_iteration:
         fout_reco=CSVData(os.path.join(logdir, 'michel-reconstruction-reco-iter-%07d.csv' % iteration))
