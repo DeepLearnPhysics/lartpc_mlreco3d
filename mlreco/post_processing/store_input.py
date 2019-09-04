@@ -5,7 +5,9 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     # 0 = Event voxels and values
     if not 'input_data' in data_blob: return
 
-    threshold = 0. if cfg is None else cfg.get('threshold',0.)
+    method_cfg = cfg['post_processing']['store_input']
+
+    threshold = 0. if method_cfg is None else method_cfg.get('threshold',0.)
     
     index      = data_blob.get('index',None)
     input_dat  = data_blob.get('input_data',None)
@@ -15,9 +17,9 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     label_mcst = data_blob.get('cluster3d_mcst_true',None)
 
     store_per_iteration = True
-    if cfg is not None and cfg.get('store_method',None) is not None:
-        assert(cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = cfg['store_method'] == 'per-iteration'
+    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
+        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
     fout=None
     if store_per_iteration:
         fout=CSVData(os.path.join(logdir, 'input-iter-%07d.csv' % iteration))
