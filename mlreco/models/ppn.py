@@ -47,6 +47,18 @@ class PPN(torch.nn.Module):
         Should be number of classes (+1 if we include ghost points directly)
     data_dim : int
         Dimension 2 or 3
+    use_encoding: bool, optional
+        Whether to use feature maps from the encoding or decoding path of UResNet.
+    downsample_ghost: bool, optional
+        Whether to apply the downsampled ghost mask.
+    ppn_num_conv: int, optional
+        How many convolutions to apply at each level of PPN.
+    ppn1_size: int, optional
+        Size in px of the coarsest feature map used by PPN1. Should divide the original spatial size.
+    ppn2_size: int, optional
+        Size in px of the intermediate feature map used by PPN2. Should divide the original spatial size.
+    spatial_size: int, optional
+        Size in px of the original image.
     """
     def __init__(self, cfg):
         super(PPN, self).__init__()
@@ -188,6 +200,24 @@ class PPN(torch.nn.Module):
 
 
 class PPNLoss(torch.nn.modules.loss._Loss):
+    """
+    Configuration TO BE COMPLETED
+    -------------
+    downsample_ghost: bool, optional
+        Whether to apply downsampled ghost mask in PPN forward and loss computation.
+    weight_ppn1: float, optional
+        Weight for PPN1 loss.
+    true_distance_ppn1: float, optional
+    true_distance_ppn2: float, optional
+    true_distance_ppn3: float, optional
+    score_threshold: float, optional
+    random_sample_negatives: bool, optional
+        Whether to compute the PPN1/2/3 losses by randomly sampling negatives, to limit the cases where the true point is very far away from any voxel after deghosting (would lead to penalizing the network unfairly)
+    near_sampling: bool, optional
+        In addition to above, also sample randomly negatives in the neighborhood of positives.
+    sampling_factor: int, optional
+        How many samples to draw from negatives (for both `random_sampling_negatives` and `near_sampling` options).
+    """
     def __init__(self, cfg, reduction='sum'):
         super(PPNLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['modules']['ppn']
@@ -204,6 +234,9 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         self._true_distance_ppn2 = self._cfg.get('true_distance_ppn2', 1.0)
         self._true_distance_ppn3 = self._cfg.get('true_distance_ppn3', 5.0)
         self._score_threshold = self._cfg.get('score_threshold', 0.5)
+        self._random_sample_negatives = self._cfg.get('random_sample_negatives', False)
+        self._near_sampling = self._cfg.get('near_sampling', False)
+        self._sampling_factor = self._cfg.get('sampling_factor', 20)
 
         self._ppn1_size = self._cfg.get('ppn1_size', -1)
         self._ppn2_size = self._cfg.get('ppn2_size', -1)
@@ -236,6 +269,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         total_acc_type, total_loss_type = 0., 0.
         num_labels = 0.
         num_discarded_labels_ppn1, num_discarded_labels_ppn2 = 0., 0.
+        total_num_positives_ppn1, total_num_positives_ppn2 = 0., 0.
         data_dim = self._dimension
         for i in range(len(label)):
             event_particles = particles[i]
@@ -257,7 +291,6 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                 # PPN stuff
                 event_label = event_particles[event_particles[:, -2] == b][:, :-2]  # (N_gt, 3)
                 event_types_label = event_particles[event_particles[:, -2] == b][:, -1]
-                # print(b, event_label.size())
                 if event_label.size(0) > 0:
                     # Mask: only consider pixels that were selected
                     event_mask = result['mask_ppn2'][i][batch_index]
@@ -271,8 +304,6 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     if event_mask.int().sum() == 0:
                         continue
 
-                    # event_label = event_label[event_mask]
-                    # event_segmentation = event_segmentation[event_mask]
                     event_pixel_pred = event_pixel_pred[event_mask]
                     event_scores = event_scores[event_mask]
                     event_types = event_types[event_mask]
@@ -312,9 +343,32 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     d = self.distances(event_label, event_pixel_pred)
                     d_true = self.distances(event_label, event_data)
                     positives = (d_true < self._true_distance_ppn3).any(dim=0)  # FIXME can be empty
-                    if positives.shape[0] == 0:
+                    num_positives = positives.long().sum()
+                    if num_positives == 0:
                         continue
-                    loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
+                    if self._random_sample_negatives:
+                        neg_sample_index = torch.randperm(positives.nelement() - num_positives)[:self._sampling_factor*max(num_positives, 1)]
+                        neg_index = torch.nonzero(1-positives.long())[neg_sample_index]
+
+                        index = positives.byte()
+                        index[neg_index] = True
+
+                        if self._near_sampling:
+                            near_positives = (d_true < self._true_distance_ppn3*2).any(dim=0) & (~positives)
+                            near_sample_index = torch.randperm(near_positives.long().sum())[:self._sampling_factor*max(num_positives, 1)]
+                            near_index = torch.nonzero(near_positives.long())[near_sample_index]
+                            index[near_index] = True
+                        weight = torch.Tensor([1.0, self._sampling_factor*(2 if self._near_sampling else 1)]).double()
+                        if torch.cuda.is_available():
+                            weight = weight.cuda()
+                        loss_seg = torch.nn.functional.cross_entropy(event_scores[index].double(), positives[index].long(), weight=weight)
+                    else:
+                        num_positives = positives.long().sum()
+                        num_negatives = positives.nelement() - num_positives
+                        w = num_positives.float() / (num_positives + num_negatives).float()
+                        weight_ppn3 = torch.stack([w, 1-w]).double()
+                        # loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
+                        loss_seg = torch.nn.functional.cross_entropy(event_scores.double(), positives.long(), weight=weight_ppn3)
                     total_class += loss_seg
 
                     # Accuracy for scores
@@ -327,15 +381,15 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     event_label_ppn2 = torch.floor(event_label/float(2**self.ppn2_stride))
                     d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
                     d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
-                    positives_ppn1 = (d_true_ppn1 < self._true_distance_ppn1).any(dim=0).long()
-                    positives_ppn2 = (d_true_ppn2 < self._true_distance_ppn2).any(dim=0).long()
+                    positives_ppn1 = (d_true_ppn1 < self._true_distance_ppn1).any(dim=0)
+                    positives_ppn2 = (d_true_ppn2 < self._true_distance_ppn2).any(dim=0)
 
-                    num_positives_ppn1 = positives_ppn1.sum()
+                    num_positives_ppn1 = positives_ppn1.long().sum()
                     num_negatives_ppn1 = positives_ppn1.nelement() - num_positives_ppn1
                     w = num_positives_ppn1.float() / (num_positives_ppn1 + num_negatives_ppn1).float()
                     weight_ppn1 = torch.stack([w, 1-w]).double()
 
-                    num_positives_ppn2 = positives_ppn2.sum()
+                    num_positives_ppn2 = positives_ppn2.long().sum()
                     num_negatives_ppn2 = positives_ppn2.nelement() - num_positives_ppn2
                     w2 = num_positives_ppn2.float() / (num_positives_ppn2 + num_negatives_ppn2).float()
                     weight_ppn2 = torch.stack([w2, 1-w2]).double()
@@ -349,10 +403,37 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     num_discarded_labels_ppn1 += (~(d_true_ppn1 < self._true_distance_ppn1).any(dim=1)).sum().item()
                     num_discarded_labels_ppn2 += (~(d_true_ppn2 < self._true_distance_ppn2).any(dim=1)).sum().item()
 
-                    # loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1))
-                    loss_seg_ppn1 = torch.nn.functional.cross_entropy(event_ppn1_scores.double(), positives_ppn1, weight=weight_ppn1)
-                    # loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2))
-                    loss_seg_ppn2 = torch.nn.functional.cross_entropy(event_ppn2_scores.double(), positives_ppn2, weight=weight_ppn2)
+                    if self._random_sample_negatives:
+                        neg_sample_index = torch.randperm(num_negatives_ppn1)[:self._sampling_factor*max(num_positives_ppn1, 1)]
+                        neg_index = torch.nonzero(1-positives_ppn1.long())[neg_sample_index]
+
+                        index = positives_ppn1.byte()
+                        index[neg_index] = True
+
+                        if self._near_sampling:
+                            near_positives_ppn1 = (d_true_ppn1 < self._true_distance_ppn1*2).any(dim=0) & (~positives_ppn1)
+                            near_sample_index = torch.randperm(near_positives_ppn1.long().sum())[:20*max(num_positives_ppn1, 1)]
+                            near_index = torch.nonzero(near_positives_ppn1.long())[near_sample_index]
+                            index[near_index] = True
+                        loss_seg_ppn1 = torch.nn.functional.cross_entropy(event_ppn1_scores[index].double(), positives_ppn1[index].long(), weight=weight)
+
+                        neg_sample_index2 = torch.randperm(num_negatives_ppn2)[:20*max(num_positives_ppn2, 1)]
+                        neg_index = torch.nonzero(1-positives_ppn2.long())[neg_sample_index2]
+
+                        index = positives_ppn2.byte()
+                        index[neg_index] = True
+
+                        if self._near_sampling:
+                            near_positives_ppn2 = (d_true_ppn2 < self._true_distance_ppn2*2).any(dim=0) & (~positives_ppn2)
+                            near_sample_index2 = torch.randperm(near_positives_ppn2.long().sum())[:self._sampling_factor*max(num_positives_ppn2, 1)]
+                            near_index = torch.nonzero(near_positives_ppn2.long())[near_sample_index2]
+                            index[near_index] = True
+                        loss_seg_ppn2 = torch.nn.functional.cross_entropy(event_ppn2_scores[index].double(), positives_ppn2[index].long(), weight=weight)
+                    else:
+                        # loss_seg_ppn1 = torch.mean(self.cross_entropy(event_ppn1_scores.double(), positives_ppn1))
+                        loss_seg_ppn1 = torch.nn.functional.cross_entropy(event_ppn1_scores.double(), positives_ppn1.long(), weight=weight_ppn1)
+                        # loss_seg_ppn2 = torch.mean(self.cross_entropy(event_ppn2_scores.double(), positives_ppn2))
+                        loss_seg_ppn2 = torch.nn.functional.cross_entropy(event_ppn2_scores.double(), positives_ppn2.long(), weight=weight_ppn2)
                     predicted_labels_ppn1 = torch.argmax(event_ppn1_scores, dim=-1)
                     predicted_labels_ppn2 = torch.argmax(event_ppn2_scores, dim=-1)
                     acc_ppn1 = (predicted_labels_ppn1 == positives_ppn1.long()).sum().item() / float(predicted_labels_ppn1.nelement())
@@ -370,8 +451,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         fraction_negatives_ppn2 = (predicted_labels_ppn2[positives_ppn2 == 0] == positives_ppn2[positives_ppn2 == 0].long()).sum().item() / float(predicted_labels_ppn2[positives_ppn2 == 0].nelement())
                         total_fraction_negatives_ppn2 += fraction_negatives_ppn2
                     #print(num_positives_ppn1, num_negatives_ppn1, w, acc_ppn1)
-                    #total_num_positives_ppn1 += num_positives_ppn1
-                    #total_num_negatives_ppn1 += num_negatives_ppn1
+                    total_num_positives_ppn1 += num_positives_ppn1
+                    total_num_positives_ppn2 += num_positives_ppn2
                     # Distance loss
                     # positives = (d_true[:, event_mask] < 5).any(dim=0)
                     # distances_positives = d[:, event_mask][:, positives]
@@ -420,7 +501,9 @@ class PPNLoss(torch.nn.modules.loss._Loss):
             'loss_type': total_loss_type,
             'num_labels': num_labels,
             'num_discarded_labels_ppn1': num_discarded_labels_ppn1,
-            'num_discarded_labels_ppn2': num_discarded_labels_ppn2
+            'num_discarded_labels_ppn2': num_discarded_labels_ppn2,
+            'num_positives_ppn1': total_num_positives_ppn1,
+            'num_positives_ppn2': total_num_positives_ppn2
         }
         for key in ppn_results:
             if not isinstance(ppn_results[key], torch.Tensor):
