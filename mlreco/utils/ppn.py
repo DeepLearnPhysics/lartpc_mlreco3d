@@ -288,15 +288,16 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
                 final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
                 final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
                 final_labels.append(ppn_type_predictions[ppn_points][ppn_mask])
-        final_points = np.concatenate(final_points, axis=0)
-        final_scores = np.concatenate(final_scores, axis=0)
-        final_labels = np.concatenate(final_labels, axis=0)
-        clusts = dbscan_types(final_points, final_labels, epsilon=1.99,  minpts=1, typemin=0, typemax=5)
-        for c in clusts:
-            # append mean of points
-            all_points.append(np.mean(final_points[c], axis=0))
-            all_batch.append(b)
-            all_labels.append(np.mean(final_labels[c]))
+        if len(final_points)>0:
+            final_points = np.concatenate(final_points, axis=0)
+            final_scores = np.concatenate(final_scores, axis=0)
+            final_labels = np.concatenate(final_labels, axis=0)
+            clusts = dbscan_types(final_points, final_labels, epsilon=1.99,  minpts=1, typemin=0, typemax=5)
+            for c in clusts:
+                # append mean of points
+                all_points.append(np.mean(final_points[c], axis=0))
+                all_batch.append(b)
+                all_labels.append(np.mean(final_labels[c]))
 
     return np.column_stack((all_points, all_batch, all_labels))
 

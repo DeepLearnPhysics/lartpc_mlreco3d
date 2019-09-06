@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import os
 from mlreco.utils import CSVData
 
 def store_uresnet(cfg, data_blob, res, logdir, iteration):
@@ -7,10 +8,10 @@ def store_uresnet(cfg, data_blob, res, logdir, iteration):
     if not 'segmentation' in res: return
 
     method_cfg = cfg['post_processing']['store_uresnet']
-    
+
     index        = data_blob['index']
     segment_data = res['segmentation']
-    input_data   = data_blob['input_data']
+    input_data   = data_blob.get('input_data' if method_cfg is None else method_cfg.get('input_data', 'input_data'), None)
 
     store_per_iteration = True
     if method_cfg is not None and method_cfg.get('store_method',None) is not None:
@@ -33,5 +34,5 @@ def store_uresnet(cfg, data_blob, res, logdir, iteration):
             fout.write()
 
         if not store_per_iteration: fout.close()
-            
+
     if store_per_iteration: fout.close()
