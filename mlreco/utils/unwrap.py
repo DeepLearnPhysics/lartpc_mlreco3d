@@ -67,26 +67,37 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 result_data[target].append(d[where])
                 
     # a-2) Handle the list of list of ndarrays
+    #for target in target_list_keys:
+    #    data = data_blob[target]
+    #    num_elements = len(data[0])
+    #    for list_idx in range(num_elements):
+    #        combined_list = []
+    #        for d in data:
+    #            target_data = d[list_idx]
+    #
+    #            if not target_data.shape[0] in unwrap_map:
+    #                batch_map = {}
+    #                batch_idx = np.unique(target_data[:,data_dim])
+    #                for b in batch_idx:
+    #                    batch_map[b] = target_data[:,data_dim] == b
+    #                unwrap_map[target_data.shape[0]]=batch_map
+    #
+    #            batch_map = unwrap_map[target_data.shape[0]]
+    #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
+    #        result_data[target].append(combined_list)
+
+    # a-2) Handle the list of list of ndarrays
     for target in target_list_keys:
         data = data_blob[target]
-        num_elements = len(data[0])
-        for list_idx in range(num_elements):
-            combined_list = []
-            for d in data:
-                target_data = d[list_idx]
-
-                if not target_data.shape[0] in unwrap_map:
-                    batch_map = {}
-                    batch_idx = np.unique(target_data[:,data_dim])
-                    for b in batch_idx:
-                        batch_map[b] = target_data[:,data_dim] == b
-                    unwrap_map[target_data.shape[0]]=batch_map
-
-                batch_map = unwrap_map[target_data.shape[0]]
-                combined_list.extend([ target_data[where] for where in batch_map.values() ])
-                #combined_list.extend([ target_data[target_data[:,data_dim] == b] for b in batch_idx])
-            result_data[target].append(combined_list)
-
+        for dlist in data:
+            # construct a list of batch ids
+            batch_ids = []
+            for d in dlist:
+                batch_ids.extend([n for n in np.unique(d[:,data_dim]) if not n in batch_ids])
+            batch_ids.sort()
+            for b in batch_ids:
+                result_data[target].append([ d[d[:,data_dim] == b] for d in dlist ])
+            
     # Handle output
     result_outputs = {}
     # b-0) Find the target keys
@@ -127,24 +138,60 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 result_outputs[target].append(d[where])
                 
     # b-2) Handle the list of list of ndarrays
+    #for target in target_list_keys:
+    #    data = outputs[target]
+    #    num_elements = len(data[0])
+    #    for list_idx in range(num_elements):
+    #        combined_list = []
+    #        for d in data:
+    #            target_data = d[list_idx]
+    #            if not target_data.shape[0] in unwrap_map:
+    #                batch_map = {}
+    #                batch_idx = np.unique(target_data[:,data_dim])
+    #                for b in batch_idx:
+    #                    batch_map[b] = target_data[:,data_dim] == b
+    #                unwrap_map[target_data.shape[0]]=batch_map
+    
+    #            batch_map = unwrap_map[target_data.shape[0]]
+    #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
+    #            #combined_list.extend([ target_data[target_data[:,data_dim] == b] for b in batch_idx])
+    #        result_outputs[target].append(combined_list)
+
+    # b-2) Handle the list of list of ndarrays
+
+    # ensure outputs[key] length is same for all key in target_list_keys
+    for target in target_list_keys:
+        print(target,len(outputs[target]))
+    num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
+    assert len(num_elements)<1 or len(num_elements) == 1
+    num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])
+
+    # construct unwrap mapping
+    list_unwrap_map = []
+    list_batch_ctrs = []
+    for data_index in range(num_elements):
+        element_map = {}
+        batch_ctrs  = []
+        for target in target_list_keys:
+            dlist = outputs[target][data_index]
+            for d in dlist:
+                if not d.shape[0] in element_map:
+                    batch_idx = np.unique(d[:,data_dim])
+                    batch_ctrs.append(int(np.max(batch_idx)+1))
+                    assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
+                    where = [d[:,data_dim] == b for b in range(batch_ctrs[-1])]
+                    element_map[d.shape[0]] = where
+        assert len(np.unique(batch_ctrs)) == 1
+        list_unwrap_map.append(element_map)
+        list_batch_ctrs.append(batch_ctrs[0])
+        
     for target in target_list_keys:
         data = outputs[target]
-        num_elements = len(data[0])
-        for list_idx in range(num_elements):
-            combined_list = []
-            for d in data:
-                target_data = d[list_idx]
-                if not target_data.shape[0] in unwrap_map:
-                    batch_map = {}
-                    batch_idx = np.unique(target_data[:,data_dim])
-                    for b in batch_idx:
-                        batch_map[b] = target_data[:,data_dim] == b
-                    unwrap_map[target_data.shape[0]]=batch_map
-
-                batch_map = unwrap_map[target_data.shape[0]]
-                combined_list.extend([ target_data[where] for where in batch_map.values() ])
-                #combined_list.extend([ target_data[target_data[:,data_dim] == b] for b in batch_idx])
-            result_outputs[target].append(combined_list)
+        for data_index, dlist in enumerate(data):
+            batch_ctrs  = list_batch_ctrs[data_index]
+            element_map = list_unwrap_map[data_index]
+            for b in range(batch_ctrs):
+                result_outputs[target].append([ d[element_map[d.shape[0]][b]] for d in dlist])
 
     return result_data, result_outputs
 

@@ -30,12 +30,14 @@ def loader_handmade(name, minibatch_size,
                             num_workers = num_workers)
     return loader,ds.data_keys()
 
-def dataset_factory(cfg):
+def dataset_factory(cfg,event_list=None):
     import mlreco.iotools.datasets
     params = cfg['iotool']['dataset']
+    if event_list is not None:
+        params['event_list'] = str(list(event_list))
     return getattr(mlreco.iotools.datasets, params['name']).create(params)
 
-def loader_factory(cfg):
+def loader_factory(cfg,event_list=None):
     params = cfg['iotool']
     minibatch_size = int(params['minibatch_size'])
     shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
@@ -48,7 +50,8 @@ def loader_factory(cfg):
     
     import mlreco.iotools.collates
     import mlreco.iotools.samplers
-    ds = dataset_factory(cfg)
+
+    ds = dataset_factory(cfg,event_list)
     sampler = None
     if 'sampler' in cfg['iotool']:
         sam_cfg = cfg['iotool']['sampler']
