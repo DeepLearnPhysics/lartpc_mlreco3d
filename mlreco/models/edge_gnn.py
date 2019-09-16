@@ -181,7 +181,7 @@ class EdgeChannelLoss(torch.nn.Module):
             # form primary/secondary bipartite graph
             primaries = assign_primaries(data2, clusts, data0, max_dist=self.pmd)
             batch = get_cluster_batch(data0, clusts)
-            edge_index = primary_bipartite_incidence(batch, primaries)
+            edge_index = primary_bipartite_incidence(batch, primaries, device=device)
             if not edge_index.shape[0]:
                 total_loss += self.lossfn(edge_pred, edge_pred)
                 total_acc += 1.
