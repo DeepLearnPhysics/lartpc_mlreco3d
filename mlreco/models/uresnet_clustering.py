@@ -374,6 +374,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 # Loss for clustering
                 # Loop first over feature maps, starting from coarsest one
                 # Note: We have to be careful with coordinates sorting.
+                # TODO
+                # - density estimation for points within 0.1, 0.3, 0.5, outside of 0.5 of cluster center
                 for j, feature_map in enumerate(result['cluster_feature'][i]):
                     if torch.cuda.is_available():
                         batch_index = feature_map.get_spatial_locations()[:, -1].cuda() == b.long()
