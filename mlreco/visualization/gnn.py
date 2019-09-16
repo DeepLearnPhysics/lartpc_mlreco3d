@@ -185,7 +185,6 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
         # Define the edges closest pixel to closest pixel
         import scipy as sp
         edge_vertices = []
-        print(edges.shape)
         for i, j in zip(edges[0], edges[1]):
             vi, vj = voxels[clusters[i]], voxels[clusters[j]]
             d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
