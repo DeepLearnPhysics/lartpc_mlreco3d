@@ -31,6 +31,11 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=7, mi
             # we are now in EM primary
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
+
+            # check that the particle is not an EM daughter
+            parent_pdg_code = abs(particle.parent_pdg_code())
+            if parent_pdg_code == 11 or parent_pdg_code == 22:
+                continue
             
             # TODO deal with different 2d projections
             # Register start point

@@ -243,6 +243,7 @@ def parse_cluster3d(data):
     np_data = np.concatenate(clusters_data, axis=0)
     return np_voxels, np_data
 
+
 def parse_cluster3d_full(data):
     """
     A function to retrieve clusters tensor
@@ -274,6 +275,25 @@ def parse_cluster3d_full(data):
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
     return np_voxels, np_features
+
+
+def parse_cluster3d_groups(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,1) where 1 is cluster id a
+    """
+    np_voxels, np_data = parse_cluster3d([data[0]])
+    groups, edges = parse_particle_group([data[1]])
+    for cluster_index, group_id in enumerate(groups):
+        where = np.where(np_data == float(cluster_index))
+        np_data[where] = group_id
+
+    return np_voxels, np_data
 
 
 def parse_sparse3d_clean(data):
@@ -401,6 +421,7 @@ def parse_particle_group(data):
 
     return groups, edges
     
+
 def parse_particle_asis(data):
     """
     A function to copy construct & return an array of larcv::Particle
@@ -425,6 +446,7 @@ def parse_particle_asis(data):
             z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
             getattr(p,f)(x,y,z,pos.t())
     return particles
+
 
 def parse_cluster3d_scales(data):
     """
