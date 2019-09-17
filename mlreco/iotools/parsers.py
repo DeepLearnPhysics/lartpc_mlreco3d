@@ -296,6 +296,27 @@ def parse_cluster3d_groups(data):
     return np_voxels, np_data
 
 
+def parse_cluster3d_em(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,1) where 1 is cluster id a
+    """
+    np_voxels, np_data = parse_cluster3d([data[0]])
+    particles = parse_particle_asis([data[1], data[0]])
+    for cluster_index, particle in enumerate(particles):
+        pdg_code = abs(particle.pdg_code())
+        if pdg_code != 11 and pdg_code != 22:
+            where = np.where(np_data == float(cluster_index))
+            np_data[where] = -1
+
+    return np_voxels, np_data
+
+
 def parse_sparse3d_clean(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
