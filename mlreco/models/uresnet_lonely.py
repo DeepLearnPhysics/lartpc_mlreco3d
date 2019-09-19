@@ -222,6 +222,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
+        uresnet_acc_class = [0.] * self._num_classes
+        count_class = [0.] * self._num_classes
         mask_loss, mask_acc = 0., 0.
         ghost2ghost, nonghost2nonghost = 0., 0.
         count = 0
@@ -283,6 +285,14 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
                         uresnet_acc += acc
 
+                        # Class accuracy
+                        for c in range(self._num_classes):
+                            class_mask = event_label == c
+                            class_count = class_mask.sum().item()
+                            if class_count > 0:
+                                uresnet_acc_class[c] += predicted_labels[class_mask].sum().item() / float(class_count)
+                                count_class[c] += 1
+
                 count += 1
 
         if self._ghost:
@@ -301,4 +311,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 'accuracy': uresnet_acc/count,
                 'loss': uresnet_loss/count
             }
+        for c in range(self._num_classes):
+            if count_class[c] > 0:
+                results['accuracy_class_%d' % c] = uresnet_acc_class[c]/count_class[c]
+            else:
+                results['accuracy_class_%d' % c] = -1.
         return results
