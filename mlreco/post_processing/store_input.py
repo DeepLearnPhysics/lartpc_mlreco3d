@@ -1,6 +1,19 @@
 import os
 from mlreco.utils import CSVData
 
+
+def get_coords(row, data_dim, tree_index):
+    if data_dim == 2:
+        coords_labels = ('idx', 'x', 'y')
+        coords = (tree_index, row[0], row[1])
+    elif data_dim == 3:
+        coords_labels = ('idx', 'x', 'y', 'z')
+        coords = (tree_index, row[0], row[1], row[2])
+    else:
+        raise Exception("data_dim must be 2 or 3, got %d" % data_dim)
+    return coords_labels, coords
+
+
 def store_input(cfg, data_blob, res, logdir, iteration):
     """
     Store input data blob.
@@ -22,6 +35,7 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     if (method_cfg is not None and not method_cfg.get('input_data', 'input_data') in data_blob) or (method_cfg is None and 'input_data' not in data_blob): return
 
     threshold = 0. if method_cfg is None else method_cfg.get('threshold',0.)
+    data_dim = 3 if method_cfg is None else method_cfg.get('data_dim', 3)
 
     index      = data_blob.get('index', None)
     input_dat  = data_blob.get('input_data' if method_cfg is None else method_cfg.get('input_data', 'input_data'), None)
@@ -47,9 +61,11 @@ def store_input(cfg, data_blob, res, logdir, iteration):
 
         mask = input_dat[data_index][:,-1] > threshold
 
+
         # type 0 = input data
         for row in input_dat[data_index][mask]:
-            fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],0,row[4]))
+            coords_labels, coords = get_coords(row, data_dim, tree_index)
+            fout.record(coords_labels + ('type','value'), coords + (0,row[data_dim+1]))
             fout.write()
 
         # type 1 = Labels for PPN
@@ -60,7 +76,8 @@ def store_input(cfg, data_blob, res, logdir, iteration):
         # 2 = UResNet labels
         if label_seg is not None:
             for row in label_seg[data_index][mask]:
-                fout.record(('idx','x','y','z','type','value'),(tree_index,row[0],row[1],row[2],2,row[4]))
+                coords_labels, coords = get_coords(row, data_dim, tree_index)
+                fout.record(coords_labels + ('type','value'),coords + (2,row[data_dim+1]))
                 fout.write()
         # type 15 = group id, 16 = semantic labels, 17 = energy
         if label_cls is not None:

@@ -120,7 +120,11 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
             #raise TypeError
 
     # b-1) Handle the list of ndarrays
+    if target_array_keys is not None:
+        target_array_keys.sort(reverse=True)
+    #print(target_array_keys)
     for target in target_array_keys:
+        #print(target)
         data = outputs[target]
         for d in data:
             # check if batch map is available, and create if not
@@ -128,6 +132,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 batch_map = {}
                 batch_idx = np.unique(d[:,data_dim])
                 # ensure these are integer values
+                print(batch_idx)
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,data_dim] == b
@@ -276,4 +281,3 @@ def unwrap_scn2(data_blob, outputs, data_dim, main_key=None, data_keys=None, out
             output_index += 1
 
     return parsed_data_blob, parsed_outputs
-
