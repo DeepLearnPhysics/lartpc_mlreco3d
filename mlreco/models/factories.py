@@ -8,6 +8,7 @@ def model_dict():
     from . import uresnet_ppn_chain
     from . import edge_gnn
     from . import full_edge_gnn
+    from . import node_gnn
     from . import iter_edge_gnn
     from . import chain_gnn
     #from . import mst_gnn
@@ -34,6 +35,8 @@ def model_dict():
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
         # Full Edge Model
         "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
+        # Full Node Model
+        "node_model": (node_gnn.NodeModel, node_gnn.NodeChannelLoss),
         # MST edge model
         ##"mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
         # Iterative Edge Model
