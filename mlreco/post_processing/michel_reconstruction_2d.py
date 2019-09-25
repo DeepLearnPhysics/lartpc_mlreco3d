@@ -64,10 +64,11 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
 
         # from input/labels
         data        = data_blob['input_data'     ][batch_id]
-        label       = data_blob['segment_label'  ][batch_id][:,-1] + 1
+        label       = data_blob['segment_label'  ][batch_id][:,-1]
         # clusters    = data_blob['clusters_label' ][batch_id]
         particles   = data_blob['particles_label'][batch_id]
-        Michel_particles = particles[particles[:, 4] == 4]  # FIXME 3 or 4 in 2D? Also not sure if type is registered for Michel
+
+        Michel_particles = particles[particles[:, 2] == 4]  # FIXME 3 or 4 in 2D? Also not sure if type is registered for Michel
 
         # from network output
         segmentation = res['segmentation'][batch_id]
@@ -86,7 +87,8 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
         MIP_coords_pred = data[(predictions == MIP_label).reshape((-1,)), ...][:, :data_dim]
         Michel_coords_pred = data[(predictions == Michel_label).reshape((-1,)), ...][:, :data_dim]
 
-        one_pixel = 2.8284271247461903
+        # DBSCAN epsilon used for many things... TODO list here
+        one_pixel = 10#2.8284271247461903
         # 1. Find true particle information matching the true Michel cluster
         Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
         # Michel_true_clusters = [Michel_coords[Michel_coords[:, -2] == gid] for gid in np.unique(Michel_coords[:, -2])]
@@ -118,7 +120,7 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
         # TODO how do we count events where there are no predictions but true?
         if MIP_coords_pred.shape[0] == 0 or Michel_coords_pred.shape[0] == 0:
             continue
-        
+
         # print("Also predicted!")
         # 2. Compute true and predicted clusters
         MIP_clusters = DBSCAN(eps=one_pixel, min_samples=10).fit(MIP_coords_pred).labels_

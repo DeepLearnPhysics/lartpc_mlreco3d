@@ -200,6 +200,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._num_classes = self._cfg.get('num_classes', 5)
         self._alpha = self._cfg.get('alpha', 1.0)
         self._beta = self._cfg.get('beta', 1.0)
+        self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
@@ -276,7 +277,17 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 if event_label.shape[0] > 0:  # FIXME how to handle empty mask?
                     # Loss for semantic segmentation
-                    loss_seg = self.cross_entropy(event_segmentation, event_label)
+                    if self._weight_loss:
+                        class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
+                        w = torch.Tensor([1.0 / c if c.item() > 0 else 0. for c in class_count]).double()
+                        #w = torch.Tensor([2.0, 2.0, 5.0, 10.0, 2.0]).double()
+                        #w = 1.0 - w / w.sum()
+                        if torch.cuda.is_available():
+                            w = w.cuda()
+                        #print(class_count, w, class_count[0].item() > 0)
+                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
+                    else:
+                        loss_seg = self.cross_entropy(event_segmentation, event_label)
                     uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation
