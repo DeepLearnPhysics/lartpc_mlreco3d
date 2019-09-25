@@ -13,27 +13,32 @@ def parse_sparse2d_scn(data):
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
     Returns the data in format to pass to SCN
     Args:
-        array of larcv::EventSparseTensor3D
+        array of larcv::EventSparseTensor2D
+        optionally, array of (larcv::EventSparseTensor2D, int) for projection id
     Return:
-        voxels - numpy array(int32) with shape (N,3) - coordinates
+        voxels - numpy array(int32) with shape (N,2) - coordinates
         data   - numpy array(float32) with shape (N,C) - pixel values/channels
     """
     meta = None
     output = []
     np_voxels = None
     for event_tensor2d in data:
-        
-        tensor2d=event_tensor2d.sparse_tensor_2d(0)
+        projection_id = 0  # default
+        if isinstance(event_tensor2d, tuple):
+            projection_id = event_tensor2d[1]
+            event_tensor2d = event_tensor2d[0]
+
+        tensor2d = event_tensor2d.sparse_tensor_2d(projection_id)
         num_point = tensor2d.as_vector().size()
-        
+
         if meta is None:
-            
+
             meta = tensor2d.meta()
             np_voxels = np.empty(shape=(num_point, 2), dtype=np.int32)
             larcv.fill_2d_voxels(tensor2d, np_voxels)
-            
-        else:
-            assert meta == tensor2d.meta()
+
+        # else:
+        #     assert meta == tensor2d.meta()
         np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
         larcv.fill_2d_pcloud(tensor2d, np_data)
         output.append(np_data)
@@ -375,7 +380,7 @@ def parse_particle_group(data):
     Return:
         a numpy array of group ID per particle (i.e. cluster), length = particle/cluster count.
         a numpy array of directed edges where each edge is (parent,child) cluster index ID.
-    """    
+    """
     particles = data[0]
 
     # for convention, construct particle id => cluster id mapping
@@ -400,7 +405,7 @@ def parse_particle_group(data):
     edges = np.array(edges).astype(np.int32)
 
     return groups, edges
-    
+
 def parse_particle_asis(data):
     """
     A function to copy construct & return an array of larcv::Particle
@@ -412,9 +417,9 @@ def parse_particle_asis(data):
     particles = data[0]
     clusters  = data[1]
     assert particles.as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
-    
+
     meta = clusters.meta()
-    
+
     particles = [larcv.Particle(p) for p in data[0].as_vector()]
     funcs = ["first_step","last_step","position","end_position"]
     for p in particles:
@@ -481,4 +486,3 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
-
