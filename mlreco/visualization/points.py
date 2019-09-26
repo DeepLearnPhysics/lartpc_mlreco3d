@@ -1,6 +1,6 @@
 import plotly.graph_objs as go
 
-def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None, opacity=0.8, hovertext=None):
+def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None, opacity=0.8, hovertext=None, cmin=None, cmax=None):
     """
     Produces go.Scatter3d or go.Scatter object to be plotted in plotly
     - voxels is a list of voxel coordinates (Nx2 or Nx3 matrix)
@@ -17,6 +17,10 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     """
     if hovertext is None and color is not None and not type(color) == type(str()):
         hovertext = ['%.2f' % float(v) for v in color]
+    if cmin is None and color is not None and not type(color) == type(str()):
+        cmin = min(color)
+    if cmax is None and color is not None and not type(color) == type(str()):
+        cmax = max(color)
 
     if not dim in [2,3]:
         print('dim argument must be 2 or 3!')
@@ -33,6 +37,8 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
             color=color,
             colorscale=colorscale,
             opacity=opacity,
+            cmin=cmin,
+            cmax=cmax,
         ),
         hoverinfo = ['x','y'] if hovertext is None else ['x','y','text'],
         hovertext = hovertext,
@@ -45,17 +51,3 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     else:
         return [go.Scatter(**args)]
     
-    """
-    trace = go.Scatter3d(x=points[:,0], y=points[:,1], z=points[:,2],
-                         mode='markers',
-                         marker = dict(
-                            size = markersize,
-                            color=color,
-                            colorscale=colorscale,
-                            opacity=opacity,
-                         ),
-                         hoverinfo = ['x','y','z'] if hovertext is None else ['x','y','z','text'],
-                         hovertext = hovertext,
-                        )
-    return [trace]
-    """
