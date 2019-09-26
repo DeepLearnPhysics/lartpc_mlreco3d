@@ -61,7 +61,7 @@ def process_config(cfg):
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
 
     if 'iotool' in cfg:
-        
+
         # Update IO seed
         if 'sampler' in cfg['iotool']:
             if 'seed' not in cfg['iotool']['sampler'] or cfg['iotool']['sampler']['seed'] < 0:
@@ -116,7 +116,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
             if handlers is not None:
                 handlers.csv_logger = utils.CSVData(logname)
 
-    
+
 def prepare(cfg):
     """
     Prepares high level API handlers, namely trainval instance and torch DataLoader (w/ iterator)
@@ -161,7 +161,7 @@ def prepare(cfg):
             handlers.iteration = loaded_iteration
 
         make_directories(cfg, loaded_iteration, handlers=handlers)
-        
+
     return handlers
 
 
@@ -219,18 +219,18 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     if handlers.csv_logger:
 
         tsum_map = handlers.trainer.tspent_sum
-        
+
         handlers.csv_logger.record(('iter', 'first_id', 'epoch', 'titer', 'tsumiter'),
                                    (handlers.iteration, first_id, epoch, t_iter, tsum))
         handlers.csv_logger.record(('tio', 'tsumio'), (t_io,tsum_map['io']))
         handlers.csv_logger.record(('mem', ), (mem, ))
-        
+
         if cfg['trainval']['train']:
             handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),
                                        (t_net, t_save, tsum_map['train'], tsum_map['save']))
         else:
             handlers.csv_logger.record(('tforward', 'tsumforward'), (t_net, tsum_map['forward']))
-                                       
+
 
         for key in res_dict:
             handlers.csv_logger.record((key,), (res_dict[key],))
@@ -326,7 +326,7 @@ def inference_loop(cfg, handlers):
             epoch = handlers.iteration / float(len(handlers.data_io))
             tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             handlers.watch.start('iteration')
-            
+
             checkpt_step = cfg['trainval']['checkpoint_step'] and \
                            cfg['trainval']['weight_prefix'] and \
                            ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
@@ -345,7 +345,7 @@ def inference_loop(cfg, handlers):
 
             log(handlers, tstamp_iteration,
                 tsum, result_blob, cfg, epoch, data_blob['index'][0])
-            
+
             handlers.iteration += 1
 
     # Metrics
