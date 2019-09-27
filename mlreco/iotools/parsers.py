@@ -302,7 +302,7 @@ def parse_cluster2d_full(data):
             clusters_features.append(np.column_stack([cluster_id,value]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
-    print(np_voxels.shape,np_features.shape)
+
     return np_voxels, np_features
 
 def parse_sparse3d_clean(data):
