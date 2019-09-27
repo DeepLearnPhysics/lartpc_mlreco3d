@@ -8,6 +8,34 @@ from mlreco.utils.gnn.primary import get_em_primary_info
 from mlreco.utils.dbscan import dbscan_types, dbscan_groups
 from mlreco.utils.groups import get_group_types, filter_duplicate_voxels, filter_nonimg_voxels
 
+
+def parse_sparse2d_meta(data):
+    event_tensor2d = data[0]
+    projection_id = 0  # default
+    if isinstance(event_tensor2d, tuple):
+        projection_id = event_tensor2d[1]
+        event_tensor2d = event_tensor2d[0]
+
+    tensor2d = event_tensor2d.sparse_tensor_2d(projection_id)
+    meta = tensor2d.meta()
+    # return np.array([[
+    #     meta.min_x(),
+    #     meta.min_y(),
+    #     meta.max_x(),
+    #     meta.max_y(),
+    #     meta.pixel_width(),
+    #     meta.pixel_height()
+    # ]])
+    return [
+        meta.min_x(),
+        meta.min_y(),
+        meta.max_x(),
+        meta.max_y(),
+        meta.pixel_width(),
+        meta.pixel_height()
+    ]
+
+
 def parse_sparse2d_scn(data):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object

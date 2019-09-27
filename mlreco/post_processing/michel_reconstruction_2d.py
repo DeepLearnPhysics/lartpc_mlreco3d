@@ -65,10 +65,12 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
         # from input/labels
         data        = data_blob['input_data'     ][batch_id]
         label       = data_blob['segment_label'  ][batch_id][:,-1]
-        # clusters    = data_blob['clusters_label' ][batch_id]
-        particles   = data_blob['particles_label'][batch_id]
+        meta        = data_blob['meta'           ][batch_id]
 
-        Michel_particles = particles[particles[:, 2] == 4]  # FIXME 3 or 4 in 2D? Also not sure if type is registered for Michel
+        # clusters    = data_blob['clusters_label' ][batch_id]
+        # particles   = data_blob['particles_label'][batch_id]
+
+        # Michel_particles = particles[particles[:, 2] == 4]  # FIXME 3 or 4 in 2D? Also not sure if type is registered for Michel
 
         # from network output
         segmentation = res['segmentation'][batch_id]
@@ -93,15 +95,32 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
         Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
         # Michel_true_clusters = [Michel_coords[Michel_coords[:, -2] == gid] for gid in np.unique(Michel_coords[:, -2])]
         # Michel_true_clusters = clusters[clusters[:, -1] == 4][:, -2].astype(np.int64)
-        Michel_start = Michel_particles[:, :data_dim]
+        # Michel_start = Michel_particles[:, :data_dim]
+
         for cluster in np.unique(Michel_true_clusters):
             # print("True", np.count_nonzero(Michel_true_clusters == cluster))
             # TODO sum_pix
-            fout_true.record(('batch_id', 'iteration', 'event_idx', 'num_pix', 'sum_pix'),
+            min_y = Michel_coords[Michel_true_clusters == cluster][:, 1].min()# * meta[-1] + meta[1]
+            max_y = Michel_coords[Michel_true_clusters == cluster][:, 1].max()# * meta[-1] + meta[1]
+            min_x = Michel_coords[Michel_true_clusters == cluster][:, 0].min()# * meta[-2] + meta[0]
+            max_x = Michel_coords[Michel_true_clusters == cluster][:, 0].max()# * meta[-2] + meta[0]
+            distances = cdist(Michel_coords[Michel_true_clusters == cluster], MIP_coords)
+            touching_idx = np.unravel_index(np.argmin(distances), distances.shape)
+            #print(touching_idx)
+            #print(Michel_coords_pred[current_index].shape)
+            touching_x = Michel_coords[Michel_true_clusters == cluster][touching_idx[0], 0]
+            touching_y = Michel_coords[Michel_true_clusters == cluster][touching_idx[0], 1]
+            fout_true.record(('batch_id', 'iteration', 'event_idx', 'num_pix',
+                              'sum_pix', 'min_y', 'max_y', 'min_x', 'max_x',
+                              'pixel_width', 'pixel_height', 'meta_min_x', 'meta_min_y',
+                              'touching_x', 'touching_y'),
                              (batch_id, iteration, event_idx,
                               np.count_nonzero(Michel_true_clusters == cluster),
                               data[(label == Michel_label).reshape((-1,)), ...][Michel_true_clusters == cluster][:, -1].sum(),
                               # clusters[clusters[:, -1] == 4][Michel_true_clusters == cluster][:, -3].sum()
+                              min_y, max_y, min_x, max_x,
+                              meta[-2], meta[-1], meta[0], meta[1],
+                              touching_x, touching_y
                              ))
             fout_true.write()
         # e.g. deposited energy, creation energy
@@ -156,6 +175,7 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
             michel_pred_num_pix_true, michel_pred_sum_pix_true = -1, -1
             michel_true_num_pix, michel_true_sum_pix = -1, -1
             michel_true_energy = -1
+            touching_x, touching_y = -1, -1
             if is_attached and is_edge and Michel_coords.shape[0] > 0:
                 # Distance from current Michel pred cluster to all true points
                 distances = cdist(Michel_coords_pred[current_index], Michel_coords)
@@ -190,15 +210,35 @@ def michel_reconstruction_2d(cfg, data_blob, res, logdir, iteration):
                         # closest_mc_id = closest_mc[np.bincount(closest_mc).argmax()]
                         # michel_true_energy = Michel_particles[closest_mc_id, 7]
                         michel_true_energy = -1
+
+                        # Find point where MIP and Michel touches
+                        #print(distances[:, Michel_true_clusters == closest_true_id].shape)
+                        touching_idx = np.unravel_index(np.argmin(distances[:, Michel_true_clusters == closest_true_id]), distances[:, Michel_true_clusters == closest_true_id].shape)
+                        #print(touching_idx)
+                        #print(Michel_coords_pred[current_index].shape)
+                        touching_x = Michel_coords_pred[current_index][touching_idx[0], 0]
+                        touching_y = Michel_coords_pred[current_index][touching_idx[0], 1]
+                        #print(touching_x, touching_y)
             # Record every predicted Michel cluster in CSV
+            # Record min and max x in real coordinates
+            min_y = Michel_coords_pred[current_index][:, 1].min()# * meta[-1] + meta[1]
+            max_y = Michel_coords_pred[current_index][:, 1].max()# * meta[-1] + meta[1]
+            min_x = Michel_coords_pred[current_index][:, 0].min()# * meta[-2] + meta[0]
+            max_x = Michel_coords_pred[current_index][:, 0].max()# * meta[-2] + meta[0]
             fout_reco.record(('batch_id', 'iteration', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
                               'pred_num_pix_true', 'pred_sum_pix_true',
                               'true_num_pix', 'true_sum_pix',
-                              'is_attached', 'is_edge', 'michel_true_energy'),
+                              'is_attached', 'is_edge', 'michel_true_energy',
+                              'min_y', 'max_y', 'min_x', 'max_x',
+                              'pixel_width', 'pixel_height', 'meta_min_x', 'meta_min_y',
+                              'touching_x', 'touching_y'),
                              (batch_id, iteration, event_idx, np.count_nonzero(current_index),
                               data[(predictions==Michel_label).reshape((-1,)), ...][current_index][:, -1].sum(),
                               michel_pred_num_pix_true, michel_pred_sum_pix_true, michel_true_num_pix, michel_true_sum_pix,
-                              is_attached, is_edge, michel_true_energy))
+                              is_attached, is_edge, michel_true_energy,
+                              min_y, max_y, min_x, max_x,
+                              meta[-2], meta[-1], meta[0], meta[1],
+                              touching_x, touching_y))
             fout_reco.write()
 
         if not store_per_iteration:
