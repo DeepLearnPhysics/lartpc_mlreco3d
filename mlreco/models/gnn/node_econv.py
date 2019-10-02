@@ -1,4 +1,4 @@
-# GNN that attempts to identify primary clusters
+# GNN that attempts to identify primary clusters using simple edge convolutions
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
