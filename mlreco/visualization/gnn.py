@@ -41,7 +41,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
     node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
 
     # Assert if there is edges to draw
-    draw_edges = bool(edges.shape[1])
+    draw_edges = bool(edges.shape[1]) if len(edges) == 2 else False
 
     # Define the nodes and their connections
     graph_data = []
@@ -183,15 +183,15 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
                                    hoverinfo = 'text')]
 
         # Define the edges closest pixel to closest pixel
-        import scipy as sp
-        edge_vertices = []
-        for i, j in zip(edges[0], edges[1]):
-            vi, vj = voxels[clusters[i]], voxels[clusters[j]]
-            d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
-            i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
-            edge_vertices.append([vi[i1].cpu().numpy(), vj[i2].cpu().numpy(), [None, None, None]])
-
         if draw_edges:
+            import scipy as sp
+            edge_vertices = []
+            for i, j in zip(edges[0], edges[1]):
+                vi, vj = voxels[clusters[i]], voxels[clusters[j]]
+                d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
+                i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
+                edge_vertices.append([vi[i1].cpu().numpy(), vj[i2].cpu().numpy(), [None, None, None]])
+
             edge_vertices = np.concatenate(edge_vertices)
 
     else:
