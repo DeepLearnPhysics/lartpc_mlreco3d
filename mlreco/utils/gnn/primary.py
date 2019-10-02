@@ -216,9 +216,9 @@ def analyze_primaries(p_est, p_true):
 def get_true_primaries(clust_ids, batch_ids, points):
     # For each cluster, check that it is in the list of primary points
     primaries = []
-    for i, idx in enumerate(zip(batch_ids, clust_ids)):
+    for i, idx in enumerate(zip(batch_ids.cpu().numpy(), clust_ids.cpu().numpy())):
         for p in points:
-            if (np.array(idx) == np.array(p[-2:])).all():
+            if (np.array(idx) == p[-2:].cpu().numpy()).all():
                 primaries.append(i)
                 break
 
