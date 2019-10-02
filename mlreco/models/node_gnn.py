@@ -138,6 +138,7 @@ class NodeChannelLoss(torch.nn.Module):
             node_pred = out['node_pred'][i]
             clust_ids = out['clust_ids'][i]
             batch_ids = out['batch_ids'][i]
+            device = node_pred.device
             if not len(clust_ids):
                 ngpus -= 1
                 continue
@@ -148,7 +149,7 @@ class NodeChannelLoss(torch.nn.Module):
             primary_batch_ids.extend(batch_ids[primaries])
 
             # Use the primary information to determine a the node assignment
-            node_assn = torch.tensor([int(i in primaries) for i in range(len(clust_ids))])
+            node_assn = torch.tensor([int(i in primaries) for i in range(len(clust_ids))]).to(device)
             total_loss += self.lossfn(node_pred, node_assn)
 
             # Compute accuracy of assignment
