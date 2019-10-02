@@ -60,7 +60,7 @@ class NodeModel(torch.nn.Module):
         
         # If requested, remove clusters below a certain size threshold
         if self.remove_compton:
-            selection = filter_compton(clusts, self.compton_thresh)
+            selection = np.where(filter_compton(clusts, self.compton_thresh))[0]
             if not len(selection):
                 return default_return(device)
             clusts = clusts[selection]
@@ -140,7 +140,8 @@ class NodeChannelLoss(torch.nn.Module):
             batch_ids = out['batch_ids'][i]
             device = node_pred.device
             if not len(clust_ids):
-                ngpus -= 1
+                if ngpus > 1:
+                    ngpus -= 1
                 continue
 
             # Use the primary point ids to determine the true primary clusters
