@@ -1,4 +1,7 @@
 # GNN that attempts to identify primaries
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import torch
 from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
@@ -21,8 +24,9 @@ class NodeModel(torch.nn.Module):
                 model_cfg:
                     <dictionary of arguments to pass to model>
                 remove_compton: <True/False to remove compton clusters> (default True)
-                balance_classes: <True/False for loss computation> (default True)
-                loss: CE, MM (default CE)
+                compton_threshold: Minimum number of voxels
+                balance_classes: <True/False for loss computation> (default False)
+                loss: 'CE', 'MM' (default 'CE')
     """
     def __init__(self, cfg):
         super(NodeModel, self).__init__()
@@ -42,6 +46,15 @@ class NodeModel(torch.nn.Module):
         # Construct the model
         self.node_predictor = model(self.model_config.get('model_cfg', {}))
 
+    @staticmethod
+    def default_return(device):
+        """
+        Default forward return if the graph is empty (no node)
+        """
+        xg = torch.tensor([], requires_grad=True)
+        x  = torch.tensor([])
+        x.to(device)
+        return {'node_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
 
     def forward(self, data):
         """
@@ -62,7 +75,7 @@ class NodeModel(torch.nn.Module):
         if self.remove_compton:
             selection = np.where(filter_compton(clusts, self.compton_thresh))[0]
             if not len(selection):
-                return default_return(device)
+                return self.default_return(device)
             clusts = clusts[selection]
 
         # Get the cluster ids of each processed cluster
@@ -74,7 +87,7 @@ class NodeModel(torch.nn.Module):
         # Form a complete graph (should add options for other structures, TODO) 
         edge_index = complete_graph(batch_ids, device=device)
         if not edge_index.shape[0]:
-            return default_return(device)
+            return self.default_return(device)
 
         # Obtain vertex features
         x = cluster_vtx_features(cluster_label, clusts, device=device)
@@ -82,7 +95,7 @@ class NodeModel(torch.nn.Module):
         # Obtain edge features
         e = cluster_edge_features(cluster_label, clusts, edge_index, device=device)
 
-        # Convert the the batch IDs to a torch tensor
+        # Convert the the batch IDs to a torch tensor to pass to Torch
         xbatch = torch.tensor(batch_ids).to(device)
         
         # Pass through the model, get output
@@ -109,6 +122,7 @@ class NodeChannelLoss(torch.nn.Module):
         
         self.reduction = self.model_config.get('reduction', 'mean')
         self.loss = self.model_config.get('loss', 'CE')
+        self.balance_classes = self.model_config.get('balance_classes', False)
         
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -119,19 +133,18 @@ class NodeChannelLoss(torch.nn.Module):
         else:
             raise Exception('Unrecognized loss: ' + self.loss)
 
-
     def forward(self, out, primary_points):
         """
         out:
             dictionary output from the DataParallel gather function
             out['node_pred'] - n_gpus tensors of predicted node weights from model forward
         data:
-            primary_points - n_gpus tensor of (x, y, z) coordinates of origins of EM primaries
+            primary_points - n_gpus tensor of (x, y, z, batch_id, primary_id)
         """
         total_loss, total_acc = 0., 0.
         primary_ids, primary_batch_ids = [], []
         ngpus = len(primary_points)
-        for i in range(ngpus):
+        for i in range(len(primary_points)):
 
             # Get the necessary data products
             points = primary_points[i]
@@ -147,11 +160,18 @@ class NodeChannelLoss(torch.nn.Module):
             # Use the primary point ids to determine the true primary clusters
             primaries = get_true_primaries(clust_ids, batch_ids, points)
             primary_ids.extend(primaries)
-            primary_batch_ids.extend(batch_ids[primaries])
 
             # Use the primary information to determine a the node assignment
             node_assn = torch.tensor([int(i in primaries) for i in range(len(clust_ids))]).to(device)
-            total_loss += self.lossfn(node_pred, node_assn)
+
+            # Increment the loss, balance classes if requested
+            if self.balance_classes and len(primaries):
+                nS, nP = np.unique(node_assn, return_counts=True)[1]
+                wP, wS = float(nP)/(nP+nS), float(nS)/(nP+nS)
+                total_loss += wP*self.lossfn(node_pred[node_assn==1], node_assn[node_assn==1])
+                total_loss += wS*self.lossfn(node_pred[node_assn==0], node_assn[node_assn==0])
+            else:
+                total_loss += self.lossfn(node_pred, node_assn)
 
             # Compute accuracy of assignment
             total_acc += float(torch.sum(torch.argmax(node_pred, dim=1) == node_assn))/len(clust_ids)
@@ -159,16 +179,6 @@ class NodeChannelLoss(torch.nn.Module):
         return {
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus,
-            'primary_ids': np.array(primary_ids),
-            'primary_batch_ids': np.array(primary_batch_ids)
+            'primary_ids': np.array(primary_ids)
         }
-
-def default_return(device):
-    """
-    Default forward return if the graph is empty (no node)
-    """ 
-    xg = torch.tensor([], requires_grad=True)
-    x  = torch.tensor([])
-    x.to(device)
-    return {'node_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
 
