@@ -12,6 +12,8 @@ def edge_model_dict():
     from . import edge_econv
     from . import edge_meta
     from . import dir_meta
+    from . import node_econv
+    from . import node_attention
     
     models = {
         "basic_attention" : edge_attention.BasicAttentionModel,
@@ -45,12 +47,13 @@ def node_model_dict():
     
     models = {
         "node_attention" : node_attention.NodeAttentionModel,
-        "node_econv" : node_econv.NodeEconvModel
+        "node_econv" : node_econv.NodeEConvModel
     }
-    
+
+    return models 
 
 def node_model_construct(name):
     models = node_model_dict()
     if not name in models:
-        raise Exception("Unknown edge model name provided")
+        raise Exception("Unknown node model name provided")
     return models[name]
