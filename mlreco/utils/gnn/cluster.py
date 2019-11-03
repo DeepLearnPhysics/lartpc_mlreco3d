@@ -58,6 +58,47 @@ def get_cluster_energies(data, clusts):
     for c in clusts:
         energy.append(len(c))
     return np.array(energy)
+
+
+def get_cluster_dirs(data, clusts, delta=0.0):
+    """
+    get (N, 9) array of cluster directions
+    
+    Optional arguments:
+        delta = orientation matrix regularization
+    """
+    # first make sure data is numpy array
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
+    
+    feats = []
+    for c in clusts:
+        # get center of cluster
+        x = get_cluster_voxels(data, c)
+        if len(c) < 2:
+            # don't waste time with computations
+            # default to regularized orientation matrix, zero direction
+            center = x.flatten()
+            B = delta * np.eye(3)
+            v0 = np.zeros(3)
+            feats.append(np.concatenate((center, B.flatten(), v0)))
+            continue
+            
+        center = np.mean(x, axis=0)
+        # center data
+        x = x - center
+        
+        # get orientation matrix
+        A = x.T.dot(x)
+        # get eigenvectors - convention with eigh is that eigenvalues are ascending
+        w, v = np.linalg.eigh(A)
+        w = w / w[2] # normalize top eigenvalue to be 1
+        # orientation matrix with regularization
+        B = (1-delta) * v.dot(np.diag(w)).dot(v.T) + delta*np.eye(3)
+        
+        feats.append(B.flatten())
+        
+    return np.array(feats)
     
     
 def get_cluster_features(data, clusts, delta=0.0):

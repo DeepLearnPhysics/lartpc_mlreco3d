@@ -7,6 +7,8 @@ import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, EdgeConv
 
+from .edge_pred import EdgeModel, BilinEdgeModel
+
 class EdgeConvModel(torch.nn.Module):
     """
     Simple GNN with several edge convolutions, followed by MetLayer for edge prediction
@@ -30,12 +32,15 @@ class EdgeConvModel(torch.nn.Module):
         self.aggr = self.model_config.get('aggr', 'max')
         self.leak = self.model_config.get('leak', 0.1)
         
+        self.node_in = self.model_config.get('node_feats', 16)
+        self.edge_in = self.model_config.get('edge_feats', 10)
+        
         # perform batch normalization
-        self.bn_node = BatchNorm1d(16)
-        self.bn_edge = BatchNorm1d(10)
+        self.bn_node = BatchNorm1d(self.node_in)
+        self.bn_edge = BatchNorm1d(self.edge_in)
         
         # go from 16 to 24 node features
-        ninput = 16
+        ninput = self.node_in
         noutput = 24
         self.nn0 = Seq(
             Lin(2*ninput, 2*noutput),
@@ -69,27 +74,17 @@ class EdgeConvModel(torch.nn.Module):
             Lin(noutput, noutput)
         )
         self.layer2 = EdgeConv(self.nn2, aggr=self.aggr)
-        
+
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64),
-                                 LeakyReLU(self.leak),
-                                 Lin(64, 32),
-                                 LeakyReLU(self.leak),
-                                 Lin(32, 16),
-                                 LeakyReLU(self.leak),
-                                 Lin(16,8),
-                                 LeakyReLU(self.leak),
-                                 Lin(8,2)
-                                )
-        
-        def edge_pred_model(source, target, edge_attr, u, batch):
-            out = torch.cat([source, target, edge_attr], dim=1)
-            out = self.edge_pred_mlp(out)
-            return out
-        
-        self.edge_predictor = MetaLayer(edge_pred_model, None, None)
-        
-        
+        pred_cfg = self.model_config.get('pred_model', 'basic')
+        if pred_cfg == 'basic':
+            self.edge_predictor = MetaLayer(EdgeModel(noutput, self.edge_in, self.leak))
+        elif pred_cfg == 'bilin':
+            self.edge_predictor = MetaLayer(BilinEdgeModel(noutput, self.edge_in, self.leak))
+        else:
+            raise Exception('unrecognized prediction model: ' + pred_cfg)
+
+
     def forward(self, x, edge_index, e, xbatch):
         """
         inputs data:
@@ -113,6 +108,4 @@ class EdgeConvModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 
-        return {
-            'edge_pred': e
-        }
+        return {'edge_pred':[e]}

@@ -31,6 +31,14 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=7, mi
             # we are now in EM primary
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
+
+            # check that the particle is not an EM daughter
+            parent_pdg_code = abs(particle.parent_pdg_code())
+            if parent_pdg_code == 11 or parent_pdg_code == 22:
+                continue
+            cp = particle.creation_process()
+            if cp != 'Decay' and cp != 'primary':
+                continue
             
             # TODO deal with different 2d projections
             # Register start point
@@ -89,7 +97,7 @@ def score_clusters_primary(clusts, data, primary):
     return scores
 
 
-def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
+def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None, compton_thresh=0):
     """
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
@@ -99,7 +107,7 @@ def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
     data = data.cpu().detach().numpy()
     
     #first remove compton-like clusters from list
-    selection = filter_compton(clusts) # non-compton looking clusters
+    selection = filter_compton(clusts, compton_thresh) # non-compton looking clusters
     selinds = np.where(selection)[0] # selected indices
     cs2 = clusts[selinds]
     # if everything looks compton, say no primaries
@@ -135,43 +143,11 @@ def assign_primaries(primaries, clusts, data, use_labels=False, max_dist=None):
     return assn
 
 
-def assign_primaries2(primaries, clusts, data):
-    """
-    for each EM primary assign closest cluster that matches batch and group
-    data should contain groups of voxels
-    
-    this version does not filter out compton clusters first
-    """
-    
-    primaries = primaries.cpu()
-    data = data.cpu()
-    
-    labels = get_cluster_label(data, clusts)
-    batches = get_cluster_batch(data, clusts)
-    
-    assn = []
-    for primary in primaries:
-        # get list of indices that match label and batch
-        pbatch = primary[-2]
-        # plabel = primary[-1]
-        # pselection = np.logical_and(labels == plabel, batches == pbatch)
-        pselection = batches == pbatch
-        pinds = np.where(pselection)[0] # indices to compare against
-        if len(pinds) < 1:
-            continue
-        
-        scores = score_clusters_primary(clusts[pinds], data, labels[pinds], primary)
-        ind = np.argmin(scores)
-        # print(scores[ind])
-        assn.append(pinds[ind])
-    return assn
-
-def assign_primaries3(primaries, clusts, data):
+def assign_primaries_unique(primaries, clusts, data, use_labels=False):
     """
     for each EM primary assign closest cluster that matches batch and group
     data should contain groups of voxels
     """
-    
     #first remove compton-like clusters from list
     cs2 = clusts
 #     selection = filter_compton(clusts) # non-compton looking clusters
@@ -184,22 +160,36 @@ def assign_primaries3(primaries, clusts, data):
     labels = get_cluster_label(data, cs2)
     batches = get_cluster_batch(data, cs2)
     
-    assn = []
-    for primary in primaries:
+    assn = -1*np.ones(len(primaries))
+    assn_scores = -1*np.ones(len(primaries))
+    for i in range(len(primaries)):
+        primary = primaries[i]
         # get list of indices that match label and batch
         pbatch = primary[-2]
-        plabel = primary[-1]
-        pselection = np.logical_and(labels == plabel, batches == pbatch)
+        if use_labels:
+            plabel = primary[-1]
+            pselection = np.logical_and(labels == plabel, batches == pbatch)
+        else:
+            pselection = batches == pbatch
         pinds = np.where(pselection)[0] # indices to compare against
         if len(pinds) < 1:
-            assn.append(-1)
             continue
         
-        scores = score_clusters_primary(cs2[pinds], data, labels[pinds], primary)
+        scores = score_clusters_primary(cs2[pinds], data, primary)
         ind = np.argmin(scores)
-        # print(scores[ind])
-#         assn.append(selinds[pinds[ind]])
-        assn.append(pinds[ind])
+        pind = pinds[ind]
+        score = scores[ind]
+        
+        already_assigned = np.where(assn == pind)[0]
+        if len(already_assigned) > 0:
+            current_low = assn_scores[already_assigned][0]
+            if score < current_low:
+                assn_scores[already_assigned] = -1.0
+                assn[already_assigned] = -1.0
+            else:
+                continue
+        assn_scores[i] = score
+        assn[i] = pind
     return assn
 
 
@@ -223,10 +213,13 @@ def analyze_primaries(p_est, p_true):
     acc = n_int * 1.0 / n_true
     return fdr, tdr, acc
     
-    
-    
-    
-    
-    
-    
-    
+def get_true_primaries(clust_ids, batch_ids, points):
+    # For each cluster, check that it is in the list of primary points
+    primaries = []
+    for i, idx in enumerate(zip(batch_ids.cpu().numpy(), clust_ids.cpu().numpy())):
+        for p in points:
+            if (np.array(idx) == p[-2:].cpu().numpy()).all():
+                primaries.append(i)
+                break
+
+    return np.array(primaries)

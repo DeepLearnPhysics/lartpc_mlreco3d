@@ -7,6 +7,8 @@ import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, GATConv
 
+from .edge_pred import EdgeModel, BilinEdgeModel
+
 class BasicAttentionModel(torch.nn.Module):
     """
     Simple GNN with several edge convolutions, followed by MetLayer for edge prediction
@@ -44,25 +46,15 @@ class BasicAttentionModel(torch.nn.Module):
         self.attn3 = GATConv(32, 64, heads=self.nheads, concat=False)
         
         self.bn_edge = BatchNorm1d(10)
-    
+
         # final prediction layer
-        self.edge_pred_mlp = Seq(Lin(138, 64),
-                                 LeakyReLU(self.leak),
-                                 Lin(64, 32),
-                                 LeakyReLU(self.leak),
-                                 Lin(32, 16),
-                                 LeakyReLU(self.leak),
-                                 Lin(16,8),
-                                 LeakyReLU(self.leak),
-                                 Lin(8,2)
-                                )
-        
-        def edge_pred_model(source, target, edge_attr, u, batch):
-            out = torch.cat([source, target, edge_attr], dim=1)
-            out = self.edge_pred_mlp(out)
-            return out
-        
-        self.edge_predictor = MetaLayer(edge_pred_model, None, None)
+        pred_cfg = self.model_config.get('pred_model', 'basic')
+        if pred_cfg == 'basic':
+            self.edge_predictor = MetaLayer(EdgeModel(64, self.edge_in, self.leak))
+        elif pred_cfg == 'bilin':
+            self.edge_predictor = MetaLayer(BilinEdgeModel(64, self.edge_in, self.leak))
+        else:
+            raise Exception('unrecognized prediction model: ' + pred_cfg)
         
         
     def forward(self, x, edge_index, e, xbatch):
@@ -89,6 +81,4 @@ class BasicAttentionModel(torch.nn.Module):
         
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
 
-        return {
-            'edge_pred': e
-        }
+        return {'edge_pred':[e]}

@@ -19,7 +19,7 @@ def scatter_clusters(voxels, labels, clusters, markersize=5):
                              color = cs,
                              colorscale='Viridis',
                              opacity=0.8
-                         ), 
+                         ),
                          hovertext=vfeats)
     return [trace]
 
@@ -37,11 +37,11 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
     # Define the node features (label, color)
     n = len(clusters)
     node_labels = ['%d (%0.1f, %0.1f, %0.1f)' % (i, pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
-    
+
     node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
-    
+
     # Assert if there is edges to draw
-    draw_edges = bool(edges.shape[1])
+    draw_edges = bool(edges.shape[1]) if len(edges) == 2 else False
 
     # Define the nodes and their connections
     graph_data = []
@@ -50,7 +50,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
         # Define the node size as a linear function of the amount of voxels in the cluster
         sizes = np.array([len(c) for c in clusters])
         node_sizes = sizes * 50./sizes.max()
-        
+
         # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
         graph_data.append(go.Scatter3d(x = pos[:,0], y = pos[:,1], z = pos[:,2],
                                        name = 'clusters',
@@ -68,7 +68,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
         # Define the edges center to center
         if draw_edges:
             edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in zip(edges[0], edges[1])])
-            
+
     elif mode == 'cone':
         # Evaluate the cone parameters
         from sklearn.decomposition import PCA
@@ -95,12 +95,12 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
             spos = np.concatenate((spos, [vox[start_id]]))
             epos = np.concatenate((epos, [vox[end_id]]))
 
-            # Get the full length of the principal axis 
+            # Get the full length of the principal axis
             pa_dist = pa_vals[start_id]-pa_vals[end_id]
 
             # Append the cone parameters
             axes = np.concatenate((axes, [2.*pa_dist*axis]))
-            
+
         # Compute plotly's internal vector scale to undo it...
         vector_scale = np.inf
         for i, p in enumerate(spos):
@@ -159,10 +159,44 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
 
         if draw_edges:
             edge_vertices = np.concatenate(edge_vertices)
-        
+
+    elif mode == 'scatter':
+        # Simply draw all the voxels of each cluster, using primary as color
+        cids = np.full(len(voxels), -1)
+        for i, c in enumerate(clusters):
+            cids[c] = i
+
+        mask = np.where(cids != -1)[0]
+        colors = [node_colors[i] for i in cids[mask]]
+        labels = [node_labels[i] for i in cids[mask]]
+
+        graph_data = [go.Scatter3d(x = voxels[mask][:,0],
+                                   y = voxels[mask][:,1],
+                                   z = voxels[mask][:,2],
+                                   mode = 'markers',
+                                   marker = dict(
+                                     symbol = 'circle',
+                                     color = colors,
+                                     size = 1
+                                   ),
+                                   text = labels,
+                                   hoverinfo = 'text')]
+
+        # Define the edges closest pixel to closest pixel
+        if draw_edges:
+            import scipy as sp
+            edge_vertices = []
+            for i, j in zip(edges[0], edges[1]):
+                vi, vj = voxels[clusters[i]], voxels[clusters[j]]
+                d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
+                i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
+                edge_vertices.append([vi[i1].cpu().numpy(), vj[i2].cpu().numpy(), [None, None, None]])
+
+            edge_vertices = np.concatenate(edge_vertices)
+
     else:
         raise ValueError("Network topology mode not supported")
-            
+
     # Initialize a graph that contains the edges
     if draw_edges:
         graph_data.append(go.Scatter3d(x = edge_vertices[:,0], y = edge_vertices[:,1], z = edge_vertices[:,2],
@@ -170,7 +204,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
                                        name = 'edges',
                                        line = dict(
                                            color = 'rgba(50, 50, 50, 0.5)',
-                                           width = 2
+                                           width = 5
                                        ),
                                        hoverinfo = 'none'))
 
@@ -190,10 +224,10 @@ def network_schematic(clusters, primaries, edges):
 
     # Define the node features (label, size, color)
     node_labels = [str(i) for i in range(n)]
-    
+
     sizes = np.array([len(c) for c in clusters])
     node_sizes = sizes * 50./sizes.max()
-    
+
     node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
 
     # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
@@ -207,7 +241,7 @@ def network_schematic(clusters, primaries, edges):
                                  ),
                                  text = node_labels,
                                  hoverinfo = 'text'))
-    
+
     # Assert if there is edges to draw
     draw_edges = bool(edges.shape[1])
 
