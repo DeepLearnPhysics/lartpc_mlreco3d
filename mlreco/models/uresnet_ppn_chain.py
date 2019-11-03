@@ -10,37 +10,64 @@ class Chain(torch.nn.Module):
     """
     Run UResNet and use its encoding/decoding feature maps for PPN layers
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
+    ]
     MODULES = ['ppn', 'uresnet_lonely']
 
     def __init__(self, model_config):
         super(Chain, self).__init__()
         self.ppn = PPN(model_config)
         self.uresnet_lonely = UResNet(model_config)
+        self._freeze_uresnet = model_config['modules']['uresnet_lonely'].get('freeze', False)
+
+        if self._freeze_uresnet:
+            for param in self.uresnet_lonely.parameters():
+                param.requires_grad = False
 
     def forward(self, input):
+        """
+        Assumes single GPU/CPU.
+        No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
+        """
         point_cloud, label = input
+        # if self._freeze_uresnet:
+        #     with torch.no_grad():
+        #         x = self.uresnet_lonely((point_cloud,))
+        # else:
+        #     x = self.uresnet_lonely((point_cloud,))
         x = self.uresnet_lonely((point_cloud,))
-        y = self.ppn((label, x[0][0], x[1][0], x[2][0]))
-        return [x[0]] + y
+        x['label'] = label
+        y = {}
+        y.update(x)
+        y['ppn_feature_enc'] = y['ppn_feature_enc'][0]
+        y['ppn_feature_dec'] = y['ppn_feature_dec'][0]
+        if 'ghost' in y:
+            y['ghost'] = y['ghost'][0]
+        z = self.ppn(y)
+        x.update(z)
+        return x
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
     """
     Loss for UResNet + PPN chain
     """
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (int,), (3, 1)],
+        ["parse_particle_points", (int,), (3, 1)]
+    ]
+
     def __init__(self, cfg):
         super(ChainLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
         self.ppn_loss = PPNLoss(cfg)
 
-    def forward(self, segmentation, label, particles):
-        uresnet_res = self.uresnet_loss([segmentation[0]], label)
-        ppn_res = self.ppn_loss(segmentation[1:], label, particles)
-        res = { **ppn_res, **uresnet_res }
-        res['uresnet_acc'] = uresnet_res['accuracy']
-        res['uresnet_loss'] = uresnet_res['loss']
+    def forward(self, result, label, particles):
+        uresnet_res = self.uresnet_loss(result, label)
+        ppn_res = self.ppn_loss(result, label, particles)
+        uresnet_res.update(ppn_res)
         # Don't forget to sum all losses
-        res['loss'] = ppn_res['loss_ppn1'].float() + ppn_res['loss_ppn2'].float() + \
-                        ppn_res['loss_class'].float() + ppn_res['loss_distance'].float() \
-                        + uresnet_res['loss'].float()
-        return res
+        uresnet_res['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
+        return uresnet_res

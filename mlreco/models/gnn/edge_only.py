@@ -45,9 +45,4 @@ class EdgeOnlyModel(torch.nn.Module):
         
         e = self.edge_pred_mlp(e)
         
-        return {
-            'edge_pred': e
-        }
-    
-    
-    
+        return {'edge_pred':[e]}
