@@ -47,6 +47,7 @@ class Chain(torch.nn.Module):
             y['ghost'] = y['ghost'][0]
         z = self.ppn(y)
         x.update(z)
+        #print((x['points'][0]>0).sum())
         return x
 
 
