@@ -56,7 +56,7 @@ def AMI(pred, truth, bid=None):
     if bid:
         pred, = unique_with_batch(pred, bid)
         truth, = unique_with_batch(truth, bid)
-    return adjusted_mutual_info_score(pred, truth)
+    return adjusted_mutual_info_score(pred, truth, average_method='arithmetic')
 
 
 def BD(data_sum, clusters_sum, clusters_sum_counts, data_fixed, clusters_fixed, clusters_fixed_counts):
