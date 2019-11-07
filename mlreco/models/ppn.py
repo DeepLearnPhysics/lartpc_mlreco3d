@@ -5,6 +5,7 @@ import torch
 from mlreco.models.layers.extract_feature_map import Selection, Multiply, AddLabels, GhostMask
 import numpy as np
 
+
 def define_ppn12(ppn1_size, ppn2_size, spatial_size, num_strides):
     if ppn1_size == -1:
         ppn1_size = spatial_size/2**4
@@ -121,7 +122,7 @@ class PPN(torch.nn.Module):
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
 
-        self.ghost_mask = GhostMask()
+        self.ghost_mask = GhostMask(self._dimension)
 
     def forward(self, input):
         """
@@ -134,6 +135,7 @@ class PPN(torch.nn.Module):
         ppn1_feature_dec = input['ppn_feature_dec']
         assert len(ppn1_feature_enc) == self._num_strides+1
         assert len(ppn1_feature_dec) == self._num_strides
+        #print("PPN1/2 stride = ", self.ppn1_stride, self.ppn2_stride)
         if self._use_encoding:
             feature_map1 = ppn1_feature_enc[self.ppn1_stride]
             feature_map2 = ppn1_feature_enc[self.ppn2_stride]
@@ -148,6 +150,11 @@ class PPN(torch.nn.Module):
             with torch.no_grad():
                 ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
                 coords = ppn1_feature_enc[0].get_spatial_locations()
+                # print('Strides = ', self.ppn1_stride, self.ppn2_stride)
+                # print('Feature maps = ', feature_map1.features.size(), feature_map2.features.size(), feature_map3.features.size())
+                # print(feature_map1.get_spatial_locations())
+                # print(feature_map2.get_spatial_locations())
+                # print(feature_map3.get_spatial_locations())
                 feature_map1, ghost_mask1 = self.ghost_mask(ghost_mask, coords, feature_map1, factor=self.ppn1_stride)
                 feature_map2, ghost_mask2 = self.ghost_mask(ghost_mask, coords, feature_map2, factor=self.ppn2_stride)
                 feature_map3, _ = self.ghost_mask(ghost_mask, coords, feature_map3, factor=0.0)
@@ -296,12 +303,18 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     event_mask = result['mask_ppn2'][i][batch_index]
                     event_mask = (~(event_mask == 0)).any(dim=1)  # (N,)
 
+                    if event_mask.int().sum() == 0:
+                        print('event_mask before downsample = 0')
+                        continue
+
                     if self._downsample_ghost:
                         event_ghost = 1.0-torch.argmax(result['ghost'][i][batch_index], dim=1)
                         # event_ghost = label[i][batch_index][:, -1] < self._num_classes
+                        # print('event_ghost', (event_ghost>0).sum(), event_ghost.size(), (event_mask>0).sum(), event_mask.size())
                         event_mask = event_mask & event_ghost.byte()
 
                     if event_mask.int().sum() == 0:
+                        print('event_mask after downsample = 0')
                         continue
 
                     event_pixel_pred = event_pixel_pred[event_mask]
@@ -325,6 +338,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         # inv_perm = np.argsort(perm)
                         # event_ppn2_mask = event_ppn2_mask & (l[inv_perm][:, -1] < self._num_classes)
                     if event_ppn2_mask.int().sum() == 0:
+                        print('event_ppn2_mask = 0')
                         continue
                     event_ppn2_data = event_ppn2_data[event_ppn2_mask]
                     event_ppn2_scores = event_ppn2_scores[event_ppn2_mask]
@@ -337,6 +351,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         event_ppn1_data = event_ppn1_data[event_mask_ppn1]
                         event_ppn1_scores = event_ppn1_scores[event_mask_ppn1]
                         if event_mask_ppn1.int().sum() == 0:
+                            print('event_mask_ppn1 = 0')
                             continue
 
                     # Segmentation loss (predict positives)
@@ -344,8 +359,9 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     d_true = self.distances(event_label, event_data)
                     positives = (d_true < self._true_distance_ppn3).any(dim=0)  # FIXME can be empty
                     num_positives = positives.long().sum()
-                    if num_positives == 0:
-                        continue
+                    # if num_positives == 0:
+                    #     print('num positives = 0')
+                    #     continue
                     if self._random_sample_negatives:
                         neg_sample_index = torch.randperm(positives.nelement() - num_positives)[:self._sampling_factor*max(num_positives, 1)]
                         neg_index = torch.nonzero(1-positives.long())[neg_sample_index]
@@ -508,6 +524,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         for key in ppn_results:
             if not isinstance(ppn_results[key], torch.Tensor):
                 ppn_results[key] = torch.tensor(ppn_results[key])
+                if torch.cuda.is_available():
+                    ppn_results[key] = ppn_results[key].cuda()
         if ppn_count > 0:
             for key in ppn_results:
                 ppn_results[key] = ppn_results[key] / float(ppn_count)
