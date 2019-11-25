@@ -105,15 +105,15 @@ class EdgeModel(torch.nn.Module):
         e = cluster_edge_features(cluster_label, clusts, edge_index, device=device)
 
         # Convert the the batch IDs to a torch tensor to pass to Torch
-        xbatch = torch.tensor(batch_ids).to(device)
+        batch_ids = torch.tensor(batch_ids).to(device)
         
         # Pass through the model, get output
-        out = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, batch_ids)
 
         return {**out,
-                'clust_ids':[torch.tensor(clust_ids)],
-                'batch_ids':[torch.tensor(batch_ids)],
-                'primary_ids':[torch.tensor(primary_ids)],
+                'clust_ids':[torch.tensor(clust_ids).to(device)],
+                'batch_ids':[batch_ids],
+                'primary_ids':[torch.tensor(primary_ids).to(device)],
                 'edge_index':[edge_index]}
 
 
@@ -173,7 +173,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 continue
 
             # Get list of IDs of points contained in each cluster
-            clusts = np.array([np.where((clust_label[:,3] == batch_ids[j]) & (clust_label[:,4] == clust_ids[j]))[0] for j in range(len(batch_ids))])
+            clusts = np.array([torch.nonzero((clust_label[:,3] == batch_ids[j]) & (clust_label[:,4] == clust_ids[j])).reshape(-1).cpu().numpy() for j in range(len(batch_ids))])
 
             # Get the group ids of each processed cluster
             group_ids = get_cluster_label(group_label, clusts)
@@ -181,7 +181,7 @@ class EdgeChannelLoss(torch.nn.Module):
             # Get the true primary assignment and compare to effective assigment
             # TODO Vestigial feature that should go away once cluster ID and particle ID match 
             primaries_true = assign_primaries(primary_points, clusts, group_label, use_labels=True)
-            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primary_ids, primaries_true)
+            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primary_ids.cpu().numpy(), primaries_true)
             total_primary_fdr += primary_fdr
             total_primary_acc += primary_acc
 
