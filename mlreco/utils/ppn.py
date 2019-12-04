@@ -105,6 +105,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
             #    continue
 
         # Determine point type
+        gt_type = -1
         if (pdg_code == 2212):
             gt_type = 0 # proton
         elif pdg_code != 22 and pdg_code != 11:
@@ -118,6 +119,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
                 gt_type = 3 # delta
             elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
                 gt_type = 4 # michel
+        if gt_type == -1: # FIXME unknown point type ??
+            continue
 
         #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
         #    continue
