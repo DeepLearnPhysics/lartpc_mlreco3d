@@ -132,7 +132,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 batch_map = {}
                 batch_idx = np.unique(d[:,data_dim])
                 # ensure these are integer values
-                print(batch_idx)
+                # print(batch_idx)
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,data_dim] == b
