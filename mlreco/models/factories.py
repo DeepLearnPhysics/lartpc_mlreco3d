@@ -8,12 +8,14 @@ def model_dict():
     from . import uresnet_ppn_chain
     from . import edge_gnn
     from . import full_edge_gnn
+    from . import node_gnn
     from . import iter_edge_gnn
     from . import chain_gnn
     #from . import mst_gnn
     from . import cluster_edge_gnn
     from . import cluster_dir_gnn
     from . import uresnet_clustering
+    from . import uresnet_ppn_chain2
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -28,12 +30,15 @@ def model_dict():
         # Chain test for track clustering (w/ DBSCAN)
         "chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
+        "uresnet_ppn_chain2": (uresnet_ppn_chain2.Chain, uresnet_ppn_chain2.ChainLoss),
         # Clustering
         "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
         # Edge Model
         "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
         # Full Edge Model
         "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
+        # Full Node Model
+        "node_model": (node_gnn.NodeModel, node_gnn.NodeChannelLoss),
         # MST edge model
         ##"mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
         # Iterative Edge Model

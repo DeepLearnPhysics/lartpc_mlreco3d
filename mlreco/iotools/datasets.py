@@ -41,7 +41,7 @@ class LArCVDataset(Dataset):
         elif len(self._files)>10: print(len(self._files),'files loaded')
         else:
             for f in self._files: print('Loading file:',f)
-        
+
         # Instantiate parsers
         self._data_keys = []
         self._data_parsers = []
@@ -55,6 +55,7 @@ class LArCVDataset(Dataset):
             self._data_keys.append(key)
             self._data_parsers.append((getattr(mlreco.iotools.parsers,value[0]),value[1:]))
             for data_key in value[1:]:
+                if isinstance(data_key, dict): data_key = list(data_key.values())[0]
                 if data_key in self._trees: continue
                 self._trees[data_key] = None
         self._data_keys.append('index')
@@ -71,7 +72,7 @@ class LArCVDataset(Dataset):
                 chain.AddFile(f)
             if self._entries is not None: assert(self._entries == chain.GetEntries())
             else: self._entries = chain.GetEntries()
-            
+
         # If event list is provided, register
         if event_list is None:
             self._event_list = np.arange(0, self._entries)
@@ -89,7 +90,7 @@ class LArCVDataset(Dataset):
         # Set total sample size
         if limit_num_samples > 0 and self._entries > limit_num_samples:
             self._entries = limit_num_samples
-            
+
         # Flag to identify if Trees are initialized or not
         self._trees_ready=False
 
@@ -122,7 +123,7 @@ class LArCVDataset(Dataset):
 
         # convert to actual index: by default, it is idx, but not if event_list provided
         event_idx = self._event_list[idx]
-        
+
         # If this is the first data loading, instantiate chains
         if not self._trees_ready:
             from ROOT import TChain
@@ -137,7 +138,10 @@ class LArCVDataset(Dataset):
         # Create data chunks
         result = {}
         for index, (parser, datatree_keys) in enumerate(self._data_parsers):
-            data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
+            if isinstance(datatree_keys[0], dict):
+                data = [(getattr(self._trees[list(d.values())[0]], list(d.values())[0] + '_branch'), list(d.keys())[0]) for d in datatree_keys]
+            else:
+                data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
             name = self._data_keys[index]
             result[name] = parser(data)
 

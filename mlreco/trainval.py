@@ -113,7 +113,6 @@ class trainval(object):
             for key in minibatch:
                 if not key in data_blob: data_blob[key]=[]
                 data_blob[key].append(minibatch[key])
-
         return data_blob
 
 
@@ -213,7 +212,8 @@ class trainval(object):
                     raise ImportError
                 input_data, res = unwrapper(input_data, res)
             else:
-                outputs = res_combined
+                if 'index' in input_data:
+                    input_data['index'] = input_data['index'][0]
 
             for key in res.keys():
                 if key not in res_combined:
