@@ -105,6 +105,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
             #    continue
 
         # Determine point type
+        gt_type = -1
         if (pdg_code == 2212):
             gt_type = 0 # proton
         elif pdg_code != 22 and pdg_code != 11:
@@ -118,6 +119,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
                 gt_type = 3 # delta
             elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
                 gt_type = 4 # michel
+        if gt_type == -1: # FIXME unknown point type ??
+            continue
 
         #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
         #    continue
@@ -288,15 +291,16 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
                 final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
                 final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
                 final_labels.append(ppn_type_predictions[ppn_points][ppn_mask])
-        final_points = np.concatenate(final_points, axis=0)
-        final_scores = np.concatenate(final_scores, axis=0)
-        final_labels = np.concatenate(final_labels, axis=0)
-        clusts = dbscan_types(final_points, final_labels, epsilon=1.99,  minpts=1, typemin=0, typemax=5)
-        for c in clusts:
-            # append mean of points
-            all_points.append(np.mean(final_points[c], axis=0))
-            all_batch.append(b)
-            all_labels.append(np.mean(final_labels[c]))
+        if len(final_points)>0:
+            final_points = np.concatenate(final_points, axis=0)
+            final_scores = np.concatenate(final_scores, axis=0)
+            final_labels = np.concatenate(final_labels, axis=0)
+            clusts = dbscan_types(final_points, final_labels, epsilon=1.99,  minpts=1, typemin=0, typemax=5)
+            for c in clusts:
+                # append mean of points
+                all_points.append(np.mean(final_points[c], axis=0))
+                all_batch.append(b)
+                all_labels.append(np.mean(final_labels[c]))
 
     return np.column_stack((all_points, all_batch, all_labels))
 
