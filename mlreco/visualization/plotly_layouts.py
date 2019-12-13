@@ -29,7 +29,7 @@ def plotly_layout3d(ranges=None, titles=None, **kwargs):
         zrange = (np.min(ranges[:,2]),np.max(ranges[:,2]))
 
     layout = go.Layout(
-        showlegend=False,
+        showlegend=True,
         width=768,
         height=768,
         #xaxis=titles[0], yaxis=titles[1], zaxis=titles[2],
