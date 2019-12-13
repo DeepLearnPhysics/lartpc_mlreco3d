@@ -239,6 +239,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     event_label = (event_label == self._ghost_label).long()
 
                 elif self._ghost:
+                    # check and warn about invalid labels
+    	            if (unique_label > self._num_classes).long().sum():
+                        print('Invalid semantic label found (will be ignored)')
+                        print('Semantic label values:',unique_label)
+                        print('Label counts:',unique_count)
                     event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
@@ -270,6 +275,17 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         acc_mask = predicted_mask.eq_(mask_label).sum().item() / float(predicted_mask.nelement())
                         mask_acc += acc_mask
 
+                    # Now mask to compute the rest of UResNet loss
+                    mask = event_label < self._num_classes
+                    event_segmentation = event_segmentation[mask]
+                    event_label = event_label[mask]
+                else:
+                    # check and warn about invalid labels
+                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
+                    if (unique_label >= self._num_classes).long().sum():
+                        print('Invalid semantic label found (will be ignored)')
+                        print('Semantic label values:',unique_label)
+                        print('Label counts:',unique_count)
                     # Now mask to compute the rest of UResNet loss
                     mask = event_label < self._num_classes
                     event_segmentation = event_segmentation[mask]
