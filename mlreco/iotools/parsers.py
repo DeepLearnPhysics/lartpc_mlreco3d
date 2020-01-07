@@ -435,11 +435,6 @@ def parse_cluster3d_clean(data):
     return grp_voxels, grp_data
 
 
-<<<<<<< HEAD
-def parse_sparse3d_scn_scales(data):
-    """
-    Retrieves sparse tensors at different spatial sizes.
-=======
 def parse_particle_group(data):
     """
     A function to parse larcv::EventParticle to construct two information:
@@ -532,15 +527,10 @@ def parse_sparse3d_scn_scales(data):
     """
     Retrieves sparse tensors at different spatial sizes.
 
->>>>>>> 713aa56d58abe3c501994b95a507841c83356fcb
     Parameters
     ----------
     data: list
         length 1 array of larcv::EventSparseTensor3D
-<<<<<<< HEAD
-=======
-
->>>>>>> 713aa56d58abe3c501994b95a507841c83356fcb
     Returns
     -------
     list of tuples
@@ -562,7 +552,3 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
-<<<<<<< HEAD
-=======
-
->>>>>>> 713aa56d58abe3c501994b95a507841c83356fcb
