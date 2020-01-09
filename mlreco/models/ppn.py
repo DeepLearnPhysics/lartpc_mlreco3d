@@ -130,7 +130,7 @@ class PPN(torch.nn.Module):
         spatial size of feature_map2 (PPN2) = spatial_size / 2**self.ppn2_stride
         spatial size of feature_map3 = spatial_size (original)
         """
-        label = input['label'][:, :-1]
+        label = None if not 'label' in input else input['label'][:, :-1]
         ppn1_feature_enc = input['ppn_feature_enc']
         ppn1_feature_dec = input['ppn_feature_dec']
         assert len(ppn1_feature_enc) == self._num_strides+1
@@ -164,7 +164,7 @@ class PPN(torch.nn.Module):
         ppn1_scores = self.ppn1_scores(x)
         mask = self.selection1(ppn1_scores)
         attention = self.unpool1(mask)
-        if self.training:
+        if self.training and label is not None:
             with torch.no_grad():
                 attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.ppn2_stride, label[:, -1][:, None]], dim=1).long())
 
@@ -174,7 +174,7 @@ class PPN(torch.nn.Module):
         ppn2_scores = self.ppn2_scores(y)
         mask2 = self.selection2(ppn2_scores)
         attention2 = self.unpool2(mask2)
-        if self.training:
+        if self.training and label is not None:
             with torch.no_grad():
                 attention2 = self.add_labels2(attention2, label.long())
 
