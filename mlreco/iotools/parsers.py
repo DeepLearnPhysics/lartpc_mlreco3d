@@ -461,12 +461,14 @@ def parse_particle_group(data):
         group_id = p.group_id()
         if not group_id in group_ids: group_ids.append(group_id)
         groups[cluster_id] = group_ids.index(group_id)
+
     # fill edges (directed, [parent,child] pair)
     edges = []
     for cluster_id in range(particles.as_vector().size()):
         p = particles.as_vector()[cluster_id]
         for child in p.children_id():
-            edges.append([cluster_id,particle_to_cluster[child]])
+            if cluster_id != particle_to_cluster[child]:
+                edges.append([cluster_id,particle_to_cluster[child]])
     edges = np.array(edges).astype(np.int32)
 
     return groups, edges
