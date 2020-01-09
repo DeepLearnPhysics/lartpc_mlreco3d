@@ -15,7 +15,6 @@ def model_dict():
     from . import cluster_edge_gnn
     from . import cluster_dir_gnn
     from . import uresnet_clustering
-    #from . import uresnet_ppn_chain2
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -30,7 +29,6 @@ def model_dict():
         # Chain test for track clustering (w/ DBSCAN)
         "chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
-        #"uresnet_ppn_chain2": (uresnet_ppn_chain2.Chain, uresnet_ppn_chain2.ChainLoss),
         # Clustering
         "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
         # Edge Model
