@@ -240,6 +240,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 elif self._ghost:
                     # check and warn about invalid labels
+                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
                     if (unique_label > self._num_classes).long().sum():
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)

@@ -4,10 +4,8 @@ from __future__ import print_function
 import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
-from mlreco.utils.gnn.primary import get_em_primary_info
-from mlreco.utils.dbscan import dbscan_types, dbscan_groups
-from mlreco.utils.groups import get_group_types, filter_duplicate_voxels, filter_nonimg_voxels
-
+from mlreco.utils.dbscan import dbscan_types
+from mlreco.utils.groups import filter_duplicate_voxels, filter_nonimg_voxels
 
 def parse_sparse2d_meta(data):
     event_tensor2d = data[0]
@@ -71,6 +69,7 @@ def parse_sparse2d_scn(data):
         larcv.fill_2d_pcloud(tensor2d, np_data)
         output.append(np_data)
     return np_voxels, np.concatenate(output, axis=-1)
+
 
 def parse_sparse3d_scn(data):
     """
@@ -144,6 +143,32 @@ def parse_tensor3d(data):
     return np.stack(np_data, axis=-1)
 
 
+def parse_particle_asis(data):
+    """
+    A function to copy construct & return an array of larcv::Particle
+    Args:
+        length 1 array of larcv::EventParticle
+    Return:
+        a python list of larcv::Particle object
+    """
+    particles = data[0]
+    clusters  = data[1]
+    assert particles.as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
+
+    meta = clusters.meta()
+
+    particles = [larcv.Particle(p) for p in data[0].as_vector()]
+    funcs = ["first_step","last_step","position","end_position"]
+    for p in particles:
+        for f in funcs:
+            pos = getattr(p,f)()
+            x = (pos.x() - meta.min_x()) / meta.size_voxel_x()
+            y = (pos.y() - meta.min_y()) / meta.size_voxel_y()
+            z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
+            getattr(p,f)(x,y,z,pos.t())
+    return particles
+
+
 def parse_particle_points(data):
     """
     A function to retrieve particles ground truth points tensor, includes
@@ -166,42 +191,44 @@ def parse_particle_points(data):
         return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 2), dtype=np.float32)
 
 
-def parse_particle_infos(data):
+def parse_particle_graph(data):
     """
-    A function to retrieve particles ground truth points tensor, includes
-    spatial coordinates, point type and other infos (creation energy, pdg, etc)
+    A function to parse larcv::EventParticle to construct two information:
+    1) grouping of particles (i.e. clusters)
+    2) edges between particles (i.e. clusters)
     Args:
-        length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
+        length 1 array of larcv::EventParticle
     Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-        a numpy array with the shape (N, C) where C represents class of
-        the ground truth point + other infos.
+        a numpy array of group ID per particle (i.e. cluster), length = particle/cluster count.
+        a numpy array of directed edges where each edge is (parent,child) cluster index ID.
     """
-    particles_v = data[1].as_vector()
-    part_info = get_ppn_info(particles_v, data[0].meta())
-    if part_info.shape[0] > 0:
-        return part_info[:, :3], part_info[:, 3:]
-    else:
-        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 6), dtype=np.float32)
+    particles = data[0]
 
+    # for convention, construct particle id => cluster id mapping
+    particle_to_cluster = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
 
-def parse_em_primaries(data):
-    """
-    A function to retrieve primary ionization points from grond truth
-    Args:
-        length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
-    Return:
-        a numpy array with the shape (N,6) where 6 represents (x,y,z,px,py,pz)
-        coordinate
-        a numpy array with the shape (N, 1) containing group id for the primary
-    """
-    particles_v = data[1].as_vector()
-    part_info = get_em_primary_info(particles_v, data[0].meta(), min_voxel_count=30, min_energy_deposit=0)
-    if part_info.shape[0] > 0:
-        return part_info[:, :-1], part_info[:, -1][:, None]
-    else:
-        return np.empty(shape=(0, 6), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+    # fill grouping of clusters (particles)
+    group_ids = []
+    groups = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
+    for cluster_id in range(particles.as_vector().size()):
+        p = particles.as_vector()[cluster_id]
+        particle_id = p.id()
+        particle_to_cluster[particle_id] = cluster_id
+
+        group_id = p.group_id()
+        if not group_id in group_ids: group_ids.append(group_id)
+        groups[cluster_id] = group_ids.index(group_id)
+
+    # fill edges (directed, [parent,child] pair)
+    edges = []
+    for cluster_id in range(particles.as_vector().size()):
+        p = particles.as_vector()[cluster_id]
+        for child in p.children_id():
+            if cluster_id != particle_to_cluster[child]:
+                edges.append([cluster_id,particle_to_cluster[child]])
+    edges = np.array(edges).astype(np.int32)
+
+    return groups, edges
 
 
 def parse_dbscan(data):
@@ -223,30 +250,7 @@ def parse_dbscan(data):
     return np_voxels, np_types
 
 
-def parse_dbscan_groups(data):
-    """
-    A function to create dbscan tensor
-    Args:
-        length 2 array of larcv::EventClusterVoxel3 and larcv::EventParticle
-    Return:
-        voxels - numpy array(int32) with shape (N,3) - coordinates
-        data   - numpy array(float32) with shape (N,1) - dbscan cluster. -1 if not assigned
-    """
-    np_voxels, np_groups = parse_cluster3d(data)
-    # get the particle types for each group
-    particles_v = data[1].as_vector()
-    part_types = get_group_types(particles_v, data[0].meta())
-    # now run dbscan on data
-    num_groups = data[0].as_vector().size()
-    clusts = dbscan_groups(np_voxels, np_groups, part_types)
-    # start with no clusters assigned.
-    np_groups.fill(-1)
-    for i, c in enumerate(clusts):
-        np_groups[c] = i
-    return np_voxels, np_groups
-
-
-def parse_cluster3d(data):
+def parse_cluster2d(data):
     """
     A function to retrieve clusters tensor
     Args:
@@ -254,40 +258,39 @@ def parse_cluster3d(data):
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,1) where 1 is cluster id a
+        a numpy array with the shape (N,2) where 2 is pixel value and cluster id, respectively
     """
-    cluster_event = data[0]
-    num_clusters = cluster_event.as_vector().size()
-    clusters_voxels, clusters_data = [], []
+    cluster_event = data[0].as_vector().front()
+    meta = cluster_event.meta()
+    num_clusters = cluster_event.size()
+    clusters_voxels, clusters_features = [], []
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
         num_points = cluster.as_vector().size()
         if num_points > 0:
             x = np.empty(shape=(num_points,), dtype=np.int32)
             y = np.empty(shape=(num_points,), dtype=np.int32)
-            z = np.empty(shape=(num_points,), dtype=np.int32)
-            value = np.empty(shape=(num_points,), dtype=np.int32)
-            larcv.as_flat_arrays(cluster_event.as_vector()[i],
-                                 cluster_event.meta(),
-                                 x, y, z, value)
-            value = np.full(shape=(cluster.as_vector().size(), 1),
-                            fill_value=i, dtype=np.int32)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_data.append(value)
-    np_voxels = np.concatenate(clusters_voxels, axis=0)
-    np_data = np.concatenate(clusters_data, axis=0)
-    return np_voxels, np_data
+            value = np.empty(shape=(num_points,), dtype=np.float32)
+            larcv.as_flat_arrays(cluster,meta,x, y, value)
+            cluster_id = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=i, dtype=np.float32)
+            clusters_voxels.append(np.stack([x, y], axis=1))
+            clusters_features.append(np.column_stack([value, cluster_id]))
+    np_voxels   = np.concatenate(clusters_voxels, axis=0)
+    np_features = np.concatenate(clusters_features, axis=0)
+
+    return np_voxels, np_features
 
 
-def parse_cluster3d_full(data):
+def parse_cluster3d(data):
     """
-    A function to retrieve clusters tensor
-    Args:
+    a function to retrieve clusters tensor
+    args:
         length 1 array of larcv::EventClusterVoxel3D
-    Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+        a numpy array with the shape (n,2) where 2 is voxel value and cluster id, respectively
     """
     cluster_event = data[0]
     meta = cluster_event.meta()
@@ -305,24 +308,27 @@ def parse_cluster3d_full(data):
             cluster_id = np.full(shape=(cluster.as_vector().size()),
                                  fill_value=i, dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([cluster_id,value]))
+            clusters_features.append(np.column_stack([value,cluster_id]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
     return np_voxels, np_features
 
-def parse_cluster2d_full(data):
+
+def parse_cluster3d_full(data):
     """
-    A function to retrieve clusters tensor
-    Args:
-        length 1 array of larcv::EventClusterVoxel3D
-    Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+    a function to retrieve clusters tensor
+    args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+        a numpy array with the shape (n,4) where 4 is voxel value, 
+        cluster id, group id and semantic type, respectively
     """
-    cluster_event = data[0].as_vector().front()
+    cluster_event = data[0]
+    particles_v = data[1].as_vector()
     meta = cluster_event.meta()
-    num_clusters = cluster_event.size()
+    num_clusters = cluster_event.as_vector().size()
     clusters_voxels, clusters_features = [], []
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
@@ -330,55 +336,61 @@ def parse_cluster2d_full(data):
         if num_points > 0:
             x = np.empty(shape=(num_points,), dtype=np.int32)
             y = np.empty(shape=(num_points,), dtype=np.int32)
+            z = np.empty(shape=(num_points,), dtype=np.int32)
             value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, value)
+            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            assert i == particles_v[i].id()
             cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=i, dtype=np.float32)
-            clusters_voxels.append(np.stack([x, y], axis=1))
-            clusters_features.append(np.column_stack([cluster_id,value]))
+                                 fill_value=particles_v[i].id(), dtype=np.float32)
+            group_id = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].group_id(), dtype=np.float32)
+            sem_type = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].shape(), dtype=np.float32)
+            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            clusters_features.append(np.column_stack([value,cluster_id,group_id,sem_type]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
-
     return np_voxels, np_features
 
-def parse_cluster3d_groups(data):
+
+def parse_cluster3d_clean(data):
     """
-    A function to retrieve clusters tensor
+    A function to retrieve clusters tensor.  Do the following cleaning:
+    1) lexicographically sort group data (images are lexicographically sorted)
+    2) remove voxels from group data that are not in image
+    3) choose only one group per voxel (by lexicographic order)
     Args:
-        length 1 array of larcv::EventClusterVoxel3D
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,1) where 1 is cluster id a
+        a numpy array with the shape (N,1) where 1 is cluster id
     """
-    np_voxels, np_data = parse_cluster3d([data[0]])
-    groups, edges = parse_particle_group([data[1]])
-    for cluster_index, group_id in enumerate(groups):
-        where = np.where(np_data == float(cluster_index))
-        np_data[where] = group_id
+    grp_voxels, grp_data = parse_cluster3d([data[0]])
+    img_voxels, img_data = parse_sparse3d_scn([data[1]])
 
-    return np_voxels, np_data
+    # step 1: lexicographically sort group data
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm,:]
+    grp_data = grp_data[perm]
 
+    perm = np.lexsort(img_voxels.T)
+    img_voxels = img_voxels[perm,:]
+    img_data = img_data[perm]
 
-def parse_cluster3d_em(data):
-    """
-    A function to retrieve clusters tensor
-    Args:
-        length 1 array of larcv::EventClusterVoxel3D
-    Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-        a numpy array with the shape (N,1) where 1 is cluster id a
-    """
-    np_voxels, np_data = parse_cluster3d([data[0]])
-    particles = parse_particle_asis([data[1], data[0]])
-    for cluster_index, particle in enumerate(particles):
-        pdg_code = abs(particle.pdg_code())
-        if pdg_code != 11 and pdg_code != 22:
-            where = np.where(np_data == float(cluster_index))
-            np_data[where] = -1
+    # step 2: remove duplicates
+    sel1 = filter_duplicate_voxels(grp_voxels, usebatch=False)
+    inds1 = np.where(sel1)[0]
+    grp_voxels = grp_voxels[inds1,:]
+    grp_data = grp_data[inds1]
 
-    return np_voxels, np_data
+    # step 3: remove voxels not in image
+    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
+    inds2 = np.where(sel2)[0]
+    grp_voxels = grp_voxels[inds2,:]
+    grp_data = grp_data[inds2]
+
+    return grp_voxels, grp_data
 
 
 def parse_sparse3d_clean(data):
@@ -387,7 +399,6 @@ def parse_sparse3d_clean(data):
     1) lexicographically sort coordinates
     2) choose only one group per voxel (by lexicographic order)
     3) get labels from the image labels for each voxel in addition to groups
-
     Args:
         length 3 array of larcv::EventSparseTensor3D
         Typically [sparse3d_mcst_reco, sparse3d_mcst_reco_group, sparse3d_fivetypes_reco]
@@ -427,110 +438,6 @@ def parse_sparse3d_clean(data):
     img_voxels = img_voxels[inds2]
     img_data = img_data[inds2]
     return grp_voxels, np.concatenate([img_data, grp_data, label_data[label_data<5][:, None]], axis=1)
-
-
-def parse_cluster3d_clean(data):
-    """
-    A function to retrieve clusters tensor.  Do the following cleaning:
-    1) lexicographically sort group data (images are lexicographically sorted)
-    2) remove voxels from group data that are not in image
-    3) choose only one group per voxel (by lexicographic order)
-
-    Args:
-        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
-    Return:
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-        a numpy array with the shape (N,1) where 1 is cluster id
-    """
-    grp_voxels, grp_data = parse_cluster3d([data[0]])
-    img_voxels, img_data = parse_sparse3d_scn([data[1]])
-
-    # step 1: lexicographically sort group data
-    perm = np.lexsort(grp_voxels.T)
-    grp_voxels = grp_voxels[perm,:]
-    grp_data = grp_data[perm]
-
-    perm = np.lexsort(img_voxels.T)
-    img_voxels = img_voxels[perm,:]
-    img_data = img_data[perm]
-
-    # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels(grp_voxels, usebatch=False)
-    inds1 = np.where(sel1)[0]
-    grp_voxels = grp_voxels[inds1,:]
-    grp_data = grp_data[inds1]
-
-    # step 3: remove voxels not in image
-    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
-    inds2 = np.where(sel2)[0]
-    grp_voxels = grp_voxels[inds2,:]
-    grp_data = grp_data[inds2]
-
-    return grp_voxels, grp_data
-
-
-def parse_particle_group(data):
-    """
-    A function to parse larcv::EventParticle to construct two information:
-    1) grouping of particles (i.e. clusters)
-    2) edges between particles (i.e. clusters)
-    Args:
-        length 1 array of larcv::EventParticle
-    Return:
-        a numpy array of group ID per particle (i.e. cluster), length = particle/cluster count.
-        a numpy array of directed edges where each edge is (parent,child) cluster index ID.
-    """
-    particles = data[0]
-
-    # for convention, construct particle id => cluster id mapping
-    particle_to_cluster = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
-    # fill grouping of clusters (particles)
-    group_ids = []
-    groups = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
-    for cluster_id in range(particles.as_vector().size()):
-        p = particles.as_vector()[cluster_id]
-        particle_id = p.id()
-        particle_to_cluster[particle_id] = cluster_id
-
-        group_id = p.group_id()
-        if not group_id in group_ids: group_ids.append(group_id)
-        groups[cluster_id] = group_ids.index(group_id)
-    # fill edges (directed, [parent,child] pair)
-    edges = []
-    for cluster_id in range(particles.as_vector().size()):
-        p = particles.as_vector()[cluster_id]
-        for child in p.children_id():
-            edges.append([cluster_id,particle_to_cluster[child]])
-    edges = np.array(edges).astype(np.int32)
-
-    return groups, edges
-
-
-def parse_particle_asis(data):
-    """
-    A function to copy construct & return an array of larcv::Particle
-    Args:
-        length 1 array of larcv::EventParticle
-    Return:
-        a python list of larcv::Particle object
-    """
-    particles = data[0]
-    clusters  = data[1]
-    assert particles.as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
-
-    meta = clusters.meta()
-
-    particles = [larcv.Particle(p) for p in data[0].as_vector()]
-    funcs = ["first_step","last_step","position","end_position"]
-    for p in particles:
-        for f in funcs:
-            pos = getattr(p,f)()
-            x = (pos.x() - meta.min_x()) / meta.size_voxel_x()
-            y = (pos.y() - meta.min_y()) / meta.size_voxel_y()
-            z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
-            getattr(p,f)(x,y,z,pos.t())
-    return particles
 
 
 def parse_cluster3d_scales(data):
@@ -588,3 +495,4 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
+

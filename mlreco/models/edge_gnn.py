@@ -4,7 +4,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, get_cluster_group, form_clusters_new
 from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
 from mlreco.utils.gnn.network import primary_bipartite_incidence
 from mlreco.utils.gnn.compton import filter_compton
@@ -63,8 +63,7 @@ class EdgeModel(torch.nn.Module):
     def forward(self, data):
         """
         inputs data:
-            data[0]: (Nx5) Cluster tensor with row (x, y, z, batch_id, cluster_id)
-            data[1]: primary data
+            data[0]: (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
         output:
         dictionary, with
             'edge_pred': torch.tensor with edge prediction weights
@@ -73,8 +72,12 @@ class EdgeModel(torch.nn.Module):
         cluster_label = data[0]
         device = cluster_label.device
 
+        # Mask out the energy depositions that are not EM
+        em_mask = np.where(cluster_label[:,-1] == 0)[0]
+
         # Find index of points that belong to the same EM clusters
-        clusts = form_clusters_new(cluster_label)
+        clusts = form_clusters_new(cluster_label[em_mask])
+        clusts = np.array([em_mask[c] for c in clusts])
 
         # If requested, remove clusters below a certain size threshold
         if self.remove_compton:
@@ -83,17 +86,17 @@ class EdgeModel(torch.nn.Module):
                 return self.default_return(device)
             clusts = clusts[selection]
 
-        # Get the cluster ids of each processed cluster
+        # Get the cluster id of each cluster
         clust_ids = get_cluster_label(cluster_label, clusts)
 
-        # Get the batch ids of each cluster
+        # Get the group id of each cluster
+        group_ids = get_cluster_group(cluster_label, clusts)
+
+        # Get the batch id of each cluster
         batch_ids = get_cluster_batch(cluster_label, clusts)
 
         # Form primary/secondary bipartite incidence graph
-        # TODO Once primary IDs and cluster IDs are matched, need to change this!
-        # TODO Current method does not use truth, matches points and clusters distance-wise
-        # TODO for a lack of a better way (cluster ID and particle ID not matched)
-        primary_ids = assign_primaries(data[1], clusts, cluster_label, max_dist=self.pmd)
+        primary_ids = np.where(clust_ids == group_ids)[0]
         edge_index = primary_bipartite_incidence(batch_ids, primary_ids, device=device)
         if not edge_index.shape[0]:
             return self.default_return(device)
@@ -104,16 +107,17 @@ class EdgeModel(torch.nn.Module):
         # Obtain edge features
         e = cluster_edge_features(cluster_label, clusts, edge_index, device=device)
 
-        # Convert the the batch IDs to a torch tensor to pass to Torch
-        xbatch = torch.tensor(batch_ids).to(device)
+        # Convert the the batch IDs to a torch tensor to pass to torch
+        batch_ids = torch.tensor(batch_ids).to(device)
         
         # Pass through the model, get output
-        out = self.edge_predictor(x, edge_index, e, xbatch)
+        out = self.edge_predictor(x, edge_index, e, batch_ids)
 
         return {**out,
-                'clust_ids':[torch.tensor(clust_ids)],
-                'batch_ids':[torch.tensor(batch_ids)],
-                'primary_ids':[torch.tensor(primary_ids)],
+                'clust_ids':[torch.tensor(clust_ids).to(device)],
+                'group_ids':[torch.tensor(group_ids).to(device)],
+                'batch_ids':[batch_ids],
+                'primary_ids':[torch.tensor(primary_ids).to(device)],
                 'edge_index':[edge_index]}
 
 
@@ -124,7 +128,7 @@ class EdgeChannelLoss(torch.nn.Module):
     def __init__(self, cfg):
         super(EdgeChannelLoss, self).__init__()
 
-        # Ge the model loss parameters
+        # Get the model loss parameters
         if 'modules' in cfg:
             self.model_config = cfg['modules']['edge_model']
         else:
@@ -143,13 +147,11 @@ class EdgeChannelLoss(torch.nn.Module):
         else:
             raise Exception('unrecognized loss: ' + self.loss)
 
-    def forward(self, out, clusters, groups, primary):
+    def forward(self, out, clusters):
         """
         out:
             dictionary output from the DataParallel gather function
             out['edge_pred'] - n_gpus tensors of predicted edge weights from model forward
-        data:
-            group_labels - n_gpus Nx5 tensors of (x, y, z, batch_id, group_id) 
         """
         edge_ct = 0
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
@@ -159,10 +161,9 @@ class EdgeChannelLoss(torch.nn.Module):
 
             # Get the necessary data products
             clust_label = clusters[i]
-            group_label = groups[i]
-            primary_points = primary[i]
             edge_pred = out['edge_pred'][i]
             clust_ids = out['clust_ids'][i]
+            group_ids = out['group_ids'][i]
             batch_ids = out['batch_ids'][i]
             primary_ids = out['primary_ids'][i]
             edge_index = out['edge_index'][i]
@@ -171,19 +172,9 @@ class EdgeChannelLoss(torch.nn.Module):
                 if ngpus > 1:
                     ngpus -= 1
                 continue
-
+            
             # Get list of IDs of points contained in each cluster
-            clusts = np.array([np.where((clust_label[:,3] == batch_ids[j]) & (clust_label[:,4] == clust_ids[j]))[0] for j in range(len(batch_ids))])
-
-            # Get the group ids of each processed cluster
-            group_ids = get_cluster_label(group_label, clusts)
-
-            # Get the true primary assignment and compare to effective assigment
-            # TODO Vestigial feature that should go away once cluster ID and particle ID match 
-            primaries_true = assign_primaries(primary_points, clusts, group_label, use_labels=True)
-            primary_fdr, primary_tdr, primary_acc = analyze_primaries(primary_ids, primaries_true)
-            total_primary_fdr += primary_fdr
-            total_primary_acc += primary_acc
+            clusts = np.array([torch.nonzero((clust_label[:,3] == batch_ids[j]) & (clust_label[:,5] == clust_ids[j])).reshape(-1).cpu().numpy() for j in range(len(batch_ids))])
 
             # Use group information to determine the true edge assigment 
             edge_assn = edge_assignment(edge_index, batch_ids, group_ids, device=device, dtype=torch.long)

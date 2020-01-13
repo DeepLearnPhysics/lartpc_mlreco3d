@@ -23,7 +23,7 @@ def scatter_clusters(voxels, labels, clusters, markersize=5):
                          hovertext=vfeats)
     return [trace]
 
-def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
+def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_width=2):
     """
     Network 3D topological representation
     - voxels is a list of voxel coordinates (Nx3-matrix)
@@ -204,7 +204,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere'):
                                        name = 'edges',
                                        line = dict(
                                            color = 'rgba(50, 50, 50, 0.5)',
-                                           width = 5
+                                           width = edge_width
                                        ),
                                        hoverinfo = 'none'))
 
