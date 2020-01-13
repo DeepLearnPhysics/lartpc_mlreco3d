@@ -168,7 +168,7 @@ def form_clusters_new(data):
     input dbscan image data
     returns clusters
     ASSUME:
-    data is in [x,y,z, batchid, cid] form
+    data is in [x,y,z, batchid, val, cid] form
     """
     if isinstance(data, torch.Tensor):
         data = data.cpu().detach().numpy()
@@ -178,10 +178,10 @@ def form_clusters_new(data):
         batch_sel = data[:, 3] == b
         binds = np.where(batch_sel)[0]
         data_batch = data[binds,:]
-        for c in np.unique(data_batch[:,4]):
+        for c in np.unique(data_batch[:,5]):
             if c < 0:
                 continue
-            c_sel = data_batch[:,4] == c
+            c_sel = data_batch[:,5] == c
             clust = np.where(c_sel)[0]
             # go back to original indices
             clusts.append(binds[clust])
