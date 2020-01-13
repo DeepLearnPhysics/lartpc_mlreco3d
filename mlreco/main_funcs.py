@@ -142,7 +142,6 @@ def prepare(cfg):
         if len(cfg['trainval']['gpus']) > 0:
             torch.cuda.set_device(cfg['trainval']['gpus'][0])
 
-
         # TODO check that it does what we want (cycle through dataloader)
         # check on a small sample, check 1/ it cycles through and 2/ randomness
         if cfg['trainval']['train']:

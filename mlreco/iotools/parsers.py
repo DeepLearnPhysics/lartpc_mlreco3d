@@ -153,15 +153,17 @@ def parse_particle_points(data):
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N, 1) where 1 represents class of
-        the ground truth point.
+        a numpy array with the shape (N, 2) where 2 represents the particle data
+        index and the class of the ground truth point respectively.
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())
     if part_info.shape[0] > 0:
-        return part_info[:, :3], part_info[:, 3][:, None]
+        #return part_info[:, :3], part_info[:, 3][:, None]
+        return part_info[:, :3], np.column_stack([part_info[:, 3],part_info[:, -1]])
     else:
-        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+        #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 2), dtype=np.float32)
 
 
 def parse_particle_infos(data):
