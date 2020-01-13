@@ -185,7 +185,7 @@ def parse_particle_points(data):
     part_info = get_ppn_info(particles_v, data[0].meta())
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]
-        return part_info[:, :3], np.column_stack([part_info[:, 3],part_info[:, -1]])
+        return part_info[:, :3], np.column_stack([part_info[:, -6],part_info[:, -1]])
     else:
         #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
         return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 2), dtype=np.float32)
@@ -322,7 +322,7 @@ def parse_cluster3d_full(data):
     return:
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (n,4) where 4 is voxel value, 
+        a numpy array with the shape (n,4) where 4 is voxel value,
         cluster id, group id and semantic type, respectively
     """
     cluster_event = data[0]
@@ -495,4 +495,3 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
-
