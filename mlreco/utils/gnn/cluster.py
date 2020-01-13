@@ -3,14 +3,26 @@ import torch
 
 def get_cluster_label(data, clusts):
     """
-    get cluster label
-    typically 5-types label or group
+    get cluster id
     """
     if isinstance(data, torch.Tensor):
         data = data.cpu().detach().numpy()
     labels = []
     for c in clusts:
-        v, cts = np.unique(data[c,4], return_counts=True)
+        v, cts = np.unique(data[c,5], return_counts=True)
+        labels.append(v[np.argmax(cts)])
+    return np.array(labels)
+
+
+def get_cluster_group(data, clusts):
+    """
+    get cluster group
+    """
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
+    labels = []
+    for c in clusts:
+        v, cts = np.unique(data[c,6], return_counts=True)
         labels.append(v[np.argmax(cts)])
     return np.array(labels)
 
