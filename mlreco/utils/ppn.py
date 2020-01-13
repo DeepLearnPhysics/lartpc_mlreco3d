@@ -105,7 +105,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             #    continue
 
         # Determine point type
-        if use_particle_shape:
+        if not use_particle_shape:
             gt_type = -1
             if (pdg_code == 2212):
                 gt_type = 0 # proton
@@ -123,6 +123,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             if gt_type == -1: # FIXME unknown point type ??
                 continue
         else:
+            from larcv import larcv
             gt_type = particle.shape()
             if gt_type == larcv.kShapeUnknown:
                 continue
@@ -136,6 +137,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
                   particle.num_voxels(),
                   particle.energy_init(),
                   part_index]
+        assert(part_index == particle.id())
+
         # Register start point
         x = particle.first_step().x()
         y = particle.first_step().y()
@@ -151,7 +154,10 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
             gt_positions.append([x, y, gt_type] + record)
 
         # Register end point (for tracks only)
-        if gt_type == 0 or gt_type == 1:
+        track_types = [0,1]
+        if use_particle_shape:
+            track_types = [larcv.kShapeTrack]
+        if gt_type in track_types:
             x = particle.last_step().x()
             y = particle.last_step().y()
             z = particle.last_step().z()
@@ -275,7 +281,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
         mask = mask[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         scores = scores[mask_ghost]
-    pool_op = np.max if score_pool == 'max' else score_pool = np.mean
+    pool_op = None
+    if   score_pool == 'max'  : pool_op=np.max
+    elif score_pool == 'mean' : pool_op = np.mean
+    else: raise ValueError('score_pool must be either "max" or "mean"!')
     all_points = []
     all_types  = []
     all_scores = []
