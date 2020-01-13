@@ -61,7 +61,7 @@ def pass_particle(gt_type, start, end, energy_deposit, vox_count):
     if gt_type == 4: return vox_count<5 or energy_deposit < 5.
 
 
-def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energy_deposit=10):
+def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=5, use_particle_shape=True):
     """
     Gets particle points coordinates and informations for running PPN.
 
@@ -89,7 +89,7 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
         raise Exception("Point type not supported in PPN I/O.")
     # from larcv import larcv
     gt_positions = []
-    for particle in particle_v:
+    for part_index, particle in enumerate(particle_v):
         pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
         # Skip particle under some conditions
@@ -105,22 +105,27 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
             #    continue
 
         # Determine point type
-        gt_type = -1
-        if (pdg_code == 2212):
-            gt_type = 0 # proton
-        elif pdg_code != 22 and pdg_code != 11:
-            gt_type = 1
-        elif pdg_code == 22:
-            gt_type = 2
+        if use_particle_shape:
+            gt_type = -1
+            if (pdg_code == 2212):
+                gt_type = 0 # proton
+            elif pdg_code != 22 and pdg_code != 11:
+                gt_type = 1
+            elif pdg_code == 22:
+                gt_type = 2
+            else:
+                if prc == "primary" or prc == "nCapture" or prc == "conv":
+                    gt_type = 2 # em shower
+                elif prc == "muIoni" or prc == "hIoni":
+                    gt_type = 3 # delta
+                elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
+                    gt_type = 4 # michel
+            if gt_type == -1: # FIXME unknown point type ??
+                continue
         else:
-            if prc == "primary" or prc == "nCapture" or prc == "conv":
-                gt_type = 2 # em shower
-            elif prc == "muIoni" or prc == "hIoni":
-                gt_type = 3 # delta
-            elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
-                gt_type = 4 # michel
-        if gt_type == -1: # FIXME unknown point type ??
-            continue
+            gt_type = particle.shape()
+            if gt_type == larcv.kShapeUnknown:
+                continue
 
         #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
         #    continue
@@ -129,7 +134,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=7, min_energ
         record = [pdg_code,
                   particle.energy_deposit(),
                   particle.num_voxels(),
-                  particle.energy_init()]
+                  particle.energy_init(),
+                  part_index]
         # Register start point
         x = particle.first_step().x()
         y = particle.first_step().y()
@@ -243,7 +249,7 @@ def group_points(ppn_pts, batch, label):
 
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
-                                    type_threshold=100, entry=0, **kwargs):
+                                    type_threshold=100, entry=0, score_pool='max', **kwargs):
     """
     Postprocessing of PPN points.
     Parameters
@@ -269,19 +275,21 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
         mask = mask[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         scores = scores[mask_ghost]
-
+    pool_op = np.max if score_pool == 'max' else score_pool = np.mean
     all_points = []
-    all_batch = []
-    all_labels = []
-    batch_ids = event_data[:, 3]
+    all_types  = []
+    all_scores = []
+    all_batch  = []
+    batch_ids  = event_data[:, 3]
     for b in np.unique(batch_ids):
         final_points = []
         final_scores = []
-        final_labels = []
+        final_types = []
         batch_index = batch_ids == b
         mask = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
+        #ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
+        ppn_type_predictions = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
         for c in range(num_classes):
             uresnet_points = uresnet_predictions[batch_index][mask] == c
             ppn_points = ppn_type_predictions == c
@@ -290,19 +298,20 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
                 ppn_mask = (d < type_threshold).any(axis=1)
                 final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
                 final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
-                final_labels.append(ppn_type_predictions[ppn_points][ppn_mask])
+                final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
         if len(final_points)>0:
             final_points = np.concatenate(final_points, axis=0)
             final_scores = np.concatenate(final_scores, axis=0)
-            final_labels = np.concatenate(final_labels, axis=0)
-            clusts = dbscan_types(final_points, final_labels, epsilon=1.99,  minpts=1, typemin=0, typemax=5)
+            final_type   = np.concatenate(final_types,  axis=0)
+            clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
             for c in clusts:
                 # append mean of points
                 all_points.append(np.mean(final_points[c], axis=0))
+                all_scores.append(pool_op(final_scores[c], axis=0))
+                all_types.append (pool_op(final_types[c],  axis=0))
                 all_batch.append(b)
-                all_labels.append(np.mean(final_labels[c]))
 
-    return np.column_stack((all_points, all_batch, all_labels))
+    return np.column_stack((all_points, all_batch, all_scores, all_types))
 
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
