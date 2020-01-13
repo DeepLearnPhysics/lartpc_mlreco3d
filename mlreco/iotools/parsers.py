@@ -337,8 +337,9 @@ def parse_cluster3d_full(data):
             z = np.empty(shape=(num_points,), dtype=np.int32)
             value = np.empty(shape=(num_points,), dtype=np.float32)
             larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            assert i == particles_v[i].id()
             cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=i, dtype=np.float32)
+                                 fill_value=particles_v[i].id(), dtype=np.float32)
             group_id = np.full(shape=(cluster.as_vector().size()),
                                fill_value=particles_v[i].group_id(), dtype=np.float32)
             sem_type = np.full(shape=(cluster.as_vector().size()),
