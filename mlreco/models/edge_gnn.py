@@ -58,7 +58,7 @@ class EdgeModel(torch.nn.Module):
         xg = torch.tensor([], requires_grad=True)
         x  = torch.tensor([])
         x.to(device)
-        return {'node_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
+        return {'node_pred':[xg], 'clust_ids':[x], 'group_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
 
     def forward(self, data):
         """
@@ -152,6 +152,8 @@ class EdgeChannelLoss(torch.nn.Module):
         out:
             dictionary output from the DataParallel gather function
             out['edge_pred'] - n_gpus tensors of predicted edge weights from model forward
+        data:
+            clusters: (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
         """
         edge_ct = 0
         total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
