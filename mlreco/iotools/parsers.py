@@ -98,6 +98,16 @@ def parse_sparse3d_scn(data):
     return np_voxels, np.concatenate(output, axis=-1)
 
 
+def parse_semantics(data):
+    from larcv import larcv
+    event_cluster3d = data[0]
+    event_particle  = data[1]
+    event_tensor3d = larcv.generate_semantics(event_cluster3d,event_particle)
+    data = [event_tensor3d]
+    res = parse_sparse3d_scn(data)
+    return res
+
+
 def parse_sparse3d(data):
     """
     A function to retrieve sparse tensor from larcv::EventSparseTensor3D object

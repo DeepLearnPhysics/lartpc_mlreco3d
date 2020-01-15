@@ -61,7 +61,7 @@ def pass_particle(gt_type, start, end, energy_deposit, vox_count):
     if gt_type == 4: return vox_count<5 or energy_deposit < 5.
 
 
-def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=5, use_particle_shape=True):
+def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energy_deposit=0, use_particle_shape=True):
     """
     Gets particle points coordinates and informations for running PPN.
 
@@ -87,18 +87,24 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
     """
     if point_type not in ["3d", "xy", "yz", "zx"]:
         raise Exception("Point type not supported in PPN I/O.")
-    # from larcv import larcv
+    from larcv import larcv
     gt_positions = []
     for part_index, particle in enumerate(particle_v):
         pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
         # Skip particle under some conditions
         if particle.energy_deposit() < min_energy_deposit or particle.num_voxels() < min_voxel_count:
+            #print('[a] skipping',part_index,'/',len(particle_v))
             continue
         if pdg_code > 1000000000:  # skipping nucleus trackid
+            #print('[b] skipping',part_index,'/',len(particle_v))
             continue
         if pdg_code == 11 or pdg_code == 22:  # Shower
             if not contains(meta, particle.first_step(), point_type=point_type):
+                #print('[c] skipping particle id',particle.id(),'as its start is not contained in the box...')
+                print(particle.dump())
+                print(meta.dump())
+
                 continue
             # Skipping delta ray
             #if particle.parent_pdg_code() == 13 and particle.creation_process() == "muIoni":
@@ -121,11 +127,13 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
                 elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
                     gt_type = 4 # michel
             if gt_type == -1: # FIXME unknown point type ??
+                #print('[d] skipping',part_index,'/',len(particle_v))
                 continue
         else:
             from larcv import larcv
             gt_type = particle.shape()
-            if gt_type == larcv.kShapeUnknown:
+            if particle.shape() in [larcv.kShapeLEScatter, larcv.kShapeUnknown]:
+                #print('[e] skipping',part_index,'/',len(particle_v))
                 continue
 
         #if pass_particle(gt_type,particle.first_step(),particle.last_step(),particle.energy_deposit(),particle.num_voxels()):
