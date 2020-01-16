@@ -50,8 +50,9 @@ def delaunay_graph(clust_label, labels, dist=None, max_dist=-1, device=None, cud
     for i in np.unique(batches):
         where = np.where(batches == i)[0]
         tri = Delaunay(voxels[where])
-        edges = np.unique(np.array([[int(labels[where[i]]), int(labels[where[j]])] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]]), axis=0)
-        ret = np.vstack((ret, edges))
+        edges = np.array([[int(labels[where[i]]), int(labels[where[j]])] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
+        if len(edges):
+            ret = np.vstack((ret, np.unique(edges, axis=0)))
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
