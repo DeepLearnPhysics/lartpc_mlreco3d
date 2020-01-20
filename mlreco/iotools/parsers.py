@@ -191,42 +191,32 @@ def parse_particle_points(data):
 
 def parse_particle_graph(data):
     """
-    A function to parse larcv::EventParticle to construct two information:
-    1) grouping of particles (i.e. clusters)
-    2) edges between particles (i.e. clusters)
+    A function to parse larcv::EventParticle to construct edges between particles (i.e. clusters)
     Args:
         length 1 array of larcv::EventParticle
     Return:
-        a numpy array of group ID per particle (i.e. cluster), length = particle/cluster count.
         a numpy array of directed edges where each edge is (parent,child) cluster index ID.
     """
     particles = data[0]
 
-    # for convention, construct particle id => cluster id mapping
+    # For convention, construct particle id => cluster id mapping
     particle_to_cluster = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
 
-    # fill grouping of clusters (particles)
-    group_ids = []
-    groups = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
+    # Fill group mapping
     for cluster_id in range(particles.as_vector().size()):
         p = particles.as_vector()[cluster_id]
         particle_id = p.id()
         particle_to_cluster[particle_id] = cluster_id
 
-        group_id = p.group_id()
-        if not group_id in group_ids: group_ids.append(group_id)
-        groups[cluster_id] = group_ids.index(group_id)
-
-    # fill edges (directed, [parent,child] pair)
-    edges = []
+    # Fill edges (directed, [parent,child] pair)
+    edges = np.empty((0,2), dtype = np.int32)
     for cluster_id in range(particles.as_vector().size()):
         p = particles.as_vector()[cluster_id]
         for child in p.children_id():
             if cluster_id != particle_to_cluster[child]:
-                edges.append([cluster_id,particle_to_cluster[child]])
-    edges = np.array(edges).astype(np.int32)
+                edges = np.vstack((edges, [cluster_id,particle_to_cluster[child]]))
 
-    return groups, edges
+    return edges
 
 
 def parse_dbscan(data):

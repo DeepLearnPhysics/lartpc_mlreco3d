@@ -46,9 +46,6 @@ class EdgeModel(torch.nn.Module):
 
         # Construct the model
         self.edge_predictor = model(self.model_config.get('model_cfg', {}))
-      
-        # Check if primaries assignment should be thresholded
-        self.pmd = self.model_config.get('primary_max_dist', None)
 
     @staticmethod
     def default_return(device):
@@ -64,9 +61,13 @@ class EdgeModel(torch.nn.Module):
         """
         inputs data:
             data[0]: (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
-        output:
-        dictionary, with
-            'edge_pred': torch.tensor with edge prediction weights
+        output data:
+            dictionary, with
+                'edge_pred': torch.tensor with edge prediction weights
+                'clust_ids': torch.tensor with cluster ids
+                'group_ids': torch.tensor with cluster group ids
+                'batch_ids': torch.tensor with cluster batch ids
+                'edge_index': 2xn tensor of edges in the bipartite graph
         """
         # Get device
         cluster_label = data[0]
@@ -153,10 +154,10 @@ class EdgeChannelLoss(torch.nn.Module):
             dictionary output from the DataParallel gather function
             out['edge_pred'] - n_gpus tensors of predicted edge weights from model forward
         data:
-            clusters: (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
+            clusters: n_gpus (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
         """
         edge_ct = 0
-        total_loss, total_acc, total_primary_fdr, total_primary_acc = 0., 0., 0., 0.
+        total_loss, total_acc = 0., 0.
         ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
         for i in range(len(clusters)):
@@ -197,7 +198,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 )
             )
 
-            ari0, ami0, sbd0, pur0, eff0 = DBSCAN_cluster_metrics(
+            ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics(
                 edge_index,
                 edge_assn,
                 edge_pred,
@@ -205,17 +206,15 @@ class EdgeChannelLoss(torch.nn.Module):
                 clusts,
                 len(clusts)
             )
-            ari += ari0
-            ami += ami0
-            sbd += sbd0
-            pur += pur0
-            eff += eff0
+            total_ari += ari
+            total_ami += ami
+            total_sbd += sbd
+            total_pur += pur
+            total_eff += eff
 
             edge_ct += edge_index.shape[1]
 
         return {
-            'primary_fdr': total_primary_fdr/ngpus,
-            'primary_acc': total_primary_acc/ngpus,
             'ARI': ari/ngpus,
             'AMI': ami/ngpus,
             'SBD': sbd/ngpus,

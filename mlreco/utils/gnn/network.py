@@ -100,3 +100,23 @@ def inter_cluster_distance(voxels, clusts, mode='set'):
         raise(ValueError('Distance mode not supported '+mode))
     return dist_mat 
 
+def get_fragment_edges(graph, clust_ids, batch_ids):
+    """
+    graph:
+        list of [clust_id_1, clust_id_2, batch_id]
+    output:
+        list of [frag_id_2, frag_id_2]
+    Here cluster id corresponds to particle ID and fragment ID to
+    the order of the fragment in the list
+    """
+    # Loop over the graph edges, find the fragment ids, append
+    true_edges = np.empty((0,2), dtype=np.int32)
+    fragid_map = np.vstack((clust_ids, batch_ids)).transpose().astype(int)
+    for e in graph.cpu().numpy().astype(int):
+        n1 = np.where([(pair == e[::2]).all() for pair in fragid_map])[0]
+        n2 = np.where([(pair == e[1:]).all() for pair in fragid_map])[0]
+        if len(n1) and len(n2):
+            true_edges = np.vstack((true_edges, (n1[0], n2[0])))
+
+    return true_edges 
+
