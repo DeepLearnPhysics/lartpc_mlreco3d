@@ -22,14 +22,14 @@ def primary_bipartite_incidence(batches, primaries, dist=None, max_dist=float('i
         ret = ret.cuda()
     return ret
 
-def complete_graph(batches, dist=None, max_dist=float('inf'), device=None, cuda=True):
+def complete_graph(batches, dist=None, max_dist=-1, device=None, cuda=True):
     """
     incidence matrix of bipartite graph between primary clusters and non-primary clusters
     """
     ret = torch.tensor([[i, j] for i in np.arange(len(batches)) for j in np.arange(len(batches)) if (batches[i] == batches[j] and j > i)], dtype=torch.long, requires_grad=False).t().contiguous().reshape(2,-1)
 
     # If requested, remove the edges above a certain length threshold
-    if max_dist < float('inf'):
+    if max_dist > -1:
         dists = np.array([dist[i, j] for i in np.arange(len(batches)) for j in np.arange(len(batches)) if (batches[i] == batches[j] and j > i)])
         ret = ret[:,np.where(dists < max_dist)[0]]
 
@@ -39,21 +39,24 @@ def complete_graph(batches, dist=None, max_dist=float('inf'), device=None, cuda=
         ret = ret.cuda()
     return ret
 
-def delaunay_graph(batches, centers, max_dist=float('inf'), device=None, cuda=None):
+def delaunay_graph(clust_label, labels, dist=None, max_dist=-1, device=None, cuda=None):
     """
     incidence matrix of graph between clusters that are connected by a distance-based Delaunay Graph
     """
     # For each batch, find the list of edges, append it
     ret = np.zeros(shape=(0, 2), dtype=np.int32)
+    voxels = clust_label[:,:3]
+    batches = clust_label[:,3]
     for i in np.unique(batches):
         where = np.where(batches == i)[0]
-        tri = Delaunay(centers[where])
-        edges = np.unique(np.array([[where[i], where[j]] for s in tri.simplices for i in s for j in s if i < j]), axis=0)
-        ret = np.vstack((ret, edges))
+        tri = Delaunay(voxels[where])
+        edges = np.array([[int(labels[where[i]]), int(labels[where[j]])] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
+        if len(edges):
+            ret = np.vstack((ret, np.unique(edges, axis=0)))
 
     # If requested, remove the edges above a certain length threshold
-    if max_dist < float('inf'):
-        dists = np.linalg.norm(centers[ret[:,1]]-centers[ret[:,0]], axis=1)
+    if max_dist > -1:
+        dists = np.array([dist[e[0], e[1]] for e in ret])
         ret = ret[dists < max_dist]
 
     ret = torch.tensor(ret.transpose())
@@ -63,7 +66,7 @@ def delaunay_graph(batches, centers, max_dist=float('inf'), device=None, cuda=No
         ret = ret.cuda()
     return ret
 
-def mst_graph(batches, dist, max_dist=float('inf'), device=None, cuda=None):
+def mst_graph(batches, dist, max_dist=-1, device=None, cuda=None):
     """
     incidence matrix of graph between clusters that are connected by a distance-based Minimum Spanning Tree
     """
@@ -71,7 +74,7 @@ def mst_graph(batches, dist, max_dist=float('inf'), device=None, cuda=None):
     ret = torch.tensor(np.unravel_index(np.where(mst_mat.flatten() > 0.)[0], mst_mat.shape))
 
     # If requested, remove the edges above a certain length threshold
-    if max_dist < float('inf'):
+    if max_dist > -1:
         dists = mst_mat.flatten()[np.where(mst_mat.flatten() > 0.)[0]]
         ret = ret[:,np.where(dists < max_dist)[0]]
 
@@ -80,4 +83,40 @@ def mst_graph(batches, dist, max_dist=float('inf'), device=None, cuda=None):
     elif cuda:
         ret = ret.cuda()
     return ret
+
+def inter_cluster_distance(voxels, clusts, mode='set'):
+    """
+    Returns the matrix of distances the input set of clusters
+     - Set mode uses the set distance (distance between two closest points)
+     - Centroid mode uses the distance between cluster centroids
+    """
+    from scipy.spatial.distance import cdist
+    if mode == 'set':
+        dist_mat = np.array([np.min(cdist(voxels[ci].cpu().numpy(), voxels[cj].cpu().numpy())) for ci in clusts for cj in clusts]).reshape((len(clusts), len(clusts)))
+    elif mode == 'centroid':
+        centroids = [np.mean(voxels[c].cpu().numpy(), axis=0) for c in clusts]
+        dist_mat = cdist(centroids, centroids)
+    else:
+        raise(ValueError('Distance mode not supported '+mode))
+    return dist_mat 
+
+def get_fragment_edges(graph, clust_ids, batch_ids):
+    """
+    graph:
+        list of [clust_id_1, clust_id_2, batch_id]
+    output:
+        list of [frag_id_2, frag_id_2]
+    Here cluster id corresponds to particle ID and fragment ID to
+    the order of the fragment in the list
+    """
+    # Loop over the graph edges, find the fragment ids, append
+    true_edges = np.empty((0,2), dtype=np.int32)
+    fragid_map = np.vstack((clust_ids, batch_ids)).transpose().astype(int)
+    for e in graph.cpu().numpy().astype(int):
+        n1 = np.where([(pair == e[::2]).all() for pair in fragid_map])[0]
+        n2 = np.where([(pair == e[1:]).all() for pair in fragid_map])[0]
+        if len(n1) and len(n2):
+            true_edges = np.vstack((true_edges, (n1[0], n2[0])))
+
+    return true_edges 
 

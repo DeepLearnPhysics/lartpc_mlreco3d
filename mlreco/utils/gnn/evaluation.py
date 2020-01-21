@@ -104,6 +104,18 @@ def cluster_to_voxel_label(label, clusters):
     return vlabel
 
 
+def form_groups(edge_index, edge_pred, n):
+    """. 
+    Assign a group ID to each of the clusters. 
+    """
+    group_ids = np.arange(n)
+    on_edges = edge_index.transpose(0, 1)[torch.nonzero(edge_pred).flatten()]
+    for e in on_edges:
+        new_id = min(group_ids[e])
+        group_ids[e] = (new_id, new_id)
+    return group_ids
+
+
 def DBSCAN_cluster_metrics(edge_index, true_labels, pred_labels, primaries, clusters, n):
     """
     return ARI, AMI, SBD, purity, efficiency
@@ -134,4 +146,20 @@ def DBSCAN_cluster_metrics2(matched, clusters, group):
     sbd = SBD(pred_vox, true_vox)
     pur, eff = purity_efficiency(pred_vox, true_vox)
     return ari, ami, sbd, pur, eff
-    
+
+
+def DBSCAN_cluster_metrics3(edge_index, edge_assn, edge_pred, clusters):
+    """ 
+    return ARI, AMI, SBD, purity, efficiency
+    of matching. Use complete graph
+    """
+    pred_group_ids = form_groups(edge_index, edge_pred, len(clusters))
+    pred_vox = cluster_to_voxel_label(pred_group_ids, clusters) 
+    true_group_ids = form_groups(edge_index, edge_assn, len(clusters))
+    true_vox = cluster_to_voxel_label(true_group_ids, clusters) 
+    ari = ARI(pred_vox, true_vox)
+    ami = AMI(pred_vox, true_vox)
+    sbd = SBD(pred_vox, true_vox)
+    pur, eff = purity_efficiency(pred_vox, true_vox)
+    return ari, ami, sbd, pur, eff
+
