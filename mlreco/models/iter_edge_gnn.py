@@ -248,7 +248,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
             niter = out['counter'][i]
             total_iter.append(niter)
 
-            # Get the list of true edges (graph returned as list of [particle_id_1, particle_id_2, batch_id])
+            # Get the list of true edges
             true_edge_index = get_fragment_edges(graph[i], clust_ids, batch_ids)
 
             # Loop over iterations and add loss at each iter, based
