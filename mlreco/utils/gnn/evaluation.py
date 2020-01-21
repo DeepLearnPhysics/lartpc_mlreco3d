@@ -109,9 +109,10 @@ def form_groups(edge_index, edge_pred, n):
     Assign a group ID to each of the clusters. 
     """
     group_ids = np.arange(n)
-    on_edges = edge_index.transpose(0, 1)[torch.nonzero(edge_pred)].reshape(-1, 2)
+    on_edges = edge_index.transpose(0, 1)[torch.nonzero(edge_pred).flatten()]
     for e in on_edges:
-        group_ids[e[1]] = group_ids[e[0]]
+        new_id = min(group_ids[e])
+        group_ids[e] = (new_id, new_id)
     return group_ids
 
 
