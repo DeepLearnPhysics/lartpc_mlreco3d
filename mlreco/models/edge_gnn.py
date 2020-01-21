@@ -158,7 +158,7 @@ class EdgeChannelLoss(torch.nn.Module):
         """
         edge_ct = 0
         total_loss, total_acc = 0., 0.
-        ari, ami, sbd, pur, eff = 0., 0., 0., 0., 0.
+        total_ari, total_ami, total_sbd, total_pur, total_eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
         for i in range(len(clusters)):
 
@@ -215,11 +215,11 @@ class EdgeChannelLoss(torch.nn.Module):
             edge_ct += edge_index.shape[1]
 
         return {
-            'ARI': ari/ngpus,
-            'AMI': ami/ngpus,
-            'SBD': sbd/ngpus,
-            'purity': pur/ngpus,
-            'efficiency': eff/ngpus,
+            'ARI': total_ari/ngpus,
+            'AMI': total_ami/ngpus,
+            'SBD': total_sbd/ngpus,
+            'purity': total_pur/ngpus,
+            'efficiency': total_eff/ngpus,
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus,
             'edge_count': edge_ct
