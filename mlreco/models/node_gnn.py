@@ -4,11 +4,10 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import torch
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
-from mlreco.utils.gnn.network import complete_graph
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, get_cluster_group, form_clusters_new
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, inter_cluster_distance
 from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
-from mlreco.utils.gnn.primary import get_true_primaries
 from .gnn import node_model_construct
 
 class NodeModel(torch.nn.Module):
@@ -39,6 +38,11 @@ class NodeModel(torch.nn.Module):
         
         self.remove_compton = self.model_config.get('remove_compton', True)
         self.compton_thresh = self.model_config.get('compton_thresh', 30)
+        
+        # Choose what type of network to use
+        self.network = self.model_config.get('network', 'complete')
+        self.edge_max_dist = self.model_config.get('edge_max_dist', -1)
+        self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
             
         # Extract the model to use
         model = node_model_construct(self.model_config.get('name', 'node_econv'))
@@ -54,12 +58,12 @@ class NodeModel(torch.nn.Module):
         xg = torch.tensor([], requires_grad=True)
         x  = torch.tensor([])
         x.to(device)
-        return {'node_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
+        return {'node_pred':[xg], 'clust_ids':[x], 'group_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
 
     def forward(self, data):
         """
         Input:
-            data[0]: (Nx5) Cluster tensor with row (x, y, z, batch_id, cluster_id)
+            data[0]: (Nx8) Cluster tensor with row (x, y, z, value, batch_id, cluster_id)
         Output:
         dictionary, with
             'node_pred': torch.tensor with node prediction weights
@@ -67,9 +71,13 @@ class NodeModel(torch.nn.Module):
         # Get device
         cluster_label = data[0]
         device = cluster_label.device
+
+        # Mask out the energy depositions that are not EM
+        em_mask = np.where(cluster_label[:,-1] == 0)[0]
         
         # Find index of points that belong to the same EM clusters
-        clusts = form_clusters_new(cluster_label)
+        clusts = form_clusters_new(cluster_label[em_mask])
+        clusts = np.array([em_mask[c] for c in clusts])
         
         # If requested, remove clusters below a certain size threshold
         if self.remove_compton:
@@ -81,11 +89,28 @@ class NodeModel(torch.nn.Module):
         # Get the cluster ids of each processed cluster
         clust_ids = get_cluster_label(cluster_label, clusts)
 
+        # Get the group id of each cluster
+        group_ids = get_cluster_group(cluster_label, clusts)
+
         # Get the batch ids of each cluster
         batch_ids = get_cluster_batch(cluster_label, clusts)
-        
-        # Form a complete graph (should add options for other structures, TODO) 
-        edge_index = complete_graph(batch_ids, device=device)
+
+        # Form the requested network 
+        dist_mat = None
+        if self.edge_max_dist > 0:
+            dist_mat = inter_cluster_distance(cluster_label[:,:3], clusts, self.edge_dist_metric) 
+        if self.network == 'complete':
+            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist, device)
+        elif self.network == 'delaunay':
+            mask = np.hstack(clusts)
+            labels = np.hstack([np.full(len(c), i) for i, c in enumerate(clusts)])
+            edge_index = delaunay_graph(cluster_label[mask], labels, dist_mat, self.edge_max_dist, device)
+        elif self.network == 'mst':
+            if dist_mat is None:
+                dist_mat = inter_cluster_distance(cluster_label[:,:3], clusts, self.edge_dist_metric) 
+            edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist, device)
+
+        # Skip if there is no edges (Is this necessary ? TODO)
         if not edge_index.shape[0]:
             return self.default_return(device)
 
@@ -96,14 +121,15 @@ class NodeModel(torch.nn.Module):
         e = cluster_edge_features(cluster_label, clusts, edge_index, device=device)
 
         # Convert the the batch IDs to a torch tensor to pass to Torch
-        xbatch = torch.tensor(batch_ids).to(device)
+        batch_ids = torch.tensor(batch_ids).to(device)
         
         # Pass through the model, get output
-        out = self.node_predictor(x, edge_index, e, xbatch)
+        out = self.node_predictor(x, edge_index, e, batch_ids)
 
         return {**out,
                 'clust_ids':[torch.tensor(clust_ids)],
-                'batch_ids':[torch.tensor(batch_ids)],
+                'group_ids':[torch.tensor(group_ids).to(device)],
+                'batch_ids':[batch_ids],
                 'edge_index':[edge_index]}
 
 
@@ -133,23 +159,24 @@ class NodeChannelLoss(torch.nn.Module):
         else:
             raise Exception('Unrecognized loss: ' + self.loss)
 
-    def forward(self, out, primary_points):
+    def forward(self, out, clusters):
         """
         out:
             dictionary output from the DataParallel gather function
             out['node_pred'] - n_gpus tensors of predicted node weights from model forward
         data:
-            primary_points - n_gpus tensor of (x, y, z, batch_id, primary_id)
+            clusters: (Nx8) Cluster tensor with row (x, y, z, batch_id, voxel_val, cluster_id, group_id, sem_type)
         """
         total_loss, total_acc = 0., 0.
-        primary_ids, primary_batch_ids = [], []
-        ngpus = len(primary_points)
-        for i in range(len(primary_points)):
+        primary_ids = []
+        ngpus = len(clusters)
+        for i in range(len(clusters)):
 
             # Get the necessary data products
-            points = primary_points[i]
+            clust_labels = clusters[i]
             node_pred = out['node_pred'][i]
             clust_ids = out['clust_ids'][i]
+            group_ids = out['group_ids'][i]
             batch_ids = out['batch_ids'][i]
             device = node_pred.device
             if not len(clust_ids):
@@ -158,7 +185,7 @@ class NodeChannelLoss(torch.nn.Module):
                 continue
 
             # Use the primary point ids to determine the true primary clusters
-            primaries = get_true_primaries(clust_ids, batch_ids, points)
+            primaries = np.where(clust_ids == group_ids)[0].tolist()
             primary_ids.extend(primaries)
 
             # Use the primary information to determine a the node assignment
