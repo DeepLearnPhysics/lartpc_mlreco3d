@@ -193,10 +193,10 @@ class NodeChannelLoss(torch.nn.Module):
 
             # Increment the loss, balance classes if requested
             if self.balance_classes and len(primaries):
-                nS, nP = np.unique(node_assn, return_counts=True)[1]
-                wP, wS = float(nP)/(nP+nS), float(nS)/(nP+nS)
-                total_loss += wP*self.lossfn(node_pred[node_assn==1], node_assn[node_assn==1])
-                total_loss += wS*self.lossfn(node_pred[node_assn==0], node_assn[node_assn==0])
+                counts = np.unique(node_assn, return_counts=True)[1]
+                weights = np.array([float(counts[k])/len(node_assn) for k in range(2)])
+                for k in range(2):
+                    total_loss += (1./weights[k])*self.lossfn(node_pred[node_assn==k], node_assn[node_assn==k])
             else:
                 total_loss += self.lossfn(node_pred, node_assn)
 

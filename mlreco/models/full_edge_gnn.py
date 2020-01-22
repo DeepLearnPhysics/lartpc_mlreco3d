@@ -59,7 +59,7 @@ class FullEdgeModel(torch.nn.Module):
         xg = torch.tensor([], requires_grad=True)
         x  = torch.tensor([])
         x.to(device)
-        return {'node_pred':[xg], 'clust_ids':[x], 'group_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
+        return {'edge_pred':[xg], 'clust_ids':[x], 'group_ids':[x], 'batch_ids':[x], 'edge_index':[x]}
 
     def forward(self, data):
         """
@@ -116,7 +116,7 @@ class FullEdgeModel(torch.nn.Module):
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist, device)
 
         # Skip if there is no edges (Is this necessary ? TODO)
-        if not edge_index.shape[0]:
+        if not edge_index.shape[1]:
             return self.default_return(device)
 
         # Obtain vertex features
@@ -199,10 +199,17 @@ class FullEdgeChannelLoss(torch.nn.Module):
 
             # Use group information to determine the true edge assigment 
             edge_assn = edge_assignment(edge_index, batch_ids, group_ids, device=device, dtype=torch.long)
+            #edge_assn = torch.tensor([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index.transpose(0,1).cpu().numpy()], dtype=torch.long)
             edge_assn = edge_assn.view(-1)
 
-            # Increment the loss, balance classes if requested (TODO)
-            total_loss += self.lossfn(edge_pred, edge_assn)
+            # Increment the loss, balance classes if requested
+            if self.balance_classes:
+                counts = np.unique(edge_assn, return_counts=True)[1]
+                weights = np.array([float(counts[k])/len(edge_assn) for k in range(2)])
+                for k in range(2):
+                    total_loss += (1./weights[k])*self.lossfn(edge_pred[edge_assn==k], edge_assn[edge_assn==k])
+            else:
+                total_loss += self.lossfn(edge_pred, edge_assn)
 
             # Compute accuracy of assignment
             total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]

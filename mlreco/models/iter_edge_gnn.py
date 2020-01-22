@@ -202,6 +202,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
 
         self.reduction = self.model_config.get('reduction', 'mean')
         self.loss = self.model_config.get('loss', 'CE')
+        self.balance_classes = self.model_config.get('balance_classes', False)
         
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -264,8 +265,14 @@ class IterEdgeChannelLoss(torch.nn.Module):
                 # Get edge predictions (2 channels)
                 edge_pred = out['edge_pred'][i][j]
 
-                # Increment the loss
-                total_loss += self.lossfn(edge_pred, edge_assn)
+                # Increment the loss, balance classes if requested
+                if self.balance_classes:
+                    counts = np.unique(edge_assn, return_counts=True)[1]
+                    weights = np.array([float(counts[k])/len(edge_assn) for k in range(2)])
+                    for k in range(2):
+                        total_loss += (1./weights[k])*self.lossfn(edge_pred[edge_assn==k], edge_assn[edge_assn==k])
+                else:
+                    total_loss += self.lossfn(edge_pred, edge_assn)
 
             # Compute accuracy of assignment
             total_acc += secondary_matching_vox_efficiency2(
