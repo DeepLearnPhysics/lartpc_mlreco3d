@@ -183,8 +183,14 @@ class EdgeChannelLoss(torch.nn.Module):
             edge_assn = edge_assignment(edge_index, batch_ids, group_ids, device=device, dtype=torch.long)
             edge_assn = edge_assn.view(-1)
 
-            # Increment the loss, balance classes if requested (TODO)
-            total_loss += self.lossfn(edge_pred, edge_assn)
+            # Increment the loss, balance classes if requested
+            if self.balance_classes:
+                counts = np.unique(edge_assn, return_counts=True)[1]
+                weights = np.array([float(counts[k])/len(edge_assn) for k in range(2)])
+                for k in range(2):
+                    total_loss += (1./weights[k])*self.lossfn(edge_pred[edge_assn==k], edge_assn[edge_assn==k])
+            else:
+                total_loss += self.lossfn(edge_pred, edge_assn)
 
             # Compute accuracy of assignment
             total_acc += torch.tensor(
