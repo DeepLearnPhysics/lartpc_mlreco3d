@@ -74,7 +74,7 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
                               (ghost_acc, uresnet_acc))
             # Class-wise nonzero accuracy for 5 types, based on true mask
             acc, num_true_pix, num_pred_pix = [], [], []
-            num_pred_pix_true = []
+            num_pred_pix_true, num_true_pix_pred = [], []
             num_true_deghost_pix, num_original_pix = [], []
             ghost_false_positives, ghost_true_positives = [], []
             for c in range(num_classes):
@@ -94,6 +94,7 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
                 num_pred_pix.append(np.count_nonzero(predictions[mask] == c))
                 # Pixels in predictions + nonghost that are correctly classified
                 num_pred_pix_true.append(np.count_nonzero(class_predictions == c))
+                num_true_pix_pred.append(np.count_nonzero(predictions[mask & class_mask] == c))
                 # Fraction of pixels in this class (wrongly) predicted as ghost
                 ghost_false_positives.append(np.count_nonzero(ghost_predictions[class_mask] == 1))
                 # Fraction of pixels in this class (correctly) predicted as nonghost
@@ -116,6 +117,8 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
                               num_pred_pix)
             csv_logger.record(['num_pred_pix_true_class%d' % c for c in range(num_classes)],
                               num_pred_pix_true)
+            csv_logger.record(['num_true_pix_pred_class%d' % c for c in range(num_classes)],
+                              num_true_pix_pred)
             csv_logger.record(['ghost_false_positives_class%d' % c for c in range(num_classes)],
                               ghost_false_positives)
             csv_logger.record(['ghost_true_positives_class%d' % c for c in range(num_classes)],
