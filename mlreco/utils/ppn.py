@@ -102,8 +102,8 @@ def get_ppn_info(particle_v, meta, point_type="3d", min_voxel_count=5, min_energ
         if pdg_code == 11 or pdg_code == 22:  # Shower
             if not contains(meta, particle.first_step(), point_type=point_type):
                 #print('[c] skipping particle id',particle.id(),'as its start is not contained in the box...')
-                print(particle.dump())
-                print(meta.dump())
+                #print(particle.dump())
+                #print(meta.dump())
 
                 continue
             # Skipping delta ray
