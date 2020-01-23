@@ -1,6 +1,9 @@
 from mlreco.utils import CSVData
 import numpy as np
 import scipy
+import os
+from mlreco.utils.ppn import uresnet_ppn_type_point_selector
+
 
 def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                       nms_score_threshold=0.8,
@@ -9,23 +12,29 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                       type_threshold=2,
                       **kwargs):
     """
+    Configuration
+    -------------
+    input_data: str, optional
+    store_method: str, optional
     threshold, size: NMS parameters
     score_threshold: to filter based on score only (no NMS)
     """
-
-    if not 'input_data' in data_blob: return
-    if not 'points' in res: return
-
     method_cfg = cfg['post_processing']['store_uresnet_ppn']
 
+    if (method_cfg is not None and not method_cfg.get('input_data', 'input_data') in data_blob) or (method_cfg is None and 'input_data' not in data_blob): return
+    if not 'points' in res: return
+
     index       = data_blob['index']
-    input_dat   = data_blob.get('input_data',None)
+    input_dat   = data_blob.get('input_data' if method_cfg is None else method_cfg.get('input_data', 'input_data'), None)
     output_pts  = res.get('points',None)
     output_seg  = res.get('segmentation',None)
     output_ppn1 = res.get('ppn1',None)
     output_ppn2 = res.get('ppn2',None)
     output_mask = res.get('mask_ppn2',None)
     output_ghost = res.get('ghost',None)
+
+    ppn_score_threshold = 0.2 if method_cfg is None else method_cfg.get('ppn_score_threshold', 0.2)
+    ppn_type_threshold = 2 if method_cfg is None else method_cfg.get('ppn_type_threshold', 2)
 
     store_per_iteration = True
     if method_cfg is not None and method_cfg.get('store_method',None) is not None:
@@ -39,7 +48,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
 
         if not store_per_iteration:
             fout=CSVData(os.path.join(logdir, 'uresnet-ppn-event-%07d.csv' % tree_idx))
-        
+
         if output_pts is not None:
             scores = scipy.special.softmax(output_pts[data_idx][:, 3:5], axis=1)
 
@@ -52,7 +61,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                     value = scores[row_idx, 1]
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 3, value))
-                fout.write()   
+                fout.write()
 
             # type 5 = PPN predictions after NMS
             keep = nms_numpy(output_pts[data_idx][:,:3], scores[:, 1], nms_score_threshold, window_size)
@@ -92,7 +101,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 7, value))
                 fout.write()
-            
+
 
             # type 10 = masking + score threshold
             mask = ((~(output_mask[data_idx] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
@@ -106,7 +115,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 10, value))
                 fout.write()
-            
+
             # type 11 = masking + score threshold + NMS
             mask = ((~(output_mask[data_idx] == 0)).any(axis=1)) & (scores[:, 1] > score_threshold)
             keep = nms_numpy(output_pts[data_idx][mask][:, :3], scores[mask][:, 1], nms_score_threshold, window_size)
@@ -119,7 +128,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                     value = scores[mask][keep][i, 1]
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 11, value))
-                fout.write()            
+                fout.write()
 
 
             # Store PPN1 and PPN2 output
@@ -146,7 +155,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                 event = input_dat[data_idx][row_idx]
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0], event[1], event[2], 4, row))
-                fout.write()        
+                fout.write()
 
         if output_ghost is not None:
             predictions = np.argmax(output_ghost[data_idx],axis=1)
@@ -189,9 +198,15 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                         fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                                     (tree_idx, event[0] + 0.5 + row[0], event[1] + 0.5 + row[1], event[2] + 0.5 + row[2], 13, value))
                         fout.write()
+            # 14
+            pts = uresnet_ppn_type_point_selector(data_blob['input_data'][data_idx], res, entry=data_idx, score_threshold=ppn_score_threshold, type_threshold=ppn_type_threshold)
+            for i, row in enumerate(pts):
+                fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
+                            (tree_idx, row[0], row[1], row[2], 14, row[-1]))
+                fout.write()
         if not store_per_iteration:
             fout.close()
-            
+
     if store_per_iteration:
         fout.close()
 
