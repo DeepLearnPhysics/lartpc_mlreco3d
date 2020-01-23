@@ -31,14 +31,15 @@ class Chain(torch.nn.Module):
         Assumes single GPU/CPU.
         No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
         """
-        point_cloud, label = input
+        point_cloud = input[0]
         # if self._freeze_uresnet:
         #     with torch.no_grad():
         #         x = self.uresnet_lonely((point_cloud,))
         # else:
         #     x = self.uresnet_lonely((point_cloud,))
         x = self.uresnet_lonely((point_cloud,))
-        x['label'] = label
+        if len(input) > 1:
+            x['label'] = input[1]
         y = {}
         y.update(x)
         y['ppn_feature_enc'] = y['ppn_feature_enc'][0]
@@ -47,6 +48,7 @@ class Chain(torch.nn.Module):
             y['ghost'] = y['ghost'][0]
         z = self.ppn(y)
         x.update(z)
+        #print((x['points'][0]>0).sum())
         return x
 
 

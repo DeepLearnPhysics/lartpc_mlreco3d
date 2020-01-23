@@ -200,6 +200,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._num_classes = self._cfg.get('num_classes', 5)
         self._alpha = self._cfg.get('alpha', 1.0)
         self._beta = self._cfg.get('beta', 1.0)
+        self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
 
     def distances(self, v1, v2):
@@ -222,6 +223,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, -2] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
+        uresnet_acc_class = [0.] * self._num_classes
+        count_class = [0.] * self._num_classes
         mask_loss, mask_acc = 0., 0.
         ghost2ghost, nonghost2nonghost = 0., 0.
         count = 0
@@ -236,6 +239,11 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     event_label = (event_label == self._ghost_label).long()
 
                 elif self._ghost:
+                    # check and warn about invalid labels
+                    if (unique_label > self._num_classes).long().sum():
+                        print('Invalid semantic label found (will be ignored)')
+                        print('Semantic label values:',unique_label)
+                        print('Label counts:',unique_count)
                     event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
@@ -271,10 +279,31 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     mask = event_label < self._num_classes
                     event_segmentation = event_segmentation[mask]
                     event_label = event_label[mask]
+                else:
+                    # check and warn about invalid labels
+                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
+                    if (unique_label >= self._num_classes).long().sum():
+                        print('Invalid semantic label found (will be ignored)')
+                        print('Semantic label values:',unique_label)
+                        print('Label counts:',unique_count)
+                    # Now mask to compute the rest of UResNet loss
+                    mask = event_label < self._num_classes
+                    event_segmentation = event_segmentation[mask]
+                    event_label = event_label[mask]
 
                 if event_label.shape[0] > 0:  # FIXME how to handle empty mask?
                     # Loss for semantic segmentation
-                    loss_seg = self.cross_entropy(event_segmentation, event_label)
+                    if self._weight_loss:
+                        class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
+                        w = torch.Tensor([1.0 / c if c.item() > 0 else 0. for c in class_count]).double()
+                        #w = torch.Tensor([2.0, 2.0, 5.0, 10.0, 2.0]).double()
+                        #w = 1.0 - w / w.sum()
+                        if torch.cuda.is_available():
+                            w = w.cuda()
+                        #print(class_count, w, class_count[0].item() > 0)
+                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
+                    else:
+                        loss_seg = self.cross_entropy(event_segmentation, event_label)
                     uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation
@@ -282,6 +311,14 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         predicted_labels = torch.argmax(event_segmentation, dim=-1)
                         acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
                         uresnet_acc += acc
+
+                        # Class accuracy
+                        for c in range(self._num_classes):
+                            class_mask = event_label == c
+                            class_count = class_mask.sum().item()
+                            if class_count > 0:
+                                uresnet_acc_class[c] += predicted_labels[class_mask].sum().item() / float(class_count)
+                                count_class[c] += 1
 
                 count += 1
 
@@ -301,4 +338,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 'accuracy': uresnet_acc/count,
                 'loss': uresnet_loss/count
             }
+        for c in range(self._num_classes):
+            if count_class[c] > 0:
+                results['accuracy_class_%d' % c] = uresnet_acc_class[c]/count_class[c]
+            else:
+                results['accuracy_class_%d' % c] = -1.
         return results
