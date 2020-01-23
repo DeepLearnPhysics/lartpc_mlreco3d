@@ -3,6 +3,7 @@ from scipy.spatial.distance import cdist
 import scipy
 import os
 from mlreco.utils import CSVData
+from mlreco.utils.dbscan import dbscan_points
 
 def ppn_metrics(cfg, data_blob, res, logdir, iteration):
     # UResNet prediction
@@ -29,6 +30,9 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
         fout_gt=CSVData(os.path.join(logdir, 'ppn-metrics-gt-iter-%07d.csv' % iteration))
         fout_pred=CSVData(os.path.join(logdir, 'ppn-metrics-pred-iter-%07d.csv' % iteration))
 
+    pool_op = np.max
+    if method_cfg is not None and method_cfg.get('pool_op', 'max') == 'mean':
+        pool_op = np.mean
     for data_idx, tree_idx in enumerate(index):
 
         if not store_per_iteration:
@@ -48,6 +52,17 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
         ppn_voxels = ppn_voxels[ppn_mask]
         ppn_score  = ppn_score[ppn_mask]
         ppn_type   = ppn_type[ppn_mask]
+
+        all_voxels, all_scores, all_types = [], [], []
+        clusts = dbscan_points(ppn_voxels, epsilon=1.99, minpts=1)
+        for c in clusts:
+            all_voxels.append(np.mean(ppn_voxels[c], axis=0))
+            all_scores.append(pool_op(ppn_score[c], axis=0))
+            all_types.append(pool_op(ppn_type[c], axis=0))
+        ppn_voxels = np.stack(all_voxels, axis=0)
+        ppn_score = np.stack(all_scores)
+        ppn_type = np.stack(all_types)
+        #print(ppn_voxels.shape, ppn_score.shape, ppn_type.shape)
 
         # Metrics now
         # Distance to closest true point (regardless of type)
@@ -87,11 +102,11 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
         distance_to_closest_pred_point = d.min(axis=0)
         score_of_closest_pred_point = ppn_score[d.argmin(axis=0)]
         types_of_closest_pred_point = ppn_type[d.argmin(axis=0)]
-        #print(score_of_closest_pred_point.shape, types_of_closest_pred_point.shape)
 
         one_pixel = 2.
         for i in range(points_label[data_idx].shape[0]):
             # Whether this point is already missed in mask_ppn2 or not
+            #print(input_data[data_idx][ppn_mask].shape, points_label[data_idx].shape)
             is_in_attention = cdist(input_data[data_idx][ppn_mask][:, :3], [points_label[data_idx][i, :3]]).min(axis=0) < one_pixel
             fout_gt.record(('idx', 'distance_to_closest_pred_point', 'type', 'score_of_closest_pred_point',
                             'attention') + tuple(['type_of_closest_pred_point_%d' % c for c in range(num_classes)]),
