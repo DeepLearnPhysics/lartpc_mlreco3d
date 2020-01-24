@@ -51,10 +51,10 @@ class FullEdgeModel(torch.nn.Module):
         self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
             
         # Extract the model to use
-        model = edge_model_construct(self.model_config.get('name'))
+        edge_model = edge_model_construct(self.model_config.get('name'))
 
         # Construct the model
-        self.edge_predictor = model(self.model_config.get('model_cfg'))
+        self.edge_predictor = edge_model(self.model_config.get('model_cfg'))
 
     @staticmethod
     def default_return(device):
