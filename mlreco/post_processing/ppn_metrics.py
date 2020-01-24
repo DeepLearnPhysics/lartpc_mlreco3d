@@ -4,6 +4,7 @@ import scipy
 import os
 from mlreco.utils import CSVData
 from mlreco.utils.dbscan import dbscan_points
+from mlreco.utils.ppn import uresnet_ppn_point_selector, uresnet_ppn_type_point_selector
 
 def ppn_metrics(cfg, data_blob, res, logdir, iteration):
     # UResNet prediction
@@ -43,38 +44,56 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
         predictions = np.argmax(segmentation[data_idx],axis=1)
         label = segment_label[data_idx][:, -1]
 
+
+        # Remove deltas from true points
+        delta = 3
+        points_label_idx = points_label[data_idx][points_label[data_idx][:, -1] != delta]
+
         ppn_voxels = points[data_idx][:, :3] + 0.5 + input_data[data_idx][:, :3]
         ppn_score  = scipy.special.softmax(points[data_idx][:, 3:5], axis=1)[:, 1]
         ppn_type   = scipy.special.softmax(points[data_idx][:, 5:], axis=1)
 
         ppn_mask = (attention[data_idx][:, 0]==1) & (ppn_score > 0.5)
 
-        ppn_voxels = ppn_voxels[ppn_mask]
-        ppn_score  = ppn_score[ppn_mask]
-        ppn_type   = ppn_type[ppn_mask]
+        mode = 'select'
+        #mode = 'simple'
+        if mode == 'simple':
+            ppn_voxels = ppn_voxels[ppn_mask]
+            ppn_score  = ppn_score[ppn_mask]
+            ppn_type   = ppn_type[ppn_mask]
 
-        all_voxels, all_scores, all_types = [], [], []
-        clusts = dbscan_points(ppn_voxels, epsilon=1.99, minpts=1)
-        for c in clusts:
-            all_voxels.append(np.mean(ppn_voxels[c], axis=0))
-            all_scores.append(pool_op(ppn_score[c], axis=0))
-            all_types.append(pool_op(ppn_type[c], axis=0))
-        ppn_voxels = np.stack(all_voxels, axis=0)
-        ppn_score = np.stack(all_scores)
-        ppn_type = np.stack(all_types)
+            all_voxels, all_scores, all_types = [], [], []
+            clusts = dbscan_points(ppn_voxels, epsilon=1.99, minpts=1)
+            for c in clusts:
+                all_voxels.append(np.mean(ppn_voxels[c], axis=0))
+                all_scores.append(pool_op(ppn_score[c], axis=0))
+                all_types.append(pool_op(ppn_type[c], axis=0))
+            ppn_voxels = np.stack(all_voxels, axis=0)
+            ppn_score = np.stack(all_scores)
+            ppn_type = np.stack(all_types)
+        else:
+            #ppn = uresnet_ppn_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.6, window_size=10, nms_score_threshold=0.99 )
+            ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.9, window_size=3, type_threshold=2)
+            # Remove delta from predicted points
+            #ppn = ppn[ppn[:, -1] != delta]
+            ppn = ppn[ppn[:, -3] < 0.1]
+            ppn_voxels = ppn[:, :3]
+            ppn_score = ppn[:, 5]
+            ppn_type = ppn[:, 6:-1]#np.repeat(ppn[:, -1][:, None], num_classes, axis=1)
         #print(ppn_voxels.shape, ppn_score.shape, ppn_type.shape)
 
         # Metrics now
         # Distance to closest true point (regardless of type)
-        d = cdist(ppn_voxels, points_label[data_idx][:, :3])
+        d = cdist(ppn_voxels, points_label_idx[:, :3])
         distance_to_closest_true_point = d.min(axis=1)
 
         distance_to_closest_true_point_type = []
         distance_to_closest_true_pix_type = []
         distance_to_closest_pred_pix_type = []
         for c in range(num_classes):
-            true_mask = points_label[data_idx][:, -1] == c
-            d = cdist(ppn_voxels, points_label[data_idx][true_mask][:, :3])
+            true_mask = points_label_idx[:, -1] == c
+            d = cdist(ppn_voxels, points_label_idx[true_mask][:, :3])
+            #print(d.shape)
             if d.shape[1] > 0:
                 distance_to_closest_true_point_type.append(d.min(axis=1))
             else:
@@ -94,23 +113,25 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
         distance_to_closest_pred_pix_type = np.array(distance_to_closest_pred_pix_type)
 
         for i in range(ppn_voxels.shape[0]):
-            fout_pred.record(('idx', 'distance_to_closest_true_point', 'score') + tuple(['distance_to_closest_true_point_type_%d' % c for c in range(num_classes)]) + tuple(['score_type_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_true_pix_type_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_pred_pix_type_%d' % c for c in range(num_classes)]), (tree_idx, distance_to_closest_true_point[i], ppn_score[i]) + tuple(distance_to_closest_true_point_type[:, i]) + tuple(ppn_type[i]) + tuple(distance_to_closest_true_pix_type[:, i]) + tuple(distance_to_closest_pred_pix_type[:, i]))
+            fout_pred.record(('idx', 'distance_to_closest_true_point', 'score', 'x', 'y', 'z') + tuple(['distance_to_closest_true_point_type_%d' % c for c in range(num_classes)]) + tuple(['score_type_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_true_pix_type_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_pred_pix_type_%d' % c for c in range(num_classes)]), (tree_idx, distance_to_closest_true_point[i], ppn_score[i], ppn_voxels[i, 0], ppn_voxels[i, 1], ppn_voxels[i, 2]) + tuple(distance_to_closest_true_point_type[:, i]) + tuple(ppn_type[i]) + tuple(distance_to_closest_true_pix_type[:, i]) + tuple(distance_to_closest_pred_pix_type[:, i]))
             fout_pred.write()
 
         # Distance to closest pred point (regardless of type)
-        d = cdist(ppn_voxels, points_label[data_idx][:, :3])
+        d = cdist(ppn_voxels, points_label_idx[:, :3])
+        #print(d.shape)
         distance_to_closest_pred_point = d.min(axis=0)
         score_of_closest_pred_point = ppn_score[d.argmin(axis=0)]
         types_of_closest_pred_point = ppn_type[d.argmin(axis=0)]
 
         one_pixel = 2.
-        for i in range(points_label[data_idx].shape[0]):
+        for i in range(points_label_idx.shape[0]):
             # Whether this point is already missed in mask_ppn2 or not
             #print(input_data[data_idx][ppn_mask].shape, points_label[data_idx].shape)
-            is_in_attention = cdist(input_data[data_idx][ppn_mask][:, :3], [points_label[data_idx][i, :3]]).min(axis=0) < one_pixel
-            fout_gt.record(('idx', 'distance_to_closest_pred_point', 'type', 'score_of_closest_pred_point',
+            is_in_attention = cdist(input_data[data_idx][ppn_mask][:, :3], [points_label_idx[i, :3]]).min(axis=0) < one_pixel
+            fout_gt.record(('idx', 'distance_to_closest_pred_point', 'type', 'score_of_closest_pred_point', 'x', 'y', 'z',
                             'attention') + tuple(['type_of_closest_pred_point_%d' % c for c in range(num_classes)]),
-                    (tree_idx, distance_to_closest_pred_point[i], points_label[data_idx][i, -1], score_of_closest_pred_point[i],
+                    (tree_idx, distance_to_closest_pred_point[i], points_label_idx[i, -1], score_of_closest_pred_point[i],
+                        points_label_idx[i, 0], points_label_idx[i, 1], points_label_idx[i, 2],
                             int(is_in_attention)) + tuple(types_of_closest_pred_point[i]))
             fout_gt.write()
 
