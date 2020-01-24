@@ -7,6 +7,8 @@ import sparseconvnet as scn
 import time
 
 def to_numpy(s):
+    if isinstance(s, np.ndarray):
+        return s
     if isinstance(s, torch.Tensor):
         return s.cpu().detach().numpy()
     elif isinstance(s, scn.SparseConvNetTensor):

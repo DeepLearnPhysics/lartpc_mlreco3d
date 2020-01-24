@@ -6,9 +6,8 @@ import torch
 import numpy as np
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import MetaLayer, GATConv
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label
 from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
-from mlreco.utils.gnn.compton import filter_compton
 from mlreco.utils.gnn.data import edge_features, edge_assignment
 from mlreco.utils.gnn.features.utils import edge_labels_to_node_labels
 from mlreco.utils.groups import process_group_data

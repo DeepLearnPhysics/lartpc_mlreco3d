@@ -4,16 +4,10 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout, BatchNorm1d
-from torch_geometric.nn import MetaLayer, GATConv
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, get_cluster_group, form_clusters_new
-from mlreco.utils.gnn.primary import assign_primaries, analyze_primaries
-from mlreco.utils.gnn.network import primary_bipartite_incidence, get_fragment_edges
-from mlreco.utils.gnn.compton import filter_compton
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import secondary_matching_vox_efficiency2
-from mlreco.utils.gnn.evaluation import DBSCAN_cluster_metrics2
-from mlreco.utils.groups import process_group_data
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_group
+from mlreco.utils.gnn.network import bipartite_graph, get_fragment_edges
+from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
+from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment_bipartite, voxel_efficiency_bipartite, clustering_metrics
 from .gnn import edge_model_construct
 
 class IterativeEdgeModel(torch.nn.Module):
@@ -105,7 +99,7 @@ class IterativeEdgeModel(torch.nn.Module):
         em_mask = np.where(cluster_label[:,-1] == 0)[0]
 
         # Find index of points that belong to the same EM clusters
-        clusts = form_clusters_new(cluster_label[em_mask])
+        clusts = form_clusters(cluster_label[em_mask])
         clusts = np.array([em_mask[c] for c in clusts])
         
         # If requested, remove clusters below a certain size threshold
@@ -149,7 +143,6 @@ class IterativeEdgeModel(torch.nn.Module):
             others   = np.where(matched == -1)[0]
 
             # Form a bipartite graph between assigned clusters  and others 
-            edge_index = primary_bipartite_incidence(batch_ids, assigned, device=device)
 
             # Check if there are any edges to predict also batch norm will fail
             # on only 1 edge, so break if this is the case
@@ -237,6 +230,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
             group_ids = out['group_ids'][i]
             batch_ids = out['batch_ids'][i]
             primary_ids = out['primary_ids'][i]
+            matched = out['matched'][i]
             device = clust_ids.device
             if not len(clust_ids):
                 ngpus = max(1, ngpus-1)
@@ -275,19 +269,10 @@ class IterEdgeChannelLoss(torch.nn.Module):
                     total_loss += self.lossfn(edge_pred, edge_assn)
 
             # Compute accuracy of assignment
-            total_acc += secondary_matching_vox_efficiency2(
-                    out['matched'][i],
-                    group_ids,
-                    primary_ids,
-                    clusts
-                )
+            total_acc += voxel_efficiency_bipartite(clusts, group_ids, matched, primary_ids)
 
             # Get clustering metrics
-            ari, ami, sbd, pur, eff = DBSCAN_cluster_metrics2(
-                out['matched'][i].cpu().numpy(),
-                clusts,
-                group_ids
-            )
+            ari, ami, sbd, pur, eff = clustering_metrics(clusts, group_ids, matched)
             total_ari += ari
             total_ami += ami
             total_sbd += sbd

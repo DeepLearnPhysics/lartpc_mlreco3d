@@ -6,14 +6,11 @@ def model_dict():
     from . import uresnet
     from . import chain_track_clustering
     from . import uresnet_ppn_chain
-    from . import edge_gnn
-    from . import full_edge_gnn
-    from . import node_gnn
-    from . import iter_edge_gnn
-    from . import chain_gnn
-    #from . import mst_gnn
-    from . import cluster_edge_gnn
-    from . import cluster_dir_gnn
+    from . import cluster_gnn
+    from . import cluster_node_gnn
+    from . import cluster_iter_gnn
+    from . import cluster_chain_gnn
+    #from . import cluster_mst_gnn
     from . import uresnet_clustering
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -31,20 +28,14 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Clustering
         "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
-        # Edge Model
-        "edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
-        # Full Edge Model
-        "full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
-        # Full Node Model
-        "node_model": (node_gnn.NodeModel, node_gnn.NodeChannelLoss),
-        # MST edge model
-        ##"mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
-        # Iterative Edge Model
-        "iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss),
-        # full cluster model
-        "clust_edge_model": (cluster_edge_gnn.EdgeModel, cluster_edge_gnn.EdgeChannelLoss),
-        # direction model
-        "clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
+        # Cluster grouping GNN
+        "cluster_gnn": (cluster_gnn.FullEdgeModel, cluster_gnn.FullEdgeChannelLoss),
+        # Cluster primary node identification
+        "cluster_node_gnn": (cluster_node_gnn.NodeModel, cluster_node_gnn.NodeChannelLoss),
+        # Iterative cluster grouping
+        "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
+        # Cluster grouping GNN with MST
+        #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
