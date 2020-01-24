@@ -192,7 +192,9 @@ def parse_particle_points(data):
         index and the class of the ground truth point respectively.
     """
     particles_v = data[1].as_vector()
-    part_info = get_ppn_info(particles_v, data[0].meta())
+    #part_info = get_ppn_info(particles_v, data[0].meta())
+    # For open data - to reproduce
+    part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]
         return part_info[:, :3], np.column_stack([part_info[:, -6],part_info[:, -1]])
