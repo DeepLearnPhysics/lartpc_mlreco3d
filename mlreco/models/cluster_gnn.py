@@ -8,9 +8,9 @@ from .gnn import edge_model_construct
 from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, clustering_metrics
+from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_group, clustering_metrics
 
-class FullEdgeModel(torch.nn.Module):
+class EdgeModel(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
@@ -32,7 +32,7 @@ class FullEdgeModel(torch.nn.Module):
           model_path      : <path to the model weights>
     """
     def __init__(self, cfg):
-        super(FullEdgeModel, self).__init__()
+        super(EdgeModel, self).__init__()
 
         # Get the model input parameters 
         if 'modules' in cfg:
@@ -150,9 +150,9 @@ class FullEdgeModel(torch.nn.Module):
                 'edge_index':[edge_index]}
 
 
-class FullEdgeChannelLoss(torch.nn.Module):
+class EdgeChannelLoss(torch.nn.Module):
     """
-    Takes the output of FullEdgeModel and computes the channel-loss.
+    Takes the output of EdgeModel and computes the channel-loss.
 
     For use in config:
     model:
@@ -165,7 +165,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
           target_photons  : <use true photon connections as basis for loss (default False)>
     """
     def __init__(self, cfg):
-        super(FullEdgeChannelLoss, self).__init__()
+        super(EdgeChannelLoss, self).__init__()
 
         # Get the model loss parameters
         if 'modules' in cfg:
@@ -173,6 +173,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
         else:
             self.model_config = cfg
 
+        # Set the loss
         self.loss = self.model_config.get('loss', 'CE')
         self.reduction = self.model_config.get('reduction', 'mean')
         self.balance_classes = self.model_config.get('balance_classes', False)
@@ -185,11 +186,11 @@ class FullEdgeChannelLoss(torch.nn.Module):
             margin = self.model_config.get('margin', 1.0)
             self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
         else:
-            raise Exception('unrecognized loss: ' + self.loss)
+            raise Exception('Loss not recognized: ' + self.loss)
 
     def forward(self, out, clusters, graph):
         """
-        Default return when no valid node is found in the input data.
+        Applies the requested loss on the edge prediction. 
 
         Args:
             out (dict):
@@ -208,7 +209,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
         out['group_ids'] = []
         for i in range(len(clusters)):
 
-            # Get the necessary data products
+            # If the input did not have any node, proceed
             if not len(out['clust_ids'][i]):
                 if ngpus == 1:
                     total_loss = torch.tensor(0., requires_grad=True, device=edge_pred.device)
@@ -221,7 +222,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
             batch_ids = out['batch_ids'][i]
             clusts = reform_clusters(cluster_label, clust_ids, batch_ids)
 
-            # Use group information to determine the true edge assigment (must be torch.long)
+            # Use group information or particle tree to determine the true edge assigment
             edge_pred = out['edge_pred'][i]
             edge_index = out['edge_index'][i]
             group_ids = get_cluster_group(cluster_label, clusts)
@@ -244,11 +245,11 @@ class FullEdgeChannelLoss(torch.nn.Module):
             else:
                 total_loss += self.lossfn(edge_pred, edge_assn)
 
-            # Compute accuracy of assignment (Fraction of correctly assigned edges)
+            # Compute accuracy of assignment (fraction of correctly assigned edges)
             total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
 
             # Compute clustering accuracy metrics
-            node_assn = node_assignment(edge_index, edge_assn.cpu().numpy(), len(clust_ids))
+            node_assn = node_assignment_group(group_ids, batch_ids)
             node_pred = node_assignment(edge_index, torch.argmax(edge_pred, dim=1).detach().cpu().numpy(), len(clust_ids))
             ari, ami, sbd, pur, eff = clustering_metrics(clusts, node_assn, node_pred)
             total_ari += ari
