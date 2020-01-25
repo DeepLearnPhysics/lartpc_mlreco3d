@@ -19,9 +19,9 @@ iotool:
         - parse_particle_graph
         - particle_corrected
 model:
-  name: cluster_gnn
+  name: cluster_iter_gnn
   modules:
-    edge_model:
+    iter_edge_model:
       name: nnconv
       model_cfg:
           edge_feats: 19
@@ -30,9 +30,10 @@ model:
       node_type: 0
       node_min_size: -1
       encoder: ''
-      network: 'complete'
       edge_max_dist: -1
       edge_dist_metric: 'set'
+      maxiter: 10
+      thresh: 0.5
       loss: 'CE'
       reduction: 'mean'
       balance_classes: False
@@ -47,11 +48,11 @@ trainval:
   seed: 0
   learning_rate: 0.0025
   gpus: ''
-  weight_prefix: weights/cluster_gnn/nnconv/snapshot
+  weight_prefix: weights/cluster_iter_gnn/nnconv/snapshot
   iterations: 1000
   report_step: 1
   checkpoint_step: 100
-  log_dir: logs/cluster_gnn/nnconv
+  log_dir: logs/cluster_iter_gnn/nnconv
   model_path: ''
   train: True
   debug: False

@@ -29,7 +29,7 @@ def model_dict():
         # Clustering
         "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
         # Cluster grouping GNN
-        "cluster_gnn": (cluster_gnn.FullEdgeModel, cluster_gnn.FullEdgeChannelLoss),
+        "cluster_gnn": (cluster_gnn.EdgeModel, cluster_gnn.EdgeChannelLoss),
         # Cluster primary node identification
         "cluster_node_gnn": (cluster_node_gnn.NodeModel, cluster_node_gnn.NodeChannelLoss),
         # Iterative cluster grouping

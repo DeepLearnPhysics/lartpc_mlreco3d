@@ -164,6 +164,23 @@ def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     return group_ids
 
 
+def node_assignment_group(group_ids, batch_ids):
+    """
+    Function that assigns each node to a group, given
+    group ids at each batch and corresponding batch ids
+
+    Args:
+        group_ids (np.ndarray): (C) List of cluster group ids within each batch
+        batch_ids (np.ndarray): (C) List of cluster batch ids
+    Returns:
+        np.ndarray: (C) List of unique group ids
+    """
+    # Loop over on edges, reset the group IDs of connected node
+    joined = np.vstack((group_ids, batch_ids))
+    _, unique_ids = np.unique(joined, axis=1, return_inverse=True)
+    return unique_ids
+
+
 def clustering_metrics(clusts, node_assn, node_pred):
     """
     Function that assigns each node to a group, based
