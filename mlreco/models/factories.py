@@ -11,10 +11,18 @@ def model_dict():
     from . import node_gnn
     from . import iter_edge_gnn
     #from . import chain_gnn
-    #from . import mst_gnn
     from . import cluster_edge_gnn
     from . import cluster_dir_gnn
     from . import uresnet_clustering
+
+    from . import discriminative_loss
+    from . import clustercnn_single
+    from . import clustercnn_se
+    from . import clustercnn_density
+
+    from . import clusternet
+    from . import clustercnn_adaptis
+
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -45,6 +53,22 @@ def model_dict():
         "clust_edge_model": (cluster_edge_gnn.EdgeModel, cluster_edge_gnn.EdgeChannelLoss),
         # direction model
         "clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
+        # ClusterUNet Single
+        "clustercnn_single": (clustercnn_single.ClusterCNN, clustercnn_single.ClusteringLoss),
+        # Same as ClusterUNet Single, but coordinate concat is done in first input layer.
+        "discriminative_loss": (discriminative_loss.UResNet, discriminative_loss.DiscriminativeLoss),
+        # Colossal ClusterNet Model to Wrap them all
+        "clusternet": (clusternet.ClusterCNN, clusternet.ClusteringLoss),
+        # Density Loss
+        "clustercnn_density": (clustercnn_density.ClusterCNN, clustercnn_density.ClusteringLoss),
+        # Spatial Embeddings
+        "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
+        # Spatial Embeddings Stack
+        "spatial_embeddings_stack": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
+        # AdaptIS
+        "adaptis": (clustercnn_adaptis.ClusterCNN, clustercnn_adaptis.ClusteringLoss),
+        # Spatial Embeddings Lovasz free
+        "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
