@@ -92,7 +92,35 @@ class stopwatch(object):
         return data[0] if data[0]>0 else time.time() - data[1]
 
 
-    
+# Dumb class to organize loss/accuracy computations in forward loop. 
+class ForwardData:
+    '''
+    Utility class for computing averages of loss and accuracies.
+    '''
+    def __init__(self):
+        from collections import defaultdict
+        self.counts = defaultdict(float)
+        self.means = defaultdict(float)
+
+    def __getitem__(self, name):
+        return self.means[name]
+        
+    def update_mean(self, name, value):
+        mean = (self.means[name] * float(self.counts[name]) + value) \
+            / float((self.counts[name] + 1))
+        self.means[name] = mean
+        self.counts[name] += 1
+
+    def update_dict(self, d):
+        for name, value in d.items():
+            self.update_mean(name, value)
+
+    def as_dict(self):
+        return self.means
+
+    def __repr__(self):
+        return self.as_dict()
+
 
 # Dumb class to organize output csv file
 class CSVData:
@@ -119,7 +147,6 @@ class CSVData:
                 self._str+='{:f}'
             self._fout.write('\n')
             self._str+='\n'
-
         self._fout.write(self._str.format(*(self._dict.values())))
 
     def flush(self):
