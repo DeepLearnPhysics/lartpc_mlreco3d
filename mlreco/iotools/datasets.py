@@ -41,7 +41,7 @@ class LArCVDataset(Dataset):
         elif len(self._files)>10: print(len(self._files),'files loaded')
         else:
             for f in self._files: print('Loading file:',f)
-        
+
         # Instantiate parsers
         self._data_keys = []
         self._data_parsers = []
@@ -71,7 +71,7 @@ class LArCVDataset(Dataset):
                 chain.AddFile(f)
             if self._entries is not None: assert(self._entries == chain.GetEntries())
             else: self._entries = chain.GetEntries()
-            
+
         # If event list is provided, register
         if event_list is None:
             self._event_list = np.arange(0, self._entries)
@@ -89,9 +89,23 @@ class LArCVDataset(Dataset):
         # Set total sample size
         if limit_num_samples > 0 and self._entries > limit_num_samples:
             self._entries = limit_num_samples
-            
+
         # Flag to identify if Trees are initialized or not
         self._trees_ready=False
+
+    @staticmethod
+    def list_data(f):
+        from ROOT import TFile
+        f=TFile.Open(f,"READ")
+        data={'sparse3d':[],'cluster3d':[],'particle':[]}
+        for k in f.GetListOfKeys():
+            name = k.GetName()
+            if not name.endswith('_tree'): continue
+            if not len(name.split('_')) < 3: continue
+            key = name.split('_')[0]
+            if not key in data.keys(): continue
+            data[key] = name[:name.rfind('_')]
+        return data
 
     @staticmethod
     def create(cfg):
@@ -122,7 +136,7 @@ class LArCVDataset(Dataset):
 
         # convert to actual index: by default, it is idx, but not if event_list provided
         event_idx = self._event_list[idx]
-        
+
         # If this is the first data loading, instantiate chains
         if not self._trees_ready:
             from ROOT import TChain
