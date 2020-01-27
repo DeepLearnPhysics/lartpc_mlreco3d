@@ -39,9 +39,9 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     target_list_keys  = []
     for key,data in data_blob.items():
         if not key in result_data: result_data[key]=[]
-        if isinstance(data[0],np.ndarray) and len(data[0].shape) == 2: 
+        if isinstance(data[0],np.ndarray) and len(data[0].shape) == 2:
             target_array_keys.append(key)
-        elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape) == 2: 
+        elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape) == 2:
             target_list_keys.append(key)
         elif isinstance(data[0],list):
             for d in data: result_data[key].extend(d)
@@ -65,7 +65,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
             batch_map = unwrap_map[d.shape[0]]
             for where in batch_map.values():
                 result_data[target].append(d[where])
-                
+
     # a-2) Handle the list of list of ndarrays
     #for target in target_list_keys:
     #    data = data_blob[target]
@@ -97,7 +97,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
             batch_ids.sort()
             for b in batch_ids:
                 result_data[target].append([ d[d[:,data_dim] == b] for d in dlist ])
-            
+
     # Handle output
     result_outputs = {}
     # b-0) Find the target keys
@@ -120,7 +120,11 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
             #raise TypeError
 
     # b-1) Handle the list of ndarrays
+    if target_array_keys is not None:
+        target_array_keys.sort(reverse=True)
+    #print(target_array_keys)
     for target in target_array_keys:
+        #print(target)
         data = outputs[target]
         for d in data:
             # check if batch map is available, and create if not
@@ -128,6 +132,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
                 batch_map = {}
                 batch_idx = np.unique(d[:,data_dim])
                 # ensure these are integer values
+                # print(batch_idx)
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,data_dim] == b
@@ -136,7 +141,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
             batch_map = unwrap_map[d.shape[0]]
             for where in batch_map.values():
                 result_outputs[target].append(d[where])
-                
+
     # b-2) Handle the list of list of ndarrays
     #for target in target_list_keys:
     #    data = outputs[target]
@@ -151,7 +156,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     #                for b in batch_idx:
     #                    batch_map[b] = target_data[:,data_dim] == b
     #                unwrap_map[target_data.shape[0]]=batch_map
-    
+
     #            batch_map = unwrap_map[target_data.shape[0]]
     #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
     #            #combined_list.extend([ target_data[target_data[:,data_dim] == b] for b in batch_idx])
@@ -160,8 +165,8 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     # b-2) Handle the list of list of ndarrays
 
     # ensure outputs[key] length is same for all key in target_list_keys
-    for target in target_list_keys:
-        print(target,len(outputs[target]))
+    # for target in target_list_keys:
+    #     print(target,len(outputs[target]))
     num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
     assert len(num_elements)<1 or len(num_elements) == 1
     num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])
@@ -184,7 +189,7 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
         assert len(np.unique(batch_ctrs)) == 1
         list_unwrap_map.append(element_map)
         list_batch_ctrs.append(batch_ctrs[0])
-        
+
     for target in target_list_keys:
         data = outputs[target]
         for data_index, dlist in enumerate(data):
@@ -215,7 +220,7 @@ def unwrap_scn2(data_blob, outputs, data_dim, main_key=None, data_keys=None, out
     if data_keys   is None: data_keys   = list(data_blob.keys())
     if output_keys is None: output_keys = list(outputs.keys()  )
     if main_key    is None: main_key    = data_keys[0]
-    
+
     parsed_data_blob = []
     parsed_outputs   = []
 
@@ -274,6 +279,5 @@ def unwrap_scn2(data_blob, outputs, data_dim, main_key=None, data_keys=None, out
                 parsed_data_blob.append(data_blob_element)
                 parsed_outputs.append(output_element)
             output_index += 1
-                
-    return parsed_data_blob, parsed_outputs
 
+    return parsed_data_blob, parsed_outputs

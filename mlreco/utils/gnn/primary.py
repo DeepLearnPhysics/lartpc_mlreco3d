@@ -31,6 +31,14 @@ def get_em_primary_info(particle_v, meta, point_type="3d", min_voxel_count=7, mi
             # we are now in EM primary
             if not contains(meta, particle.first_step(), point_type=point_type):
                 continue
+
+            # check that the particle is not an EM daughter
+            parent_pdg_code = abs(particle.parent_pdg_code())
+            if parent_pdg_code == 11 or parent_pdg_code == 22:
+                continue
+            cp = particle.creation_process()
+            if cp != 'Decay' and cp != 'primary':
+                continue
             
             # TODO deal with different 2d projections
             # Register start point
@@ -205,10 +213,13 @@ def analyze_primaries(p_est, p_true):
     acc = n_int * 1.0 / n_true
     return fdr, tdr, acc
     
-    
-    
-    
-    
-    
-    
-    
+def get_true_primaries(clust_ids, batch_ids, points):
+    # For each cluster, check that it is in the list of primary points
+    primaries = []
+    for i, idx in enumerate(zip(batch_ids.cpu().numpy(), clust_ids.cpu().numpy())):
+        for p in points:
+            if (np.array(idx) == p[-2:].cpu().numpy()).all():
+                primaries.append(i)
+                break
+
+    return np.array(primaries)

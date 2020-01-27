@@ -83,7 +83,6 @@ def process_config(cfg):
             cfg['iotool']['batch_size'] = int(cfg['iotool']['minibatch_size'] * num_gpus)
         if cfg['iotool']['minibatch_size'] < 0:
             cfg['iotool']['minibatch_size'] = int(cfg['iotool']['batch_size'] / num_gpus)
-        print('iotool.minibatch_size',cfg['iotool']['minibatch_size'])
         # Check consistency
         if not (cfg['iotool']['batch_size'] % (cfg['iotool']['minibatch_size'] * num_gpus)) == 0:
             raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
@@ -142,7 +141,6 @@ def prepare(cfg):
         # Set primary device
         if len(cfg['trainval']['gpus']) > 0:
             torch.cuda.set_device(cfg['trainval']['gpus'][0])
-
 
         # TODO check that it does what we want (cycle through dataloader)
         # check on a small sample, check 1/ it cycles through and 2/ randomness
@@ -274,6 +272,7 @@ def train_loop(cfg, handlers):
 
         # Train step
         data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
+
         # Save snapshot
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)

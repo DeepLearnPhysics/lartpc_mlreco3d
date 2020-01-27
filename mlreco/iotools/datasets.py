@@ -55,6 +55,7 @@ class LArCVDataset(Dataset):
             self._data_keys.append(key)
             self._data_parsers.append((getattr(mlreco.iotools.parsers,value[0]),value[1:]))
             for data_key in value[1:]:
+                if isinstance(data_key, dict): data_key = list(data_key.values())[0]
                 if data_key in self._trees: continue
                 self._trees[data_key] = None
         self._data_keys.append('index')
@@ -151,7 +152,10 @@ class LArCVDataset(Dataset):
         # Create data chunks
         result = {}
         for index, (parser, datatree_keys) in enumerate(self._data_parsers):
-            data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
+            if isinstance(datatree_keys[0], dict):
+                data = [(getattr(self._trees[list(d.values())[0]], list(d.values())[0] + '_branch'), list(d.keys())[0]) for d in datatree_keys]
+            else:
+                data = [getattr(self._trees[key], key + '_branch') for key in datatree_keys]
             name = self._data_keys[index]
             result[name] = parser(data)
 
