@@ -483,7 +483,6 @@ def parse_sparse3d_scn_scales(data):
     ----------
     data: list
         length 1 array of larcv::EventSparseTensor3D
-
     Returns
     -------
     list of tuples
