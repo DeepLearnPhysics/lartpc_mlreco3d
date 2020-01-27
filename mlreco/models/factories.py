@@ -53,5 +53,5 @@ def model_dict():
 def construct(name):
     models = model_dict()
     if name not in models:
-        raise Exception("Unknown model name provided")
+        raise Exception("Unknown model name provided: %s" % name)
     return models[name]
