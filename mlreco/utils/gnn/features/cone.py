@@ -1,6 +1,6 @@
 from mlreco.utils.gnn.features.utils import *
 import numpy as np
-from mlreco.utils.gnn.cluster import form_clusters_new
+from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.utils.gnn.primary import assign_primaries_unique
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -12,7 +12,7 @@ def find_shower_cone(dbscan, em_primaries, energy_data, types, length_factor=14.
     
     returns a list of length len(em_primaries) containing np arrays, each of which contains the indices corresponding to the voxels in the cone of the corresponding EM primary
     """
-    clusts = form_clusters_new(dbscan)
+    clusts = form_clusters(dbscan)
     selected_voxels = []
     true_voxels = []
     
