@@ -32,7 +32,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
     - edges is list of pairs of cluster ids arranged in two vectors (2xM-vector)
     """
     # Define the arrays of node positions (barycenter of voxels in the cluster)
-    pos = np.array([voxels[c].cpu().numpy().mean(0) for c in clusters])
+    pos = np.array([voxels[c].mean(0) for c in clusters])
 
     # Define the node features (label, color)
     n = len(clusters)
@@ -53,7 +53,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
 
         # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
         graph_data.append(go.Scatter3d(x = pos[:,0], y = pos[:,1], z = pos[:,2],
-                                       name = 'clusters',
+                                       name = 'Graph nodes',
                                        mode = 'markers',
                                        marker = dict(
                                            symbol = 'circle',
@@ -79,7 +79,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
             np.sum([np.abs(np.dot((v-vox[pid])/LA.norm(v-vox[pid]), norm)) for i, v in enumerate(vox) if i != pid])
         for c in clusters:
             # Get the voxels corresponding to the cluster
-            vox = voxels[c].numpy()
+            vox = voxels[c]
 
             # Get the mean and the principal axis from the PCA
             pca.fit(vox)
@@ -113,7 +113,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
         # Add a graph with a cone per cluster
         graph_data.append(go.Cone(x=spos[:,0], y=spos[:,1], z=spos[:,2],
                                   u=axes[:,0], v=axes[:,1], w=axes[:,2],
-                                  name = 'clusters',
+                                  name = 'Graph node cones',
                                   opacity=.5,
                                   sizeref=.5/vector_scale,
                                   showscale=False,
@@ -121,7 +121,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
 
         # Add a graph with the starting points
         graph_data.append(go.Scatter3d(x=spos[:,0], y=spos[:,1], z=spos[:,2],
-                                       name = 'nodes',
+                                       name = 'Graph node starts',
                                        mode='markers',
                                        marker = dict(
                                            symbol = 'circle',
@@ -139,7 +139,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
     elif mode == 'hull':
         # For each cluster, add the convex hull of all its voxels
         graph_data += [go.Mesh3d(alphahull =10.0,
-                                 name = '',
+                                 name = 'Graph nodes',
                                  x = voxels[c][:,0],
                                  y = voxels[c][:,1],
                                  z = voxels[c][:,2],
@@ -155,7 +155,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
             vi, vj = voxels[clusters[i]], voxels[clusters[j]]
             d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
             i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
-            edge_vertices.append([vi[i1].cpu().numpy(), vj[i2].cpu().numpy(), [None, None, None]])
+            edge_vertices.append([vi[i1], vj[i2], [None, None, None]])
 
         if draw_edges:
             edge_vertices = np.concatenate(edge_vertices)
@@ -174,6 +174,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
                                    y = voxels[mask][:,1],
                                    z = voxels[mask][:,2],
                                    mode = 'markers',
+                                   name = 'Graph nodes',
                                    marker = dict(
                                      symbol = 'circle',
                                      color = colors,
@@ -190,7 +191,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
                 vi, vj = voxels[clusters[i]], voxels[clusters[j]]
                 d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
                 i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
-                edge_vertices.append([vi[i1].cpu().numpy(), vj[i2].cpu().numpy(), [None, None, None]])
+                edge_vertices.append([vi[i1], vj[i2], [None, None, None]])
 
             edge_vertices = np.concatenate(edge_vertices)
 
@@ -201,7 +202,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
     if draw_edges:
         graph_data.append(go.Scatter3d(x = edge_vertices[:,0], y = edge_vertices[:,1], z = edge_vertices[:,2],
                                        mode = 'lines',
-                                       name = 'edges',
+                                       name = 'Graph edges',
                                        line = dict(
                                            color = 'rgba(50, 50, 50, 0.5)',
                                            width = edge_width
