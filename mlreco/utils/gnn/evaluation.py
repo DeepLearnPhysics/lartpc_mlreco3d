@@ -123,7 +123,6 @@ def node_assignment(edge_index, edge_label, n):
             else:
                 group_ids[i] = group_ids[j] = i
                 groups[i] = set([i, j])
-        print(i, j, group_ids, groups)
 
     return group_ids
 
