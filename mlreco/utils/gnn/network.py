@@ -78,6 +78,7 @@ def mst_graph(batches, dist, max_dist=-1):
     mst_mat = minimum_spanning_tree(dist).toarray().astype(float)
     inds = np.where(mst_mat.flatten() > 0.)[0]
     ret = np.array(np.unravel_index(inds, mst_mat.shape))
+    ret = np.sort(ret, axis=0)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
