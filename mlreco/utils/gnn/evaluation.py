@@ -102,7 +102,6 @@ def node_assignment(edge_index, edge_label, n):
         p2 = find_parent(group_ids, b)
         if p1 != p2:
             group_ids[p2] = p1
-        print(a, b, group_ids)
 
     return group_ids
 
