@@ -104,7 +104,7 @@ def node_assignment(edge_index, edge_label, n):
         leaderj = group_ids[j]
         if leaderi in groups:
             if leaderj in groups:
-                if leaderi == leaderj: return # nothing to do
+                if leaderi == leaderj: continue # nothing to do
                 groupi = groups[leaderi]
                 groupj = groups[leaderj]
                 if len(groupi) < len(groupj):
@@ -123,6 +123,7 @@ def node_assignment(edge_index, edge_label, n):
             else:
                 group_ids[i] = group_ids[j] = i
                 groups[i] = set([i, j])
+        print(i, j, group_ids, groups)
 
     return group_ids
 
