@@ -42,9 +42,29 @@ def reform_clusters(data, clust_ids, batch_ids):
     return np.array([np.where((data[:,3] == batch_ids[j]) & (data[:,5] == clust_ids[j]))[0] for j in range(len(batch_ids))])
 
 
+def get_cluster_batch(data, clusts):
+    """
+    Function that returns the batch ID of each cluster.
+    This should be unique for each clustert, assert that it is.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of batch IDs
+    """
+    labels = []
+    for c in clusts:
+        assert np.unique(data[c,3]).size == 1
+        labels.append(data[c[0],3])
+
+    return np.array(labels)
+
+
 def get_cluster_label(data, clusts):
     """
     Function that returns the cluster label of each cluster.
+    This should be unique for each clustert, assert that it is.
 
     Args:
         data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
@@ -54,8 +74,8 @@ def get_cluster_label(data, clusts):
     """
     labels = []
     for c in clusts:
-        v, cts = np.unique(data[c,5], return_counts=True)
-        labels.append(v[np.argmax(cts)])
+        assert np.unique(data[c,5]).size == 1
+        labels.append(data[c[0],5])
 
     return np.array(labels)
 
@@ -63,6 +83,8 @@ def get_cluster_label(data, clusts):
 def get_cluster_group(data, clusts):
     """
     Function that returns the group label of each cluster.
+    This does not have to be unique, depending on the cluster
+    formation method. Use majority vote.
 
     Args:
         data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
@@ -78,27 +100,11 @@ def get_cluster_group(data, clusts):
     return np.array(labels)
 
 
-def get_cluster_batch(data, clusts):
-    """
-    Function that returns the batch ID of each cluster.
-
-    Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-    Returns:
-        np.ndarray: (C) List of batch IDs
-    """
-    labels = []
-    for c in clusts:
-        v, cts = np.unique(data[c,3], return_counts=True)
-        labels.append(v[np.argmax(cts)])
-
-    return np.array(labels)
-
-
 def get_cluster_primary(clust_ids, group_ids):
     """
     Function that returns the group label of each cluster.
+    This function assumes that if clust_id == group_id,
+    the cluster is a primary.
 
     Args:
         clust_ids (np.ndarray): (C) List of cluster ids
