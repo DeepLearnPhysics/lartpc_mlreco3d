@@ -103,7 +103,10 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1):
     """
     # Create the incidence matrix
     others = [i for i in range(len(batches)) if i not in primaries]
-    ret = np.vstack([[i, j] for i in primaries for j in others if batches[i] == batches[j]]).T
+    edges = [[i, j] for i in primaries for j in others if batches[i] == batches[j]]
+    if not len(edges):
+        return np.empty((2,0))
+    ret = np.vstack(edges).T
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
