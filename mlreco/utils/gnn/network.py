@@ -49,7 +49,7 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
     ret = np.empty((0, 2), dtype=int)
     for i in np.unique(batches):
         where = np.where(batches == i)[0]
-        tri = Delaunay(voxels[where])
+        tri = Delaunay(voxels[where], qhull_options='QJ') # Joggled input guarantees simplical faces
         edges = np.array([[labels[where[i]], labels[where[j]]] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
         if len(edges):
             ret = np.vstack((ret, np.unique(edges, axis=0)))
