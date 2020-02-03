@@ -220,8 +220,8 @@ class NodeChannelLoss(torch.nn.Module):
             node_pred = out['node_pred'][i]
             primary_ids = []
             for c in clusts:
-                primaries, cnts = np.unique(clusters[i][c, -3]==clusters[i][c,-2], return_counts=True)
-                primary_ids.append(primaries[np.argmax(cnts)])
+                primaries, cnts = torch.unique(clusters[i][c, -3]==clusters[i][c,-2], return_counts=True)
+                primary_ids.append(primaries[torch.argmax(cnts)])
 
             node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
