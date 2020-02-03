@@ -103,4 +103,22 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         self.loss = UResNetPPNLoss(cfg)
 
     def forward(self, result, label, particles):
+        n_gpus = len(label)
+        for i in range(n_gpus):
+            is_primary = []
+            group_id = []
+            
+            clusters = result['clust'][i]
+            #FIXME(2020-02-03 kvtsang) replace key
+            #detach to cpu?
+            features = label['<KEY>'][i]
+           
+            for cluster_ids in clusters: 
+                is_primary.append(np.any(features[cluster_ids, -2]))
+                
+                groups, cnts = np.unique(features[cluster_ids, -3], return_counts=True)
+                i_grp = np.argmax(groups) 
+                group_id.append(groups[i_grp])
+
+
         return self.loss(result, label, particles)
