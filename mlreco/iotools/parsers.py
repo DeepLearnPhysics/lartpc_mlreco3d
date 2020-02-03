@@ -392,6 +392,59 @@ def parse_cluster3d_clean(data):
 
     return grp_voxels, grp_data
 
+def parse_cluster3d_clean_full(data):
+    """
+    a function to retrieve clusters tensor
+
+    Arguments
+    ---------
+    data: array_like (2, )
+        array of larcv::EventClusterVoxel3D and larcv::EventParticle
+
+    Returns
+    -------
+    np_voxels: ndarray (N, 3)
+        array of voxel cooridinates (x, y, z)
+    np_features: ndarray (N, 4) 
+        array of (voxel value, cluster id, group id, is_primary, semantic type)
+    """
+    clusters, particles = data
+
+    meta = clusters.meta()
+    v_clusters = clusters.as_vector()
+    v_particles = particles.as_vector()
+
+    voxels, features = [], []
+    for i, (cluster, particle) in enumerate(zip(v_clusters, v_particles)):
+        n_pts = cluster.size()
+
+        if n_pts <= 0:
+            continue
+        
+        x = np.empty(shape=(n_pts,), dtype=np.int32)
+        y = np.empty_like(x)
+        z = np.empty_like(x)
+        value = np.empty(shape=(n_pts,), dtype=np.float32)
+
+        larcv.as_flat_arrays(cluster, meta, x, y, z, value)
+        assert i == particle.id()
+
+        _fill = lambda v: np.full(shape=(cluster.size()), fill_value=v, dtype=np.float32)
+
+        cluster_id = _fill(particle.id())
+        group_id = _fill(particle.group_id())
+        is_primary = _fill(particle.id() == particle.group_id())
+        sem_type = _fill(particle.shape())
+
+        voxels.append(np.stack((x, y, z), axis=1))
+        features.append(
+                np.column_stack((value, cluster_id, group_id, is_primary, sem_type)))
+        
+    np_voxels = np.concatenate(voxels, axis=0)
+    np_features = np.concatenate(features, axis=0)
+
+    return np_voxels, np_features
+
 
 def parse_sparse3d_clean(data):
     """
