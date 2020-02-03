@@ -73,6 +73,8 @@ def model_dict():
         "cluster_node_gnn": (cluster_node_gnn.NodeModel, cluster_node_gnn.NodeChannelLoss),
         # Iterative cluster grouping
         "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
+        # Chain of uresnet + ppn + dbscan + primary node gnn + fragment clustering gnn
+        "cluster_dbscan_gnn": (cluster_chain_gnn.ChainDBSCANGNN, cluster_chain_gnn.ChainLoss),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
