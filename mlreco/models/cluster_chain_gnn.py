@@ -7,7 +7,10 @@ from .gnn import node_model_construct, edge_model_construct
 from mlreco.models.layers.dbscan import DBScan, DBScanClusts2
 from mlreco.models.uresnet_ppn_chain import ChainLoss as UResNetPPNLoss
 from mlreco.models.uresnet_ppn_chain import Chain as UResNetPPN
+from mlreco.models.cluster_node_gnn import NodeChannelLoss
+from mlreco.models.cluster_gnn import EdgeChannelLoss
 from mlreco.utils.ppn import uresnet_ppn_point_selector
+from mlreco.utils.gnn.evaluation import edge_assignment
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 import mlreco.utils
@@ -79,6 +82,7 @@ class ChainDBSCANGNN(torch.nn.Module):
             if not len(batch_id) == 1:
                 raise ValueError('Found a cluster with mixed batch ids:',batch_id)
             batch_ids.append(batch_id[0].item())
+        result.update(dict(batch_ids=[np.array(batch_ids, dtype=np.int32)]))
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
@@ -108,10 +112,10 @@ class ChainDBSCANGNN(torch.nn.Module):
             index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
             xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
             out = self.node_predictor(x, index, e, xbatch)
+            result.update(out)
 
             # Convert the node output to a list of primaries
             primaries = torch.nonzero(torch.argmax(out['node_pred'][0], dim=1)).flatten()
-            result.update(shower_primaries=primaries)
 
         # Initialize the requested network for edge prediction, get edge features
         elif self.network == 'complete':
@@ -126,7 +130,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         else:
             raise ValueError('Network type not recognized: '+self.network)
         
-        result.update(edge_index=edge_index)
+        result.update(edge_index=[edge_index])
         e = torch.tensor(cluster_edge_features(data[0], clusts, edge_index), device=data[0].device, dtype=torch.float)
 
         # Pass through the node model, get edge prections
@@ -141,26 +145,21 @@ class ChainDBSCANGNN(torch.nn.Module):
 class ChainLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
         super(ChainLoss, self).__init__()
-        self.loss = UResNetPPNLoss(cfg)
+        self.sem_loss = UResNetPPNLoss(cfg)
+        self.node_loss = NodeChannelLoss(cfg)
+        self.edge_loss = EdgeChannelLoss(cfg)
+        self.clust_loss = ClusterGNNLoss(cfg)
 
-    def forward(self, result, label, particles):
-        n_gpus = len(label)
-        for i in range(n_gpus):
-            is_primary = []
-            group_id = []
-            
-            clusters = result['clust'][i]
-            #FIXME(2020-02-03 kvtsang) replace key
-            #detach to cpu?
-            features = label['<KEY>'][i]
-           
-            for cluster_ids in clusters: 
-                is_primary.append(np.any(features[cluster_ids, -2]))
-                
-                groups, cnts = np.unique(features[cluster_ids, -3], return_counts=True)
-                i_grp = np.argmax(groups) 
-                group_id.append(groups[i_grp])
+    def forward(self, result, sem_label, particles, clust_label):
 
-
-        return self.loss(result, label, particles)
+        loss = {}
+        uresnet_ppn_loss = self.sem_loss(result, sem_label, particles)
+        node_loss = self.node_loss(result, clust_label)
+        edge_loss = self.edge_loss(result, clust_label)
+        loss.update(uresnet_ppn_loss)
+        loss.update(node_loss)
+        loss.update(edge_loss)
+        loss['loss'] = uresnet_ppn_loss['loss'] + node_loss['loss'] + edge_loss['loss']
+        loss['accuracy'] = (uresnet_ppn_loss['accuracy'] + node_loss['accuracy'] + edge_loss['accuracy'])/3
+        return loss
 
