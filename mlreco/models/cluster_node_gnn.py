@@ -99,6 +99,9 @@ class NodeModel(torch.nn.Module):
         else:
             clusts = form_clusters(cluster_label, self.node_min_size)
 
+        if not len(clusts):
+            return self.default_return(device)
+
         # Get the batch, cluster and group id of each cluster
         batch_ids = get_cluster_batch(cluster_label, clusts)
         clust_ids = get_cluster_label(cluster_label, clusts)
@@ -107,7 +110,9 @@ class NodeModel(torch.nn.Module):
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
             dist_mat = inter_cluster_distance(cluster_label[:,:3], clusts, self.edge_dist_metric)
-        if self.network == 'complete':
+        if len(clusts) == 1:
+            edge_index = np.empty((2,0))
+        elif self.network == 'complete':
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
             edge_index = delaunay_graph(cluster_label, clusts, dist_mat, self.edge_max_dist)
@@ -208,7 +213,7 @@ class NodeChannelLoss(torch.nn.Module):
             # If the input did not have any node, proceed
             if not len(out['clust_ids'][i]):
                 if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=node_pred.device)
+                    total_loss = torch.tensor(0., requires_grad=True, device=out['node_pred'][i].device)
                 ngpus = max(1, ngpus-1)
                 continue
 

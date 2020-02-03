@@ -81,12 +81,12 @@ class IterativeEdgeModel(torch.nn.Module):
                 'primary_ids' (np.ndarray): (0) Empty primary cluster ids
                 'edge_index' (np.ndarray) : (2,0) Empty incidence matrix
                 'matched' (np.ndarray)    : (0) Empty cluster group predictions
-                'counter' (int)           : Zero counter
+                'counter' (np.ndarray)    : (1) Zero counter
         """
         xg = torch.empty((0,2), requires_grad=True, device=device)
         x  = np.empty(0)
         e  = np.empty((2,0))
-        return {'edge_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'primary_ids':[x], 'edge_index':[e], 'matched':[x], 'counter':[0]}
+        return {'edge_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'primary_ids':[x], 'edge_index':[e], 'matched':[x], 'counter':[np.array([0])]}
 
     @staticmethod
     def assign_clusters(edge_index, edge_pred, others, matched, thresh):
@@ -130,7 +130,7 @@ class IterativeEdgeModel(torch.nn.Module):
                 'edge_pred' ([torch.tensor]): List of (E,2) Two-channel edge predictions
                 'matched' ([np.ndarray])    : List of (C) Cluster group predictions
                 'edge_index' ([np.ndarray]) : List of (2,E) Incidence matrix
-                'counter' (int)             : Iteration counter
+                'counter' (np.ndarray)      : (1) Iteration counter
                 'clust_ids' (np.ndarray)    : (C) Cluster ids
                 'batch_ids' (np.ndarray)    : (C) Cluster batch ids
                 'primary_ids' (np.ndarray)  : (P) Primary cluster ids
@@ -148,6 +148,9 @@ class IterativeEdgeModel(torch.nn.Module):
             clusts = np.array([mask[c] for c in clusts])
         else:
             clusts = form_clusters(cluster_label, self.node_min_size)
+
+        if not len(clusts):
+            return self.default_return(device)
 
         # Get the batch, cluster and group id of each cluster
         batch_ids = get_cluster_batch(cluster_label, clusts)
@@ -193,7 +196,7 @@ class IterativeEdgeModel(torch.nn.Module):
             others   = np.where(matched == -1)[0]
 
             # Form a bipartite graph between assigned clusters and others
-            edges = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
+            edges = bipartite_graph(batch_ids, assigned, dist_mat, self.edge_max_dist)
 
             # Check if there are any edges to predict also batch norm will fail
             # on only 1 edge, so break if this is the case
@@ -280,7 +283,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
         """
         total_loss, total_acc = 0., 0.
         total_ari, total_ami, total_sbd, total_pur, total_eff = 0., 0., 0., 0., 0.
-        total_iter = []
+        total_iter = 0
         ngpus = len(clusters)
         out['group_ids'] = []
         for i in range(ngpus):
@@ -288,7 +291,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
             # If the input did not have any node, proceed
             if not len(out['clust_ids'][i]):
                 if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=edge_pred.device)
+                    total_loss = torch.tensor(0., requires_grad=True, device=out['edge_pred'][i].device)
                 ngpus = max(1, ngpus-1)
                 continue
 
@@ -300,7 +303,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
 
             # Append the number of iterations
             niter = out['counter'][i][0]
-            total_iter.append(niter)
+            total_iter += niter
 
             # Loop over iterations and add loss at each step based
             # on the graph formed at that iteration.
@@ -315,7 +318,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
                 if not self.target_photons:
                     edge_assn = edge_assignment(edge_index, batch_ids, group_ids)
                 else:
-                    edge_assn = edge_assignment_from_graph(edge_index, true_edge_undex)
+                    edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
                 edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
 
@@ -347,7 +350,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
             'SBD': total_sbd/ngpus,
             'purity': total_pur/ngpus,
             'efficiency': total_eff/ngpus,
-            'accuracy': total_acc/np.sum(total_iter),
+            'accuracy': total_acc/max(1,total_iter),
             'loss': total_loss/ngpus,
             'n_iter': total_iter
         }

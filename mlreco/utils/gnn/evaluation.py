@@ -85,7 +85,8 @@ def find_parent(parent, i):
 def node_assignment(edge_index, edge_label, n):
     """
     Function that assigns each node to a group, based
-    on the edge assigment provided.
+    on the edge assigment provided. This uses a simple
+    union find implementation.
 
     Args:
         edge_index (np.ndarray): (2,E) Incidence matrix
@@ -95,16 +96,35 @@ def node_assignment(edge_index, edge_label, n):
         np.ndarray: (C) List of group ids
     """
     # Loop over on edges, reset the group IDs of connected node
+    groups = {}
     group_ids = np.arange(n)
     on_edges = edge_index.T[np.where(edge_label)[0]]
-    for a, b in on_edges:
-        p1 = find_parent(group_ids, a)
-        p2 = find_parent(group_ids, b)
-        if p1 != p2:
-            group_ids[p1] = p2
+    for i, j in on_edges: 
+        leaderi = group_ids[i]
+        leaderj = group_ids[j]
+        if leaderi in groups:
+            if leaderj in groups:
+                if leaderi == leaderj: continue # nothing to do
+                groupi = groups[leaderi]
+                groupj = groups[leaderj]
+                if len(groupi) < len(groupj):
+                    i, leaderi, groupi, j, leaderj, groupj = j, leaderj, groupj, i, leaderi, groupi
+                groupi |= groupj
+                del groups[leaderj]
+                for k in groupj:
+                    group_ids[k] = leaderi
+            else:
+                groups[leaderi].add(j)
+                group_ids[j] = leaderi
+        else:
+            if leaderj in groups:
+                groups[leaderj].add(i)
+                group_ids[i] = leaderj
+            else:
+                group_ids[i] = group_ids[j] = i
+                groups[i] = set([i, j])
 
     return group_ids
-
 
 def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
     """
