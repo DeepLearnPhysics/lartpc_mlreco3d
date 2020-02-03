@@ -196,40 +196,34 @@ class NodeChannelLoss(torch.nn.Module):
 
         Args:
             out (dict):
-                'node_pred' (torch.tensor): (C,2) Two-channel node predictions
-                'clust_ids' (np.ndarray)  : (C) Cluster ids
-                'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
-            clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+                'node_pred' (torch.tensor)     : (C,2) Two-channel node predictions
+                'shower_fragments' (np.ndarray): (C) Cluster ids
+            clusters ([torch.tensor])          : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         Returns:
             double: loss, accuracy, clustering metrics
         """
         total_loss, total_acc = 0., 0.
         ngpus = len(clusters)
-        out['group_ids'] = []
-        out['primary_ids'] = []
         for i in range(len(clusters)):
 
             # If the input did not have any node, proceed
-            if not len(out['clust_ids'][i]):
+            if 'node_pred' not in out:
                 if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=out['node_pred'][i].device)
+                    total_loss = torch.tensor(0., requires_grad=True, device=clusters[i].device)
                 ngpus = max(1, ngpus-1)
                 continue
 
             # Get list of IDs of points contained in each cluster
-            cluster_label = clusters[i].detach().cpu().numpy()
-            clust_ids = out['clust_ids'][i]
-            batch_ids = out['batch_ids'][i]
-            clusts = reform_clusters(cluster_label, clust_ids, batch_ids)
+            clusts = out['shower_fragments'][i]
 
             # Use the primary information to determine the true node assignment
             node_pred = out['node_pred'][i]
-            group_ids = get_cluster_group(cluster_label, clusts)
-            primary_ids = get_cluster_primary(clust_ids, group_ids)
-            out['group_ids'].append(group_ids)
-            out['primary_ids'].append(primary_ids)
-            node_assn = torch.tensor([int(i in primary_ids) for i in range(len(clust_ids))], dtype=torch.long, device=node_pred.device, requires_grad=False)
+            primary_ids = []
+            for c in clusts:
+                primaries, cnts = np.unique(clusters[i][c, -3]==clusters[i][c,-2], return_counts=True)
+                primary_ids.append(primaries[np.argmax(cnts)])
+
+            node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
             # Increment the loss, balance classes if requested
             if self.balance_classes:
@@ -241,7 +235,7 @@ class NodeChannelLoss(torch.nn.Module):
                 total_loss += self.lossfn(node_pred, node_assn)
 
             # Compute accuracy of assignment (fraction of correctly assigned nodes)
-            total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(clust_ids)
+            total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(clusts)
 
         return {
             'accuracy': total_acc/ngpus,

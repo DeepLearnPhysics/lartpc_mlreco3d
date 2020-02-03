@@ -406,7 +406,7 @@ def parse_cluster3d_clean_full(data):
     np_voxels: ndarray (N, 3)
         array of voxel cooridinates (x, y, z)
     np_features: ndarray (N, 4) 
-        array of (voxel value, cluster id, group id, is_primary, semantic type)
+        array of (voxel value, cluster id, group id, semantic type)
     """
     clusters, particles = data
 
@@ -433,12 +433,11 @@ def parse_cluster3d_clean_full(data):
 
         cluster_id = _fill(particle.id())
         group_id = _fill(particle.group_id())
-        is_primary = _fill(particle.id() == particle.group_id())
         sem_type = _fill(particle.shape())
 
         voxels.append(np.stack((x, y, z), axis=1))
         features.append(
-                np.column_stack((value, cluster_id, group_id, is_primary, sem_type)))
+                np.column_stack((value, cluster_id, group_id, sem_type)))
         
     np_voxels = np.concatenate(voxels, axis=0)
     np_features = np.concatenate(features, axis=0)

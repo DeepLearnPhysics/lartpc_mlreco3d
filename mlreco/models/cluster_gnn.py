@@ -193,7 +193,7 @@ class EdgeChannelLoss(torch.nn.Module):
         else:
             raise Exception('Loss not recognized: ' + self.loss)
 
-    def forward(self, out, clusters, graph):
+    def forward(self, out, clusters):
         """
         Applies the requested loss on the edge prediction. 
 
@@ -209,35 +209,34 @@ class EdgeChannelLoss(torch.nn.Module):
             double: loss, accuracy, clustering metrics
         """
         total_loss, total_acc = 0., 0.
-        total_ari, total_ami, total_sbd, total_pur, total_eff = 0., 0., 0., 0., 0.
         ngpus = len(clusters)
-        out['group_ids'] = []
         for i in range(len(clusters)):
 
             # If the input did not have any node, proceed
-            if not len(out['clust_ids'][i]):
+            if 'edge_pred' not in out:
                 if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=out['edge_pred'][i].device)
+                    total_loss = torch.tensor(0., requires_grad=True, device=clusters[i].device)
                 ngpus = max(1, ngpus-1)
                 continue
 
             # Get list of IDs of points contained in each cluster
-            cluster_label = clusters[i].detach().cpu().numpy()
-            clust_ids = out['clust_ids'][i]
-            batch_ids = out['batch_ids'][i]
-            clusts = reform_clusters(cluster_label, clust_ids, batch_ids)
+            clusts = out['shower_fragments'][i]
 
             # Use group information or particle tree to determine the true edge assigment
             edge_pred = out['edge_pred'][i]
             edge_index = out['edge_index'][i]
-            group_ids = get_cluster_group(cluster_label, clusts)
-            out['group_ids'].append(group_ids)
+            batch_ids = out['batch_ids'][i] 
+            group_ids = []
+            for c in clusts:
+                grps, cnts = np.unique(clusters[i][c, -2], return_counts=True)
+                group_ids.append(grps[np.argmax(cnts)])
+
             if not self.target_photons:
                 edge_assn = edge_assignment(edge_index, batch_ids, group_ids)
-            else:
-                graph = graph[i].detach().cpu().numpy()
-                true_edge_index = get_fragment_edges(graph, clust_ids, batch_ids)
-                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
+#            else:
+#                graph = graph[i]
+#                true_edge_index = get_fragment_edges(graph, clust_ids, batch_ids)
+#                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
             edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
 
@@ -253,22 +252,7 @@ class EdgeChannelLoss(torch.nn.Module):
             # Compute accuracy of assignment (fraction of correctly assigned edges)
             total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
 
-            # Compute clustering accuracy metrics
-            node_assn = node_assignment_group(group_ids, batch_ids)
-            node_pred = node_assignment(edge_index, torch.argmax(edge_pred, dim=1).detach().cpu().numpy(), len(clust_ids))
-            ari, ami, sbd, pur, eff = clustering_metrics(clusts, node_assn, node_pred)
-            total_ari += ari
-            total_ami += ami
-            total_sbd += sbd
-            total_pur += pur
-            total_eff += eff
-
         return {
-            'ARI': total_ari/ngpus,
-            'AMI': total_ami/ngpus,
-            'SBD': total_sbd/ngpus,
-            'purity': total_pur/ngpus,
-            'efficiency': total_eff/ngpus,
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus,
         }
