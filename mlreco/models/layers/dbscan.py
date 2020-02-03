@@ -112,6 +112,8 @@ class DBScanClusts2(torch.nn.Module):
             segmentation = x[:, -self.num_classes:]
         else:
             segmentation = x[:,-1] # labels
+        for i in range(self.num_classes):
+            clusts.append([])
         # loop over batch
         for bid in bids:
             # batch indices
@@ -127,7 +129,7 @@ class DBScanClusts2(torch.nn.Module):
                 bcinds = torch.all(torch.stack([binds, cinds]), dim=0)
                 selection = np.where(bcinds == 1)[0]
                 if len(selection) == 0:
-                    clusts.append([])
+                    #clusts[c].append([])
                     continue
                 #print('selection length',len(selection))
                 # perform DBSCAN
@@ -140,7 +142,9 @@ class DBScanClusts2(torch.nn.Module):
                 cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
                 #for idx in cls_idx:
                 #    print('cluster',len(idx),'points')
-                clusts.append(cls_idx)
+                if not len(cls_idx):
+                    continue
+                clusts[c].extend(cls_idx)
 
         return clusts
 

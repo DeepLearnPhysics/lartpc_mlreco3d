@@ -15,7 +15,10 @@ def complete_graph(batches, dist=None, max_dist=-1):
     """
     # Create the incidence matrix
     ids = np.arange(len(batches))
-    ret = np.vstack([[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]).T
+    edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]
+    if not len(edges):
+        return np.empty((2,0))
+    ret = np.vstack(edges).T
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
@@ -31,7 +34,7 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
     that share an edge in their corresponding Euclidean Delaunay graph.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (np.ndarray)    : (N,4) [x, y, z, batchid]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         dist (np.ndarray)    : (C,C) Tensor of pair-wise cluster distances
         max_dist (double)    : Maximal edge length
