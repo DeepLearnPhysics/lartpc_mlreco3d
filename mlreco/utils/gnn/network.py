@@ -49,7 +49,7 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
     ret = np.empty((0, 2), dtype=int)
     for i in np.unique(batches):
         where = np.where(batches == i)[0]
-        tri = Delaunay(voxels[where])
+        tri = Delaunay(voxels[where], qhull_options='QJ') # Joggled input guarantees simplical faces
         edges = np.array([[labels[where[i]], labels[where[j]]] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
         if len(edges):
             ret = np.vstack((ret, np.unique(edges, axis=0)))
@@ -78,6 +78,7 @@ def mst_graph(batches, dist, max_dist=-1):
     mst_mat = minimum_spanning_tree(dist).toarray().astype(float)
     inds = np.where(mst_mat.flatten() > 0.)[0]
     ret = np.array(np.unravel_index(inds, mst_mat.shape))
+    ret = np.sort(ret, axis=0)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
@@ -102,7 +103,10 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1):
     """
     # Create the incidence matrix
     others = [i for i in range(len(batches)) if i not in primaries]
-    ret = np.vstack([[i, j] for i in primaries for j in others if batches[i] == batches[j]]).T
+    edges = [[i, j] for i in primaries for j in others if batches[i] == batches[j]]
+    if not len(edges):
+        return np.empty((2,0))
+    ret = np.vstack(edges).T
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
