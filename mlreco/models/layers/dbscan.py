@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from sklearn.cluster import DBSCAN
+import sklearn
 
 class DBScanClusts(torch.nn.Module):
     """
@@ -54,14 +54,17 @@ class DBScanClusts(torch.nn.Module):
                     cinds = segmentation[:,c] == 1
                 else:
                     cinds = segmentation == c
+                print('class',c,cinds.sum(),'points')
                 # batch = bid and class = c
                 bcinds = torch.all(torch.stack([binds, cinds]), dim=0)
                 selection = np.where(bcinds == 1)[0]
                 if len(selection) == 0:
                     continue
+                print('selection length',len(selection))
                 # perform DBSCAN
                 sel_vox = data[bcinds, :self.dim]
-                res=DBSCAN(eps=self.epsilon,
+                print('sel vox length',sel_vox.size())
+                res=sklearn.cluster.DBSCAN(eps=self.epsilon,
                                            min_samples=self.minPoints,
                                            metric='euclidean'
                                           ).fit(sel_vox)
@@ -69,6 +72,77 @@ class DBScanClusts(torch.nn.Module):
                 clusts.extend(cls_idx)
 
         return np.array(clusts)
+
+class DBScanClusts2(torch.nn.Module):
+    """
+    DBSCAN Layer that uses sklearn's DBSCAN implementation
+    expects input that is of form
+        x, y, z, batch_id, features, classes
+        classes should be one-hot encoded
+
+    forward:
+        INPUT:
+        x - torch.floatTensor
+            x.shape = (N, dim + batch_index + feature + num_classes)
+        OUTPUT:
+        inds - list of torch.longTensor indices for each cluster
+    """
+    def __init__(self, cfg):
+        super(DBScanClusts2, self).__init__()
+        self._cfg = cfg['modules']['dbscan']
+        self.epsilon = self._cfg.get('epsilon', 15)
+        self.minPoints = self._cfg.get('minPoints', 5)
+        self.num_classes = self._cfg.get('num_classes', 5)
+        self.dim = self._cfg.get('data_dim', 3)
+
+    def forward(self, x, onehot=True):
+        # output clusters
+        clusts = []
+        # none of this is differentiable.  Detach for call to numpy
+        x = x.detach()
+        # move to CPU if on gpu
+        if x.is_cuda:
+            x = x.cpu()
+        bids = torch.unique(x[:,self.dim])
+        if onehot:
+            data = x[:,:-self.num_classes]
+        else:
+            data = x[:,:-1]
+        if onehot:
+            segmentation = x[:, -self.num_classes:]
+        else:
+            segmentation = x[:,-1] # labels
+        # loop over batch
+        for bid in bids:
+            # batch indices
+            binds = data[:,self.dim] == bid
+            # loop over classes
+            for c in range(self.num_classes):
+                if onehot:
+                    cinds = segmentation[:,c] == 1
+                else:
+                    cinds = segmentation == c
+                #print('class',c,cinds.sum(),'points')
+                # batch = bid and class = c
+                bcinds = torch.all(torch.stack([binds, cinds]), dim=0)
+                selection = np.where(bcinds == 1)[0]
+                if len(selection) == 0:
+                    clusts.append([])
+                    continue
+                #print('selection length',len(selection))
+                # perform DBSCAN
+                sel_vox = data[bcinds, :self.dim]
+                #print('sel vox length',sel_vox.size())
+                res=sklearn.cluster.DBSCAN(eps=self.epsilon,
+                                           min_samples=self.minPoints,
+                                           metric='euclidean'
+                                          ).fit(sel_vox)
+                cls_idx = [ selection[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
+                #for idx in cls_idx:
+                #    print('cluster',len(idx),'points')
+                clusts.append(cls_idx)
+
+        return clusts
 
 
 class DBScan2(torch.nn.Module):
