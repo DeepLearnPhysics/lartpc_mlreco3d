@@ -228,8 +228,8 @@ class EdgeChannelLoss(torch.nn.Module):
             batch_ids = out['batch_ids'][i] 
             group_ids = []
             for c in clusts:
-                grps, cnts = np.unique(clusters[i][c, -2], return_counts=True)
-                group_ids.append(grps[np.argmax(cnts)])
+                grps, cnts = torch.unique(clusters[i][c, -2], return_counts=True)
+                group_ids.append(grps[torch.argmax(cnts)])
 
             if not self.target_photons:
                 edge_assn = edge_assignment(edge_index, batch_ids, group_ids)

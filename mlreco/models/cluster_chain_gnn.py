@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, edge_model_construct
 from mlreco.models.layers.dbscan import DBScan, DBScanClusts2
+from mlreco.models.gnn.cluster_geo_features import ClustGeoNodeEncoder, ClustGeoEdgeEncoder
 from mlreco.models.uresnet_ppn_chain import ChainLoss as UResNetPPNLoss
 from mlreco.models.uresnet_ppn_chain import Chain as UResNetPPN
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
@@ -44,6 +45,10 @@ class ChainDBSCANGNN(torch.nn.Module):
         # Initialize the modules
         self.dbscan = DBScanClusts2(model_config)
         self.uresnet_ppn = UResNetPPN(model_config)
+        self.ppn = self.uresnet_ppn.ppn
+        self.uresnet_lonely = self.uresnet_ppn.uresnet_lonely
+        self.node_encoder = ClustGeoNodeEncoder(model_config)
+        self.edge_encoder = ClustGeoEdgeEncoder(model_config)
         node_model = node_model_construct(model_config['modules']['node_model']['name'])
         self.node_predictor = node_model(model_config['modules']['node_model'])
         edge_model = edge_model_construct(model_config['modules']['edge_model']['name'])
@@ -98,7 +103,7 @@ class ChainDBSCANGNN(torch.nn.Module):
                         dist_mat[idx0,idx1]=dist_mat[idx1,idx0]
 
         # Get the node features
-        x = torch.tensor(cluster_vtx_features(data[0].numpy(), clusts), device=data[0].device, dtype=torch.float)
+        x = self.node_encoder(data[0], clusts)
 
         # If the bipartite graph is used, predict primaries
         if self.network == 'bipartite':
@@ -106,7 +111,7 @@ class ChainDBSCANGNN(torch.nn.Module):
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
             if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
                 return result
-            e = torch.tensor(cluster_edge_features(data[0], clusts, edge_index), device=data[0].device, dtype=torch.float)
+            e = self.edge_encoder(data[0], clusts, edge_index)
 
             # Pass through the node model, get node prections
             index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
@@ -129,9 +134,9 @@ class ChainDBSCANGNN(torch.nn.Module):
             edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist)
         else:
             raise ValueError('Network type not recognized: '+self.network)
-        
         result.update(edge_index=[edge_index])
-        e = torch.tensor(cluster_edge_features(data[0], clusts, edge_index), device=data[0].device, dtype=torch.float)
+
+        e = self.edge_encoder(data[0], clusts, edge_index)
 
         # Pass through the node model, get edge prections
         index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
@@ -148,7 +153,6 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         self.sem_loss = UResNetPPNLoss(cfg)
         self.node_loss = NodeChannelLoss(cfg)
         self.edge_loss = EdgeChannelLoss(cfg)
-        self.clust_loss = ClusterGNNLoss(cfg)
 
     def forward(self, result, sem_label, particles, clust_label):
 
