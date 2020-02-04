@@ -21,7 +21,7 @@ class DBScanClusts(torch.nn.Module):
     """
     def __init__(self, cfg):
         super(DBScanClusts, self).__init__()
-        self._cfg = cfg['modules']['dbscan']
+        self._cfg = cfg['dbscan']
         self.epsilon = self._cfg.get('epsilon', 15)
         self.minPoints = self._cfg.get('minPoints', 5)
         self.num_classes = self._cfg.get('num_classes', 5)
@@ -89,7 +89,7 @@ class DBScanClusts2(torch.nn.Module):
     """
     def __init__(self, cfg):
         super(DBScanClusts2, self).__init__()
-        self._cfg = cfg['modules']['dbscan']
+        self._cfg = cfg['dbscan']
         self.epsilon = self._cfg.get('epsilon', 15)
         self.minPoints = self._cfg.get('minPoints', 5)
         self.num_classes = self._cfg.get('num_classes', 5)
@@ -166,7 +166,7 @@ class DBScan2(torch.nn.Module):
     def __init__(self, cfg):
         super(DBScan2, self).__init__()
         self.dbclusts = DBScanClusts(cfg)
-        self._cfg = cfg['modules']['dbscan']
+        self._cfg = cfg['dbscan']
         self.num_classes = self._cfg.get('num_classes', 5)
 
     def forward(self, x):
@@ -279,7 +279,7 @@ class DBScan(torch.nn.Module):
     def __init__(self, cfg):
         super(DBScan, self).__init__()
         self.function = DBScanFunction.apply
-        self._cfg = cfg['modules']['dbscan']
+        self._cfg = cfg['dbscan']
         self.epsilon = self._cfg.get('epsilon', 15)
         self.minPoints = self._cfg.get('minPoints', 5)
         self.num_classes = self._cfg.get('num_classes', 5)

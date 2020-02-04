@@ -31,11 +31,8 @@ class NodeModel(torch.nn.Module):
     def __init__(self, cfg):
         super(NodeModel, self).__init__()
 
-        # Get the model input parameters 
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['node_model']
-        else:
-            self.model_config = cfg
+        # Get the model input parameters
+        self.model_config = cfg['node_model']
 
         # Choose what type of node to use
         self.node_type = self.model_config.get('node_type', 0)
@@ -46,7 +43,7 @@ class NodeModel(torch.nn.Module):
         self.network = self.model_config.get('network', 'complete')
         self.edge_max_dist = self.model_config.get('edge_max_dist', -1)
         self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
-            
+
         # Extract the model to use
         node_model = node_model_construct(self.model_config.get('name'))
 
@@ -135,7 +132,7 @@ class NodeModel(torch.nn.Module):
         elif self.node_encoder == 'cnn':
             raise NotImplementedError('CNN encoder not yet implemented...')
         else:
-            raise ValueError('Node encoder not recognized: '+self.node_encoding) 
+            raise ValueError('Node encoder not recognized: '+self.node_encoding)
 
         e = torch.tensor(cluster_edge_features(cluster_label, clusts, edge_index), device=device, dtype=torch.float)
 
@@ -144,7 +141,7 @@ class NodeModel(torch.nn.Module):
         xbatch = torch.tensor(batch_ids, device=device)
 
         # Pass through the model, get output (long edge_index)
-        out = self.node_predictor(x, index, e, xbatch) 
+        out = self.node_predictor(x, index, e, xbatch)
 
         return {**out,
                 'clust_ids':[clust_ids],
@@ -170,11 +167,8 @@ class NodeChannelLoss(torch.nn.Module):
         super(NodeChannelLoss, self).__init__()
 
         # Get the model loss parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['node_model']
-        else:
-            self.model_config = cfg
-
+        self.model_config = cfg['node_model']
+        
         # Set the loss
         self.loss = self.model_config.get('loss', 'CE')
         self.reduction = self.model_config.get('reduction', 'mean')
@@ -192,7 +186,7 @@ class NodeChannelLoss(torch.nn.Module):
 
     def forward(self, out, clusters):
         """
-        Applies the requested loss on the node prediction. 
+        Applies the requested loss on the node prediction.
 
         Args:
             out (dict):
@@ -241,4 +235,3 @@ class NodeChannelLoss(torch.nn.Module):
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus
         }
-

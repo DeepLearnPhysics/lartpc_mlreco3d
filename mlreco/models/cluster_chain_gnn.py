@@ -35,7 +35,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         super(ChainDBSCANGNN, self).__init__()
 
         # Initialize the chain parameters
-        chain_config = model_config['modules']['chain']
+        chain_config = model_config['chain']
         self.shower_class = int(chain_config['shower_class'])
         self.node_min_size = chain_config['node_min_size']
         self.node_encoder = chain_config['node_encoder']
@@ -44,18 +44,18 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Initialize the modules
         self.dbscan = DBScanClusts2(model_config)
-        self.uresnet_ppn = UResNetPPN(model_config)
-        self.ppn = self.uresnet_ppn.ppn
-        self.uresnet_lonely = self.uresnet_ppn.uresnet_lonely
+        self.uresnet_ppn = UResNetPPN(model_config['uresnet_ppn'])
+        #self.ppn = self.uresnet_ppn.ppn
+        #self.uresnet_lonely = self.uresnet_ppn.uresnet_lonely
         self.node_encoder = ClustGeoNodeEncoder(model_config)
         self.edge_encoder = ClustGeoEdgeEncoder(model_config)
-        node_model = node_model_construct(model_config['modules']['node_model']['name'])
-        self.node_predictor = node_model(model_config['modules']['node_model'])
-        edge_model = edge_model_construct(model_config['modules']['edge_model']['name'])
-        self.edge_predictor = edge_model(model_config['modules']['edge_model'])
+        node_model = node_model_construct(model_config['node_model']['name'])
+        self.node_predictor = node_model(model_config)
+        edge_model = edge_model_construct(model_config['edge_model']['name'])
+        self.edge_predictor = edge_model(model_config)
 
     def forward(self, data):
-        
+
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = self.uresnet_ppn(data)
 
@@ -150,7 +150,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 class ChainLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
         super(ChainLoss, self).__init__()
-        self.sem_loss = UResNetPPNLoss(cfg)
+        self.sem_loss = UResNetPPNLoss(cfg['uresnet_ppn'])
         self.node_loss = NodeChannelLoss(cfg)
         self.edge_loss = EdgeChannelLoss(cfg)
 
@@ -166,4 +166,3 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         loss['loss'] = uresnet_ppn_loss['loss'] + node_loss['loss'] + edge_loss['loss']
         loss['accuracy'] = (uresnet_ppn_loss['accuracy'] + node_loss['accuracy'] + edge_loss['accuracy'])/3
         return loss
-

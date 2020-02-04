@@ -11,11 +11,11 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         super(ClustGeoNodeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config['modules']['node_encoder']['use_numpy']
+        self.use_numpy = model_config['node_encoder']['use_numpy']
 
     def forward(self, data, clusts, delta=0.):
 
-        # Get the voxel set 
+        # Get the voxel set
         voxels = data[:,:3].float()
         dtype = voxels.dtype
         device = voxels.device
@@ -96,11 +96,11 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config['modules']['node_encoder']['use_numpy']
+        self.use_numpy = model_config['node_encoder']['use_numpy']
 
     def forward(self, data, clusts, edge_index):
 
-        # Get the voxel set 
+        # Get the voxel set
         voxels = data[:,:3].float()
         dtype = voxels.dtype
         device = voxels.device
@@ -136,4 +136,3 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
             feats.append(torch.cat([v1, v2, disp, torch.tensor([lend], dtype=dtype).to(device), B]))
 
         return torch.stack(feats, dim=0)
-
