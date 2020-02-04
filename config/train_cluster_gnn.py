@@ -25,7 +25,7 @@ model:
       node_type: 0
       node_min_size: -1
       network: 'complete'
-      edge_max_dist: 100
+      edge_max_dist: -1
       edge_dist_metric: 'set'
       loss: 'CE'
       reduction: 'mean'

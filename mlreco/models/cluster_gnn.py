@@ -6,14 +6,14 @@ import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
 
 class ClustEdgeGNN(torch.nn.Module):
     """
-    Driver class for edge prediction, assumed to be a GNN model.
+    Driver class for cluster edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
     If DBSCAN is used, use the semantic label tensor as an input.
 
@@ -95,10 +95,10 @@ class ClustEdgeGNN(torch.nn.Module):
             data ([torch.tensor]): (N,5-6) [x, y, z, batchid, (value,) id]
         Returns:
             dict:
-                'edge_pred' (torch.tensor) : (E,2) Two-channel edge predictions
-                'clusts' ([np.ndarray])    : [(N_0), (N_1), ..., (N_C)] Cluster ids
-                'batch_ids' (np.ndarray)   : (C) Cluster batch ids
-                'edge_index' (np.ndarray)  : (2,E) Incidence matrix
+                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
+                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
+                'batch_ids' (np.ndarray)  : (C) Cluster batch ids
+                'edge_index' (np.ndarray) : (2,E) Incidence matrix
         """
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
@@ -124,14 +124,8 @@ class ClustEdgeGNN(torch.nn.Module):
         if not len(clusts):
             return self.default_return(device)
 
-        # Get the batch, cluster and group id of each cluster
-        batch_ids = []
-        for clust in clusts:
-            batch_id = data[clust,3].unique()
-            if not len(batch_id) == 1:
-                raise ValueError('Found a cluster with mixed batch ids:',batch_id)
-            batch_ids.append(batch_id[0].item())
-        batch_ids = np.array(batch_ids)
+        # Get the batch id for each cluster
+        batch_ids = get_cluster_batch(data, clusts)
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
@@ -217,7 +211,7 @@ class EdgeChannelLoss(torch.nn.Module):
         Args:
             out (dict):
                 'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (C) Cluster ids
+                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 'batch_ids' (np.ndarray)  : (C) Cluster batch ids
                 'edge_index' (np.ndarray) : (2,E) Incidence matrix
             clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
