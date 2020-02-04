@@ -68,7 +68,7 @@ def model_dict():
         # Spatial Embeddings Lovasz free
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Cluster grouping GNN
-        "cluster_gnn": (cluster_gnn.EdgeModel, cluster_gnn.EdgeChannelLoss),
+        "cluster_gnn": (cluster_gnn.ClustEdgeGNN, cluster_gnn.EdgeChannelLoss),
         # Cluster primary node identification
         "cluster_node_gnn": (cluster_node_gnn.NodeModel, cluster_node_gnn.NodeChannelLoss),
         # Iterative cluster grouping

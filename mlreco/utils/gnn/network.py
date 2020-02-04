@@ -1,5 +1,6 @@
 # Defines network incidence matrices
 import numpy as np
+import torch
 
 def complete_graph(batches, dist=None, max_dist=-1):
     """
@@ -142,13 +143,43 @@ def inter_cluster_distance(voxels, clusts, mode='set'):
     return dist_mat
 
 
+def inter_cluster_distance(voxels, clusts, mode='set'):
+    """
+    Function that returns the matrix of pair-wise cluster distances.
+
+    Args:
+        voxels (torch.tensor): (N,3) Tensor of voxel coordinates
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        mode (str)           : Maximal edge length (distance mode: set or centroid)
+    Returns:
+        torch.tensor: (C,C) Tensor of pair-wise cluster distances
+    """
+    if mode == 'set':
+        from mlreco.utils import local_cdist
+        dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
+        for i, ci in enumerate(clusts):
+            for j, cj in enumerate(clusts):
+                if i < j:
+                    dist_mat[i,j] = local_cdist(voxels[ci], voxels[cj]).min()
+                else:
+                    dist_mat[i,j] = dist_mat[j,i]
+
+    elif mode == 'centroid':
+        centroids = torch.stack([torch.mean(voxels[c], dim=0) for c in clusts])
+        dist_mat = local_cdist(centroids, centroids)
+    else:
+        raise(ValueError('Distance mode not recognized: '+mode))
+
+    return dist_mat
+
+
 def get_fragment_edges(graph, clust_ids, batch_ids):
     """
     Function that converts a set of edges between cluster ids
     to a set of edges between fragment ids (ordering in list)
 
     Args:
-        graph (np.ndarray)    : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
+        graph (torch.tensor)    : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
         clust_ids (np.ndarray): (C) List of fragment cluster ids
         batch_ids (np.ndarray): (C) List of fragment batch ids
     Returns:
@@ -156,7 +187,7 @@ def get_fragment_edges(graph, clust_ids, batch_ids):
     """
     # Loop over the graph edges, find the fragment ids, append
     true_edges = np.empty((0,2), dtype=int)
-    fragid_map = np.vstack((clust_ids, batch_ids)).T
+    fragid_map = torch.tensor(np.vstack((clust_ids, batch_ids)).T)
     for e in graph:
         n1 = np.where([(pair == e[::2]).all() for pair in fragid_map])[0]
         n2 = np.where([(pair == e[1:]).all() for pair in fragid_map])[0]
