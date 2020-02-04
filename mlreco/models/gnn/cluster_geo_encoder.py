@@ -11,7 +11,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         super(ClustGeoNodeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config['modules']['node_encoder']['use_numpy']
+        self.use_numpy = model_config.get('use_numpy', False)
 
     def forward(self, data, clusts, delta=0.):
 
@@ -96,7 +96,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config['modules']['edge_encoder']['use_numpy']
+        self.use_numpy = model_config.get('use_numpy', False)
 
     def forward(self, data, clusts, edge_index):
 

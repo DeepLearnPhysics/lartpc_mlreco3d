@@ -4,57 +4,69 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from .gnn import edge_model_construct
-from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_group, clustering_metrics
+from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
+from .layers.dbscan import DBScanClusts2
+from mlreco.utils.gnn.cluster import form_clusters
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, get_fragment_edges
+from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
+from mlreco.utils import local_cdist
 
 class EdgeModel(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
+    If DBSCAN is used, use the semantic label tensor as an input.
 
     For use in config:
     model:
       name: cluster_gnn
       modules:
-        edge_model:
-          name: <name of the edge model>
-          model_cfg:
-            <dictionary of arguments to pass to the model>
+        chain:
           node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
           node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          node_encoder    : <node feature encoding: 'basic' or 'cnn' (default 'basic')>
           network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+        dbscan:
+          <dictionary of dbscan parameters>
+        node_encoder:
+          name: <name of the node encoder>
+          <dictionary of arguments to pass to the encoder>
+        edge_encoder:
+          name: <name of the edge encoder>
+          <dictionary of arguments to pass to the encoder>
+        edge_model:
+          name: <name of the edge model>
+          <dictionary of arguments to pass to the model>
           model_path      : <path to the model weights>
     """
     def __init__(self, cfg):
         super(EdgeModel, self).__init__()
 
-        # Get the model input parameters 
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
-        else:
-            self.model_config = cfg
+        # Get the chain input parameters 
+        chain_config = cfg['modules']['chain']
 
         # Choose what type of node to use
-        self.node_type = self.model_config.get('node_type', 0)
-        self.node_min_size = self.model_config.get('node_min_size', -1)
-        self.node_encoder = self.model_config.get('node_encoder', 'basic')
+        self.node_type = chain_config.get('node_type', 0)
+        self.node_min_size = chain_config.get('node_min_size', -1)
 
         # Choose what type of network to use
-        self.network = self.model_config.get('network', 'complete')
-        self.edge_max_dist = self.model_config.get('edge_max_dist', -1)
-        self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
-            
-        # Extract the model to use
-        edge_model = edge_model_construct(self.model_config.get('name'))
+        self.network = chain_config.get('network', 'complete')
+        self.edge_max_dist = chain_config.get('edge_max_dist', -1)
+        self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
 
+        # If requested, use DBSCAN to form clusters from semantics
+        self.do_dbscan = False
+        if 'dbscan' in cfg['modules']:
+            self.do_dbscan = True
+            self.dbscan = DBScanClusts2(cfg)
+
+        # Initialize encoders
+        self.node_encoder = node_encoder_construct(cfg)
+        self.edge_encoder = edge_encoder_construct(cfg)
+            
         # Construct the model
-        self.edge_predictor = edge_model(self.model_config.get('model_cfg'))
+        self.edge_predictor = edge_model_construct(cfg)
 
     @staticmethod
     def default_return(device):
@@ -65,82 +77,99 @@ class EdgeModel(torch.nn.Module):
             device (torch.device): Device on which the input is stored
         Returns:
             dict:
-                'edge_pred' (torch.tensor): (0,2) Empty two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (0) Empty cluster ids
-                'batch_ids' (np.ndarray)  : (0) Empty cluster batch ids
-                'edge_index' (np.ndarray) : (2,0) Empty incidence matrix
+                'edge_pred' (torch.tennsor): (0,2) Empty two-channel edge predictions
+                'clusts' ([np.ndarray])    : (0) Empty cluster ids
+                'batch_ids' (np.ndarray)   : (0) Empty cluster batch ids
+                'edge_index' (np.ndarray)  : (2,0) Empty incidence matrix
         """
         xg = torch.empty((0,2), requires_grad=True, device=device)
         x  = np.empty(0)
         e  = np.empty((2,0))
-        return {'edge_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[e]}
+        return {'edge_pred':[xg], 'clusts':[x], 'batch_ids':[x], 'edge_index':[e]}
 
     def forward(self, data):
         """
         Prepares particle clusters and feed them to the GNN model.
 
         Args:
-            data ([torch.tensor]): (N,8) [x, y, z, batchid, value, id, groupid, shape]
+            data ([torch.tensor]): (N,5-6) [x, y, z, batchid, (value,) id]
         Returns:
             dict:
-                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (C) Cluster ids
-                'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
+                'edge_pred' (torch.tensor) : (E,2) Two-channel edge predictions
+                'clusts' ([np.ndarray])    : [(N_0), (N_1), ..., (N_C)] Cluster ids
+                'batch_ids' (np.ndarray)   : (C) Cluster batch ids
+                'edge_index' (np.ndarray)  : (2,E) Incidence matrix
         """
-        # Get original device, bring data to CPU (for data preparation)
-        device = data[0].device
-        cluster_label = data[0].detach().cpu().numpy()
-
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
-        if self.node_type > -1:
-            mask = np.where(cluster_label[:,-1] == 0)[0]
-            clusts = form_clusters(cluster_label[mask], self.node_min_size)
-            clusts = np.array([mask[c] for c in clusts])
+        data = data[0]
+        device = data.device
+        if self.do_dbscan:
+            clusts = self.dbscan(data, onehot=False)
+            if self.node_type > -1:
+                mask = np.where(data[:,-1] == 0)[0]
+                clusts = clusts[self.node_type]
+                clusts = [mask[c] for c in clusts]
+            else:
+                clusts = np.concatenate(clusts).tolist()
         else:
-            clusts = form_clusters(cluster_label, self.node_min_size)
+            if self.node_type > -1:
+                mask = np.where(data[:,-1] == 0)[0]
+                clusts = form_clusters(data[mask], self.node_min_size)
+                clusts = [mask[c] for c in clusts]
+            else:
+                clusts = form_clusters(data, self.node_min_size)
 
         if not len(clusts):
             return self.default_return(device)
 
         # Get the batch, cluster and group id of each cluster
-        batch_ids = get_cluster_batch(cluster_label, clusts)
-        clust_ids = get_cluster_label(cluster_label, clusts)
+        batch_ids = []
+        for clust in clusts:
+            batch_id = data[clust,3].unique()
+            if not len(batch_id) == 1:
+                raise ValueError('Found a cluster with mixed batch ids:',batch_id)
+            batch_ids.append(batch_id[0].item())
+        batch_ids = np.array(batch_ids)
 
-        # Form the requested network
+        # Compute the cluster distance matrix, if necessary
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = inter_cluster_distance(cluster_label[:,:3], clusts, self.edge_dist_metric)
+            dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
+            for idx0 in range(len(clusts)):
+                pts0 = data[clusts[idx0]][:,:3]
+                for idx1 in range(len(clusts)):
+                    if idx0 < idx1:
+                        pts1 = data[clusts[idx1]][:,:3]
+                        d01 = local_cdist(pts0,pts1)
+                        dist_mat[idx0,idx1] = d01.min()
+                    else:
+                        dist_mat[idx0,idx1] = dist_mat[idx1,idx0]
+
+        # Form the requested network
         if len(clusts) == 1:
             edge_index = np.empty((2,0))
         elif self.network == 'complete':
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
-            edge_index = delaunay_graph(cluster_label, clusts, dist_mat, self.edge_max_dist)
+            edge_index = delaunay_graph(data, clusts, dist_mat, self.edge_max_dist)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'bipartite':
-            group_ids = get_cluster_group(cluster_label, clusts)
+            group_ids = get_cluster_group(data, clusts)
             primary_ids = get_cluster_primary(clust_ids, group_ids)
             edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
-        # Skip if there is no edges (Is this necessary ? TODO)
-        if not edge_index.shape[1]:
+        # Skip if there is less than two edges (fails batchnorm)
+        if edge_index.shape[1] < 2:
             return self.default_return(device)
 
         # Obtain node and edge features
-        if self.node_encoder == 'basic':
-            x = torch.tensor(cluster_vtx_features(cluster_label, clusts), device=device, dtype=torch.float)
-        elif self.node_encoder == 'cnn':
-            raise NotImplementedError('CNN encoder not yet implemented...')
-        else:
-            raise ValueError('Node encoder not recognized: '+self.node_encoding) 
-
-        e = torch.tensor(cluster_edge_features(cluster_label, clusts, edge_index), device=device, dtype=torch.float)
+        x = self.node_encoder(data, clusts)
+        e = self.edge_encoder(data, clusts, edge_index)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
@@ -150,7 +179,7 @@ class EdgeModel(torch.nn.Module):
         out = self.edge_predictor(x, index, e, xbatch) 
 
         return {**out,
-                'clust_ids':[clust_ids],
+                'clusts':[clusts],
                 'batch_ids':[batch_ids],
                 'edge_index':[edge_index]}
 
@@ -193,7 +222,7 @@ class EdgeChannelLoss(torch.nn.Module):
         else:
             raise Exception('Loss not recognized: ' + self.loss)
 
-    def forward(self, out, clusters):
+    def forward(self, out, clusters, graph):
         """
         Applies the requested loss on the edge prediction. 
 
@@ -220,7 +249,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 continue
 
             # Get list of IDs of points contained in each cluster
-            clusts = out['shower_fragments'][i]
+            clusts = out['clusts'][i]
 
             # Use group information or particle tree to determine the true edge assigment
             edge_pred = out['edge_pred'][i]
