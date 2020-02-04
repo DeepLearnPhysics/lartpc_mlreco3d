@@ -10,11 +10,11 @@ from mlreco.models.layers.base import NetworkBase
 #
 # Define one multilayer model to incorporate all options.
 #
-# Embedding Transforming Convolutions are added on top of 
-# backbone decoder features. 
-# 
+# Embedding Transforming Convolutions are added on top of
+# backbone decoder features.
+#
 # Distance Estimation Map is added on top of final layer of
-# backbone decoder concatenated with final layer of clustering. 
+# backbone decoder concatenated with final layer of clustering.
 #
 ###########################################################
 
@@ -34,15 +34,12 @@ class ClusterCNN(NetworkBase):
     at each decoding path.
 
     proximity: configurations for final distance estimation map.
-    ---------------------------------------------------------- 
+    ----------------------------------------------------------
     '''
     def __init__(self, cfg, name='clusternet'):
         super(ClusterCNN, self).__init__(cfg)
 
-        if 'modules' in cfg:
-            self.model_config = cfg['modules'][name]
-        else:
-            self.model_config = cfg
+        self.model_config = cfg[name]
 
         self.backbone_config = self.model_config.get('backbone', None)
         self.clustering_config = self.model_config.get('clustering', None)
@@ -64,7 +61,7 @@ class ClusterCNN(NetworkBase):
         self.final_embeddings = scn.Sequential()
         self.embedding_dim = self.clustering_config.get('embedding_dim', 8)
         self._resnet_block(self.final_embeddings, 2 * self.num_filters, self.embedding_dim)
-        
+
         self.freeze_embeddings = self.clustering_config.get('freeze_embeddings', False)
         if self.freeze_embeddings:
             print("Embedding Generator Network Freezed.")
@@ -121,8 +118,8 @@ class ClusteringLoss(nn.Module):
 
     Configurations
     ----------------------------------------------------------
-    loss_segmentation: 
-        - configurations for semantic segmentation loss. 
+    loss_segmentation:
+        - configurations for semantic segmentation loss.
 
     loss_clustering:
         - configurations for clustering loss.
@@ -134,10 +131,7 @@ class ClusteringLoss(nn.Module):
     def __init__(self, cfg, name='clustering_loss'):
         super(ClusteringLoss, self).__init__()
 
-        if 'modules' in cfg:
-            self.loss_config = cfg['modules'][name]
-        else:
-            self.loss_config = cfg
+        self.loss_config = cfg[name]
 
         self.loss_func_name = self.loss_config.get('name', 'multi')
         self.loss_func = clustering_loss_construct(self.loss_func_name)
@@ -157,4 +151,3 @@ class ClusteringLoss(nn.Module):
         #         print("{} = {}".format(key, val[0].features.shape))
         res = self.loss_func(result, segment_label, cluster_label)
         return res
-

@@ -14,7 +14,7 @@ class UResNet(torch.nn.Module):
     def __init__(self, cfg, name='discriminative_loss'):
         import sparseconvnet as scn
         super(UResNet, self).__init__()
-        model_config = cfg['modules'][name]
+        model_config = cfg[name]
         dimension = model_config['data_dim']
         self.spatial_size = model_config['spatial_size']
         reps = model_config.get('reps', 2)  # Conv block repetition factor
@@ -70,7 +70,7 @@ class DiscriminativeLoss(torch.nn.Module):
 
     def __init__(self, cfg, reduction='sum', name='discriminative_loss'):
         super(DiscriminativeLoss, self).__init__()
-        self._cfg = cfg['modules'][name]
+        self._cfg = cfg[name]
 
     def find_cluster_means(self, features, labels):
         '''
@@ -105,7 +105,7 @@ class DiscriminativeLoss(torch.nn.Module):
             labels (torch.Tensor): ground truth instance labels
             cluster_means (torch.Tensor): output from find_cluster_means
             margin (float/int): constant used to specify delta_v in paper. Think of it
-            as the size of each clusters in embedding space. 
+            as the size of each clusters in embedding space.
         Returns:
             var_loss: (float) variance loss (see paper).
         '''
@@ -172,7 +172,7 @@ class DiscriminativeLoss(torch.nn.Module):
         '''
         Compute Adjusted Rand Index Score for given embedding coordinates,
         where predicted cluster labels are obtained from distance to closest
-        centroid (computes heuristic accuracy). 
+        centroid (computes heuristic accuracy).
 
         Inputs:
             embedding (torch.Tensor): (N, d) Tensor where 'd' is the embedding dimension.
@@ -225,22 +225,22 @@ class DiscriminativeLoss(torch.nn.Module):
 
     def combine_multiclass(self, features, slabels, clabels):
         '''
-        Wrapper function for combining different components of the loss, 
-        in particular when clustering must be done PER SEMANTIC CLASS. 
+        Wrapper function for combining different components of the loss,
+        in particular when clustering must be done PER SEMANTIC CLASS.
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud. 
+        and then compute the clustering loss over each masked point cloud.
 
-        INPUTS: 
+        INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
 
         OUTPUT:
-            loss_segs (list): list of computed loss values for each semantic class. 
-            loss[i] = computed DLoss for semantic class <i>. 
-            acc_segs (list): list of computed clustering accuracy for each semantic class. 
+            loss_segs (list): list of computed loss values for each semantic class.
+            loss[i] = computed DLoss for semantic class <i>.
+            acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss, acc_segs = defaultdict(list), defaultdict(float)
         semantic_classes = slabels.unique()
@@ -270,7 +270,7 @@ class DiscriminativeLoss(torch.nn.Module):
             group_labels: ground-truth instance labels
         Returns:
             (dict): A dictionary containing key-value pairs for
-            loss, accuracy, etc. 
+            loss, accuracy, etc.
         '''
         slabels = semantic_labels[0][:, 4]
         slabels = slabels.type(torch.LongTensor)

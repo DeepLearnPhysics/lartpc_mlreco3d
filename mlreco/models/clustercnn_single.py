@@ -14,8 +14,8 @@ class ClusterCNN(UResNet):
 
     Congifurations:
         - coordConv: Option to concat coordinates to input features at
-        final linear layer. 
-        - embedding_dim: dimension of final embedding space for clustering. 
+        final linear layer.
+        - embedding_dim: dimension of final embedding space for clustering.
     '''
     def __init__(self, cfg, name='clustercnn_single'):
         super(ClusterCNN, self).__init__(cfg, name)

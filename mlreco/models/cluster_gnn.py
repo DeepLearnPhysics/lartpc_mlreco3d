@@ -34,11 +34,8 @@ class EdgeModel(torch.nn.Module):
     def __init__(self, cfg):
         super(EdgeModel, self).__init__()
 
-        # Get the model input parameters 
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
-        else:
-            self.model_config = cfg
+        # Get the model input parameters
+        self.model_config = cfg['edge_model']
 
         # Choose what type of node to use
         self.node_type = self.model_config.get('node_type', 0)
@@ -49,7 +46,7 @@ class EdgeModel(torch.nn.Module):
         self.network = self.model_config.get('network', 'complete')
         self.edge_max_dist = self.model_config.get('edge_max_dist', -1)
         self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
-            
+
         # Extract the model to use
         edge_model = edge_model_construct(self.model_config.get('name'))
 
@@ -138,7 +135,7 @@ class EdgeModel(torch.nn.Module):
         elif self.node_encoder == 'cnn':
             raise NotImplementedError('CNN encoder not yet implemented...')
         else:
-            raise ValueError('Node encoder not recognized: '+self.node_encoding) 
+            raise ValueError('Node encoder not recognized: '+self.node_encoding)
 
         e = torch.tensor(cluster_edge_features(cluster_label, clusts, edge_index), device=device, dtype=torch.float)
 
@@ -147,7 +144,7 @@ class EdgeModel(torch.nn.Module):
         xbatch = torch.tensor(batch_ids, device=device)
 
         # Pass through the model, get output (long edge_index)
-        out = self.edge_predictor(x, index, e, xbatch) 
+        out = self.edge_predictor(x, index, e, xbatch)
 
         return {**out,
                 'clust_ids':[clust_ids],
@@ -173,10 +170,7 @@ class EdgeChannelLoss(torch.nn.Module):
         super(EdgeChannelLoss, self).__init__()
 
         # Get the model loss parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
-        else:
-            self.model_config = cfg
+        self.model_config = cfg
 
         # Set the loss
         self.loss = self.model_config.get('loss', 'CE')
@@ -195,7 +189,7 @@ class EdgeChannelLoss(torch.nn.Module):
 
     def forward(self, out, clusters):
         """
-        Applies the requested loss on the edge prediction. 
+        Applies the requested loss on the edge prediction.
 
         Args:
             out (dict):
@@ -204,7 +198,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 'batch_ids' (np.ndarray)  : (C) Cluster batch ids
                 'edge_index' (np.ndarray) : (2,E) Incidence matrix
             clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-            graph ([torch.tensor])        : (N,3) True edges 
+            graph ([torch.tensor])        : (N,3) True edges
         Returns:
             double: loss, accuracy, clustering metrics
         """
@@ -225,7 +219,7 @@ class EdgeChannelLoss(torch.nn.Module):
             # Use group information or particle tree to determine the true edge assigment
             edge_pred = out['edge_pred'][i]
             edge_index = out['edge_index'][i]
-            batch_ids = out['batch_ids'][i] 
+            batch_ids = out['batch_ids'][i]
             group_ids = []
             for c in clusts:
                 grps, cnts = torch.unique(clusters[i][c, -2], return_counts=True)
@@ -256,4 +250,3 @@ class EdgeChannelLoss(torch.nn.Module):
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus,
         }
-
