@@ -11,7 +11,7 @@ from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
 from mlreco.utils.ppn import uresnet_ppn_point_selector
 from mlreco.utils.gnn.evaluation import edge_assignment
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 import mlreco.utils
 # chain UResNet + PPN + DBSCAN + GNN for showers
@@ -89,16 +89,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
-            for idx0 in range(len(clusts)):
-                pts0 = data[0][clusts[idx0]][:,:3]
-                for idx1 in range(len(clusts)):
-                    if idx0 < idx1:
-                        pts1 = data[0][clusts[idx1]][:,:3]
-                        d01 = mlreco.utils.local_cdist(pts0,pts1)
-                        dist_mat[idx0,idx1] = d01.min()
-                    else:
-                        dist_mat[idx0,idx1] = dist_mat[idx1,idx0]
+            dist_mat = inter_cluster_distance(data[0][:,:3], clusts)
 
         # Get the node features
         x = self.node_encoder(data[0], clusts)

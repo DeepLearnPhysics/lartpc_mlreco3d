@@ -6,12 +6,12 @@ import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, get_fragment_edges
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
 
-class EdgeModel(torch.nn.Module):
+class ClustEdgeGNN(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
@@ -41,7 +41,7 @@ class EdgeModel(torch.nn.Module):
           model_path      : <path to the model weights>
     """
     def __init__(self, cfg):
-        super(EdgeModel, self).__init__()
+        super(ClustEdgeGNN, self).__init__()
 
         # Get the chain input parameters 
         chain_config = cfg['modules']['chain']
@@ -136,16 +136,7 @@ class EdgeModel(torch.nn.Module):
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
-            for idx0 in range(len(clusts)):
-                pts0 = data[clusts[idx0]][:,:3]
-                for idx1 in range(len(clusts)):
-                    if idx0 < idx1:
-                        pts1 = data[clusts[idx1]][:,:3]
-                        d01 = local_cdist(pts0,pts1)
-                        dist_mat[idx0,idx1] = d01.min()
-                    else:
-                        dist_mat[idx0,idx1] = dist_mat[idx1,idx0]
+            dist_mat = inter_cluster_distance(data[:,:3], clusts, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
@@ -192,7 +183,7 @@ class EdgeChannelLoss(torch.nn.Module):
     model:
       name: cluster_gnn
       modules:
-        edge_model:
+        chain:
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
           reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
           balance_classes : <balance loss per class: True or False (default False)>
@@ -201,23 +192,20 @@ class EdgeChannelLoss(torch.nn.Module):
     def __init__(self, cfg):
         super(EdgeChannelLoss, self).__init__()
 
-        # Get the model loss parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
-        else:
-            self.model_config = cfg
+        # Get the chain input parameters 
+        chain_config = cfg['modules']['chain']
 
         # Set the loss
-        self.loss = self.model_config.get('loss', 'CE')
-        self.reduction = self.model_config.get('reduction', 'mean')
-        self.balance_classes = self.model_config.get('balance_classes', False)
-        self.target_photons = self.model_config.get('target_photons', False)
+        self.loss = chain_config.get('loss', 'CE')
+        self.reduction = chain_config.get('reduction', 'mean')
+        self.balance_classes = chain_config.get('balance_classes', False)
+        self.target_photons = chain_config.get('target_photons', False)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
         elif self.loss == 'MM':
-            p = self.model_config.get('p', 1)
-            margin = self.model_config.get('margin', 1.0)
+            p = chain_config.get('p', 1)
+            margin = chain_config.get('margin', 1.0)
             self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
         else:
             raise Exception('Loss not recognized: ' + self.loss)
@@ -262,10 +250,10 @@ class EdgeChannelLoss(torch.nn.Module):
 
             if not self.target_photons:
                 edge_assn = edge_assignment(edge_index, batch_ids, group_ids)
-#            else:
-#                graph = graph[i]
-#                true_edge_index = get_fragment_edges(graph, clust_ids, batch_ids)
-#                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
+            else:
+                clust_ids = get_cluster_label(clusters[i], clusts)
+                true_edge_index = get_fragment_edges(graph[i], clust_ids, batch_ids)
+                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
             edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
 
