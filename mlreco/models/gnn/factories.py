@@ -1,6 +1,10 @@
 def edge_model_dict():
     """
-    returns dictionary of valid edge models
+    Imports and returns dictionary of valid edge models.
+
+    Args:
+    Returns:
+        dict: Dictionary of valid edge models
     """
     
     from . import edge_attention
@@ -28,16 +32,34 @@ def edge_model_dict():
     return models
 
 
-def edge_model_construct(name):
+def edge_model_construct(cfg):
+    """
+    Instanties the appropriate edge model from
+    the provided configuration.
+
+    Args:
+        dict:
+            'name': <Name of the edge model>
+            <other entries that specify the model properties>
+    Returns:
+        object: Instantiated edge model
+    """
     models = edge_model_dict()
+    model_cfg = cfg['modules']['edge_model']
+    name = model_cfg['name']
     if not name in models:
-        raise Exception("Unknown edge model name provided")
-    return models[name]
+        raise Exception("Unknown edge model name provided:", name)
+
+    return models[name](model_cfg)
 
 
 def node_model_dict():
     """
-    returns dictionary of valid node models
+    Imports and returns dictionary of valid node models.
+
+    Args:
+    Returns:
+        dict: Dictionary of valid node models
     """
         
     from . import node_attention
@@ -52,8 +74,101 @@ def node_model_dict():
 
     return models 
 
-def node_model_construct(name):
+
+def node_model_construct(cfg):
+    """
+    Instanties the appropriate node model from
+    the provided configuration.
+
+    Args:
+        dict:
+            'name': <Name of the node model>
+            <other entries that specify the model properties>
+    Returns:
+        object: Instantiated node model
+    """
     models = node_model_dict()
+    model_cfg = cfg['modules']['node_model']
+    name = model_cfg['name']
     if not name in models:
-        raise Exception("Unknown node model name provided")
-    return models[name]
+        raise Exception("Unknown node model name provided:", name)
+
+    return models[name](model_cfg)
+
+
+def node_encoder_dict():
+    """
+    Imports and returns dictionary of valid node encoders.
+
+    Args:
+    Returns:
+        dict: Dictionary of valid node encoders
+    """
+        
+    from . import cluster_geo_encoder
+    
+    encoders = {
+        "geo" : cluster_geo_encoder.ClustGeoNodeEncoder
+    }
+
+    return encoders 
+
+
+def node_encoder_construct(cfg):
+    """
+    Instanties the appropriate node encoder from
+    the provided configuration.
+
+    Args:
+        dict:
+            'name': <Name of the node encoder>
+            <other entries that specify the encoder properties>
+    Returns:
+        object: Instantiated node encoder
+    """
+    encoders = node_encoder_dict()
+    encoder_cfg = cfg['modules']['node_encoder']
+    name = encoder_cfg['name']
+    if not name in encoders:
+        raise Exception("Unknown node encoder name provided:", name)
+
+    return encoders[name](encoder_cfg)
+
+
+def edge_encoder_dict():
+    """
+    Imports and returns dictionary of valid edge encoders.
+
+    Args:
+    Returns:
+        dict: Dictionary of valid edge encoders
+    """
+        
+    from . import cluster_geo_encoder
+    
+    encoders = {
+        "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder
+    }
+
+    return encoders 
+
+
+def edge_encoder_construct(cfg):
+    """
+    Instanties the appropriate edge encoder from
+    the provided configuration.
+
+    Args:
+        dict:
+            'name': <Name of the edge encoder>
+            <other entries that specify the encoder properties>
+    Returns:
+        object: Instantiated edge encoder
+    """
+    encoders = edge_encoder_dict()
+    encoder_cfg = cfg['modules']['edge_encoder']
+    name = encoder_cfg['name']
+    if not name in encoders:
+        raise Exception("Unknown edge encoder name provided:", name)
+
+    return encoders[name](encoder_cfg)
