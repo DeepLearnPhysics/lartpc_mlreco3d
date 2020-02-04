@@ -52,6 +52,9 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             # Get eigenvectors
             w, v = torch.eig(A, eigenvectors=True)
             w = w[:,0].flatten() # Real part of eigenvalues
+            idxs = torch.argsort(w) # Sort in increasing order of eigenval
+            w = w[idxs]
+            v = v[:,idxs]
             dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2]
             w = w + delta
             w = w / w[2]
