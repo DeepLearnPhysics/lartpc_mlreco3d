@@ -23,7 +23,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         # If numpy is to be used, bring data to cpu, pass through function
         if self.use_numpy:
             from mlreco.utils.gnn.data import cluster_vtx_features
-            return cluter_vtx_features(voxels.detach().cpu().numpy(), clusts)
+            return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts), dtype=voxels.dtype, device=voxels.device)
 
         # Here is a torch-based implementation of cluster_vtx_features
         feats = []
@@ -96,7 +96,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config['modules']['node_encoder']['use_numpy']
+        self.use_numpy = model_config['modules']['edge_encoder']['use_numpy']
 
     def forward(self, data, clusts, edge_index):
 
@@ -108,7 +108,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         # If numpy is to be used, bring data to cpu, pass through function
         if self.use_numpy:
             from mlreco.utils.gnn.data import cluster_edge_features
-            return cluter_edge_features(voxels.detach().cpu().numpy(), clusts, edge_index)
+            return torch.tensor(cluster_edge_features(voxels.detach().cpu().numpy(), clusts, edge_index), dtype=voxels.dtype, device=voxels.device)
 
         # Here is a torch-based implementation of cluster_edge_features
         feats = []
