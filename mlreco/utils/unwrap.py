@@ -1,20 +1,52 @@
 import numpy as np
 
-def unwrap_2d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
+def list_concat(data_blob, outputs, avoid_keys=[]):
+    result_data = {}
+    for key,data in data_blob.items():
+        if key in avoid_keys:
+            result_data[key]=data
+            continue
+        result_data[key] = []
+        for d in data: result_data[key] += d
+
+    result_outputs = {}
+    for key,data in outputs.items():
+        if key in avoid_keys:
+            result_outputs[key]=data
+            continue
+        if len(data) == 1:
+            result_outputs[key]=data[0]
+            continue
+        # remove the outer-list
+        if isinstance(data[0],list):
+            result_outputs[key] = []
+            for d in data:
+                result_outputs[key] += d
+        elif isinstance(data[0],np.ndarray):
+            result_outputs[key] = np.concatenate(data)
+        elif isinstance(data[0],torch.Tensor):
+            result_outputs[key] = torch.concatenate(data,axis=0)
+        else:
+            print('Unexpected data type',type(data))
+            raise TypeError
+
+    return result_data, result_outputs
+
+def unwrap_2d_scn(data_blob, outputs, avoid_keys=[]):
     """
     See unwrap_scn
     """
-    return unwrap_scn(data_blob, outputs, 2, main_key, data_keys, output_keys)
+    return unwrap_scn(data_blob, outputs, 2, avoid_keys)
 
 
-def unwrap_3d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
+def unwrap_3d_scn(data_blob, outputs, avoid_keys=[]):
     """
     See unwrap_scn
     """
-    return unwrap_scn(data_blob, outputs, 3, main_key, data_keys, output_keys)
+    return unwrap_scn(data_blob, outputs, 3, avoid_keys)
 
 
-def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, output_keys=None):
+def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
     """
     Break down the data_blob and outputs dictionary into events for sparseconvnet formatted tensors.
     Need to account for: multi-gpu, minibatching, multiple outputs, batches.
@@ -22,9 +54,6 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
         data_blob: a dictionary of array of array of minibatch data [key][num_minibatch][num_device]
         outputs: results dictionary, output of trainval.forward, [key][num_minibatch*num_device]
         data_dim: 2 for 2D, 3 for 3D,,, and indicate the location of "batch id"
-        main_key: used to identify a unique set of batch ids to be parsed
-        data_keys: a list of string keys to specify, if needed, a subset of data to be returned
-        output_keys: a list of string keys to specify, if needed, a subset of output to be returned
     OUTPUT:
         two un-wrapped arrays of dictionaries where array length = num_minibatch*num_device*minibatch_size
     ASSUMES:
@@ -38,6 +67,9 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     target_array_keys = []
     target_list_keys  = []
     for key,data in data_blob.items():
+        if key in avoid_keys:
+            result_data[key]=data
+            continue
         if not key in result_data: result_data[key]=[]
         if isinstance(data[0],np.ndarray) and len(data[0].shape) == 2:
             target_array_keys.append(key)
@@ -104,6 +136,9 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     target_array_keys = []
     target_list_keys  = []
     for key, data in outputs.items():
+        if key in avoid_keys:
+            result_outputs[key] = data
+            continue
         if not key in result_outputs: result_outputs[key]=[]
         if not isinstance(data,list): result_outputs[key].append(data)
         elif isinstance(data[0],np.ndarray) and len(data[0].shape)==2:
@@ -124,7 +159,6 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
         target_array_keys.sort(reverse=True)
     #print(target_array_keys)
     for target in target_array_keys:
-        #print(target)
         data = outputs[target]
         for d in data:
             # check if batch map is available, and create if not
@@ -170,7 +204,6 @@ def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, outp
     num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
     assert len(num_elements)<1 or len(num_elements) == 1
     num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])
-
     # construct unwrap mapping
     list_unwrap_map = []
     list_batch_ctrs = []

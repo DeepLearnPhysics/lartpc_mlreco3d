@@ -197,7 +197,14 @@ class trainval(object):
 
             res = self._forward(input_train, input_loss)
 
-            # here, contruct the unwrapped input and output
+            # Here, contruct the unwrapped input and output
+            # First, handle the case of a simple list concat
+            concat_keys = self._trainval_config.get('concat_result',[])
+            if len(concat_keys):
+                avoid_keys  = [k for k,v in input_data.items() if not k in concat_keys]
+                avoid_keys += [k for k,v in res.items()        if not k in concat_keys]
+                input_data,res = utils.list_concat(input_data,res,avoid_keys=avoid_keys)
+            # Below for more sophisticated unwrapping functions
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
@@ -209,7 +216,8 @@ class trainval(object):
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % output_cfg['unwrapper'])
                     raise ImportError
-                input_data, res = unwrapper(input_data, res)
+
+                input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:
                 if 'index' in input_data:
                     input_data['index'] = input_data['index'][0]
@@ -276,20 +284,15 @@ class trainval(object):
             for label in loss_acc:
                 if len(output_keys) and not label in output_keys: continue
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
-            # Use analysis keys to also get tensors
-            #if 'analysis_keys' in self._model_config:
-            #    for key in self._model_config['analysis_keys']:
-            #        res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
+
             for key in result.keys():
                 if len(output_keys) and not key in output_keys: continue
-                if len(result[key]) == 0:
-                    continue
-                # if isinstance(result[key][0][0][0], Logits):
-                #     continue
+                if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
+
             return res
 
     def initialize(self):
@@ -356,14 +359,14 @@ class trainval(object):
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own
                     # version of optimizer.load_state_dict.
-                    if self._train and module == '':
-                        # This overwrites the learning rate, so reset the learning rate
-                        self._optimizer.load_state_dict(checkpoint['optimizer'])
-                        for g in self._optimizer.param_groups:
-                            self._learning_rate = g['lr']
-                            # g['lr'] = self._learning_rate
-                    if module == '':  # Root model sets iteration
-                        iteration = checkpoint['global_step'] + 1
+                    #if self._train and module == '':
+                    #    # This overwrites the learning rate, so reset the learning rate
+                    #    self._optimizer.load_state_dict(checkpoint['optimizer'])
+                    #    for g in self._optimizer.param_groups:
+                    #        self._learning_rate = g['lr']
+                    #        # g['lr'] = self._learning_rate
+                    #if module == '':  # Root model sets iteration
+                    #    iteration = checkpoint['global_step'] + 1
                 print('Done.')
 
         return iteration
