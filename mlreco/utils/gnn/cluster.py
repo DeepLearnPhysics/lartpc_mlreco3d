@@ -58,7 +58,7 @@ def get_cluster_batch(data, clusts):
         assert len(data[c,3].unique()) == 1
         labels.append(data[c[0],3])
 
-    return np.array(labels)
+    return labels
 
 
 def get_cluster_label(data, clusts):
@@ -77,7 +77,7 @@ def get_cluster_label(data, clusts):
         assert len(data[c,5].unique()) == 1
         labels.append(data[c[0],5])
 
-    return np.array(labels)
+    return labels
 
 
 def get_cluster_group(data, clusts):

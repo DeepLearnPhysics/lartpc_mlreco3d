@@ -5,6 +5,7 @@ from __future__ import print_function
 import torch
 import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
+from .layers.dbscan import DBScanClusts2
 from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
@@ -106,14 +107,12 @@ class ClustNodeGNN(torch.nn.Module):
         if self.do_dbscan:
             clusts = self.dbscan(data, onehot=False)
             if self.node_type > -1:
-                mask = np.where(data[:,-1] == 0)[0]
                 clusts = clusts[self.node_type]
-                clusts = [mask[c] for c in clusts]
             else:
                 clusts = np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = np.where(data[:,-1] == 0)[0]
+                mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
                 clusts = [mask[c] for c in clusts]
             else:
@@ -123,7 +122,7 @@ class ClustNodeGNN(torch.nn.Module):
             return self.default_return(device)
 
         # Get the batch id for each cluster
-        batch_ids = get_cluster_batch(data, clusts)
+        batch_ids = torch.stack(get_cluster_batch(data, clusts)).cpu().numpy().astype(np.int32)
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None

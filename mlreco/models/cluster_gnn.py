@@ -108,14 +108,12 @@ class ClustEdgeGNN(torch.nn.Module):
         if self.do_dbscan:
             clusts = self.dbscan(data, onehot=False)
             if self.node_type > -1:
-                mask = np.where(data[:,-1] == 0)[0]
                 clusts = clusts[self.node_type]
-                clusts = [mask[c] for c in clusts]
             else:
                 clusts = np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = np.where(data[:,-1] == 0)[0]
+                mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
                 clusts = [mask[c] for c in clusts]
             else:
@@ -125,7 +123,7 @@ class ClustEdgeGNN(torch.nn.Module):
             return self.default_return(device)
 
         # Get the batch id for each cluster
-        batch_ids = get_cluster_batch(data, clusts)
+        batch_ids = torch.stack(get_cluster_batch(data, clusts)).cpu().numpy().astype(np.int32)
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
@@ -245,7 +243,7 @@ class EdgeChannelLoss(torch.nn.Module):
             if not self.target_photons:
                 edge_assn = edge_assignment(edge_index, batch_ids, group_ids)
             else:
-                clust_ids = get_cluster_label(clusters[i], clusts)
+                clust_ids = torch.cat(get_cluster_label(clusters[i], clusts)).cpu().numpy().astype(np.int32)
                 true_edge_index = get_fragment_edges(graph[i], clust_ids, batch_ids)
                 edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
