@@ -23,7 +23,7 @@ class MSTEdgeModel(torch.nn.Module):
     """
     Driver for edge prediction, assumed to be with PyTorch GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model
-    
+
     for use in config
     model:
         modules:
@@ -36,16 +36,12 @@ class MSTEdgeModel(torch.nn.Module):
     """
     def __init__(self, cfg):
         super(MSTEdgeModel, self).__init__()
-        
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['mst_edge_model']
-        else:
-            self.model_config = cfg
-            
+
+        self.model_config = cfg['mst_edge_model']
+
         # only use points with EM segmentation label
         self.em_only = self.model_config.get('em_only', False)
-            
-        
+
         # Optional UResNet
         uresnet_cfg = self.model_config.get('uresnet_cfg')
         if uresnet_cfg is None:
@@ -71,7 +67,7 @@ class MSTEdgeModel(torch.nn.Module):
             if self.model_config.get('uresnet_freeze', True):
                 for param in self.transform.parameters():
                     param.requires_grad = False
-                    
+
         # regularization on connected components
         self.reg_ph0 = self.model_config.get('reg_ph0', 0.0)
         # regularization on cycles
@@ -85,15 +81,15 @@ class MSTEdgeModel(torch.nn.Module):
             self.cpxdim = 1
             self.halg = 'union_find'
 
-            
+
         # extract the model to use
         model = edge_model_construct(self.model_config.get('name', 'edge_only'))
-                     
+
         # construct the model
         self.edge_predictor = model(self.model_config.get('model_cfg', {}))
-      
-        
-        
+
+
+
     def forward(self, data):
         """
         inputs data:
@@ -107,47 +103,47 @@ class MSTEdgeModel(torch.nn.Module):
         """
         # get device
         dev = data[0].device
-        
+
         data0 = data[0]
-        
+
         if self.em_only:
             # select voxels with 5-types classification > 1
             sel = data[1][:,-1] > 1
             data0 = data0[sel,:]
-        
+
         # first get data
         voxels = data0[:,:3]
         xbatch = data0[:,3]
         energy = data0[:,-1]
-        
-        
+
+
         # optionally pass data through transformation (scn UResNet)
         if self.transform_input:
             x = self.transform(data0)
         else:
             x = energy.float()
-        
+
         # construct graph from Delaunay triangulation
         vox_np = voxels.detach().cpu().numpy()
         X = DelaunayLayer(vox_np, self.cpxdim, alg=self.halg, extension='flag', sublevel=False, maxdim=self.hdim)
         edges = X.Edges()
-        
 
-        
+
+
         # construct edge features
         edge_index = torch.tensor(edges.T, dtype=torch.long).to(dev)
         e = edge_features(data[0], edge_index, cuda=False, device=dev)
-        
+
         # get output
         out = self.edge_predictor(x, edge_index, e, xbatch)
-        
+
         return {
             'complex' : X,
             'edges'   : edge_index,
             'edge_pred' : out
         }
-    
-    
+
+
 class MSTEdgeChannelLoss(torch.nn.Module):
     """
     Edge loss based on two channel output
@@ -156,17 +152,17 @@ class MSTEdgeChannelLoss(torch.nn.Module):
         # torch.nn.MSELoss(reduction='sum')
         # torch.nn.L1Loss(reduction='sum')
         super(MSTEdgeChannelLoss, self).__init__()
-        self.model_config = cfg['modules']['mst_edge_model']
-        
+        self.model_config = cfg['mst_edge_model']
+
         # only use points with EM segmentation label
         self.em_only = self.model_config.get('em_only', False)
-        
+
         # use MST only for edges
         self.mst = self.model_config.get('MST', True)
-        
+
         self.reduction = self.model_config.get('reduction', 'mean')
         self.loss = self.model_config.get('loss', 'CE')
-        
+
         # regularization on connected components
         self.reg_ph0 = self.model_config.get('reg_ph0', 0.0)
         # regularization on cycles
@@ -178,7 +174,7 @@ class MSTEdgeChannelLoss(torch.nn.Module):
         if self.reg_ph1 > 0:
             self.reg = True
             self.regh1 = BarcodePolyFeature(1, 1, 0) # sum of lengths of finite H1
-        
+
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
         elif self.loss == 'MM':
@@ -187,8 +183,8 @@ class MSTEdgeChannelLoss(torch.nn.Module):
             self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
         else:
             raise Exception('unrecognized loss: ' + self.loss)
-        
-        
+
+
     def forward(self, out, data0, data1):
         """
         out : dictionary, with
@@ -200,13 +196,13 @@ class MSTEdgeChannelLoss(torch.nn.Module):
             data1 - 5-types data
         """
         dev = data0[0].device
-        
+
         data_grps = data0[0]
         data_seg = data1[0]
         edge_pred = out['edge_pred'][0][0]
         X = out['complex']
         edge_index = out['edges']
-        
+
         # 1. compute MST on edge weights edge_pred[:,1] - edge_pred[:,0]
         ft = edge_pred[:,1] - edge_pred[:,0]
         # if using MST in loss
@@ -219,7 +215,7 @@ class MSTEdgeChannelLoss(torch.nn.Module):
             # loss is on all edges
             active_edge_index = edge_index
             active_edge_pred = edge_pred
-        
+
         # 2. get edge labels
         """
         inputs:
@@ -231,17 +227,17 @@ class MSTEdgeChannelLoss(torch.nn.Module):
             # select voxels with 5-types classification > 1
             sel = data_seg[:,-1] > 1
             data_grps = data_grps[sel,:]
-            
+
         batch = data_grps[:,-2] # get batch from data
         group = data_grps[:,-1] # get gouprs from data
         edge_assn = edge_assignment(active_edge_index, batch, group, cuda=False, dtype=torch.long, device=dev)
-        
+
         # 3. compute loss, only on critical edges
         # extract critical edges
         loss = self.lossfn(active_edge_pred, edge_assn)
-        
+
         loss_terms = {'loss_raw': loss.detach().cpu().item()}
-        
+
         # 3a. add regularization (optional)
         if self.reg:
             ph_out = X(ft)
@@ -253,12 +249,12 @@ class MSTEdgeChannelLoss(torch.nn.Module):
                 penh1 = self.reg_ph1 * self.regh1(ph_out)
                 loss_terms['reg_ph1'] = penh1.detach().cpu().item()
                 loss = loss + penh1
-        
-        
+
+
         # 4. compute predicted clustering with some threhsold (0?)
         clusts = X.GetClusters(ft, 0.0) # clusters based on edge being more likely than not
         clusts = np.array(clusts)
-        
+
         # print(clusts)
         # 5. compute clustering metrics vs. group id.
         group = group.cpu().detach().numpy()
@@ -267,7 +263,7 @@ class MSTEdgeChannelLoss(torch.nn.Module):
         ami = AMI(clusts, group)
         ari = ARI(clusts, group)
         pur, eff = purity_efficiency(clusts, group)
-        
+
         return {
             'SBD' : sbd,
             'AMI' : ami,

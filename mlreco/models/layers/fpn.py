@@ -16,9 +16,9 @@ class FPN(UResNet):
 
     FPN shares most layers with our UResNet architecture except for
     the lateral skip connections that involve 1x1 convolutions with
-    an additive block, replacing U-Net's concat-convolution blocks. 
+    an additive block, replacing U-Net's concat-convolution blocks.
     FPN is a common backbone network architecture for several SOTA
-    semantic/instance segmenation architectures. 
+    semantic/instance segmenation architectures.
 
     Configuration
     -------------
@@ -36,11 +36,8 @@ class FPN(UResNet):
     """
     def __init__(self, cfg, name='uresnet'):
         super(FPN, self).__init__(cfg, name=name)
-        if 'modules' in cfg:
-            self.model_config = cfg['modules'][name]
-        else:
-            self.model_config = cfg
-        # Now decoding block does not reduce features from 2f -> f. 
+        self.model_config = cfg[name]
+        # Now decoding block does not reduce features from 2f -> f.
         self.decoding_block = scn.Sequential()
         self.decoding_conv = scn.Sequential()
         for i in range(self.num_strides-2, -1, -1):
@@ -54,13 +51,13 @@ class FPN(UResNet):
                 self._resnet_block(m, self.nPlanes[i], self.nPlanes[i])
             self.decoding_block.add(m)
 
-        # Skip Connecting NIN Layers unique to FPN. 
+        # Skip Connecting NIN Layers unique to FPN.
         self.skip_connections = scn.Sequential()
         for i in range(self.num_strides-2, -1, -1):
             self.skip_connections.add(
                 scn.NetworkInNetwork(self.nPlanes[i], self.nPlanes[i], self.allow_bias)
             )
-        # We keep the encoder/forward method of UResNet as they are identical. 
+        # We keep the encoder/forward method of UResNet as they are identical.
 
     def decoder(self, features_enc, deepest_layer):
         '''
@@ -71,7 +68,7 @@ class FPN(UResNet):
 
         RETURNS:
             - features_dec (list of scn.SparseConvNetTensor): list of feature
-            tensors in decoding path at each spatial resolution. 
+            tensors in decoding path at each spatial resolution.
         '''
         x = deepest_layer
         features_dec = [x]

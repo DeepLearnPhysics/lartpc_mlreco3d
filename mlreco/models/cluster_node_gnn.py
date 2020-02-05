@@ -42,8 +42,8 @@ class ClustNodeGNN(torch.nn.Module):
     def __init__(self, cfg):
         super(ClustNodeGNN, self).__init__()
 
-        # Get the chain input parameters 
-        chain_config = cfg['modules']['chain']
+        # Get the chain input parameters
+        chain_config = cfg['chain']
 
         # Choose what type of node to use
         self.node_type = chain_config.get('node_type', 0)
@@ -56,14 +56,14 @@ class ClustNodeGNN(torch.nn.Module):
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
-        if 'dbscan' in cfg['modules']:
+        if 'dbscan' in cfg:
             self.do_dbscan = True
             self.dbscan = DBScanClusts2(cfg)
 
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg)
         self.edge_encoder = edge_encoder_construct(cfg)
-            
+
         # Construct the model
         self.node_predictor = node_model_construct(cfg)
 
@@ -158,7 +158,7 @@ class ClustNodeGNN(torch.nn.Module):
         xbatch = torch.tensor(batch_ids, device=device)
 
         # Pass through the model, get output (long edge_index)
-        out = self.node_predictor(x, index, e, xbatch) 
+        out = self.node_predictor(x, index, e, xbatch)
 
         return {**out,
                 'clusts':[clusts],
@@ -183,8 +183,8 @@ class NodeChannelLoss(torch.nn.Module):
     def __init__(self, cfg):
         super(NodeChannelLoss, self).__init__()
 
-        # Get the chain input parameters 
-        chain_config = cfg['modules']['chain']
+        # Get the chain input parameters
+        chain_config = cfg['chain']
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
@@ -202,7 +202,7 @@ class NodeChannelLoss(torch.nn.Module):
 
     def forward(self, out, clusters):
         """
-        Applies the requested loss on the node prediction. 
+        Applies the requested loss on the node prediction.
 
         Args:
             out (dict):
@@ -251,4 +251,3 @@ class NodeChannelLoss(torch.nn.Module):
             'accuracy': total_acc/ngpus,
             'loss': total_loss/ngpus
         }
-

@@ -18,7 +18,7 @@ class ClusteringLoss(nn.Module):
 
     def __init__(self, cfg, name='clustering_loss'):
         super(ClusteringLoss, self).__init__()
-        self.loss_config = cfg['modules'][name]
+        self.loss_config = cfg[name]
         self.mask_loss = SequentialMaskLoss(cfg, name=name)
         self.seg_loss = torch.nn.CrossEntropyLoss(reduction='mean')
         self.ppn_loss = torch.nn.BCEWithLogitsLoss()
@@ -32,7 +32,7 @@ class ClusteringLoss(nn.Module):
         num_gpu = len(semantic_labels)
         loss_seg, loss_ppn = 0.0, 0.0
         loss_dict, acc_dict = defaultdict(list), defaultdict(list)
-        
+
         for igpu in range(num_gpu):
             segmentation = out['segmentation'][igpu]
             attention = out['ppn'][igpu]

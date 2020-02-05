@@ -20,7 +20,7 @@ class Chain(torch.nn.Module):
         super(Chain, self).__init__()
         self.ppn = PPN(model_config)
         self.uresnet_lonely = UResNet(model_config)
-        self._freeze_uresnet = model_config['modules']['uresnet_lonely'].get('freeze', False)
+        self._freeze_uresnet = model_config['uresnet_lonely'].get('freeze', False)
 
         if self._freeze_uresnet:
             for param in self.uresnet_lonely.parameters():

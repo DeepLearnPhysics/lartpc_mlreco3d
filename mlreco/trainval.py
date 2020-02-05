@@ -35,7 +35,7 @@ class trainval(object):
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
         self._model_path = self._trainval_config.get('model_path', '')
-
+        self._restore_optimizer = self._trainval_config.get('restore_optimizer',False)
         # optimizer
         optim_cfg = self._trainval_config.get('optimizer')
         if optim_cfg is not None:
@@ -300,13 +300,22 @@ class trainval(object):
         model = None
 
         model,criterion = construct(self._model_name)
-        self._criterion = criterion(self._model_config).cuda() if len(self._gpus) else criterion(self._model_config)
-
+        module_config = self._model_config['modules']
+        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
 
-        self._net = DataParallel(model(self._model_config),
-                                      device_ids=self._gpus)
+        self._model = model(module_config)
+        # Check if freeze weights is requested + enforce if so
+        for module in module_config:
+            if not hasattr(self._model, module) or not isinstance(getattr(self._model,module),torch.nn.Module):
+                continue
+            if module_config[module].get('freeze_weights',False):
+                print('Freezing weights for a sub-module',module)
+                for param in getattr(self._model,module).parameters():
+                    param.requires_grad = False
+
+        self._net = DataParallel(self._model,device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda() if len(self._gpus) else self._net.train()
@@ -331,15 +340,15 @@ class trainval(object):
         model_paths = []
         if self._model_path and self._model_path != '':
             model_paths.append(('', self._model_path))
-        for module in self._model_config['modules']:
-            if 'model_path' in self._model_config['modules'][module] and self._model_config['modules'][module]['model_path'] != '':
-                model_paths.append((module, self._model_config['modules'][module]['model_path']))
+        for module in module_config:
+            if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
+                model_paths.append((module, module_config[module]['model_path']))
 
         if model_paths:
             for module, model_path in model_paths:
                 if not os.path.isfile(model_path):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
-                print('Restoring weights from %s...' % model_path)
+                print('Restoring weights for %s from %s...' % (module,model_path))
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
@@ -359,14 +368,14 @@ class trainval(object):
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own
                     # version of optimizer.load_state_dict.
-                    #if self._train and module == '':
-                    #    # This overwrites the learning rate, so reset the learning rate
-                    #    self._optimizer.load_state_dict(checkpoint['optimizer'])
-                    #    for g in self._optimizer.param_groups:
-                    #        self._learning_rate = g['lr']
-                    #        # g['lr'] = self._learning_rate
-                    #if module == '':  # Root model sets iteration
-                    #    iteration = checkpoint['global_step'] + 1
+                    if self._train and module == '' and self._restore_optimizer:
+                        # This overwrites the learning rate, so reset the learning rate
+                        self._optimizer.load_state_dict(checkpoint['optimizer'])
+                        for g in self._optimizer.param_groups:
+                            self._learning_rate = g['lr']
+                            # g['lr'] = self._learning_rate
+                    if module == '':  # Root model sets iteration
+                        iteration = checkpoint['global_step'] + 1
                 print('Done.')
 
         return iteration
