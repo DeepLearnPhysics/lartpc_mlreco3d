@@ -53,7 +53,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = self.uresnet_ppn(data)
-
+        #return result
         # Run DBSCAN
         semantic = torch.argmax(result['segmentation'][0],1).view(-1,1)
         dbscan_input = torch.cat([data[0].to(torch.float32),semantic.to(torch.float32)],dim=1)
@@ -137,7 +137,7 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         result['clusts'] = result['shower_fragments']
         node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
-        del result
+        #del result
         loss.update(uresnet_ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)
