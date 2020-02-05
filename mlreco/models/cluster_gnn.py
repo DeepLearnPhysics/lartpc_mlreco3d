@@ -79,7 +79,7 @@ class ClustEdgeGNN(torch.nn.Module):
                 'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
+                'edge_index' (np.ndarray) : (E,2) Incidence matrix
         """
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
@@ -96,9 +96,10 @@ class ClustEdgeGNN(torch.nn.Module):
             if self.node_type > -1:
                 mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
-                clusts = [mask[c] for c in clusts]
+                clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
                 clusts = form_clusters(data, self.node_min_size)
+                clusts = [c.cpu().numpy() for c in clusts]
 
         if not len(clusts):
             return {}
@@ -142,16 +143,16 @@ class ClustEdgeGNN(torch.nn.Module):
         out = self.edge_predictor(x, index, e, xbatch)
         edge_pred = out['edge_pred'][0]
 
-        # Devide the output out into different arrays (one per batch)
+        # Divide the output out into different arrays (one per batch)
         _, counts = torch.unique(data[:,3], return_counts=True)
-        vids = torch.cat([torch.arange(n) for n in counts])
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
         cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
         bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
         beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
 
         edge_pred = [edge_pred[b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        clusts = [[vids[c] for c in np.array(clusts)[b]] for b in bcids]
+        clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
 
         return {'edge_pred': [edge_pred],
                 'edge_index': [edge_index],
@@ -202,7 +203,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
+                'edge_index' (np.ndarray) : (E,2) Incidence matrix
             clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
             graph ([torch.tensor])        : (N,3) True edges
         Returns:
@@ -219,17 +220,16 @@ class EdgeChannelLoss(torch.nn.Module):
             # Get the list of batch ids, loop over individual batches
             batches = clusters[i][:,3]
             nbatches = len(batches.unique())
-            n_events += nbatches
             for j in range(nbatches):
 
                 # Narrow down the tensor to the rows in the batch
                 labels = clusters[i][batches==j]
 
                 # Use group information or particle tree to determine the true edge assigment
-                edge_pred = out['edge_pred'][i][j].reshape(-1,2)
+                edge_pred = out['edge_pred'][i][j]
                 if not edge_pred.shape[0]:
                     continue
-                edge_index = out['edge_index'][i][j].reshape(-1,2)
+                edge_index = out['edge_index'][i][j]
                 clusts = out['clusts'][i][j]
                 group_ids = get_cluster_group(labels, clusts)
 
@@ -260,10 +260,10 @@ class EdgeChannelLoss(torch.nn.Module):
         if not n_events:
             return {
                 'accuracy': 0.,
-                'loss': torch.tensor(0., requires_grad=True, device=clusters[i].device)
+                'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device)
             }
 
         return {
             'accuracy': total_acc/n_events,
-            'loss': total_loss/n_events,
+            'loss': total_loss/n_events
         }

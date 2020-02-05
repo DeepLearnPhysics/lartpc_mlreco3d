@@ -67,9 +67,7 @@ class ChainDBSCANGNN(torch.nn.Module):
                 cluster_info[frag,2] = shape
 
         # Save the list of EM clusters, return if empty
-        if len(frags[self.shower_class]):
-            result.update(dict(shower_fragments=[frags[self.shower_class]]))
-        else:
+        if not len(frags[self.shower_class]):
             return result
 
         # Prepare cluster ID, batch ID for shower clusters
@@ -81,7 +79,7 @@ class ChainDBSCANGNN(torch.nn.Module):
             if not len(batch_id) == 1:
                 raise ValueError('Found a cluster with mixed batch ids:',batch_id)
             batch_ids.append(batch_id[0].item())
-        result.update(dict(batch_ids=[np.array(batch_ids, dtype=np.int32)]))
+        batch_ids = np.array(batch_ids)
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
@@ -101,7 +99,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
         out = self.node_predictor(x, index, e, xbatch)
-        result.update(out)
+        node_pred = out['node_pred'][0]
 
         # Convert the node output to a list of primaries
         primary_ids = torch.argmax(out['node_pred'][0], dim=1)
@@ -109,7 +107,6 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Initialize the network for edge prediction, get edge features
         edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist)
-        result.update(dict(edge_index=[edge_index]))
         if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
             return result
         e = self.edge_encoder(data[0], clusts, edge_index)
@@ -118,7 +115,26 @@ class ChainDBSCANGNN(torch.nn.Module):
         index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
         out = self.edge_predictor(x, index, e, xbatch)
-        result.update(out)
+        edge_pred = out['edge_pred'][0]
+
+        # Divide the output out into different arrays (one per batch)
+        _, counts = torch.unique(data[0][:,3], return_counts=True)
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
+        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
+        beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
+
+        node_pred = [node_pred[b] for b in bcids]
+        edge_pred = [edge_pred[b] for b in beids]
+        edge_index = [cids[edge_index[:,b]].T for b in beids]
+        clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
+        
+        result.update(dict(
+            node_pred = [node_pred],
+            edge_pred = [edge_pred],
+            edge_index = [edge_index],
+            shower_fragments = [clusts]
+        ))
 
         return result
 
@@ -144,3 +160,4 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         loss['loss'] = uresnet_ppn_loss['loss'] + node_loss['loss'] + edge_loss['loss']
         loss['accuracy'] = (uresnet_ppn_loss['accuracy'] + node_loss['accuracy'] + edge_loss['accuracy'])/3
         return loss
+
