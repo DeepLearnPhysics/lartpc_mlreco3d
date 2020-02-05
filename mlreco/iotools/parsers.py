@@ -429,6 +429,9 @@ def parse_cluster3d_clean_full(data):
     grp_voxels = grp_voxels[inds2,:]
     grp_data = grp_data[inds2]
 
+    # step 4: override semantic labels with those from sparse3d (TODO)
+    grp_data[:,-1] = img_data[:,-1]
+
     return grp_voxels, grp_data
 
 
