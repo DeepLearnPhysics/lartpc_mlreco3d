@@ -37,12 +37,13 @@ class ChainDBSCANGNN(torch.nn.Module):
         chain_config = model_config['chain']
         self.shower_class = int(chain_config['shower_class'])
         self.node_min_size = chain_config['node_min_size']
-        self.node_encoder = chain_config['node_encoder']
         self.edge_max_dist = chain_config['edge_max_dist']
 
         # Initialize the modules
         self.dbscan = DBScanClusts2(model_config)
         self.uresnet_ppn = UResNetPPN(model_config['uresnet_ppn'])
+        self.uresnet_lonely = self.uresnet_ppn.uresnet_lonely
+        self.ppn = self.uresnet_ppn.ppn
         self.node_encoder = node_encoder_construct(model_config)
         self.edge_encoder = edge_encoder_construct(model_config)
         self.node_predictor = node_model_construct(model_config)
@@ -52,7 +53,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = self.uresnet_ppn(data)
-
+        #return result
         # Run DBSCAN
         semantic = torch.argmax(result['segmentation'][0],1).view(-1,1)
         dbscan_input = torch.cat([data[0].to(torch.float32),semantic.to(torch.float32)],dim=1)
