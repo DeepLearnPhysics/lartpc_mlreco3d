@@ -6,7 +6,7 @@ def edge_model_dict():
     Returns:
         dict: Dictionary of valid edge models
     """
-    
+
     from . import edge_attention
     from . import edge_attention2
     from . import edge_only
@@ -16,7 +16,7 @@ def edge_model_dict():
     from . import edge_econv
     from . import edge_meta
     from . import dir_meta
-    
+
     models = {
         "basic_attention" : edge_attention.BasicAttentionModel,
         "basic_attention2": edge_attention2.BasicAttentionModel,
@@ -28,7 +28,7 @@ def edge_model_dict():
         "emeta" : edge_meta.EdgeMetaModel,
         "dir_meta" : dir_meta.EdgeMetaModel
     }
-    
+
     return models
 
 
@@ -45,7 +45,7 @@ def edge_model_construct(cfg):
         object: Instantiated edge model
     """
     models = edge_model_dict()
-    model_cfg = cfg['modules']['edge_model']
+    model_cfg = cfg['edge_model']
     name = model_cfg['name']
     if not name in models:
         raise Exception("Unknown edge model name provided:", name)
@@ -61,18 +61,18 @@ def node_model_dict():
     Returns:
         dict: Dictionary of valid node models
     """
-        
+
     from . import node_attention
     from . import node_econv
     from . import node_nnconv
-    
+
     models = {
         "node_attention" : node_attention.NodeAttentionModel,
         "node_econv" : node_econv.NodeEConvModel,
         "node_nnconv" : node_nnconv.NodeNNConvModel
     }
 
-    return models 
+    return models
 
 
 def node_model_construct(cfg):
@@ -88,7 +88,7 @@ def node_model_construct(cfg):
         object: Instantiated node model
     """
     models = node_model_dict()
-    model_cfg = cfg['modules']['node_model']
+    model_cfg = cfg['node_model']
     name = model_cfg['name']
     if not name in models:
         raise Exception("Unknown node model name provided:", name)
@@ -104,14 +104,14 @@ def node_encoder_dict():
     Returns:
         dict: Dictionary of valid node encoders
     """
-        
+
     from . import cluster_geo_encoder
-    
+
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder
     }
 
-    return encoders 
+    return encoders
 
 
 def node_encoder_construct(cfg):
@@ -127,7 +127,7 @@ def node_encoder_construct(cfg):
         object: Instantiated node encoder
     """
     encoders = node_encoder_dict()
-    encoder_cfg = cfg['modules']['node_encoder']
+    encoder_cfg = cfg['node_encoder']
     name = encoder_cfg['name']
     if not name in encoders:
         raise Exception("Unknown node encoder name provided:", name)
@@ -143,14 +143,14 @@ def edge_encoder_dict():
     Returns:
         dict: Dictionary of valid edge encoders
     """
-        
+
     from . import cluster_geo_encoder
-    
+
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder
     }
 
-    return encoders 
+    return encoders
 
 
 def edge_encoder_construct(cfg):
@@ -166,7 +166,7 @@ def edge_encoder_construct(cfg):
         object: Instantiated edge encoder
     """
     encoders = edge_encoder_dict()
-    encoder_cfg = cfg['modules']['edge_encoder']
+    encoder_cfg = cfg['edge_encoder']
     name = encoder_cfg['name']
     if not name in encoders:
         raise Exception("Unknown edge encoder name provided:", name)

@@ -41,10 +41,7 @@ class IterativeEdgeModel(torch.nn.Module):
         super(IterativeEdgeModel, self).__init__()
 
         # Get the model input parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['iter_edge_model']
-        else:
-            self.model_config = cfg
+        self.model_config = cfg['iter_edge_model']
 
         # Choose what type of node to use
         self.node_type = self.model_config.get('node_type', 0)
@@ -246,10 +243,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
         super(IterEdgeChannelLoss, self).__init__()
 
         # Get the model input parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['iter_edge_model']
-        else:
-            self.model_config = cfg
+        self.model_config = cfg
 
         # Set the loss
         self.loss = self.model_config.get('loss', 'CE')
@@ -268,7 +262,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
 
     def forward(self, out, clusters, graph):
         """
-        Applies the requested loss on the edge prediction. 
+        Applies the requested loss on the edge prediction.
 
         Args:
             out (dict):
@@ -277,7 +271,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
                 'batch_ids' (np.ndarray)  : (C) Cluster batch ids
                 'edge_index' (np.ndarray) : (2,E) Incidence matrix
             clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-            graph ([torch.tensor])        : (N,3) True edges 
+            graph ([torch.tensor])        : (N,3) True edges
         Returns:
             double: loss, accuracy, clustering metrics
         """
@@ -354,4 +348,3 @@ class IterEdgeChannelLoss(torch.nn.Module):
             'loss': total_loss/ngpus,
             'n_iter': total_iter
         }
-
