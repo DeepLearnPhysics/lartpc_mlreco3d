@@ -306,13 +306,18 @@ class trainval(object):
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
 
         self._model = model(module_config)
+
+        # module-by-module weights loading + param freezing
+
         # Check if freeze weights is requested + enforce if so
-        for module in module_config:
-            if not hasattr(self._model, module) or not isinstance(getattr(self._model,module),torch.nn.Module):
+        for module_name in module_config:
+            if not hasattr(self._model, module_name) or not isinstance(getattr(self._model,module_name),torch.nn.Module):
                 continue
-            if module_config[module].get('freeze_weights',False):
-                print('Freezing weights for a sub-module',module)
-                for param in getattr(self._model,module).parameters():
+            module = getattr(self._model,module_name)
+
+            if module_config[module_name].get('freeze_weights',False):
+                print('Freezing weights for a sub-module',module_name)
+                for param in module.parameters():
                     param.requires_grad = False
 
         self._net = DataParallel(self._model,device_ids=self._gpus)
@@ -344,7 +349,7 @@ class trainval(object):
             if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
                 model_paths.append((module, module_config[module]['model_path']))
 
-        if model_paths:
+        if model_paths: #self._model_path and self._model_path != '':
             for module, model_path in model_paths:
                 if not os.path.isfile(model_path):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))

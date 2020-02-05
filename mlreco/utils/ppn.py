@@ -274,7 +274,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
     -------
     [x,y,z,bid,label] of ppn-predicted points
     """
-    event_data = data#.cpu().detach().numpy()
+    event_data = data[entry]#.cpu().detach().numpy()
     points = out['points'][entry]#.cpu().detach().numpy()
     mask = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     # predicted type labels
@@ -298,28 +298,36 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
     all_scores = []
     all_batch  = []
     batch_ids  = event_data[:, 3]
+
     for b in np.unique(batch_ids):
         final_points = []
         final_scores = []
-        final_types = []
-        batch_index = batch_ids == b
-        mask = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
-        num_classes = 5
+        final_types  = []
+        batch_index  = np.where(batch_ids == b)[0]
+        score_mask   = np.where(scores[batch_index][:,1] > score_threshold)[0]
+        #batch_index  = (batch_ids == b)
+        #score_mask   = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        num_classes  = 5
         #ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
-        ppn_type_predictions = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
+        #ppn_type_predictions = scipy.special.softmax(points[batch_index][score_mask][:, 5:], axis=1)
+        ppn_type_predictions = scipy.special.softmax(points[batch_index][score_mask][:,-5:],axis=1)
         for c in range(num_classes):
-            uresnet_points = uresnet_predictions[batch_index][mask] == c
-            ppn_points = ppn_type_predictions[:,c] > type_threshold
+            uresnet_points = uresnet_predictions[batch_index][score_mask] == c
+            #ppn_points = ppn_type_predictions[:,c] > type_threshold
+            ppn_points = np.where(ppn_type_predictions[:,c] > type_threshold)[0]
             if ppn_points.shape[0] > 0 and uresnet_points.shape[0] > 0:
-                d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, :3] + 0.5, event_data[batch_index][mask][uresnet_points][:, :3])
+                point_set0 = points[batch_index][score_mask][ppn_points][:, :3] + event_data[batch_index][score_mask][ppn_points][:, :3] + 0.5
+                point_set1 = event_data[batch_index][score_mask][uresnet_points][:, :3]
+                d = scipy.spatial.distance.cdist(point_set0,point_set1)
                 ppn_mask = (d < distance_threshold).any(axis=1)
-                final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
-                final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
+                final_points.append(points[batch_index][score_mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][score_mask][ppn_points][ppn_mask][:, :3])
+                final_scores.append(scores[batch_index][score_mask][ppn_points][ppn_mask])
                 final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
+
+        final_points = np.concatenate(final_points, axis=0)
+        final_scores = np.concatenate(final_scores, axis=0)
+        final_types  = np.concatenate(final_types,  axis=0)
         if len(final_points)>0:
-            final_points = np.concatenate(final_points, axis=0)
-            final_scores = np.concatenate(final_scores, axis=0)
-            final_types  = np.concatenate(final_types,  axis=0)
             clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
             for c in clusts:
                 # append mean of points
