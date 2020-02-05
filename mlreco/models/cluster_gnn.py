@@ -242,7 +242,7 @@ class FullEdgeChannelLoss(torch.nn.Module):
             else:
                 graph = graph[i].detach().cpu().numpy()
                 true_edge_index = get_fragment_edges(graph, clust_ids, batch_ids)
-                edge_assn = edge_assignment_from_graph(edge_index, true_edge_undex)
+                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
             edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
 

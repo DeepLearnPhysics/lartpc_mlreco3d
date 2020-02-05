@@ -35,7 +35,7 @@ def model_dict():
         # Iterative cluster grouping
         "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
         # Cluster grouping GNN with MST
-        "cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
+        #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
     # "chain_gnn": (chain_gnn.Chain, chain_gnn.ChainLoss)
     return models
