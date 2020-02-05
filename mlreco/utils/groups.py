@@ -59,14 +59,14 @@ def filter_duplicate_voxels(data, usebatch=True):
         k = 3
     n = data.shape[0]
     ret = np.empty(n, dtype=np.bool)
-    ret[0] = True
-    for i in range(n-1):
-        if np.all(data[i,:k] == data[i+1,:k]):
+    for i in range(1,n):
+        if np.all(data[i-1,:k] == data[i,:k]):
             # duplicate voxel
-            ret[i+1] = False
+            ret[i-1] = False
         else:
             # new voxel
-            ret[i+1] = True
+            ret[i-1] = True
+    ret[n-1] = True
     return ret
 
 

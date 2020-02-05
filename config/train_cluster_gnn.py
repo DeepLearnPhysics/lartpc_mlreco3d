@@ -21,15 +21,9 @@ iotool:
 model:
   name: cluster_gnn
   modules:
-    edge_model:
-      name: nnconv
-      model_cfg:
-          edge_feats: 19
-          node_feats: 16
-          leak: 0.1
+    chain:
       node_type: 0
       node_min_size: -1
-      encoder: ''
       network: 'complete'
       edge_max_dist: -1
       edge_dist_metric: 'set'
@@ -38,6 +32,24 @@ model:
       balance_classes: False
       target_photons: False
       model_path: ''
+    #dbscan:
+    #  epsilon: 5
+    #  minPoints: 10
+    #  num_classes: 5
+    #  data_dim: 3
+    node_encoder:
+        name: 'geo'
+        use_numpy: False
+    edge_encoder:
+        name: 'geo'
+        use_numpy: False
+    edge_model:
+      name: nnconv
+      edge_feats: 19
+      node_feats: 16
+      aggr: 'add'
+      leak: 0.1
+      num_mp: 3
   network_input:
     - clust_label
   loss_input:
