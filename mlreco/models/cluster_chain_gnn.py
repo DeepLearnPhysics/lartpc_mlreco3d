@@ -3,16 +3,15 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from .gnn import node_model_construct, edge_model_construct
+from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.models.layers.dbscan import DBScan, DBScanClusts2
-from mlreco.models.gnn.cluster_geo_features import ClustGeoNodeEncoder, ClustGeoEdgeEncoder
 from mlreco.models.uresnet_ppn_chain import ChainLoss as UResNetPPNLoss
 from mlreco.models.uresnet_ppn_chain import Chain as UResNetPPN
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
 from mlreco.utils.ppn import uresnet_ppn_point_selector
 from mlreco.utils.gnn.evaluation import edge_assignment
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 import mlreco.utils
 # chain UResNet + PPN + DBSCAN + GNN for showers
@@ -45,14 +44,10 @@ class ChainDBSCANGNN(torch.nn.Module):
         # Initialize the modules
         self.dbscan = DBScanClusts2(model_config)
         self.uresnet_ppn = UResNetPPN(model_config['uresnet_ppn'])
-        #self.ppn = self.uresnet_ppn.ppn
-        #self.uresnet_lonely = self.uresnet_ppn.uresnet_lonely
-        self.node_encoder = ClustGeoNodeEncoder(model_config)
-        self.edge_encoder = ClustGeoEdgeEncoder(model_config)
-        node_model = node_model_construct(model_config['node_model']['name'])
-        self.node_predictor = node_model(model_config)
-        edge_model = edge_model_construct(model_config['edge_model']['name'])
-        self.edge_predictor = edge_model(model_config)
+        self.node_encoder = node_encoder_construct(model_config)
+        self.edge_encoder = edge_encoder_construct(model_config)
+        self.node_predictor = node_model_construct(model_config)
+        self.edge_predictor = edge_model_construct(model_config)
 
     def forward(self, data):
 
@@ -92,15 +87,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
-            for idx0 in range(len(clusts)):
-                pts0 = data[0][clusts[idx0]][:,:3]
-                for idx1 in range(len(clusts)):
-                    if idx0 < idx1:
-                        pts1 = data[0][clusts[idx1]][:,:3]
-                        dist_mat[idx0,idx1]=mlreco.utils.cdist(pts0,pts1)
-                    else:
-                        dist_mat[idx0,idx1]=dist_mat[idx1,idx0]
+            dist_mat = inter_cluster_distance(data[0][:,:3], clusts)
 
         # Get the node features
         x = self.node_encoder(data[0], clusts)
@@ -113,7 +100,7 @@ class ChainDBSCANGNN(torch.nn.Module):
                 return result
             e = self.edge_encoder(data[0], clusts, edge_index)
 
-            # Pass through the node model, get node prections
+            # Pass through the node model, get node predictions
             index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
             xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
             out = self.node_predictor(x, index, e, xbatch)
@@ -138,7 +125,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         e = self.edge_encoder(data[0], clusts, edge_index)
 
-        # Pass through the node model, get edge prections
+        # Pass through the node model, get edge predictions
         index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
         out = self.edge_predictor(x, index, e, xbatch)
@@ -158,8 +145,10 @@ class ChainLoss(torch.nn.modules.loss._Loss):
 
         loss = {}
         uresnet_ppn_loss = self.sem_loss(result, sem_label, particles)
+        result['clusts'] = result['shower_fragments']
         node_loss = self.node_loss(result, clust_label)
-        edge_loss = self.edge_loss(result, clust_label)
+        edge_loss = self.edge_loss(result, clust_label, None)
+        del result
         loss.update(uresnet_ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)
