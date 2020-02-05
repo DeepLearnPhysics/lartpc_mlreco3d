@@ -20,10 +20,10 @@ class EncoderModel(torch.nn.Module):
         #Take the parameters from the config
         self._dimension = self.model_config.get('dimension', 3)
         self.num_strides = self.model_config.get('num_stride', 4)
-        self.m =  self.model_config.get('features_per_pixel', 4)
-        self.nInputFeatures = self.model_config.get('input_features_per_pixel', 1)
-        self.leakiness = self.model_config.get('leakiness_encoder', 0)
-        self.spatial_size = self.model_config.get('input_spatial_size', 1024) #Must be a power of 2
+        self.m =  self.model_config.get('feat_per_pixel', 4)
+        self.nInputFeatures = self.model_config.get('input_feat_enc', 1)
+        self.leakiness = self.model_config.get('leakiness_enc', 0)
+        self.spatial_size = self.model_config.get('inp_spatial_size', 1024) #Must be a power of 2
         
         
         self.out_spatial_size = int(self.spatial_size/4**(self.num_strides-1))
