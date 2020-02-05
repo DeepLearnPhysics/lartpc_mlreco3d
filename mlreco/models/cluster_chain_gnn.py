@@ -11,7 +11,7 @@ from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
 from mlreco.utils.ppn import uresnet_ppn_point_selector
 from mlreco.utils.gnn.evaluation import edge_assignment
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
+from mlreco.utils.gnn.network import complete_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 import mlreco.utils
 # chain UResNet + PPN + DBSCAN + GNN for showers
@@ -38,7 +38,6 @@ class ChainDBSCANGNN(torch.nn.Module):
         self.shower_class = int(chain_config['shower_class'])
         self.node_min_size = chain_config['node_min_size']
         self.node_encoder = chain_config['node_encoder']
-        self.network = chain_config['network']
         self.edge_max_dist = chain_config['edge_max_dist']
 
         # Initialize the modules
@@ -86,43 +85,32 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
-        if self.edge_max_dist > 0 or self.network == 'mst':
+        if self.edge_max_dist > 0:
             dist_mat = inter_cluster_distance(data[0][:,:3], clusts)
 
         # Get the node features
         x = self.node_encoder(data[0], clusts)
 
-        # If the bipartite graph is used, predict primaries
-        if self.network == 'bipartite':
-            # Initialize a complete graph for node prediction, get edge features
-            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
-            if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
-                return result
-            e = self.edge_encoder(data[0], clusts, edge_index)
+        # Initialize a complete graph for node prediction, get edge features
+        edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
+        if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
+            return result
+        e = self.edge_encoder(data[0], clusts, edge_index)
 
-            # Pass through the node model, get node predictions
-            index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
-            xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
-            out = self.node_predictor(x, index, e, xbatch)
-            result.update(out)
+        # Pass through the node model, get node predictions
+        index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
+        xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
+        out = self.node_predictor(x, index, e, xbatch)
+        result.update(out)
 
-            # Convert the node output to a list of primaries
-            primaries = torch.nonzero(torch.argmax(out['node_pred'][0], dim=1)).flatten()
+        # Convert the node output to a list of primaries
+        primaries = torch.nonzero(torch.argmax(out['node_pred'][0], dim=1)).flatten()
 
-        # Initialize the requested network for edge prediction, get edge features
-        elif self.network == 'complete':
-            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
-        elif self.network == 'delaunay':
-            edge_index = delaunay_graph(cluster_label, clusts, dist_mat, self.edge_max_dist)
-        elif self.network == 'mst':
-            edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
-        elif self.network == 'bipartite':
-            group_ids = get_cluster_group(cluster_label, clusts)
-            edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist)
-        else:
-            raise ValueError('Network type not recognized: '+self.network)
-        result.update(edge_index=[edge_index])
-
+        # Initialize the network for edge prediction, get edge features
+        edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist)
+        result.update(dict(edge_index=[edge_index]))
+        if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
+            return result
         e = self.edge_encoder(data[0], clusts, edge_index)
 
         # Pass through the node model, get edge predictions
