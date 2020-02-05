@@ -2,21 +2,20 @@
 import numpy as np
 from mlreco.utils.metrics import SBD, AMI, ARI, purity_efficiency
 
-def edge_assignment(edge_index, batches, groups, binary=False):
+def edge_assignment(edge_index, groups, binary=False):
     """
     Function that determines which edges are turned on based
     on the group ids of the clusters they are connecting.
 
     Args:
-        edge_index (np.ndarray): (2,E) Incidence matrix
-        batches (np.ndarray)   : (C) List of batch ids
+        edge_index (np.ndarray): (E,2) Incidence matrix
         groups (np.ndarray)    : (C) List of group ids
         binary (bool)          : True if the assigment must be adapted to binary loss
     Returns:
         np.ndarray: (E) Boolean array specifying on/off edges
     """
     # Set the edge as true if it connects two nodes that belong to the same batch and the same group
-    edge_assn = np.array([(batches[e[0]] == batches[e[1]] and groups[e[0]] == groups[e[1]]) for e in edge_index.T], dtype=int)
+    edge_assn = np.array([groups[e[0]] == groups[e[1]] for e in edge_index], dtype=int)
 
     # If binary loss will be used, transform to -1,+1 instead of 0,1
     if binary:
@@ -30,13 +29,13 @@ def edge_assignment_from_graph(edge_index, true_edge_index, binary=False):
     on the group ids of the clusters they are connecting.
 
     Args:
-        edge_index (np.ndarray): (2,E) Constructed incidence matrix
-        edge_index (np.ndarray): (2,E) True incidence matrix
+        edge_index (np.ndarray): (E,2) Constructed incidence matrix
+        edge_index (np.ndarray): (E,2) True incidence matrix
     Returns:
         np.ndarray: (E) Boolean array specifying on/off edges
     """
     # Set the edge as true if it connects two nodes that belong to the same batch and the same group
-    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index.T], dtype=int)
+    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
 
     # If binary loss will be used, transform to -1,+1 instead of 0,1
     if binary:
@@ -89,7 +88,7 @@ def node_assignment(edge_index, edge_label, n):
     union find implementation.
 
     Args:
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
         edge_assn (np.ndarray) : (E) Boolean array (1 if edge is on)
         n (int)                  : Total number of clusters C
     Returns:
@@ -98,7 +97,7 @@ def node_assignment(edge_index, edge_label, n):
     # Loop over on edges, reset the group IDs of connected node
     groups = {}
     group_ids = np.arange(n)
-    on_edges = edge_index.T[np.where(edge_label)[0]]
+    on_edges = edge_index[np.where(edge_label)[0]]
     for i, j in on_edges: 
         leaderi = group_ids[i]
         leaderj = group_ids[j]
@@ -133,7 +132,7 @@ def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
     of union find.
 
     Args:
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
         edge_wt (np.ndarray)   : (E) Array of edge weights
         n (int)                : Total number of clusters C
         thresh (double)        : Threshold for edge association
@@ -142,9 +141,7 @@ def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
     """
     from topologylayer.functional.persistence import getClustsUF_raw
 
-    edges = edge_index
-    edges = edges.T # transpose
-    edges = edges.flatten()
+    edges = edge_index.flatten()
 
     val = edge_wt
 
@@ -159,7 +156,7 @@ def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     by a primary node.
 
     Args:
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
         edge_label (np.ndarray): (E) Boolean array (1 if edge is on)
         primaries (np.ndarray) : (P) List of primary ids
         n (int)                : Total number of clusters C
@@ -174,12 +171,12 @@ def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     # Assign the secondary clusters to primaries
     others = [i for i in range(n) if i not in primaries]
     for i in others:
-        inds = edge_index[1,:] == i
+        inds = edge_index[:,1] == i
         if sum(inds) == 0:
             clust[i] = -1
             continue
         indmax = np.argmax(edge_label[inds])
-        group_ids[i] = edge_index[0,inds][indmax].item()
+        group_ids[i] = edge_index[inds,0][indmax].item()
 
     return group_ids
 
