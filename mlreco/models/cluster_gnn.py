@@ -140,8 +140,7 @@ class ClustEdgeGNN(torch.nn.Module):
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'bipartite':
-            group_ids = get_cluster_group(data, clusts)
-            primary_ids = get_cluster_primary(clust_ids, group_ids)
+            primary_ids = [i for i, c in enumerate(clusts) if (data[c,-3] == data[c,-2]).any()]
             edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
         else:
             raise ValueError('Network type not recognized: '+self.network)
