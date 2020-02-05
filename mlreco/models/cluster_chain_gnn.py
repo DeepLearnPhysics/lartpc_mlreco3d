@@ -104,7 +104,8 @@ class ChainDBSCANGNN(torch.nn.Module):
         result.update(out)
 
         # Convert the node output to a list of primaries
-        primaries = torch.nonzero(torch.argmax(out['node_pred'][0], dim=1)).flatten()
+        primary_ids = torch.argmax(out['node_pred'][0], dim=1)
+        primaries = torch.nonzero(primary_ids).flatten()
 
         # Initialize the network for edge prediction, get edge features
         edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist)
@@ -136,7 +137,7 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         result['clusts'] = result['shower_fragments']
         node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
-        del result
+        del result['clusts']
         loss.update(uresnet_ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)

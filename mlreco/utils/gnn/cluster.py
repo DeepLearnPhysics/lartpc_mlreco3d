@@ -1,5 +1,6 @@
 # Defines cluster formation and feature extraction
 import numpy as np
+import torch
 
 def form_clusters(data, min_size=-1):
     """
@@ -13,13 +14,13 @@ def form_clusters(data, min_size=-1):
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
     clusts = []
-    for b in np.unique(data[:, 3]):
-        binds = np.where(data[:, 3] == b)[0]
-        for c in np.unique(data[binds,5]):
+    for b in data[:, 3].unique():
+        binds = torch.nonzero(data[:, 3] == b).flatten()
+        for c in data[binds,5].unique():
             # Skip if the cluster ID is -1 (not defined)
             if c < 0:
                 continue
-            clust = np.where(data[binds,5] == c)[0]
+            clust = torch.nonzero(data[binds,5] == c).flatten()
             if len(clust) < min_size:
                 continue
             clusts.append(binds[clust])
@@ -56,9 +57,9 @@ def get_cluster_batch(data, clusts):
     labels = []
     for c in clusts:
         assert len(data[c,3].unique()) == 1
-        labels.append(data[c[0],3])
+        labels.append(int(data[c[0],3].item()))
 
-    return labels
+    return np.array(labels)
 
 
 def get_cluster_label(data, clusts):
@@ -75,9 +76,9 @@ def get_cluster_label(data, clusts):
     labels = []
     for c in clusts:
         assert len(data[c,5].unique()) == 1
-        labels.append(data[c[0],5])
+        labels.append(int(data[c[0],5].item()))
 
-    return labels
+    return np.array(labels)
 
 
 def get_cluster_group(data, clusts):
@@ -94,8 +95,8 @@ def get_cluster_group(data, clusts):
     """
     labels = []
     for c in clusts:
-        v, cts = np.unique(data[c,6], return_counts=True)
-        labels.append(v[np.argmax(cts)])
+        v, cts = data[c,6].unique(return_counts=True)
+        labels.append(int(v[cts.argmax()].item()))
 
     return np.array(labels)
 

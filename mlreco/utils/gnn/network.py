@@ -173,7 +173,7 @@ def inter_cluster_distance(voxels, clusts, mode='set'):
     return dist_mat
 
 
-def get_fragment_edges(graph, clust_ids, batch_ids):
+def get_fragment_edges(graph, clust_ids):
     """
     Function that converts a set of edges between cluster ids
     to a set of edges between fragment ids (ordering in list)
@@ -187,10 +187,9 @@ def get_fragment_edges(graph, clust_ids, batch_ids):
     """
     # Loop over the graph edges, find the fragment ids, append
     true_edges = np.empty((0,2), dtype=int)
-    fragid_map = torch.tensor(np.vstack((clust_ids, batch_ids)).T)
     for e in graph:
-        n1 = np.where([(pair == e[::2]).all() for pair in fragid_map])[0]
-        n2 = np.where([(pair == e[1:]).all() for pair in fragid_map])[0]
+        n1 = np.where(clust_ids == e[0].item())[0]
+        n2 = np.where(clust_ids == e[1].item())[0]
         if len(n1) and len(n2):
             true_edges = np.vstack((true_edges, [n1[0], n2[0]]))
 
