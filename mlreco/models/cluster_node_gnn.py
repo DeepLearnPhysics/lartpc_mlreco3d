@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 
@@ -67,25 +67,6 @@ class ClustNodeGNN(torch.nn.Module):
         # Construct the model
         self.node_predictor = node_model_construct(cfg)
 
-    @staticmethod
-    def default_return(device):
-        """
-        Default return when no valid node is found in the input data.
-
-        Args:
-            device (torch.device): Device on which the input is stored
-        Returns:
-            dict:
-                'node_pred' (torch.tennsor): (0,2) Empty two-channel node predictions
-                'clusts' ([np.ndarray])    : (0) Empty cluster ids
-                'batch_ids' (np.ndarray)   : (0) Empty cluster batch ids
-                'edge_index' (np.ndarray)  : (2,0) Empty incidence matrix
-        """
-        xg = torch.empty((0,2), requires_grad=True, device=device)
-        x  = np.empty(0)
-        e  = np.empty((2,0))
-        return {'node_pred':[xg], 'clusts':[x], 'batch_ids':[x], 'edge_index':[e]}
-
     def forward(self, data):
         """
         Prepares particle clusters and feed them to the GNN model.
@@ -114,15 +95,15 @@ class ClustNodeGNN(torch.nn.Module):
             if self.node_type > -1:
                 mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
-                clusts = [mask[c] for c in clusts]
+                clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
                 clusts = form_clusters(data, self.node_min_size)
 
         if not len(clusts):
-            return self.default_return(device)
+            return {} 
 
         # Get the batch id for each cluster
-        batch_ids = torch.stack(get_cluster_batch(data, clusts)).cpu().numpy().astype(np.int32)
+        batch_ids = get_cluster_batch(data, clusts)
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
@@ -147,7 +128,7 @@ class ClustNodeGNN(torch.nn.Module):
 
         # Skip if there is no edges
         if not edge_index.shape[1]:
-            return self.default_return(device)
+            return {}
 
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
@@ -159,11 +140,22 @@ class ClustNodeGNN(torch.nn.Module):
 
         # Pass through the model, get output (long edge_index)
         out = self.node_predictor(x, index, e, xbatch)
+        node_pred = out['node_pred'][0]
 
-        return {**out,
-                'clusts':[clusts],
-                'batch_ids':[batch_ids],
-                'edge_index':[edge_index]}
+        # Divide the output out into different arrays (one per batch)
+        _, counts = torch.unique(data[:,3], return_counts=True)
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
+        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
+        beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
+
+        node_pred = [node_pred[b] for b in bcids]
+        edge_index = [cids[edge_index[:,b]].T for b in beids]
+        clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
+
+        return {'node_pred':[node_pred],
+                'edge_index':[edge_index],
+                'clusts':[clusts]}
 
 
 class NodeChannelLoss(torch.nn.Module):
@@ -213,41 +205,57 @@ class NodeChannelLoss(torch.nn.Module):
             double: loss, accuracy, clustering metrics
         """
         total_loss, total_acc = 0., 0.
-        ngpus = len(clusters)
+        n_events = 0
         for i in range(len(clusters)):
 
             # If the input did not have any node, proceed
             if 'node_pred' not in out:
-                if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=clusters[i].device)
-                ngpus = max(1, ngpus-1)
                 continue
 
-            # Get list of IDs of points contained in each cluster
-            clusts = out['clusts'][i]
+            # Get the list of batch ids, loop over individual batches
+            batches = clusters[i][:,3]
+            nbatches = len(batches.unique())
+            for j in range(nbatches):
 
-            # Use the primary information to determine the true node assignment
-            node_pred = out['node_pred'][i]
-            primary_ids = []
-            for c in clusts:
-                primary = (clusters[i][c, -3]==clusters[i][c,-2]).any() # If any point is primary, assign cluster to primary
-                primary_ids.append(primary)
+                # Narrow down the tensor to the rows in the batch
+                labels = clusters[i][batches==j]
 
-            node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
+                # Use the primary information to determine the true node assignment
+                node_pred = out['node_pred'][i][j]
+                if not node_pred.shape[0]:
+                    continue
+                clusts = out['clusts'][i][j]
+                primary_ids = []
+                for c in clusts:
+                    # If any point is primary, assign cluster to primary
+                    primary = (labels[c, -3] == labels[c,-2]).any()
+                    primary_ids.append(primary)
 
-            # Increment the loss, balance classes if requested
-            if self.balance_classes:
-                counts = torch.unique(node_assn, return_counts=True)[1]
-                weights = np.array([float(counts[k])/len(node_assn) for k in range(2)])
-                for k in range(2):
-                    total_loss += (1./weights[k])*self.lossfn(node_pred[node_assn==k], node_assn[node_assn==k])
-            else:
-                total_loss += self.lossfn(node_pred, node_assn)
+                node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
-            # Compute accuracy of assignment (fraction of correctly assigned nodes)
-            total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(clusts)
+                # Increment the loss, balance classes if requested
+                if self.balance_classes:
+                    counts = torch.unique(node_assn, return_counts=True)[1]
+                    weights = np.array([float(counts[k])/len(node_assn) for k in range(2)])
+                    for k in range(2):
+                        total_loss += (1./weights[k])*self.lossfn(node_pred[node_assn==k], node_assn[node_assn==k])
+                else:
+                    total_loss += self.lossfn(node_pred, node_assn)
+
+                # Compute accuracy of assignment (fraction of correctly assigned nodes)
+                total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(clusts)
+
+                # Increment the number of events
+                n_events += 1
+
+        # Handle the case where no cluster/edge were found
+        if not n_events:
+            return {
+                'accuracy': 0.,
+                'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device)
+            }
 
         return {
-            'accuracy': total_acc/ngpus,
-            'loss': total_loss/ngpus
+            'accuracy': total_acc/n_events,
+            'loss': total_loss/n_events
         }
