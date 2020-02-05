@@ -52,7 +52,7 @@ class FullEdgeModel(torch.nn.Module):
         self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
             
         # Extract the model to use
-        self.encoder = encoder.EncoderModel()
+        self.encoder = encoder.EncoderModel(cfg)
         
         # Extract the model to use
         edge_model = edge_model_construct(self.model_config.get('name'))
