@@ -4,14 +4,10 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from . import encoder
-from .gnn import edge_model_construct
-from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, clustering_metrics
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new, get_cluster_voxels
+from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment
 
-class FullEdgeModel(torch.nn.Module):
+class FlashMatchingModel(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
@@ -31,14 +27,6 @@ class FullEdgeModel(torch.nn.Module):
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
           model_path      : <path to the model weights>
-          
-          If an encoder is used you can add the following parameters:
-          dimension       :  <dimension of the input image (default 3)>
-          num_stride      :  <number of encodeing blocks (default 4)>
-          feat_per_pixel  :  <number of features per pixels wanted (default 4)>
-          input_feat_enc  :  <number of input features per pixel (default 1)>
-          leakiness_enc   :  <leaziness of the leaky_relu layers. (default 0)>
-          inp_spatial_size:  <size of the input image (default 1024) Must be a power of 2.>
     """
     def __init__(self, cfg):
         super(FullEdgeModel, self).__init__()
@@ -169,7 +157,7 @@ class FullEdgeModel(torch.nn.Module):
                 'edge_index':[edge_index]}
 
 
-class FullEdgeChannelLoss(torch.nn.Module):
+class FlashmatchingChannelLoss(torch.nn.Module):
     """
     Takes the output of FullEdgeModel and computes the channel-loss.
 

@@ -12,6 +12,7 @@ def model_dict():
     from . import cluster_chain_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
+    from . import flashmatchning_model
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -34,6 +35,8 @@ def model_dict():
         "cluster_node_gnn": (cluster_node_gnn.NodeModel, cluster_node_gnn.NodeChannelLoss),
         # Iterative cluster grouping
         "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
+        # Flashmatching using encoder and gnn
+        "flashmatching": (flashmatchning_model.FlashMatchingModel, flashmatchning_model.FlashmatchingChannelLoss),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
