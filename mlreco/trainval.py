@@ -311,7 +311,6 @@ class trainval(object):
 
         # Check if freeze weights is requested + enforce if so
         for module_name in module_config:
-            print('is module?',module_name)
             if not hasattr(self._model, module_name) or not isinstance(getattr(self._model,module_name),torch.nn.Module):
                 continue
             module = getattr(self._model,module_name)
