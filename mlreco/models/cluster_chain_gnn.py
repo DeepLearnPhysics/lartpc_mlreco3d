@@ -92,7 +92,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Initialize a complete graph for node prediction, get edge features
         edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
-        if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
+        if not edge_index.shape[1]:
             return result
         e = self.edge_encoder(data[0], clusts, edge_index)
 
@@ -101,6 +101,19 @@ class ChainDBSCANGNN(torch.nn.Module):
         xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
         out = self.node_predictor(x, index, e, xbatch)
         node_pred = out['node_pred'][0]
+
+        # Split the node prediction output, append result
+        _, counts = torch.unique(data[0][:,3], return_counts=True)
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
+
+        split_clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
+        node_pred = [node_pred[b] for b in bcids]
+
+        result.update(dict(
+            node_pred = [node_pred],
+            shower_fragments = [split_clusts]
+        ))
 
         # Convert the node output to a list of primaries
         primary_ids = torch.argmax(out['node_pred'][0], dim=1)
@@ -118,23 +131,16 @@ class ChainDBSCANGNN(torch.nn.Module):
         out = self.edge_predictor(x, index, e, xbatch)
         edge_pred = out['edge_pred'][0]
 
-        # Divide the output out into different arrays (one per batch)
-        _, counts = torch.unique(data[0][:,3], return_counts=True)
-        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        # Split the edge prediction output, append result
         cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
-        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
         beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
 
-        node_pred = [node_pred[b] for b in bcids]
         edge_pred = [edge_pred[b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
         
         result.update(dict(
-            node_pred = [node_pred],
             edge_pred = [edge_pred],
-            edge_index = [edge_index],
-            shower_fragments = [clusts]
+            edge_index = [edge_index]
         ))
 
         return result
@@ -151,10 +157,10 @@ class ChainLoss(torch.nn.modules.loss._Loss):
 
         loss = {}
         uresnet_ppn_loss = self.sem_loss(result, sem_label, particles)
-        result['clusts'] = result['shower_fragments']
+        if 'shower_fragments' in result:
+            result['clusts'] = result['shower_fragments']
         node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
-        del result['clusts']
         loss.update(uresnet_ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)
