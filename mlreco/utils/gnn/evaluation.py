@@ -153,27 +153,23 @@ def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
 def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     """
     Function that assigns each node to a group represented
-    by a primary node.
+    by a primary node. This function loops over secondaries and
+    associates it to the primary with that is connected to it
+    with the strongest edge.
 
     Args:
         edge_index (np.ndarray): (E,2) Incidence matrix
-        edge_label (np.ndarray): (E) Boolean array (1 if edge is on)
+        edge_label (np.ndarray): (E) Array of edge scores
         primaries (np.ndarray) : (P) List of primary ids
         n (int)                : Total number of clusters C
     Returns:
         np.ndarray: (C) List of group ids
     """
-    # Set the group ID to the cluster ID if primary
-    group_ids = np.zeros(n)
-    for i in primaries:
-        clust[i] = i
-
-    # Assign the secondary clusters to primaries
+    group_ids = np.arange(n)
     others = [i for i in range(n) if i not in primaries]
     for i in others:
         inds = edge_index[:,1] == i
         if sum(inds) == 0:
-            clust[i] = -1
             continue
         indmax = np.argmax(edge_label[inds])
         group_ids[i] = edge_index[inds,0][indmax].item()

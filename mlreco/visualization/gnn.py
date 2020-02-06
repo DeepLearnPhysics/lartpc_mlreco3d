@@ -23,13 +23,13 @@ def scatter_clusters(voxels, labels, clusters, markersize=5):
                          hovertext=vfeats)
     return [trace]
 
-def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_width=2):
+def network_topology(voxels, clusters, primaries, edges, mode='scatter', edge_width=2):
     """
     Network 3D topological representation
     - voxels is a list of voxel coordinates (Nx3-matrix)
     - clusters is an array of clusters, each defined as an array of voxel ids
     - primaries is a list of the primary cluster ids
-    - edges is list of pairs of cluster ids arranged in two vectors (2xM-vector)
+    - edges is list of pairs of cluster ids (Ex2-vector)
     """
     # Define the arrays of node positions (barycenter of voxels in the cluster)
     pos = np.array([voxels[c].mean(0) for c in clusters])
@@ -41,7 +41,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
     node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
 
     # Assert if there is edges to draw
-    draw_edges = bool(edges.shape[1]) if len(edges) == 2 else False
+    draw_edges = bool(len(edges))
 
     # Define the nodes and their connections
     graph_data = []
@@ -67,7 +67,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
 
         # Define the edges center to center
         if draw_edges:
-            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in zip(edges[0], edges[1])])
+            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in edges])
 
     elif mode == 'cone':
         # Evaluate the cone parameters
@@ -134,7 +134,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
 
         # Join end points of primary cones to starting points of secondary cones
         for e in edges:
-            edge_vertices = np.concatenate([[epos[i], spos[j], [None, None, None]] for i, j in zip(edges[0], edges[1])])
+            edge_vertices = np.concatenate([[epos[i], spos[j], [None, None, None]] for i, j in edges])
 
     elif mode == 'hull':
         # For each cluster, add the convex hull of all its voxels
@@ -151,7 +151,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
         # Define the edges closest pixel to closest pixel
         import scipy as sp
         edge_vertices = []
-        for i, j in zip(edges[0], edges[1]):
+        for i, j in edges:
             vi, vj = voxels[clusters[i]], voxels[clusters[j]]
             d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
             i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
@@ -187,7 +187,7 @@ def network_topology(voxels, clusters, primaries, edges, mode='sphere', edge_wid
         if draw_edges:
             import scipy as sp
             edge_vertices = []
-            for i, j in zip(edges[0], edges[1]):
+            for i, j in edges:
                 vi, vj = voxels[clusters[i]], voxels[clusters[j]]
                 d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
                 i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
@@ -217,7 +217,7 @@ def network_schematic(clusters, primaries, edges):
     Network 2D schematic representation
     - clusters is an array of clusters, each defined as an array of voxel ids
     - primaries is a list of the primary cluster ids
-    - edges is list of pairs of cluster ids arranged in two vectors (2xM-vector)
+    - edges is list of pairs of cluster ids (Ex2-vector)
     """
     # Define the node positions (primaries on the left, secondaries on the right)
     n = len(clusters)
@@ -244,11 +244,11 @@ def network_schematic(clusters, primaries, edges):
                                  hoverinfo = 'text'))
 
     # Assert if there is edges to draw
-    draw_edges = bool(edges.shape[1])
+    draw_edges = bool(len(edges))
 
     # Initialize the edges
     if draw_edges:
-        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in zip(edges[0], edges[1])])
+        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in edges])
         graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
                                      mode = 'lines',
                                      name = 'edges',
