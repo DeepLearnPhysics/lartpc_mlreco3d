@@ -6,27 +6,77 @@ import torch
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new, get_cluster_voxels
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features, edge_assignment
+from . import flashmatching_gnn
 
+def get_traj_features(data, clusts, delta=0.0):
+    """
+    get features for N clusters:
+    * center (N, 3) array
+    * orientation (N, 9) array
+    * direction (N, 3) array
+    output is (N, 15) matrix
+
+    Optional arguments:
+    delta = orientation matrix regularization
+
+    """
+    # first make sure data is numpy array
+    if isinstance(data, torch.Tensor):
+        data = data.cpu().detach().numpy()
+    # types of data
+    feats = []
+    for c in clusts:
+        # get center of cluster
+        x = get_cluster_voxels(data, c)
+        #Change x coordinate into relative x coordinate
+        x_coord_mean = np.mean(x[:,0])
+        x[:,0] = x[:,0] - x_coord_mean
+        if len(c) < 2:
+            # don't waste time with computations
+            # default to regularized orientation matrix, zero direction
+            center = x.flatten()
+            B = delta * np.eye(3)
+            v0 = np.zeros(3)
+            feats.append(np.concatenate((center, B.flatten(), v0)))
+            continue
+
+        center = np.mean(x, axis=0)
+        # center data
+        x = x - center
+        # get orientation matrix
+        A = x.T.dot(x)
+        # get eigenvectors - convention with eigh is that eigenvalues are ascending
+        w, v = np.linalg.eigh(A)
+        dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2] # weight for direction
+        w = w + delta # regularization
+        w = w / w[2] # normalize top eigenvalue to be 1
+        # orientation matrix
+        B = v.dot(np.diag(w)).dot(v.T)
+
+        # get direction - look at direction of spread orthogonal to v[:,2]
+        v0 = v[:,2]
+        # projection of x along v0 
+        x0 = x.dot(v0)
+        # projection orthogonal to v0
+        xp0 = x - np.outer(x0, v0)
+        np0 = np.linalg.norm(xp0, axis=1)
+        # spread coefficient
+        sc = np.dot(x0, np0)
+        if sc < 0:
+            # reverse 
+            v0 = -v0
+        # weight direction
+        v0 = dirwt*v0
+        # append, center, B.flatten(), v0
+        feats.append(np.concatenate((center, B.flatten(), v0, [len(x)])))
+    return np.array(feats)
+    
+    
 class FlashMatchingModel(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
 
-    For use in config:
-    model:
-      name: cluster_gnn
-      modules:
-        edge_model:
-          name: <name of the edge model>
-          model_cfg:
-            <dictionary of arguments to pass to the model>
-          node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-          node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          node_encoder    : <node feature encoding: 'basic' or 'cnn' (default 'basic')>
-          network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
-          edge_max_dist   : <maximal edge Euclidean length (default -1)>
-          edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-          model_path      : <path to the model weights>
     """
     def __init__(self, cfg):
         super(FullEdgeModel, self).__init__()
@@ -37,240 +87,106 @@ class FlashMatchingModel(torch.nn.Module):
         else:
             self.model_config = cfg
 
-        # Choose what type of node to use
-        self.node_type = self.model_config.get('node_type', 0)
-        self.node_min_size = self.model_config.get('node_min_size', -1)
-        self.node_encoder = self.model_config.get('node_encoder', 'basic')
-
-        # Choose what type of network to use
-        self.network = self.model_config.get('network', 'complete')
-        self.edge_max_dist = self.model_config.get('edge_max_dist', -1)
-        self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
-            
-        # Extract the model to use
-        self.encoder = encoder.EncoderModel(cfg)
-        
-        # Extract the model to use
-        edge_model = edge_model_construct(self.model_config.get('name'))
-
-        # Construct the model
-        self.edge_predictor = edge_model(self.model_config.get('model_cfg'))
-
-    @staticmethod
-    def default_return(device):
-        """
-        Default return when no valid node is found in the input data.
-
-        Args:
-            device (torch.device): Device on which the input is stored
-        Returns:
-            dict:
-                'edge_pred' (torch.tensor): (0,2) Empty two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (0) Empty cluster ids
-                'batch_ids' (np.ndarray)  : (0) Empty cluster batch ids
-                'edge_index' (np.ndarray) : (2,0) Empty incidence matrix
-        """
-        xg = torch.empty((0,2), requires_grad=True, device=device)
-        x  = np.empty(0)
-        e  = np.empty((2,0))
-        return {'edge_pred':[xg], 'clust_ids':[x], 'batch_ids':[x], 'edge_index':[e]}
-
     def forward(self, data):
-        """
-        Prepares particle clusters and feed them to the GNN model.
+        tpc_data = torch.tensor(data['tpc_sample'], dtype=torch.float, requires_grad=False).to(device)
+        pmt_data = torch.tensor(data['pmt_sample'], dtype=torch.float, requires_grad=False).to(device)       
 
-        Args:
-            data ([torch.tensor]): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        Returns:
-            dict:
-                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (C) Cluster ids
-                'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
-        """
-        # Get original device, bring data to CPU (for data preparation)
-        device = data[0].device
-        cluster_label = data[0].detach().cpu().numpy()
+        # Find index of points that have the same event_id
+        tpc_events = form_clusters_new(tpc_data)
+        # Get the event ids of each processed event
+        tpc_event_ids = get_cluster_label(tpc_data, tpc_events)
+        # Get the batch ids of each event
+        #Every event is associate with the main batch id in it.
+        tpc_batch_ids = get_cluster_batch(tpc_data, tpc_events)
 
-        # Find index of points that belong to the same clusters
-        # If a specific semantic class is required, apply mask
-        # Here the specified size selection is applied
-        if self.node_type > -1:
-            mask = np.where(cluster_label[:,-1] == 0)[0]
-            clusts = form_clusters(cluster_label[mask], self.node_min_size)
-            clusts = np.array([mask[c] for c in clusts])
-        else:
-            clusts = form_clusters(cluster_label, self.node_min_size)
+        # Find index of points that have the same flash_id
+        pmt_flashes = form_clusters_new(pmt_data)
+        # Get the flash ids of each processed flash
+        pmt_flash_ids = get_cluster_label(pmt_data, pmt_flashes)
+        # Get the batch ids of each event
+        pmt_batch_ids = get_cluster_batch(pmt_data, pmt_flashes)
 
-        # Get the batch, cluster and group id of each cluster
-        batch_ids = get_cluster_batch(cluster_label, clusts)
-        clust_ids = get_cluster_label(cluster_label, clusts)
+        #Merge the obtains batch ids.
+        batch_ids = np.append(tpc_batch_ids,pmt_batch_ids)
 
-        # Form the requested network
-        dist_mat = None
-        if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = inter_cluster_distance(cluster_label[:,:3], clusts, self.edge_dist_metric)
-        if self.network == 'complete':
-            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
-        elif self.network == 'delaunay':
-            edge_index = delaunay_graph(cluster_label, clusts, dist_mat, self.edge_max_dist)
-        elif self.network == 'mst':
-            edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
-        elif self.network == 'bipartite':
-            group_ids = get_cluster_group(cluster_label, clusts)
-            primary_ids = get_cluster_primary(clust_ids, group_ids)
-            edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
-        else:
-            raise ValueError('Network type not recognized: '+self.network)
+        #Create the graph. Here we want primary_ids to be the PMT flashes
+        #Here PMT nodes and TPC nodes does not have the same dimension but the features linked with an edge does.
 
-        # Skip if there is no edges (Is this necessary ? TODO)
-        if not edge_index.shape[1]:
-            return self.default_return(device)
+        n = len(tpc_batch_ids)
+        m = len(pmt_flash_ids)
+
+        # Obtain vertex features. (PCA, 15 features for now)
+        # NEED TO ADD THE CHARGE
+        x_TPC_data = get_traj_features(tpc_data, tpc_events)
+        x_TPC_PCA = torch.tensor(x_TPC_data, dtype=torch.float, requires_grad=False)
+
+        #Node data for the PMTs. We want position + pecount
+        pmt_data_array = []
+        for f in pmt_flashes:
+            #aux1 = np.array(pmt_data[f,:3].cpu())
+            aux2 = np.array([[np.array(pmt_data[m,5].cpu())] for m in f])
+            #pmt_data_array.append(np.concatenate((aux1,aux2),axis=1))
+            pmt_data_array.append(aux2)
+
+
+        #Node data for the TPCs. We want position + batch index + pecount
+        tpc_data_array = []
+        #pos stands for the batch size and will allow the identification of the edge.
+        pos = 0
+        for f in tpc_events:
+            aux1 = np.array(tpc_data[f,:3].cpu())
+            aux2 = np.array([[pos] for m in f])
+            aux3 = np.array([[np.array(tpc_data[m,5].cpu())] for m in f])
+            #x_batch
+            aux4 = np.array([[np.array(tpc_data[m,3].cpu())] for m in f])
+            tpc_data_array.append(np.concatenate((aux1,aux2,aux3,aux4),axis=1))
+            pos+=1
+
+        edge_index = torch.tensor([[i, n + j] for i in range(n) for j in range(m) if batch_ids[i] == batch_ids[n + j]], dtype=torch.long, requires_grad=False).t().contiguous().reshape(2,-1)
+
+        #We construct edge features
+        tpc_voxel_data = []
+        tpc_pca_data = []
+        pmt_voxel_data = []
+        node_data = []
+        matching = []
+        x_batch = []
+
+        for node in range(len(edge_index[0])):
+            tpc_pca_node = np.array(x_TPC_PCA[edge_index[0][node]]).astype(np.double)
+            tpc_node = np.array(tpc_data_array[edge_index[0][node]]).astype(np.double)
+            pmt_node = np.array(pmt_data_array[edge_index[1][node]-n]).astype(np.double)        
+
+            x_batch.append(tpc_node[0][-1])
+
+            for d in tpc_node:
+                d[3]=node
+                tpc_voxel_data.append(d[:-1])
+
+            tpc_pca_data.append(tpc_pca_node)
+
+            pmt_voxel_data.append(pmt_node)
+
+            node_data.append([1,1])
+
+            matching.append(int(edge_index[1][node]-n == edge_index[0][node]))
+
+        x_batch =  torch.tensor(x_batch, dtype=torch.long, requires_grad=False).reshape(-1)
         
-        e = torch.tensor(cluster_edge_features(cluster_label, clusts, edge_index), device=device, dtype=torch.float)
-
-        # Bring edge_index and batch_ids to device
-        index = torch.tensor(edge_index, device=device, dtype=torch.long)
-        xbatch = torch.tensor(batch_ids, device=device)
-
-        # Obtain node and edge features
-        if self.node_encoder == 'basic':
-            x = torch.tensor(cluster_vtx_features(cluster_label, clusts), device=device, dtype=torch.float)
-        elif self.node_encoder == 'cnn':
-            data_array = []
-            for node in range(len(clusts)):
-                c = clusts[node]
-                for d in cluster_label[c,:]:
-                    data_array.append(np.concatenate((d[:3],[node,d[4]])))
-                
-            x = torch.tensor(np.array(data_array), dtype=torch.float, requires_grad=False).to(device)
-            x = self.encoder(x)
-        else:
-            raise ValueError('Node encoder not recognized: '+self.node_encoding) 
-
-        # Pass through the model, get output (long edge_index)
-        out = self.edge_predictor(x, index, e, xbatch) 
-
-        return {**out,
-                'clust_ids':[clust_ids],
-                'batch_ids':[batch_ids],
-                'edge_index':[edge_index]}
-
-
-class FlashmatchingChannelLoss(torch.nn.Module):
-    """
-    Takes the output of FullEdgeModel and computes the channel-loss.
-
-    For use in config:
-    model:
-      name: cluster_gnn
-      modules:
-        edge_model:
-          loss            : <loss function: 'CE' or 'MM' (default 'CE')>
-          reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
-          balance_classes : <balance loss per class: True or False (default False)>
-          target_photons  : <use true photon connections as basis for loss (default False)>
-    """
-    def __init__(self, cfg):
-        super(FullEdgeChannelLoss, self).__init__()
-
-        # Get the model loss parameters
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_model']
-        else:
-            self.model_config = cfg
-
-        self.loss = self.model_config.get('loss', 'CE')
-        self.reduction = self.model_config.get('reduction', 'mean')
-        self.balance_classes = self.model_config.get('balance_classes', False)
-        self.target_photons = self.model_config.get('target_photons', False)
-
-        if self.loss == 'CE':
-            self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
-        elif self.loss == 'MM':
-            p = self.model_config.get('p', 1)
-            margin = self.model_config.get('margin', 1.0)
-            self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
-        else:
-            raise Exception('unrecognized loss: ' + self.loss)
-
-    def forward(self, out, clusters, graph):
-        """
-        Default return when no valid node is found in the input data.
-
-        Args:
-            out (dict):
-                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clust_ids' (np.ndarray)  : (C) Cluster ids
-                'batch_ids' (np.ndarray)  : (C) Cluster batch ids
-                'edge_index' (np.ndarray) : (2,E) Incidence matrix
-            clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-            graph ([torch.tensor])        : (N,3) True edges 
-        Returns:
-            double: loss, accuracy, clustering metrics
-        """
-        total_loss, total_acc = 0., 0.
-        total_ari, total_ami, total_sbd, total_pur, total_eff = 0., 0., 0., 0., 0.
-        ngpus = len(clusters)
-        out['group_ids'] = []
-        for i in range(len(clusters)):
-
-            # Get the necessary data products
-            if not len(out['clust_ids'][i]):
-                if ngpus == 1:
-                    total_loss = torch.tensor(0., requires_grad=True, device=edge_pred.device)
-                ngpus = max(1, ngpus-1)
-                continue
-
-            # Get list of IDs of points contained in each cluster
-            cluster_label = clusters[i].detach().cpu().numpy()
-            clust_ids = out['clust_ids'][i]
-            batch_ids = out['batch_ids'][i]
-            clusts = reform_clusters(cluster_label, clust_ids, batch_ids)
-
-            # Use group information to determine the true edge assigment (must be torch.long)
-            edge_pred = out['edge_pred'][i]
-            edge_index = out['edge_index'][i]
-            group_ids = get_cluster_group(cluster_label, clusts)
-            out['group_ids'].append(group_ids)
-            if not self.target_photons:
-                edge_assn = edge_assignment(edge_index, batch_ids, group_ids)
-            else:
-                graph = graph[i].detach().cpu().numpy()
-                true_edge_index = get_fragment_edges(graph, clust_ids, batch_ids)
-                edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
-
-            edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
-
-            # Increment the loss, balance classes if requested
-            if self.balance_classes:
-                counts = torch.unique(edge_assn, return_counts=True)[1]
-                weights = np.array([float(counts[k])/len(edge_assn) for k in range(2)])
-                for k in range(2):
-                    total_loss += (1./weights[k])*self.lossfn(edge_pred[edge_assn==k], edge_assn[edge_assn==k])
-            else:
-                total_loss += self.lossfn(edge_pred, edge_assn)
-
-            # Compute accuracy of assignment (Fraction of correctly assigned edges)
-            total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
-
-            # Compute clustering accuracy metrics
-            node_assn = node_assignment(edge_index, edge_assn.cpu().numpy(), len(clust_ids))
-            node_pred = node_assignment(edge_index, torch.argmax(edge_pred, dim=1).detach().cpu().numpy(), len(clust_ids))
-            ari, ami, sbd, pur, eff = clustering_metrics(clusts, node_assn, node_pred)
-            total_ari += ari
-            total_ami += ami
-            total_sbd += sbd
-            total_pur += pur
-            total_eff += eff
-
-        return {
-            'ARI': total_ari/ngpus,
-            'AMI': total_ami/ngpus,
-            'SBD': total_sbd/ngpus,
-            'purity': total_pur/ngpus,
-            'efficiency': total_eff/ngpus,
-            'accuracy': total_acc/ngpus,
-            'loss': total_loss/ngpus,
-        }
-
+        tpc_voxel_tensor = torch.tensor(np.array(tpc_voxel_data), dtype=torch.float, requires_grad=False).to(device)
+        tpc_pca_tensor = torch.tensor(np.array(tpc_pca_data), dtype=torch.float, requires_grad=False).to(device)
+        pmt_voxel_tensor = torch.tensor(np.array(pmt_voxel_data), dtype=torch.float, requires_grad=False).to(device)
+        node_tensor = torch.tensor(np.array(node_data), dtype=torch.float, requires_grad=False).to(device)
+        matching_tensor = torch.tensor(np.array(matching), dtype=torch.long, requires_grad=False).to(device)
+        
+        x = [tpc_voxel_tensor, tpc_pca_tensor, pmt_voxel_tensor, node_tensor, edge_index, x_batch]
+        y = matching_tensor
+        
+        model = flashmatching_gnn.UResGNet()
+        model = model.to(device)
+        
+        out = model(x)
+        
+        return {**out, 
+               'true':[matching_tensor]}
+    
