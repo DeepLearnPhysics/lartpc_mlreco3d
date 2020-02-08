@@ -161,6 +161,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
             result['clusts'] = result['shower_fragments']
         node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
+        if 'clusts' in result:
+            del result['clusts']
         loss.update(uresnet_ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)
