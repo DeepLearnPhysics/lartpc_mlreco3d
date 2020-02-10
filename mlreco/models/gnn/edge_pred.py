@@ -20,21 +20,21 @@ class EdgeModel(torch.nn.Module):
         """
         super(EdgeModel, self).__init__()
 
-        self.edge_pred_mlp = Seq(Lin(2*node_in + edge_in, 64),
-                                 LeakyReLU(leak),
-                                 Lin(64, 32),
-                                 LeakyReLU(leak),
-                                 Lin(32, 16),
-                                 LeakyReLU(leak),
-                                 Lin(16,8),
-                                 LeakyReLU(leak),
-                                 Lin(8,2)
-                                )
+        self.edge_mlp = Seq(Lin(2*node_in + edge_in, 64),
+                            LeakyReLU(leak),
+                            Lin(64, 32),
+                            LeakyReLU(leak),
+                            Lin(32, 16),
+                            LeakyReLU(leak),
+                            Lin(16,8),
+                            LeakyReLU(leak),
+                            Lin(8,2)
+                            )
 
     def forward(self, src, dest, edge_attr, u, batch):
-        return self.edge_pred_mlp(torch.cat([src, dest, edge_attr], dim=1))
-    
-    
+        return self.edge_mlp(torch.cat([src, dest, edge_attr], dim=1))
+ 
+
 class BilinEdgeModel(torch.nn.Module):
     def __init__(self, node_in, edge_in, leak):
         """
@@ -76,6 +76,4 @@ class BilinEdgeModel(torch.nn.Module):
         out = torch.cat([x, y, z], dim=1)
         out = self.mlp(out)
         return out
-    
-    
     
