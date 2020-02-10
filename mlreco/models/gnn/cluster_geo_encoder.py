@@ -136,3 +136,4 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
             feats.append(torch.cat([v1, v2, disp, torch.tensor([lend], dtype=dtype).to(device), B]))
 
         return torch.stack(feats, dim=0)
+

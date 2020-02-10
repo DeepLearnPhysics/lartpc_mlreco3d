@@ -1,3 +1,5 @@
+import torch
+
 def model_dict():
 
 #    from . import uresnet_ppn
@@ -12,6 +14,7 @@ def model_dict():
     from . import cluster_chain_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
+    from . import flashmatching_model
 
     from . import discriminative_loss
     from . import clustercnn_single
@@ -75,6 +78,8 @@ def model_dict():
         "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
         # Chain of uresnet + ppn + dbscan + primary node gnn + fragment clustering gnn
         "cluster_dbscan_gnn": (cluster_chain_gnn.ChainDBSCANGNN, cluster_chain_gnn.ChainLoss),
+        # Flashmatching using encoder and gnn
+        "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
