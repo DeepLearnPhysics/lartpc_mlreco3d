@@ -32,9 +32,11 @@ class ClustEdgeGNN(torch.nn.Module):
         node_encoder:
           name: <name of the node encoder>
           <dictionary of arguments to pass to the encoder>
+          model_path      : <path to the encoder weights>
         edge_encoder:
           name: <name of the edge encoder>
           <dictionary of arguments to pass to the encoder>
+          model_path      : <path to the encoder weights>
         edge_model:
           name: <name of the edge model>
           <dictionary of arguments to pass to the model>
@@ -161,7 +163,7 @@ class ClustEdgeGNN(torch.nn.Module):
 
 class EdgeChannelLoss(torch.nn.Module):
     """
-    Takes the output of EdgeModel and computes the channel-loss.
+    Takes the output of FullEdgeModel and computes the channel-loss.
 
     For use in config:
     model:
@@ -192,7 +194,7 @@ class EdgeChannelLoss(torch.nn.Module):
             margin = chain_config.get('margin', 1.0)
             self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
         else:
-            raise Exception('Loss not recognized: ' + self.loss)
+            raise Exception('unrecognized loss: ' + self.loss)
 
     def forward(self, out, clusters, graph):
         """

@@ -106,9 +106,11 @@ def node_encoder_dict():
     """
 
     from . import cluster_geo_encoder
+    from . import cluster_cnn_encoder
 
     encoders = {
-        "geo" : cluster_geo_encoder.ClustGeoNodeEncoder
+        "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
+        "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder
     }
 
     return encoders
@@ -145,9 +147,11 @@ def edge_encoder_dict():
     """
 
     from . import cluster_geo_encoder
+    from . import cluster_cnn_encoder
 
     encoders = {
-        "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder
+        "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
+        "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder
     }
 
     return encoders
