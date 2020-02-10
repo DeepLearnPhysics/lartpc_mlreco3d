@@ -16,8 +16,8 @@ class ClustCNNNodeEncoder(torch.nn.Module):
     def forward(self, data, clusts):
 
         # Use cluster ID as a batch ID, pass through CNN
-        cnn_data = torch.empty((0,5), dtype=torch.float)
-        device = cnn_data.device
+        device = data.device
+        cnn_data = torch.empty((0,5), device=device, dtype=torch.float)
         for i, c in enumerate(clusts):
             cnn_data = torch.cat((cnn_data, data[c,:5].float()))
             cnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
@@ -38,8 +38,8 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
     def forward(self, data, clusts, edge_index):
 
         # Use edge ID as a batch ID, pass through CNN
-        cnn_data = torch.empty((0, 5), dtype=torch.float)
-        device = cnn_data.device
+        device = data.device
+        cnn_data = torch.empty((0, 5), device=device, dtype=torch.float)
         for i, e in enumerate(edge_index.T):
             ci, cj = clusts[e[0]], clusts[e[1]]
             cnn_data = torch.cat((cnn_data, data[ci,:5].float()))
