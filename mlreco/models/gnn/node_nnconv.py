@@ -10,6 +10,7 @@ from torch_scatter import scatter_mean
 import torch.nn.functional as F
 
 from .edge_pred import EdgeModel, BilinEdgeModel
+from .node_pred import NodeModel
 
 class NodeNNConvModel(torch.nn.Module):
     """
@@ -24,12 +25,7 @@ class NodeNNConvModel(torch.nn.Module):
     def __init__(self, cfg):
         super(NodeNNConvModel, self).__init__()
 
-
-        if 'modules' in cfg:
-            self.model_config = cfg['modules']['edge_nnconv']
-        else:
-            self.model_config = cfg
-
+        self.model_config = cfg
 
         self.node_in = self.model_config.get('node_feats', 16)
         self.edge_in = self.model_config.get('edge_feats', 19)
@@ -61,25 +57,10 @@ class NodeNNConvModel(torch.nn.Module):
             )
             ninput = noutput
 
-        class NodeModel(torch.nn.Module):
-            def __init__(self):
-                super(NodeModel, self).__init__()
-
-                #self.node_mlp_1 = Seq(Lin(34, 64), LeakyReLU(0.12), Lin(64, 32))
-                self.node_mlp_2 = Seq(Lin(34, 16), LeakyReLU(0.12), Lin(16, 2))
-                #self.node_mlp = Seq(Lin(64, 32), LeakyReLU(0.12), Lin(32, 16), LeakyReLU(0.12), Lin(32, 2))
-
-            def forward(self, x, edge_index, edge_attr, u, batch):
-                row, col = edge_index
-                out = torch.cat([x[col], edge_attr], dim=1)
-                #out = self.node_mlp_1(out)
-                out = scatter_mean(out, row, dim=0, dim_size=x.size(0))
-                return self.node_mlp_2(out)
-
-        # final prediction layer
+        # Final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
         if pred_cfg == 'basic':
-            self.predictor = MetaLayer(EdgeModel(noutput, self.edge_in, self.leak), NodeModel())
+            self.predictor = MetaLayer(EdgeModel(noutput, self.edge_in, self.leak), NodeModel(noutput, 2, self.leak))
         elif pred_cfg == 'bilin':
             self.predictor = MetaLayer(BilinEdgeModel(noutput, self.edge_in, self.leak))
         else:
@@ -95,9 +76,9 @@ class NodeNNConvModel(torch.nn.Module):
 
         x = x.view(-1,self.node_in)
         e = e.view(-1,self.edge_in)
-        if self.edge_in > 1:
+        if e.shape[0] > 1:
             e = self.bn_edge(e)
-        if self.node_in > 1:
+        if x.shape[0] > 1:
             x = self.bn_node(x)
 
         # go through layers
