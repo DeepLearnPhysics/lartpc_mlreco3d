@@ -40,7 +40,7 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
         # Use edge ID as a batch ID, pass through CNN
         cnn_data = torch.empty((0, 5), dtype=torch.float)
         device = cnn_data.device
-        for i, e in enumerate(edge_index):
+        for i, e in enumerate(edge_index.T):
             ci, cj = clusts[e[0]], clusts[e[1]]
             cnn_data = torch.cat((cnn_data, data[ci,:5].float()))
             cnn_data = torch.cat((cnn_data, data[cj,:5].float()))
