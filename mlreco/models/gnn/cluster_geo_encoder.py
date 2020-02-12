@@ -57,11 +57,11 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             ts = sem_types[c]
 
             # mean value
-            mean_value = np.mean(vs)
-            std_value = np.std(vs)
+            mean_value = vs.mean()
+            std_value = vs.std()
 
             # get majority of semantic types
-            major_sem_type = mode(ts)
+            major_sem_type = ts.mode()[0]
 
             # extra features
             extra_feats = torch.tensor([mean_value, std_value, major_sem_type], dtype=dtype).to(device)
