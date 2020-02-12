@@ -20,12 +20,18 @@ class EncoderModel(torch.nn.Module):
         self.nInputFeatures = model_config.get('input_feat_enc', 1)
         self.leakiness = model_config.get('leakiness_enc', 0)
         self.spatial_size = model_config.get('inp_spatial_size', 1024) #Must be a power of 2
+        self.feat_aug_mode = model_config.get('feat_aug_mode', 'constant')
         
         
         self.out_spatial_size = int(self.spatial_size/4**(self.num_strides-1))
         self.output = self.m*self.out_spatial_size**3       
-        
-        nPlanes = [self.m*i for i in range(1, self.num_strides+1)]  # UNet number of features per level
+
+        nPlanes = [self.m for i in range(1, self.num_strides+1)]  # UNet number of features per level
+        if self.feat_aug_mode=='linear':
+            nPlanes = [self.m * i for i in range(1, self.num_strides + 1)]
+        elif self.feat_aug_mode=='power':
+            nPlanes = [self.m * np.power(2., float(i)) for i in range(self.num_strides)]
+
         kernel_size = 2
         downsample = [kernel_size, 2]  # [filter size, filter stride]
        
