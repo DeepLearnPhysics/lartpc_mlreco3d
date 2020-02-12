@@ -15,7 +15,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         self.use_numpy = model_config.get('use_numpy', False)
 
         # flag for whether including the semantic type, mean energy per voxel, and std energy per voxel
-        # If true, the output feature number will be 20
+        # If true, the output feature number will be 19
         self.more_feats = model_config.get('more_feats', False)
 
     def forward(self, data, clusts, delta=0.):
