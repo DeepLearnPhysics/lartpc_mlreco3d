@@ -208,7 +208,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, result, label):
+    def forward(self, result, label, weights=None):
         """
         result[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -305,6 +305,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
                     else:
                         loss_seg = self.cross_entropy(event_segmentation, event_label)
+                        if weights is not None:
+                            loss_seg *= weights[i][batch_index][:, -1].float()
                     uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation

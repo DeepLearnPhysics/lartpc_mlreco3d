@@ -72,6 +72,7 @@ class PPN(torch.nn.Module):
         num_classes = self._model_config.get('num_classes', 5)
         self._downsample_ghost = self._model_config.get('downsample_ghost', False)
         self._use_encoding = self._model_config.get('use_encoding', False)
+        self._use_true_ghost_mask = self._model_config.get('use_true_ghost_mask', False)
         self._ppn_num_conv = self._model_config.get('ppn_num_conv', 1)
         self._ppn1_size = self._model_config.get('ppn1_size', -1)
         self._ppn2_size = self._model_config.get('ppn2_size', -1)
@@ -148,7 +149,10 @@ class PPN(torch.nn.Module):
         # If ghost mask is present, downsample it and use it before conv
         if self._downsample_ghost:
             with torch.no_grad():
-                ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
+                if self._use_true_ghost_mask:
+                    ghost_mask = input['segment_label'] < self._num_classes
+                else:
+                    ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
                 coords = ppn1_feature_enc[0].get_spatial_locations()
                 # print('Strides = ', self.ppn1_stride, self.ppn2_stride)
                 # print('Feature maps = ', feature_map1.features.size(), feature_map2.features.size(), feature_map3.features.size())
