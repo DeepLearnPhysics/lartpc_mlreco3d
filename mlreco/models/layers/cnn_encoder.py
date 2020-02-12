@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from torch_geometric.nn import MetaLayer, NNConv
+import numpy as np
     
 class EncoderModel(torch.nn.Module):
 
@@ -30,7 +31,7 @@ class EncoderModel(torch.nn.Module):
         if self.feat_aug_mode=='linear':
             nPlanes = [self.m * i for i in range(1, self.num_strides + 1)]
         elif self.feat_aug_mode=='power':
-            nPlanes = [self.m * np.power(2., float(i)) for i in range(self.num_strides)]
+            nPlanes = [int(self.m * np.power(2., float(i))) for i in range(self.num_strides)]
 
         kernel_size = 2
         downsample = [kernel_size, 2]  # [filter size, filter stride]
