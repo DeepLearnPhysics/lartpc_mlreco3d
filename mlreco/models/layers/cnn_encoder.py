@@ -25,7 +25,7 @@ class EncoderModel(torch.nn.Module):
         self.out_spatial_size = int(self.spatial_size/4**(self.num_strides-1))
         self.output = self.m*self.out_spatial_size**3       
         
-        nPlanes = [self.m for i in range(1, self.num_strides+1)]  # UNet number of features per level, was m*i        
+        nPlanes = [self.m*i for i in range(1, self.num_strides+1)]  # UNet number of features per level
         kernel_size = 2
         downsample = [kernel_size, 2]  # [filter size, filter stride]
        
