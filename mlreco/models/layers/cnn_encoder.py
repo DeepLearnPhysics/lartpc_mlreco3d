@@ -22,8 +22,14 @@ class EncoderModel(torch.nn.Module):
         self.leakiness = model_config.get('leakiness_enc', 0)
         self.spatial_size = model_config.get('inp_spatial_size', 1024) #Must be a power of 2
         self.feat_aug_mode = model_config.get('feat_aug_mode', 'constant')
-        
-        
+
+        # More flags for linear layer
+        self.WhetherUseLinearLayer = model_config.get('linear_layer', False)
+        self.nOutputFeatures = model_config.get(
+            'out_feat_num',
+            64
+        )  # final output feature numbers, not necessary if not using linear layer
+
         self.out_spatial_size = int(self.spatial_size/4**(self.num_strides-1))
         self.output = self.m*self.out_spatial_size**3       
 
@@ -60,6 +66,11 @@ class EncoderModel(torch.nn.Module):
         self.output = scn.Sequential().add(
            scn.SparseToDense(self._dimension,nPlanes[-1]))
 
+        self.linear = None
+        if self.WhetherUseLinearLayer:
+            input_size = nPlanes[-1] * (self.out_spatial_size ** self._dimension)
+            self.linear = torch.nn.Linear(input_size, self.nOutputFeatures)
+
     def forward(self, point_cloud):
         # We separate the coordinate tensor from the feature tensor
         coords = point_cloud[:, 0:self._dimension+1].float()
@@ -77,5 +88,10 @@ class EncoderModel(torch.nn.Module):
         
         #Then we flatten the vector
         x = x.view(-1,(x.size()[2]*x.size()[2]*x.size()[2]*x.size()[1]))
+
+        # Go through linear layer if necessary
+        if self.WhetherUseLinearLayer:
+            x = self.linear(x)
+            x = x.view(-1, self.nOutputFeatures)
         
         return x
