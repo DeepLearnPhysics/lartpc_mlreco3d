@@ -1,6 +1,7 @@
 # Defines cluster formation and feature extraction
 import numpy as np
 import torch
+from scipy.stats import mode
 
 def form_clusters(data, min_size=-1):
     """
@@ -288,4 +289,36 @@ def get_cluster_features(data, clusts, delta=0.0):
         feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
 
     return np.vstack(feats)
+
+
+def get_cluster_features_extended(data_values, data_sem_types, clusts):
+    """
+    Function that returns the an array of 16 features for
+    each of the clusters in the provided list.
+
+    Args:
+        data_values (np.ndarray)    : (N) value
+        data_values (np.ndarray)    : (N) sem_type
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
+    """
+    feats = []
+    for c in clusts:
+        # Get values for the clusts
+        vs = data_values[c]
+        ts = data_sem_types[c]
+
+        # mean value
+        mean_value = np.mean(vs)
+        std_value = np.std(vs)
+
+        # get majority of semantic types
+        major_sem_type = mode(ts)
+
+        feats.append([mean_value, std_value, major_sem_type])
+
+    return np.vstack(feats)
+
+
 

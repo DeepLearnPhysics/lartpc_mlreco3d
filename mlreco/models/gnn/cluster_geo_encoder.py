@@ -1,6 +1,7 @@
 # Geometric feature extractor for Cluster GNN
 import torch
 from mlreco.utils import local_cdist
+from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
 
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
@@ -13,6 +14,10 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         # Initialize the chain parameters
         self.use_numpy = model_config.get('use_numpy', False)
 
+        # flag for whether including the semantic type, mean energy per voxel, and std energy per voxel
+        # If true, the output feature number will be 20
+        self.more_feats = model_config.get('more_feats', False)
+
     def forward(self, data, clusts, delta=0.):
 
         # Get the voxel set
@@ -20,10 +25,24 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         dtype = voxels.dtype
         device = voxels.device
 
+        # Get the value & semantic types
+        values = data[:,4].float()
+        sem_types = data[:,-1].float()
+
+
         # If numpy is to be used, bring data to cpu, pass through function
         if self.use_numpy:
-            from mlreco.utils.gnn.data import cluster_vtx_features
-            return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts), dtype=voxels.dtype, device=voxels.device)
+            if not self.more_feats:
+                return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts), dtype=voxels.dtype, device=voxels.device)
+            return torch.tensor(
+                np.concatenate(
+                    cluster_vtx_features(voxels.detach().cpu().numpy(), clusts),
+                    cluster_vtx_features_extended(values.detach().cpu().numpy(), sem_types.detach().cpu().numpy(), clusts),
+                    axis=0
+                ),
+                dtype=voxels.dtype,
+                device=voxels.device
+            )
 
         # Here is a torch-based implementation of cluster_vtx_features
         feats = []
@@ -32,6 +51,20 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             x = voxels[c]
             size = torch.tensor([len(c)], dtype=dtype).to(device)
 
+            # Get value, sem_types for the clusts
+            vs = values[c]
+            ts = sem_types[c]
+
+            # mean value
+            mean_value = np.mean(vs)
+            std_value = np.std(vs)
+
+            # get majority of semantic types
+            major_sem_type = mode(ts)
+
+            # extra features
+            extra_feats = torch.tensor([mean_value, std_value, major_sem_type], dtype=dtype).to(device)
+
             # Handle size 1 clusters seperately
             if len(c) < 2:
                 # Don't waste time with computations, default to regularized
@@ -39,7 +72,10 @@ class ClustGeoNodeEncoder(torch.nn.Module):
                 center = x.flatten()
                 B = delta * torch.eye(3, dtype=dtype).to(device)
                 v0 = torch.zeros(3, dtype=dtype).to(device)
-                feats.append(torch.cat((center, B.flatten(), v0, size)))
+                if not self.more_feats:
+                    feats.append(torch.cat((center, B.flatten(), v0, size)))
+                else:
+                    feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
                 continue
 
             # Center data
@@ -82,7 +118,11 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             v0 = dirwt * v0
 
             # Append (center, B.flatten(), v0, size)
-            feats.append(torch.cat((center, B.flatten(), v0, size)))
+            if not self.more_feats:
+                feats.append(torch.cat((center, B.flatten(), v0, size)))
+            else:
+                feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
+
 
         return torch.stack(feats, dim=0)
 
