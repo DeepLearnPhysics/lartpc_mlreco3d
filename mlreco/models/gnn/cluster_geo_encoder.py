@@ -1,5 +1,6 @@
 # Geometric feature extractor for Cluster GNN
 import torch
+import numpy as np
 from mlreco.utils import local_cdist
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
 
