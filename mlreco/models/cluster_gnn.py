@@ -255,6 +255,7 @@ class EdgeChannelLoss(torch.nn.Module):
 
                 # Compute accuracy of assignment (fraction of correctly assigned edges)
                 total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
+
                 # Increment the number of events
                 n_events += 1
 
@@ -269,3 +270,4 @@ class EdgeChannelLoss(torch.nn.Module):
             'accuracy': total_acc/n_events,
             'loss': total_loss/n_events
         }
+
