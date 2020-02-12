@@ -353,6 +353,31 @@ def parse_cluster3d_full(data):
     return np_voxels, np_features
 
 
+def parse_cluster3d_full_extended(data):
+    '''
+    a function to retrieve clusters tensor
+    an extension of parse_cluster3d_full
+    cluster id -> group id
+    group id -> interaction id
+    args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (n,4) where 4 is voxel value,
+        group id, interaction id, and semantic type respectively
+    '''
+    # first get the parser output from parse_cluster3d_full
+    np_voxels, np_features = parse_cluster3d_full(data)
+    # based on the first parser results, sort out the interaction ids
+    from mlreco.utils.groups import get_interaction_id
+    interaction_ids = get_interaction_id(data[1].as_vector(), np_features)
+    # replace the cluster id with group id, and group id with new interaction id
+    np_features[:,1] = np_features[:,2]
+    np_features[:,2] = interaction_ids
+    return np_voxels, np_features
+
+
 def parse_cluster3d_clean(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:

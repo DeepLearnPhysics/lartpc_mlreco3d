@@ -142,3 +142,63 @@ def process_group_data(data_grp, data_img):
     inds = filter_group_data(data_grp_np, data_img_np)
 
     return data_grp[inds,:]
+
+
+def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
+    '''
+    A function to sort out interaction ids.
+    Note that this assumes cluster_id==particle_id.
+    Inputs:
+        - particle_v vector: larcv::EventParticle.as_vector()
+        - np_features: a numpy array with the shape (n,4) where 4 is voxel value,
+        cluster id, group id, and semantic type respectively
+        - number of ancestor loops (default 1)
+    Outputs:
+        - interaction_ids: a numpy array with the shape (n,)
+    '''
+    # initiate the interaction_ids, setting all ids to -1 (as unknown) by default
+    interaction_ids = (-1.)*np.ones(np_features.shape[0])
+    ##########################################################################
+    # sort out the interaction ids using the information of ancestor vtx info
+    # then loop over to make sure the ancestor particles having the same interaction ids
+    ##########################################################################
+    # get the particle ancestor vtx array first
+    # and the track ids
+    # and the ancestor track ids
+    ancestor_vtxs = []
+    track_ids = []
+    ancestor_track_ids = np.empty(0, dtype=np.int)
+    for particle in particle_v:
+        ancestor_vtx = [
+            particle.ancestor_x(),
+            particle.ancestor_y(),
+            particle.ancestor_z(),
+        ]
+        ancestor_vtxs.append(ancestor_vtx)
+        track_ids.append(particle.track_id())
+        ancestor_track_ids = np.append(ancestor_track_ids, [particle.ancestor_track_id()])
+    ancestor_vtxs = np.asarray(ancestor_vtxs)
+    # get the list of unique interaction vertexes
+    interaction_vtx_list = np.unique(
+        ancestor_vtxs,
+        axis=0,
+    ).tolist()
+    # loop over each cluster to assign interaction ids
+    interaction_ids_cluster_wise = np.ones(particle_v.size(), dtype=np.int)*(-1)
+    for clust_id in range(particle_v.size()):
+        # get the interaction id from the unique list (index is the id)
+        interaction_ids_cluster_wise[clust_id] = interaction_vtx_list.index(
+            ancestor_vtxs[clust_id].tolist()
+        )
+    # Loop over ancestor, making sure particle having the same interaction id as ancestor
+    for _ in range(num_ancestor_loop):
+        for clust_id, ancestor_track_id in enumerate(ancestor_track_ids):
+            if ancestor_track_id in track_ids:
+                ancestor_clust_index = track_ids.index(ancestor_track_id)
+                interaction_ids_cluster_wise[clust_id] = interaction_ids_cluster_wise[ancestor_clust_index]
+    # loop over clusters to assign interaction to voxel wise array
+    for clust_id, interaction_id in enumerate(interaction_ids_cluster_wise):
+        # update the interaction_ids array
+        clust_inds = np.where(np_features[:,1]==clust_id)[0]
+        interaction_ids[clust_inds] = interaction_id
+    return interaction_ids
