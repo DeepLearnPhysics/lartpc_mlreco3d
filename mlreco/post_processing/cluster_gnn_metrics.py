@@ -9,9 +9,8 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
     if not 'edge_pred' in res: return
 
     # Get the post processor parameters
-    proc_cfg = cfg['post_processing']['cluster_gnn_metrics']
-    bipartite = proc_cfg['bipartite']
-    store_method = proc_cfg['store_method']
+    bipartite = cfg['model']['modules']['chain']['network'] == 'bipartite'
+    store_method = cfg['post_processing']['cluster_gnn_metrics']['store_method']
     assert store_method in ['single-file', 'per-iteration', 'per-event']
     store_per_event = store_method == 'per-event'
     if store_method == 'per-iteration':
@@ -53,7 +52,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
         else:
             # Determine the predicted group by chosing the most likely primary for each secondary
             primary_ids = np.unique(edge_index[data_idx][:,0])
-            node_pred = node_assignment_primary(edge_index[data_idx], edge_pred[data_idx], primary_ids, n)
+            node_pred = node_assignment_bipartite(edge_index[data_idx], edge_pred[data_idx][:,1], primary_ids, n)
 
         # Evaluate clustering metrics
         ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
