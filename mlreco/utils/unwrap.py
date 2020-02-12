@@ -6,8 +6,14 @@ def list_concat(data_blob, outputs, avoid_keys=[]):
         if key in avoid_keys:
             result_data[key]=data
             continue
-        result_data[key] = []
-        for d in data: result_data[key] += d
+        if isinstance(data[0],list):
+            result_data[key] = []
+            for d in data: result_data[key] += d
+        elif isinstance(data[0],np.ndarray):
+            result_data[key] = np.concatenate(data)
+        else:
+            print('Unexpected data type',type(data))
+            raise TypeError
 
     result_outputs = {}
     for key,data in outputs.items():
