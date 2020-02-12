@@ -294,6 +294,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
     elif score_pool == 'mean' : pool_op = np.amean
     else: raise ValueError('score_pool must be either "max" or "mean"!')
     all_points = []
+    all_occupancy = []
     all_types  = []
     all_scores = []
     all_batch  = []
@@ -324,16 +325,18 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5,
             final_scores = np.concatenate(final_scores, axis=0)
             final_types  = np.concatenate(final_types,  axis=0)
             final_softmax = np.concatenate(final_softmax, axis=0)
-            clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
-            for c in clusts:
-                # append mean of points
-                all_points.append(np.mean(final_points[c], axis=0))
-                all_scores.append(pool_op(final_scores[c], axis=0))
-                all_types.append (pool_op(final_types[c],  axis=0))
-                all_softmax.append(pool_op(final_softmax[c], axis=0))
-                all_batch.append(b)
+            if final_points.shape[0] > 0:
+                clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
+                for c in clusts:
+                    # append mean of points
+                    all_points.append(np.mean(final_points[c], axis=0))
+                    all_occupancy.append(len(c))
+                    all_scores.append(pool_op(final_scores[c], axis=0))
+                    all_types.append (pool_op(final_types[c],  axis=0))
+                    all_softmax.append(pool_op(final_softmax[c], axis=0))
+                    all_batch.append(b)
 
-    return np.column_stack((all_points, all_batch, all_scores, all_softmax, all_types))
+    return np.column_stack((all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types))
 
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,

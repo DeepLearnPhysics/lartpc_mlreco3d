@@ -153,6 +153,30 @@ def parse_tensor3d(data):
     return np.stack(np_data, axis=-1)
 
 
+def parse_weights(data):
+    """
+    A function to generate weights from larcv::EventSparseTensor3D and larcv::Particle list
+    Args:
+        length 3 array of larcv::EventSparseTensor3D x2 and larcv::EventParticle
+    Return:
+        a numpy array of sparse 3d tensor object
+    """
+    event_tensor3d = data[0]
+    num_point = event_tensor3d.as_vector().size()
+    np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
+    larcv.fill_3d_voxels(event_tensor3d, np_voxels)
+
+    event_index = data[1]
+    assert num_point == event_index.as_vector().size()
+    np_index = np.empty(shape=(num_point, 1), dtype=np.float32)
+    larcv.fill_3d_pcloud(event_index, np_index)
+
+    particles = data[2]
+    num_voxels = np.array([1. / (p.num_voxels()+1) for p in particles.as_vector()])
+
+    return np_voxels, num_voxels[np_index.astype(int)]
+
+
 def parse_particle_asis(data):
     """
     A function to copy construct & return an array of larcv::Particle
@@ -188,13 +212,14 @@ def parse_particle_points(data):
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N, 2) where 2 represents the particle data
-        index and the class of the ground truth point respectively.
+        a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
+        and the particle data index in this order.
     """
     particles_v = data[1].as_vector()
-    #part_info = get_ppn_info(particles_v, data[0].meta())
+    part_info = get_ppn_info(particles_v, data[0].meta())
     # For open data - to reproduce
-    part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
+    #part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
+    # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]
         return part_info[:, :3], np.column_stack([part_info[:, -6],part_info[:, -1]])
