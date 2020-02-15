@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from mlreco.utils import local_cdist
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
+from mlreco.utils.gnn.cluster import find_start_point
 
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
