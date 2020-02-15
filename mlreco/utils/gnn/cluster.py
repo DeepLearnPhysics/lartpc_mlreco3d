@@ -223,7 +223,7 @@ def get_cluster_dirs(data, clusts, delta=0.0):
     return np.vstack(dirs)
 
 
-def get_cluster_features(data, clusts, delta=0.0):
+def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False):
     """
     Function that returns the an array of 16 features for
     each of the clusters in the provided list.
@@ -285,6 +285,14 @@ def get_cluster_features(data, clusts, delta=0.0):
         # Weight direction
         v0 = dirwt * v0
 
+        # If adjust the direction
+        if whether_adjust_direction:
+            if np.dot(
+                    x[find_start_point(x.detach().cpu().numpy())],
+                    v0
+            ) > 0:
+                v0 = -v0
+
         # Append (center, B.flatten(), v0, size)
         feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
 
@@ -319,6 +327,37 @@ def get_cluster_features_extended(data_values, data_sem_types, clusts):
         feats.append([mean_value, std_value, major_sem_type])
 
     return np.vstack(feats)
+
+
+# Two functions borrowed from Francois for adjusting node direction feature
+# Finds local curvature
+def curv(vox, voxid):
+    """
+    vox: list of voxels (x, y, z)
+    refvox: reference voxel wrt which to compute curvature
+    """
+    # Find the mean direction from that point
+    import numpy.linalg as LA
+    refvox = vox[voxid]
+    axis = np.mean([v-refvox for v in vox], axis=0)
+    axis /= LA.norm(axis)
+    # Find the umbrella curvature (mean angle from the mean direction)
+    return abs(np.mean([np.dot((vox[i]-refvox)/LA.norm(vox[i]-refvox), axis) for i in range(len(vox)) if i != voxid]))
+
+# Function that identifies the principal axis, finds extremes and evaluated the point of max curvature
+def find_start_point(voxels):
+    # Find PCA
+    from sklearn.decomposition import PCA
+    pca = PCA()
+    pca.fit(voxels)
+    axis = pca.components_[0,:]
+    # Compute coord values along that axis
+    coords = [np.dot(v, axis) for v in voxels]
+    ids = [np.argmin(coords), np.argmax(coords)]
+    # Compute curvature of the
+    curvs = [curv(voxels, ids[0]), curv(voxels, ids[1])]
+    # Return ID of the point
+    return ids[np.argmax(curvs)]
 
 
 
