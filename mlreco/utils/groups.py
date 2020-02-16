@@ -202,3 +202,29 @@ def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
         clust_inds = np.where(np_features[:,1]==clust_id)[0]
         interaction_ids[clust_inds] = interaction_id
     return interaction_ids
+
+
+def reassign_id(data, id_index=6):
+    '''
+    A function to reassign group id when merging all the batches,
+    make sure that there is no overlap of group id
+    :param data: torch tensor (N,8) -> [x,y,z,batchid,value,id,group id,sem. type]
+    :return: torch tensor (N) -> reassigned group ids
+    Or the input and output can be both numpy array
+    '''
+    group_ids = None
+    batch_ids = None
+    if type(data)==torch.Tensor:
+        group_ids = data[:,id_index].detach().cpu().numpy()
+        batch_ids = data[:,3].detach().cpu().numpy()
+    else:
+        group_ids = data[:,id_index]
+        batch_ids = data[:,3]
+    max_shift = 0
+    for batch_id in np.unique(batch_ids):
+        inds = np.where(batch_ids==batch_id)[0]
+        group_ids[inds] += max_shift
+        max_shift = np.max(group_ids[inds],axis=-1)+1
+    if type(data)==torch.Tensor:
+        return torch.tensor(group_ids, device=data.device, dtype=torch.long)
+    return group_ids
