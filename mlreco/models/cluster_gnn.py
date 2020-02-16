@@ -10,6 +10,7 @@ from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_clust
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
+from mlreco.utils.groups import reassign_id
 
 class ClustEdgeGNN(torch.nn.Module):
     """
@@ -56,6 +57,9 @@ class ClustEdgeGNN(torch.nn.Module):
         self.network = chain_config.get('network', 'complete')
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
         self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
+
+        # extra flag for merging events in batch
+        self.merge_batch = chain_config.get('merge_batch', False)
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
@@ -105,6 +109,13 @@ class ClustEdgeGNN(torch.nn.Module):
 
         if not len(clusts):
             return {}
+
+        # if merge_batch set all batch id to zero
+        # and also reassign ids and group ids
+        if self.merge_batch:
+            data[:,5] = reassign_id(data,5)
+            data[:,6] = reassign_id(data,6)
+            data[:,3] = 0
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -187,6 +198,11 @@ class EdgeChannelLoss(torch.nn.Module):
         self.balance_classes = chain_config.get('balance_classes', False)
         self.target_photons = chain_config.get('target_photons', False)
 
+        # Extra flag for merging events in batch
+        # Need to be the same as ClustEdgeGNN.merge_batch
+        # To-do: better way to handle such flag, avoiding two flags in two classes
+        self.merge_batch = chain_config.get('merge_batch', False)
+
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
         elif self.loss == 'MM':
@@ -219,6 +235,13 @@ class EdgeChannelLoss(torch.nn.Module):
             if 'edge_pred' not in out:
                 continue
 
+            # if merge_batch, set batch ids to zero
+            # also make sure no overlap between interactions
+            if self.merge_batch:
+                clusters[i][:, 5] = reassign_id(clusters[i],5)
+                clusters[i][:, 6] = reassign_id(clusters[i],6)
+                clusters[i][:, 3] = 0 # set batch id to zero
+
             # Get the list of batch ids, loop over individual batches
             batches = clusters[i][:,3]
             nbatches = len(batches.unique())
@@ -239,7 +262,7 @@ class EdgeChannelLoss(torch.nn.Module):
                     edge_assn = edge_assignment(edge_index, group_ids)
                 else:
                     clust_ids = get_cluster_label(labels, clusts) 
-                    true_edge_index = get_fragment_edges(graph. clust_ids)
+                    true_edge_index = get_fragment_edges(graph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
                 edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
