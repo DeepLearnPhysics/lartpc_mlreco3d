@@ -226,5 +226,42 @@ def reassign_id(data, id_index=6):
         group_ids[inds] += max_shift
         max_shift = np.max(group_ids[inds],axis=-1)+1
     if type(data)==torch.Tensor:
-        return torch.tensor(group_ids, device=data.device, dtype=torch.long)
-    return group_ids
+        return torch.tensor(group_ids, device=data.device, dtype=data.dtype)
+    return group_ids.astype(dtype=data.dtype)
+
+def merge_batch(data, merge_size=2):
+    """
+    Merge events in same batch
+    For ex., if batch size = 16 and merge_size = 2
+    output data has a batch size of 8 with each adjacent 2 batches in input data merged.
+    Input:
+        data - (N, 8) tensor or numpy array -> [x,y,z,batch_id,value, id, group_id, sem. type]
+    Output:
+        output_data - (N, 8) tensor or numpy array
+    """
+    # Get the unique batch ids
+    batch_ids = None
+    if type(data)==torch.Tensor:
+        batch_ids = data[:,3].unique()
+    else:
+        batch_ids = np.unique(data[:,3])
+    # Calculate the number of batches of output
+    # round up at the last several
+    # However it will be better to have len(batch_ids)%merge_size == 0
+    out_batch_num = int(int(len(batch_ids)) / int(merge_size)) + (int(len(batch_ids))%int(merge_size) > 0)*1
+    # Loop over
+    output_data = data
+    for i in range(int(out_batch_num)):
+        # get index for selection batches
+        selection = (data[:,3]>=float(i*merge_size))&(data[:,3]<float(i*merge_size+merge_size))
+        inds = None
+        if type(data)==torch.Tensor:
+            inds = selection.nonzero().view(-1)
+        else:
+            inds = np.where(selection)[0]
+        # Merge batch
+        output_data[inds,5] = reassign_id(data[inds,:],5)
+        output_data[inds,6] = reassign_id(data[inds,:],6)
+        output_data[inds,3] = i
+    return output_data
+
