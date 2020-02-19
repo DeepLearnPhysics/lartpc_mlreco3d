@@ -11,6 +11,7 @@ from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, 
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
 from mlreco.utils.groups import reassign_id, merge_batch
+import random
 
 class ClustEdgeGNN(torch.nn.Module):
     """
@@ -62,6 +63,9 @@ class ClustEdgeGNN(torch.nn.Module):
         self.merge_batch = chain_config.get('merge_batch', False)
         self.merge_batch_size = chain_config.get('merge_batch_size', 2)
 
+        # hidden flag for shuffling cluster
+        self.shuffle_clusters = chain_config.get('shuffle_clusters', False)
+
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
         if 'dbscan' in cfg:
@@ -110,6 +114,10 @@ class ClustEdgeGNN(torch.nn.Module):
 
         if not len(clusts):
             return {}
+
+        # if shuffle the clusters
+        if self.shuffle_clusters:
+            random.shuffle(clusts)
 
         # if merge_batch set all batch id to zero
         # and also reassign ids and group ids
