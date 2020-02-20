@@ -58,7 +58,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
         ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
 
         # Store
-        fout.record(['idx', 'ari', 'ami', 'sbd', 'pur', 'eff'], [tree_idx, ari, ami, sbd, pur, eff])
+        fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff'], [iteration, tree_idx, ari, ami, sbd, pur, eff])
         fout.write()
         if store_per_event:
             fout.close()
