@@ -16,17 +16,17 @@ def complete_graph(batches, dist=None, max_dist=-1):
     """
     # Create the incidence matrix
     ids = np.arange(len(batches))
-    edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]
+    edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j != i)]
     if not len(edges):
         return np.empty((2,0))
-    ret = np.vstack(edges).T
+    ret = np.vstack(edges)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
-        dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)])
-        ret = ret[:,dists < max_dist]
+        dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j != i)])
+        ret = ret[dists < max_dist]
 
-    return ret
+    return ret.T
 
 
 def delaunay_graph(data, clusts, dist=None, max_dist=-1):
@@ -63,6 +63,9 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
         dists = np.array([dist[e[0], e[1]] for e in ret])
         ret = ret[dists < max_dist]
 
+    # Add the reciprocal edges as to create an undirected graph
+    ret = np.vstack(ret, np.flip(ret, axis=1))
+
     return ret.T
 
 
@@ -89,10 +92,13 @@ def mst_graph(batches, dist, max_dist=-1):
         dists = mst_mat.flatten()[inds]
         ret = ret[:,dists < max_dist]
 
+    # Add the reciprocal edges as to create an undirected graph
+    ret = np.hstack(ret, np.flip(ret, axis=0))
+
     return ret
 
 
-def bipartite_graph(batches, primaries, dist=None, max_dist=-1):
+def bipartite_graph(batches, primaries, dist=None, max_dist=-1, directed=True, directed_to='secondary'):
     """
     Function that returns an incidence matrix of the bipartite graph
     between primary nodes and non-primary nodes.
@@ -110,14 +116,23 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1):
     edges = [[i, j] for i in primaries for j in others if batches[i] == batches[j]]
     if not len(edges):
         return np.empty((2,0))
-    ret = np.vstack(edges).T
+    ret = np.vstack(edges)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
         dists = np.array([dist[i, j] for i in primaries for j in others if batches[i] == batches[j]])
-        ret = ret[:,np.where(dists < max_dist)[0]]
+        ret = ret[dists < max_dist]
 
-    return ret
+    # Handle directedness, by default graph is directed towards secondaries
+    if directed:
+        if directed_to == 'primary':
+            ret = np.flip(ret, axis=1)
+        else:
+            raise ValueError('Graph orientation not recognized:', directed_to)
+    else:
+        ret = np.vstack(ret, np.flip(ret, axis=1))
+
+    return ret.T
 
 
 def inter_cluster_distance(voxels, clusts, mode='set'):
@@ -179,7 +194,7 @@ def get_fragment_edges(graph, clust_ids):
     to a set of edges between fragment ids (ordering in list)
 
     Args:
-        graph (torch.tensor)    : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
+        graph (torch.tensor)  : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
         clust_ids (np.ndarray): (C) List of fragment cluster ids
         batch_ids (np.ndarray): (C) List of fragment batch ids
     Returns:
