@@ -225,7 +225,7 @@ class EdgeChannelLoss(torch.nn.Module):
             for j in range(nbatches):
 
                 # Narrow down the tensor to the rows in the batch
-                labels = clusters[i][batches==j]
+                labels = clusters[i][batches == j]
 
                 # Use group information or particle tree to determine the true edge assigment
                 edge_pred = out['edge_pred'][i][j]
@@ -239,7 +239,8 @@ class EdgeChannelLoss(torch.nn.Module):
                     edge_assn = edge_assignment(edge_index, group_ids)
                 else:
                     clust_ids = get_cluster_label(labels, clusts) 
-                    true_edge_index = get_fragment_edges(graph. clust_ids)
+                    subgraph = graph[i][graph[i][:,-1] == j, :2]
+                    true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
 
                 edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
