@@ -64,7 +64,7 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
         ret = ret[dists < max_dist]
 
     # Add the reciprocal edges as to create an undirected graph
-    ret = np.vstack(ret, np.flip(ret, axis=1))
+    ret = np.vstack((ret, np.flip(ret, axis=1)))
 
     return ret.T
 
@@ -75,27 +75,34 @@ def mst_graph(batches, dist, max_dist=-1):
     that share an edge in their corresponding Euclidean Minimum Spanning Tree (MST).
 
     Args:
-        batches (np.ndarray) : (N) List of batch ids
+        batches (np.ndarray) : (C) List of batch ids
         dist (np.ndarray)    : (C,C) Tensor of pair-wise cluster distances
         max_dist (double)    : Maximal edge length
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
+    # For each batch, find the list of edges, append it
     from scipy.sparse.csgraph import minimum_spanning_tree
-    mst_mat = minimum_spanning_tree(dist).toarray().astype(float)
-    inds = np.where(mst_mat.flatten() > 0.)[0]
-    ret = np.array(np.unravel_index(inds, mst_mat.shape))
-    ret = np.sort(ret, axis=0)
+    ret = np.empty((0, 2), dtype=int)
+    for i in np.unique(batches):
+        where = np.where(batches == i)[0]
+        if len(where) > 1:
+            mst_mat = minimum_spanning_tree(dist[np.ix_(where,where)]).toarray().astype(float)
+            inds = np.where(mst_mat.flatten() > 0.)[0]
+            ind_pairs = np.array(np.unravel_index(inds, mst_mat.shape)).T
+            edges = np.array([[where[i], where[j]] for i, j in ind_pairs])
+            edges.sort(axis = 1)
+            ret = np.vstack((ret, edges))
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
-        dists = mst_mat.flatten()[inds]
-        ret = ret[:,dists < max_dist]
+        dists = np.array([dist[e[0], e[1]] for e in ret])
+        ret = ret[dists < max_dist]
 
     # Add the reciprocal edges as to create an undirected graph
-    ret = np.hstack(ret, np.flip(ret, axis=0))
+    ret = np.vstack((ret, np.flip(ret, axis=1)))
 
-    return ret
+    return ret.T
 
 
 def bipartite_graph(batches, primaries, dist=None, max_dist=-1, directed=True, directed_to='secondary'):
@@ -130,32 +137,9 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1, directed=True, d
         else:
             raise ValueError('Graph orientation not recognized:', directed_to)
     else:
-        ret = np.vstack(ret, np.flip(ret, axis=1))
+        ret = np.vstack((ret, np.flip(ret, axis=1)))
 
     return ret.T
-
-
-def inter_cluster_distance(voxels, clusts, mode='set'):
-    """
-    Function that returns the matrix of pair-wise cluster distances.
-
-    Args:
-        voxels (np.ndarray)  : (N,3) Tensor of voxel coordinates
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        mode (str)           : Maximal edge length (distance mode: set or centroid)
-    Returns:
-        np.ndarray: (C,C) Tensor of pair-wise cluster distances
-    """
-    from scipy.spatial.distance import cdist
-    if mode == 'set':
-        dist_mat = np.array([np.min(cdist(voxels[ci], voxels[cj])) for ci in clusts for cj in clusts]).reshape((len(clusts), len(clusts)))
-    elif mode == 'centroid':
-        centroids = np.vstack([np.mean(voxels[c], axis=0) for c in clusts])
-        dist_mat = cdist(centroids, centroids)
-    else:
-        raise(ValueError('Distance mode not recognized: '+mode))
-
-    return dist_mat
 
 
 def inter_cluster_distance(voxels, clusts, mode='set'):
@@ -194,7 +178,7 @@ def get_fragment_edges(graph, clust_ids):
     to a set of edges between fragment ids (ordering in list)
 
     Args:
-        graph (torch.tensor)  : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
+        graph (torch.tensor)  : (E,2) Tensor of [clust_id_1, clust_id_2]
         clust_ids (np.ndarray): (C) List of fragment cluster ids
         batch_ids (np.ndarray): (C) List of fragment batch ids
     Returns:
