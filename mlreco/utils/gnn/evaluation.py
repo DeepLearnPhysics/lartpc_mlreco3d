@@ -1,6 +1,8 @@
 # Defines GNN network accuracy metrics
 import numpy as np
 from mlreco.utils.metrics import SBD, AMI, ARI, purity_efficiency
+from scipy.sparse.csgraph import minimum_spanning_tree
+from scipy.special import softmax
 
 def edge_assignment(edge_index, groups, binary=False):
     """
@@ -237,3 +239,49 @@ def voxel_efficiency_bipartite(clusts, node_assn, node_pred, primaries):
     int_vox = np.sum([len(clusts[i]) for i in others if node_pred[i] == node_assn[i]])
     return int_vox * 1.0 / tot_vox
 
+
+# Function that computes the graph score
+def graph_score(on_mat, edge_index):
+    # Assign groups based of the current index
+    pred_groups = node_assignment(edge_index, np.ones(len(edge_index)), on_mat.shape[0])
+    # Make a matrix which is True when two clusters are in the same group, False otherwise
+    group_mat = np.array([int(i == j) for i in pred_groups for j in pred_groups]).reshape(on_mat.shape)
+    # Use on score if same group, off score otherwise
+    return np.sum(group_mat*on_mat+(1-group_mat)*(1-on_mat))
+
+# Function that finds the graph with the highest score
+def find_optimal_graph(edge_index, edge_scores, nclusters):
+    # Interpret the score as a distance matrix, build an MST based on score
+    edge_scores = softmax(edge_scores, axis=1)
+    on_mat = np.ones((nclusters, nclusters))
+    for i, e in enumerate(edge_index):
+        on_mat[e[0], e[1]] = edge_scores[i,1]
+    mst_mat = minimum_spanning_tree(1-on_mat).toarray()
+    mst_index = np.array(np.where(mst_mat != 0)).T
+    # Order the mst index by increasing order of ON score
+    args = np.argsort([on_mat[e[0], e[1]] for e in mst_index])
+    mst_index = mst_index[args]
+    # Now iteratively remove edges, until the total score cannot be improved any longer
+    best_score = graph_score(on_mat, mst_index)
+    best_index = mst_index
+    found_better = True
+    while found_better:
+        found_better = False
+        for i in range(len(best_index)):
+            # Update index
+            last_index = np.vstack((best_index[:i],best_index[i+1:]))
+            last_score = graph_score(on_mat, last_index)
+            if last_score > best_score:
+                best_score = last_score
+                best_index = last_index
+                found_better = True
+                break
+    return best_index
+
+
+def node_assignment_advance(edge_index, edge_pred, n):
+    '''
+    Advanced node assignment using Francois's functions above
+    '''
+    best_index = find_optimal_graph(edge_index, edge_pred, n)
+    return node_assignment(best_index, np.ones(len(best_index)), n)
