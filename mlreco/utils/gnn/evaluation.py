@@ -279,7 +279,7 @@ def find_optimal_graph(edge_index, edge_scores, nclusters):
     return best_index
 
 
-def node_assignment_advance(edge_index, edge_pred, n):
+def node_assignment_advanced(edge_index, edge_pred, n):
     '''
     Advanced node assignment using Francois's functions above
     '''
