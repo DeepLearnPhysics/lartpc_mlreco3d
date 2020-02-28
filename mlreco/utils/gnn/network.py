@@ -134,7 +134,7 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1, directed=True, d
     if directed:
         if directed_to == 'primary':
             ret = np.flip(ret, axis=1)
-        else:
+        elif directed_to != 'secondary':
             raise ValueError('Graph orientation not recognized:', directed_to)
     else:
         ret = np.vstack((ret, np.flip(ret, axis=1)))
@@ -193,4 +193,3 @@ def get_fragment_edges(graph, clust_ids):
             true_edges = np.vstack((true_edges, [n1[0], n2[0]]))
 
     return true_edges
-
