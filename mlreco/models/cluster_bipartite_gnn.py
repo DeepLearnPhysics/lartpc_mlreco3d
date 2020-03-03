@@ -4,29 +4,33 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
+from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
+from mlreco.models.cluster_node_gnn import NodeChannelLoss
+from mlreco.models.cluster_gnn import EdgeChannelLoss
 
-class ClustEdgeGNN(torch.nn.Module):
+class ClustBipartiteGNN(torch.nn.Module):
     """
-    Driver class for cluster edge prediction, assumed to be a GNN model.
+    Driver class for cluster node+edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
     If DBSCAN is used, use the semantic label tensor as an input.
 
     For use in config:
     model:
-      name: cluster_gnn
+      name: cluster_bipartite_gnn
       modules:
         chain:
           node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
           node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
+          network         : <type of node prediction network: 'complete', 'delaunay' or 'mst' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          directed:       : <True if the edge bipartite network is directed (default True)>
+          directed_to     : <nodes in the edge bipartite graph the messages are passed to (default 'secondary')>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -37,13 +41,17 @@ class ClustEdgeGNN(torch.nn.Module):
           name: <name of the edge encoder>
           <dictionary of arguments to pass to the encoder>
           model_path      : <path to the encoder weights>
+        node_model:
+          name: <name of the node model>
+          <dictionary of arguments to pass to the model>
+          model_path      : <path to the model weights>
         edge_model:
           name: <name of the edge model>
           <dictionary of arguments to pass to the model>
           model_path      : <path to the model weights>
     """
     def __init__(self, cfg):
-        super(ClustEdgeGNN, self).__init__()
+        super(ClustBipartiteGNN, self).__init__()
 
         # Get the chain input parameters
         chain_config = cfg['chain']
@@ -55,7 +63,9 @@ class ClustEdgeGNN(torch.nn.Module):
         # Choose what type of network to use
         self.network = chain_config.get('network', 'complete')
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
-        self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
+        self.edge_dist_metric = chain_config.get('edge_dist_metric', 'set')
+        self.directed = chain_config.get('directed', True)
+        self.directed_to = chain_config.get('directed_to', 'secondary')
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
@@ -67,7 +77,8 @@ class ClustEdgeGNN(torch.nn.Module):
         self.node_encoder = node_encoder_construct(cfg)
         self.edge_encoder = edge_encoder_construct(cfg)
 
-        # Construct the model
+        # Construct the models
+        self.node_predictor = node_model_construct(cfg)
         self.edge_predictor = edge_model_construct(cfg)
 
     def forward(self, data):
@@ -78,6 +89,7 @@ class ClustEdgeGNN(torch.nn.Module):
             data ([torch.tensor]): (N,5-6) [x, y, z, batchid, (value,) id]
         Returns:
             dict:
+                'node_pred' (torch.tensor): (N,2) Two-channel node predictions
                 'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 'edge_index' (np.ndarray) : (E,2) Incidence matrix
@@ -87,6 +99,7 @@ class ClustEdgeGNN(torch.nn.Module):
         # Here the specified size selection is applied
         data = data[0]
         device = data.device
+        result = {}
         if self.do_dbscan:
             clusts = self.dbscan(data, onehot=False)
             if self.node_type > -1:
@@ -103,7 +116,7 @@ class ClustEdgeGNN(torch.nn.Module):
                 clusts = [c.cpu().numpy() for c in clusts]
 
         if not len(clusts):
-            return {}
+            return result
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -122,51 +135,78 @@ class ClustEdgeGNN(torch.nn.Module):
             edge_index = delaunay_graph(data, clusts, dist_mat, self.edge_max_dist)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
-        elif self.network == 'bipartite':
-            primary_ids = [i for i, c in enumerate(clusts) if (data[c,-3] == data[c,-2]).any()]
-            edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
-        # Skip if there is less than two edges (fails batchnorm)
-        if edge_index.shape[1] < 2:
-            return {}
+        # Skip if there is no edges
+        if not edge_index.shape[1]:
+            return result
 
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
 
-        # Bring edge_index and batch_ids to device
+        # Pass through the node model, get node predictions
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
-        xbatch = torch.tensor(batch_ids, device=device)
+        xbatch = torch.tensor(batch_ids, device=device, dtype=torch.long)
+        out = self.node_predictor(x, index, e, xbatch)
+        node_pred = out['node_pred'][0]
 
-        # Pass through the model, get output (long edge_index)
+        # Split the node prediction output, append result
+        _, counts = torch.unique(data[:,3], return_counts=True)
+        cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
+        beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
+
+        split_clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
+        node_pred = [node_pred[b] for b in bcids]
+        edge_index = [cids[edge_index[:,b]].T for b in beids]
+
+        result.update(dict(
+            node_pred = [node_pred],
+            clusts = [split_clusts],
+            node_edge_index = [edge_index]
+        ))
+
+        # Convert the node output to a list of primaries
+        primary_ids = torch.argmax(out['node_pred'][0], dim=1)
+        primaries = torch.nonzero(primary_ids).flatten()
+
+        # Initialize the network for edge prediction, get edge features
+        edge_index = bipartite_graph(batch_ids, primaries, dist_mat, self.edge_max_dist, self.directed, self.directed_to)
+        if edge_index.shape[1] < 2: # Batch norm 1D does not handle batch_size < 2
+            return result
+        e = self.edge_encoder(data, clusts, edge_index)
+
+        # Pass through the node model, get edge predictions
+        index = torch.tensor(edge_index, device=device, dtype=torch.long)
+        xbatch = torch.tensor(batch_ids, device=device, dtype=torch.long)
         out = self.edge_predictor(x, index, e, xbatch)
         edge_pred = out['edge_pred'][0]
 
-        # Divide the output out into different arrays (one per batch)
-        _, counts = torch.unique(data[:,3], return_counts=True)
-        vids = np.concatenate([np.arange(n.item()) for n in counts])
-        cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
-        bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
+        # Split the edge prediction output, append result
         beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
 
         edge_pred = [edge_pred[b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
 
-        return {'edge_pred': [edge_pred],
-                'edge_index': [edge_index],
-                'clusts': [clusts]}
+        result.update(dict(
+            edge_pred = [edge_pred],
+            edge_index = [edge_index]
+        ))
+
+        return result
 
 
-class EdgeChannelLoss(torch.nn.Module):
+class ChainLoss(torch.nn.modules.loss._Loss):
     """
-    Takes the output of EdgeModel and computes the channel-loss.
+    Takes the output of ClustBipartiteGNN and computes the total loss
+    coming from the edge model and the node model.
 
     For use in config:
     model:
-      name: cluster_gnn
+      name: cluster_bipartite_gnn
       modules:
         chain:
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
@@ -175,97 +215,20 @@ class EdgeChannelLoss(torch.nn.Module):
           target_photons  : <use true photon connections as basis for loss (default False)>
     """
     def __init__(self, cfg):
-        super(EdgeChannelLoss, self).__init__()
+        super(ChainLoss, self).__init__()
+        self.node_loss = NodeChannelLoss(cfg)
+        self.edge_loss = EdgeChannelLoss(cfg)
 
-        # Get the chain input parameters
-        chain_config = cfg['chain']
-
-        # Set the loss
-        self.loss = chain_config.get('loss', 'CE')
-        self.reduction = chain_config.get('reduction', 'mean')
-        self.balance_classes = chain_config.get('balance_classes', False)
-        self.target_photons = chain_config.get('target_photons', False)
-
-        if self.loss == 'CE':
-            self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
-        elif self.loss == 'MM':
-            p = chain_config.get('p', 1)
-            margin = chain_config.get('margin', 1.0)
-            self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
-        else:
-            raise Exception('Loss not recognized: ' + self.loss)
-
-    def forward(self, out, clusters, graph):
-        """
-        Applies the requested loss on the edge prediction.
-
-        Args:
-            out (dict):
-                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
-                'edge_index' (np.ndarray) : (E,2) Incidence matrix
-            clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-            graph ([torch.tensor])        : (N,3) True edges
-        Returns:
-            double: loss, accuracy, clustering metrics
-        """
-        total_loss, total_acc = 0., 0.
-        n_events = 0
-        for i in range(len(clusters)):
-
-            # If this batch did not have any node, proceed
-            if 'edge_pred' not in out:
-                continue
-
-            # Get the list of batch ids, loop over individual batches
-            batches = clusters[i][:,3]
-            nbatches = len(batches.unique())
-            for j in range(nbatches):
-
-                # Narrow down the tensor to the rows in the batch
-                labels = clusters[i][batches == j]
-
-                # Use group information or particle tree to determine the true edge assigment
-                edge_pred = out['edge_pred'][i][j]
-                if not edge_pred.shape[0]:
-                    continue
-                edge_index = out['edge_index'][i][j]
-                clusts = out['clusts'][i][j]
-                group_ids = get_cluster_group(labels, clusts)
-
-                if not self.target_photons:
-                    edge_assn = edge_assignment(edge_index, group_ids)
-                else:
-                    clust_ids = get_cluster_label(labels, clusts)
-                    subgraph = graph[i][graph[i][:,-1] == j, :2]
-                    true_edge_index = get_fragment_edges(subgraph, clust_ids)
-                    edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
-
-                edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
-
-                # Increment the loss, balance classes if requested
-                if self.balance_classes:
-                    vals, counts = torch.unique(edge_assn, return_counts=True)
-                    weights = np.array([float(counts[k])/len(edge_assn) for k in range(len(vals))])
-                    for k, v in enumerate(vals):
-                        total_loss += (1./weights[k])*self.lossfn(edge_pred[edge_assn==v], edge_assn[edge_assn==v])
-                else:
-                    total_loss += self.lossfn(edge_pred, edge_assn)
-
-                # Compute accuracy of assignment (fraction of correctly assigned edges)
-                total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
-
-                # Increment the number of events
-                n_events += 1
-
-        # Handle the case where no cluster/edge were found
-        if not n_events:
-            return {
-                'accuracy': 0.,
-                'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device)
-            }
-
-        return {
-            'accuracy': total_acc/n_events,
-            'loss': total_loss/n_events
-        }
+    def forward(self, result, clust_label):
+        loss = {}
+        node_loss = self.node_loss(result, clust_label)
+        edge_loss = self.edge_loss(result, clust_label, None)
+        loss.update(node_loss)
+        loss.update(edge_loss)
+        loss['node_loss'] = node_loss['loss']
+        loss['edge_loss'] = edge_loss['loss']
+        loss['loss'] = node_loss['loss'] + edge_loss['loss']
+        loss['node_accuracy'] = node_loss['accuracy']
+        loss['edge_accuracy'] = edge_loss['accuracy']
+        loss['accuracy'] = (node_loss['accuracy'] + edge_loss['accuracy'])/2
+        return loss
