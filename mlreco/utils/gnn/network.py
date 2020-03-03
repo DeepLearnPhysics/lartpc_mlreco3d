@@ -145,30 +145,52 @@ def bipartite_graph(batches, primaries, dist=None, max_dist=-1, directed=True, d
     return ret.T
 
 
-def inter_cluster_distance(voxels, clusts, mode='set'):
+def inter_cluster_distance(voxels, clusts, batch_ids, mode='set', use_numpy=True):
     """
     Function that returns the matrix of pair-wise cluster distances.
 
     Args:
-        voxels (torch.tensor): (N,3) Tensor of voxel coordinates
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        mode (str)           : Maximal edge length (distance mode: set or centroid)
+        voxels (torch.tensor) : (N,3) Tensor of voxel coordinates
+        clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
+        batch_ids (np.ndarray): (C) List of cluster batch IDs
+        mode (str)            : Maximal edge length (distance mode: set or centroid)
     Returns:
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
     """
+    from scipy.spatial.distance import cdist
+    from mlreco.utils import local_cdist
+    from scipy.linalg import block_diag
+
     if mode == 'set':
-        from mlreco.utils import local_cdist
-        dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
-        for i, ci in enumerate(clusts):
-            for j, cj in enumerate(clusts):
-                if i < j:
-                    dist_mat[i,j] = local_cdist(voxels[ci], voxels[cj]).min()
-                else:
-                    dist_mat[i,j] = dist_mat[j,i]
+        dist_mats = []
+        for b in np.unique(batch_ids):
+            bclusts = np.array(clusts)[batch_ids == b]
+            dist_mat = np.zeros(shape=(len(bclusts),len(bclusts)),dtype=np.float32)
+            for i, ci in enumerate(bclusts):
+                for j, cj in enumerate(bclusts):
+                    if i < j:
+                        if use_numpy:
+                            dist_mat[i,j] = cdist(voxels[ci].detach().cpu().numpy(), voxels[cj].detach().cpu().numpy()).min()
+                        else:
+                            dist_mat[i,j] = local_cdist(voxels[ci], voxels[cj]).min()
+                    else:
+                        dist_mat[i,j] = dist_mat[j,i]
+            dist_mats.append(dist_mat)
+        dist_mat = block_diag(*dist_mats)
 
     elif mode == 'centroid':
-        centroids = torch.stack([torch.mean(voxels[c], dim=0) for c in clusts])
-        dist_mat = local_cdist(centroids, centroids)
+        dist_mats = []
+        for b in np.unique(batch_ids):
+            bclusts = np.array(clusts)[batch_ids == b]
+            centroids = torch.stack([torch.mean(voxels[c], dim=0) for c in bclusts])
+            if use_numpy:
+                centroids = centroids.detach().cpu().numpy()
+                dist_mat = cdist(centroids, centroids)
+            else:
+                dist_mat = local_cdist(centroids, centroids)
+            dist_mats.append(dist_mat)
+        dist_mat = block_diag(*dist_mats)
+
     else:
         raise(ValueError('Distance mode not recognized: '+mode))
 
