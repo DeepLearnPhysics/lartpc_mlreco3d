@@ -19,17 +19,17 @@ def complete_graph(batches, dist=None, max_dist=-1):
     edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]
     if not len(edges):
         return np.empty((2,0))
-    ret = np.vstack(edges).T
+    ret = np.vstack(edges)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
         dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j != i)])
-        ret = ret[:,dists < max_dist]
+        ret = ret[dists < max_dist, :]
 
     # Add the reciprocal edges as to create an undirected graph
     ret = np.vstack((ret, np.flip(ret, axis=1)))
 
-    return ret
+    return ret.T
 
 
 def delaunay_graph(data, clusts, dist=None, max_dist=-1):
