@@ -43,6 +43,15 @@ class ClustEdgeGNN(torch.nn.Module):
           name: <name of the edge model>
           <dictionary of arguments to pass to the model>
           model_path      : <path to the model weights>
+    ################
+    In case of "mix" type node (or edge) encoder, config need to be like:
+        node_encoder:
+              geo_encoder:
+                  <dictionary of arguments to pass to the encoder>
+                  model_path      : <path to the encoder weights>
+              cnn_encoder:
+                  <dictionary of arguments to pass to the encoder>
+                  model_path      : <path to the encoder weights>
     """
     def __init__(self, cfg):
         super(ClustEdgeGNN, self).__init__()
