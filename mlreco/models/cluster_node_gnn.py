@@ -26,6 +26,7 @@ class ClustNodeGNN(torch.nn.Module):
           network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -53,6 +54,7 @@ class ClustNodeGNN(torch.nn.Module):
         self.network = chain_config.get('network', 'complete')
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
         self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
+        self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
@@ -100,7 +102,7 @@ class ClustNodeGNN(torch.nn.Module):
                 clusts = form_clusters(data, self.node_min_size)
 
         if not len(clusts):
-            return {} 
+            return {}
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -108,7 +110,7 @@ class ClustNodeGNN(torch.nn.Module):
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst':
-            dist_mat = inter_cluster_distance(data[:,:3], clusts, self.edge_dist_metric)
+            dist_mat = inter_cluster_distance(data[:,:3], clusts, batch_ids, self.edge_dist_metric, self.edge_dist_numpy)
 
         # Form the requested network
         if len(clusts) == 1:
