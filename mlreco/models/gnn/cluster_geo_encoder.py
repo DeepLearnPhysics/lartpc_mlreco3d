@@ -105,35 +105,49 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         dtype = voxels.dtype
         device = voxels.device
 
+        # Check if the graph is undirected, select the relevant part of the edge index
+        half_idx = int(edge_index.shape[1]/2)
+        undirected = (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
+        if undirected: edge_index = edge_index[:,:half_idx]
+
         # If numpy is to be used, bring data to cpu, pass through function
+        # Otherwise use torch-based implementation of cluster_edge_features
         if self.use_numpy:
             from mlreco.utils.gnn.data import cluster_edge_features
-            return torch.tensor(cluster_edge_features(voxels.detach().cpu().numpy(), clusts, edge_index), dtype=voxels.dtype, device=voxels.device)
+            feats = torch.tensor(cluster_edge_features(voxels.detach().cpu().numpy(), clusts, edge_index), dtype=voxels.dtype, device=voxels.device)
+        else:
+            feats = []
+            for e in edge_index.T:
 
-        # Here is a torch-based implementation of cluster_edge_features
-        feats = []
-        for e in edge_index.T:
+                # Get the voxels in the clusters connected by the edge
+                x1 = voxels[clusts[e[0]]]
+                x2 = voxels[clusts[e[1]]]
 
-            # Get the voxels in the clusters connected by the edge
-            x1 = voxels[clusts[e[0]]]
-            x2 = voxels[clusts[e[1]]]
+                # Find the closest set point in each cluster
+                d12 = local_cdist(x1,x2)
+                imin = torch.argmin(d12)
+                i1, i2 = imin//len(x2), imin%len(x2)
+                v1 = x1[i1,:] # closest point in c1
+                v2 = x2[i2,:] # closest point in c2
 
-            # Find the closest set point in each cluster
-            d12 = local_cdist(x1,x2)
-            imin = torch.argmin(d12)
-            i1, i2 = imin//len(x2), imin%len(x2)
-            v1 = x1[i1,:] # closest point in c1
-            v2 = x2[i2,:] # closest point in c2
+                # Displacement
+                disp = v1 - v2
 
-            # Displacement
-            disp = v1 - v2
+                # Distance
+                lend = torch.norm(disp) # length of displacement
+                if lend > 0:
+                    disp = disp / lend
+                B = torch.ger(disp, disp).flatten()
+                feats.append(torch.cat([v1, v2, disp, torch.tensor([lend], dtype=dtype).to(device), B]))
 
-            # Distance
-            lend = torch.norm(disp) # length of displacement
-            if lend > 0:
-                disp = disp / lend
-            B = torch.ger(disp, disp).flatten()
-            feats.append(torch.cat([v1, v2, disp, torch.tensor([lend], dtype=dtype).to(device), B]))
+            feats = torch.stack(feats, dim=0)
 
-        return torch.stack(feats, dim=0)
+        # If the graph is undirected, infer reciprocal features
+        if undirected:
+            feats_flip = feats.clone()
+            feats_flip[:,:3] = feats[:,3:6]
+            feats_flip[:,3:6] = feats[:,:3]
+            feats_flip[:,6:9] = -feats[:,6:9]
+            feats = torch.cat([feats,feats_flip])
 
+        return feats
