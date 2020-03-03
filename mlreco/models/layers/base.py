@@ -24,7 +24,7 @@ class NetworkBase(nn.Module):
     '''
     def __init__(self, cfg, name='network_base'):
         super(NetworkBase, self).__init__()
-        self.model_config = cfg['modules'][name]
+        self.model_config = cfg[name]
         # Cross-network module configurations
         self.dimension = self.model_config.get('data_dim', 3)
         self.nInputFeatures = self.model_config.get('features', 1)

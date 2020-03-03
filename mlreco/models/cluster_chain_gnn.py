@@ -53,7 +53,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = self.uresnet_ppn(data)
-        #return result
+        # return result
         # Run DBSCAN
         semantic = torch.argmax(result['segmentation'][0],1).view(-1,1)
         dbscan_input = torch.cat([data[0].to(torch.float32),semantic.to(torch.float32)],dim=1)
@@ -78,7 +78,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         for clust in clusts:
             batch_id = data[0][clust,3].unique()
             if not len(batch_id) == 1:
-                raise ValueError('Found a cluster with mixed batch ids:',batch_id)
+                raise ValueError('Found a cluster with mixed batch ids:', batch_id)
             batch_ids.append(batch_id[0].item())
         batch_ids = np.array(batch_ids)
 

@@ -77,7 +77,12 @@ class NNConvModel(torch.nn.Module):
             e - edge features
             xbatch - node batchid
         """
-
+        # print("Node Features: ", x.shape)
+        # print("Edge Indices: ", edge_index)
+        # print("Edge Indices Shape: ", edge_index.shape)
+        # print("Edge Features: ", e)
+        # print("Node Batch ID: ", xbatch)
+        # print("Node Batch ID Shape: ", xbatch.shape)
         x = x.view(-1,self.node_in)
         e = e.view(-1,self.edge_in)
         if self.edge_in > 1:
