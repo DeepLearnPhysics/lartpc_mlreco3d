@@ -207,7 +207,7 @@ def parse_particle_graph(data):
     Args:
         length 1 array of larcv::EventParticle
     Return:
-        a numpy array of directed edges where each edge is (parent,child) cluster index ID.
+        a numpy array of directed edges where each edge is (parent,child) batch index ID.
     """
     particles = data[0]
 
@@ -366,7 +366,7 @@ def parse_cluster3d_clean(data):
         coordinate
         a numpy array with the shape (N,1) where 2 represents (value, cluster_id)
     """
-    grp_voxels, grp_data = parse_cluster3d([data[0]])
+    grp_voxels, grp_data = parse_cluster3d_full([data[0], data[2]])
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
 
     # step 1: lexicographically sort group data
