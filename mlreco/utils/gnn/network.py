@@ -2,6 +2,22 @@
 import numpy as np
 import torch
 
+def loop_graph(n):
+    """
+    Function that returns an incidence matrix of a graph that only
+    connects nodes with themselves.
+
+    Args:
+        n (int): Number of nodes C
+    Returns:
+        np.ndarray: (2,C) Tensor of edges
+    """
+    # Create the incidence matrix
+    if not n:
+        return np.empty((2,0))
+    return np.vstack([[i,i] for i in range(n)]).T
+
+
 def complete_graph(batches, dist=None, max_dist=-1):
     """
     Function that returns an incidence matrix of a complete graph

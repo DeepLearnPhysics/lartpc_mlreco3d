@@ -7,7 +7,7 @@ import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
+from mlreco.utils.gnn.network import loop_graph, complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 
 class ClustNodeGNN(torch.nn.Module):
@@ -23,7 +23,7 @@ class ClustNodeGNN(torch.nn.Module):
         chain:
           node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
           node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
+          network         : <type of network: 'empty', 'loop', 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
           edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
@@ -55,6 +55,7 @@ class ClustNodeGNN(torch.nn.Module):
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
         self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
+        self.num_edge_feats =  cfg['node_model'].get('edge_feats')
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
@@ -113,8 +114,10 @@ class ClustNodeGNN(torch.nn.Module):
             dist_mat = inter_cluster_distance(data[:,:3], clusts, batch_ids, self.edge_dist_metric, self.edge_dist_numpy)
 
         # Form the requested network
-        if len(clusts) == 1:
+        if self.network == 'empty':
             edge_index = np.empty((2,0))
+        elif self.network == 'loop':
+            edge_index = loop_graph(len(clusts))
         elif self.network == 'complete':
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
@@ -128,13 +131,11 @@ class ClustNodeGNN(torch.nn.Module):
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
-        # Skip if there is no edges
-        if not edge_index.shape[1]:
-            return {}
-
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
-        e = self.edge_encoder(data, clusts, edge_index)
+        e = torch.empty((0, self.num_edge_feats), device=device)
+        if edge_index.shape[1]:
+            e = self.edge_encoder(data, clusts, edge_index)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
@@ -147,13 +148,15 @@ class ClustNodeGNN(torch.nn.Module):
         # Divide the output out into different arrays (one per batch)
         _, counts = torch.unique(data[:,3], return_counts=True)
         vids = np.concatenate([np.arange(n.item()) for n in counts])
-        cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
         bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
-        beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
-
         node_pred = [node_pred[b] for b in bcids]
-        edge_index = [cids[edge_index[:,b]].T for b in beids]
         clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
+        if edge_index.shape[1]:
+            cids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
+            beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
+            edge_index = [cids[edge_index[:,b]].T for b in beids]
+        else:
+            edge_index = [np.empty((2,0)) for b in range(len(counts))]
 
         return {'node_pred':[node_pred],
                 'edge_index':[edge_index],
