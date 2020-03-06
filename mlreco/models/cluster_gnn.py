@@ -29,6 +29,9 @@ class ClustEdgeGNN(torch.nn.Module):
           network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          merge_batch     : <flag for whether to merge batches, default False>
+          merge_batch_mode: <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it>
+          merge_batch_size: <size of batch merging>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -70,6 +73,7 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # extra flag for merging events in batch
         self.merge_batch = chain_config.get('merge_batch', False)
+        self.merge_batch_mode = chain_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = chain_config.get('merge_batch_size', 2)
 
         # hidden flag for shuffling cluster
@@ -130,7 +134,9 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # if merge_batch set all batch id to zero
         # and also reassign ids and group ids
-        if self.merge_batch:
+        if self.merge_batch and self.merge_batch_mode=='fluc':
+            data = merge_batch(data, self.merge_batch_size, whether_fluctuate=True)
+        elif self.merge_batch:
             data = merge_batch(data, self.merge_batch_size)
 
         # Get the batch id for each cluster
@@ -251,11 +257,6 @@ class EdgeChannelLoss(torch.nn.Module):
             # If this batch did not have any node, proceed
             if 'edge_pred' not in out:
                 continue
-
-            # # if merge_batch, set batch ids to zero
-            # # also make sure no overlap between interactions
-            # if self.merge_batch:
-            #     clusters[i] = merge_batch(clusters[i], self.merge_batch_size)
 
             # Get the list of batch ids, loop over individual batches
             batches = clusters[i][:,3]

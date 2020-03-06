@@ -229,13 +229,51 @@ def reassign_id(data, id_index=6):
         return torch.tensor(group_ids, device=data.device, dtype=data.dtype)
     return group_ids.astype(dtype=data.dtype)
 
-def merge_batch(data, merge_size=2):
+def form_merging_batches(batch_ids, mean_merge_size):
+    """
+    Function for returning a list of batch_ids for merging
+    """
+    num_of_batch_ids = len(batch_ids)
+    # generate random numbers based on mean merge size
+    nums_merging_batch = np.random.poisson(
+        mean_merge_size,
+        size = num_of_batch_ids / mean_merge_size * 2
+    )
+    # remove zeros
+    nums_merging_batch = nums_merging_batch[
+        np.where(nums_merging_batch!=0)[0]
+    ]
+    # cumsum it
+    nums_merging_batch = np.cumsum(nums_merging_batch)
+    # cut it where it exceeds total batch number
+    nums_merging_batch = nums_merging_batch[
+        np.where(nums_merging_batch<num_of_batch_ids)[0]
+    ]
+    # complete it
+    nums_merging_batch = np.append(
+        np.append(0,nums_merging_batch),
+        num_of_batch_ids
+    )
+    # loop over
+    merging_batches_list = []
+    for lower_index, upper_index in zip(
+        nums_merging_batch[:-1],
+        nums_merging_batch[1:]
+    ):
+        merging_batches_list.append(batch_ids[lower_index:upper_index])
+    return merging_batches_list
+
+
+def merge_batch(data, merge_size=2, whether_fluctuate=False):
     """
     Merge events in same batch
     For ex., if batch size = 16 and merge_size = 2
     output data has a batch size of 8 with each adjacent 2 batches in input data merged.
     Input:
         data - (N, 8) tensor or numpy array -> [x,y,z,batch_id,value, id, group_id, sem. type]
+        merge_size: how many batches to be merged if whether_fluctuate=False,
+                    otherwise sample the number of merged batches using Poisson with mean of merge_size
+        whether_fluctuate: whether not using a constant merging size
     Output:
         output_data - (N, 8) tensor or numpy array
     """
@@ -245,15 +283,20 @@ def merge_batch(data, merge_size=2):
         batch_ids = data[:,3].unique()
     else:
         batch_ids = np.unique(data[:,3])
-    # Calculate the number of batches of output
-    # round up at the last several
-    # However it will be better to have len(batch_ids)%merge_size == 0
-    out_batch_num = int(int(len(batch_ids)) / int(merge_size)) + (int(len(batch_ids))%int(merge_size) > 0)*1
+    # Get the list of arrays
+    if whether_fluctuate:
+        merging_batch_id_list = form_merging_batches(batch_ids, merge_size)
+    else:
+        merging_batch_id_list = np.reshape(batch_ids,(-1,merge_size))
     # Loop over
     output_data = data
-    for i in range(int(out_batch_num)):
-        # get index for selection batches
-        selection = (data[:,3]>=float(i*merge_size))&(data[:,3]<float(i*merge_size+merge_size))
+    for i, merging_batch_ids in enumerate(merging_batch_id_list):
+        selection = None
+        for j, batch_id in enumerate(merging_batch_ids):
+            if j==0:
+                selection = (data[:,3]==batch_id)
+            else:
+                selection = selection & (data[:,3]==batch_id)
         inds = None
         if type(data)==torch.Tensor:
             inds = selection.nonzero().view(-1)
