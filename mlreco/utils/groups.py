@@ -237,7 +237,7 @@ def form_merging_batches(batch_ids, mean_merge_size):
     # generate random numbers based on mean merge size
     nums_merging_batch = np.random.poisson(
         mean_merge_size,
-        size = num_of_batch_ids / mean_merge_size * 2
+        size = int(num_of_batch_ids / mean_merge_size * 2)
     )
     # remove zeros
     nums_merging_batch = nums_merging_batch[
@@ -296,7 +296,7 @@ def merge_batch(data, merge_size=2, whether_fluctuate=False):
             if j==0:
                 selection = (data[:,3]==batch_id)
             else:
-                selection = selection & (data[:,3]==batch_id)
+                selection = selection | (data[:,3]==batch_id)
         inds = None
         if type(data)==torch.Tensor:
             inds = selection.nonzero().view(-1)
