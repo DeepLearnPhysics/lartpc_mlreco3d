@@ -41,16 +41,16 @@ class FullChain(nn.Module):
         result = self.full_cnn(input)
         
         # UResNet Results
-        embeddings = result['embeddings'][0]
-        margins = result['margins'][0]
-        seediness = result['seediness'][0]
-        segmentation = result['segmentation'][0]
+        # embeddings = result['embeddings'][0]
+        # margins = result['margins'][0]
+        # seediness = result['seediness'][0]
+        # segmentation = result['segmentation'][0]
         features_gnn = result['features_gnn'][0]
 
         # Ground Truth Labels
         coords = input[0][:, :4]
         batch_index = input[0][:, 3].unique()
-        semantic_labels = input[0][:, -1]
+        # semantic_labels = input[0][:, -1]
         fragment_labels = input[0][:, -3]
 
         gnn_input = get_gnn_input(
@@ -70,9 +70,11 @@ class FullChain(nn.Module):
         gnn_output = self.full_gnn(
             node_features, edge_indices, edge_attr, gnn_batch_index)
 
+        print(gnn_output)
+
         result.update(gnn_output)
-        for key, val in result.items():
-            print(key, val[0].shape)
+        # for key, val in result.items():
+        #     print(key, val[0].shape)
 
         return result
 
@@ -96,12 +98,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
         self.ppn_weight = self.loss_config.get('ppn_weight', 1.0)
 
-    def forward(self, result, input_data, ppn_label, ppn_segment_label, graph):
+    def forward(self, out, input_data, ppn_label, ppn_segment_label, graph):
         '''
         Forward propagation for FullChain
 
         INPUTS:
-            - result (dict): result from forwarding three-tailed UResNet, with 
+            - out (dict): result from forwarding three-tailed UResNet, with 
             1) segmenation decoder 2) clustering decoder 3) seediness decoder,
             and PPN attachment to the segmentation branch. 
 
@@ -146,24 +148,27 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         # for key, val in result.items():
         #     print(key, val[0].shape)
 
-        embedding = result['embeddings'][0]
-        seediness = result['seediness'][0]
-        margins = result['margins'][0]
+        embedding = out['embeddings'][0]
+        seediness = out['seediness'][0]
+        margins = out['margins'][0]
         # PPN Loss. 
         # FIXME: This implementation will loop over the batch twice.
-        print(ppn_segment_label[0].shape)
-        print(ppn_label[0].shape)
-        ppn_res = self.ppn_loss(result, ppn_segment_label, ppn_label)
+        ppn_res = self.ppn_loss(out, ppn_segment_label, ppn_label)
         ppn_loss = ppn_res['ppn_loss']
+
+        counts = 0
+        groups = 0
 
         for bidx in batch_idx:
 
             batch_mask = coords[:, -1] == bidx
-            seg_logits = result['segmentation'][0][batch_mask]
+            seg_logits = out['segmentation'][0][batch_mask]
             # print(seg_logits)
             embedding_batch = embedding[batch_mask]
             slabels_batch = segment_label[batch_mask]
             clabels_batch = fragment_label[batch_mask]
+            counts += int(len(clabels_batch.unique()))
+            groups += int(len(group_label[batch_mask].unique()))
             seed_batch = seediness[batch_mask]
             margins_batch = margins[batch_mask]
             coords_batch = coords[batch_mask] / self.spatial_size
@@ -190,6 +195,9 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             acc = sum(acc_class.values()) / len(acc_class.values())
             accuracy['clustering_accuracy'].append(acc)
 
+        print("Number of Fragments: ", counts)
+        print("Number of Groups: ", groups)
+
         loss_avg = {}
         acc_avg = defaultdict(float)
 
@@ -208,5 +216,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         res['loss_seg'] = float(res['loss_seg'])
 
         # -----------------END OF CNN LOSS COMPUTATION--------------------
+
+        node_pred = out['node_predictions'][0]
+        edge_pred = out['edge_predictions'][0]
+
+        print(node_pred.shape)
+        print(edge_pred.shape)
+        print(graph[0].shape)
 
         return res

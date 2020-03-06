@@ -528,6 +528,9 @@ class MultiVariateLovasz(MaskLovaszInterLoss):
         probs = torch.zeros(embeddings.shape[0]).float().cuda()
         accuracy = 0.0
 
+        if embeddings.shape[0] < 2:
+            return 0, 0, 0, 0, 0
+
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
             mask = torch.zeros(embeddings.shape[0]).cuda()
@@ -537,6 +540,10 @@ class MultiVariateLovasz(MaskLovaszInterLoss):
             f = multivariate_kernel(centroids[i], sigma)
             p = f(embeddings)
             probs[index] = p[index]
+            # except:
+            #     print(probs)
+            #     print(index)
+            #     print(p)
             loss += lovasz_hinge_flat(2 * p - 1, mask)
             accuracy += iou_binary(p > 0.5, mask, per_image=False)
             sigma_detach = sigma.detach()
