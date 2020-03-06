@@ -410,8 +410,8 @@ class FullCNN(NetworkBase):
 
         ppn_res = self.ppn(ppn_inputs)
         res.update(ppn_res)
-        print('PPN RES')
-        for key, val in ppn_res.items():
-            print(key, val[0].shape)
+        # print('PPN RES')
+        # for key, val in ppn_res.items():
+        #     print(key, val[0].shape)
 
         return res

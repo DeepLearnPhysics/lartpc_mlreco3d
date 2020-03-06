@@ -3,11 +3,12 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_mean, scatter_std
 from torch_geometric.nn import MetaLayer, NNConv
 
 from mlreco.models.gnn.node_pred import NodeModel
 from mlreco.models.gnn.edge_pred import EdgeModel
+from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
 
 class FullGNN(nn.Module):
     '''
@@ -28,7 +29,7 @@ class FullGNN(nn.Module):
         self.edge_features = self.model_config.get('edge_features', 16)
 
         # perform batch normalization
-        # self.bn_node = torch.nn.ModuleList()
+        self.bn_node = torch.nn.ModuleList()
         self.bn_edge = BatchNorm1d(self.edgeInput)
 
         self.num_mp = self.model_config.get('num_mp', 3)
@@ -38,13 +39,17 @@ class FullGNN(nn.Module):
         for i in range(self.num_mp):
             self.edge_mlps.append(
                 Seq(
+                    BatchNorm1d(self.edge_features),
                     Lin(self.edge_features, nInput),
                     LeakyReLU(self.leakiness),
+                    BatchNorm1d(nInput),
                     Lin(nInput, nInput),
                     LeakyReLU(self.leakiness),
+                    BatchNorm1d(nInput),
                     Lin(nInput, nInput*nOutput)
                 )
             )
+            self.bn_node.append(BatchNorm(nInput))
             self.nnConvs.append(
                 NNConv(nInput, nOutput, self.edge_mlps[i], aggr=self.aggr))
             # self.bn_node.append(BatchNorm(nOutput))
@@ -66,6 +71,7 @@ class FullGNN(nn.Module):
         e = edge_features.view(-1, self.edgeInput)
 
         for i in range(self.num_mp):
+            x = self.bn_node[i](x)
             x = self.nnConvs[i](x, edge_indices, e)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
@@ -78,8 +84,6 @@ class FullGNN(nn.Module):
             'node_predictions': [x_pred], 
             'edge_predictions': [e_pred]
             }
-
-        print(res)
 
         return res
 
@@ -122,10 +126,13 @@ class EdgeLayer(nn.Module):
         super(EdgeLayer, self).__init__()
         # TODO: Construct Edge MLP
         self.edge_mlp = nn.Sequential(
+            BatchNorm1d(2 * node_in + edge_in),
             nn.Linear(2 * node_in + edge_in, edge_out),
             nn.LeakyReLU(negative_slope=leakiness),
+            BatchNorm1d(edge_out),
             nn.Linear(edge_out, edge_out),
             nn.LeakyReLU(negative_slope=leakiness),
+            BatchNorm1d(edge_out),
             nn.Linear(edge_out, edge_out)
         )
 
