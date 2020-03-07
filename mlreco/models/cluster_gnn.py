@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, get_start_points
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
@@ -109,8 +109,8 @@ class ClustEdgeGNN(torch.nn.Module):
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
-        data = data[0]
         particles = data[1]
+        data = data[0]
         device = data.device
         if self.do_dbscan:
             clusts = self.dbscan(data, onehot=False)
@@ -177,11 +177,10 @@ class ClustEdgeGNN(torch.nn.Module):
             x = torch.cat(
                 [
                     x,
-                    get_start_points(particles,get_cluster_group(data, clusts))
+                    get_start_points(particles, data, clusts)
                 ],
                 dim=1
             )
-        # Not finished
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
