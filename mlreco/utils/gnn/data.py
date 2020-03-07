@@ -2,7 +2,7 @@
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_voxels, get_cluster_features, get_cluster_features_extended, get_cluster_dirs
 
-def cluster_vtx_features(data, clusts, delta=0.0):
+def cluster_vtx_features(data, clusts, delta=0.0, whether_adjust_direction=False):
     """
     Function that returns the an array of 16 features for
     each of the clusters in the provided list.
@@ -14,7 +14,7 @@ def cluster_vtx_features(data, clusts, delta=0.0):
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
-    return get_cluster_features(data, clusts, delta)
+    return get_cluster_features(data, clusts, delta, whether_adjust_direction)
 
 
 def cluster_vtx_features_extended(data_values, data_sem_types, clusts):

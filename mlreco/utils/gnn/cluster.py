@@ -322,7 +322,7 @@ def get_cluster_features_extended(data_values, data_sem_types, clusts):
         std_value = np.std(vs)
 
         # get majority of semantic types
-        major_sem_type = mode(ts)
+        major_sem_type = mode(ts)[0][0]
 
         feats.append([mean_value, std_value, major_sem_type])
 

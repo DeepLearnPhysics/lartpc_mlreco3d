@@ -43,12 +43,15 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         if self.use_numpy:
             if not self.more_feats:
                 return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts, whether_adjust_direction = self.adjust_node_direction), dtype=voxels.dtype, device=voxels.device)
-            return torch.tensor(
-                np.concatenate(
+            feats = np.concatenate(
+                (
                     cluster_vtx_features(voxels.detach().cpu().numpy(), clusts, whether_adjust_direction=self.adjust_node_direction),
-                    cluster_vtx_features_extended(values.detach().cpu().numpy(), sem_types.detach().cpu().numpy(), clusts),
-                    axis=0
+                    cluster_vtx_features_extended(values.detach().cpu().numpy(), sem_types.detach().cpu().numpy(), clusts)
                 ),
+                axis=1
+            )
+            return torch.tensor(
+                feats,
                 dtype=voxels.dtype,
                 device=voxels.device
             )
