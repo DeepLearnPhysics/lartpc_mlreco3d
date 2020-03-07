@@ -360,10 +360,10 @@ def find_start_point(voxels):
     return ids[np.argmax(curvs)]
 
 
-def get_start_points(particles, data, group_ids):
+def get_start_points(particles, data, clusts):
     '''
     Function for giving starting point coordinates
-    :param particles: (tensor) (N1, 4) -> [start_x, start_y, start_z, batch_id, group_id]
+    :param particles: (tensor) (N1, 5) -> [start_x, start_y, start_z, batch_id, group_id]
     :param data     : (tensor) (N2, 8) -> [x,y,z,batch_id,value,cluster_id,group_id,sem_type]
     :param clusts   : (list)
     :return:
@@ -371,17 +371,19 @@ def get_start_points(particles, data, group_ids):
     '''
     # Get batch_ids and group_ids
     batch_ids = get_cluster_batch(data, clusts)
-    group_ids = get_cluster_group(data, clusts)
+    group_ids = get_cluster_label(data, clusts)
     # Loop over batch_ids and group_ids
     # pick the first cluster which has group id
     # Its start points is the one.
-    output_start_points = torch.zeros(len(clusts), 3, dtype=torch.float, device=data.device)
+    output_start_points = (-1.)*torch.zeros(len(clusts), 3, dtype=torch.float, device=data.device)
     for batch_id in batch_ids:
         data_batch_selection = batch_ids==batch_id
         particles_batch_selection = particles[:,3]==batch_id
         p_info = particles[particles_batch_selection,:]
         for group_id in group_ids[data_batch_selection]:
-            start_point = p_info[(p_info[:,4]==group_id).nonzero().view(-1)[0],:3]
-            output_start_points[data_batch_selection & (group_ids==group_id), :3] = start_point
+            # get selection
+            particles_group_selection = p_info[:,4]==group_id
+            start_points = p_info[particles_group_selection,:3]
+            output_start_points[data_batch_selection & (group_ids==group_id), :3] = start_points[0].float()
     return output_start_points
 

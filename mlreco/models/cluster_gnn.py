@@ -109,7 +109,9 @@ class ClustEdgeGNN(torch.nn.Module):
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
-        particles = data[1]
+        particles = None
+        if len(data)>1:
+            particles = data[1]
         data = data[0]
         device = data.device
         if self.do_dbscan:
