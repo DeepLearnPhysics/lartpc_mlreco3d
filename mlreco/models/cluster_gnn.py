@@ -75,6 +75,7 @@ class ClustEdgeGNN(torch.nn.Module):
         self.merge_batch = chain_config.get('merge_batch', False)
         self.merge_batch_mode = chain_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = chain_config.get('merge_batch_size', 2)
+        self.add_start_point = chain_config.get('add_start_point', False) # whether add start point into the node features
 
         # hidden flag for shuffling cluster
         self.shuffle_clusters = chain_config.get('shuffle_clusters', False)
@@ -109,6 +110,7 @@ class ClustEdgeGNN(torch.nn.Module):
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
         data = data[0]
+        particles = data[1]
         device = data.device
         if self.do_dbscan:
             clusts = self.dbscan(data, onehot=False)
@@ -169,6 +171,17 @@ class ClustEdgeGNN(torch.nn.Module):
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
+
+        # see if need add start point to node features
+        if self.add_start_point:
+            x = torch.cat(
+                [
+                    x,
+                    get_start_points(particles,get_cluster_group(data, clusts))
+                ],
+                dim=1
+            )
+        # Not finished
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
