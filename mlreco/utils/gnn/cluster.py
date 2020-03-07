@@ -63,6 +63,23 @@ def get_cluster_batch(data, clusts):
     return np.array(labels)
 
 
+def get_cluster_major_sem_type(data, clusts):
+    """
+    Function that returns the majority sem types of each cluster.
+
+    Args:
+        data (tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of sem types
+    """
+    labels = []
+    for c in clusts:
+        major_sem_type = data[c,7].mode()[0]
+        labels.append(major_sem_type)
+
+    return np.array(labels)
+
 def get_cluster_label(data, clusts):
     """
     Function that returns the cluster label of each cluster.
@@ -363,7 +380,7 @@ def find_start_point(voxels):
 def get_start_points(particles, data, clusts):
     '''
     Function for giving starting point coordinates
-    :param particles: (tensor) (N1, 5) -> [start_x, start_y, start_z, batch_id, group_id]
+    :param particles: (tensor) (N1, 8) -> [start_x, start_y, start_z, last_x, last_y, last_z, batch_id, group_id]
     :param data     : (tensor) (N2, 8) -> [x,y,z,batch_id,value,cluster_id,group_id,sem_type]
     :param clusts   : (list)
     :return:
@@ -372,18 +389,26 @@ def get_start_points(particles, data, clusts):
     # Get batch_ids and group_ids
     batch_ids = get_cluster_batch(data, clusts)
     group_ids = get_cluster_label(data, clusts)
+    sem_types = get_cluster_major_sem_type(data, clusts)
     # Loop over batch_ids and group_ids
     # pick the first cluster which has group id
     # Its start points is the one.
     output_start_points = (-1.)*torch.zeros(len(clusts), 3, dtype=torch.float, device=data.device)
     for batch_id in batch_ids:
         data_batch_selection = batch_ids==batch_id
-        particles_batch_selection = particles[:,3]==batch_id
+        particles_batch_selection = particles[:,6]==batch_id
         p_info = particles[particles_batch_selection,:]
-        for group_id in group_ids[data_batch_selection]:
+        for group_id, sem_type in zip(
+                group_ids[data_batch_selection],
+                sem_types[data_batch_selection]
+        ):
             # get selection
-            particles_group_selection = p_info[:,4]==group_id
+            particles_group_selection = p_info[:,7]==group_id
             start_points = p_info[particles_group_selection,:3]
+            if sem_type==1 and np.random.choice(2)>0:
+                # if it is track, cannot distinguish start and end
+                # random choose one
+                start_points = p_info[particles_group_selection,3:6]
             output_start_points[data_batch_selection & (group_ids==group_id), :3] = start_points[0].float()
     return output_start_points
 
