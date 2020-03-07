@@ -178,6 +178,42 @@ def parse_particle_asis(data):
             getattr(p,f)(x,y,z,pos.t())
     return particles
 
+def parse_particle_start_points(data):
+    '''
+    Function to return start_points & clust_wise_group_ids
+    ordered by start times
+    This is used for particle clustering into interactions
+    :param data:
+    :return: numpy.ndarray (N,4) -> [first_step_x, first_step_y, first_step_z, group_id]
+    '''
+    particles = data[0]
+    clusters = data[1]
+    assert particles.as_vector().size() in [clusters.as_vector().size(), clusters.as_vector().size() - 1]
+
+    meta = clusters.meta()
+
+    # load particle infos
+    start_points = []
+    clust_wise_group_ids = []
+    start_times = []
+    for p in larcv.Particle(particles.as_vector()):
+        start_points.append(
+            [
+                p.first_step().x(),
+                p.first_step().y(),
+                p.first_step().z(),
+            ]
+        )
+        start_times.append(p.first_step().t())
+        clust_wise_group_ids.append(
+            p.group_id()
+        )
+    # Order by start_time
+    sort_index = np.argsort(start_times)
+    clust_wise_group_ids = np.asarray(clust_wise_group_ids)[sort_index]
+    start_points = np.asarray(start_points)[sort_index]
+    return np.concatenate((start_points,clust_wise_group_ids), axis=1)
+
 
 def parse_particle_points(data):
     """
