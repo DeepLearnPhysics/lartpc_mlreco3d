@@ -203,7 +203,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                        mode = 'lines',
                                        name = 'Graph edges',
                                        line = dict(
-                                           color = 'rgba(50, 50, 50, 0.5)',
+                                           color = 'orange',
                                            width = edge_width
                                        ),
                                        hoverinfo = 'none'))
