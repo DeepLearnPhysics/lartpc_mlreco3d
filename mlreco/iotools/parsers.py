@@ -190,10 +190,9 @@ def parse_particle_start_points(data):
     clusters = data[1]
     assert particles.as_vector().size() in [clusters.as_vector().size(), clusters.as_vector().size() - 1]
 
-    meta = clusters.meta()
-
     # load particle infos
     start_points = []
+    last_points = []
     clust_wise_group_ids = []
     start_times = []
     for p in particles.as_vector():
@@ -205,6 +204,13 @@ def parse_particle_start_points(data):
                 p.first_step().z(),
             ]
         )
+        last_points.append(
+            [
+                p.last_step().x(),
+                p.last_step().y(),
+                p.last_step().z(),
+            ]
+        )
         start_times.append(p.first_step().t())
         clust_wise_group_ids.append(
             p.group_id()
@@ -213,7 +219,8 @@ def parse_particle_start_points(data):
     sort_index = np.argsort(start_times)
     clust_wise_group_ids = np.asarray(clust_wise_group_ids)[sort_index]
     start_points = np.asarray(start_points)[sort_index]
-    return start_points, np.reshape(clust_wise_group_ids, (-1,1))
+    last_points = np.asarray(last_points)[sort_index]
+    return np.concatenate((start_points,last_points),axis=1), np.reshape(clust_wise_group_ids, (-1,1))
 
 
 def parse_particle_points(data):
