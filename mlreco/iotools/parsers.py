@@ -196,7 +196,8 @@ def parse_particle_start_points(data):
     start_points = []
     clust_wise_group_ids = []
     start_times = []
-    for p in larcv.Particle(particles.as_vector()):
+    for p in particles.as_vector():
+        p = larcv.Particle(p)
         start_points.append(
             [
                 p.first_step().x(),
@@ -212,7 +213,7 @@ def parse_particle_start_points(data):
     sort_index = np.argsort(start_times)
     clust_wise_group_ids = np.asarray(clust_wise_group_ids)[sort_index]
     start_points = np.asarray(start_points)[sort_index]
-    return np.concatenate((start_points,clust_wise_group_ids), axis=1)
+    return start_points, np.reshape(clust_wise_group_ids, (-1,1))
 
 
 def parse_particle_points(data):
