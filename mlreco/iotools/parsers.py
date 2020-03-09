@@ -196,6 +196,8 @@ def parse_particle_start_points(data):
     clust_wise_group_ids = []
     start_times = []
     for p in particles.as_vector():
+        if p.num_voxels()<=0:
+            continue
         p = larcv.Particle(p)
         start_points.append(
             [

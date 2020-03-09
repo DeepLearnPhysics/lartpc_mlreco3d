@@ -204,7 +204,7 @@ def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
     return interaction_ids
 
 
-def reassign_id(data, id_index=6):
+def reassign_id(data, id_index=6, batch_index=3):
     '''
     A function to reassign group id when merging all the batches,
     make sure that there is no overlap of group id
@@ -216,10 +216,10 @@ def reassign_id(data, id_index=6):
     batch_ids = None
     if type(data)==torch.Tensor:
         group_ids = data[:,id_index].detach().cpu().numpy()
-        batch_ids = data[:,3].detach().cpu().numpy()
+        batch_ids = data[:,batch_index].detach().cpu().numpy()
     else:
         group_ids = data[:,id_index]
-        batch_ids = data[:,3]
+        batch_ids = data[:,batch_index]
     max_shift = 0
     for batch_id in np.unique(batch_ids):
         inds = np.where(batch_ids==batch_id)[0]
@@ -264,25 +264,37 @@ def form_merging_batches(batch_ids, mean_merge_size):
     return merging_batches_list
 
 
-def merge_batch(data, merge_size=2, whether_fluctuate=False):
+def merge_batch(data, merge_size=2, whether_fluctuate=False, data_type='cluster'):
     """
     Merge events in same batch
     For ex., if batch size = 16 and merge_size = 2
     output data has a batch size of 8 with each adjacent 2 batches in input data merged.
     Input:
         data - (N, 8) tensor or numpy array -> [x,y,z,batch_id,value, id, group_id, sem. type]
+               or can be [start_x, start_y, start_z, end_x, end_y, end_z, batch_id, group_id] if it is "particle" type
         merge_size: how many batches to be merged if whether_fluctuate=False,
                     otherwise sample the number of merged batches using Poisson with mean of merge_size
         whether_fluctuate: whether not using a constant merging size
+        type:       'cluster" or "particle"
     Output:
         output_data - (N, 8) tensor or numpy array
     """
+    # specify batch index
+    index_for_batch = 3
+    if data_type=='particle':
+        index_for_batch = 6
+    # specify resign id index
+    reassign_id_indexes = [5,6]
+    if data_type=='particle':
+        reassign_id_indexes = [7]
     # Get the unique batch ids
     batch_ids = None
     if type(data)==torch.Tensor:
-        batch_ids = data[:,3].unique()
+        batch_ids = data[:,index_for_batch].unique()
+    elif type(data)==np.ndarray:
+        batch_ids = np.unique(data[:,index_for_batch])
     else:
-        batch_ids = np.unique(data[:,3])
+        return data
     # Get the list of arrays
     if whether_fluctuate:
         merging_batch_id_list = form_merging_batches(batch_ids, merge_size)
@@ -305,17 +317,61 @@ def merge_batch(data, merge_size=2, whether_fluctuate=False):
         selection = None
         for j, batch_id in enumerate(merging_batch_ids):
             if j==0:
-                selection = (data[:,3]==batch_id)
+                selection = (data[:,index_for_batch]==batch_id)
             else:
-                selection = selection | (data[:,3]==batch_id)
+                selection = selection | (data[:,index_for_batch]==batch_id)
         inds = None
         if type(data)==torch.Tensor:
             inds = selection.nonzero().view(-1)
         else:
             inds = np.where(selection)[0]
         # Merge batch
-        output_data[inds,5] = reassign_id(data[inds,:],5)
-        output_data[inds,6] = reassign_id(data[inds,:],6)
-        output_data[inds,3] = i
-    return output_data
+        for reassign_id_index in reassign_id_indexes:
+            output_data[inds,reassign_id_index] = reassign_id(
+                data[inds,:],
+                reassign_id_index,
+                index_for_batch
+            )
+        output_data[inds,index_for_batch] = i
+    return output_data, merging_batch_id_list
+
+def merge_batch_based_on_list(data, merging_batch_id_list, data_type='cluster'):
+    """
+    Similar to merge_batch
+    but this function merge batches according to a list
+    """
+    # specify batch index
+    index_for_batch = 3
+    if data_type == 'particle':
+        index_for_batch = 6
+    # specify resign id index
+    reassign_id_indexes = [5, 6]
+    if data_type == 'particle':
+        reassign_id_indexes = [7]
+    # check if data is tensor or numpy
+    if type(data)!=torch.Tensor and type(data)!=np.ndarray:
+        return data, merging_batch_id_list
+    # Loop over
+    output_data = data
+    for i, merging_batch_ids in enumerate(merging_batch_id_list):
+        selection = None
+        for j, batch_id in enumerate(merging_batch_ids):
+            if j == 0:
+                selection = (data[:, index_for_batch] == batch_id)
+            else:
+                selection = selection | (data[:, index_for_batch] == batch_id)
+        inds = None
+        if type(data) == torch.Tensor:
+            inds = selection.nonzero().view(-1)
+        else:
+            inds = np.where(selection)[0]
+        # Merge batch
+        for reassign_id_index in reassign_id_indexes:
+            output_data[inds, reassign_id_index] = reassign_id(
+                data[inds, :],
+                reassign_id_index,
+                index_for_batch
+            )
+        output_data[inds, index_for_batch] = i
+    return output_data, merging_batch_id_list
 
