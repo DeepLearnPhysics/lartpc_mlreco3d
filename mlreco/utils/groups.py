@@ -287,7 +287,18 @@ def merge_batch(data, merge_size=2, whether_fluctuate=False):
     if whether_fluctuate:
         merging_batch_id_list = form_merging_batches(batch_ids, merge_size)
     else:
-        merging_batch_id_list = np.reshape(batch_ids,(-1,merge_size))
+        if len(batch_ids)%merge_size==0:
+            merging_batch_id_list = np.reshape(batch_ids,(-1,merge_size))
+        else:
+            # it will be a bit more complicated
+            # if length of batch ids is indivisible by merge size
+            # first reshape the divisible part
+            merging_batch_id_list = np.reshape(
+                batch_ids[:-int(len(batch_ids)%merge_size)],
+                (-1, merge_size)
+            ).tolist()
+            # then append the rest
+            merging_batch_id_list.append(batch_ids[-int(len(batch_ids)%merge_size):].tolist())
     # Loop over
     output_data = data
     for i, merging_batch_ids in enumerate(merging_batch_id_list):
