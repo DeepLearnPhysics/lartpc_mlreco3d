@@ -6,11 +6,12 @@ import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
+from mlreco.utils.gnn.data import regulate_to_data
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, get_start_points
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
-from mlreco.utils.groups import reassign_id, merge_batch
+from mlreco.utils.groups import reassign_id, merge_batch, merge_batch_based_on_list
 import random
 
 class ClustEdgeGNN(torch.nn.Module):
@@ -138,10 +139,20 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # if merge_batch set all batch id to zero
         # and also reassign ids and group ids
-        if self.merge_batch and self.merge_batch_mode=='fluc':
-            data = merge_batch(data, self.merge_batch_size, whether_fluctuate=True)
-        elif self.merge_batch:
-            data = merge_batch(data, self.merge_batch_size)
+        if self.merge_batch:
+            # It needs to regulate between data and particles before merging batches
+            # bc particles can have more group_id depending on how
+            # data (clusters) were obtained
+            particles = regulate_to_data(data, particles)
+            if self.merge_batch_mode=='fluc':
+                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=True)
+            else:
+                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=False)
+            particles, _ = merge_batch_based_on_list(
+                particles,
+                merging_batch_list,
+                data_type='particle'
+            )
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
