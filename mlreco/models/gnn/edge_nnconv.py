@@ -35,6 +35,10 @@ class NNConvModel(torch.nn.Module):
         self.aggr = self.model_config.get('aggr', 'add')
         self.leak = self.model_config.get('leak', 0.1)
 
+        # extra flags
+        self.batchnorm_layer = self.model_config.get('batchnorm_layer', False) # whether to apply batchnorm everywhere
+        self.mlp_depth = self.model_config.get("mlp_depth", 2) # depth of mlp
+
         # perform batch normalization
         self.bn_node = BatchNorm1d(self.node_in)
         self.bn_edge = BatchNorm1d(self.edge_in)
@@ -45,19 +49,43 @@ class NNConvModel(torch.nn.Module):
         self.layer = torch.nn.ModuleList()
         ninput = self.node_in
         noutput = max(2*self.node_in, 32)
+        # construct the mlp nodes number in each layer
+        # need two because after first message passing
+        # the layer structure changed
+        self.mlp_node_numbers = [self.edge_in]
+        mlp_node_numbers2 = [self.edge_in]
+        step  = int((ninput*noutput-ninput)/(self.mlp_depth-1))
+        step2 = int((noutput**2 - noutput)/(self.mlp_depth-1))
+        for j in range(self.mlp_depth):
+            # weird layer configuration just for being compatible with previously trained nn which has (ninput, ninput*noutput) layers
+            if j==0:
+                self.mlp_node_numbers.append(ninput)
+                mlp_node_numbers2.append(noutput)
+            elif j!=self.mlp_depth-1:
+                self.mlp_node_numbers.append(self.edge_in+int(j*step))
+                mlp_node_numbers2.append(self.edge_in+int(j*step2))
+            else:
+                self.mlp_node_numbers.append(ninput*noutput)
+                mlp_node_numbers2.append(noutput**2)
         for i in range(self.num_mp):
-            self.nn.append(
-                Seq(
-                    Lin(self.edge_in, ninput),
-                    LeakyReLU(self.leak),
-                    Lin(ninput, ninput*noutput),
+            modules = []
+            for j in range(self.mlp_depth):
+                if self.batchnorm_layer:
+                    modules.append(
+                        BatchNorm1d(self.mlp_node_numbers[j])
+                    )
+                modules.append(
+                    Lin(self.mlp_node_numbers[j], self.mlp_node_numbers[j+1])
+                )
+                modules.append(
                     LeakyReLU(self.leak)
                 )
-            )
+            self.nn.append(Seq(*modules))
             self.layer.append(
                 NNConv(ninput, noutput, self.nn[i], aggr=self.aggr)
             )
             ninput = noutput
+            self.mlp_node_numbers = mlp_node_numbers2
 
         # final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
@@ -87,6 +115,8 @@ class NNConvModel(torch.nn.Module):
 
         # go through layers
         for i in range(self.num_mp):
+            if self.batchnorm_layer:
+                x = self.bn_node(x)
             x = self.layer[i](x, edge_index, e)
 
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
