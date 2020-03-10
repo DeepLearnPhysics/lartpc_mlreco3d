@@ -169,6 +169,9 @@ def regulate_to_data(data, particles):
     Output:
         - regulated_particles: (tensor) (M',8)
     """
+    # check if particles is tensor
+    if type(particles)!=torch.Tensor:
+        return particles
     # get the batch from data and particles
     data_batch_ids = data[:,3].unique().view(-1)
     part_batch_ids = particles[:,6].unique().view(-1)
