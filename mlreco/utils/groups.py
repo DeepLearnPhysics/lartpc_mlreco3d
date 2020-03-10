@@ -299,6 +299,9 @@ def merge_batch(data, merge_size=2, whether_fluctuate=False, data_type='cluster'
     if whether_fluctuate:
         merging_batch_id_list = form_merging_batches(batch_ids, merge_size)
     else:
+        if type(batch_ids)==torch.Tensor:
+            # to be sure
+            batch_ids = batch_ids.cpu().detach().numpy()
         if len(batch_ids)%merge_size==0:
             merging_batch_id_list = np.reshape(batch_ids,(-1,merge_size))
         else:
