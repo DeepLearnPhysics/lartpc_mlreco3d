@@ -34,8 +34,8 @@ def edge_assignment_from_graph(edge_index, true_edge_index, binary=False):
     Returns:
         np.ndarray: (E) Boolean array specifying on/off edges
     """
-    # Set the edge as true if it connects two nodes that belong to the same batch and the same group
-    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
+    # Set the edge as true if it connects two nodes that are connected by a true dependency
+    edge_assn = np.array([np.any([(e == pair).all() or (np.flip(e) == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
 
     # If binary loss will be used, transform to -1,+1 instead of 0,1
     if binary:
@@ -188,7 +188,7 @@ def adjacency_matrix(edge_index, n):
     Returns:
         np.ndarray: (C,C) Adjacency matrix
     """
-    adj_mat = np.zeros((n, n))
+    adj_mat = np.eye(n)
     adj_mat[tuple(edge_index.T)] = 1
     return adj_mat
 
@@ -205,11 +205,12 @@ def grouping_adjacency_matrix(edge_index, n):
     Returns:
         np.ndarray: (C,C) Adjacency matrix
     """
+    input_adj_mat = adjacency_matrix(edge_index, n) # Constrain edge selection to input graph
     node_assn = node_assignment(edge_index, np.ones(len(edge_index)), n)
-    return np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
+    return input_adj_mat*np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
 
 
-def grouping_loss(pred_mat, edge_index, loss='l1'):
+def grouping_loss(pred_mat, edge_index, loss='ce'):
     """
     Function that defines the graph clustering score.
     Given a target adjacency matrix A as and a predicted
@@ -223,7 +224,10 @@ def grouping_loss(pred_mat, edge_index, loss='l1'):
         int: Graph grouping loss
     """
     adj_mat = grouping_adjacency_matrix(edge_index, pred_mat.shape[0])
-    if loss == 'l1':
+    if loss == 'ce':
+        from sklearn.metrics import log_loss
+        return log_loss(adj_mat.reshape(-1), pred_mat.reshape(-1), labels=[0,1])
+    elif loss == 'l1':
         return np.mean(np.absolute(pred_mat-adj_mat))
     elif loss == 'l2':
         return np.mean((pred_mat-adj_mat)*(pred_mat-adj_mat))
@@ -247,7 +251,7 @@ def node_assignment_score(edge_index, edge_scores, n):
     # Interpret the score as a distance matrix, build an MST based on score
     from scipy.special import softmax
     edge_scores = softmax(edge_scores, axis=1)
-    pred_mat = np.ones((n,n))
+    pred_mat = np.eye(n)
     pred_mat[tuple(edge_index.T)] = edge_scores[:,1]
 
     from scipy.sparse.csgraph import minimum_spanning_tree
