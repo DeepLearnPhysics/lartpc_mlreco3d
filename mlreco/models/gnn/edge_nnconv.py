@@ -49,6 +49,7 @@ class NNConvModel(torch.nn.Module):
         self.layer = torch.nn.ModuleList()
         ninput = self.node_in
         noutput = max(2*self.node_in, 32)
+        self.bn_node_intermediate = BatchNorm1d(noutput)
         # construct the mlp nodes number in each layer
         # need two because after first message passing
         # the layer structure changed
@@ -115,8 +116,8 @@ class NNConvModel(torch.nn.Module):
 
         # go through layers
         for i in range(self.num_mp):
-            if self.batchnorm_layer:
-                x = self.bn_node(x)
+            if self.batchnorm_layer and i!=0:
+                x = self.bn_node_intermediate(x)
             x = self.layer[i](x, edge_index, e)
 
         x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
