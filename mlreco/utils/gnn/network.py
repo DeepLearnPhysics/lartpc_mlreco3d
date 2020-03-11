@@ -39,7 +39,7 @@ def complete_graph(batches, dist=None, max_dist=-1):
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
-        dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j != i)])
+        dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)])
         ret = ret[dists < max_dist]
 
     # Add the reciprocal edges as to create an undirected graph

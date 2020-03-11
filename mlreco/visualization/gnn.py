@@ -1,12 +1,18 @@
 import numpy as np
 import plotly.graph_objs as go
 
-def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis'):
+def scatter_clusters(voxels, labels, clusts, markersize=5, colorscale='Viridis'):
     """
-    scatter plot of cluster voxels colored by cluster order
-    - voxels is a list of voxel coordinates (Nx3-matrix)
-    - labels is a list of voxel labels (N-vector)
-    - clusters is an array of clusters, each defined as an array of voxel ids
+    Scatter plot of cluster voxels colored by cluster order
+
+    Args:
+        voxels (np.ndarray)  : (N,3) List of voxel coordinate
+        labels (np.ndarray)  : (N) List of voxels labels
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        markersize (int)     : Size of the voxel markersize
+        colorscale (str)     : Plotly color scale name
+    Returns:
+        [plotly.graph_objs.Scatter3d]: Scatter plot
     """
     # first build voxel set
     voxels = np.concatenate([voxels[c] for c in clusters], axis=0)
@@ -23,23 +29,33 @@ def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis
                          hovertext=vfeats)
     return [trace]
 
-def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width=2, colorscale='Inferno'):
+def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labels=[], mode='scatter', markersize=3, linewidth=2, colorscale='Inferno'):
     """
     Network 3D topological representation
-    - voxels is a list of voxel coordinates (Nx3-matrix)
-    - clusters is an array of clusters, each defined as an array of voxel ids
-    - labels is a list of cluster labels
-    - edges is list of pairs of cluster ids (Ex2-vector)
+
+    Args:
+        voxels (np.ndarray)      : (N,3) List of voxel coordinate
+        clusts ([np.ndarray])    : (C) List of arrays of voxel IDs in each cluster
+        edge_index (np.ndarray)  : (E,2) List of connections
+        clust_labels (np.ndarray): (C) Cluster labels
+        edge_labels (np.ndarray) : (E) Edge labels
+        mode (str)               : Draw mode ('sphere', 'cone', 'hull', 'scatter')
+        markersize (int)         : Size of the voxel markersize in pixels
+        linewidth (int)          : Width of the edge lines in pixels
+        colorscale (str)         : Plotly color scale name
+    Returns:
+        [plotly.graph_objs.Scatter3d]: (2) 3D Scatter plots of [nodes, edges]
     """
     # Define the arrays of node positions (barycenter of voxels in the cluster)
     pos = np.array([voxels[c].mean(0) for c in clusters])
 
     # Define the node features (label, color)
     n = len(clusters)
-    node_labels = ['Cluster ID:%d<br>Cluster label:%0.2f<br>Centroid:(%0.1f, %0.1f, %0.1f)' % (i, labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    if not len(clust_labels): clust_labels = np.zeros(n)
+    node_labels = ['Cluster ID: %d<br>Cluster label: %0.3f<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
 
     # Assert if there is edges to draw
-    draw_edges = bool(len(edges))
+    draw_edges = bool(len(edge_index))
 
     # Define the nodes and their connections
     graph_data = []
@@ -56,7 +72,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                        marker = dict(
                                            symbol = 'circle',
                                            size = node_sizes,
-                                           color = labels,
+                                           color = clust_labels,
                                            colorscale = colorscale,
                                            line = dict(color='rgb(50,50,50)', width=0.5)
                                        ),
@@ -65,7 +81,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
 
         # Define the edges center to center
         if draw_edges:
-            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in edges])
+            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in edge_index])
 
     elif mode == 'cone':
         # Evaluate the cone parameters
@@ -123,7 +139,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                        mode='markers',
                                        marker = dict(
                                            symbol = 'circle',
-                                           color = labels,
+                                           color = clust_labels,
                                            size = 5,
                                            colorscale = colorscale
                                        ),
@@ -131,8 +147,8 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                        hoverinfo = 'text'))
 
         # Join end points of primary cones to starting points of secondary cones
-        for e in edges:
-            edge_vertices = np.concatenate([[epos[i], spos[j], [None, None, None]] for i, j in edges])
+        for e in edge_index:
+            edge_vertices = np.concatenate([[epos[i], spos[j], [None, None, None]] for i, j in edge_index])
 
     elif mode == 'hull':
         # For each cluster, add the convex hull of all its voxels
@@ -141,7 +157,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                  x = voxels[c][:,0],
                                  y = voxels[c][:,1],
                                  z = voxels[c][:,2],
-                                 color = labels[i],
+                                 color = clust_labels[i],
                                  opacity = 0.3,
                                  text = node_labels[i],
                                  hoverinfo = 'text') for i, c in enumerate(clusters)]
@@ -149,7 +165,7 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
         # Define the edges closest pixel to closest pixel
         import scipy as sp
         edge_vertices = []
-        for i, j in edges:
+        for i, j in edge_index:
             vi, vj = voxels[clusters[i]], voxels[clusters[j]]
             d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
             i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
@@ -165,8 +181,8 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
             cids[c] = i
 
         mask = np.where(cids != -1)[0]
-        colors = [labels[i] for i in cids[mask]]
-        labels = [node_labels[i] for i in cids[mask]]
+        colors = [clust_labels[i] for i in cids[mask]]
+        node_labels = [node_labels[i] for i in cids[mask]]
 
         graph_data = [go.Scatter3d(x = voxels[mask][:,0],
                                    y = voxels[mask][:,1],
@@ -177,16 +193,16 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
                                      symbol = 'circle',
                                      color = colors,
                                      colorscale = colorscale,
-                                     size = 3
+                                     size = markersize
                                    ),
-                                   text = labels,
+                                   text = node_labels,
                                    hoverinfo = 'text')]
 
         # Define the edges closest pixel to closest pixel
         if draw_edges:
             import scipy as sp
             edge_vertices = []
-            for i, j in edges:
+            for i, j in edge_index:
                 vi, vj = voxels[clusters[i]], voxels[clusters[j]]
                 d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
                 i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
@@ -199,61 +215,76 @@ def network_topology(voxels, clusters, labels, edges, mode='scatter', edge_width
 
     # Initialize a graph that contains the edges
     if draw_edges:
+        if not len(edge_labels): edge_labels = np.zeros(len(edge_index))
+        edge_colors = np.concatenate([[edge_labels[i]]*3 for i in range(len(edge_index))])
         graph_data.append(go.Scatter3d(x = edge_vertices[:,0], y = edge_vertices[:,1], z = edge_vertices[:,2],
                                        mode = 'lines',
                                        name = 'Graph edges',
                                        line = dict(
-                                           color = 'rgba(50, 50, 50, 0.5)',
-                                           width = edge_width
+                                           color = edge_colors,
+                                           width = linewidth,
+                                           colorscale = 'Blues'
                                        ),
                                        hoverinfo = 'none'))
 
     # Return
     return graph_data
 
-def network_schematic(clusters, primaries, edges):
+def network_schematic(clusters, edge_index, clust_labels=[], edge_labels=[], linewidth=1, colorscale='Inferno'):
     """
     Network 2D schematic representation
-    - clusters is an array of clusters, each defined as an array of voxel ids
-    - primaries is a list of the primary cluster ids
-    - edges is list of pairs of cluster ids (Ex2-vector)
+
+    Args:
+        clusts ([np.ndarray])    : (C) List of arrays of voxel IDs in each cluster
+        edge_index (np.ndarray)  : (E,2) List of connections
+        clust_labels (np.ndarray): (C) Node labels
+        edge_labels (np.ndarray) : (E) Edge labels
+        linewidth (int)          : Width of the edge lines in pixels
+        colorscale (str)         : Plotly color scale name
+    Returns:
+        [plotly.graph_objs.Scatter]: (2) Scatter plots of [nodes, edges]
     """
-    # Define the node positions (primaries on the left, secondaries on the right)
-    n = len(clusters)
-    pos = np.array([[1.-float(i in primaries), i] for i in range(n)])
-
-    # Define the node features (label, size, color)
-    node_labels = [str(i) for i in range(n)]
-
+    # Get the cluster sizes (will determine the node size)
     sizes = np.array([len(c) for c in clusters])
     node_sizes = sizes * 50./sizes.max()
 
-    node_colors = ['#ff7f0e' if i in primaries else '#1f77b4' for i in range(n)]
+    # Define the node features (label, color)
+    n = len(clusters)
+    if not len(clust_labels): clust_labels = np.zeros(n)
+    node_labels = ['Cluster ID: %d<br>Cluster label: %0.3f<br>Cluster size: %d' % (i, clust_labels[i], node_sizes[i]) for i in range(n)]
+
+    # Define the node positions (primaries on the left, secondaries on the right)
+    pos = np.array([[l, i] for i, l in enumerate(clust_labels)])
 
     # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
     graph_data = []
     graph_data.append(go.Scatter(x = pos[:,0], y = pos[:,1],
                                  mode = 'markers',
-                                 name = 'clusters',
+                                 name = 'Graph nodes',
                                  marker = dict(
-                                     color = node_colors,
-                                     size = node_sizes
+                                    color = clust_labels,
+                                    size = node_sizes,
+                                    colorscale = colorscale,
+                                    reversescale = True
                                  ),
                                  text = node_labels,
                                  hoverinfo = 'text'))
 
     # Assert if there is edges to draw
-    draw_edges = bool(len(edges))
+    draw_edges = bool(len(edge_index))
 
     # Initialize the edges
     if draw_edges:
-        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in edges])
+        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in edge_index])
+        #if not len(edge_labels): edge_labels = np.zeros(len(edge_index))
+        #edge_colors = np.concatenate([[edge_labels[i]]*3 for i in range(len(edge_index))])
         graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
                                      mode = 'lines',
-                                     name = 'edges',
+                                     name = 'Graph edges',
                                      line = dict(
-                                         color = 'rgba(50, 50, 50, 0.5)',
-                                         width = 1
+                                        color = 'gray', # Cannot use multiple colors...
+                                        width = linewidth
+                                        #colorscale = 'Greys'
                                      ),
                                      hoverinfo = 'none'))
 
