@@ -26,7 +26,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
     INPUT DATA:
         just energy deposision data
-        "input_data": ["parse_sparse3d_scn", "sparse3d_data"],
+        "input_data": ["parse_sparse3d_scn", "sparse3d_data"]
     """
     MODULES = ['dbscan', 'uresnet_ppn', 'attention_gnn']
 
@@ -137,7 +137,7 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         edge_pred = [edge_pred[b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        
+
         result.update(dict(
             edge_pred = [edge_pred],
             edge_index = [edge_index]
@@ -169,4 +169,3 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         loss['loss'] = uresnet_ppn_loss['loss'] + node_loss['loss'] + edge_loss['loss']
         loss['accuracy'] = (uresnet_ppn_loss['accuracy'] + node_loss['accuracy'] + edge_loss['accuracy'])/3
         return loss
-

@@ -7,6 +7,7 @@ def edge_model_dict():
         dict: Dictionary of valid edge models
     """
 
+    from . import modular_nnconv
     from . import edge_attention
     from . import edge_attention2
     from . import edge_only
@@ -18,6 +19,7 @@ def edge_model_dict():
     from . import dir_meta
 
     models = {
+        "modular_nnconv" : modular_nnconv.NNConvModel,
         "basic_attention" : edge_attention.BasicAttentionModel,
         "basic_attention2": edge_attention2.BasicAttentionModel,
         "edge_only" : edge_only.EdgeOnlyModel,
@@ -62,11 +64,13 @@ def node_model_dict():
         dict: Dictionary of valid node models
     """
 
+    from . import modular_nnconv
     from . import node_attention
     from . import node_econv
     from . import node_nnconv
 
     models = {
+        "modular_nnconv" : modular_nnconv.NNConvModel,
         "node_attention" : node_attention.NodeAttentionModel,
         "node_econv" : node_econv.NodeEConvModel,
         "node_nnconv" : node_nnconv.NodeNNConvModel

@@ -205,9 +205,10 @@ def grouping_adjacency_matrix(edge_index, n):
     Returns:
         np.ndarray: (C,C) Adjacency matrix
     """
-    input_adj_mat = adjacency_matrix(edge_index, n) # Constrain edge selection to input graph
+    #input_adj_mat = adjacency_matrix(edge_index, n) # Constrain edge selection to input graph
     node_assn = node_assignment(edge_index, np.ones(len(edge_index)), n)
-    return input_adj_mat*np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
+    #return input_adj_mat*np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
+    return np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
 
 
 def grouping_loss(pred_mat, edge_index, loss='ce'):
