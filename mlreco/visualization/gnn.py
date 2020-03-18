@@ -246,12 +246,12 @@ def network_schematic(clusters, edge_index, clust_labels=[], edge_labels=[], lin
     """
     # Get the cluster sizes (will determine the node size)
     sizes = np.array([len(c) for c in clusters])
-    node_sizes = sizes * 50./sizes.max()
+    node_sizes = sizes * 100./sizes.max()
 
     # Define the node features (label, color)
     n = len(clusters)
     if not len(clust_labels): clust_labels = np.zeros(n)
-    node_labels = ['Cluster ID: %d<br>Cluster label: %0.3f<br>Cluster size: %d' % (i, clust_labels[i], node_sizes[i]) for i in range(n)]
+    node_labels = ['Cluster ID: %d<br>Cluster label: %0.3f<br>Cluster size: %d' % (i, clust_labels[i], sizes[i]) for i in range(n)]
 
     # Define the node positions (primaries on the left, secondaries on the right)
     pos = np.array([[l, i] for i, l in enumerate(clust_labels)])

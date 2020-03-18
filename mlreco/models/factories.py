@@ -14,6 +14,7 @@ def model_dict():
     from . import cluster_node_gnn
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
+    from . import cluster_full_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
     from . import flashmatching_model
@@ -74,6 +75,8 @@ def model_dict():
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Cluster grouping GNN
         "cluster_gnn": (cluster_gnn.ClustEdgeGNN, cluster_gnn.EdgeChannelLoss),
+        # Cluster primary node identification + grouping GNN
+        "cluster_full_gnn": (cluster_full_gnn.ClustFullGNN, cluster_full_gnn.ChainLoss),
         # Cluster bipartite grouping GNN
         "cluster_bipartite_gnn": (cluster_bipartite_gnn.ClustBipartiteGNN, cluster_bipartite_gnn.ChainLoss),
         # Cluster hierarchical grouping GNN
