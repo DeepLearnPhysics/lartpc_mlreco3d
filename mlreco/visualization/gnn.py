@@ -270,22 +270,30 @@ def network_schematic(clusters, edge_index, clust_labels=[], edge_labels=[], lin
                                  text = node_labels,
                                  hoverinfo = 'text'))
 
-    # Assert if there is edges to draw
-    draw_edges = bool(len(edge_index))
-
-    # Initialize the edges
-    if draw_edges:
-        edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in edge_index])
-        #if not len(edge_labels): edge_labels = np.zeros(len(edge_index))
-        #edge_colors = np.concatenate([[edge_labels[i]]*3 for i in range(len(edge_index))])
-        graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
-                                     mode = 'lines',
-                                     name = 'Graph edges',
-                                     line = dict(
-                                        color = 'gray', # Cannot use multiple colors...
-                                        width = linewidth
-                                        #colorscale = 'Greys'
-                                     ),
-                                     hoverinfo = 'none'))
+    # Initialize the edges (one graph per edge to allow for multiple edge colors)
+    if len(edge_index):
+        if not len(edge_labels):
+            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None]] for i, j in edge_index])
+            graph_data.append(go.Scatter(x = edge_vertices[:,0], y = edge_vertices[:,1],
+                                         mode = 'lines',
+                                         name = 'Graph edges',
+                                         line = dict(
+                                            color = 'black',
+                                            width = linewidth
+                                         ),
+                                         hoverinfo = 'none'))
+        else:
+            for k, e in enumerate(edge_index):
+                i, j = e
+                graph_data.append(go.Scatter(x = [pos[i,0], pos[j,0]], y = [pos[i,1], pos[j,1]],
+                                             mode = 'lines',
+                                             name = 'Graph edges',
+                                             line = dict(
+                                                color = 'rgb({0:0.2f}, {0:0.2f}, {0:0.2f})'.format(255*(1-edge_labels[k])),
+                                                width = linewidth
+                                             ),
+                                             hoverinfo = 'none',
+                                             showlegend = False))
+            graph_data[-1]['showlegend'] = True
 
     return graph_data

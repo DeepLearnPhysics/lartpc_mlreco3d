@@ -342,14 +342,14 @@ def cluster_start_point(voxels):
 
 def get_cluster_start_points(voxels, clusts):
     """
-    Function that returns the an array of 16 features for
-    each of the clusters in the provided list.
+    Function that estimates the start point of clusters
+    based on their PCA and local curvature.
 
     Args:
         data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
     Returns:
-        np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
+        np.ndarray: (C,3) tensor of cluster start points
     """
     points = []
     for c in clusts:
