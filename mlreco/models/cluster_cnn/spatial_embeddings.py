@@ -33,7 +33,7 @@ class SpatialEmbeddings1(UResNet):
             for j in range(self.reps):
                 self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
             self.decoding_block2.add(m)
-        
+
         # Define outputlayers
         self.outputEmbeddings = scn.Sequential()
         self._nin_block(self.outputEmbeddings, self.num_filters, self.dimension + self.sigmaDim)
@@ -53,7 +53,10 @@ class SpatialEmbeddings1(UResNet):
 
         # Pytorch Activations
         self.tanh = nn.Tanh()
-        self.sigmoid = nn.Sigmoid()
+        if self.model_config.get('log_margin') == False:
+            self.margins_func = nn.Sigmoid()
+        else:
+            self.margins_func = torch.exp
 
 
     def seed_decoder(self, features_enc, deepest_layer):
@@ -65,7 +68,7 @@ class SpatialEmbeddings1(UResNet):
 
         RETURNS:
             - features_dec (list of scn.SparseConvNetTensor): list of feature
-            tensors in decoding path at each spatial resolution. 
+            tensors in decoding path at each spatial resolution.
         '''
         features_seediness = []
         x = deepest_layer
@@ -108,7 +111,7 @@ class SpatialEmbeddings1(UResNet):
 
         res = {
             "embeddings": [embeddings[:, :self.dimension]],
-            "margins": [self.sigmoid(embeddings[:, self.dimension:])],
+            "margins": [self.margins_func(embeddings[:, self.dimension:])],
             "seediness": [seediness]
         }
 
@@ -138,7 +141,7 @@ class SpatialEmbeddings2(StackUNet):
             for j in range(self.reps):
                 self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
             self.decoding_block2.add(m)
-        
+
         # Define outputlayers
         self.embedding = None
 
@@ -164,7 +167,7 @@ class SpatialEmbeddings2(StackUNet):
 
         RETURNS:
             - features_dec (list of scn.SparseConvNetTensor): list of feature
-            tensors in decoding path at each spatial resolution. 
+            tensors in decoding path at each spatial resolution.
         '''
         features_seediness = []
         x = deepest_layer
@@ -206,7 +209,7 @@ class SpatialEmbeddings2(StackUNet):
                 stack_feature.append(f)
             else:
                 stack_feature.append(layer)
-        
+
         stack_feature = self.concat(stack_feature)
         out = self.cluster_decoder(stack_feature)
         features_seediness = self.seed_decoder(features_enc, deepest_layer)

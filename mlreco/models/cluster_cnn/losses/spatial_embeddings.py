@@ -26,7 +26,7 @@ def multivariate_kernel(centroid, L):
 class MaskBCELoss(nn.Module):
     '''
     Loss function for Sparse Spatial Embeddings Model, with fixed
-    centroids and symmetric gaussian kernels. 
+    centroids and symmetric gaussian kernels.
     '''
     def __init__(self, cfg, name='clustering_loss'):
         super(MaskBCELoss, self).__init__()
@@ -46,7 +46,7 @@ class MaskBCELoss(nn.Module):
         else:
             raise ValueError(
             'Invalid loss scheme: {}'.format(self.loss_scheme))
-        
+
         # BCELoss for Embedding Loss
         self.bceloss = StableBCELoss()
         # L2 Loss for Seediness and Smoothing
@@ -108,22 +108,22 @@ class MaskBCELoss(nn.Module):
 
     def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels, coords):
         '''
-        Wrapper function for combining different components of the loss, 
-        in particular when clustering must be done PER SEMANTIC CLASS. 
+        Wrapper function for combining different components of the loss,
+        in particular when clustering must be done PER SEMANTIC CLASS.
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud. 
+        and then compute the clustering loss over each masked point cloud.
 
-        INPUTS: 
+        INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
 
         OUTPUT:
-            loss_segs (list): list of computed loss values for each semantic class. 
-            loss[i] = computed DLoss for semantic class <i>. 
-            acc_segs (list): list of computed clustering accuracy for each semantic class. 
+            loss_segs (list): list of computed loss values for each semantic class.
+            loss[i] = computed DLoss for semantic class <i>.
+            acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss = defaultdict(list)
         accuracy = defaultdict(float)
@@ -144,7 +144,7 @@ class MaskBCELoss(nn.Module):
             loss['mask_loss_{}'.format(int(sc))].append(float(mask_loss))
             loss['seed_loss_{}'.format(int(sc))].append(float(seed_loss))
             accuracy['accuracy_{}'.format(int(sc))] = acc
-            
+
         return loss, accuracy
 
     def forward(self, out, segment_label, group_label):
@@ -175,7 +175,7 @@ class MaskBCELoss(nn.Module):
                 coords_batch = coords[batch_idx == bidx] / self.spatial_size
 
                 loss_class, acc_class = self.combine_multiclass(
-                    embedding_batch, margins_batch, 
+                    embedding_batch, margins_batch,
                     seed_batch, slabels_batch, clabels_batch, coords_batch)
                 for key, val in loss_class.items():
                     loss[key].append(sum(val) / len(val))
@@ -242,7 +242,7 @@ class MaskBCELoss2(MaskBCELoss):
 class MaskBCELossBivariate(MaskBCELoss):
     '''
     Spatial Embeddings Loss with trainable center of attraction and
-    bivariate gaussian probability kernels. 
+    bivariate gaussian probability kernels.
     '''
     def __init__(self, cfg, name='clustering_loss'):
         super(MaskBCELossBivariate, self).__init__(cfg)
@@ -283,7 +283,7 @@ class MaskBCELossBivariate(MaskBCELoss):
 class MaskLovaszHingeLoss(MaskBCELoss2):
     '''
     Spatial Embeddings Loss using Lovasz Hinge for foreground/background
-    segmentation and trainable center of attention. 
+    segmentation and trainable center of attention.
     '''
     def __init__(self, cfg, name='clustering_loss'):
         super(MaskLovaszHingeLoss, self).__init__(cfg)
@@ -412,22 +412,22 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
 
     def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels, coords):
         '''
-        Wrapper function for combining different components of the loss, 
-        in particular when clustering must be done PER SEMANTIC CLASS. 
+        Wrapper function for combining different components of the loss,
+        in particular when clustering must be done PER SEMANTIC CLASS.
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud. 
+        and then compute the clustering loss over each masked point cloud.
 
-        INPUTS: 
+        INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
 
         OUTPUT:
-            loss_segs (list): list of computed loss values for each semantic class. 
-            loss[i] = computed DLoss for semantic class <i>. 
-            acc_segs (list): list of computed clustering accuracy for each semantic class. 
+            loss_segs (list): list of computed loss values for each semantic class.
+            loss[i] = computed DLoss for semantic class <i>.
+            acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss = defaultdict(list)
         accuracy = defaultdict(float)
@@ -436,7 +436,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             index = (slabels == sc)
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(
-                embeddings[index], margins[index], 
+                embeddings[index], margins[index],
                 clabels[index], coords[index])
             prob_truth = probs.detach()
             seed_loss = self.l2loss(prob_truth, seediness[index].squeeze(1))
@@ -455,7 +455,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             loss['mask_loss_{}'.format(int(sc))].append(float(mask_loss))
             loss['seed_loss_{}'.format(int(sc))].append(float(seed_loss))
             accuracy['accuracy_{}'.format(int(sc))] = acc
-            
+
         return loss, accuracy
 
 
@@ -540,10 +540,6 @@ class MultiVariateLovasz(MaskLovaszInterLoss):
             f = multivariate_kernel(centroids[i], sigma)
             p = f(embeddings)
             probs[index] = p[index]
-            # except:
-            #     print(probs)
-            #     print(index)
-            #     print(p)
             loss += lovasz_hinge_flat(2 * p - 1, mask)
             accuracy += iou_binary(p > 0.5, mask, per_image=False)
             sigma_detach = sigma.detach()
@@ -567,7 +563,7 @@ class EllipsoidalKernelLoss(MaskLovaszInterLoss):
     @staticmethod
     def geodesic_distance_S3(qArr, qmean):
         '''
-        Computes geodesic distance of q1, q2 in SO(3) group. 
+        Computes geodesic distance of q1, q2 in SO(3) group.
         '''
         qmeans = qmean.expand_as(qArr)
         dist = torch.abs(torch.sum(qArr * qmeans, dim=1))
@@ -628,8 +624,8 @@ class EllipsoidalKernelLoss(MaskLovaszInterLoss):
         D = torch.diag(1.0 / (var + eps))
         cov = torch.chain_matmul(U, D, U.t())
         return cov
-        
-    
+
+
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
@@ -661,7 +657,7 @@ class EllipsoidalKernelLoss(MaskLovaszInterLoss):
             # Compute argument inside exponential
             dists = torch.mm(covInverse, offset.t()).t()
             dists = torch.bmm(
-                offset.view(offset.shape[0], 1, -1), 
+                offset.view(offset.shape[0], 1, -1),
                 dists.view(dists.shape[0], -1, 1))
             dists = dists.squeeze(2)
             p = torch.clamp(torch.exp(-dists), min=0, max=1).squeeze(1)
@@ -674,7 +670,7 @@ class EllipsoidalKernelLoss(MaskLovaszInterLoss):
             qdetach = q.detach()
             smoothing_loss += self.quaternion_weight * torch.mean(
                 self.geodesic_distance_S3(quat, qdetach))
-            
+
 
         loss /= n_clusters
         smoothing_loss /= n_clusters

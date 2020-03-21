@@ -9,34 +9,29 @@ from mlreco.models.layers.base import NetworkBase
 
 from mlreco.models.ppn import PPN
 
-# from mlreco.models.cluster_cnn.utils import *
-# from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
-# from mlreco.models.cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
-
-# from mlreco.models.gnn.edge_nnconv import *
-# from mlreco.models.gnn.factories import *
-
 from torch_geometric.data import Batch as GraphData
 
 # ----------------------HELPER FUNCTIONS------------------------
 
 
-def gaussian_kernel(centroid, sigma):
+def gaussian_kernel(centroid, log_sigma, eps=1e-8):
     def f(x):
         dists = np.sum(np.power(x - centroid, 2), axis=1, keepdims=False)
-        probs = np.exp(-dists / (2.0 * sigma**2))
+        probs = np.exp(-dists / (2.0 * (torch.exp(log_sigma) + eps)**2))
         return probs
     return f
 
 
-def multivariate_kernel(centroid, L):
+def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
     def f(x):
         N = x.shape[0]
-        cov = torch.zeros(3, 3)
-        tril_indices = torch.tril_indices(row=3, col=3, offset=0)
-        cov[tril_indices[0], tril_indices[1]] = L
-        cov = torch.matmul(cov, cov.T)
-        dist = torch.matmul((x - centroid), cov)
+        L = torch.zeros(3, 3)
+        tril_indices = torch.tril_indices(row=3, col=3, offset=-1)
+        L[tril_indices[0], tril_indices[1]] = Lprime
+        sigma = torch.exp(log_sigma) + eps
+        L += torch.diag(sigma)
+        cov = torch.matmul(L, L.T)
+        dist = torch.matmul((x - centroid), torch.inverse(cov))
         dist = torch.bmm(dist.view(N, 1, -1), (x-centroid).view(N, -1, 1)).squeeze()
         probs = torch.exp(-dist)
         return probs
@@ -50,7 +45,7 @@ def get_edge_features(nodes, batch_idx, edge_net):
     INPUTS:
         - nodes (N x d Tensor): list of node features
         - batch_idx (N x 1 Tensor): list of batch indices for nodes
-        - bilinear_net: nn.Module that taks two vectors and returns edge feature vector. 
+        - bilinear_net: nn.Module that taks two vectors and returns edge feature vector.
 
     RETURNS:
         - edge_features: list of edges features
@@ -74,7 +69,7 @@ def get_edge_features(nodes, batch_idx, edge_net):
             ei2j = edge_net(row.expand_as(others), others)
             edge_features.extend(ei2j)
             edge_batch_indices.extend([bidx for _ in subindex[submask]])
-    
+
     edge_indices = torch.stack(edge_indices, dim=0)
     edge_features = torch.stack(edge_features, dim=0)
     edge_batch_indices = torch.stack(edge_batch_indices, dim=0)
@@ -110,7 +105,7 @@ class EdgeFeatureNet(nn.Module):
         return x
 
 
-def get_gnn_input(coords, features_gnn, edge_net, fit_predict, 
+def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                     train=True, **kwargs):
     '''
     Get input features to GNN from CNN clustering output
@@ -118,7 +113,7 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
     INPUTS (TRAINING):
 
         - featuresAgg (N x F): combined feature tensor per voxel, created
-        using semantic/seediness/clustering feature maps. 
+        using semantic/seediness/clustering feature maps.
 
         - fragment_labels (N, ): ground truth fragment labels.
 
@@ -130,13 +125,13 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
         - margins: margin values from CNN clustering
         - seediness: seediness values from CNN clustering
         - kernel_func: choice of probability kernel function to be used
-        in CNN clustering inference. 
+        in CNN clustering inference.
 
 
     RETURNS:
 
         gnn_result: A dictionary containing input node & edge feature to GNN.
-        The items are self-explanatory from their variable names. 
+        The items are self-explanatory from their variable names.
     '''
     nodes_full = []
     nodes_batch_id = []
@@ -185,13 +180,13 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
 
     nodes_full = torch.stack(nodes_full, dim=0)
     node_batch_id = torch.Tensor(nodes_batch_id).cuda()
-    
+
     # Compile Pairwise Edge Features
     edge_indices, edge_features, edge_batch_indices = get_edge_features(
         nodes_full, node_batch_id, edge_net)
 
-    gnn_input = GraphData(x=nodes_full, 
-                          edge_index=edge_indices.view(2, -1).long(), 
+    gnn_input = GraphData(x=nodes_full,
+                          edge_index=edge_indices.view(2, -1).long(),
                           edge_attr=edge_features,
                           batch=node_batch_id.long())
     gnn_input.edge_batch = edge_batch_indices
@@ -263,7 +258,7 @@ class FullCNN(NetworkBase):
         self.embedding_freeze = self.model_config.get('embedding_freeze', False)
         self.seediness_freeze = self.model_config.get('seediness_freeze', False)
 
-        # Input Layer Configurations and commonly used scn operations. 
+        # Input Layer Configurations and commonly used scn operations.
         self.input = scn.Sequential().add(
             scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
             scn.SubmanifoldConvolution(self.dimension, self.nInputFeatures, \
@@ -380,7 +375,6 @@ class FullCNN(NetworkBase):
         embeddings = self.output_cluster(embeddings)
         embeddings[:, :self.embedding_dim] = self.tanh(embeddings[:, :self.embedding_dim])
         embeddings[:, :self.embedding_dim] += normalized_coords
-        embeddings[:, self.embedding_dim:] = self.tanh(embeddings[:, self.embedding_dim:])
 
         res = {}
 
