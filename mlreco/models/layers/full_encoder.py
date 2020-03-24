@@ -104,7 +104,7 @@ class EncoderLayer(torch.nn.Module):
 
         x = self.input((coords, features))
 
-        initial_sparse = x
+        initial_sparse = x.clone()
 
 
         # We send x through all the encoding layers
