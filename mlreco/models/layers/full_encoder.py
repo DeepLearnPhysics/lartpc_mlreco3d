@@ -32,6 +32,7 @@ class EncoderLayer(torch.nn.Module):
         self.num_output_feats = model_config.get('num_output_feats', 64)
         self.freeze_encoder = model_config.get('freeze_encoder', False) # flag for freezing encoder in use such as GNN
         self.freeze_decoder = model_config.get('freeze_decoder', False)
+        self.only_output_feature = model_config.get('only_output_feature', False) # if true will skip decoding in forward
 
         self.out_spatial_size = int(self.spatial_size / 4 ** (self.num_strides - 1))
         self.output = self.m * self.out_spatial_size ** 3
@@ -117,6 +118,9 @@ class EncoderLayer(torch.nn.Module):
         if self.use_linear_output:
             hidden_x = self.linear(hidden_x)
             hidden_x = hidden_x.view(-1, self.num_output_feats)
+
+        if self.only_output_feature:
+            return None, hidden_x
 
 
         for i, layer in enumerate(self.decoding_conv):
