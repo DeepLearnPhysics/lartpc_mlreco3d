@@ -53,16 +53,16 @@ class AutoEncoder(torch.nn.Module):
 
         # prepare for edge index
         # by default using complete graphes
-        clusts = form_clusters(data, self.node_min_size)
+        clusts = form_clusters(data, -1)
         clusts = [c.cpu().numpy() for c in clusts]
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
 
-        images = torch.empty((0,5), type=torch.float, device=device)
+        images = torch.empty((0,5), dtype=torch.float, device=device)
         if self._mode=='node':
             for i, c in enumerate(clusts):
                 images = torch.cat((images, data[c,:5].float()))
-                images[-len(c),3] = i*torch.ones(len(c)).to(device)
+                images[-len(c):,3] = i*torch.ones(len(c)).to(device)
         elif self._mode=='edge':
             # for getting edge index
             edge_index = complete_graph(batch_ids, None, -1)
@@ -70,12 +70,12 @@ class AutoEncoder(torch.nn.Module):
             for i, (ind1, ind2) in enumerate(edge_index.T):
                 c1 = clusts[ind1]
                 c2 = clusts[ind2]
-                images = torch.cat((images, data[c1,:5], data[c2,:5]))
-                images[-len(c1)-len(c2),3] = i*torch.ones(len(c1)+len(c2)).to(device)
+                images = torch.cat((images, data[c1,:5].float(), data[c2,:5].float()))
+                images[-len(c1)-len(c2):,3] = i*torch.ones(len(c1)+len(c2)).to(device)
         else:
             raise ValueError('Auto-encoder mode not supported!')
 
-        res = self.autoencoder(images)
+        res, _ = self.autoencoder(images)
         return {'result': [res]}
 
 
@@ -91,7 +91,8 @@ class AutoEncoderLoss(torch.nn.Module):
         self.loss = torch.nn.MSELoss()
 
     def forward(self, out, clusters):
-        loss = self.loss(out['result'][0], torch.tensor([0]).float())
+
+        loss = self.loss(out['result'][0], torch.tensor([0]).float().to(out['result'][0].device))
 
         return {
             'accuracy': loss.item(),
