@@ -9,6 +9,7 @@ from .layers.full_encoder import EncoderLayer
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch
 from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.groups import merge_batch
+import random
 
 
 class AutoEncoder(torch.nn.Module):
@@ -36,6 +37,9 @@ class AutoEncoder(torch.nn.Module):
         # 'edge' mode give images with two distinct ids
         self._mode = chain_config.get('mode', 'node')
 
+        # Pick up some to perform trainning
+        self.num_to_pick = chain_config.get('num_to_pick', -1) # <0 is using all
+
         # construct autoencoder
         autoencoder_config = cfg['autoencoder']
         self.autoencoder = EncoderLayer(autoencoder_config)
@@ -60,14 +64,23 @@ class AutoEncoder(torch.nn.Module):
 
         images = torch.empty((0,5), dtype=torch.float, device=device)
         if self._mode=='node':
+            if self.num_to_pick>0:
+                random.shuffle(clusts)
             for i, c in enumerate(clusts):
+                if self.num_to_pick>0 and i>=self.num_to_pick:
+                    break
                 images = torch.cat((images, data[c,:5].float()))
                 images[-len(c):,3] = i*torch.ones(len(c)).to(device)
         elif self._mode=='edge':
             # for getting edge index
-            edge_index = complete_graph(batch_ids, None, -1)
+            edge_index = complete_graph(batch_ids, None, -1).T
+            #
+            if self.num_to_pick>0:
+                edge_index = random.shuffle(edge_index)
             # Go through each edge
-            for i, (ind1, ind2) in enumerate(edge_index.T):
+            for i, (ind1, ind2) in enumerate(edge_index):
+                if self.num_to_pick>0 and i>=self.num_to_pick:
+                    break
                 c1 = clusts[ind1]
                 c2 = clusts[ind2]
                 images = torch.cat((images, data[c1,:5].float(), data[c2,:5].float()))
