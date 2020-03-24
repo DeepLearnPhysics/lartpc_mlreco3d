@@ -111,7 +111,7 @@ class EncoderLayer(torch.nn.Module):
         for i, layer in enumerate(self.encoding_conv):
             x = self.encoding_conv[i](x)
 
-        hidden_x = self.to_dense(x)
+        hidden_x = self.to_dense(x).clone()
         hidden_x = hidden_x.view(-1, ((hidden_x.size()[2] ** 3) * hidden_x.size()[1]))
 
         # Go through the hidden layer if linear layer at encoder output is required
