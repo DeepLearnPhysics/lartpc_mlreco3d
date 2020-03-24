@@ -31,6 +31,7 @@ class EncoderLayer(torch.nn.Module):
         self.use_linear_output = model_config.get('use_linear_output', False)
         self.num_output_feats = model_config.get('num_output_feats', 64)
         self.freeze_encoder = model_config.get('freeze_encoder', False) # flag for freezing encoder in use such as GNN
+        self.freeze_decoder = model_config.get('freeze_decoder', False)
 
         self.out_spatial_size = int(self.spatial_size / 4 ** (self.num_strides - 1))
         self.output = self.m * self.out_spatial_size ** 3
@@ -66,7 +67,7 @@ class EncoderLayer(torch.nn.Module):
             self.encoding_conv.add(module2)
 
         if self.freeze_encoder:
-            self.encoding_conv.require_grads=False
+            self.encoding_conv.requires_grad=False
 
         self.to_dense = scn.Sequential().add(
             scn.SparseToDense(self._dimension, nPlanes[-1]))
@@ -82,6 +83,9 @@ class EncoderLayer(torch.nn.Module):
                                       downsample[0], downsample[1], False))
 
             self.decoding_conv.add(module2)
+
+        if self.freeze_decoder:
+            self.decoding_conv.requires_grad=False
 
         self.output = scn.Sequential().add(
             scn.BatchNormReLU(self.m)).add(
