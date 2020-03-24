@@ -5,7 +5,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from layers.full_encoder import EncoderLayer
+from .layers.full_encoder import EncoderLayer
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch
 from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.groups import merge_batch
