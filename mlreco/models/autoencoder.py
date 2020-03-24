@@ -49,32 +49,33 @@ class AutoEncoder(torch.nn.Module):
                 'result': scalar difference between image and autoencoded images
         """
         data = data[0]
+        device = data.device
 
+        # prepare for edge index
+        # by default using complete graphes
+        clusts = form_clusters(data, self.node_min_size)
+        clusts = [c.cpu().numpy() for c in clusts]
+        # Get the batch id for each cluster
+        batch_ids = get_cluster_batch(data, clusts)
+
+        images = torch.empty((0,5), type=torch.float, device=device)
         if self._mode=='node':
-            # Reuse the batch merging
-            num_batches = data[:3].unique().view(-1).size()[0]
-            images, _ = merge_batch(data, num_batches, whether_fluctuate=False)
-            # change image ids
-            images[:,3] = images[:,5]
-            res = self.autoencoder(images)
+            for i, c in enumerate(clusts):
+                images = torch.cat((images, data[c,:5].float()))
+                images[-len(c),3] = i*torch.ones(len(c)).to(device)
         elif self._mode=='edge':
-            res = 0
-            # prepare for edge index
-            # by default using complete graphes
-            clusts = form_clusters(data, self.node_min_size)
-            clusts = [c.cpu().numpy() for c in clusts]
-            # Get the batch id for each cluster
-            batch_ids = get_cluster_batch(data, clusts)
             # for getting edge index
             edge_index = complete_graph(batch_ids, None, -1)
             # Go through each edge
-            for ind1, ind2 in edge_index:
-                images = torch.cat([data[clusts[ind1],:5], data[clusts[ind2], :5]])
-                r, _ = self.autoencoder(images)
-                res += r
+            for i, (ind1, ind2) in enumerate(edge_index.T):
+                c1 = clusts[ind1]
+                c2 = clusts[ind2]
+                images = torch.cat((images, data[c1,:5], data[c2,:5]))
+                images[-len(c1)-len(c2),3] = i*torch.ones(len(c1)+len(c2)).to(device)
         else:
             raise ValueError('Auto-encoder mode not supported!')
 
+        res = self.autoencoder(images)
         return {'result': [res]}
 
 
