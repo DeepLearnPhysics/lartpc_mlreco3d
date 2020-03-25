@@ -192,3 +192,46 @@ def regulate_to_data(data, particles):
         regulated_particles
     )
 
+
+def zero_value_voxel_padding(img, image_id, device=None):
+    '''
+    create zero-value voxels tensors for appending to the sparse tensor (image)
+    The image id will be assigned
+    Note it doesn't allow batching
+
+    Inputs:
+        - img: (N, 5) tensor
+        - image_id: assigned image_id
+        - device
+    Outputs:
+        - output_img: (M, 5) tensor
+    '''
+    # get the x, y, z min/max of img
+    x_max, y_max, z_max = img[:,:3].max(dim=0)[0]
+    x_min, y_min, z_min = img[:,:3].min(dim=0)[0]
+    # x,y,z pixels (1d)
+    xs = torch.linspace(x_min, x_max, int(x_max-x_min+1), dtype=torch.float, device=device)
+    ys = torch.linspace(y_min, y_max, int(y_max-y_min+1), dtype=torch.float, device=device)
+    zs = torch.linspace(z_min, z_max, int(z_max-z_min+1), dtype=torch.float, device=device)
+    # meshgrid coor
+    X, Y, Z = torch.meshgrid(xs,ys,zs)
+    X = X.contiguous().view(-1,1)
+    Y = Y.contiguous().view(-1,1)
+    Z = Z.contiguous().view(-1,1)
+    # construct final output image
+    output_img = torch.cat((
+        X,
+        Y,
+        Z,
+        image_id*torch.ones(X.size(), dtype=torch.float, device=device),
+        torch.zeros(X.size(), dtype=torch.float, device=device),
+    ),dim=1)
+    # initialize selection
+    selection = torch.ones(X.size()[0], dtype=torch.uint8)
+    occupied_index = (img[:,0].long()-int(x_min))*int(y_max-y_min+1)*int(z_max-z_min+1) + (img[:,1].long() - int(y_min))*int(z_max-z_min+1) + img[:,2].long() - int(z_min)
+    selection[occupied_index] = 0
+    output_img = output_img[selection,:]
+    return output_img
+
+
+
