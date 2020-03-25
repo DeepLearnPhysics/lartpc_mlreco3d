@@ -6,6 +6,7 @@ from __future__ import print_function
 import torch
 import numpy as np
 from .layers.full_encoder import EncoderLayer
+from mlreco.utils.gnn.data import zero_value_voxel_padding
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch
 from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.groups import merge_batch
@@ -40,6 +41,11 @@ class AutoEncoder(torch.nn.Module):
         # Pick up some to perform trainning
         self.num_to_pick = chain_config.get('num_to_pick', -1) # <0 is using all
 
+        # zero-voxel padding
+        # append zero-value voxels to sparse input
+        # basically a cubic
+        self.voxel_padding = chain_config.get('voxel_padding', False)
+
         # construct autoencoder
         autoencoder_config = cfg['autoencoder']
         self.autoencoder = EncoderLayer(autoencoder_config)
@@ -71,6 +77,14 @@ class AutoEncoder(torch.nn.Module):
                     break
                 images = torch.cat((images, data[c,:5].float()))
                 images[-len(c):,3] = i*torch.ones(len(c)).to(device)
+                # pad zero-value voxels
+                if self.voxel_padding:
+                    pad_images = zero_value_voxel_padding(
+                        data[c,:5],
+                        i,
+                        device=device,
+                    )
+                    images = torch.cat((images,pad_images))
         elif self._mode=='edge':
             # for getting edge index
             edge_index = complete_graph(batch_ids, None, -1).T
@@ -85,10 +99,25 @@ class AutoEncoder(torch.nn.Module):
                 c2 = clusts[ind2]
                 images = torch.cat((images, data[c1,:5].float(), data[c2,:5].float()))
                 images[-len(c1)-len(c2):,3] = i*torch.ones(len(c1)+len(c2)).to(device)
+                if self.voxel_padding:
+                    pad_images1 = zero_value_voxel_padding(
+                        data[c1, :5],
+                        i,
+                        device=device,
+                    )
+                    pad_images2 = zero_value_voxel_padding(
+                        data[c2, :5],
+                        i,
+                        device=device,
+                    )
+                    images = torch.cat((images, pad_images1, pad_images2),dim=0)
         else:
             raise ValueError('Auto-encoder mode not supported!')
 
+
+
         res, _ = self.autoencoder(images)
+        # print("res = "+str(res))
         return {'result': [res]}
 
 
