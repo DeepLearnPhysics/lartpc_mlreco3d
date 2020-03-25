@@ -44,7 +44,13 @@ class AutoEncoder(torch.nn.Module):
         # zero-voxel padding
         # append zero-value voxels to sparse input
         # basically a cubic
+        # to avoid the memory leaking, there's an upperlimit of padded zero value voxel number
         self.voxel_padding = chain_config.get('voxel_padding', False)
+        self.image_size = chain_config.get('image_size', 1024)
+        self.max_num_voxel_padding = chain_config.get(
+            'max_num_voxel_padding',
+            int(1/10.* self.image_size ** 3) # default 1/10 of the total voxel number
+        )
 
         # construct autoencoder
         autoencoder_config = cfg['autoencoder']
