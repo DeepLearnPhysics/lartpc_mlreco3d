@@ -78,19 +78,24 @@ class AutoEncoder(torch.nn.Module):
         if self._mode=='node':
             if self.num_to_pick>0:
                 random.shuffle(clusts)
-            for i, c in enumerate(clusts):
-                if self.num_to_pick>0 and i>=self.num_to_pick:
+            num_picked = 0
+            for c in clusts:
+                if self.num_to_pick>0 and num_picked>=self.num_to_pick:
                     break
-                images = torch.cat((images, data[c,:5].float()))
-                images[-len(c):,3] = i*torch.ones(len(c)).to(device)
                 # pad zero-value voxels
                 if self.voxel_padding:
-                    pad_images = zero_value_voxel_padding(
+                    pad_images, if_exceed_limit = zero_value_voxel_padding(
                         data[c,:5],
-                        i,
+                        num_picked,
                         device=device,
+                        num_voxel_limit=self.max_num_voxel_padding,
                     )
+                    if if_exceed_limit:
+                        continue
                     images = torch.cat((images,pad_images))
+                images = torch.cat((images, data[c,:5].float()))
+                images[-len(c):,3] = num_picked*torch.ones(len(c)).to(device)
+                num_picked += 1
         elif self._mode=='edge':
             # for getting edge index
             edge_index = complete_graph(batch_ids, None, -1).T
@@ -106,16 +111,19 @@ class AutoEncoder(torch.nn.Module):
                 images = torch.cat((images, data[c1,:5].float(), data[c2,:5].float()))
                 images[-len(c1)-len(c2):,3] = i*torch.ones(len(c1)+len(c2)).to(device)
                 if self.voxel_padding:
-                    pad_images1 = zero_value_voxel_padding(
+                    pad_images1, if_exceed_limit = zero_value_voxel_padding(
                         data[c1, :5],
                         i,
                         device=device,
+                        num_voxel_limit=self.max_num_voxel_padding,
                     )
-                    pad_images2 = zero_value_voxel_padding(
+                    pad_images2, if_exceed_limit = zero_value_voxel_padding(
                         data[c2, :5],
                         i,
                         device=device,
+                        num_voxel_limit=self.max_num_voxel_padding,
                     )
+                    # To do: we need a function here to eliminate overlapping voxels
                     images = torch.cat((images, pad_images1, pad_images2),dim=0)
         else:
             raise ValueError('Auto-encoder mode not supported!')
