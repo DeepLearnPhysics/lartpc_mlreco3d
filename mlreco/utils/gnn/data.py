@@ -193,7 +193,7 @@ def regulate_to_data(data, particles):
     )
 
 
-def zero_value_voxel_padding(img, image_id, device=None):
+def zero_value_voxel_padding(img, image_id, device=None, num_voxel_limit=100000000000):
     '''
     create zero-value voxels tensors for appending to the sparse tensor (image)
     The image id will be assigned
@@ -209,6 +209,8 @@ def zero_value_voxel_padding(img, image_id, device=None):
     # get the x, y, z min/max of img
     x_max, y_max, z_max = img[:,:3].max(dim=0)[0]
     x_min, y_min, z_min = img[:,:3].min(dim=0)[0]
+    if (x_max-x_min+1)*(y_max-y_min+1)*(z_max-z_min+1)>num_voxel_limit:
+        return None, True
     # x,y,z pixels (1d)
     xs = torch.linspace(x_min, x_max, int(x_max-x_min+1), dtype=torch.float, device=device)
     ys = torch.linspace(y_min, y_max, int(y_max-y_min+1), dtype=torch.float, device=device)
@@ -231,7 +233,7 @@ def zero_value_voxel_padding(img, image_id, device=None):
     occupied_index = (img[:,0].long()-int(x_min))*int(y_max-y_min+1)*int(z_max-z_min+1) + (img[:,1].long() - int(y_min))*int(z_max-z_min+1) + img[:,2].long() - int(z_min)
     selection[occupied_index] = 0
     output_img = output_img[selection,:]
-    return output_img
+    return output_img, False
 
 
 
