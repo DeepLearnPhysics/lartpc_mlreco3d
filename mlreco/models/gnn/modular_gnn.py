@@ -55,16 +55,21 @@ class FullGNN(nn.Module):
             # self.bn_node.append(BatchNorm(nOutput))
             # print(nInput, nOutput)
             self.edge_updates.append(
-                MetaLayer(EdgeLayer(nOutput, self.edge_features, self.edge_features, 
+                MetaLayer(EdgeLayer(nOutput, self.edge_features, self.edge_features,
                                     leakiness=self.leakiness))
             )
             nInput = nOutput
 
-        self.nodeClasses = self.model_config.get('node_classes', 5)
+        self.nodeClasses = self.model_config.get('node_classes', 4)
         self.edgeClasses = self.model_config.get('edge_classes', 2)
 
-        self.node_predictor = nn.Linear(nOutput, self.nodeClasses)
+        self.node_predictor = Seq(
+            BatchNorm1d(nOutput),
+            nn.Linear(nOutput, self.nodeClasses))
         self.edge_predictor = nn.Linear(self.edge_features, self.edgeClasses)
+
+        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
         x = node_features.view(-1, self.nodeInput)
@@ -78,10 +83,12 @@ class FullGNN(nn.Module):
             _, e, _ = self.edge_updates[i](x, edge_indices, e)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
+        x_pred[:, :3] = self.tanh(x_pred[:, :3])
+        x_pred[:, 3:] = 2 * self.sigmoid(x_pred[:, 3:])
         e_pred = self.edge_predictor(e)
 
         res = {
-            'node_predictions': [x_pred], 
+            'node_predictions': [x_pred],
             'edge_predictions': [e_pred]
             }
 
@@ -105,22 +112,22 @@ class EdgeLayer(nn.Module):
             B: number of graphs (same as batch size)
 
         If an entry i->j is an edge, then we have source node feature
-        F^i_x, target node feature F^j_x, and edge features F_e. 
+        F^i_x, target node feature F^j_x, and edge features F_e.
 
         - source: [E, F_x] Tensor, where E is the number of edges
 
         - target: [E, F_x] Tensor, where E is the number of edges
 
-        - edge_attr: [E, F_e] Tensor, indicating input edge features. 
+        - edge_attr: [E, F_e] Tensor, indicating input edge features.
 
         - global_features: [B, F_u] Tensor, where B is the number of graphs
-        (equivalent to number of batches). 
+        (equivalent to number of batches).
 
-        - batch: [E] Tensor containing batch indices for each edge from 0 to B-1. 
+        - batch: [E] Tensor containing batch indices for each edge from 0 to B-1.
 
     RETURNS:
 
-        - output: [E, F_o] Tensor with F_o output edge features. 
+        - output: [E, F_o] Tensor with F_o output edge features.
     '''
     def __init__(self, node_in, edge_in, edge_out, leakiness=0.0):
         super(EdgeLayer, self).__init__()
@@ -143,9 +150,9 @@ class EdgeLayer(nn.Module):
 
 # class NodeModel(nn.Module):
 #     '''
-#     NodeModel for node feature prediction. 
+#     NodeModel for node feature prediction.
 
-#     Example: Particle Classification using node-level features. 
+#     Example: Particle Classification using node-level features.
 #     '''
 #     def __init__(self, node_in, node_out, edge_in, leakiness=0.0):
 #         super(NodeModel, self).__init__()
@@ -156,9 +163,8 @@ class EdgeLayer(nn.Module):
 #     Global Model for global feature prediction.
 
 #     Example: event classification (graph classification) over the whole image
-#     within a batch. 
+#     within a batch.
 
 #     Do Hierarchical Pooling to reduce features
 #     '''
 #     pass
-
