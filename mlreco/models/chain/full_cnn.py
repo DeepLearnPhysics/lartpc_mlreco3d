@@ -136,17 +136,28 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
     nodes_full = []
     nodes_batch_id = []
     batch_index = kwargs['batch_index']
+    node_group_labels = []
+    centroids = []
 
     if train:
         fragment_labels = kwargs['fragment_labels']
+        group_labels = kwargs['group_labels']
+        embeddings = kwargs['embeddings']
+        # print(embeddings.shape)
         for bidx in batch_index:
             batch_mask = coords[:, 3] == bidx
             featuresAgg_batch = features_gnn[batch_mask]
             fragment_batch = fragment_labels[batch_mask]
+            group_batch = group_labels[batch_mask]
+            embeddings_batch = embeddings[batch_mask]
             fragment_ids = fragment_batch.unique()
             for fid in fragment_ids:
                 mean_features = featuresAgg_batch[fragment_batch == fid].mean(dim=0)
-                # print(mean_features)
+                group_id = group_batch[fragment_batch == fid].unique()
+                centroid = torch.mean(embeddings_batch[fragment_batch == fid], dim=0)
+                # print(centroid)
+                centroids.append(centroid)
+                node_group_labels.append(int(group_id))
                 nodes_full.append(mean_features)
                 nodes_batch_id.append(int(bidx))
     else:
@@ -180,6 +191,8 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
 
     nodes_full = torch.stack(nodes_full, dim=0)
     node_batch_id = torch.Tensor(nodes_batch_id).cuda()
+    node_group_labels = torch.Tensor(node_group_labels).cuda()
+    centroids = torch.stack(centroids, dim=0)
 
     # Compile Pairwise Edge Features
     edge_indices, edge_features, edge_batch_indices = get_edge_features(
@@ -190,14 +203,9 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                           edge_attr=edge_features,
                           batch=node_batch_id.long())
     gnn_input.edge_batch = edge_batch_indices
+    gnn_input.node_group_labels = node_group_labels
+    gnn_input.centroids = centroids
 
-    # gnn_input = {
-    #     'edge_id': edge_indices,
-    #     'edge_features': edge_features,
-    #     'edge_batch_id': edge_batch_indices,
-    #     'node_features': nodes_full,
-    #     'node_batch_id': node_batch_id
-    # }
     return gnn_input
 
 
@@ -245,7 +253,7 @@ class FullCNN(NetworkBase):
         self.num_filters = self.model_config.get('filters', 16)
         self.ghost = self.model_config.get('ghost', False)
         self.seed_dim = self.model_config.get('seed_dim', 1)
-        self.sigma_dim = self.model_config.get('sigma_dim', 6)
+        self.sigma_dim = self.model_config.get('sigma_dim', 1)
         self.embedding_dim = self.model_config.get('embedding_dim', 3)
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_gnn_features = self.model_config.get('num_gnn_features', 16)
@@ -253,10 +261,10 @@ class FullCNN(NetworkBase):
 
         # Network Freezing Options
         self.encoder_freeze = self.model_config.get('encoder_freeze', False)
-        self.ppn_freeze = self.model_config.get('ppn_freeze', False)
+        self.ppn_freeze = self.model_config.get('ppn_freeze', True)
         self.segmentation_freeze = self.model_config.get('segmentation_freeze', False)
         self.embedding_freeze = self.model_config.get('embedding_freeze', False)
-        self.seediness_freeze = self.model_config.get('seediness_freeze', False)
+        self.seediness_freeze = self.model_config.get('seediness_freeze', True)
 
         # Input Layer Configurations and commonly used scn operations.
         self.input = scn.Sequential().add(
@@ -299,7 +307,7 @@ class FullCNN(NetworkBase):
             # self.linear_ghost.add(scn.OutputLayer(self.dimension))
 
         # PPN
-        self.ppn  = PPN(cfg)
+        # self.ppn  = PPN(cfg)
 
         # Freeze Layers
         if self.encoder_freeze:
@@ -307,10 +315,10 @@ class FullCNN(NetworkBase):
                 p.requires_grad = False
             print('Encoder Freezed')
 
-        if self.ppn_freeze:
-            for p in self.ppn.parameters():
-                p.requires_grad = False
-            print('PPN Freezed')
+        # if self.ppn_freeze:
+        #     for p in self.ppn.parameters():
+        #         p.requires_grad = False
+        #     print('PPN Freezed')
 
         if self.segmentation_freeze:
             for p in self.seg_net.parameters():
@@ -378,15 +386,15 @@ class FullCNN(NetworkBase):
 
         res = {}
 
-        ppn_inputs = {
-            'ppn_feature_enc': encoder_res["features_enc"],
-            'ppn_feature_dec': [deepest_layer] + features_seg
-        }
+        # ppn_inputs = {
+        #     'ppn_feature_enc': encoder_res["features_enc"],
+        #     'ppn_feature_dec': [deepest_layer] + features_seg
+        # }
 
-        if self.ghost:
-            ghost_mask = self.linear_ghost(segmentation)
-            res['ghost'] = [ghost_mask.features]
-            ppn_inputs['ghost'] = res['ghost'][0]
+        # if self.ghost:
+        #     ghost_mask = self.linear_ghost(segmentation)
+        #     res['ghost'] = [ghost_mask.features]
+        #     ppn_inputs['ghost'] = res['ghost'][0]
 
         # print(ppn_inputs['ppn_feature_dec'][-1].features.shape)
 
@@ -395,15 +403,15 @@ class FullCNN(NetworkBase):
 
         res.update({
             'embeddings': [embeddings[:, :self.embedding_dim]],
-            'margins': [embeddings[:, self.embedding_dim:]],
+            'margins': [2 * self.sigmoid(embeddings[:, self.embedding_dim:])],
             'seediness': [seediness],
             'features_gnn': [features_gnn],
             'segmentation': [segmentation],
             'coords': [coords]
         })
 
-        ppn_res = self.ppn(ppn_inputs)
-        res.update(ppn_res)
+        # ppn_res = self.ppn(ppn_inputs)
+        # res.update(ppn_res)
         # print('PPN RES')
         # for key, val in ppn_res.items():
         #     print(key, val[0].shape)
