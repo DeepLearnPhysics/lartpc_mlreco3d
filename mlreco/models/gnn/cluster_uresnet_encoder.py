@@ -30,7 +30,7 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
             self.encoder.load_state_dict(checkpoint['state_dict'])
             self.encoder.eval()
-            print("Manually restoring uresnet weight from " + str(self.uresnet_weight_file))
+            print("Manually restoring uresnet (node feature extractor) weight from " + str(self.uresnet_weight_file))
 
 
         # flag for whether to freeze, default True
@@ -105,7 +105,7 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
             self.encoder.load_state_dict(checkpoint['state_dict'])
             self.encoder.eval()
-            print("Manually restoring uresnet weight from " + str(self.uresnet_weight_file))
+            print("Manually restoring uresnet (edge feature extractor) weight from " + str(self.uresnet_weight_file))
 
         # flag for whether to freeze, default True
         self._freeze = model_config.get("freeze_uresnet", True)
