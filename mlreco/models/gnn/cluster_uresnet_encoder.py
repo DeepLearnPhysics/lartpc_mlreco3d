@@ -2,6 +2,7 @@
 import torch
 from mlreco.models.uresnet_lonely import UResNet
 import sparseconvnet as scn
+import os
 
 class ClustUResNetNodeEncoder(torch.nn.Module):
     """
@@ -15,11 +16,29 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
         cfg = model_config['uresnet_lonely']
         self.encoder = UResNet(model_config)
 
+        # Manual loading weight
+        self.uresnet_weight_file = model_config.get('uresnet_weight_file', None)
+        if self.uresnet_weight_file != None:
+            if not os.path.isfile(self.uresnet_weight_file):
+                raise ValueError('File ' + str(self.uresnet_weight_file) + ' not exist!')
+            # continue loading
+            checkpoint = torch.load(self.uresnet_weight_file)
+            # regulate the checkpoint
+            for name in self.encoder.state_dict().keys():
+                other_name = 'module.'+name
+                if other_name in checkpoint['state_dict'].keys():
+                    checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+            self.encoder.load_state_dict(checkpoint['state_dict'])
+            self.encoder.eval()
+            print("Manually restoring uresnet weight from " + str(self.uresnet_weight_file))
+
+
         # flag for whether to freeze, default True
         self._freeze = model_config.get("freeze_uresnet", True)
         if self._freeze:
             for param in self.encoder.parameters():
                 param.requires_grad = False
+            print("Freeze UResNet!")
 
         # to dense layer
         spatial_size = cfg.get('spatial_size', 512)
@@ -72,11 +91,28 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
         cfg = model_config['uresnet_lonely']
         self.encoder = UResNet(model_config)
 
+        # Manual loading weight
+        self.uresnet_weight_file = model_config.get('uresnet_weight_file', None)
+        if self.uresnet_weight_file != None:
+            if not os.path.isfile(self.uresnet_weight_file):
+                raise ValueError('File ' + str(self.uresnet_weight_file) + ' not exist!')
+            # continue loading
+            checkpoint = torch.load(self.uresnet_weight_file)
+            # regulate the checkpoint
+            for name in self.encoder.state_dict().keys():
+                other_name = 'module.'+name
+                if other_name in checkpoint['state_dict'].keys():
+                    checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+            self.encoder.load_state_dict(checkpoint['state_dict'])
+            self.encoder.eval()
+            print("Manually restoring uresnet weight from " + str(self.uresnet_weight_file))
+
         # flag for whether to freeze, default True
         self._freeze = model_config.get("freeze_uresnet", True)
         if self._freeze:
             for param in self.encoder.parameters():
                 param.requires_grad = False
+            print("Freeze UResNet!")
 
         # to dense layer
         spatial_size = cfg.get('spatial_size', 512)
