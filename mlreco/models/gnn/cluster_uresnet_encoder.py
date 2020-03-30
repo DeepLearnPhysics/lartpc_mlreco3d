@@ -19,6 +19,20 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
             for param in self.encoder:
                 param.requires_grad = False
 
+        # setting for MLPs
+        self.num_mlps = model_config.get("num_mlps", 2) # number of MLPs
+        self.output_features = model_config.get('output_features', 16) # number of output features
+        # get the mlps
+        input_features = model_config.get('spatial_size', 512) / (2**model_config.get('num_strides', 5)) * model_config.get('num_strides', 5) * model_config.get('filters', 16)
+        feat_step = (self.output_features - input_features) / float(self.num_mlps)
+        self.mlps = []
+        for i in self.num_mlps:
+            intermediate_features1 = int((i)*feat_step) + input_features
+            intermediate_features2 = int((i+1)*feat_step) + input_features
+            self.mlps.append(
+                torch.nn.Linear(intermediate_features1, intermediate_features2)
+            )
+
 
     def forward(self, data, clusts):
         # Use cluster ID as a batch ID, pass through CNN
@@ -28,9 +42,13 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
             cnn_data = torch.cat((cnn_data, data[c, :5].float()))
             cnn_data[-len(c):, 3] = i * torch.ones(len(c)).to(device)
 
-        out = self.encoder(cnn_data)['ppn_feature_dec']
-        print("out = " +str(out))
-        return self.encoder(cnn_data)['ppn_feature_dec'][0][0]
+        out = self.encoder(cnn_data)['ppn_feature_dec'][0][0]
+        print("out size = " +str(out.size()))
+
+        for i in self.mlps:
+            out = self.mlps[i](out)
+
+        return out
 
 
 class ClustUResNetEdgeEncoder(torch.nn.Module):
@@ -50,6 +68,23 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
             for param in self.encoder:
                 param.requires_grad = False
 
+        # setting for MLPs
+        self.num_mlps = model_config.get("num_mlps", 2)  # number of MLPs
+        self.output_features = model_config.get('output_features', 16)  # number of output features
+        # get the mlps
+        input_features = model_config.get('spatial_size', 512) / (
+                    2 ** model_config.get('num_strides', 5)) * model_config.get('num_strides',
+                                                                                5) * model_config.get('filters',
+                                                                                                      16)
+        feat_step = (self.output_features - input_features) / float(self.num_mlps)
+        self.mlps = []
+        for i in self.num_mlps:
+            intermediate_features1 = int((i) * feat_step) + input_features
+            intermediate_features2 = int((i + 1) * feat_step) + input_features
+            self.mlps.append(
+                torch.nn.Linear(intermediate_features1, intermediate_features2)
+            )
+
     def forward(self, data, clusts, edge_index):
 
         # Check if the graph is undirected, select the relevant part of the edge index
@@ -67,6 +102,9 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
             cnn_data[-len(ci)-len(cj):,3] = i*torch.ones(len(ci)+len(cj)).to(device)
 
         feats = self.encoder(cnn_data)['ppn_feature_dec'][0][0]
+
+        for i in self.mlps:
+            feats = self.mlps[i](feats)
 
         # If the graph is undirected, duplicate features
         if undirected:
