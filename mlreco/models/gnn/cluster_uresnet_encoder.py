@@ -1,6 +1,7 @@
 # Using trained UResNet for feature extractor
 import torch
 from mlreco.models.uresnet_lonely import UResNet
+import sparseconvnet as scn
 
 class ClustUResNetNodeEncoder(torch.nn.Module):
     """
@@ -11,26 +12,33 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
         super(ClustUResNetNodeEncoder, self).__init__()
 
         # Initialize the UResNet
+        cfg = model_config['uresnet_lonely']
         self.encoder = UResNet(model_config)
 
         # flag for whether to freeze, default True
         self._freeze = model_config.get("freeze_uresnet", True)
         if self._freeze:
-            for param in self.encoder:
+            for param in self.encoder.parameters():
                 param.requires_grad = False
 
-        # setting for MLPs
-        self.num_mlps = model_config.get("num_mlps", 2) # number of MLPs
-        self.output_features = model_config.get('output_features', 16) # number of output features
-        # get the mlps
-        input_features = model_config.get('spatial_size', 512) / (2**model_config.get('num_strides', 5)) * model_config.get('num_strides', 5) * model_config.get('filters', 16)
-        feat_step = (self.output_features - input_features) / float(self.num_mlps)
-        self.mlps = []
-        for i in self.num_mlps:
-            intermediate_features1 = int((i)*feat_step) + input_features
-            intermediate_features2 = int((i+1)*feat_step) + input_features
-            self.mlps.append(
-                torch.nn.Linear(intermediate_features1, intermediate_features2)
+        # to dense layer
+        spatial_size = cfg.get('spatial_size', 512)
+        num_strides = cfg.get('num_strides', 5)
+        filters = cfg.get('filters', 16)
+        self.input_features = ((spatial_size / (2**(num_strides-1)))**3)*num_strides*filters
+        self.to_dense = scn.Sequential().add(
+            scn.SparseToDense(
+                cfg.get('data_dim', 3),
+                num_strides*filters
+            )
+        )
+
+        # linear layer
+        self.output_features = model_config.get('output_feats', 64) # if output_feats<0, meaning no linear
+        if self.output_features>0:
+            self.linear = torch.nn.Linear(
+                int(self.input_features),
+                int(self.output_features)
             )
 
 
@@ -42,11 +50,12 @@ class ClustUResNetNodeEncoder(torch.nn.Module):
             cnn_data = torch.cat((cnn_data, data[c, :5].float()))
             cnn_data[-len(c):, 3] = i * torch.ones(len(c)).to(device)
 
-        out = self.encoder(cnn_data)['ppn_feature_dec'][0][0]
-        print("out size = " +str(out.size()))
+        out = self.encoder([cnn_data])['ppn_feature_dec'][0][0]
+        out = self.to_dense(out)
+        out = out.view(len(clusts), -1)
 
-        for i in self.mlps:
-            out = self.mlps[i](out)
+        if self.output_features>0:
+            out = self.linear(out)
 
         return out
 
@@ -60,30 +69,35 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
         super(ClustUResNetEdgeEncoder, self).__init__()
 
         # Initialize the UResNet
+        cfg = model_config['uresnet_lonely']
         self.encoder = UResNet(model_config)
 
         # flag for whether to freeze, default True
         self._freeze = model_config.get("freeze_uresnet", True)
         if self._freeze:
-            for param in self.encoder:
+            for param in self.encoder.parameters():
                 param.requires_grad = False
 
-        # setting for MLPs
-        self.num_mlps = model_config.get("num_mlps", 2)  # number of MLPs
-        self.output_features = model_config.get('output_features', 16)  # number of output features
-        # get the mlps
-        input_features = model_config.get('spatial_size', 512) / (
-                    2 ** model_config.get('num_strides', 5)) * model_config.get('num_strides',
-                                                                                5) * model_config.get('filters',
-                                                                                                      16)
-        feat_step = (self.output_features - input_features) / float(self.num_mlps)
-        self.mlps = []
-        for i in self.num_mlps:
-            intermediate_features1 = int((i) * feat_step) + input_features
-            intermediate_features2 = int((i + 1) * feat_step) + input_features
-            self.mlps.append(
-                torch.nn.Linear(intermediate_features1, intermediate_features2)
+        # to dense layer
+        spatial_size = cfg.get('spatial_size', 512)
+        num_strides = cfg.get('num_strides', 5)
+        filters = cfg.get('filters', 16)
+        self.input_features = ((spatial_size / (2**(num_strides-1)))**3)*num_strides*filters
+        self.to_dense = scn.Sequential().add(
+            scn.SparseToDense(
+                cfg.get('data_dim', 3),
+                num_strides * filters
             )
+        )
+
+        # linear layer
+        self.output_features = model_config.get('output_feats', 64)  # if output_feats<0, meaning no linear
+        if self.output_features > 0:
+            self.linear = torch.nn.Linear(
+                int(self.input_features),
+                int(self.output_features)
+            )
+
 
     def forward(self, data, clusts, edge_index):
 
@@ -101,10 +115,10 @@ class ClustUResNetEdgeEncoder(torch.nn.Module):
             cnn_data = torch.cat((cnn_data, data[cj,:5].float()))
             cnn_data[-len(ci)-len(cj):,3] = i*torch.ones(len(ci)+len(cj)).to(device)
 
-        feats = self.encoder(cnn_data)['ppn_feature_dec'][0][0]
+        feats = self.to_dense(self.encoder([cnn_data])['ppn_feature_dec'][0][0]).view(len(edge_index.T), -1)
 
-        for i in self.mlps:
-            feats = self.mlps[i](feats)
+        if self.output_features>0:
+            feats = self.linear(feats)
 
         # If the graph is undirected, duplicate features
         if undirected:

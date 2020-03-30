@@ -94,6 +94,8 @@ class ClustEdgeGNN(torch.nn.Module):
         # Construct the model
         self.edge_predictor = edge_model_construct(cfg)
 
+
+
     def forward(self, data):
         """
         Prepares particle clusters and feed them to the GNN model.
