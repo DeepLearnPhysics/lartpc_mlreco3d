@@ -1,6 +1,7 @@
 # Defines inputs to the GNN networks
 import numpy as np
-from mlreco.utils.gnn.cluster import get_cluster_voxels, get_cluster_features, get_cluster_dirs
+from .cluster import get_cluster_voxels, get_cluster_features, get_cluster_dirs
+from .voxels import get_voxel_features
 
 def cluster_vtx_features(data, clusts, delta=0.0):
     """
@@ -119,6 +120,21 @@ def cluster_edge_features(data, clusts, edge_index):
     return np.vstack([cluster_edge_feature(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
 
 
+def vtx_features(data, max_dist=5.0, delta=0.0):
+    """
+    Function that returns the an array of 16 features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        max_dist (float)     : Defines "local", max distance to look at
+        delta (float)        : Orientation matrix regularization
+    Returns:
+        np.ndarray: (N,16) tensor of voxel features (coords, local orientation, local direction, local count)
+    """
+    return get_voxel_features(data, max_dist, delta)
+
+
 def edge_feature(data, i, j):
     """
     Function that returns the edge features for a
@@ -129,13 +145,16 @@ def edge_feature(data, i, j):
         i (int)            : Index of the first voxel
         j (int)            : Index of the second voxel
     Returns:
-        np.ndarray: (12) Array of edge features (displacement, orientation)
+        np.ndarray: (19) Array of edge features (displacement, orientation)
     """
     xi = data[i,:3]
     xj = data[j,:3]
     disp = xj - xi
+    lend = np.linalg.norm(disp)
+    if lend > 0:
+        disp = disp / lend
     B = np.outer(disp, disp).flatten()
-    return np.concatenate([B, disp])
+    return np.concatenate([xi, xj, disp, [lend], B])
 
 
 def edge_features(data, edge_index):
@@ -147,7 +166,6 @@ def edge_features(data, edge_index):
         data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         edge_index (np.ndarray): (2,E) Incidence matrix
     Returns:
-        np.ndarray: (E,12) Tensor of edge features (displacement, orientation)
+        np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
     return np.vstack([edge_feature(data, e[0], e[1]) for e in edge_index.T])
-

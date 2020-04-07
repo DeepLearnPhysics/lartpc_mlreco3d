@@ -193,25 +193,25 @@ def adjacency_matrix(edge_index, n):
     return adj_mat
 
 
-def grouping_adjacency_matrix(edge_index, n):
+def grouping_adjacency_matrix(edge_index, adj_mat):
     """
     Function that creates an adjacency matrix from a list
     of connected edges in a graph by considering nodes to
-    be adjacent when they belong to the same group.
+    be adjacent when they belong to the same group, provided
+    that they are connected in the input graph.
 
     Args:
-        edge_index (np.ndarray): (E,2) Incidence matrix
-        n (int)                : Total number of clusters C
+        edge_index (np.ndarray): (E,2) Incidence matrix selected from adjacency matrix
+        ajd_mat (np.ndarray)   : (C,C) Input adjacency matrix
     Returns:
         np.ndarray: (C,C) Adjacency matrix
     """
-    #input_adj_mat = adjacency_matrix(edge_index, n) # Constrain edge selection to input graph
+    n = adj_mat.shape[0]
     node_assn = node_assignment(edge_index, np.ones(len(edge_index)), n)
-    #return input_adj_mat*np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
-    return np.array([int(i == j) for i in node_assn for j in node_assn]).reshape((n,n))
+    return adj_mat*(node_assn == node_assn.reshape(-1,1))
 
 
-def grouping_loss(pred_mat, edge_index, loss='ce'):
+def grouping_loss(pred_mat, edge_index, adj_mat, loss='ce'):
     """
     Function that defines the graph clustering score.
     Given a target adjacency matrix A as and a predicted
@@ -221,10 +221,11 @@ def grouping_loss(pred_mat, edge_index, loss='ce'):
     Args:
         pred_mat (np.ndarray)  : (C,C) Predicted adjacency matrix
         edge_index (np.ndarray): (E,2) Incidence matrix
+        ajd_mat (np.ndarray)   : (C,C) Input adjacency matrix
     Returns:
         int: Graph grouping loss
     """
-    adj_mat = grouping_adjacency_matrix(edge_index, pred_mat.shape[0])
+    adj_mat = grouping_adjacency_matrix(edge_index, adj_mat)
     if loss == 'ce':
         from sklearn.metrics import log_loss
         return log_loss(adj_mat.reshape(-1), pred_mat.reshape(-1), labels=[0,1])
@@ -236,7 +237,7 @@ def grouping_loss(pred_mat, edge_index, loss='ce'):
         raise ValueError('Loss type not recognized: {}'.format(loss))
 
 
-def node_assignment_score(edge_index, edge_scores, n):
+def edge_assignment_score(edge_index, edge_scores, n):
     """
     Function that finds the graph that produces the lowest
     grouping score by building a score MST and by
@@ -248,7 +249,11 @@ def node_assignment_score(edge_index, edge_scores, n):
         n (int)                : Total number of clusters C
     Returns:
         np.ndarray: (E',2) Optimal incidence matrix
+        float     : Score for the optimal incidence matrix
     """
+    # Build an input adjacency matrix to constrain the edge selection to the input graph
+    adj_mat = adjacency_matrix(edge_index, n)
+
     # Interpret the score as a distance matrix, build an MST based on score
     from scipy.special import softmax
     edge_scores = softmax(edge_scores, axis=1)
@@ -264,14 +269,14 @@ def node_assignment_score(edge_index, edge_scores, n):
     mst_index = mst_index[args]
 
     # Now iteratively remove edges, until the total score cannot be improved any longer
-    best_loss = grouping_loss(pred_mat, mst_index)
+    best_loss = grouping_loss(pred_mat, mst_index, adj_mat)
     best_index = mst_index
     found_better = True
     while found_better:
         found_better = False
         for i in range(len(best_index)):
             last_index = np.vstack((best_index[:i],best_index[i+1:]))
-            last_loss = grouping_loss(pred_mat, last_index)
+            last_loss = grouping_loss(pred_mat, last_index, adj_mat)
             if last_loss < best_loss:
                 best_loss = last_loss
                 best_index = last_index
@@ -279,6 +284,23 @@ def node_assignment_score(edge_index, edge_scores, n):
                 break
 
     return best_index, best_loss
+
+
+def node_assignment_score(edge_index, edge_scores, n):
+    """
+    Function that finds the graph that produces the lowest
+    grouping score by building a score MST and by
+    iteratively removing edges that improve the score.
+
+    Args:
+        edge_index (np.ndarray) : (E,2) Incidence matrix
+        edge_scores (np.ndarray): (E,2) Two-channel edge score
+        n (int)                : Total number of clusters C
+    Returns:
+        np.ndarray: (E',2) Optimal incidence matrix
+    """
+    best_index, _ = edge_assignment_score(edge_index, edge_scores, n)
+    return node_assignment(best_index, np.ones(len(best_index)), n)
 
 
 def clustering_metrics(clusts, node_assn, node_pred):
