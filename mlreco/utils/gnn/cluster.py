@@ -249,6 +249,15 @@ def get_cluster_features(voxels, clusts, delta=0.0):
             feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
             continue
 
+        # Start point estimate
+        #firstid, lastid = cluster_start_point(x)
+        #first = x[firstid]
+        #last  = x[lastid]
+
+        # Direction estimate
+        #fdir = cluster_direction(x, firstid, max_dist=5)
+        #ldir = cluster_direction(x, lastid, max_dist=5)
+
         # Center data
         center = np.mean(x, axis=0)
         x = x - center
@@ -286,6 +295,8 @@ def get_cluster_features(voxels, clusts, delta=0.0):
 
         # Append (center, B.flatten(), v0, size)
         feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
+        #feats.append(np.concatenate((center, B.flatten(), v0, [len(c)], first, fdir)))
+        #feats.append(np.concatenate((center, B.flatten(), v0, [len(c)], first, fdir, last, ldir)))
 
     return np.vstack(feats)
 
@@ -332,15 +343,16 @@ def cluster_start_point(voxels):
 
     # Compute coord values along that axis
     coords = [np.dot(v, axis) for v in voxels]
-    ids = [np.argmin(coords), np.argmax(coords)]
+    ids = np.array([np.argmin(coords), np.argmax(coords)])
 
     # Compute curvature of the
     curvs = [umbrella_curv(voxels, ids[0]), umbrella_curv(voxels, ids[1])]
 
     # Return ID of the point
-    return ids[np.argmax(curvs)]
+    return ids[np.argsort(curvs)]
 
-def get_cluster_start_points(voxels, clusts):
+
+def get_cluster_start_points(data, clusts):
     """
     Function that estimates the start point of clusters
     based on their PCA and local curvature.
@@ -354,8 +366,61 @@ def get_cluster_start_points(voxels, clusts):
     points = []
     for c in clusts:
         # Get list of voxels in the cluster
-        x = get_cluster_voxels(voxels, c)
-        vid = cluster_start_point(x)
+        x = get_cluster_voxels(data, c)
+        vid = cluster_start_point(x)[0]
         points.append(x[vid])
 
     return np.vstack(points)
+
+
+def cluster_direction(data, i, max_dist=-1):
+    """
+    Finds the orientation of the cluster by computing the
+    mean direction from the start point.
+
+    Args:
+        data (np.ndarray): (N,3) Voxel coordinates [x, y, z]
+        i (int)          : ID of the start voxel
+        max_dist (float) : Max distance between start voxel and other voxels
+    Returns:
+        np.ndarray: (3) Orientation
+    """
+    # If max_dist is set, limit the set of voxels to those within
+    # a sphere of radius max_dist
+    voxels = data[:,:3]
+    svoxel = voxels[i]
+    if max_dist > 0:
+        from scipy.spatial.distance import cdist
+        dist_mat = cdist(svoxel.reshape(1,-1), voxels).reshape(-1)
+        voxels = voxels[dist_mat < max_dist]
+
+    # Compute mean direction with respect to start point, normalize it
+    mean = np.mean(np.vstack([v-svoxel for v in voxels]), axis=0)
+    if np.linalg.norm(mean):
+        return mean/np.linalg.norm(mean)
+    return mean
+
+
+def get_cluster_directions(data, clusts, ids, max_dist=-1):
+    """
+    Finds the orientation of all the clusters by computing the
+    mean direction from the start point.
+
+    Args:
+        data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        ids (np.ndarray)     : (C) IDs of the start voxel in each cluster
+        max_dist (float)     : Max distance between start voxel and other voxels
+    Returns:
+        np.ndarray: (3) Orientation
+    """
+    # If max_dist is set, limit the set of voxels to those within
+    # a sphere of radius max_dist
+    dirs = []
+    for i, c in enumerate(clusts):
+        # Get list of voxels in the cluster
+        x = get_cluster_voxels(data, c)
+        dir = cluster_direction(x, ids[i], max_dist)
+        dirs.append(dir)
+
+    return np.vstack(dirs)

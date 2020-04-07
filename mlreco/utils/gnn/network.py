@@ -70,8 +70,8 @@ def delaunay_graph(data, clusts, dist=None, max_dist=-1):
     # For each batch, find the list of edges, append it
     from scipy.spatial import Delaunay
     ret = np.empty((0, 2), dtype=int)
-    for i in np.unique(batches):
-        where = np.where(batches == i)[0]
+    for b in np.unique(batches):
+        where = np.where(batches == b)[0]
         tri = Delaunay(voxels[where], qhull_options='QJ') # Joggled input guarantees simplical faces
         edges = np.array([[labels[where[i]], labels[where[j]]] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
         if len(edges):
@@ -103,8 +103,8 @@ def mst_graph(batches, dist, max_dist=-1):
     # For each batch, find the list of edges, append it
     from scipy.sparse.csgraph import minimum_spanning_tree
     ret = np.empty((0, 2), dtype=int)
-    for i in np.unique(batches):
-        where = np.where(batches == i)[0]
+    for b in np.unique(batches):
+        where = np.where(batches == b)[0]
         if len(where) > 1:
             mst_mat = minimum_spanning_tree(dist[np.ix_(where,where)]).toarray().astype(float)
             inds = np.where(mst_mat.flatten() > 0.)[0]
@@ -120,6 +120,69 @@ def mst_graph(batches, dist, max_dist=-1):
 
     # Add the reciprocal edges as to create an undirected graph
     ret = np.vstack((ret, np.flip(ret, axis=1)))
+
+    return ret.T
+
+
+def knn_graph(batches, dist, k=5, undirected=False):
+    """
+    Function that returns an incidence matrix that connects nodes
+    that are k nearest neighbors. Sorts the distance matrix.
+
+    Args:
+        batches (np.ndarray) : (C) List of batch ids
+        dist (np.ndarray)    : (C,C) Tensor of pair-wise cluster distances
+        k (int)            : Number of connected neighbors for each node
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
+    """
+    # Use the available distance matrix to build a kNN graph
+    ret = np.empty((0, 2), dtype=int)
+    for b in np.unique(batches):
+        where = np.where(batches == b)[0]
+        if len(where) > 1:
+            k = min(k+1, len(where))
+            idxs = np.argsort(dist[np.ix_(where,where)], axis=1)[:,1:k]
+            for i, v in enumerate(idxs):
+                edges = np.array([[where[j], where[i]] for j in v])
+                if len(edges):
+                    ret = np.vstack((ret, edges))
+
+    # Add the reciprocal edges as to create an undirected graph
+    if undirected:
+        ret = np.vstack((ret, np.flip(ret, axis=1)))
+
+    return ret.T
+
+
+def kdtree_graph(data, k=5, undireced=False):
+    """
+    Function that returns an incidence matrix that connects nodes
+    that are k nearest neighbors. Uses a KDTree on the input points.
+
+    Args:
+        data (np.ndarray): (N,4) [x, y, z, batchid]
+        k (int)            : Number of connected neighbors for each node
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
+    """
+    # Build a KDTree on each batch, find the nearest neighbors
+    from scipy.spatial import cKDTree
+    voxels  = data[:,:3]
+    batches = data[:,3]
+    ret = np.empty((0, 2), dtype=int)
+    for b in np.unique(batches):
+        where = np.where(batches == b)[0]
+        kdtree = cKDTree(voxels[where])
+        for i, v in enumerate(voxels[where]):
+            _, idxs = kdtree.query(v, k=k)
+            edges = np.array([[where[j], where[i]] for j in idxs])
+            if len(edges):
+                ret = np.vstack((ret, edges))
+
+    # Add the reciprocal edges as to create an undirected graph
+    if undirected:
+        ret = np.vstack((ret, np.flip(ret, axis=1)))
 
     return ret.T
 
