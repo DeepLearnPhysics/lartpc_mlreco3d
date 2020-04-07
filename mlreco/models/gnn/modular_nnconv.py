@@ -15,8 +15,10 @@ class NNConvModel(nn.Module):
         super(NNConvModel, self).__init__()
         self.model_config = cfg
         self.nodeInput = self.model_config.get('node_feats', 16)
+        self.edgeInput = self.model_config.get('edge_feats', 19)
+        self.globalInput = self.model_config.get('global_feats', 16)
         self.nodeOutput = self.model_config.get('node_output_feats', 32)
-        self.edgeInput = self.model_config.get('edge_feats', 16)
+        self.globalOutput = self.model_config.get('global_output_feats', 32)
         self.aggr = self.model_config.get('aggr', 'add')
         self.leakiness = self.model_config.get('leakiness', 0.0)
 
@@ -51,10 +53,11 @@ class NNConvModel(nn.Module):
             # self.bn_node.append(BatchNorm(nOutput))
             # print(nInput, nOutput)
             self.edge_updates.append(
-                MetaLayer(EdgeLayer(nOutput, self.edgeInput, self.edgeInput,
+                MetaLayer(edge_model=EdgeLayer(nOutput, self.edgeInput, self.edgeInput,
                                     leakiness=self.leakiness)#,
-                          #NodeLayer(nOutput, nOutput, self.edgeInput,
-                                    #leakiness=self.leakiness)
+                          #node_model=NodeLayer(nOutput, nOutput, self.edgeInput,
+                                                #leakiness=self.leakiness)
+                          #global_model=GlobalModel(nOutput, 1, 32)
                          )
             )
             nInput = nOutput
@@ -74,7 +77,7 @@ class NNConvModel(nn.Module):
             x = self.nnConvs[i](x, edge_indices, e)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
-            x, e, _ = self.edge_updates[i](x, edge_indices, e)
+            _, e, _ = self.edge_updates[i](x, edge_indices, e)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
@@ -172,7 +175,7 @@ class NodeLayer(nn.Module):
 
     RETURNS:
 
-        - output: [, F_o] Tensor with F_o output edge feature
+        - output: [C, F_o] Tensor with F_o output node feature
     '''
     def __init__(self, node_in, node_out, edge_in, leakiness=0.0):
         super(NodeLayer, self).__init__()
@@ -208,13 +211,62 @@ class NodeLayer(nn.Module):
         return self.node_mlp_2(out)
 
 
-# class GlobalModel(nn.Module):
-#     '''
-#     Global Model for global feature prediction.
+class GlobalModel(nn.Module):
+    '''
+    Global Model for global feature prediction.
 
-#     Example: event classification (graph classification) over the whole image
-#     within a batch.
+    Example: event classification (graph classification) over the whole image
+    within a batch.
 
-#     Do Hierarchical Pooling to reduce features
-#     '''
-#     pass
+    Do Hierarchical Pooling to reduce features
+
+    INPUTS:
+
+        DEFINITIONS:
+            N: number of nodes
+            F_x: number of node features
+            F_e: number of edge features
+            F_u: number of global features
+            F_o: number of output node features
+            B: number of graphs (same as batch size)
+
+        If an entry i->j is an edge, then we have source node feature
+        F^i_x, target node feature F^j_x, and edge features F_e.
+
+        - source: [E, F_x] Tensor, where E is the number of edges
+
+        - target: [E, F_x] Tensor, where E is the number of edges
+
+        - edge_attr: [E, F_e] Tensor, indicating input edge features.
+
+        - global_features: [B, F_u] Tensor, where B is the number of graphs
+        (equivalent to number of batches).
+
+        - batch: [E] Tensor containing batch indices for each edge from 0 to B-1.
+
+    RETURNS:
+
+        - output: [C, F_o] Tensor with F_o output node feature
+    '''
+    def __init__(self, node_in, batch_size, global_out, leakiness=0.0):
+        super(GlobalModel, self).__init__()
+
+        self.global_mlp = nn.Sequential(
+            BatchNorm1d(node_in + batch_size),
+            nn.Linear(node_in + batch_size, global_out),
+            nn.LeakyReLU(negative_slope=leakiness),
+            BatchNorm1d(global_out),
+            nn.Linear(global_out, global_out),
+            nn.LeakyReLU(negative_slope=leakiness),
+            BatchNorm1d(global_out),
+            nn.Linear(global_out, global_out)
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        # x: [N, F_x], where N is the number of nodes.
+        # edge_index: [2, E] with max entry N - 1.
+        # edge_attr: [E, F_e]
+        # u: [B, F_u]
+        # batch: [N] with max entry B - 1.
+        out = torch.cat([u, scatter_mean(x, batch, dim=0)], dim=1)
+        return self.global_mlp(out)
