@@ -105,7 +105,7 @@ class ClustFullGNN(torch.nn.Module):
                 clusts = np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
+                mask = torch.nonzero(data[:,7] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
                 clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
