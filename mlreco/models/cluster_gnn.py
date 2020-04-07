@@ -112,7 +112,7 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # Compute the cluster distance matrix, if necessary
         dist_mat = None
-        if self.edge_max_dist > 0 or self.network == 'mst':
+        if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
             dist_mat = inter_cluster_distance(data[:,:3], clusts, batch_ids, self.edge_dist_metric, self.edge_dist_numpy)
 
         # Form the requested network
@@ -124,6 +124,8 @@ class ClustEdgeGNN(torch.nn.Module):
             edge_index = delaunay_graph(data, clusts, dist_mat, self.edge_max_dist)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
+        elif self.network == 'knn':
+            edge_index = knn_graph(batch_ids, dist_mat, k=5)
         elif self.network == 'bipartite':
             primary_ids = [i for i, c in enumerate(clusts) if (data[c,-3] == data[c,-2]).any()]
             edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
@@ -174,7 +176,8 @@ class EdgeChannelLoss(torch.nn.Module):
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
           reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
           balance_classes : <balance loss per class: True or False (default False)>
-          target_photons  : <use true photon connections as basis for loss (default False)>
+          target          : <basis to form target adjacency matrix:'group', 'group_max', 'photon' (default 'group')>
+          high_purity     : <only penalize loss on groups with a primary (default False)>
     """
     def __init__(self, cfg):
         super(EdgeChannelLoss, self).__init__()
@@ -186,7 +189,8 @@ class EdgeChannelLoss(torch.nn.Module):
         self.loss = chain_config.get('loss', 'CE')
         self.reduction = chain_config.get('reduction', 'mean')
         self.balance_classes = chain_config.get('balance_classes', False)
-        self.target_photons = chain_config.get('target_photons', False)
+        self.target = chain_config.get('target', 'group')
+        self.high_purity = chain_config.get('high_purity', False)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -234,14 +238,59 @@ class EdgeChannelLoss(torch.nn.Module):
                 edge_index = out['edge_index'][i][j]
                 clusts = out['clusts'][i][j]
                 group_ids = get_cluster_group(labels, clusts)
+                if self.high_purity:
+                    clust_ids   = np.array([labels[c[0],5].item() for c in clusts])
+                    purity_mask = np.ones(len(edge_index), dtype=bool)
+                    for g in np.unique(group_ids):
+                        group_mask = np.where(group_ids == g)[0]
+                        if g not in clust_ids[group_mask]:
+                            edge_mask = [(e[0] in group_mask) & (e[1] in group_mask) for e in edge_index]
+                            purity_mask[edge_mask] = np.zeros(np.sum(edge_mask))
+                    edge_index = edge_index[purity_mask]
+                    edge_pred = edge_pred[np.where(purity_mask)[0]]
+                    if not len(edge_index):
+                        continue
 
-                if not self.target_photons:
+                if self.target == 'group':
                     edge_assn = edge_assignment(edge_index, group_ids)
-                else:
+                elif self.target == 'group_max':
+                    # For each group, find the most likely spanning tree, label the edges in the
+                    # tree as 1. For all other edges, apply loss only if in separate group
+                    from scipy.sparse.csgraph import minimum_spanning_tree
+                    edge_assn     = edge_assignment(edge_index, group_ids)
+                    off_scores    = torch.softmax(edge_pred, dim=1)[:,0].detach().cpu().numpy()
+                    score_mat     = np.full((len(clusts), len(clusts)), 2.0)
+                    score_mat[tuple(edge_index.T)] = off_scores
+                    new_edges = np.empty((0,2))
+                    for g in np.unique(group_ids):
+                        clust_ids = np.where(group_ids == g)[0]
+                        if len(clust_ids) < 2:
+                            continue
+
+                        mst_mat = minimum_spanning_tree(score_mat[np.ix_(clust_ids,clust_ids)]).toarray().astype(float)
+                        inds = np.where(mst_mat.flatten() > 0.)[0]
+                        ind_pairs = np.array(np.unravel_index(inds, mst_mat.shape)).T
+                        edges = np.array([[clust_ids[i], clust_ids[j]] for i, j in ind_pairs])
+                        new_edges = np.concatenate((new_edges, edges))
+
+                    edge_assn_max = np.zeros(len(edge_assn))
+                    for e in new_edges:
+                        edge_id = np.where([(e == ei).all() for ei in edge_index])[0]
+                        edge_assn_max[edge_id] = 1.
+
+                    max_mask = edge_assn == edge_assn_max
+                    edge_assn = edge_assn_max[max_mask]
+                    edge_pred = edge_pred[np.where(max_mask)[0]]
+                    if not len(edge_pred):
+                        continue
+
+                elif self.target == 'photon':
                     clust_ids = get_cluster_label(labels, clusts)
                     subgraph = graph[i][graph[i][:,-1] == j, :2]
                     true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
+                else:
+                    raise ValueError('Prediction target not recognized:', self.target)
 
                 edge_assn = torch.tensor(edge_assn, device=edge_pred.device, dtype=torch.long, requires_grad=False).view(-1)
 

@@ -96,7 +96,7 @@ class ClustNodeGNN(torch.nn.Module):
                 clusts = np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
+                mask = torch.nonzero(data[:,7] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
                 clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
@@ -175,7 +175,7 @@ class NodeChannelLoss(torch.nn.Module):
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
           reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
           balance_classes : <balance loss per class: True or False (default False)>
-          target_photons  : <use true photon connections as basis for loss (default False)>
+          high_purity     : <only penalize loss on groups with a primary (default False)>
     """
     def __init__(self, cfg):
         super(NodeChannelLoss, self).__init__()
@@ -187,6 +187,7 @@ class NodeChannelLoss(torch.nn.Module):
         self.loss = chain_config.get('loss', 'CE')
         self.reduction = chain_config.get('reduction', 'mean')
         self.balance_classes = chain_config.get('balance_classes', False)
+        self.high_purity = chain_config.get('high_purity', False)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -231,10 +232,23 @@ class NodeChannelLoss(torch.nn.Module):
                     continue
                 clusts = out['clusts'][i][j]
                 primary_ids = []
+                if self.high_purity:
+                    group_ids = np.array([labels[c[0],6].item() for c in clusts])
+                    clust_ids = np.array([labels[c[0],5].item() for c in clusts])
+                    purity_mask = np.zeros(len(clusts), dtype=bool)
+                    for g in np.unique(group_ids):
+                        group_mask = group_ids == g
+                        if g in clust_ids[group_mask]:
+                            purity_mask[group_mask] = np.ones(np.sum(group_mask))
+                    clusts = clusts[purity_mask]
+                    node_pred = node_pred[np.where(purity_mask)[0]]
+                    if not len(clusts):
+                        continue
+
                 for c in clusts:
                     # If any point is primary, assign cluster to primary
-                    primary = (labels[c, -3] == labels[c,-2]).any()
-                    primary_ids.append(primary)
+                    primary = (labels[c,5] == labels[c,6]).any()
+                    primary_ids.append(primary.item())
 
                 node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
