@@ -39,7 +39,7 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
 
         # Check if the graph is undirected, select the relevant part of the edge index
         half_idx = int(edge_index.shape[1]/2)
-        undirected = (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
+        undirected = not edge_index.shape[1] or (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
         if undirected: edge_index = edge_index[:,:half_idx]
 
         # Use edge ID as a batch ID, pass through CNN
