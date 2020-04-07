@@ -15,6 +15,7 @@ def model_dict():
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
     from . import cluster_full_gnn
+    from . import cluster_group_prior_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
     from . import flashmatching_model
@@ -77,6 +78,8 @@ def model_dict():
         "cluster_gnn": (cluster_gnn.ClustEdgeGNN, cluster_gnn.EdgeChannelLoss),
         # Cluster primary node identification + grouping GNN
         "cluster_full_gnn": (cluster_full_gnn.ClustFullGNN, cluster_full_gnn.ChainLoss),
+        # Cluster shower grouping + primary node identification
+        "cluster_group_prior_gnn": (cluster_group_prior_gnn.ClustGroupPriorGNN, cluster_group_prior_gnn.GroupPriorLoss),
         # Cluster bipartite grouping GNN
         "cluster_bipartite_gnn": (cluster_bipartite_gnn.ClustBipartiteGNN, cluster_bipartite_gnn.ChainLoss),
         # Cluster hierarchical grouping GNN
