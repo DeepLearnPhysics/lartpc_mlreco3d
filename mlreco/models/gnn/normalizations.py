@@ -1,6 +1,6 @@
 ########################################
-## Borrowed from Dae Heun's repository
-## https://github.com/dkoh0207/lartpc_mlreco3d/blob/443bdd8ba10b4e80f937fa637f28cf931e65e57c/mlreco/models/gnn/normalizations.py
+## Borrowed from Francois's repository
+## https://github.com/francois-drielsma/lartpc_mlreco3d/blob/cnn_clustering/mlreco/models/gnn/normalizations.py
 ########################################
 import numpy as np
 import torch
@@ -44,7 +44,6 @@ class BatchNorm(BatchNorm1d):
             uses batch statistics in both training and eval modes.
             (default: :obj:`True`)
     """
-
     def __init__(self, in_channels, eps=1e-5, momentum=0.1, affine=True,
                  track_running_stats=True):
         super(BatchNorm, self).__init__(in_channels, eps, momentum, affine,
@@ -53,6 +52,7 @@ class BatchNorm(BatchNorm1d):
     def forward(self, x):
         """"""
         return super(BatchNorm, self).forward(x)
+
 
     def __repr__(self):
         return ('{}({}, eps={}, momentum={}, affine={}, '
@@ -91,11 +91,11 @@ class InstanceNorm(_InstanceNorm):
             uses instance statistics in both training and eval modes.
             (default: :obj:`False`)
     """
-
     def __init__(self, in_channels, eps=1e-5, momentum=0.1, affine=False,
                  track_running_stats=False):
         super(InstanceNorm, self).__init__(in_channels, eps, momentum, affine,
                                            track_running_stats)
+
 
     def forward(self, x, batch=None):
         """"""
@@ -117,10 +117,10 @@ class InstanceNorm(_InstanceNorm):
         if self.training and self.track_running_stats:
             momentum = self.momentum
             self.running_mean = (
-                                        1 - momentum) * self.running_mean + momentum * mean.mean(dim=0)
+                1 - momentum) * self.running_mean + momentum * mean.mean(dim=0)
             self.running_var = (
-                                       1 - momentum
-                               ) * self.running_var + momentum * unbiased_var.mean(dim=0)
+                1 - momentum
+            ) * self.running_var + momentum * unbiased_var.mean(dim=0)
 
         if not self.training and self.track_running_stats:
             mean = self.running_mean.view(1, -1).expand(batch_size, -1)
