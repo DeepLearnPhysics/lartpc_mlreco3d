@@ -330,6 +330,125 @@ def parse_cluster3d_full(data):
     meta = cluster_event.meta()
     num_clusters = cluster_event.as_vector().size()
     clusters_voxels, clusters_features = [], []
+    ### SHOULD BE FIXED AT SUPERA LEVEL LATER ###
+    group_ids = np.array([particles_v[i].group_id() for i in range(particles_v.size())])
+    new_group = num_clusters + 1
+    for i, gid in enumerate(np.unique(group_ids)):
+        # If the group's parent is not EM or LE, proceed
+        if particles_v[int(gid)].shape() != 0 and particles_v[int(gid)].shape() != 4:
+            continue
+
+        # If the group's parent is nuclear activity, Delta or Michel, make it non primary
+        process = particles_v[int(gid)].creation_process()
+        parent_pdg_code = abs(particles_v[int(gid)].parent_pdg_code())
+        idxs = np.where(group_ids == gid)[0]
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+        # If a group's parent fragment has size zero, make it non primary (want high primary purity)
+        parent_size = cluster_event.as_vector()[int(gid)].as_vector().size()
+        if not parent_size:
+            idxs = np.where(group_ids == gid)[0]
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+        # If a group's parent is not the first in time, make it non primary (want high primary purity)
+        idxs = np.where(group_ids == gid)[0]
+        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        min_id = np.argmin(clust_times)
+        if idxs[min_id] != gid :
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+        # Pick the cluster that parents the largest fraction of the shower voxels as the primary
+        """
+        if len(idxs) > 1:
+            parent_ids = []
+            for i in idxs:
+                particle = particles_v[int(i)]
+                parent_id = temp_id = particle.id()
+                tree_ids = [temp_id]
+                while particle.id() != gid:
+                    temp_id = particle.parent_id()
+                    if temp_id in tree_ids or temp_id == 65535:
+                        temp_id = gid
+                    tree_ids.append(temp_id)
+                    particle = particles_v[int(temp_id)]
+                    if cluster_event.as_vector()[int(temp_id)].as_vector().size() and\
+                            particles_v[int(temp_id)].first_step().t() < particles_v[int(i)].first_step().t():
+                       parent_id = particle.id()
+                parent_ids.append(parent_id)
+
+            subids, subinv = np.unique(parent_ids, return_inverse=True)
+            sub_sizes = [np.sum([cluster_event.as_vector()[int(j)].as_vector().size()\
+                            for j in idxs[subinv == i]]) for i in range(len(subids))]
+            total_size = np.sum(sub_sizes)
+            if not total_size:
+                continue
+            sub_sizes /= total_size
+            argmax = np.argmax(sub_sizes)
+            if sub_sizes[argmax] > 0.5:
+                group_ids[idxs] = parent_ids[argmax]
+            else:
+                group_ids[idxs] = new_group
+                new_group += 1
+        """
+
+        # Make the first (in time) non-empty cluster the true group ID
+        """
+        idxs = np.where(group_ids == gid)[0]
+        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        nonempty = np.where([cluster_event.as_vector()[int(j)].as_vector().size() for j in idxs])[0]
+        if len(nonempty):
+            first_id = np.argmin(clust_times[nonempty])
+            group_ids[idxs] = idxs[nonempty][first_id]
+        """
+
+        # If the primary cluster is empty, make its direct children primaries
+        """
+        clust_size = cluster_event.as_vector()[int(gid)].as_vector().size()
+        if not clust_size:
+            idxs = np.where(group_ids == gid)[0]
+            for j in idxs:
+                if j != gid and cluster_event.as_vector()[int(j)].size():
+                    particle = particles_v[int(j)]
+                    group_id = particle.id()
+                    print(group_id)
+                    while particle.parent_id() != gid:
+                        print(particle.parent_id(), gid)
+                        parent_id = particle.parent_id()
+                        particle = particles_v[parent_id]
+                        if not cluster_event.as_vector()[parent_id].size():
+                            continue
+                        group_id = particle.id()
+                    group_ids[j] = group_id
+        """
+        """
+        idxs = np.where(group_ids == gid)[0]
+        if len(idxs) > 1:
+            parent_ids = []
+            for i in idxs:
+                particle = particles_v[int(i)]
+                parent_id = temp_id = particle.id()
+                tree_ids = [temp_id]
+                while particle.id() != gid:
+                    temp_id = particle.parent_id()
+                    if temp_id in tree_ids or temp_id == 65535:
+                        temp_id = gid
+                    tree_ids.append(temp_id)
+                    particle = particles_v[int(temp_id)]
+                    if cluster_event.as_vector()[int(temp_id)].as_vector().size() and\
+                            particles_v[int(temp_id)].first_step().t() < particles_v[int(i)].first_step().t():
+                       parent_id = particle.id()
+                parent_ids.append(parent_id)
+            group_ids[idxs] = parent_ids
+        """
+
+    #############################################
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
         num_points = cluster.as_vector().size()
@@ -343,7 +462,8 @@ def parse_cluster3d_full(data):
             cluster_id = np.full(shape=(cluster.as_vector().size()),
                                  fill_value=particles_v[i].id(), dtype=np.float32)
             group_id = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=particles_v[i].group_id(), dtype=np.float32)
+                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
+                               fill_value=group_ids[i], dtype=np.float32)
             sem_type = np.full(shape=(cluster.as_vector().size()),
                                fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
