@@ -18,9 +18,9 @@ class FullGNN(nn.Module):
     '''
     Full GNN Module for extracting node/edge/global features
     '''
-    def __init__(self, cfg, name='full_gnn'):
+    def __init__(self, cfg):
         super(FullGNN, self).__init__()
-        self.model_config = cfg[name]
+        self.model_config = cfg
         self.nodeInput = self.model_config.get('node_feats', 16)
         self.nodeOutput = self.model_config.get('node_output_features', 32)
         self.edgeInput = self.model_config.get('edge_feats', 16)
