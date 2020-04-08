@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_group
 from mlreco.utils.gnn.network import loop_graph, complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 
@@ -231,26 +231,23 @@ class NodeChannelLoss(torch.nn.Module):
                 if not node_pred.shape[0]:
                     continue
                 clusts = out['clusts'][i][j]
-                primary_ids = []
+                clust_ids = get_cluster_label(labels, clusts)
+                group_ids = get_cluster_group(labels, clusts)
                 if self.high_purity:
-                    group_ids = np.array([labels[c[0],6].item() for c in clusts])
-                    clust_ids = np.array([labels[c[0],5].item() for c in clusts])
                     purity_mask = np.zeros(len(clusts), dtype=bool)
                     for g in np.unique(group_ids):
                         group_mask = group_ids == g
                         if g in clust_ids[group_mask]:
                             purity_mask[group_mask] = np.ones(np.sum(group_mask))
-                    clusts = clusts[purity_mask]
+                    clusts    = clusts[purity_mask]
+                    clust_ids = clust_ids[purity_mask]
+                    group_ids = group_ids[purity_mask]
                     node_pred = node_pred[np.where(purity_mask)[0]]
                     if not len(clusts):
                         continue
 
-                for c in clusts:
-                    # If any point is primary, assign cluster to primary
-                    primary = (labels[c,5] == labels[c,6]).any()
-                    primary_ids.append(primary.item())
-
-                node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
+                # If the majority cluster ID agrees with the majority group ID, assign as primary
+                node_assn = torch.tensor(clust_ids == group_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:

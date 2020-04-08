@@ -75,8 +75,8 @@ def get_cluster_label(data, clusts):
     """
     labels = []
     for c in clusts:
-        assert len(data[c,5].unique()) == 1
-        labels.append(int(data[c[0],5].item()))
+        v, cts = data[c,5].unique(return_counts=True)
+        labels.append(int(v[cts.argmax()].item()))
 
     return np.array(labels)
 
