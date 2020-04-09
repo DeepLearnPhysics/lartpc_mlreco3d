@@ -18,7 +18,7 @@ def edge_model_dict():
     from . import dir_meta
     from . import modular_nnconv
     # below are temporary ones
-    from . import edge_econv2
+    from . import edge_nnconv2
     from . import modular_nnconv_2layer
     from . import modular_nnconv_1layer
 
