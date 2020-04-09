@@ -238,6 +238,8 @@ class EdgeChannelLoss(torch.nn.Module):
                 edge_index = out['edge_index'][i][j]
                 clusts = out['clusts'][i][j]
                 group_ids = get_cluster_group(labels, clusts)
+
+                # If high purity is requested, remove edges in poorly defined groups from the loss
                 if self.high_purity:
                     clust_ids   = np.array([labels[c[0],5].item() for c in clusts])
                     purity_mask = np.ones(len(edge_index), dtype=bool)
@@ -253,9 +255,10 @@ class EdgeChannelLoss(torch.nn.Module):
 
                 if self.target == 'group':
                     edge_assn = edge_assignment(edge_index, group_ids)
-                elif self.target == 'group_max':
+                elif self.target == 'group_mst':
                     # For each group, find the most likely spanning tree, label the edges in the
-                    # tree as 1. For all other edges, apply loss only if in separate group
+                    # tree as 1. For all other edges, apply loss only if in separate group.
+                    # If undirected, also assign symmetric path to 1.
                     from scipy.sparse.csgraph import minimum_spanning_tree
                     edge_assn     = edge_assignment(edge_index, group_ids)
                     off_scores    = torch.softmax(edge_pred, dim=1)[:,0].detach().cpu().numpy()
@@ -271,6 +274,7 @@ class EdgeChannelLoss(torch.nn.Module):
                         inds = np.where(mst_mat.flatten() > 0.)[0]
                         ind_pairs = np.array(np.unravel_index(inds, mst_mat.shape)).T
                         edges = np.array([[clust_ids[i], clust_ids[j]] for i, j in ind_pairs])
+                        edges = np.concatenate((edges, np.flip(edges, axis=1))) # reciprocal connections
                         new_edges = np.concatenate((new_edges, edges))
 
                     edge_assn_max = np.zeros(len(edge_assn))
@@ -283,12 +287,18 @@ class EdgeChannelLoss(torch.nn.Module):
                     edge_pred = edge_pred[np.where(max_mask)[0]]
                     if not len(edge_pred):
                         continue
-
-                elif self.target == 'photon':
+                elif 'photon' in self.target:
                     clust_ids = get_cluster_label(labels, clusts)
                     subgraph = graph[i][graph[i][:,-1] == j, :2]
                     true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
+                    if self.target == 'photon_relax':
+                        adjacency  = [group_ids[e[0]] == group_ids[e[1]] for e in edge_index]
+                        relax_mask = adjacency == edge_assn
+                        edge_assn  = edge_assn[relax_mask]
+                        edge_pred  = edge_pred[np.where(relax_mask)[0]]
+                        if not len(edge_pred):
+                            continue
                 else:
                     raise ValueError('Prediction target not recognized:', self.target)
 
