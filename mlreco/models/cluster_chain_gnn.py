@@ -53,8 +53,6 @@ class ChainDBSCANGNN(torch.nn.Module):
 
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = self.uresnet_lonely([data[0]])
-        if len(data) > 1:
-            result['label'] = data[1]
         ppn_input = {}
         ppn_input.update(result)
         ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
