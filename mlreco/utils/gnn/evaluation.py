@@ -240,8 +240,8 @@ def grouping_loss(pred_mat, edge_index, adj_mat, loss='ce'):
 def edge_assignment_score(edge_index, edge_scores, n):
     """
     Function that finds the graph that produces the lowest
-    grouping score by building a score MST and by
-    iteratively removing edges that improve the score.
+    grouping score iteratively adding the most likely edges,
+    if they improve the the score (builds a spanning tree).
 
     Args:
         edge_index (np.ndarray) : (E,2) Incidence matrix
@@ -260,28 +260,23 @@ def edge_assignment_score(edge_index, edge_scores, n):
     pred_mat = np.eye(n)
     pred_mat[tuple(edge_index.T)] = edge_scores[:,1]
 
-    from scipy.sparse.csgraph import minimum_spanning_tree
-    mst_mat = minimum_spanning_tree(1-pred_mat).toarray()
-    mst_index = np.array(np.where(mst_mat != 0)).T
+    # Order the edges by increasing order of OFF score
+    args = np.argsort(edge_scores[:,0])
+    ord_index = edge_index[args]
 
-    # Order the mst index by increasing order of ON score
-    args = np.argsort(pred_mat[tuple(mst_index.T)])
-    mst_index = mst_index[args]
-
-    # Now iteratively remove edges, until the total score cannot be improved any longer
-    best_loss = grouping_loss(pred_mat, mst_index, adj_mat)
-    best_index = mst_index
-    found_better = True
-    while found_better:
-        found_better = False
-        for i in range(len(best_index)):
-            last_index = np.vstack((best_index[:i],best_index[i+1:]))
-            last_loss = grouping_loss(pred_mat, last_index, adj_mat)
-            if last_loss < best_loss:
-                best_loss = last_loss
-                best_index = last_index
-                found_better = True
-                break
+    # Now iteratively add edges, until the total score cannot be improved any longer
+    best_index = np.empty((0,2), dtype=int)
+    best_groups = np.arange(n)
+    best_loss = grouping_loss(pred_mat, best_index, adj_mat)
+    for i, e in enumerate(ord_index):
+        if best_groups[e[0]] == best_groups[e[1]] or edge_scores[args[i]][1] < 0.5:
+            continue
+        last_index = np.vstack((best_index, e))
+        last_loss = grouping_loss(pred_mat, last_index, adj_mat)
+        if last_loss < best_loss:
+            best_index = last_index
+            best_loss = last_loss
+            best_groups = node_assignment(last_index, np.ones(len(last_index)), n)
 
     return best_index, best_loss
 
