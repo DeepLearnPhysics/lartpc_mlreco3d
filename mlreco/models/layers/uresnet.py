@@ -14,7 +14,7 @@ from mlreco.models.layers.base import NetworkBase
 class UResNet(NetworkBase):
     '''
     Vanilla UResNet with access to intermediate layers in
-    encoder/decoder path. 
+    encoder/decoder path.
 
     Configurations
     -------------
@@ -46,7 +46,7 @@ class UResNet(NetworkBase):
         self.downsample = [self.kernel_size, 2]  # [filter size, filter stride]
         self.inputKernel = self.model_config.get('input_kernel_size', 3)
 
-        # Input Layer Configurations and commonly used scn operations. 
+        # Input Layer Configurations and commonly used scn operations.
         self.input = scn.Sequential().add(
             scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
             scn.SubmanifoldConvolution(self.dimension, self.nInputFeatures, \
@@ -93,7 +93,7 @@ class UResNet(NetworkBase):
             - x (scn.SparseConvNetTensor): output from inputlayer (self.input)
 
         RETURNS:
-            - features_encoder (list of SparseConvNetTensor): list of feature 
+            - features_encoder (list of SparseConvNetTensor): list of feature
             tensors in encoding path at each spatial resolution.
         '''
         # Embeddings at each layer
@@ -103,14 +103,14 @@ class UResNet(NetworkBase):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-        
+
         res = {
             "features_enc": features_enc,
             "deepest_layer": x
         }
 
         return res
-    
+
 
 
     def decoder(self, features_enc, deepest_layer):
@@ -122,7 +122,7 @@ class UResNet(NetworkBase):
 
         RETURNS:
             - features_dec (list of scn.SparseConvNetTensor): list of feature
-            tensors in decoding path at each spatial resolution. 
+            tensors in decoding path at each spatial resolution.
         '''
         features_dec = []
         x = deepest_layer
@@ -169,7 +169,9 @@ class UResNetEncoder(NetworkBase):
     def __init__(self, cfg, name='uresnet_encoder'):
         super(UResNetEncoder, self).__init__(cfg, name='network_base')
         self.model_config = cfg[name]
-
+        # print(name)
+        # print(self.model_config)
+        # print('\n')
         # UResNet Configurations
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
         self.kernel_size = self.model_config.get('kernel_size', 2)
@@ -203,7 +205,7 @@ class UResNetEncoder(NetworkBase):
             - x (scn.SparseConvNetTensor): output from inputlayer (self.input)
 
         RETURNS:
-            - features_encoder (list of SparseConvNetTensor): list of feature 
+            - features_encoder (list of SparseConvNetTensor): list of feature
             tensors in encoding path at each spatial resolution.
         '''
         # Embeddings at each layer
@@ -213,7 +215,7 @@ class UResNetEncoder(NetworkBase):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-        
+
         res = {
             "features_enc": features_enc,
             "deepest_layer": x
@@ -226,6 +228,10 @@ class UResNetDecoder(NetworkBase):
 
     def __init__(self, cfg, name='uresnet_decoder'):
         super(UResNetDecoder, self).__init__(cfg, name='network_base')
+        self.model_config = cfg[name]
+        # print(name)
+        # print(self.model_config)
+        # print('\n')
         # UResNet Configurations
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
@@ -251,6 +257,8 @@ class UResNetDecoder(NetworkBase):
                 self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
             self.decoding_block.add(m)
 
+        # print(self.decoding_block)
+
 
     def forward(self, features_enc, deepest_layer):
         '''
@@ -261,7 +269,7 @@ class UResNetDecoder(NetworkBase):
 
         RETURNS:
             - features_dec (list of scn.SparseConvNetTensor): list of feature
-            tensors in decoding path at each spatial resolution. 
+            tensors in decoding path at each spatial resolution.
         '''
         features_dec = []
         x = deepest_layer
