@@ -79,8 +79,12 @@ class ChainDBSCANGNN(torch.nn.Module):
         if not len(frags[self.shower_class]):
             return result
 
-        # Prepare cluster ID, batch ID for shower clusters
+        # If there is cut on EM cluster size, abide
         clusts = frags[self.shower_class]
+        if self.node_min_size > 0:
+            clusts = [c for c in frags[self.shower_class] if len(c) > self.node_min_size]
+
+        # Prepare cluster ID, batch ID for shower clusters
         clust_ids = np.arange(len(clusts))
         batch_ids = []
         for clust in clusts:
