@@ -52,7 +52,7 @@ class MaskBCELoss(nn.Module):
         # BCELoss for Embedding Loss
         self.bceloss = StableBCELoss()
         # L2 Loss for Seediness and Smoothing
-        self.l2loss = torch.nn.MSELoss(reduction='mean')
+        self.l2loss = torch.nn.L1Loss(reduction='mean')
 
     def find_cluster_means(self, features, labels):
         '''
@@ -309,7 +309,7 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.exp(-dists / (2 * torch.pow(sigma, 2)))
+            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-6) )
             probs[index] = p[index]
             loss += lovasz_hinge_flat(2 * p - 1, mask)
             sigma_detach = sigma.detach()
@@ -421,7 +421,6 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         inter_loss = self.inter_cluster_loss(centroids)
-        reg_loss = self.regularization(centroids)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
         probs = torch.zeros(embeddings.shape[0]).float().cuda()
@@ -434,20 +433,19 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.exp(-dists / (2 * torch.pow(sigma, 2)))
+            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-6))
             probs[index] = p[index]
             loss += lovasz_hinge_flat(2 * p - 1, mask)
-            accuracy += iou_binary(p > 0.5, mask, per_image=False)
+            accuracy += float(iou_binary(p > 0.5, mask, per_image=False))
             sigma_detach = sigma.detach()
-            smoothing_loss += torch.sum(torch.pow(margins[index] - sigma_detach, 2))
+            smoothing_loss += torch.mean(torch.norm(margins[index] - sigma_detach, dim=1))
 
         loss /= n_clusters
         smoothing_loss /= n_clusters
         accuracy /= n_clusters
         loss += inter_loss
-        loss += reg_loss / n_clusters
 
-        return loss, smoothing_loss, inter_loss, probs, accuracy
+        return loss, smoothing_loss, float(inter_loss), probs, accuracy
 
 
     def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels, coords):
@@ -473,6 +471,8 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
+            if sc == 4:
+                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(

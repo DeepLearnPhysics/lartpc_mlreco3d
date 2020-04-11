@@ -57,29 +57,29 @@ class FullChain(nn.Module):
         fragment_labels = input[0][:, -3]
         group_labels = input[0][:, -2]
 
-        gnn_input = get_gnn_input(
-            coords,
-            features_gnn,
-            self.edge_net,
-            fit_predict,
-            train=True,
-            embeddings=embeddings,
-            fragment_labels=fragment_labels,
-            group_labels=group_labels,
-            batch_index=batch_index)
-
-        node_features = gnn_input.x
-        edge_indices = gnn_input.edge_index
-        edge_attr = gnn_input.edge_attr
-        gnn_batch_index = gnn_input.batch
-
-        gnn_output = self.full_gnn(
-            node_features, edge_indices, edge_attr, gnn_batch_index)
-
-        result.update(gnn_output)
-        result['node_batch_labels'] = [gnn_input.batch]
-        result['node_group_labels'] = [gnn_input.node_group_labels]
-        result['centroids'] = [gnn_input.centroids]
+        # gnn_input = get_gnn_input(
+        #     coords,
+        #     features_gnn,
+        #     self.edge_net,
+        #     fit_predict,
+        #     train=True,
+        #     embeddings=embeddings,
+        #     fragment_labels=fragment_labels,
+        #     group_labels=group_labels,
+        #     batch_index=batch_index)
+        #
+        # node_features = gnn_input.x
+        # edge_indices = gnn_input.edge_index
+        # edge_attr = gnn_input.edge_attr
+        # gnn_batch_index = gnn_input.batch
+        #
+        # gnn_output = self.full_gnn(
+        #     node_features, edge_indices, edge_attr, gnn_batch_index)
+        #
+        # result.update(gnn_output)
+        # result['node_batch_labels'] = [gnn_input.batch]
+        # result['node_group_labels'] = [gnn_input.node_group_labels]
+        # result['centroids'] = [gnn_input.centroids]
         # for key, val in result.items():
         #     print(key, val[0].shape)
 
@@ -90,8 +90,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
         super(FullChainLoss, self).__init__()
         self.segmentation_loss = torch.nn.CrossEntropyLoss()
-        # self.ppn_loss = PPNLoss(cfg)
+        self.ppn_loss = PPNLoss(cfg)
         self.loss_config = cfg['clustering_loss']
+        print(self.loss_config)
+        self.gnn_loss = self.loss_config.get('gnn_loss', False)
 
         self.clustering_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.clustering_loss = clustering_loss_construct(self.clustering_loss_name)
@@ -161,8 +163,9 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         margins = out['margins'][0]
         # PPN Loss.
         # FIXME: This implementation will loop over the batch twice.
-        # ppn_res = self.ppn_loss(out, ppn_segment_label, ppn_label)
-        # ppn_loss = ppn_res['ppn_loss']
+        ppn_res = self.ppn_loss(out, ppn_segment_label, ppn_label)
+        # print(ppn_res)
+        ppn_loss = ppn_res['ppn_loss']
 
         counts = 0
         groups = 0
@@ -223,26 +226,34 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
         res['clustering_loss'] = float(self.clustering_weight * res['loss'])
         res['loss'] = self.segmentation_weight * res['loss_seg'] \
-                    + self.clustering_weight * res['loss']
-                    # + self.ppn_weight * ppn_loss
+                    + self.clustering_weight * res['loss'] \
+                    + self.ppn_weight * ppn_loss
         res['loss_seg'] = float(res['loss_seg'])
+        res['ppn_loss'] = float(ppn_loss)
+        res['ppn_acc'] = float(ppn_res['ppn_acc'])
+
+        print('Segmentation Accuracy: {:.4f}'.format(acc_avg['accuracy']))
+        print('Clustering Accuracy: {:.4f}'.format(acc_avg['accuracy_clustering']))
+        print('PPN Accuracy: {:.4f}'.format(ppn_res['ppn_acc']))
 
         # -----------------END OF CNN LOSS COMPUTATION--------------------
 
-        node_batch_labels = out['node_batch_labels'][0]
-        node_group_labels = out['node_group_labels'][0]
-        node_pred = out['node_predictions'][0]
-        centroids = out['centroids'][0]
-        node_pred[:, :3] = node_pred[:, :3] + centroids
-        edge_pred = out['edge_predictions'][0]
+        if self.gnn_loss:
+            node_batch_labels = out['node_batch_labels'][0]
+            node_group_labels = out['node_group_labels'][0]
+            node_pred = out['node_predictions'][0]
+            centroids = out['centroids'][0]
+            node_pred[:, :3] = node_pred[:, :3] + centroids
+            edge_pred = out['edge_predictions'][0]
 
-        gnn_loss = self.node_loss(node_pred, node_batch_labels, node_group_labels)
-        res['loss'] += self.node_loss_weight * gnn_loss['loss']
-        res['grouping_loss'] = float(self.node_loss_weight * gnn_loss['loss'])
-        res['accuracy_grouping'] = gnn_loss['accuracy']
-        # GNN Grouping Loss
-        print('Clustering Loss = ', res['clustering_loss'])
-        print('Grouping Loss = ', res['grouping_loss'])
-        print('Clustering Accuracy = ', res['accuracy_clustering'])
-        print('Grouping Accuracy  = ', res['accuracy_grouping'])
+            gnn_loss = self.node_loss(node_pred, node_batch_labels, node_group_labels)
+            res['loss'] += self.node_loss_weight * gnn_loss['loss']
+            res['grouping_loss'] = float(self.node_loss_weight * gnn_loss['loss'])
+            res['accuracy_grouping'] = gnn_loss['accuracy']
+            # GNN Grouping Loss
+            print('Clustering Loss = ', res['clustering_loss'])
+            print('Grouping Loss = ', res['grouping_loss'])
+            print('Clustering Accuracy = ', res['accuracy_clustering'])
+            print('Grouping Accuracy  = ', res['accuracy_grouping'])
+
         return res
