@@ -353,6 +353,66 @@ def parse_cluster3d_full(data):
     return np_voxels, np_features
 
 
+def parse_cluster3d_fragment(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+    """
+    grp_voxels, grp_data = parse_cluster3d_full([data[0]])
+    label_voxels, label_data = parse_sparse3d_scn([data[1]])
+    # step 1: lexicographically sort group data
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm,:]
+    grp_data = grp_data[perm]
+
+    perm = np.lexsort(label_voxels.T)
+    label_voxels = label_voxels[perm,:]
+    label_data = label_data[perm]
+
+    # step 2: remove duplicates
+    sel1 = filter_duplicate_voxels(grp_voxels, usebatch=False)
+    inds1 = np.where(sel1)[0]
+    grp_voxels = grp_voxels[inds1,:]
+    grp_data = grp_data[inds1]
+
+    sel2 = filter_nonimg_voxels(grp_voxels, label_voxels[(label_data<4).reshape((-1,)),:], usebatch=False)
+    inds2 = np.where(sel2)[0]
+    grp_voxels = grp_voxels[inds2]
+    grp_data = grp_data[inds2]
+
+    return grp_voxels, grp_data
+
+def parse_sparse3d_fragment(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+    """
+    img_voxels, img_data = parse_sparse3d_scn(data)
+    perm = np.lexsort(img_voxels.T)
+    img_voxels = img_voxels[perm]
+    img_data = img_data[perm]
+    img_voxels, unique_indices = np.unique(img_voxels, axis=0, return_index=True)
+    img_data = img_data[unique_indices]
+    mask = img_data.squeeze(1) < 4
+    img_voxels, img_data = img_voxels[mask], img_data[mask]
+    perm = np.lexsort(img_voxels.T)
+    img_voxels = img_voxels[perm]
+    img_data = img_data[perm]
+
+    return img_voxels, img_data
+
+
+
 def parse_cluster3d_clean(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
