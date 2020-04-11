@@ -293,14 +293,14 @@ class FullCNN(NetworkBase):
         # print("Seediness Planes: ", seed_planes)
 
         self.seg_skip = scn.Sequential()
-        self.cluster_skip = scn.Sequential()
+        # self.cluster_skip = scn.Sequential()
         self.seed_skip = scn.Sequential()
 
         for p1, p2 in zip(encoder_planes, seg_planes):
             self._nin_block(self.seg_skip, p1, p2)
 
-        for p1, p2 in zip(encoder_planes, cluster_planes):
-            self._nin_block(self.cluster_skip, p1, p2)
+        # for p1, p2 in zip(encoder_planes, cluster_planes):
+        #     self._nin_block(self.cluster_skip, p1, p2)
 
         for p1, p2 in zip(encoder_planes, seed_planes):
             self._nin_block(self.seed_skip, p1, p2)
@@ -414,17 +414,17 @@ class FullCNN(NetworkBase):
         for i, layer in enumerate(features_enc[1:]):
             seed_decoder_input.append(self.seed_skip[i](layer))
         deep_seed = self.seed_skip[-1](deepest_layer)
-
-        cluster_decoder_input = [None]
-        for i, layer in enumerate(features_enc[1:]):
-            cluster_decoder_input.append(self.cluster_skip[i](layer))
-        deep_cluster = self.cluster_skip[-1](deepest_layer)
+        #
+        # cluster_decoder_input = [None]
+        # for i, layer in enumerate(features_enc[1:]):
+        #     cluster_decoder_input.append(self.cluster_skip[i](layer))
+        # deep_cluster = self.cluster_skip[-1](deepest_layer)
 
         # print([t.features.shape for t in seg_decoder_input[1:]])
         # print([t.features.shape for t in seed_decoder_input[1:]])
         # print([t.features.shape for t in cluster_decoder_input[1:]])
 
-        features_cluster = self.cluster_net(cluster_decoder_input, deep_cluster)
+        features_cluster = self.cluster_net(features_enc, deepest_layer)
         features_seediness = self.seed_net(seed_decoder_input, deep_seed)
         features_seg = self.seg_net(seg_decoder_input, deep_seg)
 

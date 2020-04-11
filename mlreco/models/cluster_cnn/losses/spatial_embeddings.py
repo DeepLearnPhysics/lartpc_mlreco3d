@@ -290,7 +290,7 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
     def __init__(self, cfg, name='clustering_loss'):
         super(MaskLovaszHingeLoss, self).__init__(cfg)
 
-    def get_per_class_probabilities(self, embeddings, margins, labels, coords):
+    def get_per_class_probabilities(self, embeddings, margins, labels):
         '''
         Computes binary foreground/background loss.
         '''
@@ -413,7 +413,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             return inter_loss
 
 
-    def get_per_class_probabilities(self, embeddings, margins, labels, coords):
+    def get_per_class_probabilities(self, embeddings, margins, labels):
         '''
         Computes binary foreground/background loss.
         '''
@@ -433,7 +433,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-6))
+            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-8))
             probs[index] = p[index]
             loss += lovasz_hinge_flat(2 * p - 1, mask)
             accuracy += float(iou_binary(p > 0.5, mask, per_image=False))
@@ -448,7 +448,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         return loss, smoothing_loss, float(inter_loss), probs, accuracy
 
 
-    def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels, coords):
+    def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels):
         '''
         Wrapper function for combining different components of the loss,
         in particular when clustering must be done PER SEMANTIC CLASS.
@@ -471,13 +471,11 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
-            if sc == 4:
-                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(
                 embeddings[index], margins[index],
-                clabels[index], coords[index])
+                clabels[index])
             prob_truth = probs.detach()
             seed_loss = self.l2loss(prob_truth, seediness[index].squeeze(1))
             total_loss = self.embedding_weight * mask_loss \
