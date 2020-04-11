@@ -98,6 +98,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.clustering_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.clustering_loss = clustering_loss_construct(self.clustering_loss_name)
         self.clustering_loss = self.clustering_loss(cfg)
+        print(self.clustering_loss)
 
         self.node_loss = GNNGroupingLoss(cfg)
         self.node_loss_weight = self.loss_config.get('node_loss_weight', 1.0)
@@ -198,9 +199,16 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy['accuracy'].append(segment_acc)
 
             # Clustering Loss & Accuracy
+            highE_mask = slabels_batch != 4
+            slabels_highE = slabels_batch[highE_mask]
+            embedding_batch_highE = embedding_batch[highE_mask]
+            clabels_batch_highE = clabels_batch[highE_mask]
+            seed_batch_highE = seed_batch[highE_mask]
+            margins_batch_highE = margins_batch[highE_mask]
+
             loss_class, acc_class = self.clustering_loss.combine_multiclass(
-                embedding_batch, margins_batch,
-                seed_batch, slabels_batch, clabels_batch, coords_batch)
+                embedding_batch_highE, margins_batch_highE,
+                seed_batch_highE, slabels_highE, clabels_batch_highE)
             for key, val in loss_class.items():
                 loss[key].append(sum(val) / len(val))
             for s, acc in acc_class.items():
