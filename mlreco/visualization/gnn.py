@@ -61,9 +61,8 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
     graph_data = []
     edge_vertices = []
     if mode == 'sphere':
-        # Define the node size as a linear function of the amount of voxels in the cluster
-        sizes = np.array([len(c) for c in clusters])
-        node_sizes = sizes * 50./sizes.max()
+        # Define the node size as a sqrt function of the amount of voxels in the cluster
+        node_sizes = 4*np.sqrt([len(c) for c in clusters])
 
         # Define the nodes as sphere of radius proportional to the log of the cluster voxel content
         graph_data.append(go.Scatter3d(x = pos[:,0], y = pos[:,1], z = pos[:,2],
@@ -73,11 +72,54 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                            symbol = 'circle',
                                            size = node_sizes,
                                            color = clust_labels,
+                                           opacity = 0.5,
                                            colorscale = colorscale,
                                            line = dict(color='rgb(50,50,50)', width=0.5)
                                        ),
                                        text = node_labels,
                                        hoverinfo = 'text'))
+
+        # Define the edges center to center
+        if draw_edges:
+            edge_vertices = np.concatenate([[pos[i], pos[j], [None, None, None]] for i, j in edge_index])
+
+    elif mode == 'ellipsoid':
+        # Compute the points on a unit 3-ball
+        phi = np.linspace(0, 2*np.pi, num=20)
+        theta = np.linspace(-np.pi/2, np.pi/2, num=20)
+        phi, theta = np.meshgrid(phi, theta)
+        x = np.cos(theta) * np.sin(phi)
+        y = np.cos(theta) * np.cos(phi)
+        z = np.sin(theta)
+        unit_points = np.hstack((x.reshape(-1,1), y.reshape(-1,1), z.reshape(-1,1)))
+
+        # Compute the range of node values
+        min_label, max_label = min(clust_labels), max(clust_labels)
+
+        for i, c in enumerate(clusters):
+            # Get the centroid and the covariance matrix
+            centroid = np.mean(voxels[c], axis=0)
+            covmat   = np.dot((voxels[c]-centroid).T, (voxels[c]-centroid))/len(c)
+
+            # Diagonalize the covariance matrix, get rotation matrix
+            w, v = np.linalg.eigh(covmat)
+            diag = np.zeros((3,3))
+            np.fill_diagonal(diag, np.sqrt(w))
+            rotmat = np.dot(diag, v.T)
+
+            # Rotate the points into the basis of the covariance matrix
+            radius = 1.75 # radius in chi value, for a 3D Gaussian, 2 corresponds to a 50% proba content
+            points = centroid + radius*np.dot(unit_points, rotmat)
+
+            # Append Mesh3d object
+            graph_data.append(go.Mesh3d(x = points[:,0],
+                                        y = points[:,1],
+                                        z = points[:,2],
+                                        alphahull = 0,
+                                        opacity = 0.5,
+                                        color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
+                                        hoverinfo = 'text',
+                                        text = node_labels[i]))
 
         # Define the edges center to center
         if draw_edges:
@@ -125,18 +167,18 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
             u2 = u
 
         # Add a graph with a cone per cluster
-        graph_data.append(go.Cone(x=spos[:,0], y=spos[:,1], z=spos[:,2],
-                                  u=axes[:,0], v=axes[:,1], w=axes[:,2],
+        graph_data.append(go.Cone(x = spos[:,0], y = spos[:,1], z = spos[:,2],
+                                  u = axes[:,0], v = axes[:,1], w = axes[:,2],
                                   name = 'Graph node cones',
-                                  opacity=.5,
-                                  sizeref=.5/vector_scale,
-                                  showscale=False,
-                                  anchor='tip'))
+                                  opacity = 0.5,
+                                  sizeref = 0.5/vector_scale,
+                                  showscale = False,
+                                  anchor = 'tip'))
 
         # Add a graph with the starting points
         graph_data.append(go.Scatter3d(x=spos[:,0], y=spos[:,1], z=spos[:,2],
                                        name = 'Graph node starts',
-                                       mode='markers',
+                                       mode ='markers',
                                        marker = dict(
                                            symbol = 'circle',
                                            color = clust_labels,
@@ -151,13 +193,16 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
             edge_vertices = np.concatenate([[epos[i], spos[j], [None, None, None]] for i, j in edge_index])
 
     elif mode == 'hull':
+        # Compute the range of node values
+        min_label, max_label = min(clust_labels), max(clust_labels)
+
         # For each cluster, add the convex hull of all its voxels
         graph_data += [go.Mesh3d(alphahull =10.0,
                                  name = 'Graph nodes',
                                  x = voxels[c][:,0],
                                  y = voxels[c][:,1],
                                  z = voxels[c][:,2],
-                                 color = clust_labels[i],
+                                 color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
                                  opacity = 0.3,
                                  text = node_labels[i],
                                  hoverinfo = 'text') for i, c in enumerate(clusters)]
@@ -297,3 +342,41 @@ def network_schematic(clusters, edge_index, clust_labels=[], edge_labels=[], lin
             graph_data[-1]['showlegend'] = True
 
     return graph_data
+
+
+def get_object_color(min, max, val, colorscale):
+    """
+    Get color given the value of an object and a plotly colorscale
+    (if multiple objects are drawn, their colors is arbitrary and does
+    not follow the color value given to the object)
+
+    Args:
+        min (double)               : Minimum value of the range of values to be drawn
+        max (double)               : Maxmimum value of the range of values to be drawn
+        val (double)               : Value of the object
+        colorscale (string or list): Plotly colorscale (either name of user defined list)
+    Returns:
+        str: Plotly color
+    """
+    # If the colorscale is a string, look for it in plotly express
+    if isinstance(colorscale, str):
+        import plotly.express as px
+        colorscale = getattr(px.colors.sequential, colorscale)
+        colorscale = [[i/(len(colorscale)-1), c] for i, c in enumerate(colorscale)]
+
+    # Get the value adjusted to the value range
+    if (max-min) > 0:
+        frac_val = (val-min)/(max-min)
+    else:
+        frac_val = 0.5
+
+    # Find the color ID
+    if frac_val == 0:
+        color_id = 0
+    elif frac_val == 1:
+        color_id = len(colorscale)-1
+    else:
+        cs_limits = [color[0] for color in colorscale]
+        color_id  = np.where(cs_limits/frac_val > 1)[0][0]-1
+
+    return colorscale[color_id][1]
