@@ -53,10 +53,7 @@ class SpatialEmbeddings1(UResNet):
 
         # Pytorch Activations
         self.tanh = nn.Tanh()
-        if self.model_config.get('log_margin') == False:
-            self.margins_func = nn.Sigmoid()
-        else:
-            self.margins_func = torch.exp
+        self.sigmoid = nn.Sigmoid()
 
 
     def seed_decoder(self, features_enc, deepest_layer):
@@ -94,8 +91,11 @@ class SpatialEmbeddings1(UResNet):
         '''
         point_cloud, = input
         coords = point_cloud[:, 0:self.dimension+1].float()
+        normalized_coords = (coords[:, :3] - self.spatial_size / 2) \
+            / (self.spatial_size / 2)
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
+        print(features)
 
         x = self.input((coords, features))
         encoder_res = self.encoder(x)
@@ -106,13 +106,13 @@ class SpatialEmbeddings1(UResNet):
 
         embeddings = self.outputEmbeddings(features_cluster[-1])
         embeddings[:, :self.dimension] = self.tanh(embeddings[:, :self.dimension])
-        embeddings[:, :self.dimension] += coords[:, :self.dimension] / self.spatial_size
+        embeddings[:, :self.dimension] += normalized_coords
         seediness = self.outputSeediness(features_seediness[-1])
 
         res = {
             "embeddings": [embeddings[:, :self.dimension]],
-            "margins": [self.margins_func(embeddings[:, self.dimension:])],
-            "seediness": [seediness]
+            "margins": [2 * self.sigmoid(embeddings[:, self.dimension:])],
+            "seediness": [self.sigmoid(seediness)]
         }
 
         return res

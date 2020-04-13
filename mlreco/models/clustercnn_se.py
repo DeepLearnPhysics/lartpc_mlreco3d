@@ -18,6 +18,7 @@ class ClusterCNN(SpatialEmbeddings1):
     '''
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
+        print(self)
 
 
 class ClusterCNN2(SpatialEmbeddings2):
@@ -51,6 +52,7 @@ class ClusteringLoss(nn.Module):
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.loss_func = clustering_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
+        print(self.loss_func)
 
     def forward(self, result, segment_label, cluster_label):
         return self.loss_func(result, segment_label, cluster_label)

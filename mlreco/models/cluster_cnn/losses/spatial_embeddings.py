@@ -130,6 +130,7 @@ class MaskBCELoss(nn.Module):
         loss = defaultdict(list)
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
+        print(semantic_classes)
         for sc in semantic_classes:
             index = (slabels == sc)
             mask_loss, smoothing_loss, probs, acc = self.get_per_class_probabilities(
@@ -178,7 +179,7 @@ class MaskBCELoss(nn.Module):
 
                 loss_class, acc_class = self.combine_multiclass(
                     embedding_batch, margins_batch,
-                    seed_batch, slabels_batch, clabels_batch, coords_batch)
+                    seed_batch, slabels_batch, clabels_batch)
                 for key, val in loss_class.items():
                     loss[key].append(sum(val) / len(val))
                 for s, acc in acc_class.items():
