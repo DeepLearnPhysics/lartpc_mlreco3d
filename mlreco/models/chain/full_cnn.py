@@ -293,14 +293,14 @@ class FullCNN(NetworkBase):
         # print("Seediness Planes: ", seed_planes)
 
         self.seg_skip = scn.Sequential()
-        # self.cluster_skip = scn.Sequential()
+        self.cluster_skip = scn.Sequential()
         self.seed_skip = scn.Sequential()
 
         for p1, p2 in zip(encoder_planes, seg_planes):
             self._nin_block(self.seg_skip, p1, p2)
 
-        # for p1, p2 in zip(encoder_planes, cluster_planes):
-        #     self._nin_block(self.cluster_skip, p1, p2)
+        for p1, p2 in zip(encoder_planes, cluster_planes):
+            self._nin_block(self.cluster_skip, p1, p2)
 
         for p1, p2 in zip(encoder_planes, seed_planes):
             self._nin_block(self.seed_skip, p1, p2)
@@ -311,25 +311,21 @@ class FullCNN(NetworkBase):
 
         # Output Layers
         self.output_cluster = scn.Sequential()
-        self.output_cluster.add(scn.NetworkInNetwork(
-            self.cluster_net.num_filters, self.dimension + self.sigma_dim, self.allow_bias))
+        self._nin_block(self.output_cluster, self.cluster_net.num_filters, 4)
         self.output_cluster.add(scn.OutputLayer(self.dimension))
 
         self.output_seediness = scn.Sequential()
-        self.output_seediness.add(scn.NetworkInNetwork(
-            self.seed_net.num_filters, self.seed_dim, self.allow_bias))
+        self._nin_block(self.output_seediness, self.seed_net.num_filters, 1)
         self.output_seediness.add(scn.OutputLayer(self.dimension))
 
         self.output_segmentation = scn.Sequential()
-        self.output_segmentation.add(scn.NetworkInNetwork(
-            self.seg_net.num_filters, self.num_classes, self.allow_bias))
+        self._nin_block(self.output_segmentation, self.seg_net.num_filters, self.num_classes)
         self.output_segmentation.add(scn.OutputLayer(self.dimension))
 
         self.output_gnn_features = scn.Sequential()
         sum_filters = self.seg_net.num_filters + self.seed_net.num_filters + self.cluster_net.num_filters
         self._resnet_block(self.output_gnn_features, sum_filters, self.num_gnn_features)
-        self.output_gnn_features.add(scn.NetworkInNetwork(
-            self.num_gnn_features, self.num_gnn_features, self.allow_bias))
+        self._nin_block(self.output_gnn_features, self.num_gnn_features, self.num_gnn_features)
         self.output_gnn_features.add(scn.OutputLayer(self.dimension))
 
         if self.ghost:
@@ -376,7 +372,7 @@ class FullCNN(NetworkBase):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
-        # print(self)
+        print(self)
 
 
     def forward(self, input):
@@ -415,10 +411,10 @@ class FullCNN(NetworkBase):
             seed_decoder_input.append(self.seed_skip[i](layer))
         deep_seed = self.seed_skip[-1](deepest_layer)
         #
-        # cluster_decoder_input = [None]
-        # for i, layer in enumerate(features_enc[1:]):
-        #     cluster_decoder_input.append(self.cluster_skip[i](layer))
-        # deep_cluster = self.cluster_skip[-1](deepest_layer)
+        cluster_decoder_input = [None]
+        for i, layer in enumerate(features_enc[1:]):
+            cluster_decoder_input.append(self.cluster_skip[i](layer))
+        deep_cluster = self.cluster_skip[-1](deepest_layer)
 
         # print([t.features.shape for t in seg_decoder_input[1:]])
         # print([t.features.shape for t in seed_decoder_input[1:]])
@@ -459,7 +455,7 @@ class FullCNN(NetworkBase):
         res.update({
             'embeddings': [embeddings[:, :self.embedding_dim]],
             'margins': [2 * self.sigmoid(embeddings[:, self.embedding_dim:])],
-            'seediness': [seediness],
+            'seediness': [self.sigmoid(seediness)],
             'features_gnn': [features_gnn],
             'segmentation': [segmentation],
             'coords': [coords]
