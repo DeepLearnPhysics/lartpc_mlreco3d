@@ -19,6 +19,7 @@ def edge_model_dict():
     from . import modular_nnconv
     # below are temporary ones
     from . import edge_nnconv2
+    from . import edge_nnconv3
     from . import modular_nnconv_2layer
     from . import modular_nnconv_1layer
 
@@ -35,6 +36,7 @@ def edge_model_dict():
         "modular_nnconv": modular_nnconv.NNConvModel,
         # below are temporary ones
         "nnconv2": edge_nnconv2.NNConvModel,
+        "nnconv3": edge_nnconv3.NNConvModel,
         "modular_nnconv_1layer": modular_nnconv_1layer.NNConvModel,
         "modular_nnconv_2layer": modular_nnconv_2layer.NNConvModel,
     }
