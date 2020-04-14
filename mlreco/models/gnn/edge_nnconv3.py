@@ -93,7 +93,7 @@ class NNConvModel(torch.nn.Module):
         # final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
         if pred_cfg == 'basic':
-            self.edge_predictor = MetaLayer(EdgeModel(noutput, self.edge_in, self.leak))
+            self.edge_predictor = nn.Linear(self.edge_in, 2)
         elif pred_cfg == 'bilin':
             self.edge_predictor = MetaLayer(BilinEdgeModel(noutput, self.edge_in, self.leak))
         else:
@@ -128,7 +128,7 @@ class NNConvModel(torch.nn.Module):
                 x = F.leaky_relu(x, negative_slope=self.leakiness)
                 _, e, _ = self.edge_updates[i](x, edge_index, e)
 
-        x, e, u = self.edge_predictor(x, edge_index, e, u=None, batch=xbatch)
+        e = self.edge_predictor(e)
 
         return {'edge_pred':[e]}
 
