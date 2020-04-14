@@ -424,3 +424,52 @@ def get_cluster_directions(data, clusts, ids, max_dist=-1):
         dirs.append(dir)
 
     return np.vstack(dirs)
+
+
+def relabel_groups(data, clusts, groups, new_array=True):
+    """
+    Function that resets the value of the group data column according
+    to the cluster value specified for each cluster1
+
+    Args:
+        data (torch.Tensor)    : N_GPU array of (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([[np.ndarray]]): N_GPU array of (C) List of arrays of voxel IDs in each cluster
+        groups ([np.ndarray])  : N_GPU array of (C) List of group ids for each cluster
+        new_array (bool)       : Whether or not to deep copy the data array
+    Returns:
+        torch.Tensor: (N,8) Relabeled [x, y, z, batchid, value, id, groupid, shape]
+    """
+    data_new = data
+    if new_array:
+        import copy
+        data_new = copy.deepcopy(data)
+
+    device = data[0].device
+    dtype  = data[0].dtype
+    for i in range(len(data)):
+        batches = data[i][:,3]
+        for b in batches.unique():
+            batch_mask = torch.nonzero(batches == b).flatten()
+            labels = data[i][batch_mask]
+            batch_clusts = clusts[i][b.int().item()]
+            if not len(batch_clusts):
+                continue
+            clust_ids = get_cluster_label(labels, batch_clusts)
+            group_ids = groups[i][b.int().item()]
+            true_group_ids = get_cluster_group(labels, batch_clusts)
+            primary_mask   = clust_ids == true_group_ids
+            new_id = max(clust_ids)+1
+            for g in np.unique(group_ids):
+                group_mask     = group_ids == g
+                primary_labels = np.where(primary_mask & group_mask)[0]
+                group_id = -1
+                if len(primary_labels) != 1:
+                    group_id = new_id
+                    new_id += 1
+                else:
+                    group_id = clust_ids[primary_labels[0]]
+                for c in batch_clusts[group_mask]:
+                    new_groups = torch.full([len(c)], group_id, dtype=dtype).to(device)
+                    data_new[i][batch_mask[c], 6] = new_groups
+
+    return data_new
