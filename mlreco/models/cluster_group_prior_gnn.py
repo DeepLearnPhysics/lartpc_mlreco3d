@@ -6,11 +6,9 @@ import torch
 import copy
 import numpy as np
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
-from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, relabel_groups
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_score
-from mlreco.utils import local_cdist
+from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
 
@@ -66,13 +64,7 @@ class ClustGroupPriorGNN(torch.nn.Module):
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
         self.edge_dist_metric = chain_config.get('edge_dist_metric', 'set')
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
-        self.group_pred = chain_config.get('group_pred','threshold')
-
-        # If requested, use DBSCAN to form clusters from semantics
-        self.do_dbscan = False
-        if 'dbscan' in cfg:
-            self.do_dbscan = True
-            self.dbscan = DBScanClusts2(cfg)
+        self.group_pred = chain_config.get('group_pred','score')
 
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg)
@@ -189,7 +181,7 @@ class ClustGroupPriorGNN(torch.nn.Module):
             return {'edge_pred': [edge_pred],
                     'edge_index': [edge_index],
                     'clusts': [div_clusts],
-                    'group_ids':[div_group_ids]}
+                    'group_pred':[div_group_ids]}
 
         # Bring node_edge_index to device
         index = torch.tensor(node_edge_index, device=device, dtype=torch.long)
@@ -214,7 +206,7 @@ class ClustGroupPriorGNN(torch.nn.Module):
                 'edge_index': [edge_index],
                 'node_edge_index': [node_edge_index],
                 'clusts': [div_clusts],
-                'group_ids':[div_group_ids]}
+                'group_pred':[div_group_pred]}
 
 
 class GroupPriorLoss(torch.nn.modules.loss._Loss):
@@ -252,46 +244,7 @@ class GroupPriorLoss(torch.nn.modules.loss._Loss):
         clusters_new = clusters
         #clusters_new = copy.deepcopy(clusters)
         if 'node_pred' in result:
-            device = clusters[0].device
-            dtype  = clusters[0].dtype
-            for i in range(len(clusters)):
-                batches = clusters[i][:,3]
-                for b in batches.unique():
-                    batch_mask = torch.nonzero(batches == b).flatten()
-                    labels = clusters[i][batch_mask]
-                    clusts = result['clusts'][i][b.int().item()]
-                    clust_ids = get_cluster_label(labels, clusts)
-                    part_info = particles[i][particles[i][:,-1] == b.int().item()][clust_ids]
-                    times = part_info[:,3]
-                    group_ids = result['group_ids'][i][b.int().item()]
-                    groups = [np.where(group_ids==g)[0] for g in np.unique(group_ids)]
-                    first_ids = [g[np.argmin(times[g])] for g in groups]
-                    # This sets the group id to the cluster that is first in time
-                    #for j, c in enumerate(clusts):
-                    #    batch_mask[c]
-                    #    clust_id = group_ids[j] if j in first_ids else -1
-                    #    new_labels = torch.full([len(c)], clust_id, dtype=dtype).to(device)
-                    #    new_groups = torch.full([len(c)], group_ids[j], dtype=dtype).to(device)
-                    #    clusters_new[i][batch_mask[c], 5] = new_labels
-                    #    clusters_new[i][batch_mask[c], 6] = new_groups
-
-                    # This sets the group ID to the cluster that is a GT primary in that group
-                    # if there is only one GT primary, and to some crap otherwise
-                    true_group_ids = get_cluster_group(labels, clusts)
-                    primary_mask   = clust_ids == true_group_ids
-                    new_id = len(particles[i][particles[i][:,-1] == b.int().item()])
-                    for g in np.unique(group_ids):
-                        group_mask     = group_ids == g
-                        primary_labels = np.where(primary_mask & group_mask)[0]
-                        group_id = -1
-                        if len(primary_labels) != 1:
-                            group_id = new_id
-                            new_id += 1
-                        else:
-                            group_id = clust_ids[primary_labels[0]]
-                        for c in clusts[group_mask]:
-                            new_groups = torch.full([len(c)], group_id, dtype=dtype).to(device)
-                            clusters_new[i][batch_mask[c], 6] = new_groups
+            clusters_new = relabel_groups(clusters, result['clusts'], result['group_pred'], new_array=True)
 
         node_loss = self.node_loss(result, clusters_new)
         loss.update(node_loss)
