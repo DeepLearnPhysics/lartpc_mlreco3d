@@ -216,7 +216,7 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         # high_purity MUST be set to true in the configuration file for this to have an effect.
         clust_label_new = clust_label
         if 'node_pred' in result:
-            clust_label_new = relabel_groups(clust_label, result['clusts'], result['group_pred'])
+            clust_label_new = relabel_groups(clust_label, result['clusts'], result['group_pred'], new_array=True)
         node_loss = self.node_loss(result, clust_label_new)
         loss.update(node_loss)
 

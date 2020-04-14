@@ -6,13 +6,12 @@ import numpy as np
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
-from mlreco.models.layers.dbscan import DBScan, DBScanClusts2
+from mlreco.models.layers.dbscan import DBScanClusts2
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
-from mlreco.utils.ppn import uresnet_ppn_point_selector
-from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_score
-from mlreco.utils.gnn.network import complete_graph, bipartite_graph, inter_cluster_distance
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
+from mlreco.utils.gnn.cluster import relabel_groups
+from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
+from mlreco.utils.gnn.network import complete_graph
 import mlreco.utils
 # chain UResNet + PPN + DBSCAN + GNN for showers
 
@@ -22,8 +21,7 @@ class ChainDBSCANGNN(torch.nn.Module):
     1) UResNet - for voxel labels
     2) PPN - for particle locations
     3) DBSCAN - to form cluster
-    4) GNN - to assign EM shower groups
-    5) GNN - to identify EM shower primaries
+    4) GNN - to assign EM shower groups and identify EM primaries
 
     INPUT DATA:
         just energy deposision data
@@ -46,8 +44,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         self.dbscan         = DBScanClusts2(model_config)
         self.node_encoder   = node_encoder_construct(model_config)
         self.edge_encoder   = edge_encoder_construct(model_config)
-        self.node_predictor = node_model_construct(model_config)
-        self.edge_predictor = edge_model_construct(model_config)
+        self.full_predictor = edge_model_construct(model_config)
 
     def forward(self, data):
 
@@ -117,7 +114,8 @@ class ChainDBSCANGNN(torch.nn.Module):
         # Pass through the edge model, get edge predictions
         index = torch.tensor(edge_index, device=data[0].device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=data[0].device, dtype=torch.long)
-        out = self.edge_predictor(x, index, e, xbatch)
+        out = self.full_predictor(x, index, e, xbatch)
+        node_pred = out['node_pred'][0]
         edge_pred = out['edge_pred'][0]
 
         # Divide the edge prediction output out into different arrays (one per batch)
@@ -127,6 +125,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
         beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
 
+        node_pred = [node_pred[b] for b in bcids]
         edge_pred    = [edge_pred[b] for b in beids]
         edge_index   = [cids[edge_index[:,b]].T for b in beids]
         split_clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
@@ -143,39 +142,12 @@ class ChainDBSCANGNN(torch.nn.Module):
                 else:
                     split_group_ids.append(np.array([], dtype = np.int64))
 
-        pairs = np.vstack((np.concatenate(split_group_ids), batch_ids)).T
-        pairs = np.ascontiguousarray(pairs).view(np.dtype((np.void, pairs.dtype.itemsize * pairs.shape[1])))
-        _, group_ids = np.unique(pairs, return_inverse=True)
-
         result.update(dict(
             shower_fragments = [split_clusts],
             edge_index = [edge_index],
+            node_pred = [node_pred],
             edge_pred = [edge_pred],
             group_pred = [split_group_ids]
-        ))
-
-        # Build a graph that only connects nodes within each predicted group, get node and edge features
-        node_edge_index = complete_graph(group_ids)
-        if node_edge_index.shape[1] < 2:
-            return result
-        #x = self.node_encoder(data, clusts)
-        x = torch.cat([x, out['node_pred'][0]], dim=1)
-        e = self.edge_encoder(data[0], clusts, node_edge_index)
-
-        # Pass through the node model, get node predictions
-        index = torch.tensor(node_edge_index, device=data[0].device, dtype=torch.long)
-        out = self.node_predictor(x, index, e, xbatch)
-        node_pred = out['node_pred'][0]
-
-        # Split the node prediction output, append result
-        bneids = [np.where(batch_ids[node_edge_index[0]] == b)[0] for b in range(len(counts))]
-
-        node_pred = [node_pred[b] for b in bcids]
-        node_edge_index = [cids[node_edge_index[:,b]].T for b in bneids]
-
-        result.update(dict(
-            node_pred = [node_pred],
-            node_edge_index = [node_edge_index]
         ))
 
         return result
@@ -196,8 +168,11 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         ppn_loss = self.ppn_loss(result, sem_label, particles)
         if 'shower_fragments' in result:
             result['clusts'] = result['shower_fragments']
-        node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
+        clust_label_new = clust_label
+        if 'node_pred' in result:
+            clust_label_new = relabel_groups(clust_label, result['clusts'], result['group_pred'], new_array=True)
+        node_loss = self.node_loss(result, clust_label_new)
         if 'clusts' in result:
             del result['clusts']
         loss.update(uresnet_loss)
