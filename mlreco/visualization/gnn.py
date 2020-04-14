@@ -108,7 +108,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
             rotmat = np.dot(diag, v.T)
 
             # Rotate the points into the basis of the covariance matrix
-            radius = 1.75 # radius in chi value, for a 3D Gaussian, 2 corresponds to a 50% proba content
+            radius = 1.75 # radius in chi value. For a 3D Gaussian, 1.75 corresponds to a ~50% probability content
             points = centroid + radius*np.dot(unit_points, rotmat)
 
             # Append Mesh3d object

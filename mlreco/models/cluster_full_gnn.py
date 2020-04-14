@@ -6,9 +6,9 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, relabel_groups
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
+from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_score
 from mlreco.utils import local_cdist
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
@@ -64,6 +64,7 @@ class ClustFullGNN(torch.nn.Module):
         self.edge_max_dist = chain_config.get('edge_max_dist', -1)
         self.edge_dist_metric = chain_config.get('edge_dist_metric', 'set')
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
+        self.group_pred = chain_config.get('group_pred','score')
 
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
@@ -164,8 +165,21 @@ class ClustFullGNN(torch.nn.Module):
         edge_index = [cids[edge_index[:,b]].T for b in beids]
         clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
 
+        # Figure out the group ids of each of the clusters (batch-wise groups)
+        group_pred = []
+        if self.group_pred == 'threshold':
+            for b in range(len(counts)):
+                group_pred.append(node_assignment(edge_index[b], np.argmax(edge_pred[b].detach().cpu().numpy(), axis=1), len(clusts[b])))
+        elif self.group_pred == 'score':
+            for b in range(len(counts)):
+                if len(clusts[b]):
+                    group_pred.append(node_assignment_score(edge_index[b], edge_pred[b].detach().cpu().numpy(), len(clusts[b])))
+                else:
+                    group_pred.append(np.array([], dtype = np.int64))
+
         return {'node_pred': [node_pred],
                 'edge_pred': [edge_pred],
+                'group_pred': [group_pred],
                 'edge_index': [edge_index],
                 'clusts': [clusts]}
 
@@ -191,11 +205,22 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         self.edge_loss = EdgeChannelLoss(cfg)
 
     def forward(self, result, clust_label):
+        # Apply edge loss
         loss = {}
-        node_loss = self.node_loss(result, clust_label)
         edge_loss = self.edge_loss(result, clust_label, None)
-        loss.update(node_loss)
         loss.update(edge_loss)
+
+        # Apply node loss
+        # Override group IDs with those predicted. Determine the primary target by using the GT
+        # primaries for each predicted group, iif the predicted group contains only one primary.
+        # high_purity MUST be set to true in the configuration file for this to have an effect.
+        clust_label_new = clust_label
+        if 'node_pred' in result:
+            clust_label_new = relabel_groups(clust_label, result['clusts'], result['group_pred'])
+        node_loss = self.node_loss(result, clust_label_new)
+        loss.update(node_loss)
+
+        # Combine losses
         loss['node_loss'] = node_loss['loss']
         loss['edge_loss'] = edge_loss['loss']
         loss['loss'] = node_loss['loss'] + edge_loss['loss']
