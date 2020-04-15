@@ -162,6 +162,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         embedding = out['embeddings'][0]
         seediness = out['seediness'][0]
         margins = out['margins'][0]
+        # print(ppn_segment_label[0])
+        # print(ppn_segment_label[0].shape)
         # PPN Loss.
         # FIXME: This implementation will loop over the batch twice.
         ppn_res = self.ppn_loss(out, ppn_segment_label, ppn_label)
