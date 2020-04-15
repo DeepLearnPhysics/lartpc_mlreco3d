@@ -93,7 +93,7 @@ class NNConvModel(torch.nn.Module):
         # final prediction layer
         pred_cfg = self.model_config.get('pred_model', 'basic')
         if pred_cfg == 'basic':
-            self.edge_predictor = nn.Linear(self.edge_in, 2)
+            self.edge_predictor = torch.nn.Linear(self.edge_in, 2)
         elif pred_cfg == 'bilin':
             self.edge_predictor = MetaLayer(BilinEdgeModel(noutput, self.edge_in, self.leak))
         else:
