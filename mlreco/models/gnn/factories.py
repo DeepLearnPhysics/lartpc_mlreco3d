@@ -17,11 +17,6 @@ def edge_model_dict():
     from . import edge_meta
     from . import dir_meta
     from . import modular_nnconv
-    # below are temporary ones
-    from . import edge_nnconv2
-    from . import edge_nnconv3
-    from . import modular_nnconv_2layer
-    from . import modular_nnconv_1layer
 
     models = {
         "basic_attention" : edge_attention.BasicAttentionModel,
@@ -34,11 +29,6 @@ def edge_model_dict():
         "emeta" : edge_meta.EdgeMetaModel,
         "dir_meta" : dir_meta.EdgeMetaModel,
         "modular_nnconv": modular_nnconv.NNConvModel,
-        # below are temporary ones
-        "nnconv2": edge_nnconv2.NNConvModel,
-        "nnconv3": edge_nnconv3.NNConvModel,
-        "modular_nnconv_1layer": modular_nnconv_1layer.NNConvModel,
-        "modular_nnconv_2layer": modular_nnconv_2layer.NNConvModel,
     }
 
     return models
