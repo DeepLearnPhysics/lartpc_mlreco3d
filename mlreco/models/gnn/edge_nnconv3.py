@@ -43,7 +43,7 @@ class NNConvModel(torch.nn.Module):
         self.update_edge = self.model_config.get('udpate_edge', False) # whether to update edge in each message passing loop
 
         # perform batch normalization
-        self.bn_node = BatchNorm1d(self.node_in)
+        self.bn_node = torch.nn.ModuleList()
         self.bn_edge = BatchNorm1d(self.edge_in)
 
         self.num_mp = self.model_config.get('num_mp', 3)
@@ -53,7 +53,6 @@ class NNConvModel(torch.nn.Module):
         self.layer = torch.nn.ModuleList()
         ninput = self.node_in
         noutput = max(2*self.node_in, 32)
-        self.bn_node_intermediate = BatchNorm1d(noutput)
         # construct the mlp nodes number in each layer
         # need two because after first message passing
         # the layer structure changed
@@ -84,6 +83,7 @@ class NNConvModel(torch.nn.Module):
             self.layer.append(
                 NNConv(ninput, noutput, self.nn[i], aggr=self.aggr)
             )
+            self.bn_node.append(BatchNorm1d(ninput))
             self.edge_updates.append(
                 MetaLayer(EdgeLayer(noutput, self.edge_in, self.edge_in,leakiness=self.leak))
             )
@@ -111,15 +111,11 @@ class NNConvModel(torch.nn.Module):
 
         x = x.view(-1,self.node_in)
         e = e.view(-1,self.edge_in)
-        if self.edge_in > 1:
-            e = self.bn_edge(e)
-        if self.node_in > 1:
-            x = self.bn_node(x)
+
 
         # go through layers
         for i in range(self.num_mp):
-            if self.batchnorm_layer and i!=0:
-                x = self.bn_node_intermediate(x)
+            x = self.bn_node[i](x)
             x = self.layer[i](x, edge_index, e)
             if self.update_edge:
                 # it also activate x as well.
