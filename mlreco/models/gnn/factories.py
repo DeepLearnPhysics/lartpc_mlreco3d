@@ -155,13 +155,11 @@ def edge_encoder_dict():
     from . import cluster_geo_encoder
     from . import cluster_cnn_encoder
     from . import cluster_mix_encoder
-    from . import cluster_uresnet_encoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
         "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
-        "uresnet": cluster_uresnet_encoder.ClustUResNetEdgeEncoder,
     }
 
     return encoders
