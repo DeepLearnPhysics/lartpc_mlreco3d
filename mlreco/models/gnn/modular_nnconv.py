@@ -14,13 +14,14 @@ class NNConvModel(nn.Module):
     def __init__(self, cfg, name='full_gnn'):
         super(NNConvModel, self).__init__()
         self.model_config = cfg
-        self.nodeInput = self.model_config.get('node_feats', 16)
-        self.edgeInput = self.model_config.get('edge_feats', 19)
-        self.globalInput = self.model_config.get('global_feats', 16)
-        self.nodeOutput = self.model_config.get('node_output_feats', 32)
-        self.globalOutput = self.model_config.get('global_output_feats', 32)
-        self.aggr = self.model_config.get('aggr', 'add')
-        self.leakiness = self.model_config.get('leakiness', 0.0)
+        self.node_input     = self.model_config.get('node_feats', 16)
+        self.edge_input     = self.model_config.get('edge_feats', 19)
+        self.global_input   = self.model_config.get('global_feats', 16)
+        self.node_output    = self.model_config.get('node_output_feats', 32)
+        self.edge_output    = self.model_config.get('edge_output_feats', self.edge_input)
+        self.global_output  = self.model_config.get('global_output_feats', 32)
+        self.aggr           = self.model_config.get('aggr', 'add')
+        self.leakiness      = self.model_config.get('leakiness', 0.1)
 
         self.edge_mlps = torch.nn.ModuleList()
         self.nnConvs = torch.nn.ModuleList()
@@ -28,49 +29,52 @@ class NNConvModel(nn.Module):
 
         # perform batch normalization
         self.bn_node = torch.nn.ModuleList()
-        self.bn_edge = BatchNorm1d(self.edgeInput)
+        self.bn_edge = BatchNorm1d(self.edge_input)
 
         self.num_mp = self.model_config.get('num_mp', 3)
 
-        nInput = self.nodeInput
-        nOutput = self.nodeOutput
+        node_input  = self.node_input
+        node_output = self.node_output
+        edge_input  = self.edge_input
+        edge_output = self.edge_output
         for i in range(self.num_mp):
             self.edge_mlps.append(
                 Seq(
-                    BatchNorm1d(self.edgeInput),
-                    Lin(self.edgeInput, nInput),
+                    BatchNorm1d(edge_input),
+                    Lin(edge_input, node_input),
                     LeakyReLU(self.leakiness),
-                    BatchNorm1d(nInput),
-                    Lin(nInput, nInput),
+                    BatchNorm1d(node_input),
+                    Lin(node_input, node_input),
                     LeakyReLU(self.leakiness),
-                    BatchNorm1d(nInput),
-                    Lin(nInput, nInput*nOutput)
+                    BatchNorm1d(node_input),
+                    Lin(node_input, node_input*node_output)
                 )
             )
-            self.bn_node.append(BatchNorm(nInput))
+            self.bn_node.append(BatchNorm(node_input))
             self.nnConvs.append(
-                NNConv(nInput, nOutput, self.edge_mlps[i], aggr=self.aggr))
-            # self.bn_node.append(BatchNorm(nOutput))
-            # print(nInput, nOutput)
+                NNConv(node_input, node_output, self.edge_mlps[i], aggr=self.aggr))
+            # self.bn_node.append(BatchNorm(node_output))
+            # print(node_input, node_output)
             self.edge_updates.append(
-                MetaLayer(edge_model=EdgeLayer(nOutput, self.edgeInput, self.edgeInput,
+                MetaLayer(edge_model=EdgeLayer(node_output, edge_input, edge_output,
                                     leakiness=self.leakiness)#,
-                          #node_model=NodeLayer(nOutput, nOutput, self.edgeInput,
+                          #node_model=NodeLayer(node_output, node_output, self.edge_input,
                                                 #leakiness=self.leakiness)
-                          #global_model=GlobalModel(nOutput, 1, 32)
+                          #global_model=GlobalModel(node_output, 1, 32)
                          )
             )
-            nInput = nOutput
+            node_input = node_output
+            edge_input = edge_output
 
-        self.nodeClasses = self.model_config.get('node_classes', 5)
-        self.edgeClasses = self.model_config.get('edge_classes', 2)
+        self.node_classes = self.model_config.get('node_classes', 2)
+        self.edge_classes = self.model_config.get('edge_classes', 2)
 
-        self.node_predictor = nn.Linear(nOutput, self.nodeClasses)
-        self.edge_predictor = nn.Linear(self.edgeInput, self.edgeClasses)
+        self.node_predictor = nn.Linear(node_output, self.node_classes)
+        self.edge_predictor = nn.Linear(edge_output, self.edge_classes)
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
-        x = node_features.view(-1, self.nodeInput)
-        e = edge_features.view(-1, self.edgeInput)
+        x = node_features.view(-1, self.node_input)
+        e = edge_features.view(-1, self.edge_input)
 
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
