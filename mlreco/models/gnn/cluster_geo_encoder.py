@@ -1,6 +1,9 @@
 # Geometric feature extractor for Cluster GNN
 import torch
+import numpy as np
 from mlreco.utils import local_cdist
+from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
+from mlreco.utils.gnn.cluster import cluster_start_point
 
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
@@ -13,6 +16,17 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         # Initialize the chain parameters
         self.use_numpy = model_config.get('use_numpy', False)
 
+        # flag for whether including the semantic type, mean energy per voxel, and std energy per voxel
+        # If true, the output feature number will be 19
+        self.more_feats = model_config.get('more_feats', False)
+
+        # flag for whether to turn on the adjusting the direction
+        # the direction from PCA is actually directionless
+        # It can be the particle outgoing direction but can also be the inversed
+        # If this flag is on, it will adjust the direction feature to be always the outgoing direction of particle
+        self.adjust_node_direction = model_config.get('adjust_node_direction', False)
+
+
     def forward(self, data, clusts, delta=0.):
 
         # Get the voxel set
@@ -20,10 +34,27 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         dtype = voxels.dtype
         device = voxels.device
 
+        # Get the value & semantic types
+        values = data[:,4].float()
+        sem_types = data[:,-1].float()
+
+
         # If numpy is to be used, bring data to cpu, pass through function
         if self.use_numpy:
-            from mlreco.utils.gnn.data import cluster_vtx_features
-            return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts), dtype=voxels.dtype, device=voxels.device)
+            if not self.more_feats:
+                return torch.tensor(cluster_vtx_features(voxels.detach().cpu().numpy(), clusts, whether_adjust_direction = self.adjust_node_direction), dtype=voxels.dtype, device=voxels.device)
+            feats = np.concatenate(
+                (
+                    cluster_vtx_features(voxels.detach().cpu().numpy(), clusts, whether_adjust_direction=self.adjust_node_direction),
+                    cluster_vtx_features_extended(values.detach().cpu().numpy(), sem_types.detach().cpu().numpy(), clusts)
+                ),
+                axis=1
+            )
+            return torch.tensor(
+                feats,
+                dtype=voxels.dtype,
+                device=voxels.device
+            )
 
         # Here is a torch-based implementation of cluster_vtx_features
         feats = []
@@ -32,6 +63,20 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             x = voxels[c]
             size = torch.tensor([len(c)], dtype=dtype).to(device)
 
+            # Get value, sem_types for the clusts
+            vs = values[c]
+            ts = sem_types[c]
+
+            # mean value
+            mean_value = vs.mean()
+            std_value = vs.std()
+
+            # get majority of semantic types
+            major_sem_type = ts.mode()[0]
+
+            # extra features
+            extra_feats = torch.tensor([mean_value, std_value, major_sem_type], dtype=dtype).to(device)
+
             # Handle size 1 clusters seperately
             if len(c) < 2:
                 # Don't waste time with computations, default to regularized
@@ -39,7 +84,10 @@ class ClustGeoNodeEncoder(torch.nn.Module):
                 center = x.flatten()
                 B = delta * torch.eye(3, dtype=dtype).to(device)
                 v0 = torch.zeros(3, dtype=dtype).to(device)
-                feats.append(torch.cat((center, B.flatten(), v0, size)))
+                if not self.more_feats:
+                    feats.append(torch.cat((center, B.flatten(), v0, size)))
+                else:
+                    feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
                 continue
 
             # Center data
@@ -65,6 +113,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             # Get direction - look at direction of spread orthogonal to v[:,maxind]
             v0 = v[:,2]
 
+
             # Projection of x along v0
             x0 = x.mv(v0)
 
@@ -81,8 +130,20 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             # Weight direction
             v0 = dirwt * v0
 
+            # If adjust the direction
+            if self.adjust_node_direction:
+                if torch.dot(
+                        x[cluster_start_point(x.detach().cpu().numpy())],
+                        v0
+                )>0:
+                    v0 = -v0
+
             # Append (center, B.flatten(), v0, size)
-            feats.append(torch.cat((center, B.flatten(), v0, size)))
+            if not self.more_feats:
+                feats.append(torch.cat((center, B.flatten(), v0, size)))
+            else:
+                feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
+
 
         return torch.stack(feats, dim=0)
 
@@ -100,15 +161,15 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
 
     def forward(self, data, clusts, edge_index):
 
+        # Check if the graph is undirected, select the relevant part of the edge index
+        half_idx = int(edge_index.shape[1] / 2)
+        undirected = not edge_index.shape[1] or (not edge_index.shape[1] % 2 and [edge_index[1, 0], edge_index[0, 0]] == edge_index[:, half_idx].tolist())
+        if undirected: edge_index = edge_index[:, :half_idx]
+
         # Get the voxel set
         voxels = data[:,:3].float()
         dtype = voxels.dtype
         device = voxels.device
-
-        # Check if the graph is undirected, select the relevant part of the edge index
-        half_idx = int(edge_index.shape[1]/2)
-        undirected = not edge_index.shape[1] or (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
-        if undirected: edge_index = edge_index[:,:half_idx]
 
         # If numpy is to be used, bring data to cpu, pass through function
         # Otherwise use torch-based implementation of cluster_edge_features
@@ -116,6 +177,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
             from mlreco.utils.gnn.data import cluster_edge_features
             feats = torch.tensor(cluster_edge_features(voxels.detach().cpu().numpy(), clusts, edge_index), dtype=voxels.dtype, device=voxels.device)
         else:
+            # Here is a torch-based implementation of cluster_edge_features
             feats = []
             for e in edge_index.T:
 

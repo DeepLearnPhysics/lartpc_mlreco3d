@@ -17,6 +17,7 @@ def edge_model_dict():
     from . import edge_econv
     from . import edge_meta
     from . import dir_meta
+    from . import modular_nnconv
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
@@ -28,7 +29,8 @@ def edge_model_dict():
         "nnconv" : edge_nnconv.NNConvModel,
         "econv" : edge_econv.EdgeConvModel,
         "emeta" : edge_meta.EdgeMetaModel,
-        "dir_meta" : dir_meta.EdgeMetaModel
+        "dir_meta" : dir_meta.EdgeMetaModel,
+        "modular_nnconv": modular_nnconv.NNConvModel,
     }
 
     return models
@@ -111,11 +113,13 @@ def node_encoder_dict():
 
     from . import cluster_geo_encoder
     from . import cluster_cnn_encoder
+    from . import cluster_mix_encoder
     from . import cluster_gnn_encoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
+        "mix" : cluster_mix_encoder.ClustMixNodeEncoder,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder
     }
 
@@ -154,11 +158,13 @@ def edge_encoder_dict():
 
     from . import cluster_geo_encoder
     from . import cluster_cnn_encoder
+    from . import cluster_mix_encoder
     from . import cluster_gnn_encoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
+        "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
         "gnn" : cluster_gnn_encoder.ClustGNNEdgeEncoder
     }
 

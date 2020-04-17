@@ -6,10 +6,13 @@ import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group
+from mlreco.utils.gnn.data import regulate_to_data
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, get_start_points
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.utils import local_cdist
+from mlreco.utils.groups import reassign_id, merge_batch, merge_batch_based_on_list
+import random
 
 class ClustEdgeGNN(torch.nn.Module):
     """
@@ -27,6 +30,9 @@ class ClustEdgeGNN(torch.nn.Module):
           network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          merge_batch     : <flag for whether to merge batches, default False>
+          merge_batch_mode: <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it>
+          merge_batch_size: <size of batch merging>
           edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
         dbscan:
           <dictionary of dbscan parameters>
@@ -42,6 +48,15 @@ class ClustEdgeGNN(torch.nn.Module):
           name: <name of the edge model>
           <dictionary of arguments to pass to the model>
           model_path      : <path to the model weights>
+    ################
+    In case of "mix" type node (or edge) encoder, config need to be like:
+        node_encoder:
+              geo_encoder:
+                  <dictionary of arguments to pass to the encoder>
+                  model_path      : <path to the encoder weights>
+              cnn_encoder:
+                  <dictionary of arguments to pass to the encoder>
+                  model_path      : <path to the encoder weights>
     """
     def __init__(self, cfg):
         super(ClustEdgeGNN, self).__init__()
@@ -59,6 +74,15 @@ class ClustEdgeGNN(torch.nn.Module):
         self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
 
+        # extra flag for merging events in batch
+        self.merge_batch = chain_config.get('merge_batch', False)
+        self.merge_batch_mode = chain_config.get('merge_batch_mode', 'const')
+        self.merge_batch_size = chain_config.get('merge_batch_size', 2)
+        self.add_start_point = chain_config.get('add_start_point', False) # whether add start point into the node features
+
+        # hidden flag for shuffling cluster
+        self.shuffle_clusters = chain_config.get('shuffle_clusters', False)
+
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
         if 'dbscan' in cfg:
@@ -71,6 +95,8 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # Construct the model
         self.edge_predictor = edge_model_construct(cfg)
+
+
 
     def forward(self, data):
         """
@@ -87,6 +113,9 @@ class ClustEdgeGNN(torch.nn.Module):
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
+        particles = None
+        if len(data)>1:
+            particles = data[1]
         data = data[0]
         device = data.device
         if self.do_dbscan:
@@ -106,6 +135,27 @@ class ClustEdgeGNN(torch.nn.Module):
 
         if not len(clusts):
             return {}
+
+        # if shuffle the clusters
+        if self.shuffle_clusters:
+            random.shuffle(clusts)
+
+        # if merge_batch set all batch id to zero
+        # and also reassign ids and group ids
+        if self.merge_batch:
+            # It needs to regulate between data and particles before merging batches
+            # bc particles can have more group_id depending on how
+            # data (clusters) were obtained
+            particles = regulate_to_data(data, particles)
+            if self.merge_batch_mode=='fluc':
+                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=True)
+            else:
+                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=False)
+            particles, _ = merge_batch_based_on_list(
+                particles,
+                merging_batch_list,
+                data_type='particle'
+            )
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -139,6 +189,17 @@ class ClustEdgeGNN(torch.nn.Module):
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
+
+
+        # see if need add start point to node features
+        if self.add_start_point:
+            x = torch.cat(
+                [
+                    x,
+                    get_start_points(particles, data, clusts)
+                ],
+                dim=1
+            )
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
@@ -191,6 +252,12 @@ class EdgeChannelLoss(torch.nn.Module):
         self.balance_classes = chain_config.get('balance_classes', False)
         self.target = chain_config.get('target', 'group')
         self.high_purity = chain_config.get('high_purity', False)
+
+        # Extra flag for merging events in batch
+        # Need to be the same as ClustEdgeGNN.merge_batch
+        # To-do: better way to handle such flag, avoiding two flags in two classes
+        self.merge_batch = chain_config.get('merge_batch', False)
+        self.merge_batch_size = chain_config.get('merge_batch_size', 2)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)

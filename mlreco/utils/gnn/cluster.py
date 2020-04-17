@@ -1,6 +1,7 @@
 # Defines cluster formation and feature extraction
 import numpy as np
 import torch
+from scipy.stats import mode
 
 def form_clusters(data, min_size=-1):
     """
@@ -61,6 +62,23 @@ def get_cluster_batch(data, clusts):
 
     return np.array(labels)
 
+
+def get_cluster_major_sem_type(data, clusts):
+    """
+    Function that returns the majority sem types of each cluster.
+
+    Args:
+        data (tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of sem types
+    """
+    labels = []
+    for c in clusts:
+        major_sem_type = data[c,7].mode()[0]
+        labels.append(major_sem_type)
+
+    return np.array(labels)
 
 def get_cluster_label(data, clusts):
     """
@@ -222,7 +240,7 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
     return np.vstack(dirs)
 
 
-def get_cluster_features(voxels, clusts, delta=0.0):
+def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False):
     """
     Function that returns the an array of 16 features for
     each of the clusters in the provided list.
@@ -237,7 +255,7 @@ def get_cluster_features(voxels, clusts, delta=0.0):
     feats = []
     for c in clusts:
         # Get list of voxels in the cluster
-        x = get_cluster_voxels(voxels, c)
+        x = get_cluster_voxels(data, c)
 
         # Handle size 1 clusters seperately
         if len(c) < 2:
@@ -293,6 +311,14 @@ def get_cluster_features(voxels, clusts, delta=0.0):
         # Weight direction
         v0 = dirwt * v0
 
+        # If adjust the direction
+        if whether_adjust_direction:
+            if np.dot(
+                    x[find_start_point(x.detach().cpu().numpy())],
+                    v0
+            ) > 0:
+                v0 = -v0
+
         # Append (center, B.flatten(), v0, size)
         feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
         #feats.append(np.concatenate((center, B.flatten(), v0, [len(c)], first, fdir)))
@@ -300,6 +326,36 @@ def get_cluster_features(voxels, clusts, delta=0.0):
 
     return np.vstack(feats)
 
+
+
+def get_cluster_features_extended(data_values, data_sem_types, clusts):
+    """
+    Function that returns the an array of 16 features for
+    each of the clusters in the provided list.
+
+    Args:
+        data_values (np.ndarray)    : (N) value
+        data_values (np.ndarray)    : (N) sem_type
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
+    """
+    feats = []
+    for c in clusts:
+        # Get values for the clusts
+        vs = data_values[c]
+        ts = data_sem_types[c]
+
+        # mean value
+        mean_value = np.mean(vs)
+        std_value = np.std(vs)
+
+        # get majority of semantic types
+        major_sem_type = mode(ts)[0][0]
+
+        feats.append([mean_value, std_value, major_sem_type])
+
+    return np.vstack(feats)
 
 def umbrella_curv(vox, voxid):
     """
@@ -318,7 +374,6 @@ def umbrella_curv(vox, voxid):
     refvox = vox[voxid]
     axis = np.mean([v-refvox for v in vox], axis=0)
     axis /= LA.norm(axis)
-
     # Find the umbrella curvature (mean angle from the mean direction)
     return abs(np.mean([np.dot((vox[i]-refvox)/LA.norm(vox[i]-refvox), axis) for i in range(len(vox)) if i != voxid]))
 
@@ -340,7 +395,6 @@ def cluster_start_point(voxels):
     pca = PCA()
     pca.fit(voxels)
     axis = pca.components_[0,:]
-
     # Compute coord values along that axis
     coords = [np.dot(v, axis) for v in voxels]
     ids = np.array([np.argmin(coords), np.argmax(coords)])
@@ -350,6 +404,46 @@ def cluster_start_point(voxels):
 
     # Return ID of the point
     return ids[np.argsort(curvs)]
+
+
+def get_start_points(particles, data, clusts):
+    '''
+    Function for giving starting point coordinates
+    :param particles: (tensor) (N1, 8) -> [start_x, start_y, start_z, last_x, last_y, last_z, batch_id, group_id]
+    :param data     : (tensor) (N2, 8) -> [x,y,z,batch_id,value,cluster_id,group_id,sem_type]
+    :param clusts   : (list)
+    :return:
+    (tensor) (N,3) particle wise start_points
+    '''
+    # Get batch_ids and group_ids
+    batch_ids = get_cluster_batch(data, clusts)
+    group_ids = get_cluster_label(data, clusts)
+    sem_types = get_cluster_major_sem_type(data, clusts)
+    # Loop over batch_ids and group_ids
+    # pick the first cluster which has group id
+    # Its start points is the one.
+    output_start_points = (-1.)*torch.zeros(len(clusts), 3, dtype=torch.float, device=data.device)
+    for batch_id in batch_ids:
+        data_batch_selection = batch_ids==batch_id
+        particles_batch_selection = particles[:,6]==batch_id
+        p_info = particles[particles_batch_selection,:]
+        for group_id, sem_type in zip(
+                group_ids[data_batch_selection],
+                sem_types[data_batch_selection]
+        ):
+            # get selection
+            particles_group_selection = p_info[:,7]==group_id
+            start_points = p_info[particles_group_selection,:3]
+            # safety control
+            if start_points.size()[0]<=0:
+                continue
+            if sem_type==1 and np.random.choice(2)>0:
+                # if it is track, cannot distinguish start and end
+                # random choose one
+                start_points = p_info[particles_group_selection,3:6]
+            output_start_points[data_batch_selection & (group_ids==group_id), :3] = start_points[0].float()
+    return output_start_points
+
 
 
 def get_cluster_start_points(data, clusts):
