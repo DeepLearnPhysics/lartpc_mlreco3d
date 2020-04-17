@@ -14,10 +14,10 @@ from torch_geometric.data import Batch as GraphData
 # ----------------------HELPER FUNCTIONS------------------------
 
 
-def gaussian_kernel(centroid, log_sigma, eps=1e-8):
+def gaussian_kernel(centroid, sigma, eps=1e-8):
     def f(x):
-        dists = np.sum(np.power(x - centroid, 2), axis=1, keepdims=False)
-        probs = np.exp(-dists / (2.0 * (torch.exp(log_sigma) + eps)**2))
+        dists = torch.sum(torch.pow(x - centroid, 2), dim=1)
+        probs = torch.exp(-dists / (2.0 * (sigma)**2 + eps))
         return probs
     return f
 
@@ -189,14 +189,15 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                     # Adding Node Features
                     for c in pred_labels.unique():
                         mask = pred_labels == c
-                        mean_features = featuresAgg_class[mask].mean()
+                        mean_features = featuresAgg_class[mask].mean(dim=0)
                         nodes_full.append(mean_features)
                         nodes_batch_id.append(bidx)
+                        centroid = torch.mean(embedding_class[mask], dim=0)
+                        centroids.append(centroid)
 
     nodes_full = torch.stack(nodes_full, dim=0)
     node_batch_id = torch.Tensor(nodes_batch_id).cuda()
     node_group_labels = torch.Tensor(node_group_labels).cuda()
-    centroids = torch.stack(centroids, dim=0)
 
     # Compile Pairwise Edge Features
     edge_indices, edge_features, edge_batch_indices = get_edge_features(
@@ -208,37 +209,37 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                           batch=node_batch_id.long())
     gnn_input.edge_batch = edge_batch_indices
     gnn_input.node_group_labels = node_group_labels
+    centroids = torch.stack(centroids, dim=0)
     gnn_input.centroids = centroids
 
     return gnn_input
 
 
-def fit_predict(embeddings, seediness, margins, fitfunc, st=0.0, pt=0.5):
+def fit_predict(embeddings, seediness, margins, fitfunc,
+                 s_threshold=0.0, p_threshold=0.5, cluster_all=False):
     pred_labels = -np.ones(embeddings.shape[0])
     probs = []
     spheres = []
-    seediness_copy = np.copy(seediness)
+    seediness_copy = seediness.clone()
     count = 0
-    while count < seediness.shape[0]:
-        i = np.argsort(seediness_copy)[::-1][0]
+    while count < int(seediness.shape[0]):
+        i = torch.argsort(seediness_copy.squeeze(), descending=True)[0]
         seedScore = seediness[i]
-        if seedScore < st:
+        if seedScore < s_threshold:
             break
         centroid = embeddings[i]
         sigma = margins[i]
         spheres.append((centroid, sigma))
         f = fitfunc(centroid, sigma)
         pValues = f(embeddings)
-        probs.append(pValues.reshape(-1, 1))
-        cluster_index = pValues > pt
-        seediness_copy[cluster_index] = 0
-        count += sum(cluster_index)
+        probs.append(pValues.view(-1, 1))
+        cluster_index = (pValues > p_threshold).view(-1) & (seediness_copy > 0).view(-1)
+        seediness_copy[cluster_index] = -1
+        count += torch.sum(cluster_index).item()
     if len(probs) == 0:
-        return pred_labels, spheres
-    probs = np.hstack(probs)
-    pred_labels = np.argmax(probs, axis=1)
-    # if cluster_all:
-    #     pred_labels = cluster_remainder(embeddings, pred_labels)
+        return pred_labels, spheres, 1
+    probs = torch.cat(probs, dim=1)
+    pred_labels = torch.argmax(probs, dim=1)
     return pred_labels
 
 
