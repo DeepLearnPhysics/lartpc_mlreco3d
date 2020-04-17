@@ -93,8 +93,8 @@ def get_cluster_label(data, clusts):
     """
     labels = []
     for c in clusts:
-        assert len(data[c,5].unique()) == 1
-        labels.append(int(data[c[0],5].item()))
+        v, cts = data[c,5].unique(return_counts=True)
+        labels.append(int(v[cts.argmax()].item()))
 
     return np.array(labels)
 
@@ -127,7 +127,7 @@ def get_cluster_primary(clust_ids, group_ids):
 
     Args:
         clust_ids (np.ndarray): (C) List of cluster ids
-        group_ids (np.ndarray): (C) List of cluster group ids 
+        group_ids (np.ndarray): (C) List of cluster group ids
     Returns:
         np.ndarray: (P) List of primary cluster ids
     """
@@ -172,7 +172,7 @@ def get_cluster_sizes(data, clusts):
     each of the listed clusters.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (np.ndarray)    : (N,5) [x, y, z, batchid, value]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
     Returns:
         np.ndarray: (C) List of cluster sizes
@@ -186,7 +186,7 @@ def get_cluster_energies(data, clusts):
     each of the listed clusters.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (np.ndarray)    : (N,5) [x, y, z, batchid, value]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
     Returns:
         np.ndarray: (C) List of cluster energies
@@ -194,13 +194,13 @@ def get_cluster_energies(data, clusts):
     return np.array([np.sum(data[c,4]) for c in clusts])
 
 
-def get_cluster_dirs(data, clusts, delta=0.0):
+def get_cluster_dirs(voxels, clusts, delta=0.0):
     """
     Function that returns the direction of the listed clusters,
     expressed as its normalized covariance matrix.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         delta (float)        : Orientation matrix regularization
     Returns:
@@ -209,7 +209,7 @@ def get_cluster_dirs(data, clusts, delta=0.0):
     dirs = []
     for c in clusts:
         # Get list of voxels in the cluster
-        x = get_cluster_voxels(data, c)
+        x = get_cluster_voxels(voxels, c)
 
         # Handle size 1 clusters seperately
         if len(c) < 2:
@@ -246,16 +246,16 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
     each of the clusters in the provided list.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)          : Orientation matrix regularization
+        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
     feats = []
     for c in clusts:
         # Get list of voxels in the cluster
-        x = get_cluster_voxels(data, c)
+        x = get_cluster_voxels(voxels, c)
 
         # Handle size 1 clusters seperately
         if len(c) < 2:
@@ -266,6 +266,15 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
             v0 = np.zeros(3)
             feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
             continue
+
+        # Start point estimate
+        #firstid, lastid = cluster_start_point(x)
+        #first = x[firstid]
+        #last  = x[lastid]
+
+        # Direction estimate
+        #fdir = cluster_direction(x, firstid, max_dist=5)
+        #ldir = cluster_direction(x, lastid, max_dist=5)
 
         # Center data
         center = np.mean(x, axis=0)
@@ -312,8 +321,11 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
 
         # Append (center, B.flatten(), v0, size)
         feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
+        #feats.append(np.concatenate((center, B.flatten(), v0, [len(c)], first, fdir)))
+        #feats.append(np.concatenate((center, B.flatten(), v0, [len(c)], first, fdir, last, ldir)))
 
     return np.vstack(feats)
+
 
 
 def get_cluster_features_extended(data_values, data_sem_types, clusts):
@@ -345,13 +357,17 @@ def get_cluster_features_extended(data_values, data_sem_types, clusts):
 
     return np.vstack(feats)
 
-
-# Two functions borrowed from Francois for adjusting node direction feature
-# Finds local curvature
-def curv(vox, voxid):
+def umbrella_curv(vox, voxid):
     """
-    vox: list of voxels (x, y, z)
-    refvox: reference voxel wrt which to compute curvature
+    Computes the umbrella curvature as in equation 9 of "Umbrella Curvature:
+    A New Curvature Estimation Method for Point Clouds" by A.Foorginejad and K.Khalili
+    (https://www.sciencedirect.com/science/article/pii/S2212017313006828)
+
+    Args:
+        voxels (np.ndarray): (N,3) Voxel coordinates [x, y, z]
+        voxid  (int)       : Voxel ID in which to compute the curvature
+    Returns:
+        int: Value of the curvature in voxid with respect to the rest of the point cloud
     """
     # Find the mean direction from that point
     import numpy.linalg as LA
@@ -361,20 +377,33 @@ def curv(vox, voxid):
     # Find the umbrella curvature (mean angle from the mean direction)
     return abs(np.mean([np.dot((vox[i]-refvox)/LA.norm(vox[i]-refvox), axis) for i in range(len(vox)) if i != voxid]))
 
-# Function that identifies the principal axis, finds extremes and evaluated the point of max curvature
-def find_start_point(voxels):
-    # Find PCA
+
+def cluster_start_point(voxels):
+    """
+    Finds the start point of a cluster by:
+    1. Find the principal axis a of the point cloud
+    2. Find the coordinate a_i of each point along this axis
+    3. Find the points with minimum and maximum coordinate
+    4. Find the point that has the largest umbrella curvature
+
+    Args:
+        voxels (np.ndarray): (N,3) Voxel coordinates [x, y, z]
+    Returns:
+        int: ID of the start voxel
+    """
     from sklearn.decomposition import PCA
     pca = PCA()
     pca.fit(voxels)
     axis = pca.components_[0,:]
     # Compute coord values along that axis
     coords = [np.dot(v, axis) for v in voxels]
-    ids = [np.argmin(coords), np.argmax(coords)]
+    ids = np.array([np.argmin(coords), np.argmax(coords)])
+
     # Compute curvature of the
-    curvs = [curv(voxels, ids[0]), curv(voxels, ids[1])]
+    curvs = [umbrella_curv(voxels, ids[0]), umbrella_curv(voxels, ids[1])]
+
     # Return ID of the point
-    return ids[np.argmax(curvs)]
+    return ids[np.argsort(curvs)]
 
 
 def get_start_points(particles, data, clusts):
@@ -412,3 +441,126 @@ def get_start_points(particles, data, clusts):
             output_start_points[data_batch_selection & (group_ids==group_id), :3] = start_points[0].float()
     return output_start_points
 
+
+
+def get_cluster_start_points(data, clusts):
+    """
+    Function that estimates the start point of clusters
+    based on their PCA and local curvature.
+
+    Args:
+        data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,3) tensor of cluster start points
+    """
+    points = []
+    for c in clusts:
+        # Get list of voxels in the cluster
+        x = get_cluster_voxels(data, c)
+        vid = cluster_start_point(x)[0]
+        points.append(x[vid])
+
+    return np.vstack(points)
+
+
+def cluster_direction(data, i, max_dist=-1):
+    """
+    Finds the orientation of the cluster by computing the
+    mean direction from the start point.
+
+    Args:
+        data (np.ndarray): (N,3) Voxel coordinates [x, y, z]
+        i (int)          : ID of the start voxel
+        max_dist (float) : Max distance between start voxel and other voxels
+    Returns:
+        np.ndarray: (3) Orientation
+    """
+    # If max_dist is set, limit the set of voxels to those within
+    # a sphere of radius max_dist
+    voxels = data[:,:3]
+    svoxel = voxels[i]
+    if max_dist > 0:
+        from scipy.spatial.distance import cdist
+        dist_mat = cdist(svoxel.reshape(1,-1), voxels).reshape(-1)
+        voxels = voxels[dist_mat < max_dist]
+
+    # Compute mean direction with respect to start point, normalize it
+    mean = np.mean(np.vstack([v-svoxel for v in voxels]), axis=0)
+    if np.linalg.norm(mean):
+        return mean/np.linalg.norm(mean)
+    return mean
+
+
+def get_cluster_directions(data, clusts, ids, max_dist=-1):
+    """
+    Finds the orientation of all the clusters by computing the
+    mean direction from the start point.
+
+    Args:
+        data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        ids (np.ndarray)     : (C) IDs of the start voxel in each cluster
+        max_dist (float)     : Max distance between start voxel and other voxels
+    Returns:
+        np.ndarray: (3) Orientation
+    """
+    # If max_dist is set, limit the set of voxels to those within
+    # a sphere of radius max_dist
+    dirs = []
+    for i, c in enumerate(clusts):
+        # Get list of voxels in the cluster
+        x = get_cluster_voxels(data, c)
+        dir = cluster_direction(x, ids[i], max_dist)
+        dirs.append(dir)
+
+    return np.vstack(dirs)
+
+
+def relabel_groups(data, clusts, groups, new_array=True):
+    """
+    Function that resets the value of the group data column according
+    to the cluster value specified for each cluster1
+
+    Args:
+        data (torch.Tensor)    : N_GPU array of (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([[np.ndarray]]): N_GPU array of (C) List of arrays of voxel IDs in each cluster
+        groups ([np.ndarray])  : N_GPU array of (C) List of group ids for each cluster
+        new_array (bool)       : Whether or not to deep copy the data array
+    Returns:
+        torch.Tensor: (N,8) Relabeled [x, y, z, batchid, value, id, groupid, shape]
+    """
+    data_new = data
+    if new_array:
+        import copy
+        data_new = copy.deepcopy(data)
+
+    device = data[0].device
+    dtype  = data[0].dtype
+    for i in range(len(data)):
+        batches = data[i][:,3]
+        for b in batches.unique():
+            batch_mask = torch.nonzero(batches == b).flatten()
+            labels = data[i][batch_mask]
+            batch_clusts = clusts[i][b.int().item()]
+            if not len(batch_clusts):
+                continue
+            clust_ids = get_cluster_label(labels, batch_clusts)
+            group_ids = groups[i][b.int().item()]
+            true_group_ids = get_cluster_group(labels, batch_clusts)
+            primary_mask   = clust_ids == true_group_ids
+            new_id = max(clust_ids)+1
+            for g in np.unique(group_ids):
+                group_mask     = group_ids == g
+                primary_labels = np.where(primary_mask & group_mask)[0]
+                group_id = -1
+                if len(primary_labels) != 1:
+                    group_id = new_id
+                    new_id += 1
+                else:
+                    group_id = clust_ids[primary_labels[0]]
+                for c in batch_clusts[group_mask]:
+                    new_groups = torch.full([len(c)], group_id, dtype=dtype).to(device)
+                    data_new[i][batch_mask[c], 6] = new_groups
+
+    return data_new

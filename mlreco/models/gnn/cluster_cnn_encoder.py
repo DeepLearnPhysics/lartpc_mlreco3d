@@ -12,7 +12,7 @@ class ClustCNNNodeEncoder(torch.nn.Module):
 
         # Initialize the CNN
         self.encoder = EncoderModel(model_config)
-        
+
     def forward(self, data, clusts):
 
         # Use cluster ID as a batch ID, pass through CNN
@@ -22,7 +22,7 @@ class ClustCNNNodeEncoder(torch.nn.Module):
             cnn_data = torch.cat((cnn_data, data[c,:5].float()))
             cnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
 
-        return self.encoder(cnn_data) 
+        return self.encoder(cnn_data)
 
 class ClustCNNEdgeEncoder(torch.nn.Module):
     """
@@ -34,12 +34,12 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
 
         # Initialize the CNN
         self.encoder = EncoderModel(model_config)
-        
+
     def forward(self, data, clusts, edge_index):
 
         # Check if the graph is undirected, select the relevant part of the edge index
         half_idx = int(edge_index.shape[1]/2)
-        undirected = (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
+        undirected = not edge_index.shape[1] or (not edge_index.shape[1]%2 and [edge_index[1,0], edge_index[0,0]] == edge_index[:,half_idx].tolist())
         if undirected: edge_index = edge_index[:,:half_idx]
 
         # Use edge ID as a batch ID, pass through CNN
@@ -55,7 +55,6 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
 
         # If the graph is undirected, duplicate features
         if undirected:
-            feats = torch.cat([feats, feats])
+            feats = torch.cat([feats,feats])
 
         return feats
-
