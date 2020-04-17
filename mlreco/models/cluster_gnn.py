@@ -193,6 +193,7 @@ class ClustEdgeGNN(torch.nn.Module):
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
 
+
         # see if need add start point to node features
         if self.add_start_point:
             x = torch.cat(
