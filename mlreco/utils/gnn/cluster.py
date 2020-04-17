@@ -255,7 +255,7 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
     feats = []
     for c in clusts:
         # Get list of voxels in the cluster
-        x = get_cluster_voxels(voxels, c)
+        x = get_cluster_voxels(data, c)
 
         # Handle size 1 clusters seperately
         if len(c) < 2:
@@ -434,6 +434,9 @@ def get_start_points(particles, data, clusts):
             # get selection
             particles_group_selection = p_info[:,7]==group_id
             start_points = p_info[particles_group_selection,:3]
+            # safety control
+            if start_points.size()[0]<=0:
+                continue
             if sem_type==1 and np.random.choice(2)>0:
                 # if it is track, cannot distinguish start and end
                 # random choose one
