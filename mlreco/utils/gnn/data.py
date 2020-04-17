@@ -174,3 +174,38 @@ def edge_features(data, edge_index):
         np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
     return np.vstack([edge_feature(data, e[0], e[1]) for e in edge_index.T])
+
+def regulate_to_data(data, particles):
+    """
+    Function for regulating particles ids as to data ids
+    deleting any particles entries that has id that doesn't appear in data ids
+    Inputs:
+        - data: (tensor) (N,8)->[x,y,z,batchids,value,ids,group_ids,sem.types]
+        - particles: (tensor) (M,8)->[start_x,start_y,start_z,end_x,end_y,end_z,batchids,ids]
+        - data_id_index
+        - particles_id_index
+    Output:
+        - regulated_particles: (tensor) (M',8)
+    """
+    # check if particles is tensor
+    if type(particles)!=torch.Tensor:
+        return particles
+    # get the batch from data and particles
+    data_batch_ids = data[:,3].unique().view(-1)
+    part_batch_ids = particles[:,6].unique().view(-1)
+    if not torch.equal(data_batch_ids, part_batch_ids):
+        raise ValueError('Data and Particles have no identical batch ids!')
+    # Loop over batches
+    regulated_particles = []
+    for batch_id in data_batch_ids:
+        data_selection = data[:,3]==batch_id
+        part_selection = particles[:,6]==batch_id
+        batched_parts = particles[part_selection,:]
+        # get ids from data_selection
+        data_ids = data[data_selection,5].unique().view(-1)
+        for p in batched_parts:
+            if p[7] in data_ids:
+                regulated_particles.append(p.view(-1, p.size()[0]))
+    return torch.cat(
+        regulated_particles
+    )
