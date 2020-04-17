@@ -137,11 +137,12 @@ class ForwardData:
 # Dumb class to organize output csv file
 class CSVData:
 
-    def __init__(self,fout):
+    def __init__(self,fout,append=False):
         self.name  = fout
         self._fout = None
         self._str  = None
         self._dict = {}
+        self.append = append
 
     def record(self, keys, vals):
         for i, key in enumerate(keys):
@@ -149,15 +150,16 @@ class CSVData:
 
     def write(self):
         if self._str is None:
-            self._fout=open(self.name,'w')
+            mode = 'a' if self.append else 'w'
+            self._fout=open(self.name,mode)
             self._str=''
             for i,key in enumerate(self._dict.keys()):
                 if i:
-                    self._fout.write(',')
+                    if not self.append: self._fout.write(',')
                     self._str += ','
-                self._fout.write(key)
+                if not self.append: self._fout.write(key)
                 self._str+='{:f}'
-            self._fout.write('\n')
+            if not self.append: self._fout.write('\n')
             self._str+='\n'
         self._fout.write(self._str.format(*(self._dict.values())))
 

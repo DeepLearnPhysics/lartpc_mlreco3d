@@ -36,8 +36,8 @@ def edge_assignment_from_graph(edge_index, true_edge_index, binary=False):
     Returns:
         np.ndarray: (E) Boolean array specifying on/off edges
     """
-    # Set the edge as true if it connects two nodes that belong to the same batch and the same group
-    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
+    # Set the edge as true if it connects two nodes that are connected by a true dependency
+    edge_assn = np.array([np.any([(e == pair).all() or (np.flip(e) == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
 
     # If binary loss will be used, transform to -1,+1 instead of 0,1
     if binary:
@@ -100,7 +100,7 @@ def node_assignment(edge_index, edge_label, n):
     groups = {}
     group_ids = np.arange(n)
     on_edges = edge_index[np.where(edge_label)[0]]
-    for i, j in on_edges: 
+    for i, j in on_edges:
         leaderi = group_ids[i]
         leaderj = group_ids[j]
         if leaderi in groups:
@@ -179,21 +179,125 @@ def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     return group_ids
 
 
-def node_assignment_group(group_ids, batch_ids):
+def adjacency_matrix(edge_index, n):
     """
-    Function that assigns each node to a group, given
-    group ids at each batch and corresponding batch ids
+    Function that creates an adjacency matrix from a list
+    of connected edges in a graph.
 
     Args:
-        group_ids (np.ndarray): (C) List of cluster group ids within each batch
-        batch_ids (np.ndarray): (C) List of cluster batch ids
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        n (int)                : Total number of clusters C
     Returns:
-        np.ndarray: (C) List of unique group ids
+        np.ndarray: (C,C) Adjacency matrix
     """
-    # Loop over on edges, reset the group IDs of connected node
-    joined = np.vstack((group_ids, batch_ids))
-    _, unique_ids = np.unique(joined, axis=1, return_inverse=True)
-    return unique_ids
+    adj_mat = np.eye(n)
+    adj_mat[tuple(edge_index.T)] = 1
+    return adj_mat
+
+
+def grouping_adjacency_matrix(edge_index, adj_mat):
+    """
+    Function that creates an adjacency matrix from a list
+    of connected edges in a graph by considering nodes to
+    be adjacent when they belong to the same group, provided
+    that they are connected in the input graph.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix selected from adjacency matrix
+        ajd_mat (np.ndarray)   : (C,C) Input adjacency matrix
+    Returns:
+        np.ndarray: (C,C) Adjacency matrix
+    """
+    n = adj_mat.shape[0]
+    node_assn = node_assignment(edge_index, np.ones(len(edge_index)), n)
+    return adj_mat*(node_assn == node_assn.reshape(-1,1))
+
+
+def grouping_loss(pred_mat, edge_index, adj_mat, loss='ce'):
+    """
+    Function that defines the graph clustering score.
+    Given a target adjacency matrix A as and a predicted
+    adjacency P, the score is evaluated the average
+    L1 or L2 distance between truth and prediction.
+
+    Args:
+        pred_mat (np.ndarray)  : (C,C) Predicted adjacency matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        ajd_mat (np.ndarray)   : (C,C) Input adjacency matrix
+    Returns:
+        int: Graph grouping loss
+    """
+    adj_mat = grouping_adjacency_matrix(edge_index, adj_mat)
+    if loss == 'ce':
+        from sklearn.metrics import log_loss
+        return log_loss(adj_mat.reshape(-1), pred_mat.reshape(-1), labels=[0,1])
+    elif loss == 'l1':
+        return np.mean(np.absolute(pred_mat-adj_mat))
+    elif loss == 'l2':
+        return np.mean((pred_mat-adj_mat)*(pred_mat-adj_mat))
+    else:
+        raise ValueError('Loss type not recognized: {}'.format(loss))
+
+
+def edge_assignment_score(edge_index, edge_scores, n):
+    """
+    Function that finds the graph that produces the lowest
+    grouping score iteratively adding the most likely edges,
+    if they improve the the score (builds a spanning tree).
+
+    Args:
+        edge_index (np.ndarray) : (E,2) Incidence matrix
+        edge_scores (np.ndarray): (E,2) Two-channel edge score
+        n (int)                : Total number of clusters C
+    Returns:
+        np.ndarray: (E',2) Optimal incidence matrix
+        float     : Score for the optimal incidence matrix
+    """
+    # Build an input adjacency matrix to constrain the edge selection to the input graph
+    adj_mat = adjacency_matrix(edge_index, n)
+
+    # Interpret the score as a distance matrix, build an MST based on score
+    from scipy.special import softmax
+    edge_scores = softmax(edge_scores, axis=1)
+    pred_mat = np.eye(n)
+    pred_mat[tuple(edge_index.T)] = edge_scores[:,1]
+
+    # Order the edges by increasing order of OFF score
+    args = np.argsort(edge_scores[:,0])
+    ord_index = edge_index[args]
+
+    # Now iteratively add edges, until the total score cannot be improved any longer
+    best_index = np.empty((0,2), dtype=int)
+    best_groups = np.arange(n)
+    best_loss = grouping_loss(pred_mat, best_index, adj_mat)
+    for i, e in enumerate(ord_index):
+        if best_groups[e[0]] == best_groups[e[1]] or edge_scores[args[i]][1] < 0.5:
+            continue
+        last_index = np.vstack((best_index, e))
+        last_loss = grouping_loss(pred_mat, last_index, adj_mat)
+        if last_loss < best_loss:
+            best_index = last_index
+            best_loss = last_loss
+            best_groups = node_assignment(last_index, np.ones(len(last_index)), n)
+
+    return best_index, best_loss
+
+
+def node_assignment_score(edge_index, edge_scores, n):
+    """
+    Function that finds the graph that produces the lowest
+    grouping score by building a score MST and by
+    iteratively removing edges that improve the score.
+
+    Args:
+        edge_index (np.ndarray) : (E,2) Incidence matrix
+        edge_scores (np.ndarray): (E,2) Two-channel edge score
+        n (int)                : Total number of clusters C
+    Returns:
+        np.ndarray: (E',2) Optimal incidence matrix
+    """
+    best_index, _ = edge_assignment_score(edge_index, edge_scores, n)
+    return node_assignment(best_index, np.ones(len(best_index)), n)
 
 
 def clustering_metrics(clusts, node_assn, node_pred):
@@ -238,7 +342,6 @@ def voxel_efficiency_bipartite(clusts, node_assn, node_pred, primaries):
     tot_vox = np.sum([len(clusts[i]) for i in others])
     int_vox = np.sum([len(clusts[i]) for i in others if node_pred[i] == node_assn[i]])
     return int_vox * 1.0 / tot_vox
-
 
 # Function that computes the graph score
 def graph_score(on_mat, edge_index):
@@ -285,3 +388,4 @@ def node_assignment_advanced(edge_index, edge_pred, n):
     '''
     best_index = find_optimal_graph(edge_index, edge_pred, n)
     return node_assignment(best_index, np.ones(len(best_index)), n)
+

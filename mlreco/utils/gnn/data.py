@@ -2,6 +2,7 @@
 import numpy as np
 import torch
 from mlreco.utils.gnn.cluster import get_cluster_voxels, get_cluster_features, get_cluster_features_extended, get_cluster_dirs
+from .voxels import get_voxel_features
 
 def cluster_vtx_features(data, clusts, delta=0.0, whether_adjust_direction=False):
     """
@@ -124,6 +125,21 @@ def cluster_edge_features(data, clusts, edge_index):
     return np.vstack([cluster_edge_feature(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
 
 
+def vtx_features(data, max_dist=5.0, delta=0.0):
+    """
+    Function that returns the an array of 16 features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        max_dist (float)     : Defines "local", max distance to look at
+        delta (float)        : Orientation matrix regularization
+    Returns:
+        np.ndarray: (N,16) tensor of voxel features (coords, local orientation, local direction, local count)
+    """
+    return get_voxel_features(data, max_dist, delta)
+
+
 def edge_feature(data, i, j):
     """
     Function that returns the edge features for a
@@ -134,13 +150,16 @@ def edge_feature(data, i, j):
         i (int)            : Index of the first voxel
         j (int)            : Index of the second voxel
     Returns:
-        np.ndarray: (12) Array of edge features (displacement, orientation)
+        np.ndarray: (19) Array of edge features (displacement, orientation)
     """
     xi = data[i,:3]
     xj = data[j,:3]
     disp = xj - xi
+    lend = np.linalg.norm(disp)
+    if lend > 0:
+        disp = disp / lend
     B = np.outer(disp, disp).flatten()
-    return np.concatenate([B, disp])
+    return np.concatenate([xi, xj, disp, [lend], B])
 
 
 def edge_features(data, edge_index):
@@ -152,88 +171,6 @@ def edge_features(data, edge_index):
         data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         edge_index (np.ndarray): (2,E) Incidence matrix
     Returns:
-        np.ndarray: (E,12) Tensor of edge features (displacement, orientation)
+        np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
     return np.vstack([edge_feature(data, e[0], e[1]) for e in edge_index.T])
-
-
-def regulate_to_data(data, particles):
-    """
-    Function for regulating particles ids as to data ids
-    deleting any particles entries that has id that doesn't appear in data ids
-    Inputs:
-        - data: (tensor) (N,8)->[x,y,z,batchids,value,ids,group_ids,sem.types]
-        - particles: (tensor) (M,8)->[start_x,start_y,start_z,end_x,end_y,end_z,batchids,ids]
-        - data_id_index
-        - particles_id_index
-    Output:
-        - regulated_particles: (tensor) (M',8)
-    """
-    # check if particles is tensor
-    if type(particles)!=torch.Tensor:
-        return particles
-    # get the batch from data and particles
-    data_batch_ids = data[:,3].unique().view(-1)
-    part_batch_ids = particles[:,6].unique().view(-1)
-    if not torch.equal(data_batch_ids, part_batch_ids):
-        raise ValueError('Data and Particles have no identical batch ids!')
-    # Loop over batches
-    regulated_particles = []
-    for batch_id in data_batch_ids:
-        data_selection = data[:,3]==batch_id
-        part_selection = particles[:,6]==batch_id
-        batched_parts = particles[part_selection,:]
-        # get ids from data_selection
-        data_ids = data[data_selection,5].unique().view(-1)
-        for p in batched_parts:
-            if p[7] in data_ids:
-                regulated_particles.append(p.view(-1, p.size()[0]))
-    return torch.cat(
-        regulated_particles
-    )
-
-
-def zero_value_voxel_padding(img, image_id, device=None, num_voxel_limit=100000000000):
-    '''
-    create zero-value voxels tensors for appending to the sparse tensor (image)
-    The image id will be assigned
-    Note it doesn't allow batching
-
-    Inputs:
-        - img: (N, 5) tensor
-        - image_id: assigned image_id
-        - device
-    Outputs:
-        - output_img: (M, 5) tensor
-    '''
-    # get the x, y, z min/max of img
-    x_max, y_max, z_max = img[:,:3].max(dim=0)[0]
-    x_min, y_min, z_min = img[:,:3].min(dim=0)[0]
-    if (x_max-x_min+1)*(y_max-y_min+1)*(z_max-z_min+1)>num_voxel_limit:
-        return None, True
-    # x,y,z pixels (1d)
-    xs = torch.linspace(x_min, x_max, int(x_max-x_min+1), dtype=torch.float, device=device)
-    ys = torch.linspace(y_min, y_max, int(y_max-y_min+1), dtype=torch.float, device=device)
-    zs = torch.linspace(z_min, z_max, int(z_max-z_min+1), dtype=torch.float, device=device)
-    # meshgrid coor
-    X, Y, Z = torch.meshgrid(xs,ys,zs)
-    X = X.contiguous().view(-1,1)
-    Y = Y.contiguous().view(-1,1)
-    Z = Z.contiguous().view(-1,1)
-    # construct final output image
-    output_img = torch.cat((
-        X,
-        Y,
-        Z,
-        image_id*torch.ones(X.size(), dtype=torch.float, device=device),
-        torch.zeros(X.size(), dtype=torch.float, device=device),
-    ),dim=1)
-    # initialize selection
-    selection = torch.ones(X.size()[0], dtype=torch.uint8)
-    occupied_index = (img[:,0].long()-int(x_min))*int(y_max-y_min+1)*int(z_max-z_min+1) + (img[:,1].long() - int(y_min))*int(z_max-z_min+1) + img[:,2].long() - int(z_min)
-    selection[occupied_index] = 0
-    output_img = output_img[selection,:]
-    return output_img, False
-
-
-

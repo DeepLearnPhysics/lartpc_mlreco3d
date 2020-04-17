@@ -7,6 +7,7 @@ def edge_model_dict():
         dict: Dictionary of valid edge models
     """
 
+    from . import modular_nnconv
     from . import edge_attention
     from . import edge_attention2
     from . import edge_only
@@ -19,6 +20,7 @@ def edge_model_dict():
     from . import modular_nnconv
 
     models = {
+        "modular_nnconv" : modular_nnconv.NNConvModel,
         "basic_attention" : edge_attention.BasicAttentionModel,
         "basic_attention2": edge_attention2.BasicAttentionModel,
         "edge_only" : edge_only.EdgeOnlyModel,
@@ -64,11 +66,13 @@ def node_model_dict():
         dict: Dictionary of valid node models
     """
 
+    from . import modular_nnconv
     from . import node_attention
     from . import node_econv
     from . import node_nnconv
 
     models = {
+        "modular_nnconv" : modular_nnconv.NNConvModel,
         "node_attention" : node_attention.NodeAttentionModel,
         "node_econv" : node_econv.NodeEConvModel,
         "node_nnconv" : node_nnconv.NodeNNConvModel
@@ -110,13 +114,13 @@ def node_encoder_dict():
     from . import cluster_geo_encoder
     from . import cluster_cnn_encoder
     from . import cluster_mix_encoder
-    from . import cluster_uresnet_encoder
+    from . import cluster_gnn_encoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
         "mix" : cluster_mix_encoder.ClustMixNodeEncoder,
-        "uresnet": cluster_uresnet_encoder.ClustUResNetNodeEncoder
+        "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder
     }
 
     return encoders
@@ -155,11 +159,13 @@ def edge_encoder_dict():
     from . import cluster_geo_encoder
     from . import cluster_cnn_encoder
     from . import cluster_mix_encoder
+    from . import cluster_gnn_encoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
         "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
+        "gnn" : cluster_gnn_encoder.ClustGNNEdgeEncoder
     }
 
     return encoders

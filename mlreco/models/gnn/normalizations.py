@@ -1,7 +1,3 @@
-########################################
-## Borrowed from Francois's repository
-## https://github.com/francois-drielsma/lartpc_mlreco3d/blob/cnn_clustering/mlreco/models/gnn/normalizations.py
-########################################
 import numpy as np
 import torch
 import torch.nn as nn
