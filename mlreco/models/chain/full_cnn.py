@@ -162,16 +162,20 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                 nodes_batch_id.append(int(bidx))
     else:
         with torch.no_grad():
-            embeddings = kwargs['embeddings']
-            margins = kwargs['margins']
             semantic_labels = kwargs['semantic_labels']
-            seediness = kwargs['seediness']
+            high_energy_mask = semantic_labels < 4
+            semantic_labels_highE = semantic_labels[high_energy_mask]
+            embeddings = kwargs['embeddings'][high_energy_mask]
+            margins = kwargs['margins'][high_energy_mask]
+            seediness = kwargs['seediness'][high_energy_mask]
+            features_gnn_highE = features_gnn[high_energy_mask]
             kernel_func = kwargs.get('kernel_func', multivariate_kernel)
+            coords_highE = coords[high_energy_mask]
             for bidx in batch_index:
-                batch_mask = coords[:, 3] == bidx
-                slabel = semantic_labels[batch_mask]
+                batch_mask = coords_highE[:, 3] == bidx
+                slabel = semantic_labels_highE[batch_mask]
                 embedding_batch = embeddings[batch_mask]
-                featuresAgg_batch = features_gnn[batch_mask]
+                featuresAgg_batch = features_gnn_highE[batch_mask]
                 margins_batch = margins[batch_mask]
                 seediness_batch = seediness[batch_mask]
                 for s in slabel.unique():
@@ -210,20 +214,19 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
 
 
 def fit_predict(embeddings, seediness, margins, fitfunc, st=0.0, pt=0.5):
-    '''
-    Inference subroutine for test time behavior of network.
-    '''
-    pred_labels = torch.zeros(embeddings.shape[0])
+    pred_labels = -np.ones(embeddings.shape[0])
     probs = []
-    seediness_copy = np.copy(seediness.detach().cpu().numpy())
+    spheres = []
+    seediness_copy = np.copy(seediness)
     count = 0
     while count < seediness.shape[0]:
         i = np.argsort(seediness_copy)[::-1][0]
         seedScore = seediness[i]
-        centroid = embeddings[i]
-        sigma = margins[i]
         if seedScore < st:
             break
+        centroid = embeddings[i]
+        sigma = margins[i]
+        spheres.append((centroid, sigma))
         f = fitfunc(centroid, sigma)
         pValues = f(embeddings)
         probs.append(pValues.reshape(-1, 1))
@@ -231,9 +234,11 @@ def fit_predict(embeddings, seediness, margins, fitfunc, st=0.0, pt=0.5):
         seediness_copy[cluster_index] = 0
         count += sum(cluster_index)
     if len(probs) == 0:
-        return pred_labels
+        return pred_labels, spheres
     probs = np.hstack(probs)
     pred_labels = np.argmax(probs, axis=1)
+    # if cluster_all:
+    #     pred_labels = cluster_remainder(embeddings, pred_labels)
     return pred_labels
 
 
