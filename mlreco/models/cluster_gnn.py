@@ -30,13 +30,10 @@ class ClustEdgeGNN(torch.nn.Module):
           network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
           edge_max_dist   : <maximal edge Euclidean length (default -1)>
           edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-<<<<<<< HEAD
           merge_batch     : <flag for whether to merge batches, default False>
           merge_batch_mode: <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it>
           merge_batch_size: <size of batch merging>
-=======
           edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
->>>>>>> upstream/cnn_clustering
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
