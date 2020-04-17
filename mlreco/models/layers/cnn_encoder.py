@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from torch_geometric.nn import MetaLayer, NNConv
-
 class EncoderModel(torch.nn.Module):
 
     def __init__(self, cfg):
