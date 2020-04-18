@@ -185,7 +185,7 @@ class NodeChannelLoss(torch.nn.Module):
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
-        self.reduction = chain_config.get('reduction', 'mean')
+        self.reduction = chain_config.get('reduction', 'sum')
         self.balance_classes = chain_config.get('balance_classes', False)
         self.high_purity = chain_config.get('high_purity', False)
 
@@ -211,7 +211,7 @@ class NodeChannelLoss(torch.nn.Module):
             double: loss, accuracy, clustering metrics
         """
         total_loss, total_acc = 0., 0.
-        n_events = 0
+        n_clusts = 0
         for i in range(len(clusters)):
 
             # If the input did not have any node, proceed
@@ -259,19 +259,19 @@ class NodeChannelLoss(torch.nn.Module):
                     total_loss += self.lossfn(node_pred, node_assn)
 
                 # Compute accuracy of assignment (fraction of correctly assigned nodes)
-                total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(clusts)
+                total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
 
                 # Increment the number of events
-                n_events += 1
+                n_clusts += len(clusts)
 
         # Handle the case where no cluster/edge were found
-        if not n_events:
+        if not n_clusts:
             return {
                 'accuracy': 0.,
                 'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device)
             }
 
         return {
-            'accuracy': total_acc/n_events,
-            'loss': total_loss/n_events
+            'accuracy': total_acc/n_clusts,
+            'loss': total_loss/n_clusts
         }

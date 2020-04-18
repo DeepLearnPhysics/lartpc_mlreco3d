@@ -74,13 +74,13 @@ class ClustEdgeGNN(torch.nn.Module):
         self.edge_dist_metric = chain_config.get('edge_dist_metric','set')
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
 
-        # extra flag for merging events in batch
+        # Extra flags for merging events in batch
         self.merge_batch = chain_config.get('merge_batch', False)
         self.merge_batch_mode = chain_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = chain_config.get('merge_batch_size', 2)
         self.add_start_point = chain_config.get('add_start_point', False) # whether add start point into the node features
 
-        # hidden flag for shuffling cluster
+        # Hidden flag for shuffling cluster
         self.shuffle_clusters = chain_config.get('shuffle_clusters', False)
 
         # If requested, use DBSCAN to form clusters from semantics
@@ -190,16 +190,9 @@ class ClustEdgeGNN(torch.nn.Module):
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
 
-
-        # see if need add start point to node features
+        # See if need add start point to node features
         if self.add_start_point:
-            x = torch.cat(
-                [
-                    x,
-                    get_start_points(particles, data, clusts)
-                ],
-                dim=1
-            )
+            x = torch.cat([x, get_start_points(particles, data, clusts)], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
@@ -248,16 +241,10 @@ class EdgeChannelLoss(torch.nn.Module):
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
-        self.reduction = chain_config.get('reduction', 'mean')
+        self.reduction = chain_config.get('reduction', 'sum')
         self.balance_classes = chain_config.get('balance_classes', False)
         self.target = chain_config.get('target', 'group')
         self.high_purity = chain_config.get('high_purity', False)
-
-        # Extra flag for merging events in batch
-        # Need to be the same as ClustEdgeGNN.merge_batch
-        # To-do: better way to handle such flag, avoiding two flags in two classes
-        self.merge_batch = chain_config.get('merge_batch', False)
-        self.merge_batch_size = chain_config.get('merge_batch_size', 2)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -283,7 +270,7 @@ class EdgeChannelLoss(torch.nn.Module):
             double: loss, accuracy, clustering metrics
         """
         total_loss, total_acc = 0., 0.
-        n_events = 0
+        n_edges = 0
         for i in range(len(clusters)):
 
             # If this batch did not have any node, proceed
@@ -381,19 +368,19 @@ class EdgeChannelLoss(torch.nn.Module):
                     total_loss += self.lossfn(edge_pred, edge_assn)
 
                 # Compute accuracy of assignment (fraction of correctly assigned edges)
-                total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()/edge_assn.shape[0]
+                total_acc += torch.sum(torch.argmax(edge_pred, dim=1) == edge_assn).float()
 
                 # Increment the number of events
-                n_events += 1
+                n_edges += len(edge_pred)
 
         # Handle the case where no cluster/edge were found
-        if not n_events:
+        if not n_edges:
             return {
                 'accuracy': 0.,
                 'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device)
             }
 
         return {
-            'accuracy': total_acc/n_events,
-            'loss': total_loss/n_events
+            'accuracy': total_acc/n_edges,
+            'loss': total_loss/n_edges
         }
