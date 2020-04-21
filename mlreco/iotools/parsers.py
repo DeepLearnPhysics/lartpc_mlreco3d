@@ -543,6 +543,72 @@ def parse_cluster3d_full_extended(data):
     np_features[:,2] = interaction_ids
     return np_voxels, np_features
 
+def parse_cluster3d_full_extended2(data):
+    '''
+    a function to retrieve clusters
+    an extension of parse_cluster3d_full
+    cluster id -> group id
+    group id -> interaction id
+    similiar to parse_cluster3d_full_extended but with extra column for outputing nu_id (whether interacction is a neutrino interaction)
+    CAVEAT: Dirty way to get the nu_id, since it only applies to certain dataset
+            Only one nu interaction in each event
+            only interaction that includes the first group is assigned as nu-interaction
+    args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (n,5) where 5 is voxel value,
+        group id, interaction id, semantic type, and nu_interaction id, respectively
+    '''
+    # first get the parser output from parse_cluster3d_full
+    np_voxels, np_features = parse_cluster3d_full(data)
+    # based on the first parser results, sort out the interaction ids
+    from mlreco.utils.groups import get_interaction_id
+    interaction_ids = get_interaction_id(data[1].as_vector(), np_features)
+    # get nu_ids
+    from mlreco.utils.groups import get_nu_id
+    nu_ids = get_nu_id(data[1].as_vector(), np_features, interaction_ids)
+    # replace the cluster id with group id, and group id with new interaction id
+    np_features[:, 1] = np_features[:, 2]
+    np_features[:, 2] = interaction_ids
+    # concatenate the nu_ids
+    np_features = np.concatenate([np_features, nu_ids], axis=1)
+    return np_voxels, np_features
+
+def parse_cluster3d_full_extended_nu_only(data):
+    '''
+    a function to retrieve clusters
+    an extension of parse_cluster3d_full
+    cluster id -> group id
+    group id -> interaction id
+    NOTE: This function only keeps nu-interaction
+    args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (n,4) where 4 is voxel value,
+        group id, interaction id, and semantic type, respectively
+    '''
+    # first get the parser output from parse_cluster3d_full
+    np_voxels, np_features = parse_cluster3d_full(data)
+    # based on the first parser results, sort out the interaction ids
+    from mlreco.utils.groups import get_interaction_id
+    interaction_ids = get_interaction_id(data[1].as_vector(), np_features)
+    # get nu_ids
+    from mlreco.utils.groups import get_nu_id
+    nu_ids = get_nu_id(data[1].as_vector(), np_features, interaction_ids)
+    # Keep only nu interaction
+    inds = np.where(nu_ids>0)[0]
+    np_voxels = np_voxels[inds,:]
+    np_features = np_features[inds, :]
+    interaction_ids = interaction_ids[inds]
+    # replace the cluster id with group id, and group id with new interaction id
+    np_features[:, 1] = np_features[:, 2]
+    np_features[:, 2] = interaction_ids
+    return np_voxels, np_features
+
 
 def parse_cluster3d_clean(data):
     """
