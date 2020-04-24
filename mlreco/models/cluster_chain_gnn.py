@@ -87,7 +87,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         for clust in clusts:
             batch_id = data[0][clust,3].unique()
             if not len(batch_id) == 1:
-                raise ValueError('Found a cluster with mixed batch ids:',batch_id)
+                raise ValueError('Found a cluster with mixed batch ids:', batch_id)
             batch_ids.append(batch_id[0].item())
         batch_ids = np.array(batch_ids)
 

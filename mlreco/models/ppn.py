@@ -155,6 +155,8 @@ class PPN(torch.nn.Module):
                 # print(feature_map1.get_spatial_locations())
                 # print(feature_map2.get_spatial_locations())
                 # print(feature_map3.get_spatial_locations())
+                # print(ghost_mask.shape)
+                # print(coords.shape)
                 feature_map1, ghost_mask1 = self.ghost_mask(ghost_mask, coords, feature_map1, factor=self.ppn1_stride)
                 feature_map2, ghost_mask2 = self.ghost_mask(ghost_mask, coords, feature_map2, factor=self.ppn2_stride)
                 feature_map3, _ = self.ghost_mask(ghost_mask, coords, feature_map3, factor=0.0)
