@@ -157,6 +157,54 @@ At this point, you should be able to train your model using a configuration file
 
 Brief descriptions of analysis and output formatters
 
+# Iotools
+
+The `iotools` section contains all information regarding how to parse data stored in `.root` files. An example configuration option for `iotool` is given below. 
+
+```yaml
+iotool:
+  batch_size: 16
+  shuffle: False
+  num_workers: 4
+  collate_fn: CollateSparse
+  sampler:
+    name: RandomSequenceSampler
+  dataset:
+    name: LArCVDataset
+    data_keys:
+      - /gpfs/slac/staas/fs1/g/neutrino/kterao/data/mpvmpr_2020_01_v04/train.root
+    limit_num_files: 1
+    schema:
+      input_data:
+        - parse_cluster3d_full
+        - cluster3d_pcluster_highE
+        - particle_corrected
+      cluster_label:
+        - parse_cluster3d_full
+        - cluster3d_pcluster_highE
+        - particle_corrected
+      graph:
+        - parse_particle_graph
+        - particle_corrected
+      segment_label:
+        - parse_sparse3d_scn
+        - sparse3d_pcluster_semantics
+```
+We list the definitions of each variable as follows:
+ * `batch_size`: batch size for gradient descent. 
+ * `shuffle`: option to shuffle sample each instance of the dataset. 
+ * `num_workers`: 
+ * `collate_fn`: Collate function used in `torch.DataLoader`. 
+ * `sampler`: 
+ * `dataset`:
+
+### 1. Schema
+
+
+### 2. 
+
+## 
+
 # Models
 
 Model building blocks
