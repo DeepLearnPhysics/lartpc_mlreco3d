@@ -203,6 +203,45 @@ def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
         interaction_ids[clust_inds] = interaction_id
     return interaction_ids
 
+def get_nu_id(particle_v, np_features, interaction_ids):
+    '''
+    A function to sort out nu ids (0 for cosmic, 1 for nu).
+    CAVEAT: Dirty way to sort out nu_ids
+            Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
+    Inputs:
+        - particle_v vector: larcv::EventParticle.as_vector()
+        - np_features: a numpy array with the shape (n,4) where 4 is voxel value,
+        cluster id, group id, and semantic type respectively
+        - interaction_id: a numpy array with shape (n, 1) where 1 is interaction id
+    Outputs:
+        - nu_id: a numpy array with the shape (n,1)
+    '''
+    # initiate the nu_id
+    nu_id = np.zeros((np_features.shape[0], 1))
+    # find the first cluster
+    first_clust_id = np.min(np.unique(np_features[:,1]))
+    # the corresponding interaction id
+    nu_interaction_id = np.unique(
+        interaction_ids[
+            np.where(np_features[:,1]==first_clust_id)[0]
+        ]
+    )[0]
+    # Get clust indexes for interaction_id = nu_interaction_id
+    inds = np.where(interaction_ids==nu_interaction_id)[0]
+    # Check whether there're at least two clusts coming from 'primary' process
+    num_primary = 0
+    for i, part in enumerate(particle_v):
+        if i not in inds:
+            continue
+        create_prc = part.creation_process()
+        if create_prc=='primary':
+            num_primary += 1
+    # if there is nu interaction
+    if num_primary>1:
+        nu_id[inds]=1
+    return nu_id
+
+
 
 def reassign_id(data, id_index=6, batch_index=3):
     '''
