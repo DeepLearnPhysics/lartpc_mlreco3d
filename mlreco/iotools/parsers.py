@@ -260,19 +260,15 @@ def parse_particle_graph(data):
     # For convention, construct particle id => cluster id mapping
     particle_to_cluster = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
 
-    # Fill group mapping
-    for cluster_id in range(particles.as_vector().size()):
-        p = particles.as_vector()[cluster_id]
-        particle_id = p.id()
-        particle_to_cluster[particle_id] = cluster_id
-
     # Fill edges (directed, [parent,child] pair)
     edges = np.empty((0,2), dtype = np.int32)
     for cluster_id in range(particles.as_vector().size()):
         p = particles.as_vector()[cluster_id]
-        for child in p.children_id():
-            if cluster_id != particle_to_cluster[child]:
-                edges = np.vstack((edges, [cluster_id,particle_to_cluster[child]]))
+        #print(p.id(), p.parent_id(), p.group_id())
+        if p.parent_id() != p.id():
+            edges = np.vstack((edges, [int(p.parent_id()),cluster_id]))
+        if p.parent_id() == p.id() and p.group_id() != p.id():
+            edges = np.vstack((edges, [int(p.group_id()),cluster_id]))
 
     return edges
 

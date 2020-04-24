@@ -8,6 +8,10 @@ def edge_model_dict():
     """
 
     from . import modular_nnconv
+    from . import modular_econv
+    from . import modular_gatconv
+    from . import modular_agnnconv
+    from . import modular_meta
     from . import edge_attention
     from . import edge_attention2
     from . import edge_only
@@ -21,6 +25,10 @@ def edge_model_dict():
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
+        "modular_econv" : modular_econv.EConvModel,
+        "modular_gatconv" : modular_gatconv.GATConvModel,
+        "modular_agnnconv" : modular_agnnconv.AGNNConvModel,
+        "modular_meta" : modular_meta.MetaLayerModel,
         "basic_attention" : edge_attention.BasicAttentionModel,
         "basic_attention2": edge_attention2.BasicAttentionModel,
         "edge_only" : edge_only.EdgeOnlyModel,
