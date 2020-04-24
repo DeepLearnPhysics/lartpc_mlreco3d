@@ -22,9 +22,10 @@ class NetworkBase(nn.Module):
     leakiness: float, optional
         slope value for LeakyReLU activation functions.
     '''
+
     def __init__(self, cfg, name='network_base'):
         super(NetworkBase, self).__init__()
-        self.model_config = cfg['modules'][name]
+        self.model_config = cfg[name]
         # Cross-network module configurations
         self.dimension = self.model_config.get('data_dim', 3)
         self.nInputFeatures = self.model_config.get('features', 1)
@@ -47,14 +48,13 @@ class NetworkBase(nn.Module):
             None (operation is in-place)
         '''
         module.add(scn.ConcatTable()
-            .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, self.allow_bias))
-            .add(scn.Sequential()
-                .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
-                .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
-                .add(scn.BatchNormLeakyReLU(b, leakiness=self.leakiness))
-                .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias)))
-        ).add(scn.AddTable())
-
+                   .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, self.allow_bias))
+                   .add(scn.Sequential()
+                        .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
+                        .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
+                        .add(scn.BatchNormLeakyReLU(b, leakiness=self.leakiness))
+                        .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias)))
+                   ).add(scn.AddTable())
 
     def _resnet_block_general(self, norm_layer):
         '''
@@ -71,17 +71,16 @@ class NetworkBase(nn.Module):
         '''
         def f(m, a, b):
             m.add(scn.ConcatTable()
-                .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, self.allow_bias))
-                .add(scn.Sequential()
-                    .add(norm_layer(a, leakiness=self.leakiness))
-                    .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
-                    .add(norm_layer(b, leakiness=self.leakiness))
-                    .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias)))
-            ).add(scn.AddTable())
+                  .add(scn.Identity() if a == b else scn.NetworkInNetwork(a, b, self.allow_bias))
+                  .add(scn.Sequential()
+                       .add(norm_layer(a, leakiness=self.leakiness))
+                       .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
+                       .add(norm_layer(b, leakiness=self.leakiness))
+                       .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias)))
+                  ).add(scn.AddTable())
             return m
         return f
 
-    
     def _block(self, module, a, b):
         '''
         Utility Method for attaching 2 x (Conv-BN) Blocks.
@@ -95,12 +94,11 @@ class NetworkBase(nn.Module):
             None (operation is in-place)
         '''
         module.add(scn.Sequential()
-            .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
-            .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
-            .add(scn.BatchNormLeakyReLU(b, leakiness=self.leakiness))
-            .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias))
-        )
-
+                   .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
+                   .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
+                   .add(scn.BatchNormLeakyReLU(b, leakiness=self.leakiness))
+                   .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias))
+                   )
 
     def _nin_block(self, module, a, b):
         '''
@@ -116,10 +114,9 @@ class NetworkBase(nn.Module):
             None (operation is in-place)
         '''
         module.add(scn.Sequential()
-            .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
-            .add(scn.NetworkInNetwork(a, b, self.allow_bias))
-        )
-
+                   .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
+                   .add(scn.NetworkInNetwork(a, b, self.allow_bias))
+                   )
 
     def forward(self, input):
         raise NotImplementedError

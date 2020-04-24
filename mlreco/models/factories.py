@@ -27,6 +27,8 @@ def model_dict():
 
     from . import clusternet
     from . import clustercnn_adaptis
+    # from . import cluster_chain
+    from . import full_chain
 
 
 
@@ -93,6 +95,8 @@ def model_dict():
         "cluster_dbscan_gnn": (cluster_chain_gnn.ChainDBSCANGNN, cluster_chain_gnn.ChainLoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
+        # CNN Clustering + GNN Chain
+        "full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
