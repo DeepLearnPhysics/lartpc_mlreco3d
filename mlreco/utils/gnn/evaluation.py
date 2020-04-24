@@ -83,24 +83,25 @@ def find_parent(parent, i):
     return parent[i]
 
 
-def node_assignment(edge_index, edge_label, n):
+def union_find(new_edges, n, group_ids=None, groups=None):
     """
-    Function that assigns each node to a group, based
-    on the edge assigment provided. This uses a simple
-    union find implementation.
+    Implementation of the Union-Find algorithm.
 
     Args:
-        edge_index (np.ndarray): (E,2) Incidence matrix
-        edge_assn (np.ndarray) : (E) Boolean array (1 if edge is on)
-        n (int)                  : Total number of clusters C
+        new_edges (np.ndarray): (E,2) Additional edges
+        n (int)               : Total number of clusters C
+        group_ids (array)     : (C) List of group ids
+        groups (dict of array): Dictionary of partition groups
+
     Returns:
-        np.ndarray: (C) List of group ids
+        np.ndarray: (C) Updated list of group ids
+        np.ndarray: (C) Updated dictionary of partition groups
     """
-    # Loop over on edges, reset the group IDs of connected node
-    groups = {}
-    group_ids = np.arange(n)
-    on_edges = edge_index[np.where(edge_label)[0]]
-    for i, j in on_edges:
+    if group_ids is None:
+        group_ids = np.arange(n)
+    if groups is None:
+        groups = {}
+    for i, j in new_edges:
         leaderi = group_ids[i]
         leaderj = group_ids[j]
         if leaderi in groups:
@@ -125,7 +126,26 @@ def node_assignment(edge_index, edge_label, n):
                 group_ids[i] = group_ids[j] = i
                 groups[i] = set([i, j])
 
-    return group_ids
+    return group_ids, groups
+
+
+def node_assignment(edge_index, edge_label, n):
+    """
+    Function that assigns each node to a group, based
+    on the edge assigment provided. This uses a local
+    union find implementation.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        edge_assn (np.ndarray) : (E) Boolean array (1 if edge is on)
+        n (int)                : Total number of clusters C
+    Returns:
+        np.ndarray: (C) List of group ids
+    """
+    # Loop over on edges, reset the group IDs of connected node
+    on_edges = edge_index[np.where(edge_label)[0]]
+    return union_find(on_edges, n)[0]
+
 
 def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
     """
@@ -388,4 +408,3 @@ def node_assignment_advanced(edge_index, edge_pred, n):
     '''
     best_index = find_optimal_graph(edge_index, edge_pred, n)
     return node_assignment(best_index, np.ones(len(best_index)), n)
-
