@@ -1,56 +1,60 @@
-# defines incidence matrix for primaries
+# Defines network incidence matrices
 import numpy as np
 import torch
-from scipy.spatial import Delaunay
-from scipy.sparse.csgraph import minimum_spanning_tree
 
-def primary_bipartite_incidence(batches, primaries, dist=None, max_dist=float('inf'), device=None, cuda=True):
+def complete_graph(batches, dist=None, max_dist=-1):
     """
-    incidence matrix of bipartite graph between primary clusters and non-primary clusters
-    """
-    others = np.where([ not(x in primaries) for x in np.arange(len(batches))])[0]
-    ret = torch.tensor([[i, j] for i in primaries for j in others if batches[i] == batches[j]], dtype=torch.long, requires_grad=False).t().contiguous().reshape(2,-1)
+    Function that returns an incidence matrix of a complete graph
+    that connects every node with ever other node.
 
-    # If requested, remove the edges above a certain length threshold
-    if max_dist < float('inf'):
-        dists = np.array([dist[i, j] for i in primaries for j in others if batches[i] == batches[j]])
-        ret = ret[:,np.where(dists < max_dist)[0]]
-
-    if not device is None:
-        ret = ret.to(device)
-    elif cuda:
-        ret = ret.cuda()
-    return ret
-
-def complete_graph(batches, dist=None, max_dist=-1, device=None, cuda=True):
+    Args:
+        batches (np.ndarray): (C) List of batch ids
+        dist (np.ndarray)   : (C,C) Tensor of pair-wise cluster distances
+        max_dist (double)   : Maximal edge length
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
     """
-    incidence matrix of bipartite graph between primary clusters and non-primary clusters
-    """
-    ret = torch.tensor([[i, j] for i in np.arange(len(batches)) for j in np.arange(len(batches)) if (batches[i] == batches[j] and j > i)], dtype=torch.long, requires_grad=False).t().contiguous().reshape(2,-1)
+    # Create the incidence matrix
+    ids = np.arange(len(batches))
+    edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]
+    if not len(edges):
+        return np.empty((2,0))
+    ret = np.vstack(edges).T
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
-        dists = np.array([dist[i, j] for i in np.arange(len(batches)) for j in np.arange(len(batches)) if (batches[i] == batches[j] and j > i)])
-        ret = ret[:,np.where(dists < max_dist)[0]]
+        dists = np.array([dist[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)])
+        ret = ret[:,dists < max_dist]
 
-    if not device is None:
-        ret = ret.to(device)
-    elif cuda:
-        ret = ret.cuda()
     return ret
 
-def delaunay_graph(clust_label, labels, dist=None, max_dist=-1, device=None, cuda=None):
+
+def delaunay_graph(data, clusts, dist=None, max_dist=-1):
     """
-    incidence matrix of graph between clusters that are connected by a distance-based Delaunay Graph
+    Function that returns an incidence matrix that connects nodes
+    that share an edge in their corresponding Euclidean Delaunay graph.
+
+    Args:
+        data (np.ndarray)    : (N,4) [x, y, z, batchid]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        dist (np.ndarray)    : (C,C) Tensor of pair-wise cluster distances
+        max_dist (double)    : Maximal edge length
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
     """
+    # Only keep the voxels that are in the clusters
+    mask = np.concatenate(clusts)
+    labels = np.concatenate([np.full(len(c), i) for i, c in enumerate(clusts)])
+    voxels = data[mask,:3]
+    batches = data[mask,3]
+
     # For each batch, find the list of edges, append it
-    ret = np.zeros(shape=(0, 2), dtype=np.int32)
-    voxels = clust_label[:,:3]
-    batches = clust_label[:,3]
+    from scipy.spatial import Delaunay
+    ret = np.empty((0, 2), dtype=int)
     for i in np.unique(batches):
         where = np.where(batches == i)[0]
-        tri = Delaunay(voxels[where])
-        edges = np.array([[int(labels[where[i]]), int(labels[where[j]])] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
+        tri = Delaunay(voxels[where], qhull_options='QJ') # Joggled input guarantees simplical faces
+        edges = np.array([[labels[where[i]], labels[where[j]]] for s in tri.simplices for i in s for j in s if labels[where[i]] < labels[where[j]]])
         if len(edges):
             ret = np.vstack((ret, np.unique(edges, axis=0)))
 
@@ -59,64 +63,135 @@ def delaunay_graph(clust_label, labels, dist=None, max_dist=-1, device=None, cud
         dists = np.array([dist[e[0], e[1]] for e in ret])
         ret = ret[dists < max_dist]
 
-    ret = torch.tensor(ret.transpose())
-    if not device is None:
-        ret = ret.to(device)
-    elif cuda:
-        ret = ret.cuda()
-    return ret
+    return ret.T
 
-def mst_graph(batches, dist, max_dist=-1, device=None, cuda=None):
+
+def mst_graph(batches, dist, max_dist=-1):
     """
-    incidence matrix of graph between clusters that are connected by a distance-based Minimum Spanning Tree
+    Function that returns an incidence matrix that connects nodes
+    that share an edge in their corresponding Euclidean Minimum Spanning Tree (MST).
+
+    Args:
+        batches (np.ndarray) : (N) List of batch ids
+        dist (np.ndarray)    : (C,C) Tensor of pair-wise cluster distances
+        max_dist (double)    : Maximal edge length
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
     """
+    from scipy.sparse.csgraph import minimum_spanning_tree
     mst_mat = minimum_spanning_tree(dist).toarray().astype(float)
-    ret = torch.tensor(np.unravel_index(np.where(mst_mat.flatten() > 0.)[0], mst_mat.shape))
+    inds = np.where(mst_mat.flatten() > 0.)[0]
+    ret = np.array(np.unravel_index(inds, mst_mat.shape))
+    ret = np.sort(ret, axis=0)
 
     # If requested, remove the edges above a certain length threshold
     if max_dist > -1:
-        dists = mst_mat.flatten()[np.where(mst_mat.flatten() > 0.)[0]]
+        dists = mst_mat.flatten()[inds]
+        ret = ret[:,dists < max_dist]
+
+    return ret
+
+
+def bipartite_graph(batches, primaries, dist=None, max_dist=-1):
+    """
+    Function that returns an incidence matrix of the bipartite graph
+    between primary nodes and non-primary nodes.
+
+    Args:
+        batches (np.ndarray)  : (C) List of batch ids
+        primaries (np.ndarray): (P) List of primary ids
+        dist (np.ndarray)     : (C,C) Tensor of pair-wise cluster distances
+        max_dist (double)     : Maximal edge length
+    Returns:
+        np.ndarray: (2,E) Tensor of edges
+    """
+    # Create the incidence matrix
+    others = [i for i in range(len(batches)) if i not in primaries]
+    edges = [[i, j] for i in primaries for j in others if batches[i] == batches[j]]
+    if not len(edges):
+        return np.empty((2,0))
+    ret = np.vstack(edges).T
+
+    # If requested, remove the edges above a certain length threshold
+    if max_dist > -1:
+        dists = np.array([dist[i, j] for i in primaries for j in others if batches[i] == batches[j]])
         ret = ret[:,np.where(dists < max_dist)[0]]
 
-    if not device is None:
-        ret = ret.to(device)
-    elif cuda:
-        ret = ret.cuda()
     return ret
+
 
 def inter_cluster_distance(voxels, clusts, mode='set'):
     """
-    Returns the matrix of distances the input set of clusters
-     - Set mode uses the set distance (distance between two closest points)
-     - Centroid mode uses the distance between cluster centroids
+    Function that returns the matrix of pair-wise cluster distances.
+
+    Args:
+        voxels (np.ndarray)  : (N,3) Tensor of voxel coordinates
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        mode (str)           : Maximal edge length (distance mode: set or centroid)
+    Returns:
+        np.ndarray: (C,C) Tensor of pair-wise cluster distances
     """
     from scipy.spatial.distance import cdist
     if mode == 'set':
-        dist_mat = np.array([np.min(cdist(voxels[ci].cpu().numpy(), voxels[cj].cpu().numpy())) for ci in clusts for cj in clusts]).reshape((len(clusts), len(clusts)))
+        dist_mat = np.array([np.min(cdist(voxels[ci], voxels[cj])) for ci in clusts for cj in clusts]).reshape((len(clusts), len(clusts)))
     elif mode == 'centroid':
-        centroids = [np.mean(voxels[c].cpu().numpy(), axis=0) for c in clusts]
+        centroids = np.vstack([np.mean(voxels[c], axis=0) for c in clusts])
         dist_mat = cdist(centroids, centroids)
     else:
-        raise(ValueError('Distance mode not supported '+mode))
-    return dist_mat 
+        raise(ValueError('Distance mode not recognized: '+mode))
 
-def get_fragment_edges(graph, clust_ids, batch_ids):
+    return dist_mat
+
+
+def inter_cluster_distance(voxels, clusts, mode='set'):
     """
-    graph:
-        list of [clust_id_1, clust_id_2, batch_id]
-    output:
-        list of [frag_id_2, frag_id_2]
-    Here cluster id corresponds to particle ID and fragment ID to
-    the order of the fragment in the list
+    Function that returns the matrix of pair-wise cluster distances.
+
+    Args:
+        voxels (torch.tensor): (N,3) Tensor of voxel coordinates
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        mode (str)           : Maximal edge length (distance mode: set or centroid)
+    Returns:
+        torch.tensor: (C,C) Tensor of pair-wise cluster distances
+    """
+    if mode == 'set':
+        from mlreco.utils import local_cdist
+        dist_mat = np.zeros(shape=(len(clusts),len(clusts)),dtype=np.float32)
+        for i, ci in enumerate(clusts):
+            for j, cj in enumerate(clusts):
+                if i < j:
+                    dist_mat[i,j] = local_cdist(voxels[ci], voxels[cj]).min()
+                else:
+                    dist_mat[i,j] = dist_mat[j,i]
+
+    elif mode == 'centroid':
+        centroids = torch.stack([torch.mean(voxels[c], dim=0) for c in clusts])
+        dist_mat = local_cdist(centroids, centroids)
+    else:
+        raise(ValueError('Distance mode not recognized: '+mode))
+
+    return dist_mat
+
+
+def get_fragment_edges(graph, clust_ids):
+    """
+    Function that converts a set of edges between cluster ids
+    to a set of edges between fragment ids (ordering in list)
+
+    Args:
+        graph (torch.tensor)    : (E,3) Tensor of [clust_id_1, clust_id_2, batch_id]
+        clust_ids (np.ndarray): (C) List of fragment cluster ids
+        batch_ids (np.ndarray): (C) List of fragment batch ids
+    Returns:
+        np.ndarray: (E,2) Tensor of true edges [frag_id_1, frag_id2]
     """
     # Loop over the graph edges, find the fragment ids, append
-    true_edges = np.empty((0,2), dtype=np.int32)
-    fragid_map = np.vstack((clust_ids, batch_ids)).transpose().astype(int)
-    for e in graph.cpu().numpy().astype(int):
-        n1 = np.where([(pair == e[::2]).all() for pair in fragid_map])[0]
-        n2 = np.where([(pair == e[1:]).all() for pair in fragid_map])[0]
+    true_edges = np.empty((0,2), dtype=int)
+    for e in graph:
+        n1 = np.where(clust_ids == e[0].item())[0]
+        n2 = np.where(clust_ids == e[1].item())[0]
         if len(n1) and len(n2):
-            true_edges = np.vstack((true_edges, (n1[0], n2[0])))
+            true_edges = np.vstack((true_edges, [n1[0], n2[0]]))
 
-    return true_edges 
+    return true_edges
 

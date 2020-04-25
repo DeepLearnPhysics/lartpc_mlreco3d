@@ -5,13 +5,6 @@ from __future__ import print_function
 import torch
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, Sigmoid, LeakyReLU, Dropout
 import torch.nn.functional as F
-from torch_geometric.nn import MetaLayer, GATConv, AGNNConv
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters_new
-from mlreco.utils.gnn.primary import assign_primaries
-from mlreco.utils.gnn.network import complete_graph
-from mlreco.utils.gnn.compton import filter_compton
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_old
-from mlreco.utils.gnn.evaluation import primary_assign_vox_efficiency
 from torch_geometric.nn import MetaLayer, EdgeConv
 from torch_scatter import scatter_mean
 import numpy as np

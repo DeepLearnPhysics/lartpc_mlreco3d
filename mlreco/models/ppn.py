@@ -64,7 +64,7 @@ class PPN(torch.nn.Module):
     def __init__(self, cfg):
         super(PPN, self).__init__()
         import sparseconvnet as scn
-        self._model_config = cfg['modules']['ppn']
+        self._model_config = cfg['ppn']
 
         self._dimension = self._model_config.get('data_dim', 3)
         self._num_strides = self._model_config.get('num_strides', 5)
@@ -231,7 +231,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
     """
     def __init__(self, cfg, reduction='sum'):
         super(PPNLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['modules']['ppn']
+        self._cfg = cfg['ppn']
         self._dimension = self._cfg.get('data_dim', 3)
         self._num_strides = self._cfg.get('num_strides', 5)
         self._num_classes = self._cfg.get('num_classes', 5)

@@ -50,6 +50,7 @@ def CollateSparse(batch):
             ]
         else:
             result[key] = [sample[key] for sample in batch]
+            
     return result
 
 #def CollateSparse(batch):

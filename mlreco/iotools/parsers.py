@@ -391,7 +391,7 @@ def parse_cluster3d_clean(data):
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,1) where 1 is cluster id
+        a numpy array with the shape (N,1) where 2 represents (value, cluster_id)
     """
     grp_voxels, grp_data = parse_cluster3d([data[0]])
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
@@ -419,6 +419,48 @@ def parse_cluster3d_clean(data):
 
     return grp_voxels, grp_data
 
+def parse_cluster3d_clean_full(data):
+    """
+    A function to retrieve clusters tensor.  Do the following cleaning:
+    1) lexicographically sort group data (images are lexicographically sorted)
+    2) remove voxels from group data that are not in image
+    3) choose only one group per voxel (by lexicographic order)
+    Args:
+        length 3 array of larcv::EventClusterVoxel3D, larcv::EventParticle and larcv::EventSparseTensor3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,4) where 4 represens (value, cluster_id, group_id, sem_type)
+    """
+    grp_voxels, grp_data = parse_cluster3d_full(data)
+    img_voxels, img_data = parse_sparse3d_scn([data[2]])
+
+    # step 1: lexicographically sort group data
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm,:]
+    grp_data = grp_data[perm]
+
+    perm = np.lexsort(img_voxels.T)
+    img_voxels = img_voxels[perm,:]
+    img_data = img_data[perm]
+
+    # step 2: remove duplicates
+    sel1 = filter_duplicate_voxels(grp_voxels, usebatch=False)
+    inds1 = np.where(sel1)[0]
+    grp_voxels = grp_voxels[inds1,:]
+    grp_data = grp_data[inds1]
+
+    # step 3: remove voxels not in image
+    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
+    inds2 = np.where(sel2)[0]
+    grp_voxels = grp_voxels[inds2,:]
+    grp_data = grp_data[inds2]
+
+    # step 4: override semantic labels with those from sparse3d (TODO)
+    grp_data[:,-1] = img_data[:,-1]
+
+    return grp_voxels, grp_data
+
 
 def parse_sparse3d_clean(data):
     """
@@ -437,9 +479,9 @@ def parse_sparse3d_clean(data):
     img_voxels, img_data = parse_sparse3d_scn([data[0]])
     perm = np.lexsort(img_voxels.T)
     img_voxels = img_voxels[perm]
-    img_data = img_data[perm]
+    #img_data = img_data[perm]
     img_voxels, unique_indices = np.unique(img_voxels, axis=0, return_index=True)
-    img_data = img_data[unique_indices]
+    #img_data = img_data[unique_indices]
 
     grp_voxels, grp_data = parse_sparse3d_scn([data[1]])
     perm = np.lexsort(grp_voxels.T)
@@ -470,12 +512,10 @@ def parse_sparse3d_clean(data):
 def parse_cluster3d_scales(data):
     """
     Retrieves clusters tensors at different spatial sizes.
-
     Parameters
     ----------
     data: list
         length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
-
     Returns
     -------
     list of tuples
@@ -495,12 +535,10 @@ def parse_cluster3d_scales(data):
 def parse_sparse3d_scn_scales(data):
     """
     Retrieves sparse tensors at different spatial sizes.
-
     Parameters
     ----------
     data: list
         length 1 array of larcv::EventSparseTensor3D
-
     Returns
     -------
     list of tuples
