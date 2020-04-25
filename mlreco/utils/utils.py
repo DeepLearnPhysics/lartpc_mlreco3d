@@ -6,7 +6,19 @@ import torch
 import sparseconvnet as scn
 import time
 
+# inter-cluster distance calculation: define dumb matrix (vectorized) dist calculation + jit it
+# FIXME in torch 1.3 or 1.4, cdist should be fixed (02-02-2020 the container using v1.1 has slow cdist)
+@torch.jit.script
+def local_cdist(set0, set1):
+    norm0 = set0.pow(2).sum(dim=-1, keepdim=True)
+    norm1 = set1.pow(2).sum(dim=-1, keepdim=True)
+    res = torch.addmm(norm1.transpose(-2, -1), set0, set1.transpose(-2, -1), alpha=-2).add_(norm0)
+    res = res.clamp_min_(1e-20).sqrt()
+    return res
+
 def to_numpy(s):
+    if isinstance(s, np.ndarray):
+        return s
     if isinstance(s, torch.Tensor):
         return s.cpu().detach().numpy()
     elif isinstance(s, scn.SparseConvNetTensor):
@@ -92,16 +104,45 @@ class stopwatch(object):
         return data[0] if data[0]>0 else time.time() - data[1]
 
 
-    
+# Dumb class to organize loss/accuracy computations in forward loop.
+class ForwardData:
+    '''
+    Utility class for computing averages of loss and accuracies.
+    '''
+    def __init__(self):
+        from collections import defaultdict
+        self.counts = defaultdict(float)
+        self.means = defaultdict(float)
+
+    def __getitem__(self, name):
+        return self.means[name]
+
+    def update_mean(self, name, value):
+        mean = (self.means[name] * float(self.counts[name]) + value) \
+            / float((self.counts[name] + 1))
+        self.means[name] = mean
+        self.counts[name] += 1
+
+    def update_dict(self, d):
+        for name, value in d.items():
+            self.update_mean(name, value)
+
+    def as_dict(self):
+        return self.means
+
+    def __repr__(self):
+        return self.as_dict()
+
 
 # Dumb class to organize output csv file
 class CSVData:
 
-    def __init__(self,fout):
+    def __init__(self,fout,append=False):
         self.name  = fout
         self._fout = None
         self._str  = None
         self._dict = {}
+        self.append = append
 
     def record(self, keys, vals):
         for i, key in enumerate(keys):
@@ -109,17 +150,17 @@ class CSVData:
 
     def write(self):
         if self._str is None:
-            self._fout=open(self.name,'w')
+            mode = 'a' if self.append else 'w'
+            self._fout=open(self.name,mode)
             self._str=''
             for i,key in enumerate(self._dict.keys()):
                 if i:
-                    self._fout.write(',')
+                    if not self.append: self._fout.write(',')
                     self._str += ','
-                self._fout.write(key)
+                if not self.append: self._fout.write(key)
                 self._str+='{:f}'
-            self._fout.write('\n')
+            if not self.append: self._fout.write('\n')
             self._str+='\n'
-
         self._fout.write(self._str.format(*(self._dict.values())))
 
     def flush(self):

@@ -1,132 +1,217 @@
-# utility to evaluate the network accuracy
+# Defines GNN network accuracy metrics
 import numpy as np
-import torch
 from mlreco.utils.metrics import SBD, AMI, ARI, purity_efficiency
 
-
-def assign_clusters(edge_index, edge_label, primaries, others, n):
+def edge_assignment(edge_index, groups, binary=False):
     """
-    assigns each node to a cluster represented by the primary node
+    Function that determines which edges are turned on based
+    on the group ids of the clusters they are connecting.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        groups (np.ndarray)    : (C) List of group ids
+        binary (bool)          : True if the assigment must be adapted to binary loss
+    Returns:
+        np.ndarray: (E) Boolean array specifying on/off edges
     """
-    clust = np.zeros(n)
-    for i in primaries:
-        clust[i] = i
-    for i in others:
-        inds = edge_index[1,:] == i
-        if sum(inds) == 0:
-            clust[i] = -1
-            continue
-        indmax = torch.argmax(edge_label[inds])
-        clust[i] = edge_index[0,inds][indmax].item()
-    return clust
+    # Set the edge as true if it connects two nodes that belong to the same batch and the same group
+    edge_assn = np.array([groups[e[0]] == groups[e[1]] for e in edge_index], dtype=int)
+
+    # If binary loss will be used, transform to -1,+1 instead of 0,1
+    if binary:
+        edge_assn = 2*edge_assn - 1
+    return edge_assn
 
 
-def assign_clusters_UF(edge_index, edge_wt, n, thresh=0.0):
+def edge_assignment_from_graph(edge_index, true_edge_index, binary=False):
     """
-    assigns clusters using Union Find on edges
+    Function that determines which edges are turned on based
+    on the group ids of the clusters they are connecting.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Constructed incidence matrix
+        edge_index (np.ndarray): (E,2) True incidence matrix
+    Returns:
+        np.ndarray: (E) Boolean array specifying on/off edges
+    """
+    # Set the edge as true if it connects two nodes that belong to the same batch and the same group
+    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
+
+    # If binary loss will be used, transform to -1,+1 instead of 0,1
+    if binary:
+        edge_assn = 2*edge_assn - 1
+    return edge_assn
+
+
+def cluster_to_voxel_label(clusts, node_label):
+    """
+    Function that turns an array of labels on clusters
+    to an array of labels on voxels.
+
+    Args:
+        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
+        node_label (np.ndarray): (C) List of node labels
+    Returns:
+        np.ndarray: (N) List of voxel labels
+    """
+    nvoxels = np.sum([len(c) for c in clusts])
+    vlabel = np.empty(nvoxels)
+    stptr = 0
+    for i, c in enumerate(clusts):
+        endptr = stptr + len(c)
+        vlabel[stptr:endptr] = node_label[i]
+        stptr = endptr
+
+    return vlabel
+
+
+def find_parent(parent, i):
+    """
+    Function that recursivey finds the parent node id.
+
+    Args:
+        parent (np.ndarray): (C) List of current group ids for all the node
+        i (int)              : Index of the node of which to find the parent
+    Returns:
+        int: Parent id
+    """
+    if i != parent[i]:
+        parent[i] = find_parent(parent, parent[i])
+
+    return parent[i]
+
+
+def node_assignment(edge_index, edge_label, n):
+    """
+    Function that assigns each node to a group, based
+    on the edge assigment provided. This uses a simple
+    union find implementation.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        edge_assn (np.ndarray) : (E) Boolean array (1 if edge is on)
+        n (int)                  : Total number of clusters C
+    Returns:
+        np.ndarray: (C) List of group ids
+    """
+    # Loop over on edges, reset the group IDs of connected node
+    groups = {}
+    group_ids = np.arange(n)
+    on_edges = edge_index[np.where(edge_label)[0]]
+    for i, j in on_edges: 
+        leaderi = group_ids[i]
+        leaderj = group_ids[j]
+        if leaderi in groups:
+            if leaderj in groups:
+                if leaderi == leaderj: continue # nothing to do
+                groupi = groups[leaderi]
+                groupj = groups[leaderj]
+                if len(groupi) < len(groupj):
+                    i, leaderi, groupi, j, leaderj, groupj = j, leaderj, groupj, i, leaderi, groupi
+                groupi |= groupj
+                del groups[leaderj]
+                for k in groupj:
+                    group_ids[k] = leaderi
+            else:
+                groups[leaderi].add(j)
+                group_ids[j] = leaderi
+        else:
+            if leaderj in groups:
+                groups[leaderj].add(i)
+                group_ids[i] = leaderj
+            else:
+                group_ids[i] = group_ids[j] = i
+                groups[i] = set([i, j])
+
+    return group_ids
+
+def node_assignment_UF(edge_index, edge_wt, n, thresh=0.0):
+    """
+    Function that assigns each node to a group, based on the edge
+    weights provided, by using the topologylayer implementation
+    of union find.
+
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        edge_wt (np.ndarray)   : (E) Array of edge weights
+        n (int)                : Total number of clusters C
+        thresh (double)        : Threshold for edge association
+    Returns:
+        np.ndarray: (C) List of group ids
     """
     from topologylayer.functional.persistence import getClustsUF_raw
-    
-    edges = edge_index.detach().cpu().numpy()
-    edges = edges.T # transpose
-    edges = edges.flatten()
-    
-    val = edge_wt.detach().cpu().numpy()
-    
+
+    edges = edge_index.flatten()
+
+    val = edge_wt
+
     cs = getClustsUF_raw(edges, val, n, thresh)
     un, cinds = np.unique(cs, return_inverse=True)
     return cinds
 
 
-def secondary_matching_vox_efficiency(edge_index, true_labels, pred_labels, primaries, clusters, n):
+def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     """
-    fraction of secondary voxels that are correctly assigned
-    """
-    # mask = np.array([(i not in primaries) for i in range(n)])
-    # others = np.arange(n)[mask]
-    others = np.array([i for i in range(n) if i not in primaries])
-    true_nodes = assign_clusters(edge_index, true_labels, primaries, others, n)
-    pred_nodes = assign_clusters(edge_index, pred_labels, primaries, others, n)
-    tot_vox = np.sum([len(clusters[i]) for i in others])
-    int_vox = np.sum([len(clusters[i]) for i in others if true_nodes[i] == pred_nodes[i]])
-    return int_vox * 1.0 / tot_vox
+    Function that assigns each node to a group represented
+    by a primary node. This function loops over secondaries and
+    associates it to the primary with that is connected to it
+    with the strongest edge.
 
-
-def secondary_matching_vox_efficiency2(matched, group, primaries, clusters):
-    """
-    fraction of secondary voxels that are correctly assigned
-    uses matched array
-    """
-    n = len(matched)
-    others = np.array([i for i in range(n) if i not in primaries])
-    others_matched = np.array([i for i in others if matched[i] > -1])
-    tot_vox = np.sum([len(clusters[i]) for i in others])
-    int_vox = np.sum([len(clusters[i]) for i in others_matched if  group[i] == group[matched[i]]])
-    return int_vox * 1.0 / tot_vox
-
-
-def secondary_matching_vox_efficiency3(edge_index, true_labels, pred_labels, primaries, clusters, n):
-    """
-    fraction of secondary voxels that are correctly assigned
-    pred_labels is N x C
-    """
-    # mask = np.array([(i not in primaries) for i in range(n)])
-    # others = np.arange(n)[mask]
-    others = np.array([i for i in range(n) if i not in primaries])
-    true_nodes = assign_clusters(edge_index, true_labels, primaries, others, n)
-    pred_labels = torch.argmax(pred_labels, 1) # get argmax predicted
-    pred_nodes = assign_clusters(edge_index, pred_labels, primaries, others, n)
-    tot_vox = np.sum([len(clusters[i]) for i in others])
-    int_vox = np.sum([len(clusters[i]) for i in others if true_nodes[i] == pred_nodes[i]])
-    return int_vox * 1.0 / tot_vox
-
-
-def primary_assign_vox_efficiency(true_nodes, pred_nodes, clusters):
-    """
-    fraction of secondary voxels that are correctly assigned
-    """
-    tot_vox = np.sum([len(c) for c in clusters])
-    int_vox = np.sum([len(clusters[i]) for i in range(len(clusters)) if np.sign(true_nodes[i].detach().cpu().numpy()) == np.sign(pred_nodes[i].detach().cpu().numpy())])
-    return int_vox * 1.0 / tot_vox
-
-
-def cluster_to_voxel_label(label, clusters):
-    """
-    turn an array of labels on clusters to an array of labels on voxels
-    """
-    nvoxels = np.sum([len(c) for c in clusters])
-    vlabel = np.empty(nvoxels, dtype=np.int)
-    stptr = 0
-    for i, c in enumerate(clusters):
-        endptr = stptr + len(c)
-        vlabel[stptr:endptr] = label[i]
-        stptr = endptr
-    return vlabel
-
-
-def form_groups(edge_index, edge_pred, n):
-    """. 
-    Assign a group ID to each of the clusters. 
+    Args:
+        edge_index (np.ndarray): (E,2) Incidence matrix
+        edge_label (np.ndarray): (E) Array of edge scores
+        primaries (np.ndarray) : (P) List of primary ids
+        n (int)                : Total number of clusters C
+    Returns:
+        np.ndarray: (C) List of group ids
     """
     group_ids = np.arange(n)
-    on_edges = edge_index.transpose(0, 1)[torch.nonzero(edge_pred).flatten()]
-    for e in on_edges:
-        new_id = min(group_ids[e])
-        group_ids[e] = (new_id, new_id)
+    others = [i for i in range(n) if i not in primaries]
+    for i in others:
+        inds = edge_index[:,1] == i
+        if sum(inds) == 0:
+            continue
+        indmax = np.argmax(edge_label[inds])
+        group_ids[i] = edge_index[inds,0][indmax].item()
+
     return group_ids
 
 
-def DBSCAN_cluster_metrics(edge_index, true_labels, pred_labels, primaries, clusters, n):
+def node_assignment_group(group_ids, batch_ids):
     """
-    return ARI, AMI, SBD, purity, efficiency
-    of matching
+    Function that assigns each node to a group, given
+    group ids at each batch and corresponding batch ids
+
+    Args:
+        group_ids (np.ndarray): (C) List of cluster group ids within each batch
+        batch_ids (np.ndarray): (C) List of cluster batch ids
+    Returns:
+        np.ndarray: (C) List of unique group ids
     """
-    others = np.array([i for i in range(n) if i not in primaries])
-    true_nodes = assign_clusters(edge_index, true_labels, primaries, others, n)
-    pred_labels = torch.argmax(pred_labels, 1) # get argmax predicted
-    pred_nodes = assign_clusters(edge_index, pred_labels, primaries, others, n)
-    pred_vox = cluster_to_voxel_label(pred_nodes, clusters)
-    true_vox = cluster_to_voxel_label(true_nodes, clusters)
+    # Loop over on edges, reset the group IDs of connected node
+    joined = np.vstack((group_ids, batch_ids))
+    _, unique_ids = np.unique(joined, axis=1, return_inverse=True)
+    return unique_ids
+
+
+def clustering_metrics(clusts, node_assn, node_pred):
+    """
+    Function that assigns each node to a group, based
+    on the edge assigment provided.
+
+    Args:
+        clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
+        node_assn (np.ndarray): (C) List of true node group labels
+        node_pred (np.ndarray): (C) List of predicted node group labels
+    Returns:
+        double: Adjusted Rand Index
+        double: Adjusted Mutual Information
+        double: Symmetric Best Dice
+        double: Purity
+        double: Efficiency
+    """
+    pred_vox = cluster_to_voxel_label(clusts, node_pred)
+    true_vox = cluster_to_voxel_label(clusts, node_assn)
     ari = ARI(pred_vox, true_vox)
     ami = AMI(pred_vox, true_vox)
     sbd = SBD(pred_vox, true_vox)
@@ -134,32 +219,21 @@ def DBSCAN_cluster_metrics(edge_index, true_labels, pred_labels, primaries, clus
     return ari, ami, sbd, pur, eff
 
 
-def DBSCAN_cluster_metrics2(matched, clusters, group):
+def voxel_efficiency_bipartite(clusts, node_assn, node_pred, primaries):
     """
-    return ARI, AMI, SBD, purity, efficiency
-    of matching.  Use matched array
-    """
-    pred_vox = cluster_to_voxel_label(matched, clusters)
-    true_vox = cluster_to_voxel_label(group, clusters)
-    ari = ARI(pred_vox, true_vox)
-    ami = AMI(pred_vox, true_vox)
-    sbd = SBD(pred_vox, true_vox)
-    pur, eff = purity_efficiency(pred_vox, true_vox)
-    return ari, ami, sbd, pur, eff
+    Function that evaluates the fraction of secondary
+    voxels that are associated to the corresct primary.
 
-
-def DBSCAN_cluster_metrics3(edge_index, edge_assn, edge_pred, clusters):
-    """ 
-    return ARI, AMI, SBD, purity, efficiency
-    of matching. Use complete graph
+    Args:
+        clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
+        node_assn (np.ndarray): (C) List of true node group labels
+        node_pred (np.ndarray): (C) List of predicted node group labels
+        primaries (np.ndarray): (P) List of primary ids
+    Returns:
+        double: Fraction of correctly assigned secondary voxels
     """
-    pred_group_ids = form_groups(edge_index, edge_pred, len(clusters))
-    pred_vox = cluster_to_voxel_label(pred_group_ids, clusters) 
-    true_group_ids = form_groups(edge_index, edge_assn, len(clusters))
-    true_vox = cluster_to_voxel_label(true_group_ids, clusters) 
-    ari = ARI(pred_vox, true_vox)
-    ami = AMI(pred_vox, true_vox)
-    sbd = SBD(pred_vox, true_vox)
-    pur, eff = purity_efficiency(pred_vox, true_vox)
-    return ari, ami, sbd, pur, eff
+    others = [i for i in range(n) if i not in primaries]
+    tot_vox = np.sum([len(clusts[i]) for i in others])
+    int_vox = np.sum([len(clusts[i]) for i in others if node_pred[i] == node_assn[i]])
+    return int_vox * 1.0 / tot_vox
 

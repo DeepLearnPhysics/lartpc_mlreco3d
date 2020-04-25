@@ -1,7 +1,7 @@
 import numpy as np
 import plotly.graph_objs as go
 
-def scatter_label(voxels, labels, markersize=5):
+def scatter_label(voxels, labels, markersize=1):
     """
     scatter plot of voxels colored by labels
     - voxels is a list of voxel coordinates (Nx3-matrix)
@@ -19,7 +19,7 @@ def scatter_label(voxels, labels, markersize=5):
                         hovertext=labels)
     return [trace]
 
-def scatter_voxels(voxels, markersize=5):
+def scatter_voxels(voxels, markersize=1):
     """
     scatter plot of voxels colored by labels
     - voxels is a list of voxel coordinates (Nx3-matrix)

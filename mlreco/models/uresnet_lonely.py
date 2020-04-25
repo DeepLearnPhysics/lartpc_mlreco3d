@@ -57,7 +57,7 @@ class UResNet(torch.nn.Module):
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
-        self._model_config = cfg['modules'][name]
+        self._model_config = cfg[name]
 
         # Whether to compute ghost mask separately or not
         self._ghost = self._model_config.get('ghost', False)
@@ -194,7 +194,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['modules']['uresnet_lonely']
+        self._cfg = cfg['uresnet_lonely']
         self._ghost = self._cfg.get('ghost', False)
         self._ghost_label = self._cfg.get('ghost_label', -1)
         self._num_classes = self._cfg.get('num_classes', 5)
