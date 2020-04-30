@@ -327,7 +327,6 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
                     final_scores.append(scores[batch_index][score_mask][ppn_points][ppn_mask])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
 
-<<<<<<< HEAD
     if 'ghost' in out:
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
@@ -372,17 +371,11 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
             final_types  = np.concatenate(final_types,  axis=0)
             final_softmax = np.concatenate(final_softmax, axis=0)
             if final_points.shape[0] > 0:
-=======
-            final_points = np.concatenate(final_points, axis=0)
-            final_scores = np.concatenate(final_scores, axis=0)
-            final_types  = np.concatenate(final_types,  axis=0)
-            if len(final_points)>0:
->>>>>>> kazu/cnn_clustering
+
                 clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
                 for c in clusts:
                     # append mean of points
                     all_points.append(np.mean(final_points[c], axis=0))
-<<<<<<< HEAD
                     all_occupancy.append(len(c))
                     all_scores.append(pool_op(final_scores[c], axis=0))
                     all_types.append (pool_op(final_types[c],  axis=0))
@@ -390,14 +383,6 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
                     all_batch.append(b)
 
     return np.column_stack((all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types))
-=======
-                    all_scores.append(pool_op(final_scores[c], axis=0))
-                    all_types.append (pool_op(final_types[c],  axis=0))
-                    all_batch.append(b)
-
-        result.append(np.column_stack((all_points, all_batch, all_scores, all_types)))
-    return result
->>>>>>> kazu/cnn_clustering
 
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,

@@ -33,7 +33,7 @@ class UResNet(torch.nn.Module):
         for more details.
     ghost_label: int, optional
         If specified, then will collapse all classes other than ghost_label into
-        single non-ghost class and perform 2-classes segmentatiion (deghosting).
+        single non-ghost class and perform 2-classes segmentation (deghosting).
     reps : int, optional
         Convolution block repetition factor
     kernel_size : int, optional
@@ -61,6 +61,7 @@ class UResNet(torch.nn.Module):
 
         # Whether to compute ghost mask separately or not
         self._ghost = self._model_config.get('ghost', False)
+        self._ghost_label = self._model_config.get('ghost_label', -1)
         self._dimension = self._model_config.get('data_dim', 3)
         reps = self._model_config.get('reps', 2)  # Conv block repetition factor
         kernel_size = self._model_config.get('kernel_size', 2)
@@ -170,6 +171,8 @@ class UResNet(torch.nn.Module):
         }
         if self._ghost:
             res['ghost'] = [x_ghost]
+        elif self._ghost_label > -1:
+            res['ghost'] = [x_seg]
         return res
 
 
