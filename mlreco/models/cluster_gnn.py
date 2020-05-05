@@ -21,20 +21,20 @@ class ClustEdgeGNN(torch.nn.Module):
       name: cluster_gnn
       modules:
         chain:
-          node_type        : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-          node_min_size    : <minimum number of voxels inside a cluster to be considered (default -1)>
-          source_col       : <column in the input data that specifies the source node ids of each voxel (default 5)>
-          add_start_point  : <add label start point to the node features (default False)
-          add_start_dir    : <add predicted start direction to the node features (default False)
-          stat_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
-          network          : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
-          edge_max_dist    : <maximal edge Euclidean length (default -1)>
-          edge_dist_method : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-          merge_batch      : <flag for whether to merge batches (default False)>
-          merge_batch_mode : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
-          merge_batch_size : <size of batch merging (default 2)>
-          shuffle_clusters : <randomize cluster order (default False)>
-          edge_dist_numpy  : <use numpy to compute inter cluster distance (default False)>
+          node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
+          node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
+          source_col        : <column in the input data that specifies the source node ids of each voxel (default 5)>
+          add_start_point   : <add label start point to the node features (default False)
+          add_start_dir     : <add predicted start direction to the node features (default False)
+          start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
+          network           : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
+          edge_max_dist     : <maximal edge Euclidean length (default -1)>
+          edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          merge_batch       : <flag for whether to merge batches (default False)>
+          merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
+          merge_batch_size  : <size of batch merging (default 2)>
+          shuffle_clusters  : <randomize cluster order (default False)>
+          edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -180,7 +180,7 @@ class ClustEdgeGNN(torch.nn.Module):
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
 
-        # See if need add start point to node features
+        # Add start point and/or start direction to node features if requested
         if self.add_start_point:
             points = get_cluster_points_label(data, particles, clusts, self.source_col==6)
             x = torch.cat([x, points.float()], dim=1)

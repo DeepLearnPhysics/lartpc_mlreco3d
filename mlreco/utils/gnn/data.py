@@ -241,16 +241,17 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         data[batch_selection,3] = int(i)
 
         # Relabel the cluster and group IDs by offseting by the number of particles
-        clust_offset, int_offset, nu_offset = 0, 0, 0
+        clust_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0
         for j, sel in enumerate(data_selections):
             if j:
-                clust_offset += torch.sum(part_selections[j-1])
                 data[sel & (data[:,5] > -1),5] += clust_offset
-                data[sel & (data[:,6] > -1),6] += clust_offset
-                int_offset = torch.max(data[sel,7])+1
+                data[sel & (data[:,6] > -1),6] += group_offset
                 data[sel & (data[:,7] > -1),7] += int_offset
-                nu_offset = torch.max(data[sel,8])+1
                 data[sel & (data[:,8] > -1),8] += nu_offset
+            clust_offset += torch.sum(part_selections[j])
+            group_offset += torch.max(data[sel,6])+1
+            int_offset = torch.max(data[sel,7])+1
+            nu_offset = torch.max(data[sel,8])+1
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
