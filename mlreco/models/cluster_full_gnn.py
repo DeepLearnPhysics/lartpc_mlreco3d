@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, relabel_groups
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, relabel_groups, get_cluster_points_label, get_cluster_directions
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_score
 from mlreco.utils import local_cdist
@@ -24,12 +24,15 @@ class ClustFullGNN(torch.nn.Module):
       name: cluster_hierachy_gnn
       modules:
         chain:
-          node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-          node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          network         : <type of node prediction network: 'complete', 'delaunay' or 'mst' (default 'complete')>
-          edge_max_dist   : <maximal edge Euclidean length (default -1)>
-          edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-          edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
+          node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
+          node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
+          add_start_point   : <add label start point to the node features (default False)
+          add_start_dir     : <add predicted start direction to the node features (default False)
+          start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
+          network           : <type of node prediction network: 'complete', 'delaunay' or 'mst' (default 'complete')>
+          edge_max_dist     : <maximal edge Euclidean length (default -1)>
+          edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -58,6 +61,9 @@ class ClustFullGNN(torch.nn.Module):
         # Choose what type of node to use
         self.node_type = chain_config.get('node_type', 0)
         self.node_min_size = chain_config.get('node_min_size', -1)
+        self.add_start_point = chain_config.get('add_start_point', False)
+        self.add_start_dir = chain_config.get('add_start_dir', False)
+        self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
 
         # Choose what type of network to use
         self.network = chain_config.get('network', 'complete')
@@ -143,6 +149,14 @@ class ClustFullGNN(torch.nn.Module):
         # Obtain node and edge features
         x = self.node_encoder(data, clusts)
         e = self.edge_encoder(data, clusts, edge_index)
+
+        # Add start point and/or start direction to node features if requested
+        if self.add_start_point:
+            points = get_cluster_points_label(data, particles, clusts, groupwise=False)
+            x = torch.cat([x, points.float()], dim=1)
+            if self.add_start_dir:
+                dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist)
+                x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
