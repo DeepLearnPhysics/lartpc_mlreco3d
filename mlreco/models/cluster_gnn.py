@@ -5,14 +5,10 @@ from __future__ import print_function
 import torch
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
-from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.data import regulate_to_data
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, get_start_points
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
+from mlreco.utils.gnn.data import merge_batch
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, knn_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
-from mlreco.utils import local_cdist
-from mlreco.utils.groups import reassign_id, merge_batch, merge_batch_based_on_list
-import random
 
 class ClustEdgeGNN(torch.nn.Module):
     """
@@ -25,15 +21,20 @@ class ClustEdgeGNN(torch.nn.Module):
       name: cluster_gnn
       modules:
         chain:
-          node_type       : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-          node_min_size   : <minimum number of voxels inside a cluster to be considered (default -1)>
-          network         : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
-          edge_max_dist   : <maximal edge Euclidean length (default -1)>
-          edge_dist_method: <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-          merge_batch     : <flag for whether to merge batches, default False>
-          merge_batch_mode: <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it>
-          merge_batch_size: <size of batch merging>
-          edge_dist_numpy : <use numpy to compute inter cluster distance (default False)>
+          node_type        : <semantic class to group (all classes if -1, default 0, i.e. EM)>
+          node_min_size    : <minimum number of voxels inside a cluster to be considered (default -1)>
+          source_col       : <column in the input data that specifies the source node ids of each voxel (default 5)>
+          add_start_point  : <add label start point to the node features (default False)
+          add_start_dir    : <add predicted start direction to the node features (default False)
+          stat_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
+          network          : <type of network: 'complete', 'delaunay', 'mst' or 'bipartite' (default 'complete')>
+          edge_max_dist    : <maximal edge Euclidean length (default -1)>
+          edge_dist_method : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+          merge_batch      : <flag for whether to merge batches (default False)>
+          merge_batch_mode : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
+          merge_batch_size : <size of batch merging (default 2)>
+          shuffle_clusters : <randomize cluster order (default False)>
+          edge_dist_numpy  : <use numpy to compute inter cluster distance (default False)>
         dbscan:
           <dictionary of dbscan parameters>
         node_encoder:
@@ -58,15 +59,19 @@ class ClustEdgeGNN(torch.nn.Module):
                   <dictionary of arguments to pass to the encoder>
                   model_path      : <path to the encoder weights>
     """
-    def __init__(self, cfg):
+    def __init__(self, cfg, name='chain'):
         super(ClustEdgeGNN, self).__init__()
 
         # Get the chain input parameters
-        chain_config = cfg['chain']
+        chain_config = cfg[name]
 
         # Choose what type of node to use
         self.node_type = chain_config.get('node_type', 0)
         self.node_min_size = chain_config.get('node_min_size', -1)
+        self.source_col = chain_config.get('source_col', 5)
+        self.add_start_point = chain_config.get('add_start_point', False)
+        self.add_start_dir = chain_config.get('add_start_dir', False)
+        self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
 
         # Choose what type of network to use
         self.network = chain_config.get('network', 'complete')
@@ -78,15 +83,14 @@ class ClustEdgeGNN(torch.nn.Module):
         self.merge_batch = chain_config.get('merge_batch', False)
         self.merge_batch_mode = chain_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = chain_config.get('merge_batch_size', 2)
-        self.add_start_point = chain_config.get('add_start_point', False) # whether add start point into the node features
 
         # Hidden flag for shuffling cluster
         self.shuffle_clusters = chain_config.get('shuffle_clusters', False)
 
         # If requested, use DBSCAN to form clusters from semantics
-        self.do_dbscan = False
+        self.dbscan = None
         if 'dbscan' in cfg:
-            self.do_dbscan = True
+            from .layers.dbscan import DBScanClusts2
             self.dbscan = DBScanClusts2(cfg)
 
         # Initialize encoders
@@ -97,13 +101,12 @@ class ClustEdgeGNN(torch.nn.Module):
         self.edge_predictor = edge_model_construct(cfg)
 
 
-
     def forward(self, data):
         """
         Prepares particle clusters and feed them to the GNN model.
 
         Args:
-            data ([torch.tensor]): (N,5-6) [x, y, z, batchid, (value,) id]
+            data ([torch.tensor]): (N,5-10) [x, y, z, batchid, (value,) id(, groupid, intid, nuid, semtype)]
         Returns:
             dict:
                 'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
@@ -113,12 +116,11 @@ class ClustEdgeGNN(torch.nn.Module):
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
-        particles = None
-        if len(data)>1:
+        if len(data) > 1:
             particles = data[1]
         data = data[0]
         device = data.device
-        if self.do_dbscan:
+        if self.dbscan is not None:
             clusts = self.dbscan(data, onehot=False)
             if self.node_type > -1:
                 clusts = clusts[self.node_type]
@@ -127,35 +129,23 @@ class ClustEdgeGNN(torch.nn.Module):
         else:
             if self.node_type > -1:
                 mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
-                clusts = form_clusters(data[mask], self.node_min_size)
+                clusts = form_clusters(data[mask], self.node_min_size, self.source_col)
                 clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
-                clusts = form_clusters(data, self.node_min_size)
+                clusts = form_clusters(data, self.node_min_size, self.source_col)
                 clusts = [c.cpu().numpy() for c in clusts]
 
         if not len(clusts):
             return {}
 
-        # if shuffle the clusters
+        # If requested, shuffule the order in which the clusters are listed (used for debugging)
         if self.shuffle_clusters:
+            import random
             random.shuffle(clusts)
 
-        # if merge_batch set all batch id to zero
-        # and also reassign ids and group ids
+        # If requested, merge images together within the batch
         if self.merge_batch:
-            # It needs to regulate between data and particles before merging batches
-            # bc particles can have more group_id depending on how
-            # data (clusters) were obtained
-            particles = regulate_to_data(data, particles)
-            if self.merge_batch_mode=='fluc':
-                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=True)
-            else:
-                data, merging_batch_list = merge_batch(data, self.merge_batch_size, whether_fluctuate=False)
-            particles, _ = merge_batch_based_on_list(
-                particles,
-                merging_batch_list,
-                data_type='particle'
-            )
+            data, particles = merge_batch(data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -171,7 +161,7 @@ class ClustEdgeGNN(torch.nn.Module):
         elif self.network == 'complete':
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
-            edge_index = delaunay_graph(data, clusts, dist_mat, self.edge_max_dist)
+            edge_index = delaunay_graph(data.cpu().numpy(), clusts, dist_mat, self.edge_max_dist)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'knn':
@@ -192,7 +182,11 @@ class ClustEdgeGNN(torch.nn.Module):
 
         # See if need add start point to node features
         if self.add_start_point:
-            x = torch.cat([x, get_start_points(particles, data, clusts)], dim=1)
+            points = get_cluster_points_label(data, particles, clusts, self.source_col==6)
+            x = torch.cat([x, points.float()], dim=1)
+            if self.add_start_dir:
+                dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist)
+                x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
@@ -227,17 +221,23 @@ class EdgeChannelLoss(torch.nn.Module):
       name: cluster_gnn
       modules:
         chain:
+          source_col      : <column in the input data that specifies the source node ids of each voxel (default 5)>
+          target_col      : <column in the input data that specifies the target group ids of each voxel (default 6)>
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
           reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
           balance_classes : <balance loss per class: True or False (default False)>
           target          : <basis to form target adjacency matrix:'group', 'group_max', 'photon' (default 'group')>
           high_purity     : <only penalize loss on groups with a primary (default False)>
     """
-    def __init__(self, cfg):
+    def __init__(self, cfg, name='chain'):
         super(EdgeChannelLoss, self).__init__()
 
         # Get the chain input parameters
-        chain_config = cfg['chain']
+        chain_config = cfg[name]
+
+        # Sets the source and target for the loss_seg
+        self.source_col = chain_config.get('source_col', 5)
+        self.target_col = chain_config.get('target_col', 6)
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
@@ -285,17 +285,17 @@ class EdgeChannelLoss(torch.nn.Module):
                 # Narrow down the tensor to the rows in the batch
                 labels = clusters[i][batches == j]
 
-                # Use group information or particle tree to determine the true edge assigment
+                # Get the output of the forward function
                 edge_pred = out['edge_pred'][i][j]
                 if not edge_pred.shape[0]:
                     continue
                 edge_index = out['edge_index'][i][j]
                 clusts = out['clusts'][i][j]
-                group_ids = get_cluster_group(labels, clusts)
+                group_ids = get_cluster_label(labels, clusts, self.target_col)
 
                 # If high purity is requested, remove edges in poorly defined groups from the loss
                 if self.high_purity:
-                    clust_ids   = np.array([labels[c[0],5].item() for c in clusts])
+                    clust_ids   = get_cluster_label(labels, clusts, self.source_col)
                     purity_mask = np.ones(len(edge_index), dtype=bool)
                     for g in np.unique(group_ids):
                         group_mask = np.where(group_ids == g)[0]
@@ -307,6 +307,7 @@ class EdgeChannelLoss(torch.nn.Module):
                     if not len(edge_index):
                         continue
 
+                # Use group information or particle tree to determine the true edge assigment
                 if self.target == 'group':
                     edge_assn = edge_assignment(edge_index, group_ids)
                 elif self.target == 'group_mst':
@@ -342,7 +343,7 @@ class EdgeChannelLoss(torch.nn.Module):
                     if not len(edge_pred):
                         continue
                 elif 'photon' in self.target:
-                    clust_ids = get_cluster_label(labels, clusts)
+                    clust_ids = get_cluster_label(labels, clusts, self.source_col)
                     subgraph = graph[i][graph[i][:,-1] == j, :2]
                     true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)

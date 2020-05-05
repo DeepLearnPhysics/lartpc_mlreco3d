@@ -22,7 +22,7 @@ def get_group_types(particle_v, meta, point_type="3d"):
     for particle in particle_v:
         pdg_code = abs(particle.pdg_code())
         prc = particle.creation_process()
-        
+
         # Determine point type
         if (pdg_code == 2212):
             gt_type = 0 # proton
@@ -41,7 +41,7 @@ def get_group_types(particle_v, meta, point_type="3d"):
                 gt_type = -1 # not well defined
 
         gt_types.append(gt_type)
-        
+
     return np.array(gt_types)
 
 
@@ -67,6 +67,38 @@ def filter_duplicate_voxels(data, usebatch=True):
             # new voxel
             ret[i-1] = True
     ret[n-1] = True
+    return ret
+
+
+def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True):
+    """
+    return array that will filter out duplicate voxels
+    Sort with respect to a reference and following the specified precedence order
+    Assume data[:4] = [x,y,z,batchid]
+    Assumes data is lexicographically sorted in x,y,z,batch order
+    """
+    # set number of cols to look at
+    if usebatch:
+        k = 4
+    else:
+        k = 3
+    n = data.shape[0]
+    ret = np.full(n, True, dtype=np.bool)
+    duplicates = {}
+    for i in range(1,n):
+        if np.all(data[i-1,:k] == data[i,:k]):
+            x, y, z = int(data[i,0]), int(data[i,1]), int(data[i,2])
+            id = meta.index(x, y, z)
+            if id in duplicates:
+                duplicates[id].append(i)
+            else:
+                duplicates[id] = [i-1, i]
+    precendence = [1, 2, 0, 3, 4]
+    for d in duplicates.values():
+        ref = [precendence.index(r) for r in reference[d]]
+        args = np.argsort(ref)
+        ret[d[1:]] = False
+
     return ret
 
 
@@ -144,20 +176,65 @@ def process_group_data(data_grp, data_img):
     return data_grp[inds,:]
 
 
-def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
+def get_valid_group_id(cluster_event, particles_v):
+    '''
+    Function that makes sure that the particle for which id = group_id (primary)
+    is a valid group ID. This should be handled somewhere else (e.g. SUPERA)
+
+    Inputs:
+        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    # Only shower fragments that come first in time and deposit energy can be primaries
+    num_clusters = cluster_event.as_vector().size()
+    group_ids = np.array([particles_v[i].group_id() for i in range(particles_v.size())])
+    new_group = num_clusters + 1
+    for i, gid in enumerate(np.unique(group_ids)):
+        # If the group's parent is not EM or LE, nothing to do
+        if particles_v[int(gid)].shape() != 0 and particles_v[int(gid)].shape() != 4:
+            continue
+
+        # If the group's parent is nuclear activity, Delta or Michel, make it non primary
+        process = particles_v[int(gid)].creation_process()
+        parent_pdg_code = abs(particles_v[int(gid)].parent_pdg_code())
+        idxs = np.where(group_ids == gid)[0]
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+        # If a group's parent fragment has size zero, make it non primary
+        parent_size = cluster_event.as_vector()[int(gid)].as_vector().size()
+        if not parent_size:
+            idxs = np.where(group_ids == gid)[0]
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+        # If a group's parent is not the first in time, make it non primary
+        idxs = np.where(group_ids == gid)[0]
+        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        min_id = np.argmin(clust_times)
+        if idxs[min_id] != gid :
+            group_ids[idxs] = new_group
+            new_group += 1
+            continue
+
+    return group_ids
+
+
+def get_interaction_id(particle_v, num_ancestor_loop=1):
     '''
     A function to sort out interaction ids.
     Note that this assumes cluster_id==particle_id.
     Inputs:
-        - particle_v vector: larcv::EventParticle.as_vector()
-        - np_features: a numpy array with the shape (n,4) where 4 is voxel value,
-        cluster id, group id, and semantic type respectively
-        - number of ancestor loops (default 1)
+        - particle_v (array)     : larcv::EventParticle.as_vector()
+        - num_ancestor_loop (int): number of ancestor loops (default 1)
     Outputs:
         - interaction_ids: a numpy array with the shape (n,)
     '''
-    # initiate the interaction_ids, setting all ids to -1 (as unknown) by default
-    interaction_ids = (-1.)*np.ones(np_features.shape[0])
     ##########################################################################
     # sort out the interaction ids using the information of ancestor vtx info
     # then loop over to make sure the ancestor particles having the same interaction ids
@@ -184,10 +261,10 @@ def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
         axis=0,
     ).tolist()
     # loop over each cluster to assign interaction ids
-    interaction_ids_cluster_wise = np.ones(particle_v.size(), dtype=np.int)*(-1)
+    interaction_ids = np.ones(particle_v.size(), dtype=np.int)*(-1)
     for clust_id in range(particle_v.size()):
         # get the interaction id from the unique list (index is the id)
-        interaction_ids_cluster_wise[clust_id] = interaction_vtx_list.index(
+        interaction_ids[clust_id] = interaction_vtx_list.index(
             ancestor_vtxs[clust_id].tolist()
         )
     # Loop over ancestor, making sure particle having the same interaction id as ancestor
@@ -195,37 +272,31 @@ def get_interaction_id(particle_v, np_features, num_ancestor_loop=1):
         for clust_id, ancestor_track_id in enumerate(ancestor_track_ids):
             if ancestor_track_id in track_ids:
                 ancestor_clust_index = track_ids.index(ancestor_track_id)
-                interaction_ids_cluster_wise[clust_id] = interaction_ids_cluster_wise[ancestor_clust_index]
-    # loop over clusters to assign interaction to voxel wise array
-    for clust_id, interaction_id in enumerate(interaction_ids_cluster_wise):
-        # update the interaction_ids array
-        clust_inds = np.where(np_features[:,1]==clust_id)[0]
-        interaction_ids[clust_inds] = interaction_id
+                interaction_ids[clust_id] = interaction_ids[ancestor_clust_index]
+
     return interaction_ids
 
-def get_nu_id(particle_v, np_features, interaction_ids):
+
+def get_nu_id(cluster_event, particle_v, interaction_ids):
     '''
-    A function to sort out nu ids (0 for cosmic, 1 for nu).
+    A function to sort out nu ids (0 for cosmic, 1 to n_nu for nu).
     CAVEAT: Dirty way to sort out nu_ids
             Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
     Inputs:
+        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
         - particle_v vector: larcv::EventParticle.as_vector()
-        - np_features: a numpy array with the shape (n,4) where 4 is voxel value,
-        cluster id, group id, and semantic type respectively
         - interaction_id: a numpy array with shape (n, 1) where 1 is interaction id
     Outputs:
         - nu_id: a numpy array with the shape (n,1)
     '''
     # initiate the nu_id
-    nu_id = np.zeros((np_features.shape[0], 1))
-    # find the first cluster
-    first_clust_id = np.min(np.unique(np_features[:,1]))
+    nu_id = np.ones(len(particle_v))*(-1)
+    # find the first cluster that has nonzero size
+    sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
+    nonzero = np.where(sizes > 0)[0]
+    first_clust_id = nonzero[0]
     # the corresponding interaction id
-    nu_interaction_id = np.unique(
-        interaction_ids[
-            np.where(np_features[:,1]==first_clust_id)[0]
-        ]
-    )[0]
+    nu_interaction_id = interaction_ids[first_clust_id]
     # Get clust indexes for interaction_id = nu_interaction_id
     inds = np.where(interaction_ids==nu_interaction_id)[0]
     # Check whether there're at least two clusts coming from 'primary' process
@@ -240,180 +311,3 @@ def get_nu_id(particle_v, np_features, interaction_ids):
     if num_primary>1:
         nu_id[inds]=1
     return nu_id
-
-
-
-def reassign_id(data, id_index=6, batch_index=3):
-    '''
-    A function to reassign group id when merging all the batches,
-    make sure that there is no overlap of group id
-    :param data: torch tensor (N,8) -> [x,y,z,batchid,value,id,group id,sem. type]
-    :return: torch tensor (N) -> reassigned group ids
-    Or the input and output can be both numpy array
-    '''
-    group_ids = None
-    batch_ids = None
-    if type(data)==torch.Tensor:
-        group_ids = data[:,id_index].detach().cpu().numpy()
-        batch_ids = data[:,batch_index].detach().cpu().numpy()
-    else:
-        group_ids = data[:,id_index]
-        batch_ids = data[:,batch_index]
-    max_shift = 0
-    for batch_id in np.unique(batch_ids):
-        inds = np.where(batch_ids==batch_id)[0]
-        group_ids[inds] += max_shift
-        max_shift = np.max(group_ids[inds],axis=-1)+1
-    if type(data)==torch.Tensor:
-        return torch.tensor(group_ids, device=data.device, dtype=data.dtype)
-    return group_ids.astype(dtype=data.dtype)
-
-def form_merging_batches(batch_ids, mean_merge_size):
-    """
-    Function for returning a list of batch_ids for merging
-    """
-    num_of_batch_ids = len(batch_ids)
-    # generate random numbers based on mean merge size
-    nums_merging_batch = np.random.poisson(
-        mean_merge_size,
-        size = int(num_of_batch_ids / mean_merge_size * 2)
-    )
-    # remove zeros
-    nums_merging_batch = nums_merging_batch[
-        np.where(nums_merging_batch!=0)[0]
-    ]
-    # cumsum it
-    nums_merging_batch = np.cumsum(nums_merging_batch)
-    # cut it where it exceeds total batch number
-    nums_merging_batch = nums_merging_batch[
-        np.where(nums_merging_batch<num_of_batch_ids)[0]
-    ]
-    # complete it
-    nums_merging_batch = np.append(
-        np.append(0,nums_merging_batch),
-        num_of_batch_ids
-    )
-    # loop over
-    merging_batches_list = []
-    for lower_index, upper_index in zip(
-        nums_merging_batch[:-1],
-        nums_merging_batch[1:]
-    ):
-        merging_batches_list.append(batch_ids[lower_index:upper_index])
-    return merging_batches_list
-
-
-def merge_batch(data, merge_size=2, whether_fluctuate=False, data_type='cluster'):
-    """
-    Merge events in same batch
-    For ex., if batch size = 16 and merge_size = 2
-    output data has a batch size of 8 with each adjacent 2 batches in input data merged.
-    Input:
-        data - (N, 8) tensor or numpy array -> [x,y,z,batch_id,value, id, group_id, sem. type]
-               or can be [start_x, start_y, start_z, end_x, end_y, end_z, batch_id, group_id] if it is "particle" type
-        merge_size: how many batches to be merged if whether_fluctuate=False,
-                    otherwise sample the number of merged batches using Poisson with mean of merge_size
-        whether_fluctuate: whether not using a constant merging size
-        type:       'cluster" or "particle"
-    Output:
-        output_data - (N, 8) tensor or numpy array
-    """
-    # specify batch index
-    index_for_batch = 3
-    if data_type=='particle':
-        index_for_batch = 6
-    # specify resign id index
-    reassign_id_indexes = [5,6]
-    if data_type=='particle':
-        reassign_id_indexes = [7]
-    # Get the unique batch ids
-    batch_ids = None
-    if type(data)==torch.Tensor:
-        batch_ids = data[:,index_for_batch].unique()
-    elif type(data)==np.ndarray:
-        batch_ids = np.unique(data[:,index_for_batch])
-    else:
-        return data
-    # Get the list of arrays
-    if whether_fluctuate:
-        merging_batch_id_list = form_merging_batches(batch_ids, merge_size)
-    else:
-        if type(batch_ids)==torch.Tensor:
-            # to be sure
-            batch_ids = batch_ids.cpu().detach().numpy()
-        if len(batch_ids)%merge_size==0:
-            merging_batch_id_list = np.reshape(batch_ids,(-1,merge_size))
-        else:
-            # it will be a bit more complicated
-            # if length of batch ids is indivisible by merge size
-            # first reshape the divisible part
-            merging_batch_id_list = np.reshape(
-                batch_ids[:-int(len(batch_ids)%merge_size)],
-                (-1, merge_size)
-            ).tolist()
-            # then append the rest
-            merging_batch_id_list.append(batch_ids[-int(len(batch_ids)%merge_size):].tolist())
-    # Loop over
-    output_data = data
-    for i, merging_batch_ids in enumerate(merging_batch_id_list):
-        selection = None
-        for j, batch_id in enumerate(merging_batch_ids):
-            if j==0:
-                selection = (data[:,index_for_batch]==batch_id)
-            else:
-                selection = selection | (data[:,index_for_batch]==batch_id)
-        inds = None
-        if type(data)==torch.Tensor:
-            inds = selection.nonzero().view(-1)
-        else:
-            inds = np.where(selection)[0]
-        # Merge batch
-        for reassign_id_index in reassign_id_indexes:
-            output_data[inds,reassign_id_index] = reassign_id(
-                data[inds,:],
-                reassign_id_index,
-                index_for_batch
-            )
-        output_data[inds,index_for_batch] = i
-    return output_data, merging_batch_id_list
-
-def merge_batch_based_on_list(data, merging_batch_id_list, data_type='cluster'):
-    """
-    Similar to merge_batch
-    but this function merge batches according to a list
-    """
-    # specify batch index
-    index_for_batch = 3
-    if data_type == 'particle':
-        index_for_batch = 6
-    # specify resign id index
-    reassign_id_indexes = [5, 6]
-    if data_type == 'particle':
-        reassign_id_indexes = [7]
-    # check if data is tensor or numpy
-    if type(data)!=torch.Tensor and type(data)!=np.ndarray:
-        return data, merging_batch_id_list
-    # Loop over
-    output_data = data
-    for i, merging_batch_ids in enumerate(merging_batch_id_list):
-        selection = None
-        for j, batch_id in enumerate(merging_batch_ids):
-            if j == 0:
-                selection = (data[:, index_for_batch] == batch_id)
-            else:
-                selection = selection | (data[:, index_for_batch] == batch_id)
-        inds = None
-        if type(data) == torch.Tensor:
-            inds = selection.nonzero().view(-1)
-        else:
-            inds = np.where(selection)[0]
-        # Merge batch
-        for reassign_id_index in reassign_id_indexes:
-            output_data[inds, reassign_id_index] = reassign_id(
-                data[inds, :],
-                reassign_id_index,
-                index_for_batch
-            )
-        output_data[inds, index_for_batch] = i
-    return output_data, merging_batch_id_list
-

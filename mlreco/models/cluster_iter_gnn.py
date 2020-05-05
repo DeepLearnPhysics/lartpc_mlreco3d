@@ -5,7 +5,7 @@ from __future__ import print_function
 import torch
 import numpy as np
 from .gnn import edge_model_construct
-from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label, get_cluster_group, get_cluster_primary
+from mlreco.utils.gnn.cluster import form_clusters, reform_clusters, get_cluster_batch, get_cluster_label
 from mlreco.utils.gnn.network import bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, clustering_metrics
@@ -155,7 +155,7 @@ class IterativeEdgeModel(torch.nn.Module):
 
         # Identify the primary clusters
         group_ids = get_cluster_group(cluster_label, clusts)
-        primary_ids = get_cluster_primary(clust_ids, group_ids)
+        primary_ids = np.where(clust_ids == group_ids)[0]
 
         # Obtain node features
         if self.node_encoder == 'basic':
