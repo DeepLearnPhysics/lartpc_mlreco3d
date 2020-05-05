@@ -325,7 +325,7 @@ def get_cluster_points_label(data, particles, clusts, groupwise=False):
 
     Args:
         data (torch.tensor)     : (N,6) Voxel coordinates [x, y, z, batch_id, value, clust_id, group_id]
-        particles (torch.tensor): (N,8) Point coordinates [start_x, start_y, start_z, last_x, last_y, last_z, start_t, batch_id]
+        particles (torch.tensor): (N,8) Point coordinates [start_x, start_y, start_z, last_x, last_y, last_z, batch_id, start_t]
         clusts ([np.ndarray])   : (C) List of arrays of voxel IDs in each cluster
         groupwise (bool)        : Whether or not to get a single point per group (merges shower fragments)
     Returns:
@@ -337,16 +337,16 @@ def get_cluster_points_label(data, particles, clusts, groupwise=False):
     if not groupwise:
         clust_ids = get_cluster_label(data, clusts)
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,-1] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
             idx = batch_mask[clust_ids[i]]
             points.append(particles[idx,:3])
     else:
         group_ids = get_cluster_label(data, clusts, column=6)
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,-1] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
             clust_ids  = data[c,5].unique().long()
-            maxid = torch.argmin(particles[batch_mask][clust_ids,-2])
-            order = [0, 1, 2, 3, 4, 5] if np.random.choice(2) else [3, 4, 5, 0, 1, 2]
+            maxid = torch.argmin(particles[batch_mask][clust_ids,-1])
+            order = [0, 1, 2, 4, 5, 6] if np.random.choice(2) else [4, 5, 6, 0, 1, 2]
             points.append(particles[batch_mask][clust_ids[maxid],order])
 
     return torch.stack(points)

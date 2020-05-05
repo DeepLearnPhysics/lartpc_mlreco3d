@@ -197,7 +197,8 @@ def parse_particle_coords(data):
             last_point  = [p.last_step().x(), p.last_step().y(), p.last_step().z()]
         particle_feats.append(np.concatenate((start_point, last_point, [p.first_step().t()])))
 
-    return np.vstack(particle_feats)
+    particle_feats = np.vstack(particle_feats)
+    return particle_feats[:,:3], particle_feats[:,3:]
 
 
 def parse_particle_points(data):

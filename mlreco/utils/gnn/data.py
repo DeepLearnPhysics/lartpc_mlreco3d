@@ -206,7 +206,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
 
     Args:
         data (np.ndarray)       : (N,10) [x, y, z, batchid, value, id, groupid, intid, nuid,shape]
-        particles (np.ndarray)  : (N,8) [start_x, start_y, start_z, last_x, last_y, last_z, start_t, batch_id]
+        particles (np.ndarray)  : (N,8) [start_x, start_y, start_z, batch_id, last_x, last_y, last_z, start_t]
         merge_size (int)        : How many batches to be merged if whether_fluctuate=False,
                                   otherwise sample the number of merged batches using Poisson with mean of merge_size
         whether_fluctuate (bool): Whether not using a constant merging size
@@ -234,7 +234,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         # Find the list of voxels that belong to the new batch
         merging_batch_ids = np.where(merging_batch_id_list == i)[0]
         data_selections = [data[:,3] == j for j in merging_batch_ids]
-        part_selections = [particles[:,-1] == j for j in merging_batch_ids]
+        part_selections = [particles[:,3] == j for j in merging_batch_ids]
 
         # Relabel the batch column to the new batch id
         batch_selection = torch.sum(torch.stack(data_selections), dim=0).type(torch.bool)
@@ -254,6 +254,6 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
-        particles[batch_selection,-1] = int(i)
+        particles[batch_selection,3] = int(i)
 
     return data, particles

@@ -199,6 +199,31 @@ def node_assignment_bipartite(edge_index, edge_label, primaries, n):
     return group_ids
 
 
+def primary_assignment(node_scores, group_ids=None):
+    """
+    Function that select shower primary fragments based
+    on the node-score (and optionally an a priori grouping).
+
+    Args:
+        node_scores (np.ndarray): (C,2) Node scores
+        group_ids (array)      : (C) List of group ids
+    Returns:
+        np.ndarray: (C) Primary labels
+    """
+    if group_ids is None:
+        return node_scores.argmax(1)
+
+    from scipy.special import softmax
+    node_scores = softmax(node_scores, axis=1)
+    primary_labels = np.zeros(len(node_scores), dtype=bool)
+    for g in np.unique(group_ids):
+        mask = np.where(group_ids == g)[0]
+        idx  = node_scores[mask][:,1].argmax()
+        primary_labels[mask[idx]] = True
+
+    return primary_labels
+
+
 def adjacency_matrix(edge_index, n):
     """
     Function that creates an adjacency matrix from a list
