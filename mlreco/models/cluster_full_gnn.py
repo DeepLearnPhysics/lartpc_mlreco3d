@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label, get_cluster_batch, get_cluster_group, relabel_groups
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, relabel_groups
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, node_assignment, node_assignment_score
 from mlreco.utils import local_cdist
@@ -106,7 +106,7 @@ class ClustFullGNN(torch.nn.Module):
                 clusts = np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = torch.nonzero(data[:,7] == self.node_type).flatten()
+                mask = torch.nonzero(data[:,-1] == self.node_type).flatten()
                 clusts = form_clusters(data[mask], self.node_min_size)
                 clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
@@ -199,10 +199,10 @@ class ChainLoss(torch.nn.modules.loss._Loss):
           balance_classes : <balance loss per class: True or False (default False)>
           target_photons  : <use true photon connections as basis for loss (default False)>
     """
-    def __init__(self, cfg):
+    def __init__(self, cfg, name='chain'):
         super(ChainLoss, self).__init__()
-        self.node_loss = NodeChannelLoss(cfg)
-        self.edge_loss = EdgeChannelLoss(cfg)
+        self.node_loss = NodeChannelLoss(cfg, name)
+        self.edge_loss = EdgeChannelLoss(cfg, name)
 
     def forward(self, result, clust_label):
         # Apply edge loss

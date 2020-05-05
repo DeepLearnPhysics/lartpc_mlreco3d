@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_group
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
 from mlreco.utils.gnn.network import loop_graph, complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 
@@ -125,7 +125,7 @@ class ClustNodeGNN(torch.nn.Module):
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'bipartite':
-            group_ids = get_cluster_group(data, clusts)
+            group_ids = get_cluster_label(data, clusts, column=6)
             primary_ids = get_cluster_primary(clust_ids, group_ids)
             edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
         else:
@@ -177,11 +177,11 @@ class NodeChannelLoss(torch.nn.Module):
           balance_classes : <balance loss per class: True or False (default False)>
           high_purity     : <only penalize loss on groups with a primary (default False)>
     """
-    def __init__(self, cfg):
+    def __init__(self, cfg, name='chain'):
         super(NodeChannelLoss, self).__init__()
 
         # Get the chain input parameters
-        chain_config = cfg['chain']
+        chain_config = cfg[name]
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
@@ -232,12 +232,12 @@ class NodeChannelLoss(torch.nn.Module):
                     continue
                 clusts = out['clusts'][i][j]
                 clust_ids = get_cluster_label(labels, clusts)
-                group_ids = get_cluster_group(labels, clusts)
+                group_ids = get_cluster_label(labels, clusts, column=6)
                 if self.high_purity:
                     purity_mask = np.zeros(len(clusts), dtype=bool)
                     for g in np.unique(group_ids):
                         group_mask = group_ids == g
-                        if g in clust_ids[group_mask]:
+                        if np.sum(group_mask) > 1 and g in clust_ids[group_mask]:
                             purity_mask[group_mask] = np.ones(np.sum(group_mask))
                     clusts    = clusts[purity_mask]
                     clust_ids = clust_ids[purity_mask]
