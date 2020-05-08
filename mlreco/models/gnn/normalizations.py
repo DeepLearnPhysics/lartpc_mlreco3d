@@ -13,8 +13,8 @@ from torch.nn.modules.instancenorm import _InstanceNorm
 
 class BatchNorm(BatchNorm1d):
     r"""
-    © Copyright 2020, Matthias Fey Revision 18da46c2. 
-    
+    © Copyright 2020, Matthias Fey Revision 18da46c2.
+
     Applies batch normalization over a batch of node features as described
     in the `"Batch Normalization: Accelerating Deep Network Training by
     Reducing Internal Covariate Shift" <https://arxiv.org/abs/1502.03167>`_
@@ -60,8 +60,8 @@ class BatchNorm(BatchNorm1d):
 
 class InstanceNorm(_InstanceNorm):
     r"""
-    © Copyright 2020, Matthias Fey Revision 18da46c2. 
-    
+    © Copyright 2020, Matthias Fey Revision 18da46c2.
+
     Applies instance normalization over each individual example in a batch
     of node features as described in the `"Instance Normalization: The Missing
     Ingredient for Fast Stylization" <https://arxiv.org/abs/1607.08022>`_
