@@ -29,7 +29,9 @@ def model_dict():
     from . import clustercnn_adaptis
     # from . import cluster_chain
     from . import full_chain
-
+    from . import full_chain_2
+    from . import full_chain_3
+    from . import full_cnn
 
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -96,7 +98,10 @@ def model_dict():
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # CNN Clustering + GNN Chain
-        "full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
+        #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
+        #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
+        "full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }

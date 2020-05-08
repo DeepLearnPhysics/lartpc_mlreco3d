@@ -93,11 +93,11 @@ def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True):
                 duplicates[id].append(i)
             else:
                 duplicates[id] = [i-1, i]
-    precendence = [1, 2, 0, 3, 4]
+    precendence = [2, 1, 0, 3, 4]
     for d in duplicates.values():
-        ref = [precendence.index(r) for r in reference[d]]
-        args = np.argsort(ref)
-        ret[d[1:]] = False
+        ref = np.array([precendence.index(r) for r in reference[d]])
+        args = np.argsort(-ref, kind='mergesort') # Must preserve of order of duplicates
+        ret[np.array(d)[args[:-1]]] = False
 
     return ret
 

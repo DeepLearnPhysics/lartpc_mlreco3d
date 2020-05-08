@@ -53,28 +53,26 @@ def get_edge_features(nodes, batch_idx, edge_net):
         - edge_batch_indices: list of batch indices (0 to B)
     '''
     unique_batch = batch_idx.unique()
-    edge_indices = []
+    edge_index = []
     edge_features = []
-    edge_batch_indices = []
     for bidx in unique_batch:
         mask = bidx == batch_idx
+        clust_ids = torch.nonzero(mask).flatten()
         nodes_batch = nodes[mask]
         subindex = torch.arange(nodes_batch.shape[0])
         N = nodes_batch.shape[0]
         for i, row in enumerate(nodes_batch):
             submask = subindex != i
-            edge_idx = [torch.Tensor([i, j]).cuda() for j in subindex[submask]]
-            edge_indices.extend(edge_idx)
+            edge_idx = [[clust_ids[i].item(), clust_ids[j].item()] for j in subindex[submask]]
+            edge_index.extend(edge_idx)
             others = nodes_batch[submask]
             ei2j = edge_net(row.expand_as(others), others)
             edge_features.extend(ei2j)
-            edge_batch_indices.extend([bidx for _ in subindex[submask]])
 
-    edge_indices = torch.stack(edge_indices, dim=0)
+    edge_index = np.vstack(edge_index)
     edge_features = torch.stack(edge_features, dim=0)
-    edge_batch_indices = torch.stack(edge_batch_indices, dim=0)
 
-    return edge_indices, edge_features, edge_batch_indices
+    return edge_index, edge_features
 
 
 class EdgeFeatureNet(nn.Module):
@@ -98,14 +96,16 @@ class EdgeFeatureNet(nn.Module):
     def forward(self, x1, x2):
         x = torch.cat([x1, x2], dim=1)
         x = self.linear1(x)
-        x = self.norm1(x)
+        if x.shape[0] > 1:
+            x = self.norm1(x)
         x = self.linear2(x)
-        x = self.norm2(x)
+        if x.shape[0] > 1:
+            x = self.norm2(x)
         x = self.linear3(x)
         return x
 
 
-def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
+def get_gnn_input(coords, features_gnn, fit_predict,
                     train=True, **kwargs):
     '''
     Get input features to GNN from CNN clustering output
@@ -135,35 +135,43 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
     '''
     nodes_full = []
     nodes_batch_id = []
-    batch_index = kwargs['batch_index']
-    node_group_labels = []
-    centroids = []
+    batch_index = coords[:,-1].unique()
+    #node_group_labels = []
+    #centroids = []
+    fragments = []
 
     if train:
         fragment_labels = kwargs['fragment_labels']
-        group_labels = kwargs['group_labels']
+        fragments = []
+        #group_labels = kwargs['group_labels']
         embeddings = kwargs['embeddings']
         # print(embeddings.shape)
         for bidx in batch_index:
             batch_mask = coords[:, 3] == bidx
+            batch_map = torch.nonzero(batch_mask).flatten()
             featuresAgg_batch = features_gnn[batch_mask]
             fragment_batch = fragment_labels[batch_mask]
-            group_batch = group_labels[batch_mask]
+            #group_batch = group_labels[batch_mask]
             embeddings_batch = embeddings[batch_mask]
-            fragment_ids = fragment_batch.unique()
-            for fid in fragment_ids:
+            fragment_batch_ids = fragment_batch.unique()
+            for fid in fragment_batch_ids:
+                fragments.append(batch_map[fragment_batch == fid])
                 mean_features = featuresAgg_batch[fragment_batch == fid].mean(dim=0)
-                group_id = group_batch[fragment_batch == fid].unique()
-                centroid = torch.mean(embeddings_batch[fragment_batch == fid], dim=0)
+                #group_id = group_batch[fragment_batch == fid].unique()
+                #centroid = torch.mean(embeddings_batch[fragment_batch == fid], dim=0)
                 # print(centroid)
-                centroids.append(centroid)
-                node_group_labels.append(int(group_id))
+                #centroids.append(centroid)
+                #node_group_labels.append(int(group_id))
                 nodes_full.append(mean_features)
                 nodes_batch_id.append(int(bidx))
+
+        fragments = np.array([f.detach().cpu().numpy() for f in fragments])
     else:
         with torch.no_grad():
+            fragments = []
             semantic_labels = kwargs['semantic_labels']
-            high_energy_mask = semantic_labels < 4
+            #fragment_labels = torch.ones(len(semantic_labels), dtype=torch.int32)*-1
+            high_energy_mask = torch.nonzero(semantic_labels < 4).flatten()
             semantic_labels_highE = semantic_labels[high_energy_mask]
             embeddings = kwargs['embeddings'][high_energy_mask]
             margins = kwargs['margins'][high_energy_mask]
@@ -172,14 +180,14 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
             kernel_func = kwargs.get('kernel_func', multivariate_kernel)
             coords_highE = coords[high_energy_mask]
             for bidx in batch_index:
-                batch_mask = coords_highE[:, 3] == bidx
+                batch_mask = torch.nonzero(coords_highE[:, 3] == bidx).flatten()
                 slabel = semantic_labels_highE[batch_mask]
                 embedding_batch = embeddings[batch_mask]
                 featuresAgg_batch = features_gnn_highE[batch_mask]
                 margins_batch = margins[batch_mask]
                 seediness_batch = seediness[batch_mask]
                 for s in slabel.unique():
-                    segment_mask = slabel == s
+                    segment_mask = torch.nonzero(slabel == s).flatten()
                     featuresAgg_class = featuresAgg_batch[segment_mask]
                     embedding_class = embedding_batch[segment_mask]
                     margins_class = margins_batch[segment_mask]
@@ -189,30 +197,34 @@ def get_gnn_input(coords, features_gnn, edge_net, fit_predict,
                     # Adding Node Features
                     for c in pred_labels.unique():
                         mask = pred_labels == c
+                        fragments.append(np.array(high_energy_mask[batch_mask[segment_mask[mask]]]))
                         mean_features = featuresAgg_class[mask].mean(dim=0)
                         nodes_full.append(mean_features)
                         nodes_batch_id.append(bidx)
-                        centroid = torch.mean(embedding_class[mask], dim=0)
-                        centroids.append(centroid)
+                        #centroid = torch.mean(embedding_class[mask], dim=0)
+                        #centroids.append(centroid)
+            fragments = np.array(fragments)
 
+    device = features_gnn.device
     nodes_full = torch.stack(nodes_full, dim=0)
-    node_batch_id = torch.Tensor(nodes_batch_id).cuda()
-    node_group_labels = torch.Tensor(node_group_labels).cuda()
+    node_batch_id = torch.Tensor(nodes_batch_id).to(device)
+    #centroids = torch.stack(centroids, dim=0)
 
     # Compile Pairwise Edge Features
-    edge_indices, edge_features, edge_batch_indices = get_edge_features(
-        nodes_full, node_batch_id, edge_net)
+    # edge_indices, edge_features, edge_batch_indices = get_edge_features(
+    #     nodes_full, node_batch_id, edge_net)
 
-    gnn_input = GraphData(x=nodes_full,
-                          edge_index=edge_indices.view(2, -1).long(),
-                          edge_attr=edge_features,
-                          batch=node_batch_id.long())
-    gnn_input.edge_batch = edge_batch_indices
-    gnn_input.node_group_labels = node_group_labels
-    centroids = torch.stack(centroids, dim=0)
-    gnn_input.centroids = centroids
+    # gnn_input = GraphData(x=nodes_full,
+    #                       edge_index=edge_indices.view(2, -1).long(),
+    #                       edge_attr=edge_features,
+    #                       batch=node_batch_id.long())
+    # gnn_input.edge_batch = edge_batch_indices
+    # gnn_input.centroids = centroids
+    # if train:
+    #     node_group_labels = torch.Tensor(node_group_labels).to(device)
+    #     gnn_input.node_group_labels = node_group_labels
 
-    return gnn_input
+    return nodes_full, node_batch_id.long(), fragments
 
 
 def fit_predict(embeddings, seediness, margins, fitfunc,
@@ -222,6 +234,8 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
     spheres = []
     seediness_copy = seediness.clone()
     count = 0
+    if seediness_copy.shape[0] == 1:
+        return torch.argmax(seediness_copy)
     while count < int(seediness.shape[0]):
         i = torch.argsort(seediness_copy.squeeze(), descending=True)[0]
         seedScore = seediness[i]
@@ -237,7 +251,7 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
         seediness_copy[cluster_index] = -1
         count += torch.sum(cluster_index).item()
     if len(probs) == 0:
-        return pred_labels, spheres, 1
+        return torch.tensor(pred_labels)
     probs = torch.cat(probs, dim=1)
     pred_labels = torch.argmax(probs, dim=1)
     return pred_labels
@@ -267,10 +281,10 @@ class FullCNN(NetworkBase):
 
         # Network Freezing Options
         self.encoder_freeze = self.model_config.get('encoder_freeze', False)
-        self.ppn_freeze = self.model_config.get('ppn_freeze', True)
+        self.ppn_freeze = self.model_config.get('ppn_freeze', False)
         self.segmentation_freeze = self.model_config.get('segmentation_freeze', False)
         self.embedding_freeze = self.model_config.get('embedding_freeze', False)
-        self.seediness_freeze = self.model_config.get('seediness_freeze', True)
+        self.seediness_freeze = self.model_config.get('seediness_freeze', False)
 
         # Input Layer Configurations and commonly used scn operations.
         self.input = scn.Sequential().add(
@@ -378,7 +392,7 @@ class FullCNN(NetworkBase):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
-        print(self)
+        #print(self)
 
 
     def forward(self, input):
