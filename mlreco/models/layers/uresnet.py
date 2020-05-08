@@ -243,6 +243,11 @@ class UResNetDecoder(NetworkBase):
         self.concat = scn.JoinTable()
         self.add = scn.AddTable()
 
+        self.encoder_num_filters = self.model_config.get('encoder_num_filters', None)
+        if self.encoder_num_filters is None:
+            self.encoder_num_filters = self.num_filters
+        self.encoder_nPlanes = [i*self.encoder_num_filters for i in range(1, self.num_strides+1)]
+
         # Define Sparse UResNet Decoder.
         self.decoding_block = scn.Sequential()
         self.decoding_conv = scn.Sequential()
@@ -254,7 +259,8 @@ class UResNetDecoder(NetworkBase):
             self.decoding_conv.add(m)
             m = scn.Sequential()
             for j in range(self.reps):
-                self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
+                self._resnet_block(m, self.nPlanes[i] + (self.encoder_nPlanes[i] \
+                    if j == 0 else 0), self.nPlanes[i])
             self.decoding_block.add(m)
 
         # print(self.decoding_block)
