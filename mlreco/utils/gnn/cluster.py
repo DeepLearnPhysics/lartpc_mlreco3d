@@ -341,7 +341,6 @@ def get_cluster_points_label(data, particles, clusts, groupwise=False):
             idx = batch_mask[clust_ids[i]]
             points.append(particles[idx,:3])
     else:
-        group_ids = get_cluster_label(data, clusts, column=6)
         for i, c in enumerate(clusts):
             batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
             clust_ids  = data[c,5].unique().long()

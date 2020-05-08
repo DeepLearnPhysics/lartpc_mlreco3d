@@ -101,6 +101,8 @@ class ClustFullGNN(torch.nn.Module):
         # Find index of points that belong to the same clusters
         # If a specific semantic class is required, apply mask
         # Here the specified size selection is applied
+        if len(data) > 1:
+            particles = data[1]
         data = data[0]
         device = data.device
         result = {}

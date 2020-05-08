@@ -80,17 +80,18 @@ class MaskBCELoss(nn.Module):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(coords, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1.0
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
@@ -207,23 +208,24 @@ class MaskBCELoss2(MaskBCELoss):
     Spatial Embeddings Loss with trainable center of attention.
     '''
     def __init__(self, cfg, name='clustering_loss'):
-        super(MaskBCELoss2, self).__init__(cfg)
+        super(MaskBCELoss2, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1.0
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
@@ -248,23 +250,24 @@ class MaskBCELossBivariate(MaskBCELoss):
     bivariate gaussian probability kernels.
     '''
     def __init__(self, cfg, name='clustering_loss'):
-        super(MaskBCELossBivariate, self).__init__(cfg)
+        super(MaskBCELossBivariate, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1.0
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
@@ -289,23 +292,24 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
     segmentation and trainable center of attention.
     '''
     def __init__(self, cfg, name='clustering_loss'):
-        super(MaskLovaszHingeLoss, self).__init__(cfg)
+        super(MaskLovaszHingeLoss, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
@@ -326,23 +330,24 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
 class CELovaszLoss(MaskBCELoss2):
 
     def __init__(self, cfg, name='clustering_loss'):
-        super(CELovaszLoss, self).__init__(cfg)
+        super(CELovaszLoss, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1.0
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
@@ -364,7 +369,7 @@ class CELovaszLoss(MaskBCELoss2):
 class MaskLovaszInterLoss(MaskLovaszHingeLoss):
 
     def __init__(self, cfg, name='clustering_loss'):
-        super(MaskLovaszInterLoss, self).__init__(cfg)
+        super(MaskLovaszInterLoss, self).__init__(cfg, name)
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.norm = 2
 
@@ -418,18 +423,19 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         inter_loss = self.inter_cluster_loss(centroids)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         accuracy = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
@@ -503,24 +509,25 @@ class MaskFocalLoss(MaskBCELoss2):
     Spatial Embeddings Loss with trainable center of attention.
     '''
     def __init__(self, cfg, name='clustering_loss'):
-        super(MaskFocalLoss, self).__init__(cfg)
+        super(MaskFocalLoss, self).__init__(cfg, name)
         self.bceloss = FocalLoss(logits=False)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         acc = 0.0
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1.0
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
@@ -543,13 +550,14 @@ class MaskFocalLoss(MaskBCELoss2):
 class MultiVariateLovasz(MaskLovaszInterLoss):
 
     def __init__(self, cfg, name='clustering_loss'):
-        super(MultiVariateLovasz, self).__init__(cfg)
+        super(MultiVariateLovasz, self).__init__(cfg, name)
 
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
         '''
         Computes binary foreground/background loss.
         '''
+        device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels)
@@ -557,7 +565,7 @@ class MultiVariateLovasz(MaskLovaszInterLoss):
         reg_loss = self.regularization(centroids)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
-        probs = torch.zeros(embeddings.shape[0]).float().cuda()
+        probs = torch.zeros(embeddings.shape[0]).float().to(device)
         accuracy = 0.0
 
         if embeddings.shape[0] < 2:
@@ -565,7 +573,7 @@ class MultiVariateLovasz(MaskLovaszInterLoss):
 
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
-            mask = torch.zeros(embeddings.shape[0]).cuda()
+            mask = torch.zeros(embeddings.shape[0]).to(device)
             mask[index] = 1
             mask[~index] = 0
             sigma = torch.mean(margins[index], dim=0)
