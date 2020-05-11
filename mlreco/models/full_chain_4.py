@@ -76,13 +76,19 @@ class FullChain(torch.nn.Module):
         self.ppn            = PPN(cfg)
         self.cluster_cnn    = ClusterCNN(cfg)
 
+        # Fragment formation parameters
+        self.frag_cfg     = cfg['fragment_clustering']
+        self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+        self.p_thresholds = self.frag_cfg.get('s_thresholds', [0.5, 0.5, 0.5, 0.5])
+        self.cluster_all  = self.frag_cfg.get('cluster_all', True)
+
         # Initialize the geometric encoders
         self.node_encoder = node_encoder_construct(cfg)
         self.edge_encoder = edge_encoder_construct(cfg)
 
         # Initialize the GNN models
-        self.particle_gnn = GNN(cfg['particle_edge_model'])
-        self.inter_gnn    = GNN(cfg['interaction_edge_model'])
+        self.particle_gnn  = GNN(cfg['particle_edge_model'])
+        self.inter_gnn     = GNN(cfg['interaction_edge_model'])
         self.min_frag_size = cfg['particle_gnn']['node_min_size']
 
     def forward(self, input):
@@ -121,7 +127,9 @@ class FullChain(torch.nn.Module):
                 if s > 3: continue
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
                 pred_labels = fit_predict(result['embeddings'][0][mask],
-                    result['seediness'][0][mask], result['margins'][0][mask], gaussian_kernel)
+                    result['seediness'][0][mask], result['margins'][0][mask], gaussian_kernel,
+                    s_threshold=self.s_thresholds[s], p_threshold=self.s_thresholds[s],
+                    cluster_all=self.cluster_all)
                 for c in pred_labels.unique():
                     if torch.sum(pred_labels == c) < self.min_frag_size:
                         continue
@@ -325,9 +333,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         # Apply the PPN loss
         res_ppn = self.ppn_loss(out, [segment_label_tensor], ppn_label)
 
-        # Apply the CNN dense clustering loss
-        sem_label = [torch.cat((cluster_label[0][:,:4],cluster_label[0][:,-1].view(-1,1)), dim=1)]
-        res_cnn_clust = self.cluster_cnn_loss(out, sem_label, cluster_label)
+        # Apply the CNN dense clustering loss to HE voxels only
+        he_mask = segment_label < 4
+        sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
+        clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
+        cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
+        res_cnn_clust = self.cluster_cnn_loss(cnn_clust_output, sem_label, clust_label)
         cnn_clust_acc, cnn_clust_loss = res_cnn_clust['accuracy'], res_cnn_clust['loss']
 
         # Apply the GNN particle clustering loss
