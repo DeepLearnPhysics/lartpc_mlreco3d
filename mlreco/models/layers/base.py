@@ -81,7 +81,7 @@ class NetworkBase(nn.Module):
             return m
         return f
 
-    def _block(self, module, a, b):
+    def _block(self, module, a, b, kernel=3):
         '''
         Utility Method for attaching 2 x (Conv-BN) Blocks.
 
@@ -95,9 +95,9 @@ class NetworkBase(nn.Module):
         '''
         module.add(scn.Sequential()
                    .add(scn.BatchNormLeakyReLU(a, leakiness=self.leakiness))
-                   .add(scn.SubmanifoldConvolution(self.dimension, a, b, 3, self.allow_bias))
+                   .add(scn.SubmanifoldConvolution(self.dimension, a, b, kernel, self.allow_bias))
                    .add(scn.BatchNormLeakyReLU(b, leakiness=self.leakiness))
-                   .add(scn.SubmanifoldConvolution(self.dimension, b, b, 3, self.allow_bias))
+                   .add(scn.SubmanifoldConvolution(self.dimension, b, b, kernel, self.allow_bias))
                    )
 
     def _nin_block(self, module, a, b):

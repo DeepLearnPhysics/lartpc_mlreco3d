@@ -179,7 +179,6 @@ class UResNetEncoder(NetworkBase):
         self.num_filters = self.model_config.get('filters', 16)
         self.nPlanes = [i*self.num_filters for i in range(1, self.num_strides+1)]
         self.downsample = [self.kernel_size, 2]  # [filter size, filter stride]
-        self.inputKernel = self.model_config.get('input_kernel_size', 3)
 
         # Define Sparse UResNet Encoder
         self.encoding_block = scn.Sequential()
@@ -196,6 +195,7 @@ class UResNetEncoder(NetworkBase):
                     scn.Convolution(self.dimension, self.nPlanes[i], self.nPlanes[i+1], \
                         self.downsample[0], self.downsample[1], self.allow_bias))
             self.encoding_conv.add(m)
+
 
     def forward(self, x):
         '''
@@ -251,19 +251,23 @@ class UResNetDecoder(NetworkBase):
         # Define Sparse UResNet Decoder.
         self.decoding_block = scn.Sequential()
         self.decoding_conv = scn.Sequential()
-        for i in range(self.num_strides-2, -1, -1):
-            m = scn.Sequential().add(
-                scn.BatchNormLeakyReLU(self.nPlanes[i+1], leakiness=self.leakiness)).add(
-                scn.Deconvolution(self.dimension, self.nPlanes[i+1], self.nPlanes[i],
-                    self.downsample[0], self.downsample[1], self.allow_bias))
+        for idx, i in enumerate(list(range(self.num_strides-2, -1, -1))):
+            if idx == 0:
+                m = scn.Sequential().add(
+                    scn.BatchNormLeakyReLU(self.encoder_nPlanes[i+1], leakiness=self.leakiness)).add(
+                    scn.Deconvolution(self.dimension, self.encoder_nPlanes[i+1], self.nPlanes[i],
+                        self.downsample[0], self.downsample[1], self.allow_bias))
+            else:
+                m = scn.Sequential().add(
+                    scn.BatchNormLeakyReLU(self.nPlanes[i+1], leakiness=self.leakiness)).add(
+                    scn.Deconvolution(self.dimension, self.nPlanes[i+1], self.nPlanes[i],
+                        self.downsample[0], self.downsample[1], self.allow_bias))
             self.decoding_conv.add(m)
             m = scn.Sequential()
             for j in range(self.reps):
                 self._resnet_block(m, self.nPlanes[i] + (self.encoder_nPlanes[i] \
                     if j == 0 else 0), self.nPlanes[i])
             self.decoding_block.add(m)
-
-        # print(self.decoding_block)
 
 
     def forward(self, features_enc, deepest_layer):
