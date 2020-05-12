@@ -79,7 +79,7 @@ class FullChain(torch.nn.Module):
         # Fragment formation parameters
         self.frag_cfg     = cfg['fragment_clustering']
         self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-        self.p_thresholds = self.frag_cfg.get('s_thresholds', [0.5, 0.5, 0.5, 0.5])
+        self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
         self.cluster_all  = self.frag_cfg.get('cluster_all', True)
 
         # Initialize the geometric encoders
@@ -126,10 +126,13 @@ class FullChain(torch.nn.Module):
             for s in semantic_labels.unique():
                 if s > 3: continue
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
-                pred_labels = fit_predict(result['embeddings'][0][mask],
-                    result['seediness'][0][mask], result['margins'][0][mask], gaussian_kernel,
-                    s_threshold=self.s_thresholds[s], p_threshold=self.s_thresholds[s],
-                    cluster_all=self.cluster_all)
+                pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
+                                          seediness = result['seediness'][0][mask],
+                                          margins = result['margins'][0][mask],
+                                          fitfunc = gaussian_kernel,
+                                          s_threshold = self.s_thresholds[s],
+                                          p_threshold = self.p_thresholds[s],
+                                          cluster_all = self.cluster_all)
                 for c in pred_labels.unique():
                     if torch.sum(pred_labels == c) < self.min_frag_size:
                         continue
