@@ -426,8 +426,9 @@ def parse_cluster3d_fragment(data):
         coordinate
         a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
     """
-    grp_voxels, grp_data = parse_cluster3d_full([data[0]])
+    grp_voxels, grp_data = parse_cluster3d([data[0]])
     label_voxels, label_data = parse_sparse3d_scn([data[1]])
+
     # step 1: lexicographically sort group data
     perm = np.lexsort(grp_voxels.T)
     grp_voxels = grp_voxels[perm,:]
@@ -448,7 +449,7 @@ def parse_cluster3d_fragment(data):
     grp_voxels = grp_voxels[inds2]
     grp_data = grp_data[inds2]
 
-    return grp_voxels, grp_data
+    return grp_voxels, np.flip(grp_data, axis=1)
 
 
 def parse_sparse3d_fragment(data):
