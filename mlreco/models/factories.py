@@ -9,9 +9,13 @@ def model_dict():
     #from . import chain_track_clustering
     from . import uresnet_ppn_chain
     from . import cluster_gnn
+    from . import cluster_bipartite_gnn
+    from . import cluster_hierarchy_gnn
     from . import cluster_node_gnn
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
+    from . import cluster_full_gnn
+    from . import cluster_group_prior_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
     from . import flashmatching_model
@@ -23,6 +27,11 @@ def model_dict():
 
     from . import clusternet
     from . import clustercnn_adaptis
+    # from . import cluster_chain
+    from . import full_chain
+    from . import full_chain_2
+    from . import full_chain_3
+    from . import full_cnn
 
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -72,6 +81,14 @@ def model_dict():
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Cluster grouping GNN
         "cluster_gnn": (cluster_gnn.ClustEdgeGNN, cluster_gnn.EdgeChannelLoss),
+        # Cluster primary node identification + grouping GNN
+        "cluster_full_gnn": (cluster_full_gnn.ClustFullGNN, cluster_full_gnn.ChainLoss),
+        # Cluster shower grouping + primary node identification
+        "cluster_group_prior_gnn": (cluster_group_prior_gnn.ClustGroupPriorGNN, cluster_group_prior_gnn.GroupPriorLoss),
+        # Cluster bipartite grouping GNN
+        "cluster_bipartite_gnn": (cluster_bipartite_gnn.ClustBipartiteGNN, cluster_bipartite_gnn.ChainLoss),
+        # Cluster hierarchical grouping GNN
+        "cluster_hierarchy_gnn": (cluster_hierarchy_gnn.ClustHierarchyGNN, cluster_hierarchy_gnn.ChainLoss),
         # Cluster primary node identification
         "cluster_node_gnn": (cluster_node_gnn.ClustNodeGNN, cluster_node_gnn.NodeChannelLoss),
         # Iterative cluster grouping
@@ -80,6 +97,11 @@ def model_dict():
         "cluster_dbscan_gnn": (cluster_chain_gnn.ChainDBSCANGNN, cluster_chain_gnn.ChainLoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
+        # CNN Clustering + GNN Chain
+        #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
+        #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
+        "full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
