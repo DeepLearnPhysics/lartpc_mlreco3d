@@ -47,7 +47,7 @@ def inference(cfg):
     inference_loop(cfg, handlers)
 
 
-def process_config(cfg):
+def process_config(cfg, verbose=True):
 
     # Set GPUS to be used
     if 'trainval' in cfg:
@@ -93,8 +93,9 @@ def process_config(cfg):
     print('\n$CUDA_VISIBLE_DEVICES="%s"\n' % os.environ.get('CUDA_VISIBLE_DEVICES',None))
     # Report GPUs to be used (if any)
     # Report configuations
-    pp = pprint.PrettyPrinter(indent=4)
-    pp.pprint(cfg)
+    if verbose:
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(cfg)
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
@@ -141,7 +142,6 @@ def prepare(cfg):
         # Set primary device
         if len(cfg['trainval']['gpus']) > 0:
             torch.cuda.set_device(cfg['trainval']['gpus'][0])
-
 
         # TODO check that it does what we want (cycle through dataloader)
         # check on a small sample, check 1/ it cycles through and 2/ randomness

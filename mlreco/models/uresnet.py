@@ -5,10 +5,13 @@ import torch
 
 
 class UResNet(torch.nn.Module):
-    def __init__(self, cfg):
+
+    MODULES = ['uresnet']
+    
+    def __init__(self, cfg, name='uresnet'):
         import sparseconvnet as scn
         super(UResNet, self).__init__()
-        self._model_config = cfg['modules']['uresnet']
+        self._model_config = cfg[name]
 
         self._dimension = self._model_config.get('data_dim', 3)
         num_strides = self._model_config.get('num_strides', 5)
@@ -39,6 +42,7 @@ class UResNet(torch.nn.Module):
         point_cloud, = input
         coords = point_cloud[:, :self._dimension+1].float()
         features = point_cloud[:, self._dimension+1:].float()
+        features = features[:, -1].view(-1, 1)
         x = self.sparseModel((coords, features))
         x = self.linear(x)
         return {"segmentation" : [x]}
@@ -85,7 +89,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
                 total_acc += acc
                 count += 1
-        
+
         return {
             'accuracy': total_acc/count,
             'loss': total_loss/count

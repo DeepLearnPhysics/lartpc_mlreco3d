@@ -1,6 +1,6 @@
 import numpy as np
 from mlreco.utils.gnn.compton import filter_compton
-from mlreco.utils.gnn.cluster import form_clusters_new
+from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.utils.gnn.cluster import get_cluster_features
 
 def find_parent(parent, i):
@@ -59,7 +59,7 @@ def get_lifetimes(data):
         lifetime will be infinity if a voxel is outside a cluster or in a compton scatter
     """
     all_lifetimes = np.inf * np.ones(len(data))
-    clusts = form_clusters_new(data)
+    clusts = form_clusters(data)
 
     # remove compton clusters
     selection = filter_compton(clusts)

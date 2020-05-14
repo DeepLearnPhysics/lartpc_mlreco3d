@@ -95,6 +95,20 @@ class LArCVDataset(Dataset):
         self._trees_ready=False
 
     @staticmethod
+    def list_data(f):
+        from ROOT import TFile
+        f=TFile.Open(f,"READ")
+        data={'sparse3d':[],'cluster3d':[],'particle':[]}
+        for k in f.GetListOfKeys():
+            name = k.GetName()
+            if not name.endswith('_tree'): continue
+            if not len(name.split('_')) < 3: continue
+            key = name.split('_')[0]
+            if not key in data.keys(): continue
+            data[key] = name[:name.rfind('_')]
+        return data
+
+    @staticmethod
     def create(cfg):
         data_schema = cfg['schema']
         data_keys   = cfg['data_keys']

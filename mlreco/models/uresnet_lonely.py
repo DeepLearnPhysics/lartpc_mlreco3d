@@ -33,7 +33,7 @@ class UResNet(torch.nn.Module):
         for more details.
     ghost_label: int, optional
         If specified, then will collapse all classes other than ghost_label into
-        single non-ghost class and perform 2-classes segmentatiion (deghosting).
+        single non-ghost class and perform 2-classes segmentation (deghosting).
     reps : int, optional
         Convolution block repetition factor
     kernel_size : int, optional
@@ -54,13 +54,16 @@ class UResNet(torch.nn.Module):
         ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
+    MODULES = ['uresnet_lonely']
+
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
-        self._model_config = cfg['modules'][name]
+        self._model_config = cfg[name]
 
         # Whether to compute ghost mask separately or not
         self._ghost = self._model_config.get('ghost', False)
+        self._ghost_label = self._model_config.get('ghost_label', -1)
         self._dimension = self._model_config.get('data_dim', 3)
         reps = self._model_config.get('reps', 2)  # Conv block repetition factor
         kernel_size = self._model_config.get('kernel_size', 2)
@@ -170,6 +173,8 @@ class UResNet(torch.nn.Module):
         }
         if self._ghost:
             res['ghost'] = [x_ghost]
+        elif self._ghost_label > -1:
+            res['ghost'] = [x_seg]
         return res
 
 
@@ -194,7 +199,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['modules']['uresnet_lonely']
+        self._cfg = cfg['uresnet_lonely']
         self._ghost = self._cfg.get('ghost', False)
         self._ghost_label = self._cfg.get('ghost_label', -1)
         self._num_classes = self._cfg.get('num_classes', 5)
@@ -208,7 +213,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, result, label):
+    def forward(self, result, label, weights=None):
         """
         result[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -240,6 +245,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
                 elif self._ghost:
                     # check and warn about invalid labels
+                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
                     if (unique_label > self._num_classes).long().sum():
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)
@@ -304,6 +310,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
                     else:
                         loss_seg = self.cross_entropy(event_segmentation, event_label)
+                        if weights is not None:
+                            loss_seg *= weights[i][batch_index][:, -1].float()
                     uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation
