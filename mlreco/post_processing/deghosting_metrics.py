@@ -1,6 +1,8 @@
 import numpy as np
 import os
 from mlreco.utils import utils
+import scipy
+from scipy.spatial.distance import cdist
 
 def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
     """
@@ -35,6 +37,9 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
     method_cfg = cfg['post_processing']['deghosting_metrics']
 
     csv_logger = utils.CSVData(os.path.join(logdir,"deghosting_metrics-iter-%.07d.csv" % iteration))
+    csv_logger2 = utils.CSVData(os.path.join(logdir,"deghosting_metrics-true-ghost-iter-%.07d.csv" % iteration))
+    csv_logger3 = utils.CSVData(os.path.join(logdir,"deghosting_metrics-true-nonghost-iter-%.07d.csv" % iteration))
+
     for data_idx, tree_idx in enumerate(data_blob['index']):
 
         deghosting_type = method_cfg['method']
@@ -43,9 +48,11 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
         pcluster = None
         if 'pcluster' in data_blob:
             pcluster = data_blob['pcluster'][data_idx][:, -1]
+        data = data_blob['input_data'][data_idx]
         label = data_blob['segment_label'][data_idx][:,-1]
         segmentation = res['segmentation'][data_idx]  # (N, 5)
         predictions  = np.argmax(segmentation, axis=1)
+        softmax_predictions = scipy.special.softmax(segmentation, axis=1)
 
         num_classes = segmentation.shape[1]
         num_ghost_points = np.count_nonzero(label == 5)
@@ -57,6 +64,7 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
         if deghosting_type == '5+2':
             # Accuracy for ghost prediction for 5+2
             ghost_predictions = np.argmax(res['ghost'][data_idx], axis=1)
+            ghost_softmax = scipy.special.softmax(res['ghost'][data_idx], axis=1)
             mask = ghost_predictions == 0
             # 0 = non ghost, 1 = ghost
             # Fraction of true points predicted correctly
@@ -67,6 +75,34 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
             nonghost2nonghost = (ghost_predictions[label < 5] == 0).sum() / float(num_nonghost_points)
             csv_logger.record(("ghost2ghost", "nonghost2nonghost"),
                               (ghost2ghost, nonghost2nonghost))
+
+            # # Looking at mistakes: true ghost predicted as nonghost
+            # # distance from a true ghost point predicted as nonghost, to closest true nonghost point
+            # d = cdist(data[(ghost_predictions == 0) & (label == 5), :3], data[label < 5, :3])
+            # closest_true_nonghost = d.argmin(axis=1)
+            # for d_idx in range(d.shape[0]):
+            #     csv_logger2.record(("distance_to_closest_true_nonghost", "semantic_of_closest_true_nonghost", "predicted_semantic",
+            #                         "nonghost_softmax"),
+            #                        (d[d_idx, closest_true_nonghost[d_idx]], label[label<5][closest_true_nonghost[d_idx]], predictions[(ghost_predictions == 0) & (label == 5)][d_idx],
+            #                        ghost_softmax[(ghost_predictions == 0) & (label == 5)][d_idx][0]))
+            #     for c in range(num_classes):
+            #         csv_logger2.record(("softmax_class%d" %c,),
+            #                             (softmax_predictions[(ghost_predictions == 0) & (label == 5)][d_idx][c],))
+            #     csv_logger2.write()
+            #
+            # # Looking at mistakes: true nonghost predicted as ghost
+            # d = cdist(data[(ghost_predictions == 1) & (label < 5), :3], data[label == 5, :3])
+            # closest_true_ghost = d.argmin(axis=1)
+            # for d_idx in range(d.shape[0]):
+            #     csv_logger3.record(("distance_to_closest_true_ghost", "semantic",
+            #                         "ghost_softmax", "predicted_semantic"),
+            #                         (d[d_idx, closest_true_ghost[d_idx]], label[(ghost_predictions == 1) & (label < 5)][d_idx],
+            #                         ghost_softmax[(ghost_predictions == 1) & (label < 5)][d_idx][1],
+            #                         predictions[(ghost_predictions == 1) & (label < 5)][d_idx]))
+            #     for c in range(num_classes):
+            #         csv_logger3.record(("softmax_class%d" % c,),
+            #                             (softmax_predictions[(ghost_predictions == 1) & (label < 5)][d_idx][c],))
+            #     csv_logger3.write()
 
             # Accuracy for 5 types, global
             uresnet_acc = (label[label < 5] == predictions[label < 5]).sum() / float(np.count_nonzero(label < 5))
@@ -145,3 +181,5 @@ def deghosting_metrics(cfg, data_blob, res, logdir, iteration):#, idx):
             raise ValueError
         csv_logger.write()
     csv_logger.close()
+    csv_logger2.close()
+    csv_logger3.close()
