@@ -22,22 +22,6 @@ def gaussian_kernel(centroid, sigma, eps=1e-8):
     return f
 
 
-def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
-    def f(x):
-        N = x.shape[0]
-        L = torch.zeros(3, 3)
-        tril_indices = torch.tril_indices(row=3, col=3, offset=-1)
-        L[tril_indices[0], tril_indices[1]] = Lprime
-        sigma = torch.exp(log_sigma) + eps
-        L += torch.diag(sigma)
-        cov = torch.matmul(L, L.T)
-        dist = torch.matmul((x - centroid), torch.inverse(cov))
-        dist = torch.bmm(dist.view(N, 1, -1), (x-centroid).view(N, -1, 1)).squeeze()
-        probs = torch.exp(-dist)
-        return probs
-    return f
-
-
 def get_edge_features(nodes, batch_idx, edge_net):
     '''
     Compile Fully Connected Edge Features from nodes and batch indices.
@@ -278,6 +262,7 @@ class FullCNN(NetworkBase):
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_gnn_features = self.model_config.get('num_gnn_features', 16)
         self.inputKernel = self.model_config.get('input_kernel_size', 3)
+        self.coordConv = self.model_config.get('coordConv', False) 
 
         # Network Freezing Options
         self.encoder_freeze = self.model_config.get('encoder_freeze', False)
@@ -296,12 +281,14 @@ class FullCNN(NetworkBase):
 
         # Backbone UResNet. Do NOT change namings!
         self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
+        print('Segmentation')
         self.seg_net = UResNetDecoder(cfg, name='segmentation_decoder')
+        print('Seediness')
         self.seed_net = UResNetDecoder(cfg, name='seediness_decoder')
+        print('Clustering')
         self.cluster_net = UResNetDecoder(cfg, name='embedding_decoder')
 
         # Encoder-Decoder 1x1 Connections
-
         encoder_planes = [i for i in self.encoder.nPlanes]
         seg_planes = [i for i in self.seg_net.nPlanes]
         cluster_planes = [i for i in self.cluster_net.nPlanes]
@@ -312,18 +299,11 @@ class FullCNN(NetworkBase):
         # print("Cluster Planes: ", cluster_planes)
         # print("Seediness Planes: ", seed_planes)
 
+        self.skip_mode = self.model_config.get('skip_mode', 'default')
+
         self.seg_skip = scn.Sequential()
         self.cluster_skip = scn.Sequential()
         self.seed_skip = scn.Sequential()
-
-        for p1, p2 in zip(encoder_planes, seg_planes):
-            self._nin_block(self.seg_skip, p1, p2)
-
-        for p1, p2 in zip(encoder_planes, cluster_planes):
-            self._nin_block(self.cluster_skip, p1, p2)
-
-        for p1, p2 in zip(encoder_planes, seed_planes):
-            self._nin_block(self.seed_skip, p1, p2)
 
         # print(self.seg_skip)
         # print(self.cluster_skip)
@@ -355,6 +335,35 @@ class FullCNN(NetworkBase):
 
         # PPN
         self.ppn  = PPN(cfg)
+
+        if self.skip_mode == 'default':
+
+            for p1, p2 in zip(encoder_planes, seg_planes):
+                self.seg_skip.add(scn.Identity())
+            for p1, p2 in zip(encoder_planes, cluster_planes):
+                self.cluster_skip.add(scn.Identity())
+            for p1, p2 in zip(encoder_planes, seed_planes):
+                self.seed_skip.add(scn.Identity())
+            self.ppn_transform = scn.Sequential()
+            ppn1_num_filters = seg_planes[self.ppn.ppn1_stride-self.ppn._num_strides]
+            self._nin_block(self.ppn_transform, encoder_planes[-1], ppn1_num_filters)
+
+
+        elif self.skip_mode == '1x1':
+
+            for p1, p2 in zip(encoder_planes, seg_planes):
+                self._nin_block(self.seg_skip, p1, p2)
+
+            for p1, p2 in zip(encoder_planes, cluster_planes):
+                self._nin_block(self.cluster_skip, p1, p2)
+
+            for p1, p2 in zip(encoder_planes, seed_planes):
+                self._nin_block(self.seed_skip, p1, p2)
+            
+            self.ppn_transform = scn.Identity()
+
+        else:
+            raise ValueError('Invalid skip connection mode!')
 
         # Freeze Layers
         if self.encoder_freeze:
@@ -410,11 +419,11 @@ class FullCNN(NetworkBase):
         coords = point_cloud[:, 0:self.dimension+1].float()
         normalized_coords = (coords[:, :self.embedding_dim] - float(self.spatial_size) / 2) \
                     / (float(self.spatial_size) / 2)
-        energy = point_cloud[:, self.dimension+1].float().view(-1, 1)
-        # if self.coordConv:
-        #     features = torch.cat([normalized_coords, features], dim=1)
+        features = point_cloud[:, self.dimension+1].float().view(-1, 1)
+        if self.coordConv:
+            features = torch.cat([normalized_coords, features], dim=1)
 
-        x = self.input((coords, energy))
+        x = self.input((coords, features))
         encoder_res = self.encoder(x)
         features_enc = encoder_res['features_enc']
         deepest_layer = encoder_res['deepest_layer']
@@ -459,7 +468,7 @@ class FullCNN(NetworkBase):
 
         ppn_inputs = {
             'ppn_feature_enc': seg_decoder_input,
-            'ppn_feature_dec': [deep_seg] + features_seg
+            'ppn_feature_dec': [self.ppn_transform(deep_seg)] + features_seg
         }
 
         if self.ghost:
@@ -488,3 +497,36 @@ class FullCNN(NetworkBase):
         #     print(key, val[0].shape)
 
         return res
+
+
+class FullCNNSELU(NetworkBase):
+
+    def __init__(self, cfg, name='full_cnn'):
+        super(FullCNNSELU, self).__init__(cfg, name='network_base')
+
+        self.model_config = cfg[name]
+        self.num_filters = self.model_config.get('filters', 16)
+        self.ghost = self.model_config.get('ghost', False)
+        self.seed_dim = self.model_config.get('seed_dim', 1)
+        self.sigma_dim = self.model_config.get('sigma_dim', 1)
+        self.embedding_dim = self.model_config.get('embedding_dim', 3)
+        self.num_classes = self.model_config.get('num_classes', 5)
+        self.num_gnn_features = self.model_config.get('num_gnn_features', 16)
+        self.inputKernel = self.model_config.get('input_kernel_size', 3)
+
+        # Network Freezing Options
+        self.encoder_freeze = self.model_config.get('encoder_freeze', False)
+        self.ppn_freeze = self.model_config.get('ppn_freeze', True)
+        self.segmentation_freeze = self.model_config.get('segmentation_freeze', False)
+        self.embedding_freeze = self.model_config.get('embedding_freeze', False)
+        self.seediness_freeze = self.model_config.get('seediness_freeze', True)
+
+        # Input Layer Configurations and commonly used scn operations.
+        self.input = scn.Sequential().add(
+            scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
+            scn.SubmanifoldConvolution(self.dimension, self.nInputFeatures, \
+            self.num_filters, self.inputKernel, self.allow_bias)) # Kernel size 3, no bias
+        self.concat = scn.JoinTable()
+        self.add = scn.AddTable()
+
+        self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')

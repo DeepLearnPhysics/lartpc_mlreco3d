@@ -11,7 +11,7 @@ from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 import torch.nn.init as init
 
-from mlreco.models.layers.uresnet import UResNet
+from mlreco.models.layers.uresnet import *
 from mlreco.models.discriminative_loss import DiscriminativeLoss
 from mlreco.models.layers.base import NetworkBase
 from mlreco.models.layers.normalizations import *
@@ -260,90 +260,47 @@ class InstanceBranch(NetworkBase):
             mask_logits.append(x_mask.squeeze(1))
         return mask_logits
 
-        
+
 class AdaptIS(NetworkBase):
-    '''
-    Wrapper module for entire AdaptIS network chain.
-
-    We roughly follow the network architecture description 
-    in page 6 of paper: https://arxiv.org/pdf/1909.07829.pdf.
-
-    We rename "point proposal branch" in the paper as "attention proposal",
-    to avoid confusion with existing PPN. 
-    '''
 
     def __init__(self, cfg, name='adaptis'):
         super(AdaptIS, self).__init__(cfg, name='network_base')
-        self.model_config = cfg['modules'][name]
-
-        # Model Configurations
-        self.feature_size = self.model_config.get('feature_size', 32)
-        self.attention_depth = self.model_config.get('attention_depth', 3)
-        self.segmentation_depth = self.model_config.get('segmentation_depth', 3)
-        self.attention_hidden = self.model_config.get('attention_hidden', 32)
-        self.segmentation_hidden = self.model_config.get('segmentation_hidden', 32)
-
-        # TODO: Give option to use ResNet Blocks insteaed of Conv+BN+LeakyReLU Blocks
-
-        # Backbone Feature Extraction Network
-        self.net = UResNet(cfg, name='uresnet')
+        self.model_config = cfg[name]
+        self.num_filters = self.model_config.get('filters', 16)
+        self.seed_dim = self.model_config.get('seed_dim', 1)
+        self.sigma_dim = self.model_config.get('sigma_dim', 1)
+        self.embedding_dim = self.model_config.get('embedding_dim', 3)
         self.num_classes = self.model_config.get('num_classes', 5)
+        self.num_gnn_features = self.model_config.get('num_gnn_features', 16)
+        self.inputKernel = self.model_config.get('input_kernel_size', 3)
 
-        # Attention Proposal Branch
-        self.attention_net = scn.Sequential()
-        for i in range(self.attention_depth):
-            module = scn.Sequential()
-            module.add(
-                scn.SubmanifoldConvolution(self.net.dimension,
-                (self.feature_size if i == 0 else self.attention_hidden),
-                self.attention_hidden, 3, self.allow_bias)).add(
-                scn.BatchNormLeakyReLU(self.attention_hidden, 
-                                       leakiness=self.leakiness))
-            self.attention_net.add(module)
-        self.attention_net.add(scn.NetworkInNetwork(
-            self.attention_hidden, 1, self.allow_bias))
+        # Network Freezing Options
+        self.encoder_freeze = self.model_config.get('encoder_freeze', False)
+        self.segmentation_freeze = self.model_config.get('segmentation_freeze', False)
+        self.embedding_freeze = self.model_config.get('embedding_freeze', False)
+        self.seediness_freeze = self.model_config.get('seediness_freeze', False)
+        self.mask_freeze = self.model_config.get('mask_freeze', False)
 
-        # Segmentation Branch
-        self.segmentation_net = scn.Sequential()
-        for i in range(self.segmentation_depth):
-            module = scn.Sequential()
-            module.add(
-                scn.SubmanifoldConvolution(self.net.dimension,
-                (self.feature_size if i == 0 else self.segmentation_hidden),
-                self.segmentation_hidden, 3, self.allow_bias)).add(
-                scn.BatchNormLeakyReLU(self.segmentation_hidden, 
-                                       leakiness=self.leakiness))
-            self.segmentation_net.add(module)
-        self.segmentation_net.add(scn.NetworkInNetwork(
-            self.segmentation_hidden, self.num_classes, self.allow_bias))
-
-        self.featureOutput = scn.OutputLayer(self.dimension)
-        self.segmentationOut = scn.OutputLayer(self.dimension)
-        self.attentionOut = scn.OutputLayer(self.dimension)
-
-        # 1. Controller Network makes AdaIN parameter vector from query point. 
-        self.controller_weight = ControllerNet(self.feature_size, self.feature_size, 3)
-        self.controller_bias = ControllerNet(self.feature_size, self.feature_size, 3)
-        # 2. Relative CoordConv and concat to feature tensor
-        self.rel_cc = RelativeCoordConv(self.feature_size, self.feature_size)
+        # Input Layer Configurations and commonly used scn operations.
+        self.input = scn.Sequential().add(
+            scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
+            scn.SubmanifoldConvolution(self.dimension, self.nInputFeatures, \
+            self.num_filters, self.inputKernel, self.allow_bias)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
+        self.add = scn.AddTable()
 
-        self.instance_branch = InstanceBranch(cfg, name='adaptis_instance')
+        # Backbone UResNet. Do NOT change namings!
+        self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
+        self.decoder = UResNetDecoder(cfg, name='uresnet_decoder')
 
-    @staticmethod
-    def find_query_points(coords, ppn_scores, max_points=100):
-        '''
-        TODO:
-        Based on PPN Output, find query points to be passed to 
-        AdaIN layers via local maximum finding.
-
-        NOTE: Only used in inference. 
-        '''
-        return
+        self.seed_net = scn.Sequential()
+        self._block(self.cluster_net, self.num_filters, self.num_filters, kernel=5)
+        self.mask_net = scn.Sequential()
+        self._block(self.mask_net, self.num_filters + self.dimension, self.num_filters, kernel=5)
+        self._block(self.mask_net, self.num_filters, self.num_filters, kernel=5)
 
 
-    @staticmethod
-    def find_centroids(features, labels):
+    def find_centroids(self, features, labels):
         '''
         For a given image, compute the centroids mu_c for each
         cluster label in the embedding space.
@@ -365,153 +322,278 @@ class AdaptIS(NetworkBase):
         centroids = torch.stack(centroids)
         return centroids
 
-
-    def find_nearest_features(self, features, coords, points):
-        '''
-        Given a PPN Truth point (x0, y0, z0, b0, c0), locates the
-        nearest voxel in the input image. We construct a KDTree with 
-        <points> and query <coords> for fast nearest-neighbor search. 
-
-        NOTE: that PPN Truth gives a floating point coordinate, and the output
-        feature tensors have integer spatial coordinates of original space.
-
-        NOTE: This function should only be used in TRAINING AdaptIS. 
-
-        INPUTS:
-            - coords (N x 5 Tensor): coordinates (including batch and class)
-            for the current event (fixed batch index).
-            - points (N_p x 5 Tensor): PPN points to query nearest neighbor.
-            Here, N_p is the number of PPN ground truth points. 
-
-        RETURNS:
-            - nearest_neighbor (1 x 5 Tensor): nearest neighbor of <point>
-        '''
-        with torch.no_grad():
-            localCoords = coords[:, :3].detach().cpu().numpy()
-            localPoints = points[:, :3].detach().cpu().numpy()
-            tree = cKDTree(localPoints)
-            dists, indices = tree.query(localCoords, k=1,
-                             distance_upper_bound=self.spatial_size)
-            perm = np.argsort(dists)
-            _, indices = np.unique(indices[perm], return_index=True)
-        return features[perm[indices]], perm[indices]
-
-
-    def train_loop(self, features, coords, query_points, segment_label, cluster_label):
-        '''
-        Training loop for AdaptIS Instance Branch
-        '''
-        k = 1
-        use_ppn_truth = set([2, 4])
-        batch_idx = coords[:, -1].unique()
-        output = []
-        for i, bidx in enumerate(batch_idx):
-            batch_logits = []
-            batch_mask = coords[:, 3] == bidx
-            points_batch = query_points[query_points[:, 3] == bidx]
-            coords_batch = coords[batch_mask]
-            slabels_batch = segment_label[batch_mask]
-            clabels_batch = cluster_label[batch_mask]
-            feature_batch = features[batch_mask]
-            semantic_classes = slabels_batch[:, -1].unique()
-            for s in semantic_classes:
-                class_mask = slabels_batch[:, -1] == s
-                clabels_class = clabels_batch[class_mask]
-                # print('------------Class = {}, Cluster Count = {}-------------'.format(
-                #     s, len(clabels_class[:, -1].unique())))
-                # if int(s) in use_ppn_truth:
-                #     # For showers and michel, use PPN Ground Truth Shower Start
-                #     priors = points_batch[points_batch[:, -1] == s]
-                #     print(priors)
-                #     priors, indices = self.find_nearest_features(
-                #         feature_batch[class_mask], 
-                #         coords_batch[class_mask], 
-                #         priors)
-                #     print(clabels_class[indices])
-                #     print(priors.shape)
-                # else:
-                priors = []
-                prior_coords = []
-                clabels = []
-                # For tracks, random sample k point proposals per group
-                for c in clabels_class[:, -1].unique():
-                    mask = clabels_class[:, -1] == c
-                    cluster_features = feature_batch[class_mask][mask]
-                    sample_idx = torch.randperm(
-                        cluster_features.shape[0])[0]
-                    prior = cluster_features[sample_idx]
-                    sample_coord = coords_batch[class_mask][sample_idx]
-                    priors.append(prior)
-                    prior_coords.append(sample_coord)
-                    clabels.append(c.item())
-                priors = torch.stack(priors)
-                prior_coords = torch.stack(prior_coords)[:, :3]
-                clabels = np.asarray(clabels)
-                weights = self.controller_weight(priors)
-                biases = self.controller_bias(priors)
-                # print(weights.shape, biases.shape)
-                mask_logits = self.instance_branch(
-                    feature_batch, coords_batch, 
-                    prior_coords, weights, biases)
-                mask_logits = list(zip(clabels, mask_logits))
-                for c, scores in mask_logits:
-                    logits = Logits(int(bidx), int(s), int(c), scores)
-                    batch_logits.append(logits)
-            output.append(batch_logits)
-        return output
-
-
-    def test_loop(self, features, ppn_scores):
-        '''
-        Inference loop for AdaptIS
-        '''
-        coords = features.get_spatial_locations()
-        batch_idx = coords[:, -1].int().unique()
-        segmented = torch.zeros(features.features.shape[0])
-        for i, bidx in enumerate(batch_idx):
-            batch_mask = coords[:, 3] == bidx
-            coords_batch = coords[batch_mask]
-            ppn_batch = ppn_scores[batch_mask]
-            self.mask_tensor.mask = batch_mask
-            features_batch = self.mask_tensor(features)
-
-        
+    
     def forward(self, input):
-        '''
-        INPUTS:
-            - input: usual input to UResNet
-            - query_points: PPN Truth (only used during training)
+        point_cloud, = input
+        coords = point_cloud[:, 0:self.dimension+1].float()
+        normalized_coords = (coords[:, :self.embedding_dim] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+        energy = point_cloud[:, self.dimension+1].float().view(-1, 1)
+        # if self.coordConv:
+        #     features = torch.cat([normalized_coords, features], dim=1)
 
-            During training, we sample random points at least once from each cluster.
-            During inference, we sample the highest attention scoring points.
+        x = self.input((coords, energy))
+        encoder_res = self.encoder(x)
+        features_enc = encoder_res['features_enc']
+        deepest_layer = encoder_res['deepest_layer']
+        x = self.decoder(features_enc, deepest_layer)
+        seed = self.seed_net(x)
+        vectors = self.find_centroids(seed)
+
+
+
         
-        TODO: Turn off attention map training. 
-        '''
-        cluster_label, input_data, segment_label, particle_label = input
-        coords = input_data[:, :4]
-        net_output = self.net([input_data])
-        # Get last feature layer in UResNet
-        features = net_output['features_dec'][0][-1]
+# class AdaptIS(NetworkBase):
+#     '''
+#     Wrapper module for entire AdaptIS network chain.
 
-        # Point Proposal map and Segmentation Map is Holistic. 
-        ppn_scores = self.attention_net(features)
-        ppn_scores = self.attentionOut(ppn_scores)
-        segmentation_scores = self.segmentation_net(features)
-        segmentation_scores = self.segmentationOut(segmentation_scores)
-        features = self.featureOutput(features)
+#     We roughly follow the network architecture description 
+#     in page 6 of paper: https://arxiv.org/pdf/1909.07829.pdf.
 
-        # For Instance Branch, mask generation is instance-by-instance.
-        if self.instance_branch.training_mode:
-            instance_scores = self.train_loop(features, coords, 
-                particle_label, segment_label, cluster_label)
-        else:
-            instance_scores = self.test_loop(features, ppn_scores)
+#     We rename "point proposal branch" in the paper as "attention proposal",
+#     to avoid confusion with existing PPN. 
+#     '''
 
-        # Return Logits for Cross-Entropy Loss
-        res = {
-            'segmentation': [segmentation_scores],
-            'ppn': [ppn_scores],
-            'instance_scores': [instance_scores]
-        }
+#     def __init__(self, cfg, name='adaptis'):
+#         super(AdaptIS, self).__init__(cfg, name='network_base')
+#         self.model_config = cfg['modules'][name]
 
-        return res
+#         # Model Configurations
+#         self.feature_size = self.model_config.get('feature_size', 32)
+#         self.attention_depth = self.model_config.get('attention_depth', 3)
+#         self.segmentation_depth = self.model_config.get('segmentation_depth', 3)
+#         self.attention_hidden = self.model_config.get('attention_hidden', 32)
+#         self.segmentation_hidden = self.model_config.get('segmentation_hidden', 32)
+
+#         # TODO: Give option to use ResNet Blocks insteaed of Conv+BN+LeakyReLU Blocks
+
+#         # Backbone Feature Extraction Network
+#         self.net = UResNet(cfg, name='uresnet')
+#         self.num_classes = self.model_config.get('num_classes', 5)
+
+#         # Attention Proposal Branch
+#         self.attention_net = scn.Sequential()
+#         for i in range(self.attention_depth):
+#             module = scn.Sequential()
+#             module.add(
+#                 scn.SubmanifoldConvolution(self.net.dimension,
+#                 (self.feature_size if i == 0 else self.attention_hidden),
+#                 self.attention_hidden, 3, self.allow_bias)).add(
+#                 scn.BatchNormLeakyReLU(self.attention_hidden, 
+#                                        leakiness=self.leakiness))
+#             self.attention_net.add(module)
+#         self.attention_net.add(scn.NetworkInNetwork(
+#             self.attention_hidden, 1, self.allow_bias))
+
+#         # Segmentation Branch
+#         self.segmentation_net = scn.Sequential()
+#         for i in range(self.segmentation_depth):
+#             module = scn.Sequential()
+#             module.add(
+#                 scn.SubmanifoldConvolution(self.net.dimension,
+#                 (self.feature_size if i == 0 else self.segmentation_hidden),
+#                 self.segmentation_hidden, 3, self.allow_bias)).add(
+#                 scn.BatchNormLeakyReLU(self.segmentation_hidden, 
+#                                        leakiness=self.leakiness))
+#             self.segmentation_net.add(module)
+#         self.segmentation_net.add(scn.NetworkInNetwork(
+#             self.segmentation_hidden, self.num_classes, self.allow_bias))
+
+#         self.featureOutput = scn.OutputLayer(self.dimension)
+#         self.segmentationOut = scn.OutputLayer(self.dimension)
+#         self.attentionOut = scn.OutputLayer(self.dimension)
+
+#         # 1. Controller Network makes AdaIN parameter vector from query point. 
+#         self.controller_weight = ControllerNet(self.feature_size, self.feature_size, 3)
+#         self.controller_bias = ControllerNet(self.feature_size, self.feature_size, 3)
+#         # 2. Relative CoordConv and concat to feature tensor
+#         self.rel_cc = RelativeCoordConv(self.feature_size, self.feature_size)
+#         self.concat = scn.JoinTable()
+
+#         self.instance_branch = InstanceBranch(cfg, name='adaptis_instance')
+
+#     @staticmethod
+#     def find_query_points(coords, ppn_scores, max_points=100):
+#         '''
+#         TODO:
+#         Based on PPN Output, find query points to be passed to 
+#         AdaIN layers via local maximum finding.
+
+#         NOTE: Only used in inference. 
+#         '''
+#         return
+
+
+#     @staticmethod
+#     def find_centroids(features, labels):
+#         '''
+#         For a given image, compute the centroids mu_c for each
+#         cluster label in the embedding space.
+#         Inputs:
+#             features (torch.Tensor): the pixel embeddings, shape=(N, d) where
+#             N is the number of pixels and d is the embedding space dimension.
+#             labels (torch.Tensor): ground-truth group labels, shape=(N, )
+#         Returns:
+#             centroids (torch.Tensor): (n_c, d) tensor where n_c is the number of
+#             distinct instances. Each row is a (1,d) vector corresponding to
+#             the coordinates of the i-th centroid.
+#         '''
+#         clabels = labels.unique(sorted=True)
+#         centroids = []
+#         for c in clabels:
+#             index = (labels == c)
+#             mu_c = features[index].mean(0)
+#             centroids.append(mu_c)
+#         centroids = torch.stack(centroids)
+#         return centroids
+
+
+#     def find_nearest_features(self, features, coords, points):
+#         '''
+#         Given a PPN Truth point (x0, y0, z0, b0, c0), locates the
+#         nearest voxel in the input image. We construct a KDTree with 
+#         <points> and query <coords> for fast nearest-neighbor search. 
+
+#         NOTE: that PPN Truth gives a floating point coordinate, and the output
+#         feature tensors have integer spatial coordinates of original space.
+
+#         NOTE: This function should only be used in TRAINING AdaptIS. 
+
+#         INPUTS:
+#             - coords (N x 5 Tensor): coordinates (including batch and class)
+#             for the current event (fixed batch index).
+#             - points (N_p x 5 Tensor): PPN points to query nearest neighbor.
+#             Here, N_p is the number of PPN ground truth points. 
+
+#         RETURNS:
+#             - nearest_neighbor (1 x 5 Tensor): nearest neighbor of <point>
+#         '''
+#         with torch.no_grad():
+#             localCoords = coords[:, :3].detach().cpu().numpy()
+#             localPoints = points[:, :3].detach().cpu().numpy()
+#             tree = cKDTree(localPoints)
+#             dists, indices = tree.query(localCoords, k=1,
+#                              distance_upper_bound=self.spatial_size)
+#             perm = np.argsort(dists)
+#             _, indices = np.unique(indices[perm], return_index=True)
+#         return features[perm[indices]], perm[indices]
+
+
+#     def train_loop(self, features, coords, query_points, segment_label, cluster_label):
+#         '''
+#         Training loop for AdaptIS Instance Branch
+#         '''
+#         k = 1
+#         use_ppn_truth = set([2, 4])
+#         batch_idx = coords[:, -1].unique()
+#         output = []
+#         for i, bidx in enumerate(batch_idx):
+#             batch_logits = []
+#             batch_mask = coords[:, 3] == bidx
+#             points_batch = query_points[query_points[:, 3] == bidx]
+#             coords_batch = coords[batch_mask]
+#             slabels_batch = segment_label[batch_mask]
+#             clabels_batch = cluster_label[batch_mask]
+#             feature_batch = features[batch_mask]
+#             semantic_classes = slabels_batch[:, -1].unique()
+#             for s in semantic_classes:
+#                 class_mask = slabels_batch[:, -1] == s
+#                 clabels_class = clabels_batch[class_mask]
+#                 # print('------------Class = {}, Cluster Count = {}-------------'.format(
+#                 #     s, len(clabels_class[:, -1].unique())))
+#                 # if int(s) in use_ppn_truth:
+#                 #     # For showers and michel, use PPN Ground Truth Shower Start
+#                 #     priors = points_batch[points_batch[:, -1] == s]
+#                 #     print(priors)
+#                 #     priors, indices = self.find_nearest_features(
+#                 #         feature_batch[class_mask], 
+#                 #         coords_batch[class_mask], 
+#                 #         priors)
+#                 #     print(clabels_class[indices])
+#                 #     print(priors.shape)
+#                 # else:
+#                 priors = []
+#                 prior_coords = []
+#                 clabels = []
+#                 # For tracks, random sample k point proposals per group
+#                 for c in clabels_class[:, -1].unique():
+#                     mask = clabels_class[:, -1] == c
+#                     cluster_features = feature_batch[class_mask][mask]
+#                     sample_idx = torch.randperm(
+#                         cluster_features.shape[0])[0]
+#                     prior = cluster_features[sample_idx]
+#                     sample_coord = coords_batch[class_mask][sample_idx]
+#                     priors.append(prior)
+#                     prior_coords.append(sample_coord)
+#                     clabels.append(c.item())
+#                 priors = torch.stack(priors)
+#                 prior_coords = torch.stack(prior_coords)[:, :3]
+#                 clabels = np.asarray(clabels)
+#                 weights = self.controller_weight(priors)
+#                 biases = self.controller_bias(priors)
+#                 # print(weights.shape, biases.shape)
+#                 mask_logits = self.instance_branch(
+#                     feature_batch, coords_batch, 
+#                     prior_coords, weights, biases)
+#                 mask_logits = list(zip(clabels, mask_logits))
+#                 for c, scores in mask_logits:
+#                     logits = Logits(int(bidx), int(s), int(c), scores)
+#                     batch_logits.append(logits)
+#             output.append(batch_logits)
+#         return output
+
+
+#     def test_loop(self, features, ppn_scores):
+#         '''
+#         Inference loop for AdaptIS
+#         '''
+#         coords = features.get_spatial_locations()
+#         batch_idx = coords[:, -1].int().unique()
+#         segmented = torch.zeros(features.features.shape[0])
+#         for i, bidx in enumerate(batch_idx):
+#             batch_mask = coords[:, 3] == bidx
+#             coords_batch = coords[batch_mask]
+#             ppn_batch = ppn_scores[batch_mask]
+#             self.mask_tensor.mask = batch_mask
+#             features_batch = self.mask_tensor(features)
+
+        
+#     def forward(self, input):
+#         '''
+#         INPUTS:
+#             - input: usual input to UResNet
+#             - query_points: PPN Truth (only used during training)
+
+#             During training, we sample random points at least once from each cluster.
+#             During inference, we sample the highest attention scoring points.
+        
+#         TODO: Turn off attention map training. 
+#         '''
+#         cluster_label, input_data, segment_label, particle_label = input
+#         coords = input_data[:, :4]
+#         net_output = self.net([input_data])
+#         # Get last feature layer in UResNet
+#         features = net_output['features_dec'][0][-1]
+
+#         # Point Proposal map and Segmentation Map is Holistic. 
+#         ppn_scores = self.attention_net(features)
+#         ppn_scores = self.attentionOut(ppn_scores)
+#         segmentation_scores = self.segmentation_net(features)
+#         segmentation_scores = self.segmentationOut(segmentation_scores)
+#         features = self.featureOutput(features)
+
+#         # For Instance Branch, mask generation is instance-by-instance.
+#         if self.instance_branch.training_mode:
+#             instance_scores = self.train_loop(features, coords, 
+#                 particle_label, segment_label, cluster_label)
+#         else:
+#             instance_scores = self.test_loop(features, ppn_scores)
+
+#         # Return Logits for Cross-Entropy Loss
+#         res = {
+#             'segmentation': [segmentation_scores],
+#             'ppn': [ppn_scores],
+#             'instance_scores': [instance_scores]
+#         }
+
+#         return res
