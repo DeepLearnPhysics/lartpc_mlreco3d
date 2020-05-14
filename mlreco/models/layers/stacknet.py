@@ -11,13 +11,13 @@ from mlreco.models.layers.fpn import FPN
 class StackUNet(UResNet):
     '''
     Simple StackNet architecture with UResNet backbone without
-    intermediate layer losses. 
+    intermediate layer losses.
     '''
     def __init__(self, cfg, name='stacknet'):
         super(StackUNet, self).__init__(cfg)
 
         # StackNet Model Parameters
-        self.model_config = cfg['modules'][name]
+        self.model_config = cfg[name]
         self.reduce_feature = self.model_config.get('reduce_feature', 'nin')
         self.sum_features = sum(self.nPlanes)
         self.embedding_dim = self.model_config.get('embedding_dim', 8)
@@ -107,7 +107,7 @@ class StackUNet(UResNet):
                 stack_feature.append(f)
             else:
                 stack_feature.append(layer)
-        
+
         stack_feature = self.concat(stack_feature)
         out = self.cluster_decoder(stack_feature)
         out = self.embedding(out)

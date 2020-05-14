@@ -37,6 +37,9 @@ class IterativeEdgeModel(torch.nn.Module):
           thresh          : <threshold edge score to consider a secondary to be matched>
           model_path      : <path to the model weights>
     """
+
+    MODULES = ['iter_edge_model']
+
     def __init__(self, cfg):
         super(IterativeEdgeModel, self).__init__()
 
@@ -54,10 +57,10 @@ class IterativeEdgeModel(torch.nn.Module):
         self.edge_dist_metric = self.model_config.get('edge_dist_metric','set')
 
         # Extract the model to use
-        edge_model = edge_model_construct(self.model_config.get('name'))
+        edge_model = edge_model_construct(self.model_config.get('name', {'edge_model': {}}))
 
         # Construct the model
-        self.edge_predictor = edge_model(self.model_config.get('model_cfg'))
+        self.edge_predictor = edge_model#(self.model_config.get('model_cfg', {}))
 
         # Parse the iterative model parameters
         self.maxiter = self.model_config.get('maxiter', 10)

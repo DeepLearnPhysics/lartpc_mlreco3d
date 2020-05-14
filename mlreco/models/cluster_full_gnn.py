@@ -52,6 +52,9 @@ class ClustFullGNN(torch.nn.Module):
           <dictionary of arguments to pass to the model>
           model_path      : <path to the model weights>
     """
+
+    MODULES = ['chain', 'dbscan', 'node_encoder', 'edge_encoder', 'node_model', 'edge_model']
+
     def __init__(self, cfg):
         super(ClustFullGNN, self).__init__()
 

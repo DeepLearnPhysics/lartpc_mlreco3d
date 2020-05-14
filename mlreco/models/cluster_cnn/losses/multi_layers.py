@@ -14,14 +14,14 @@ class MultiScaleLoss(DiscriminativeLoss):
 
     def __init__(self, cfg, name='clustering_loss'):
         super(MultiScaleLoss, self).__init__(cfg)
-        self.loss_config = cfg['modules']['clustering_loss']
+        self.loss_config = cfg['clustering_loss']
         self.num_strides = self.loss_config.get('num_strides', 5)
 
-        self.intra_margins = self.loss_config.get('intra_margins', 
+        self.intra_margins = self.loss_config.get('intra_margins',
             [self.loss_hyperparams['intra_margin'] for i in range(self.num_strides)])
         self.inter_margins = self.loss_config.get('inter_margins',
             [self.loss_hyperparams['inter_margin'] for i in range(self.num_strides)])
-        
+
 
     def compute_loss_layer(self, embedding_scn, slabels, clabels, batch_idx, **kwargs):
         '''
@@ -144,16 +144,16 @@ class MultiScaleLoss2(MultiScaleLoss):
                            ally_margin=0.5, enemy_margin=1.0):
         '''
         Intra-cluster loss, with per-voxel weighting and enemy loss.
-        This variant of intra-cluster loss penalizes the distance 
-        from the centroid to its enemies in addition to pulling 
-        ally points towards the center. 
+        This variant of intra-cluster loss penalizes the distance
+        from the centroid to its enemies in addition to pulling
+        ally points towards the center.
 
         INPUTS:
             - ally_margin (float): centroid pulls all allied points
             inside this margin.
             - enemy_margin (float): centroid pushs all enemy points
             inside this margin.
-            - weight: 
+            - weight:
         '''
         intra_loss = 0.0
         ally_loss, enemy_loss = 0.0, 0.0
@@ -193,7 +193,7 @@ class MultiScaleLoss2(MultiScaleLoss):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         ally_margin = kwargs.get('ally_margin', 0.5)
         enemy_margin = kwargs.get('enemy_margin', 1.0)
         inter_margin = kwargs.get('inter_margin', 1.5)
@@ -214,7 +214,7 @@ class MultiScaleLoss2(MultiScaleLoss):
             * inter_loss + reg_weight * reg_loss
 
         return {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss),
@@ -294,9 +294,9 @@ class WeightedMultiLoss(MultiScaleLoss):
     def intra_cluster_loss(self, features, labels, cluster_means, coords, margin=0.5):
         '''
         Intra-cluster loss, with per-voxel weighting and enemy loss.
-        This variant of intra-cluster loss penalizes the distance 
-        from the centroid to its enemies in addition to pulling 
-        ally points towards the center. 
+        This variant of intra-cluster loss penalizes the distance
+        from the centroid to its enemies in addition to pulling
+        ally points towards the center.
 
         INPUTS:
             - ally_margin (float): centroid pulls all allied points
@@ -304,7 +304,7 @@ class WeightedMultiLoss(MultiScaleLoss):
             - enemy_margin (float): centroid pushs all enemy points
             inside this margin.
             - weight: Tensor with features.shape[0] entries corresponding to
-            attention weights. 
+            attention weights.
         '''
         intra_loss = 0.0
         ally_loss, enemy_loss = 0.0, 0.0
@@ -339,7 +339,7 @@ class WeightedMultiLoss(MultiScaleLoss):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         inter_margin = kwargs.get('inter_margin', 1.5)
         intra_margin = kwargs.get('intra_margin', 0.5)
         intra_weight = kwargs.get('intra_weight', 1.0)
@@ -360,7 +360,7 @@ class WeightedMultiLoss(MultiScaleLoss):
             * inter_loss + reg_weight * reg_loss
 
         return {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss)
@@ -431,7 +431,7 @@ class WeightedMultiLoss(MultiScaleLoss):
                         loss_event[key].append(sum(val) / len(val))
                 for key, val in loss_event.items():
                     loss[key].append(sum(val) / len(val))
-                    
+
         res = {}
 
         for key, val in loss.items():
@@ -448,7 +448,7 @@ class DistanceEstimationLoss(MultiScaleLoss):
     def __init__(self, cfg, name='clustering_loss'):
         super().__init__(cfg)
         print('Distance Estimation')
-        self.loss_config = cfg['modules'][name]
+        self.loss_config = cfg[name]
         self.huber_loss = torch.nn.SmoothL1Loss(reduction='mean')
         self.distance_estimate_weight = self.loss_config.get('distance_estimate_weight', 1.0)
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
@@ -467,14 +467,14 @@ class DistanceEstimationLoss(MultiScaleLoss):
             - loss (torch.Tensor): scalar tensor representing aggregated loss.
             - dlossF (dict of floats): dictionary of ally loss.
             - dlossE (dict of floats): dictionary of enemy loss.
-            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel. 
+            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel.
         """
         with torch.no_grad():
             allyMap = torch.zeros(embedding_class.shape[0])
             enemyMap = torch.zeros(embedding_class.shape[0])
             if torch.cuda.is_available():
                 allyMap = allyMap.cuda()
-                enemyMap = enemyMap.cuda() 
+                enemyMap = enemyMap.cuda()
             dist = distance_matrix(embedding_class)
             cluster_ids = cluster_class.unique().int()
             num_clusters = float(cluster_ids.shape[0])
@@ -489,13 +489,13 @@ class DistanceEstimationLoss(MultiScaleLoss):
                 allies[ind[0], ind[1]] = float('inf')
                 allies, _ = torch.min(allies, dim=1)
                 allyMap[index] = allies
-                if index.all(): 
+                if index.all():
                     # Skip if there are no enemies
                     continue
                 enemies, _ = torch.min(dist[index, :][:, ~index], dim=1)
                 enemyMap[index] = enemies
 
-            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)         
+            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)
             return nnMap
 
 
@@ -595,7 +595,7 @@ class DistanceEstimationLoss2(MultiScaleLoss2):
 
     def __init__(self, cfg, name='clustering_loss'):
         super(DistanceEstimationLoss2, self).__init__(cfg, name='uresnet')
-        self.loss_config = cfg['modules'][name]
+        self.loss_config = cfg[name]
         self.huber_loss = torch.nn.SmoothL1Loss(reduction='mean')
         self.distance_estimate_weight = self.loss_config.get('distance_estimate_weight', 1.0)
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
@@ -613,14 +613,14 @@ class DistanceEstimationLoss2(MultiScaleLoss2):
             - loss (torch.Tensor): scalar tensor representing aggregated loss.
             - dlossF (dict of floats): dictionary of ally loss.
             - dlossE (dict of floats): dictionary of enemy loss.
-            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel. 
+            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel.
         """
         with torch.no_grad():
             allyMap = torch.zeros(embedding_class.shape[0])
             enemyMap = torch.zeros(embedding_class.shape[0])
             if torch.cuda.is_available():
                 allyMap = allyMap.cuda()
-                enemyMap = enemyMap.cuda() 
+                enemyMap = enemyMap.cuda()
             dist = distance_matrix(embedding_class)
             cluster_ids = cluster_class.unique().int()
             num_clusters = float(cluster_ids.shape[0])
@@ -635,13 +635,13 @@ class DistanceEstimationLoss2(MultiScaleLoss2):
                 allies[ind[0], ind[1]] = float('inf')
                 allies, _ = torch.min(allies, dim=1)
                 allyMap[index] = allies
-                if index.all(): 
+                if index.all():
                     # Skip if there are no enemies
                     continue
                 enemies, _ = torch.min(dist[index, :][:, ~index], dim=1)
                 enemyMap[index] = enemies
 
-            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)         
+            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)
             return nnMap
 
 
@@ -735,7 +735,7 @@ class DistanceEstimationLoss3(WeightedMultiLoss):
 
     def __init__(self, cfg, name='clustering_loss'):
         super(DistanceEstimationLoss3, self).__init__(cfg, name='uresnet')
-        self.loss_config = cfg['modules'][name]
+        self.loss_config = cfg[name]
         self.huber_loss = torch.nn.SmoothL1Loss(reduction='mean')
         self.distance_estimate_weight = self.loss_config.get('distance_estimate_weight', 1.0)
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
@@ -754,14 +754,14 @@ class DistanceEstimationLoss3(WeightedMultiLoss):
             - loss (torch.Tensor): scalar tensor representing aggregated loss.
             - dlossF (dict of floats): dictionary of ally loss.
             - dlossE (dict of floats): dictionary of enemy loss.
-            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel. 
+            - dloss_map (torch.Tensor): computed ally/enemy affinity for each voxel.
         """
         with torch.no_grad():
             allyMap = torch.zeros(embedding_class.shape[0])
             enemyMap = torch.zeros(embedding_class.shape[0])
             if torch.cuda.is_available():
                 allyMap = allyMap.cuda()
-                enemyMap = enemyMap.cuda() 
+                enemyMap = enemyMap.cuda()
             dist = distance_matrix(embedding_class)
             cluster_ids = cluster_class.unique().int()
             num_clusters = float(cluster_ids.shape[0])
@@ -776,13 +776,13 @@ class DistanceEstimationLoss3(WeightedMultiLoss):
                 allies[ind[0], ind[1]] = float('inf')
                 allies, _ = torch.min(allies, dim=1)
                 allyMap[index] = allies
-                if index.all(): 
+                if index.all():
                     # Skip if there are no enemies
                     continue
                 enemies, _ = torch.min(dist[index, :][:, ~index], dim=1)
                 enemyMap[index] = enemies
 
-            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)         
+            nnMap = torch.cat([allyMap.view(-1, 1), enemyMap.view(-1, 1)], dim=1)
             return nnMap
 
 
@@ -889,9 +889,9 @@ class DensityLoss(MultiScaleLoss2):
                            ally_margin=0.5, enemy_margin=1.0):
         '''
         Intra-cluster loss, with per-voxel weighting and enemy loss.
-        This variant of intra-cluster loss penalizes the distance 
-        from the centroid to its enemies in addition to pulling 
-        ally points towards the center. 
+        This variant of intra-cluster loss penalizes the distance
+        from the centroid to its enemies in addition to pulling
+        ally points towards the center.
 
         INPUTS:
             - ally_margin (float): centroid pulls all allied points
@@ -965,7 +965,7 @@ class DensityLoss(MultiScaleLoss2):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         ally_margin = kwargs.get('ally_margin', 0.5)
         enemy_margin = kwargs.get('enemy_margin', 1.0)
         inter_margin = kwargs.get('inter_margin', 1.5)
@@ -987,7 +987,7 @@ class DensityLoss(MultiScaleLoss2):
             * inter_loss + reg_weight * reg_loss
 
         res = {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss),
@@ -1015,16 +1015,16 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
                            ally_margin=0.5, enemy_margin=1.0):
         '''
         Intra-cluster loss, with per-voxel weighting and enemy loss.
-        This variant of intra-cluster loss penalizes the distance 
-        from the centroid to its enemies in addition to pulling 
-        ally points towards the center. 
+        This variant of intra-cluster loss penalizes the distance
+        from the centroid to its enemies in addition to pulling
+        ally points towards the center.
 
         INPUTS:
             - ally_margin (float): centroid pulls all allied points
             inside this margin.
             - enemy_margin (float): centroid pushs all enemy points
             inside this margin.
-            - weight: 
+            - weight:
         '''
         intra_loss = 0.0
         ally_loss, enemy_loss = 0.0, 0.0
@@ -1056,9 +1056,9 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
                            ally_margin=0.5, enemy_margin=1.0):
         '''
         Intra-cluster loss, with per-voxel weighting and enemy loss.
-        This variant of intra-cluster loss penalizes the distance 
-        from the centroid to its enemies in addition to pulling 
-        ally points towards the center. 
+        This variant of intra-cluster loss penalizes the distance
+        from the centroid to its enemies in addition to pulling
+        ally points towards the center.
 
         INPUTS:
             - ally_margin (float): centroid pulls all allied points
@@ -1132,7 +1132,7 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         ally_margin = kwargs.get('ally_margin', 0.5)
         enemy_margin = kwargs.get('enemy_margin', 1.0)
         inter_margin = kwargs.get('inter_margin', 1.5)
@@ -1153,7 +1153,7 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
             * inter_loss + reg_weight * reg_loss
 
         res = {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss),
@@ -1174,7 +1174,7 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         ally_margin = kwargs.get('ally_margin', 0.5)
         enemy_margin = kwargs.get('enemy_margin', 1.0)
         inter_margin = kwargs.get('inter_margin', 1.5)
@@ -1196,7 +1196,7 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
             * inter_loss + reg_weight * reg_loss
 
         res = {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss),
@@ -1296,7 +1296,7 @@ class DensityDistanceEstimationLoss(DistanceEstimationLoss):
 
         for key, val in accuracy.items():
             res[key] = sum(val) / len(val)
-        
+
         for key, val in res.items():
             print("{}: {}".format(key, val))
 

@@ -17,6 +17,9 @@ class ClusterCNN(UResNet):
         final linear layer.
         - embedding_dim: dimension of final embedding space for clustering.
     '''
+
+    MODULES = ['clustercnn_single', 'clustering_loss']
+
     def __init__(self, cfg, name='clustercnn_single'):
         super(ClusterCNN, self).__init__(cfg, name)
         self._coordConv = self._model_config.get('coordConv', False)

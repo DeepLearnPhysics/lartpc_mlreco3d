@@ -22,11 +22,11 @@ class SequentialMaskLoss(nn.Module):
     '''
     Loss for sequential mask generating architectures (SMGA)
     SMGAs generate foreground/background scores for each instance
-    mask sequentially. 
+    mask sequentially.
     '''
     def __init__(self, cfg, name='clustering_loss'):
         super(SequentialMaskLoss, self).__init__()
-        self.loss_config = cfg['modules'][name]
+        self.loss_config = cfg[name]
         self.loss_scheme = self.loss_config.get('loss_scheme', 'BCE')
 
         if self.loss_scheme == 'BCE':
@@ -37,12 +37,12 @@ class SequentialMaskLoss(nn.Module):
             raise NotImplementedError
         else:
             raise NotImplementedError
-        
+
     def forward(self, cluster_masks, labels):
         '''
         INPUTS:
             - logits: list of namedtuples
-            - labels: ground truth cluster labels. 
+            - labels: ground truth cluster labels.
 
         RETURNS:
             - res (dict): loss and accuracy results for backprop/logging.
@@ -84,5 +84,3 @@ class SequentialMaskLoss(nn.Module):
         res['mask_loss'] = loss
         res['accuracy'] = acc
         return res
-
-        
