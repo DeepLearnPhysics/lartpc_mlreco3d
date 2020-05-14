@@ -29,7 +29,7 @@ def main():
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
 
     process_config(cfg)
-    log_dir = cfg['training']['log_dir']
+    log_dir = cfg['trainval']['log_dir']
     
     # loop over configuration files
     wfiles = np.array([w for w in os.listdir(ckpt_dir) if w.endswith('.ckpt')])
@@ -38,9 +38,9 @@ def main():
         print(wfile)
         filename, file_extension = os.path.splitext(wfile)
         # set weight file
-        cfg['training']['model_path'] = ckpt_dir + '/' + wfile
+        cfg['trainval']['model_path'] = ckpt_dir + '/' + wfile
         # set output log
-        cfg['training']['log_dir'] = log_dir + '/' + filename
+        cfg['trainval']['log_dir'] = log_dir + '/' + filename
         
         # run inference
         inference(cfg)

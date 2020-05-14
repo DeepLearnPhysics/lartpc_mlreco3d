@@ -14,7 +14,7 @@ def backbone_dict():
         "uresnet": uresnet.UResNet,
         "fpn": fpn.FPN
     }
-    
+
     return models
 
 
@@ -45,9 +45,9 @@ def clustering_loss_dict():
         'se_bce_ellipse': losses.spatial_embeddings.MaskBCELossBivariate,
         'se_lovasz': losses.spatial_embeddings.MaskLovaszHingeLoss,
         'se_lovasz_inter': losses.spatial_embeddings.MaskLovaszInterLoss,
-        'se_lovasz_ellipse': losses.spatial_embeddings.EllipsoidalKernelLoss,
         'se_focal': losses.spatial_embeddings.MaskFocalLoss,
-        'se_weighted_focal': losses.spatial_embeddings.MaskWeightedFocalLoss
+        'se_multivariate': losses.spatial_embeddings.MultiVariateLovasz,
+        'se_ce_lovasz': losses.spatial_embeddings.CELovaszLoss
     }
     return loss
 
@@ -56,7 +56,7 @@ def backbone_construct(name):
     models = backbone_dict()
     if not name in models:
         raise Exception("Unknown backbone architecture name provided")
-    return models[name]    
+    return models[name]
 
 
 def cluster_model_construct(name):
