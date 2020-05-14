@@ -21,6 +21,8 @@ from pprint import pprint
 
 class FullChain(nn.Module):
 
+    MODULES = ['shower_gnn', 'shower_edge_model', 'interaction_gnn', 'interaction_edge_model']
+
     def __init__(self, cfg, name='full_chain'):
         super(FullChain, self).__init__()
         #self.model_config = cfg[name]

@@ -262,7 +262,7 @@ class FullCNN(NetworkBase):
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_gnn_features = self.model_config.get('num_gnn_features', 16)
         self.inputKernel = self.model_config.get('input_kernel_size', 3)
-        self.coordConv = self.model_config.get('coordConv', False) 
+        self.coordConv = self.model_config.get('coordConv', False)
 
         # Network Freezing Options
         self.encoder_freeze = self.model_config.get('encoder_freeze', False)
@@ -359,7 +359,7 @@ class FullCNN(NetworkBase):
 
             for p1, p2 in zip(encoder_planes, seed_planes):
                 self._nin_block(self.seed_skip, p1, p2)
-            
+
             self.ppn_transform = scn.Identity()
 
         else:

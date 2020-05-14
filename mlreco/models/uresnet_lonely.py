@@ -54,6 +54,8 @@ class UResNet(torch.nn.Module):
         ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
+    MODULES = ['uresnet_lonely']
+
     def __init__(self, cfg, name="uresnet_lonely"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn

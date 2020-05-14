@@ -18,7 +18,7 @@ class DiscriminativeLoss(torch.nn.Module):
 
     def __init__(self, cfg, reduction='sum'):
         super(DiscriminativeLoss, self).__init__()
-        self.loss_config = cfg['modules']['clustering_loss']
+        self.loss_config = cfg['clustering_loss']
         self.num_classes = self.loss_config.get('num_classes', 5)
         self.depth = self.loss_config.get('stride', 5)
 
@@ -64,7 +64,7 @@ class DiscriminativeLoss(torch.nn.Module):
             labels (torch.Tensor): ground truth instance labels
             cluster_means (torch.Tensor): output from find_cluster_means
             margin (float/int): constant used to specify delta_v in paper. Think of it
-            as the size of each clusters in embedding space. 
+            as the size of each clusters in embedding space.
         Returns:
             intra_loss: (float) variance loss (see paper).
         '''
@@ -129,7 +129,7 @@ class DiscriminativeLoss(torch.nn.Module):
         '''
         Compute Adjusted Rand Index Score for given embedding coordinates,
         where predicted cluster labels are obtained from distance to closest
-        centroid (computes heuristic accuracy). 
+        centroid (computes heuristic accuracy).
 
         Inputs:
             embedding (torch.Tensor): (N, d) Tensor where 'd' is the embedding dimension.
@@ -164,7 +164,7 @@ class DiscriminativeLoss(torch.nn.Module):
         '''
         # Clustering Loss Hyperparameters
         # We allow changing the parameters at each computation in order
-        # to alter the margins at each spatial resolution in multi-scale losses. 
+        # to alter the margins at each spatial resolution in multi-scale losses.
         intra_margin = kwargs.get('intra_margin', 0.5)
         inter_margin = kwargs.get('inter_margin', 1.5)
         intra_weight = kwargs.get('intra_weight', 1.0)
@@ -183,7 +183,7 @@ class DiscriminativeLoss(torch.nn.Module):
             * inter_loss + reg_weight * reg_loss
 
         return {
-            'loss': loss, 
+            'loss': loss,
             'intra_loss': intra_weight * float(intra_loss),
             'inter_loss': inter_weight * float(inter_loss),
             'reg_loss': reg_weight * float(reg_loss)
@@ -192,22 +192,22 @@ class DiscriminativeLoss(torch.nn.Module):
 
     def combine_multiclass(self, features, slabels, clabels, **kwargs):
         '''
-        Wrapper function for combining different components of the loss, 
-        in particular when clustering must be done PER SEMANTIC CLASS. 
+        Wrapper function for combining different components of the loss,
+        in particular when clustering must be done PER SEMANTIC CLASS.
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud. 
+        and then compute the clustering loss over each masked point cloud.
 
-        INPUTS: 
+        INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
 
         OUTPUT:
-            loss_segs (list): list of computed loss values for each semantic class. 
-            loss[i] = computed DLoss for semantic class <i>. 
-            acc_segs (list): list of computed clustering accuracy for each semantic class. 
+            loss_segs (list): list of computed loss values for each semantic class.
+            loss[i] = computed DLoss for semantic class <i>.
+            acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss, acc_segs = defaultdict(list), defaultdict(float)
         semantic_classes = slabels.unique()
@@ -235,7 +235,7 @@ class DiscriminativeLoss(torch.nn.Module):
             group_labels: ground-truth instance labels
         Returns:
             (dict): A dictionary containing key-value pairs for
-            loss, accuracy, etc. 
+            loss, accuracy, etc.
         '''
         num_gpus = len(semantic_labels)
         loss = defaultdict(list)
@@ -267,7 +267,7 @@ class DiscriminativeLoss(torch.nn.Module):
                     loss["loss"].append(self.combine(embedding_batch, clabels_batch, **self.loss_hyperparams))
                     acc, _ = self.compute_heuristic_accuracy(embedding_batch, clabels_batch)
                     accuracy['accuracy'].append(acc)
-        
+
         loss_avg = {}
         acc_avg = defaultdict(float)
 

@@ -483,11 +483,12 @@ def parse_cluster3d_clean(data):
     2) remove voxels from group data that are not in image
     3) choose only one group per voxel (by lexicographic order)
     Args:
-        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
+        length 3 array of larcv::EventClusterVoxel3D, larcv::EventSparseTensor3D
+        and larcv::EventParticle
     Return:
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (N,1) where 2 represents (value, cluster_id)
+        a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
     """
     grp_voxels, grp_data = parse_cluster3d_full([data[0], data[2]])
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
