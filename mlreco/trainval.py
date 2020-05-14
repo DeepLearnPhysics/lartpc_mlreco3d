@@ -11,7 +11,7 @@ from mlreco.utils.data_parallel import DataParallel
 import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
-
+from mlreco.utils.adabound import *
 
 class trainval(object):
     """
@@ -35,7 +35,7 @@ class trainval(object):
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
         self._model_path = self._trainval_config.get('model_path', '')
-
+        self._restore_optimizer = self._trainval_config.get('restore_optimizer',False)
         # optimizer
         optim_cfg = self._trainval_config.get('optimizer')
         if optim_cfg is not None:
@@ -73,7 +73,6 @@ class trainval(object):
             total_loss += loss
         total_loss /= len(self._loss)
         self._loss = []  # Reset loss accumulator
-
         self._optimizer.zero_grad()  # Reset gradients accumulation
         total_loss.backward()
         # torch.nn.utils.clip_grad_norm_(self._net.parameters(), 1.0)
@@ -198,7 +197,14 @@ class trainval(object):
 
             res = self._forward(input_train, input_loss)
 
-            # here, contruct the unwrapped input and output
+            # Here, contruct the unwrapped input and output
+            # First, handle the case of a simple list concat
+            concat_keys = self._trainval_config.get('concat_result',[])
+            if len(concat_keys):
+                avoid_keys  = [k for k,v in input_data.items() if not k in concat_keys]
+                avoid_keys += [k for k,v in res.items()        if not k in concat_keys]
+                input_data,res = utils.list_concat(input_data,res,avoid_keys=avoid_keys)
+            # Below for more sophisticated unwrapping functions
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
@@ -210,7 +216,8 @@ class trainval(object):
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % output_cfg['unwrapper'])
                     raise ImportError
-                input_data, res = unwrapper(input_data, res)
+
+                input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:
                 if 'index' in input_data:
                     input_data['index'] = input_data['index'][0]
@@ -277,18 +284,15 @@ class trainval(object):
             for label in loss_acc:
                 if len(output_keys) and not label in output_keys: continue
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
-            # Use analysis keys to also get tensors
-            #if 'analysis_keys' in self._model_config:
-            #    for key in self._model_config['analysis_keys']:
-            #        res[key] = [s.cpu().detach().numpy() for s in result[self._model_config['analysis_keys'][key]]]
+
             for key in result.keys():
                 if len(output_keys) and not key in output_keys: continue
-                if len(result[key]) == 0:
-                    continue
+                if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
+
             return res
 
     def initialize(self):
@@ -296,22 +300,39 @@ class trainval(object):
         model = None
 
         model,criterion = construct(self._model_name)
-        self._criterion = criterion(self._model_config).cuda() if len(self._gpus) else criterion(self._model_config)
-
+        module_config = self._model_config['modules']
+        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
 
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
 
-        self._net = DataParallel(model(self._model_config),
-                                      device_ids=self._gpus)
+        self._model = model(module_config)
+
+        # module-by-module weights loading + param freezing
+
+        # Check if freeze weights is requested + enforce if so
+        for module_name in module_config:
+            if not hasattr(self._model, module_name) or not isinstance(getattr(self._model,module_name),torch.nn.Module):
+                continue
+            module = getattr(self._model,module_name)
+            if module_config[module_name].get('freeze_weights',False):
+                print('Freezing weights for a sub-module',module_name)
+                for param in module.parameters():
+                    param.requires_grad = False
+
+        self._net = DataParallel(self._model,device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda() if len(self._gpus) else self._net.train()
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-
-        optim_class = eval('torch.optim.' + self._optim)
-        self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+        if self._optim == 'AdaBound':
+            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
+        elif self._optim == 'AdaBoundW':
+            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
+        else:
+            optim_class = eval('torch.optim.' + self._optim)
+            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
 
         # learning rate scheduler
         if self._lr_scheduler is not None:
@@ -327,15 +348,15 @@ class trainval(object):
         model_paths = []
         if self._model_path and self._model_path != '':
             model_paths.append(('', self._model_path))
-        for module in self._model_config['modules']:
-            if 'model_path' in self._model_config['modules'][module] and self._model_config['modules'][module]['model_path'] != '':
-                model_paths.append((module, self._model_config['modules'][module]['model_path']))
+        for module in module_config:
+            if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
+                model_paths.append((module, module_config[module]['model_path']))
 
-        if model_paths:
+        if model_paths: #self._model_path and self._model_path != '':
             for module, model_path in model_paths:
                 if not os.path.isfile(model_path):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
-                print('Restoring weights from %s...' % model_path)
+                print('Restoring weights for %s from %s...' % (module,model_path))
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
@@ -355,11 +376,12 @@ class trainval(object):
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own
                     # version of optimizer.load_state_dict.
-                    if self._train and module == '':
+                    if self._train and module == '' and self._restore_optimizer:
                         # This overwrites the learning rate, so reset the learning rate
                         self._optimizer.load_state_dict(checkpoint['optimizer'])
                         for g in self._optimizer.param_groups:
-                            g['lr'] = self._learning_rate
+                            self._learning_rate = g['lr']
+                            # g['lr'] = self._learning_rate
                     if module == '':  # Root model sets iteration
                         iteration = checkpoint['global_step'] + 1
                 print('Done.')

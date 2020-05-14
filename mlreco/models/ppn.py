@@ -64,7 +64,7 @@ class PPN(torch.nn.Module):
     def __init__(self, cfg):
         super(PPN, self).__init__()
         import sparseconvnet as scn
-        self._model_config = cfg['modules']['ppn']
+        self._model_config = cfg['ppn']
 
         self._dimension = self._model_config.get('data_dim', 3)
         self._num_strides = self._model_config.get('num_strides', 5)
@@ -72,6 +72,7 @@ class PPN(torch.nn.Module):
         num_classes = self._model_config.get('num_classes', 5)
         self._downsample_ghost = self._model_config.get('downsample_ghost', False)
         self._use_encoding = self._model_config.get('use_encoding', False)
+        self._use_true_ghost_mask = self._model_config.get('use_true_ghost_mask', False)
         self._ppn_num_conv = self._model_config.get('ppn_num_conv', 1)
         self._ppn1_size = self._model_config.get('ppn1_size', -1)
         self._ppn2_size = self._model_config.get('ppn2_size', -1)
@@ -148,13 +149,18 @@ class PPN(torch.nn.Module):
         # If ghost mask is present, downsample it and use it before conv
         if self._downsample_ghost:
             with torch.no_grad():
-                ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
+                if self._use_true_ghost_mask:
+                    ghost_mask = input['segment_label'] < self._num_classes
+                else:
+                    ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
                 coords = ppn1_feature_enc[0].get_spatial_locations()
                 # print('Strides = ', self.ppn1_stride, self.ppn2_stride)
                 # print('Feature maps = ', feature_map1.features.size(), feature_map2.features.size(), feature_map3.features.size())
                 # print(feature_map1.get_spatial_locations())
                 # print(feature_map2.get_spatial_locations())
                 # print(feature_map3.get_spatial_locations())
+                # print(ghost_mask.shape)
+                # print(coords.shape)
                 feature_map1, ghost_mask1 = self.ghost_mask(ghost_mask, coords, feature_map1, factor=self.ppn1_stride)
                 feature_map2, ghost_mask2 = self.ghost_mask(ghost_mask, coords, feature_map2, factor=self.ppn2_stride)
                 feature_map3, _ = self.ghost_mask(ghost_mask, coords, feature_map3, factor=0.0)
@@ -166,7 +172,7 @@ class PPN(torch.nn.Module):
         attention = self.unpool1(mask)
         if self.training and label is not None:
             with torch.no_grad():
-                attention = self.add_labels1(attention, torch.cat([label[:, :-1]/2**self.ppn2_stride, label[:, -1][:, None]], dim=1).long())
+                attention = self.add_labels1(attention, torch.cat([label[:, :-2]/2**self.ppn2_stride, label[:, -2][:, None]], dim=1).long())
 
         # Feature map 2 = intermediate
         y = self.multiply1(feature_map2, attention)
@@ -176,7 +182,7 @@ class PPN(torch.nn.Module):
         attention2 = self.unpool2(mask2)
         if self.training and label is not None:
             with torch.no_grad():
-                attention2 = self.add_labels2(attention2, label.long())
+                attention2 = self.add_labels2(attention2, label[:,:-1].long())
 
         # Feature map 3 = original spatial size
         z = self.multiply2(feature_map3, attention2)
@@ -227,7 +233,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
     """
     def __init__(self, cfg, reduction='sum'):
         super(PPNLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['modules']['ppn']
+        self._cfg = cfg['ppn']
         self._dimension = self._cfg.get('data_dim', 3)
         self._num_strides = self._cfg.get('num_strides', 5)
         self._num_classes = self._cfg.get('num_classes', 5)
@@ -255,16 +261,16 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    def forward(self, result, label, particles):
+    def forward(self, result, segment_label, particles):
         """
-        result[0], label and weight are lists of size #gpus = batch_size.
+        result[0], segment_label and weight are lists of size #gpus = batch_size.
         result has only 1 element because UResNet returns only 1 element.
-        label[0] has shape (N, 1) where N is #pts across minibatch_size events.
+        segment_label[0] has shape (N, 1) where N is #pts across minibatch_size events.
         weight can be None.
         """
         assert len(result['points']) == len(particles)
-        assert len(result['points']) == len(label)
-        batch_ids = [d[:, -2] for d in label]
+        assert len(result['points']) == len(segment_label)
+        batch_ids = [d[:, -2] for d in segment_label]
         total_loss = 0.
         total_acc = 0.
         ppn_count = 0.
@@ -278,11 +284,11 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         num_discarded_labels_ppn1, num_discarded_labels_ppn2 = 0., 0.
         total_num_positives_ppn1, total_num_positives_ppn2 = 0., 0.
         data_dim = self._dimension
-        for i in range(len(label)):
+        for i in range(len(segment_label)):
             event_particles = particles[i]
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
-                event_data = label[i][batch_index][:, :data_dim]  # (N, 3)
+                event_data = segment_label[i][batch_index][:, :data_dim]  # (N, 3)
                 ppn1_batch_index = result['ppn1'][i][:, -3] == b.float()
                 ppn2_batch_index = result['ppn2'][i][:, -3] == b.float()
                 event_ppn1_data = result['ppn1'][i][ppn1_batch_index][:, :-3]  # (N1, 3)
@@ -296,8 +302,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                 event_ppn2_scores = result['ppn2'][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
                 # PPN stuff
-                event_label = event_particles[event_particles[:, -2] == b][:, :-2]  # (N_gt, 3)
-                event_types_label = event_particles[event_particles[:, -2] == b][:, -1]
+                event_label = event_particles[event_particles[:, -3] == b][:, :-3]  # (N_gt, 3)
+                event_types_label = event_particles[event_particles[:, -3] == b][:, -2]
                 if event_label.size(0) > 0:
                     # Mask: only consider pixels that were selected
                     event_mask = result['mask_ppn2'][i][batch_index]
@@ -309,7 +315,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
 
                     if self._downsample_ghost:
                         event_ghost = 1.0-torch.argmax(result['ghost'][i][batch_index], dim=1)
-                        # event_ghost = label[i][batch_index][:, -1] < self._num_classes
+                        # event_ghost = segment_label[i][batch_index][:, -1] < self._num_classes
                         # print('event_ghost', (event_ghost>0).sum(), event_ghost.size(), (event_mask>0).sum(), event_mask.size())
                         event_mask = event_mask & event_ghost.byte()
 
@@ -328,7 +334,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     # event_ppn2_mask = torch.nn.functional.softmax(result['ppn2'][i][ppn2_batch_index][:, 4:], dim=1)[:, 1] > self._score_threshold
                     if self._downsample_ghost:
                         event_ppn2_mask = event_ppn2_mask & result['ghost_mask2'][i][ppn2_batch_index].byte().reshape((-1,))
-                        # l = label[i][batch_index]
+                        # l = segment_label[i][batch_index]
                         # coords = torch.floor(l[:, :3] / float(2**self.half_stride) ).cpu().detach().numpy()
                         # _, indices = np.unique(coords, axis=0, return_index=True)
                         # l = torch.cat([torch.floor(l[indices][:, :3]/float(2**self.half_stride)), l[indices][:, 3:]], dim=1)

@@ -12,7 +12,7 @@ class Chain(torch.nn.Module):
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (float,), (3, 1)],
-        ["parse_particle_points", (int,), (3, 1)]
+        ["parse_particle_points", (int, int), (3, 2)]
     ]
     MODULES = ['ppn', 'uresnet_lonely']
 
@@ -20,7 +20,7 @@ class Chain(torch.nn.Module):
         super(Chain, self).__init__()
         self.ppn = PPN(model_config)
         self.uresnet_lonely = UResNet(model_config)
-        self._freeze_uresnet = model_config['modules']['uresnet_lonely'].get('freeze', False)
+        self._freeze_uresnet = model_config['uresnet_lonely'].get('freeze', False)
 
         if self._freeze_uresnet:
             for param in self.uresnet_lonely.parameters():
