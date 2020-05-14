@@ -74,14 +74,6 @@ def gaussian_kernel(centroid, sigma):
     return f
 
 
-def ellipsoidal_kernel(centroid, sigma):
-    def f(x):
-        dists = np.power(x - centroid, 2) / (2.0 * sigma**2)
-        probs = np.exp(-np.sum(-dists, axis=1, keepdims=False))
-        return probs
-    return f
-
-
 def find_cluster_means(features, labels):
     '''
     For a given image, compute the centroids \mu_c for each
@@ -109,51 +101,17 @@ def find_cluster_means(features, labels):
     return group_ids, cluster_means
 
 
-def cluster_remainder(embedding, semi_predictions):
-    if sum(semi_predictions == -1) == 0 or sum(semi_predictions != -1) == 0:
-        return semi_predictions
-    group_ids, predicted_cmeans = find_cluster_means(
-        embedding, semi_predictions)
-    semi_predictions[semi_predictions == -1] = np.argmin(
-        cdist(embedding[semi_predictions == -1], predicted_cmeans[1:]), axis=1)
-    return semi_predictions
-
-
-def fit_predict1(embeddings, seediness, margins, threshold=0.9, cluster_all=False):
-    pred_labels = -np.ones(embeddings.shape[0])
-    spheres = []
-    seediness_copy = np.copy(seediness)
-    check_completion = np.zeros(seediness.shape[0], dtype=int)
-    c = 0
-    while not check_completion.all():
-        i = np.argsort(seediness_copy)[::-1][0]
-        seedScore = seediness[i]
-        if seedScore < s_threshold:
-            break
-        centroid = embeddings[i]
-        sigma = margins[i]
-        spheres.append((centroid, sigma))
-        f = fitfunc(centroid, sigma)
-        pValues = f(embeddings)
-        cluster_index = pValues > p_threshold
-        seediness_copy[cluster_index] = 0
-        check_completion[cluster_index] = 1
-        pred_labels[cluster_index] = c
-        c += 1
-    if cluster_all:
-        pred_labels = cluster_remainder(embeddings, pred_labels)
-    return pred_labels, spheres
-
-
-def fit_predict2(embeddings, seediness, margins, fitfunc, 
-                 s_threshold=0.0, p_threshold=0.5, cluster_all=False):
+def fit_predict(embeddings, seediness, margins, fitfunc,
+                 s_threshold=0.0, p_threshold=0.5):
     pred_labels = -np.ones(embeddings.shape[0])
     probs = []
     spheres = []
-    seediness_copy = np.copy(seediness)
+    seediness_copy = seediness.clone()
     count = 0
-    while count < seediness.shape[0]:
-        i = np.argsort(seediness_copy)[::-1][0]
+    if seediness_copy.shape[0] == 1:
+        return torch.argmax(seediness_copy)
+    while count < int(seediness.shape[0]):
+        i = torch.argsort(seediness_copy.squeeze(), descending=True)[0]
         seedScore = seediness[i]
         if seedScore < s_threshold:
             break
@@ -162,17 +120,15 @@ def fit_predict2(embeddings, seediness, margins, fitfunc,
         spheres.append((centroid, sigma))
         f = fitfunc(centroid, sigma)
         pValues = f(embeddings)
-        probs.append(pValues.reshape(-1, 1))
-        cluster_index = pValues > p_threshold
-        seediness_copy[cluster_index] = 0
-        count += sum(cluster_index)
+        probs.append(pValues.view(-1, 1))
+        cluster_index = (pValues > p_threshold).view(-1) & (seediness_copy > 0).view(-1)
+        seediness_copy[cluster_index] = -1
+        count += torch.sum(cluster_index).item()
     if len(probs) == 0:
-        return pred_labels, spheres
-    probs = np.hstack(probs)
-    pred_labels = np.argmax(probs, axis=1)
-    # if cluster_all:
-    #     pred_labels = cluster_remainder(embeddings, pred_labels)
-    return pred_labels, spheres
+        return torch.tensor(pred_labels)
+    probs = torch.cat(probs, dim=1)
+    pred_labels = torch.argmax(probs, dim=1)
+    return pred_labels
 
 
 def main_loop(train_cfg, **kwargs):
@@ -190,10 +146,8 @@ def main_loop(train_cfg, **kwargs):
 
     inference_cfg['trainval']['iterations'] = len(event_list)
     iterations = inference_cfg['trainval']['iterations']
-    # s_threshold = kwargs['s_threshold']
-    # p_threshold = kwargs['p_threshold']
-    s_thresholds = {0: 0.88, 1: 0.92, 2: 0.84, 3: 0.84, 4: 0.8}
-    p_thresholds = {0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5}
+    s_threshold = kwargs['s_threshold']
+    p_threshold = kwargs['p_threshold']
 
     for i in event_list:
 
@@ -219,8 +173,8 @@ def main_loop(train_cfg, **kwargs):
             seed_class = seediness[semantic_mask]
             margins_class = margins[semantic_mask]
             print(index, c)
-            pred, spheres = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
-                                s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)], cluster_all=True)
+            pred, spheres = fit_predict(embedding_class, seed_class, margins_class, gaussian_kernel,
+                                s_threshold=s_threshold p_threshold=p_threshold)
             purity, efficiency = purity_efficiency(pred, clabels)
             fscore = 2 * (purity * efficiency) / (purity + efficiency)
             ari = ARI(pred, clabels)
@@ -250,15 +204,21 @@ if __name__ == "__main__":
     cfg = yaml.load(open(args['test_config'], 'r'), Loader=yaml.Loader)
 
     train_cfg = cfg['config_path']
-    s_thresholds = [0.0]
-    p_thresholds = [0.5]
+    p_lims = cfg.get('p_lims', None)
+    s_lims = cfg.get('s_lims', None)
+    if p_lims is not None:
+        p_thresholds = np.linspace(p_lims[0], p_lims[1], 20)
+    if s_lims is not None:
+        s_thresholds = np.linspace(s_lims[0], s_lims[1], 20)
+    s_thresholds = cfg['s_thresholds']
+    p_thresholds = cfg['p_thresholds']
     for p in p_thresholds:
         for t in s_thresholds:
             start = time.time()
             output = main_loop(train_cfg, s_threshold=t, p_threshold=p, **cfg)
             end = time.time()
             print("Time = {}".format(end - start))
-            name = '{}.csv'.format(cfg['name'])
+            name = '{}_st_{}_pt_{}.csv'.format(cfg['name'], t, p)
             if not os.path.exists(cfg['target']):
                 os.mkdir(cfg['target'])
             target = os.path.join(cfg['target'], name)
