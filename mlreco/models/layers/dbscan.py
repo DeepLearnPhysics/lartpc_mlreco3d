@@ -69,17 +69,21 @@ class DBSCANFragmenter(torch.nn.Module):
 
                 voxels = data[selection, :self.dim]
                 if s == self.track_label:
-                    labels = -1*np.ones(len(selection))
+                    labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
                     points = track_points[track_points[:,self.dim] == bid,:3]
                     dist_mat  = cdist(points, voxels)
                     dist_mask = np.all((dist_mat > self.ppn_mask_radius), axis=0)
-                    if np.sum(dist_mask):
-                        res = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels[dist_mask])
-                        labels[dist_mask] = res.labels_
-                    if np.sum(dist_mask) and np.sum(~dist_mask):
-                        dist_mat = cdist(voxels[~dist_mask], voxels[dist_mask])
-                        args = np.argmin(dist_mat, axis=1)
-                        labels[~dist_mask] = labels[dist_mask][args]
+                    for i in np.unique(labels):
+                        global_mask = labels == i
+                        active_mask = dist_mask & global_mask
+                        passive_mask = ~dist_mask & global_mask
+                        if np.sum(active_mask):
+                            res = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels[active_mask])
+                            labels[active_mask] = np.max(labels)+1+res.labels_
+                            if np.sum(passive_mask):
+                                dist_mat = cdist(voxels[active_mask], voxels[passive_mask])
+                                args = np.argmin(dist_mat, axis=0)
+                                labels[passive_mask] = labels[active_mask][args]
                 else:
                     res = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels)
                     labels = res.labels_
