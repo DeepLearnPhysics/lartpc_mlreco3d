@@ -12,7 +12,7 @@ class Chain(torch.nn.Module):
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (float,), (3, 1)],
-        ["parse_particle_points", (int,), (3, 1)]
+        ["parse_particle_points", (int, int), (3, 2)]
     ]
     MODULES = ['ppn', 'uresnet_lonely']
 

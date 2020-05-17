@@ -51,6 +51,9 @@ class FullChain(torch.nn.Module):
           ppn_weight: <relative weight of the ppn loss>
     """
 
+    MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
+            'seediness_decoder', 'embedding_decoder', 'full_chain_loss', 'ppn']
+
     def __init__(self, cfg, name='full_chain'):
         super(FullChain, self).__init__()
 

@@ -10,6 +10,8 @@ from .cluster_cnn.losses.sequential_mask import SequentialMaskLoss
 
 class ClusterCNN(AdaptIS):
 
+    MODULES = ['network_base', 'adaptis', 'uresnet_encoder', 'uresnet_decoder', 'clustering_loss']
+
     def __init__(self, cfg, name='adaptis'):
         super(ClusterCNN, self).__init__(cfg, name=name)
 

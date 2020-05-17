@@ -59,6 +59,9 @@ class ClustEdgeGNN(torch.nn.Module):
                   <dictionary of arguments to pass to the encoder>
                   model_path      : <path to the encoder weights>
     """
+
+    MODULES = ['chain', 'dbscan', 'node_encoder', 'edge_encoder', 'edge_model']
+
     def __init__(self, cfg, name='chain'):
         super(ClustEdgeGNN, self).__init__()
 

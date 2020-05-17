@@ -56,7 +56,7 @@ def get_traj_features(data, clusts, delta=0.0):
 
         # get direction - look at direction of spread orthogonal to v[:,2]
         v0 = v[:,2]
-        # projection of x along v0 
+        # projection of x along v0
         x0 = x.dot(v0)
         # projection orthogonal to v0
         xp0 = x - np.outer(x0, v0)
@@ -64,25 +64,28 @@ def get_traj_features(data, clusts, delta=0.0):
         # spread coefficient
         sc = np.dot(x0, np0)
         if sc < 0:
-            # reverse 
+            # reverse
             v0 = -v0
         # weight direction
         v0 = dirwt*v0
         # append, center, B.flatten(), v0
         feats.append(np.concatenate((center, B.flatten(), v0, [len(x)])))
     return np.array(feats)
-    
-    
+
+
 class FlashMatchingModel(torch.nn.Module):
     """
     Driver class for edge prediction, assumed to be a GNN model.
     This class mostly acts as a wrapper that will hand the graph data to another model.
 
     """
+
+    MODULES = ['edge_model']
+
     def __init__(self, cfg):
         super(FullEdgeModel, self).__init__()
 
-        # Get the model input parameters 
+        # Get the model input parameters
         if 'modules' in cfg:
             self.model_config = cfg['modules']['edge_model']
         else:
@@ -90,7 +93,7 @@ class FlashMatchingModel(torch.nn.Module):
 
     def forward(self, data):
         tpc_data = torch.tensor(data['tpc_sample'], dtype=torch.float, requires_grad=False).to(device)
-        pmt_data = torch.tensor(data['pmt_sample'], dtype=torch.float, requires_grad=False).to(device)       
+        pmt_data = torch.tensor(data['pmt_sample'], dtype=torch.float, requires_grad=False).to(device)
 
         # Find index of points that have the same event_id
         tpc_events = form_clusters(tpc_data)
@@ -156,7 +159,7 @@ class FlashMatchingModel(torch.nn.Module):
         for node in range(len(edge_index[0])):
             tpc_pca_node = np.array(x_TPC_PCA[edge_index[0][node]]).astype(np.double)
             tpc_node = np.array(tpc_data_array[edge_index[0][node]]).astype(np.double)
-            pmt_node = np.array(pmt_data_array[edge_index[1][node]-n]).astype(np.double)        
+            pmt_node = np.array(pmt_data_array[edge_index[1][node]-n]).astype(np.double)
 
             x_batch.append(tpc_node[0][-1])
 
@@ -173,21 +176,20 @@ class FlashMatchingModel(torch.nn.Module):
             matching.append(int(edge_index[1][node]-n == edge_index[0][node]))
 
         x_batch =  torch.tensor(x_batch, dtype=torch.long, requires_grad=False).reshape(-1)
-        
+
         tpc_voxel_tensor = torch.tensor(np.array(tpc_voxel_data), dtype=torch.float, requires_grad=False).to(device)
         tpc_pca_tensor = torch.tensor(np.array(tpc_pca_data), dtype=torch.float, requires_grad=False).to(device)
         pmt_voxel_tensor = torch.tensor(np.array(pmt_voxel_data), dtype=torch.float, requires_grad=False).to(device)
         node_tensor = torch.tensor(np.array(node_data), dtype=torch.float, requires_grad=False).to(device)
         matching_tensor = torch.tensor(np.array(matching), dtype=torch.long, requires_grad=False).to(device)
-        
+
         x = [tpc_voxel_tensor, tpc_pca_tensor, pmt_voxel_tensor, node_tensor, edge_index, x_batch]
         y = matching_tensor
-        
+
         model = flashmatching_gnn.UResGNet()
         model = model.to(device)
-        
+
         out = model(x)
-        
-        return {**out, 
+
+        return {**out,
                'true':[matching_tensor]}
-    
