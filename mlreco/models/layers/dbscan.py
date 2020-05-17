@@ -48,8 +48,8 @@ class DBSCANFragmenter(torch.nn.Module):
         points =  uresnet_ppn_type_point_selector([data], numpy_output,
                                                   score_threshold = self.ppn_score_threshold,
                                                   type_threshold = self.ppn_type_threshold,
-                                                  distance_threshold = self.ppn_distance_threshold)[0]
-        point_labels = np.argmax(points[:,-5:], axis=1)
+                                                  distance_threshold = self.ppn_distance_threshold)
+        point_labels = points[:,-1]
         track_points = points[point_labels == self.track_label,:self.dim+1]
 
         # Break down the input data to its components
