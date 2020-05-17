@@ -48,6 +48,8 @@ class UResNet(torch.nn.Module):
         ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
+    MODULES = ['uresnet_clustering']
+
     def __init__(self, cfg, name="uresnet_clustering"):
         super(UResNet, self).__init__()
         import sparseconvnet as scn
@@ -61,7 +63,7 @@ class UResNet(torch.nn.Module):
         num_strides = self._model_config.get('num_strides', 5)
         m = self._model_config.get('filters', 16)  # Unet number of features
         nInputFeatures = self._model_config.get('features', 1)
-        spatial_size = self._model_config.get('spatial_size', 512)
+        spatial_size = self._model_config.get('spatial_size', 768)
         num_classes = self._model_config.get('num_classes', 5)
         self._N = self._model_config.get('num_cluster_conv', 0)
         self._simpleN = self._model_config.get('simple_conv', True)
@@ -383,10 +385,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         batch_index = feature_map.get_spatial_locations()[:, -1] == b.long()
                     hypercoordinates = feature_map.features[batch_index]
                     coordinates = feature_map.get_spatial_locations()[batch_index][:, :-1]
-                    clusters = cluster_label[i][-(j+1+(max_depth-self._depth))][cluster_label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
+                    clusters = cluster_label[i][-(j+1+(max_depth-self._depth))][cluster_label[i][-(j+1+(max_depth-self._depth))][:, self._dimension] == b]
                     # clusters_coordinates = clusters[:, :self._dimension]
                     clusters_labels = clusters[:, -1:]
-                    semantic_labels = label[i][-(j+1+(max_depth-self._depth))][label[i][-(j+1+(max_depth-self._depth))][:, -2] == b]
+                    semantic_labels = label[i][-(j+1+(max_depth-self._depth))][label[i][-(j+1+(max_depth-self._depth))][:, self._dimension] == b]
                     # Sort coordinates in lexicographic order
                     x = coordinates.cpu().detach().numpy()
                     perm = np.lexsort((x[:, 2], x[:, 1], x[:, 0]))

@@ -11,7 +11,7 @@ from mlreco.utils.data_parallel import DataParallel
 import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
-from mlreco.models.cluster_cnn.adaptis import Logits
+from mlreco.utils.adabound import *
 
 class trainval(object):
     """
@@ -326,9 +326,13 @@ class trainval(object):
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-
-        optim_class = eval('torch.optim.' + self._optim)
-        self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+        if self._optim == 'AdaBound':
+            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
+        elif self._optim == 'AdaBoundW':
+            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
+        else:
+            optim_class = eval('torch.optim.' + self._optim)
+            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
 
         # learning rate scheduler
         if self._lr_scheduler is not None:

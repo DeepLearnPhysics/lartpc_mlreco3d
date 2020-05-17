@@ -12,6 +12,9 @@ class ClusterCNN(ClusterUNet):
     each spatial resolution. In the last clustering feature layer,
     we add a distance estimation branch.
     '''
+
+    MODULES = ['network_base', 'clusterunet', 'clusterunet_density', 'clustering_loss']
+
     def __init__(self, cfg, name='clusterunet_density'):
         super(ClusterCNN, self).__init__(cfg, name='clusterunet')
         self.model_config = cfg[name]
@@ -78,7 +81,7 @@ class ClusteringLoss(nn.Module):
     '''
     def __init__(self, cfg, name='clustering_loss'):
         super(ClusteringLoss, self).__init__()
-        self.model_config = cfg['modules'][name]
+        self.model_config = cfg[name]
 
         # TODO: Define single model with configurable enhancements.
         self.loss_func = DensityDistanceEstimationLoss(cfg)
