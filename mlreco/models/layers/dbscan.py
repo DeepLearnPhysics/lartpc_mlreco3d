@@ -4,6 +4,7 @@ from __future__ import print_function
 import torch
 import numpy as np
 import sklearn
+from mlreco.utils.track_clustering import track_clustering
 
 class DBSCANFragmenter(torch.nn.Module):
     """
@@ -27,6 +28,7 @@ class DBSCANFragmenter(torch.nn.Module):
         self.min_size = self.cfg.get('min_size', 10)
         self.num_classes = self.cfg.get('num_classes', 4)
         self.track_label = self.cfg.get('track_label', 1)
+        self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
         self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.9)
         self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 0.3)
         self.ppn_distance_threshold = self.cfg.get('ppn_distance_threshold', 1.999)
@@ -68,25 +70,16 @@ class DBSCANFragmenter(torch.nn.Module):
                     continue
 
                 voxels = data[selection, :self.dim]
+                labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
                 if s == self.track_label:
-                    labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
-                    points = track_points[track_points[:,self.dim] == bid,:3]
-                    dist_mat  = cdist(points, voxels)
-                    dist_mask = np.all((dist_mat > self.ppn_mask_radius), axis=0)
-                    for i in np.unique(labels):
-                        global_mask = labels == i
-                        active_mask = dist_mask & global_mask
-                        passive_mask = ~dist_mask & global_mask
-                        if np.sum(active_mask):
-                            res = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels[active_mask])
-                            labels[active_mask] = np.max(labels)+1+res.labels_
-                            if np.sum(passive_mask):
-                                dist_mat = cdist(voxels[active_mask], voxels[passive_mask])
-                                args = np.argmin(dist_mat, axis=0)
-                                labels[passive_mask] = labels[active_mask][args]
+                    labels = track_clustering(voxels = voxels,
+                                              points = track_points[track_points[:,self.dim] == bid,:3],
+                                              method = self.track_clustering_method,
+                                              eps = self.eps[s],
+                                              min_samples = self.min_samples,
+                                              mask_radius = self.ppn_mask_radius)
                 else:
-                    res = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels)
-                    labels = res.labels_
+                    sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
 
                 # Build clusters for this class
                 cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if np.sum(labels == i) > self.min_size]
