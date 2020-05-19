@@ -25,7 +25,7 @@ class DBSCANFragmenter(torch.nn.Module):
         self.dim = self.cfg.get('dim', 3)
         self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
         self.min_samples = self.cfg.get('min_samples', 1)
-        self.min_size = self.cfg.get('min_size', 10)
+        self.min_size = self.cfg.get('min_size', [10,10,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
         self.track_label = self.cfg.get('track_label', 1)
         self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
@@ -82,7 +82,7 @@ class DBSCANFragmenter(torch.nn.Module):
                     sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
 
                 # Build clusters for this class
-                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if np.sum(labels == i) > self.min_size]
+                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if np.sum(labels == i) >= self.min_size[s]]
                 clusts.extend(cls_idx)
 
         return np.array(clusts)
