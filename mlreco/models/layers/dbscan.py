@@ -25,7 +25,7 @@ class DBSCANFragmenter(torch.nn.Module):
         self.dim = self.cfg.get('dim', 3)
         self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
         self.min_samples = self.cfg.get('min_samples', 1)
-        self.min_size = self.cfg.get('min_size', [10,10,3,3])
+        self.min_size = self.cfg.get('min_size', [3,10,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
         self.track_label = self.cfg.get('track_label', 1)
         self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
