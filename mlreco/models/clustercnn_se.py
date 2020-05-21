@@ -19,6 +19,7 @@ class ClusterCNN(SpatialEmbeddings1):
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
         print(self)
+        # print(self)
 
 
 class ClusterCNN2(SpatialEmbeddings2):
@@ -54,8 +55,10 @@ class ClusteringLoss(nn.Module):
         self.loss_func = self.loss_func(cfg)
         print(self.loss_func)
 
-    def forward(self, result, segment_label, cluster_label):
-        return self.loss_func(result, segment_label, cluster_label)
+    def forward(self, result, cluster_label):
+        segment_label = [cluster_label[0][:, [0, 1, 2, 3, -1]]]
+        group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
+        return self.loss_func(result, segment_label, group_label)
 
 # class ClusteringLoss1(MaskBCELoss2):
 

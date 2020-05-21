@@ -70,6 +70,31 @@ def filter_duplicate_voxels(data, usebatch=True):
     return ret
 
 
+# def filter_duplicate_voxels(data, usebatch=True):
+#     """
+#     return array that will filter out duplicate voxels
+#     Only first instance of voxel will appear
+#     Assume data[:4] = [x,y,z,batchid]
+#     Assumes data is lexicographically sorted in x,y,z,batch order
+#     """
+#     # set number of cols to look at
+#     if usebatch:
+#         k = 4
+#     else:
+#         k = 3
+#     n = data.shape[0]
+#     ret = np.empty(n, dtype=np.bool)
+#     ret[0] = True
+#     for i in range(n-1):
+#         if np.all(data[i,:k] == data[i+1,:k]):
+#             # duplicate voxel
+#             ret[i+1] = False
+#         else:
+#             # new voxel
+#             ret[i+1] = True
+#     return ret
+
+
 def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True):
     """
     return array that will filter out duplicate voxels
