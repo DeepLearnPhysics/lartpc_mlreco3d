@@ -16,8 +16,9 @@ class SpatialEmbeddings1(UResNet):
         if 'modules' in cfg:
             self.model_config = cfg['modules'][name]
         else:
-            self.model_config = cfg
+            self.model_config = cfg[name]
         self.seedDim = self.model_config.get('seediness_dim', 1)
+        self.coordConv = self.model_config.get('coordConv', False)
         self.sigmaDim = self.model_config.get('sigma_dim', 1)
         self.seed_freeze = self.model_config.get('seed_freeze', False)
         # Define Separate Sparse UResNet Decoder for seediness.
@@ -90,12 +91,15 @@ class SpatialEmbeddings1(UResNet):
             - feature_dec: decoder features at each spatial resolution.
         '''
         point_cloud, = input
+        # print("Point Cloud: ", point_cloud)
         coords = point_cloud[:, 0:self.dimension+1].float()
-        normalized_coords = (coords[:, :3] - self.spatial_size / 2) \
-            / (self.spatial_size / 2)
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
-        print(features)
+
+        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+        if self.coordConv:
+            features = torch.cat([normalized_coords, features], dim=1)
 
         x = self.input((coords, features))
         encoder_res = self.encoder(x)
@@ -116,6 +120,68 @@ class SpatialEmbeddings1(UResNet):
         }
 
         return res
+
+
+# class SpatialEmbeddings3(SpatialEmbeddings1):
+    
+#     def __init__(self, cfg, name='spatial_embeddings'):
+#         super(SpatialEmbeddings1, self).__init__(cfg, name='uresnet')
+#         self.track_reps = self.model_config.get('track_reps', 2)
+
+#         self.track_convolutions = scn.Sequential()
+#         for i in range(self.track_reps):
+#             m = scn.Sequential()
+#             self._resnet_block(m, self.num_filters, self.num_filters)
+        
+#         self.outputTracks = scn.Sequential()
+#         self._nin_block(self.outputTracks, self.num_filters, self.dimension + self.sigmaDim)
+
+#     def forward(self, input):
+#         '''
+#         point_cloud is a list of length minibatch size (assumes mbs = 1)
+#         point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
+#         label has shape (point_cloud.shape[0] + 5*num_labels, 1)
+#         label contains segmentation labels for each point + coords of gt points
+
+#         RETURNS:
+#             - feature_enc: encoder features at each spatial resolution.
+#             - feature_dec: decoder features at each spatial resolution.
+#         '''
+#         point_cloud, = input
+#         # print("Point Cloud: ", point_cloud)
+#         coords = point_cloud[:, 0:self.dimension+1].float()
+#         features = point_cloud[:, self.dimension+1:].float()
+#         features = features[:, -1].view(-1, 1)
+
+#         normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+#                     / (float(self.spatial_size) / 2)
+#         if self.coordConv:
+#             features = torch.cat([normalized_coords, features], dim=1)
+
+#         x = self.input((coords, features))
+#         encoder_res = self.encoder(x)
+#         features_enc = encoder_res['features_enc']
+#         deepest_layer = encoder_res['deepest_layer']
+#         features_cluster = self.decoder(features_enc, deepest_layer)
+#         features_seediness = self.seed_decoder(features_enc, deepest_layer)
+
+#         embeddings = self.outputEmbeddings(features_cluster[-1])
+
+#         tracks = self.track_convolutions(features_cluster[-1])
+#         tracks = self.outputTracks(tracks)
+#         embeddings[track_mask] = tracks
+#         embeddings[:, :self.dimension] = self.tanh(embeddings[:, :self.dimension])
+#         embeddings[:, :self.dimension] += normalized_coords
+
+#         seediness = self.outputSeediness(features_seediness[-1])
+
+#         res = {
+#             "embeddings": [embeddings[:, :self.dimension]],
+#             "margins": [2 * self.sigmoid(embeddings[:, self.dimension:])],
+#             "seediness": [self.sigmoid(seediness)]
+#         }
+
+#         return res
 
 
 class SpatialEmbeddings2(StackUNet):

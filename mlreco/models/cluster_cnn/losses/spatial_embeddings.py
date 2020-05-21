@@ -133,6 +133,8 @@ class MaskBCELoss(nn.Module):
         semantic_classes = slabels.unique()
         print(semantic_classes)
         for sc in semantic_classes:
+            if int(sc) == 4:
+                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, probs, acc = self.get_per_class_probabilities(
                 embeddings[index], margins[index], clabels[index], coords[index])
@@ -163,7 +165,7 @@ class MaskBCELoss(nn.Module):
             if torch.cuda.is_available():
                 coords = coords.cuda()
             slabels = slabels.int()
-            clabels = group_label[i][:, -2]
+            clabels = group_label[i][:, -1]
             batch_idx = segment_label[i][:, 3]
             embedding = out['embeddings'][i]
             seediness = out['seediness'][i]
@@ -199,6 +201,8 @@ class MaskBCELoss(nn.Module):
         res = {}
         res.update(loss_avg)
         res.update(acc_avg)
+
+        print(acc_avg)
 
         return res
 
@@ -478,6 +482,8 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
+            if int(sc) == 4:
+                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(

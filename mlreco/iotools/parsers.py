@@ -383,6 +383,38 @@ def parse_cluster3d_full(data):
     return np_voxels, np_features
 
 
+def parse_cluster3d_full_fragment(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+    """
+    cluster_event = data[0]
+    meta = cluster_event.meta()
+    num_clusters = cluster_event.as_vector().size()
+    clusters_voxels, clusters_features = [], []
+    for i in range(num_clusters):
+        cluster = cluster_event.as_vector()[i]
+        num_points = cluster.as_vector().size()
+        if num_points > 0:
+            x = np.empty(shape=(num_points,), dtype=np.int32)
+            y = np.empty(shape=(num_points,), dtype=np.int32)
+            z = np.empty(shape=(num_points,), dtype=np.int32)
+            value = np.empty(shape=(num_points,), dtype=np.float32)
+            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            cluster_id = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=i, dtype=np.float32)
+            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            clusters_features.append(np.column_stack([cluster_id,value]))
+    np_voxels   = np.concatenate(clusters_voxels, axis=0)
+    np_features = np.concatenate(clusters_features, axis=0)
+    return np_voxels, np_features
+
+
 def parse_cluster3d_fragment(data):
     """
     A function to retrieve clusters tensor
@@ -393,7 +425,7 @@ def parse_cluster3d_fragment(data):
         coordinate
         a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
     """
-    grp_voxels, grp_data = parse_cluster3d_full([data[0]])
+    grp_voxels, grp_data = parse_cluster3d_full_fragment([data[0]])
     label_voxels, label_data = parse_sparse3d_scn([data[1]])
     # step 1: lexicographically sort group data
     perm = np.lexsort(grp_voxels.T)
@@ -585,7 +617,7 @@ def parse_cluster3d_scales(data):
     -------
     list of tuples
     """
-    grp_voxels, grp_data = parse_cluster3d_clean(data)
+    grp_voxels, grp_data = parse_cluster3d_clean_full(data)
     spatial_size = data[0].meta().num_voxel_x()
     max_depth = int(np.floor(np.log2(spatial_size))-1)
     scales = []
