@@ -21,6 +21,7 @@ class SpatialEmbeddings1(UResNet):
         self.coordConv = self.model_config.get('coordConv', False)
         self.sigmaDim = self.model_config.get('sigma_dim', 1)
         self.seed_freeze = self.model_config.get('seed_freeze', False)
+        self.coordConv = self.model_config.get('coordConv', True)
         # Define Separate Sparse UResNet Decoder for seediness.
         self.decoding_block2 = scn.Sequential()
         self.decoding_conv2 = scn.Sequential()

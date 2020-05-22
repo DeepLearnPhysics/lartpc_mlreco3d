@@ -5,6 +5,9 @@ import torch
 
 
 class UResNet(torch.nn.Module):
+
+    MODULES = ['uresnet']
+    
     def __init__(self, cfg, name='uresnet'):
         import sparseconvnet as scn
         super(UResNet, self).__init__()

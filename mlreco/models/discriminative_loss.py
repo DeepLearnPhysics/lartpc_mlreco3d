@@ -11,22 +11,26 @@ class UResNet(torch.nn.Module):
     '''
     UResNet Backbone architecture. Nothing has changed from uresnet.py
     '''
+
+    MODULES = ['discriminative_loss']
+
     def __init__(self, cfg, name='discriminative_loss'):
         import sparseconvnet as scn
         super(UResNet, self).__init__()
         model_config = cfg[name]
-        dimension = model_config['data_dim']
-        self.spatial_size = model_config['spatial_size']
+        dimension = model_config.get('data_dim', 3)
+        self.spatial_size = model_config.get('spatial_size', 512)
         reps = model_config.get('reps', 2)  # Conv block repetition factor
         kernel_size = 2  # Use input_spatial_size method for other values?
-        m = model_config['filters']  # Unet number of features
-        nPlanes = [i * m for i in range(1, model_config['num_strides'] + 1)]
+        m = model_config.get('filters', 16)  # Unet number of features
+        nPlanes = [i * m for i in range(1, model_config.get('num_strides', 5) + 1)]
         nInputFeatures = 1
         self._coordConv = model_config.get('coordConv', False)
+        self.num_classes =  model_config.get('num_classes', 5)
         if self._coordConv:
             nInputFeatures += 3
         self.sparseModel = scn.Sequential().add(
-            scn.InputLayer(dimension, model_config['spatial_size'], mode=3)).add(
+            scn.InputLayer(dimension, self.spatial_size, mode=3)).add(
             scn.SubmanifoldConvolution(dimension, nInputFeatures, m, 3,False)).add(
                    # Kernel size 3, no bias
             scn.UNet(dimension, reps, nPlanes, residual_blocks=True,
@@ -34,9 +38,9 @@ class UResNet(torch.nn.Module):
                    # downsample = [filter size, filter stride]
             scn.BatchNormReLU(m)).add(scn.OutputLayer(dimension))
         if self._coordConv:
-            self.linear = torch.nn.Linear(m, model_config['num_classes'])
+            self.linear = torch.nn.Linear(m, self.num_classes)
         else:
-            self.linear = torch.nn.Linear(m, model_config['num_classes'])
+            self.linear = torch.nn.Linear(m, self.num_classes)
 
     def forward(self, input):
         """

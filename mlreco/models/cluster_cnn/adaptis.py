@@ -27,7 +27,7 @@ class AdaIN(nn.Module):
     Original Paper: https://arxiv.org/pdf/1703.06868.pdf
 
     Many parts of the code is borrowed from pytorch original
-    BatchNorm implementation. 
+    BatchNorm implementation.
 
     INPUT:
         - input: SparseTensor
@@ -45,7 +45,7 @@ class AdaIN(nn.Module):
         self.eps = eps
         self._weight = torch.ones(num_features)
         self._bias = torch.zeros(num_features)
-    
+
     @property
     def weight(self):
         return self._weight
@@ -53,15 +53,15 @@ class AdaIN(nn.Module):
     @weight.setter
     def weight(self, weight):
         '''
-        Set weight and bias parameters for AdaIN Layer. 
+        Set weight and bias parameters for AdaIN Layer.
         Note that in AdaptIS, the parameters to the AdaIN layer
-        are trainable outputs from the controller network. 
+        are trainable outputs from the controller network.
         '''
         if weight.shape[0] != self.num_features:
             raise ValueError('Supplied weight vector feature dimension\
              does not match layer definition!')
         self._weight = weight
-    
+
     @property
     def bias(self):
         return self._bias
@@ -115,19 +115,19 @@ class ControllerNet(nn.Module):
     def forward(self, input):
 
         return self.net(input)
-        
+
 
 class RelativeCoordConv(nn.Module):
     '''
     Relative Coordinate Convolution Blocks introduced in AdaptIS paper.
-    We tailer to our use (Sparse Tensors). 
+    We tailer to our use (Sparse Tensors).
 
     This serves as a prior on the location of the object.
 
     Original paper contains an "instance size" limiting parameter R,
-    which may not suit our purposes. 
+    which may not suit our purposes.
     '''
-    def __init__(self, num_input, num_output, data_dim=3, 
+    def __init__(self, num_input, num_output, data_dim=3,
                  spatial_size=512, kernel_size=3, allow_bias=True):
         super(RelativeCoordConv, self).__init__()
         self._num_input = num_input
@@ -137,7 +137,7 @@ class RelativeCoordConv(nn.Module):
 
         # CoordConv Block Definition
         self.conv = scn.SubmanifoldConvolution(
-            data_dim, num_input + data_dim, 
+            data_dim, num_input + data_dim,
             num_output, kernel_size, allow_bias)
 
 
@@ -199,10 +199,10 @@ class InstanceBranch(NetworkBase):
         # Network Definition
         self.input = scn.InputLayer(self.dimension, self.spatial_size, mode=3)
         self.relConv = RelativeCoordConv(self.nInputFeatures,
-                                         self.num_filters, 
+                                         self.num_filters,
                                          self.dimension,
                                          self.spatial_size,
-                                         self.inputKernel, 
+                                         self.inputKernel,
                                          self.allow_bias)
         self.leaky_relu = scn.LeakyReLU(leak=self.leakiness)
 
@@ -212,7 +212,7 @@ class InstanceBranch(NetworkBase):
             m = scn.Sequential()
             self.block(m, self.num_filters, self.num_filters)
             self.instance_net.add(m)
-        # 4. Adaptive Instance Normalization 
+        # 4. Adaptive Instance Normalization
         self.adain = AdaIN(feature_size)
         # 5. Mask Generating Decoder
         instance_downsample = [feature_size] + [int(feature_size / 2**i) \
@@ -230,20 +230,20 @@ class InstanceBranch(NetworkBase):
 
     def forward(self, features, coords, points, weights, biases):
         '''
-        For each point proposal (priors), generates a list of 
-        instance masks from <input> feature tensor. 
+        For each point proposal (priors), generates a list of
+        instance masks from <input> feature tensor.
 
         INPUTS:
             - weights (N_p x F torch.Tensor): AdaIN layer weights
             - biases (N_p x F torch.Tensor): AdaIN layer biases
             - features (N x F torch.Tensor): Extracted feature tensor from
-            backbone network. Input must be given per event. 
+            backbone network. Input must be given per event.
             - coords (N x 3 torch.Tensor): Coordinates corresponding to
-            <features> feature tensor. 
+            <features> feature tensor.
 
         RETURNS:
             - masks (list of N x 1 torch.Tensor): list of length N_p
-            of generated instance masks for each point proposal. 
+            of generated instance masks for each point proposal.
         '''
         mask_logits = []
         x = self.input((coords.float(), features.float()))
@@ -294,7 +294,7 @@ class AdaptIS(NetworkBase):
         self.decoder = UResNetDecoder(cfg, name='uresnet_decoder')
 
         self.seed_net = scn.Sequential()
-        self._block(self.cluster_net, self.num_filters, self.num_filters, kernel=5)
+        self._block(self.seed_net, self.num_filters, self.num_filters, kernel=5)
         self.mask_net = scn.Sequential()
         self._block(self.mask_net, self.num_filters + self.dimension, self.num_filters, kernel=5)
         self._block(self.mask_net, self.num_filters, self.num_filters, kernel=5)
@@ -322,7 +322,7 @@ class AdaptIS(NetworkBase):
         centroids = torch.stack(centroids)
         return centroids
 
-    
+
     def forward(self, input):
         point_cloud, = input
         coords = point_cloud[:, 0:self.dimension+1].float()
@@ -342,16 +342,16 @@ class AdaptIS(NetworkBase):
 
 
 
-        
+
 # class AdaptIS(NetworkBase):
 #     '''
 #     Wrapper module for entire AdaptIS network chain.
 
-#     We roughly follow the network architecture description 
+#     We roughly follow the network architecture description
 #     in page 6 of paper: https://arxiv.org/pdf/1909.07829.pdf.
 
 #     We rename "point proposal branch" in the paper as "attention proposal",
-#     to avoid confusion with existing PPN. 
+#     to avoid confusion with existing PPN.
 #     '''
 
 #     def __init__(self, cfg, name='adaptis'):
@@ -379,7 +379,7 @@ class AdaptIS(NetworkBase):
 #                 scn.SubmanifoldConvolution(self.net.dimension,
 #                 (self.feature_size if i == 0 else self.attention_hidden),
 #                 self.attention_hidden, 3, self.allow_bias)).add(
-#                 scn.BatchNormLeakyReLU(self.attention_hidden, 
+#                 scn.BatchNormLeakyReLU(self.attention_hidden,
 #                                        leakiness=self.leakiness))
 #             self.attention_net.add(module)
 #         self.attention_net.add(scn.NetworkInNetwork(
@@ -393,7 +393,7 @@ class AdaptIS(NetworkBase):
 #                 scn.SubmanifoldConvolution(self.net.dimension,
 #                 (self.feature_size if i == 0 else self.segmentation_hidden),
 #                 self.segmentation_hidden, 3, self.allow_bias)).add(
-#                 scn.BatchNormLeakyReLU(self.segmentation_hidden, 
+#                 scn.BatchNormLeakyReLU(self.segmentation_hidden,
 #                                        leakiness=self.leakiness))
 #             self.segmentation_net.add(module)
 #         self.segmentation_net.add(scn.NetworkInNetwork(
@@ -403,7 +403,7 @@ class AdaptIS(NetworkBase):
 #         self.segmentationOut = scn.OutputLayer(self.dimension)
 #         self.attentionOut = scn.OutputLayer(self.dimension)
 
-#         # 1. Controller Network makes AdaIN parameter vector from query point. 
+#         # 1. Controller Network makes AdaIN parameter vector from query point.
 #         self.controller_weight = ControllerNet(self.feature_size, self.feature_size, 3)
 #         self.controller_bias = ControllerNet(self.feature_size, self.feature_size, 3)
 #         # 2. Relative CoordConv and concat to feature tensor
@@ -416,10 +416,10 @@ class AdaptIS(NetworkBase):
 #     def find_query_points(coords, ppn_scores, max_points=100):
 #         '''
 #         TODO:
-#         Based on PPN Output, find query points to be passed to 
+#         Based on PPN Output, find query points to be passed to
 #         AdaIN layers via local maximum finding.
 
-#         NOTE: Only used in inference. 
+#         NOTE: Only used in inference.
 #         '''
 #         return
 
@@ -451,19 +451,19 @@ class AdaptIS(NetworkBase):
 #     def find_nearest_features(self, features, coords, points):
 #         '''
 #         Given a PPN Truth point (x0, y0, z0, b0, c0), locates the
-#         nearest voxel in the input image. We construct a KDTree with 
-#         <points> and query <coords> for fast nearest-neighbor search. 
+#         nearest voxel in the input image. We construct a KDTree with
+#         <points> and query <coords> for fast nearest-neighbor search.
 
 #         NOTE: that PPN Truth gives a floating point coordinate, and the output
 #         feature tensors have integer spatial coordinates of original space.
 
-#         NOTE: This function should only be used in TRAINING AdaptIS. 
+#         NOTE: This function should only be used in TRAINING AdaptIS.
 
 #         INPUTS:
 #             - coords (N x 5 Tensor): coordinates (including batch and class)
 #             for the current event (fixed batch index).
 #             - points (N_p x 5 Tensor): PPN points to query nearest neighbor.
-#             Here, N_p is the number of PPN ground truth points. 
+#             Here, N_p is the number of PPN ground truth points.
 
 #         RETURNS:
 #             - nearest_neighbor (1 x 5 Tensor): nearest neighbor of <point>
@@ -506,8 +506,8 @@ class AdaptIS(NetworkBase):
 #                 #     priors = points_batch[points_batch[:, -1] == s]
 #                 #     print(priors)
 #                 #     priors, indices = self.find_nearest_features(
-#                 #         feature_batch[class_mask], 
-#                 #         coords_batch[class_mask], 
+#                 #         feature_batch[class_mask],
+#                 #         coords_batch[class_mask],
 #                 #         priors)
 #                 #     print(clabels_class[indices])
 #                 #     print(priors.shape)
@@ -533,7 +533,7 @@ class AdaptIS(NetworkBase):
 #                 biases = self.controller_bias(priors)
 #                 # print(weights.shape, biases.shape)
 #                 mask_logits = self.instance_branch(
-#                     feature_batch, coords_batch, 
+#                     feature_batch, coords_batch,
 #                     prior_coords, weights, biases)
 #                 mask_logits = list(zip(clabels, mask_logits))
 #                 for c, scores in mask_logits:
@@ -557,7 +557,7 @@ class AdaptIS(NetworkBase):
 #             self.mask_tensor.mask = batch_mask
 #             features_batch = self.mask_tensor(features)
 
-        
+
 #     def forward(self, input):
 #         '''
 #         INPUTS:
@@ -566,8 +566,8 @@ class AdaptIS(NetworkBase):
 
 #             During training, we sample random points at least once from each cluster.
 #             During inference, we sample the highest attention scoring points.
-        
-#         TODO: Turn off attention map training. 
+
+#         TODO: Turn off attention map training.
 #         '''
 #         cluster_label, input_data, segment_label, particle_label = input
 #         coords = input_data[:, :4]
@@ -575,7 +575,7 @@ class AdaptIS(NetworkBase):
 #         # Get last feature layer in UResNet
 #         features = net_output['features_dec'][0][-1]
 
-#         # Point Proposal map and Segmentation Map is Holistic. 
+#         # Point Proposal map and Segmentation Map is Holistic.
 #         ppn_scores = self.attention_net(features)
 #         ppn_scores = self.attentionOut(ppn_scores)
 #         segmentation_scores = self.segmentation_net(features)
@@ -584,7 +584,7 @@ class AdaptIS(NetworkBase):
 
 #         # For Instance Branch, mask generation is instance-by-instance.
 #         if self.instance_branch.training_mode:
-#             instance_scores = self.train_loop(features, coords, 
+#             instance_scores = self.train_loop(features, coords,
 #                 particle_label, segment_label, cluster_label)
 #         else:
 #             instance_scores = self.test_loop(features, ppn_scores)

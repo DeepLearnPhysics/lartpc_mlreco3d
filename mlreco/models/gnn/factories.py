@@ -58,7 +58,7 @@ def edge_model_construct(cfg):
     """
     models = edge_model_dict()
     model_cfg = cfg['edge_model']
-    name = model_cfg['name']
+    name = model_cfg.get('name', 'modular_nnconv')
     if not name in models:
         raise Exception("Unknown edge model name provided:", name)
 
@@ -103,7 +103,7 @@ def node_model_construct(cfg):
     """
     models = node_model_dict()
     model_cfg = cfg['node_model']
-    name = model_cfg['name']
+    name = model_cfg.get('name', 'modular_nnconv')
     if not name in models:
         raise Exception("Unknown node model name provided:", name)
 
@@ -149,7 +149,7 @@ def node_encoder_construct(cfg):
     """
     encoders = node_encoder_dict()
     encoder_cfg = cfg['node_encoder']
-    name = encoder_cfg['name']
+    name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown node encoder name provided:", name)
 
@@ -195,7 +195,7 @@ def edge_encoder_construct(cfg):
     """
     encoders = edge_encoder_dict()
     encoder_cfg = cfg['edge_encoder']
-    name = encoder_cfg['name']
+    name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown edge encoder name provided:", name)
 

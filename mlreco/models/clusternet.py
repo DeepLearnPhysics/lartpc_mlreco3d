@@ -36,13 +36,16 @@ class ClusterCNN(NetworkBase):
     proximity: configurations for final distance estimation map.
     ----------------------------------------------------------
     '''
+
+    MODULES = ['network_base', 'clusternet', 'uresnet', 'clustering_loss']
+
     def __init__(self, cfg, name='clusternet'):
         super(ClusterCNN, self).__init__(cfg)
 
         self.model_config = cfg[name]
 
-        self.backbone_config = self.model_config.get('backbone', None)
-        self.clustering_config = self.model_config.get('clustering', None)
+        self.backbone_config = self.model_config.get('backbone', {})
+        self.clustering_config = self.model_config.get('clustering', {})
         self.compute_distance_estimate = self.clustering_config.get('compute_distance_estimate', False)
 
         # Construct Backbone
@@ -53,7 +56,7 @@ class ClusterCNN(NetworkBase):
 
         # Add N-Convolutions for Clustering
         if self.clustering_config is not None:
-            self.clustering_name = self.clustering_config.get('name', 'multi_distance')
+            self.clustering_name = self.clustering_config.get('name', 'multi')
             clusternet = cluster_model_construct(self.clustering_name)
             self.net = clusternet(cfg, self.net, name='embeddings')
 

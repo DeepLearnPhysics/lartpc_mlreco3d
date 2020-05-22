@@ -131,7 +131,7 @@ class MaskBCELoss(nn.Module):
         loss = defaultdict(list)
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
-        print(semantic_classes)
+        #print(semantic_classes)
         for sc in semantic_classes:
             if int(sc) == 4:
                 continue
