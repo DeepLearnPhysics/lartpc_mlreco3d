@@ -48,7 +48,7 @@ def event_particles(request):
     from larcv import larcv
     num_particles = request.param
     particles = larcv.EventParticle()
-    for _ in range(num_particles):
+    for idx in range(num_particles):
         p = larcv.Particle()
         p.shape(0)
         p.energy_deposit(np.random.random()*100)
@@ -68,7 +68,7 @@ def event_particles(request):
         elif particle_type == 4:
             p.pdg_code(11)
             p.creation_process(np.random.choice(["muMinusCaptureAtRest", "muPlusCaptureAtRest", "Decay"]))
-
+        p.group_id(idx)
         particles.append(p)
 
     return particles
@@ -151,7 +151,7 @@ def test_parse_particle_points(event_tensor3d, event_particles):
     assert len(output[0].shape) == 2
     assert len(output[1].shape) == 2
     assert output[0].shape[1] == 3
-    assert output[1].shape[1] == 1
+    assert output[1].shape[1] == 2
     assert output[0].shape[0] == output[1].shape[0]
 
 
@@ -178,14 +178,17 @@ def test_parse_cluster3d(event_cluster3d):
     assert output[0].shape[0] == output[1].shape[0]
 
 
+# Make sure there are the same number of clusters in
+# event_cluster3d and particles in event_particles
 @pytest.mark.parametrize("event_tensor3d", [1], indirect=True)
-def test_parse_cluster3d_clean(event_cluster3d, event_tensor3d):
+@pytest.mark.parametrize("event_particles", [5], indirect=True)
+@pytest.mark.parametrize("event_cluster3d", [5], indirect=True)
+def test_parse_cluster3d_clean(event_cluster3d, event_tensor3d, event_particles):
     from mlreco.iotools.parsers import parse_cluster3d_clean
-    output = parse_cluster3d_clean([event_cluster3d] + event_tensor3d)
+    output = parse_cluster3d_clean([event_cluster3d] + event_tensor3d + [event_particles])
     assert len(output) == 2
     assert len(output[0].shape) == 2
     assert len(output[1].shape) == 2
     assert output[0].shape[1] == 3
-    assert output[1].shape[1] == 2
+    assert output[1].shape[1] == 6
     assert output[0].shape[0] == output[1].shape[0]
-

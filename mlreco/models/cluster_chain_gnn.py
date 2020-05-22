@@ -27,16 +27,16 @@ class ChainDBSCANGNN(torch.nn.Module):
         just energy deposision data
         "input_data": ["parse_sparse3d_scn", "sparse3d_data"]
     """
-    MODULES = ['dbscan', 'uresnet_ppn', 'attention_gnn']
+    MODULES = ['chain', 'dbscan', 'uresnet_lonely', 'attention_gnn', 'ppn', 'node_encoder', 'edge_encoder', 'edge_model', 'node_model']
 
     def __init__(self, model_config):
         super(ChainDBSCANGNN, self).__init__()
 
         # Initialize the chain parameters
         chain_config = model_config['chain']
-        self.shower_class = int(chain_config['shower_class'])
-        self.node_min_size = chain_config['node_min_size']
-        self.group_pred = chain_config['group_pred']
+        self.shower_class = int(chain_config.get('shower_class', 0))
+        self.node_min_size = chain_config.get('node_min_size', -1)
+        self.group_pred = chain_config.get('group_pred', 'threshold')
 
         # Initialize the modules
         self.uresnet_lonely = UResNet(model_config)

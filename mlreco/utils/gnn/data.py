@@ -224,7 +224,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
     else:
         event_cnts = np.full(int(batch_size/merge_size), merge_size)
         if np.sum(event_cnts) < batch_size:
-            event_cnts.append(batch_size-np.sum(event_cnts))
+            event_cnts = np.append(event_cnts, batch_size-np.sum(event_cnts))
         merging_batch_id_list = np.concatenate([np.full(n,i) for i,n in enumerate(event_cnts)])
 
     # Merge batches, relabel everything to prevent any repeated indices

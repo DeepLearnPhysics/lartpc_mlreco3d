@@ -11,7 +11,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 @pytest.mark.parametrize("num_voxels_low", [20])
 @pytest.mark.parametrize("num_voxels_high", [100])
-def test_model_forward(config_simple, N, num_voxels_low, num_voxels_high):
+def test_model_forward(config_simple, xfail_models, N, num_voxels_low, num_voxels_high):
     """
     Test whether a model can be trained.
     Using only numpy input arrays, should also test with parsers running.
@@ -28,10 +28,13 @@ def test_model_forward(config_simple, N, num_voxels_low, num_voxels_high):
     num_voxels_high: int, optional
         Upper boundary for generating (random) number of voxels.
     """
+    if config_simple['model']['name'] in xfail_models:
+        pytest.xfail("%s is expected to fail at the moment." % config_simple['model']['name'])
+
     config = config_simple
     model, criterion = factories.construct(config['model']['name'])
-    net = model(config['model'])
-    loss = criterion(config['model'])
+    net = model(config['model']['modules'])
+    loss = criterion(config['model']['modules'])
 
     if not hasattr(net, "INPUT_SCHEMA"):
         pytest.skip('No test defined for network of %s' % config['model']['name'])
@@ -111,7 +114,7 @@ def generate_data(N, input_schema, num_voxels_low=20, num_voxels_high=100,
             values = []
             assert len(types) == shapes[1]
             for t in types:
-                values.append(np.random.random((voxels.shape[0], shapes[1])).astype(t))
+                values.append(np.random.random((voxels.shape[0], 1)).astype(t))
             obj = np.concatenate([voxels, np.zeros((voxels.shape[0], 1))] + values, axis=1)
             net_input += (torch.tensor(obj),) if not loss else ([torch.tensor(obj)],)
 

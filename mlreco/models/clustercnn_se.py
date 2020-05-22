@@ -16,10 +16,12 @@ class ClusterCNN(SpatialEmbeddings1):
         final linear layer.
         - embedding_dim: dimension of final embedding space for clustering.
     '''
+
+    MODULES = ['network_base', 'uresnet', 'clustering_loss']
+
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
-        print(self)
-        # print(self)
+        #print(self)
 
 
 class ClusterCNN2(SpatialEmbeddings2):
@@ -31,6 +33,9 @@ class ClusterCNN2(SpatialEmbeddings2):
         final linear layer.
         - embedding_dim: dimension of final embedding space for clustering.
     '''
+
+    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'spatial_embeddings']
+
     def __init__(self, cfg):
         super(ClusterCNN2, self).__init__(cfg)
 
@@ -53,7 +58,7 @@ class ClusteringLoss(nn.Module):
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.loss_func = clustering_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
-        print(self.loss_func)
+        #print(self.loss_func)
 
     def forward(self, result, cluster_label):
         segment_label = [cluster_label[0][:, [0, 1, 2, 3, -1]]]
