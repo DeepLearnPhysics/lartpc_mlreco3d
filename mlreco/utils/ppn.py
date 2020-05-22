@@ -360,7 +360,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
             ppn_points = ppn_type_predictions == c
             if ppn_points.shape[0] > 0 and uresnet_points.shape[0] > 0:
                 d = scipy.spatial.distance.cdist(points[batch_index][mask2][ppn_points][:, :3] + event_data[batch_index][mask2][ppn_points][:, :3] + 0.5, event_data[batch_index][mask2][uresnet_points][:, :3])
-                ppn_mask = (d < type_threshold).any(axis=1)
+                ppn_mask = (d > type_threshold).any(axis=1)
                 final_points.append(points[batch_index][mask2][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask2][ppn_points][ppn_mask][:, :3])
                 final_scores.append(scores[batch_index][mask2][ppn_points][ppn_mask])
                 final_types.append(ppn_type_predictions[ppn_points][ppn_mask])

@@ -50,6 +50,9 @@ def track_clustering(voxels, points, method='masked_dbscan', **kwargs):
                     while l != k:
                         l = predecessors[k,l]
                         paths[i].append(l)
+                if np.all([len(p) == 2 for p in paths]):
+                    labels[group_mask] = max(labels)+1
+                    continue
                 mindists = np.vstack([np.min(shortest_mat[len(group_points):,p[1:-1]],axis=1) for p in paths if len(p) > 2])
                 sublabels = np.argmin(mindists, axis=0)
                 labels[group_mask] = max(labels)+1+sublabels
