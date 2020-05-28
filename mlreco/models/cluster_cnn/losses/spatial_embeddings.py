@@ -161,9 +161,9 @@ class MaskBCELoss(nn.Module):
 
         for i in range(num_gpus):
             slabels = segment_label[i][:, -1]
-            coords = segment_label[i][:, :3].float()
-            if torch.cuda.is_available():
-                coords = coords.cuda()
+            #coords = segment_label[i][:, :3].float()
+            #if torch.cuda.is_available():
+            #    coords = coords.cuda()
             slabels = slabels.int()
             clabels = group_label[i][:, -1]
             batch_idx = segment_label[i][:, 3]
@@ -178,7 +178,6 @@ class MaskBCELoss(nn.Module):
                 clabels_batch = clabels[batch_idx == bidx]
                 seed_batch = seediness[batch_idx == bidx]
                 margins_batch = margins[batch_idx == bidx]
-                coords_batch = coords[batch_idx == bidx] / self.spatial_size
 
                 loss_class, acc_class = self.combine_multiclass(
                     embedding_batch, margins_batch,
