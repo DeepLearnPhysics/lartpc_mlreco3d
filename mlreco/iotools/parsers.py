@@ -416,7 +416,7 @@ def parse_cluster3d_full(data):
     return np_voxels, np_features
 
 
-def parse_cluster3d_all(data):
+def parse_cluster3d_kinematics(data):
     """
     a function to retrieve clusters tensor
     args:
@@ -429,8 +429,17 @@ def parse_cluster3d_all(data):
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
+    TYPE_LABELS = {
+        22: 0,  # photon
+        11: 1,  # e-
+        -11: 1, # e+
+        13: 2,  # mu-
+        -13: 2, # mu+
+        211: 3, # pi+
+        -211: 3, # pi-
+        2212: 4, # protons
+    }
     # print(cluster_event)
-    # print(particles_v)
     # assert False
     meta = cluster_event.meta()
     num_clusters = cluster_event.as_vector().size()
@@ -456,17 +465,28 @@ def parse_cluster3d_all(data):
             group_id = np.full(shape=(cluster.as_vector().size()),
                                #fill_value=particles_v[i].group_id(), dtype=np.float32)
                                fill_value=group_ids[i], dtype=np.float32)
-            inter_id = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=inter_ids[i], dtype=np.float32)
-            nu_id = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=nu_ids[i], dtype=np.float32)
-            sem_type = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=particles_v[i].shape(), dtype=np.float32)
+            p = particles_v[i].p()
+            px = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=particles_v[i].px() / p, dtype=np.float32)
+            py = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].py() / p, dtype=np.float32)
+            pz = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].pz() / p, dtype=np.float32)
+            p = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=p, dtype=np.float32)
+            t = int(particles_v[i].pdg_code())
+            if t in TYPE_LABELS.keys():
+                pdg = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=TYPE_LABELS[t], dtype=np.float32)
+            else:
+                continue
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,sem_type]))
+            clusters_features.append(np.column_stack([value, cluster_id, group_id, px,py,pz,p,pdg]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
+    mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
 
+    # print(np_features[mask][:, [0, 1, 5, 6]])
     return np_voxels, np_features
 
 
