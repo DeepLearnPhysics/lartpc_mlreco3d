@@ -91,7 +91,7 @@ class ClustCNNEdgeEncoder2(nn.Module):
     """
     def __init__(self, model_config):
         super(ClustCNNEdgeEncoder2, self).__init__()
-
+        print(model_config)
         # Initialize the CNN
         self.encoder = ResidualEncoder(model_config)
 

@@ -37,8 +37,7 @@ def edge_assignment_from_graph(edge_index, true_edge_index, binary=False):
         np.ndarray: (E) Boolean array specifying on/off edges
     """
     # Set the edge as true if it connects two nodes that are connected by a true dependency
-    edge_assn = np.array([np.any([(e == pair).all() or (np.flip(e) == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
-
+    edge_assn = np.array([np.any([(e == pair).all() for pair in true_edge_index]) for e in edge_index], dtype=int)
     # If binary loss will be used, transform to -1,+1 instead of 0,1
     if binary:
         edge_assn = 2*edge_assn - 1
