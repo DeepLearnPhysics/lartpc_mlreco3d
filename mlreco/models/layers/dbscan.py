@@ -28,6 +28,8 @@ class DBSCANFragmenter(torch.nn.Module):
         self.min_size = self.cfg.get('min_size', [3,10,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
         self.track_label = self.cfg.get('track_label', 1)
+        self.michel_label = self.cfg.get('michel_label', 2)
+        self.delta_label = self.cfg.get('delta_label', 3)
         self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
         self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.9)
         self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 0.3)
@@ -52,7 +54,7 @@ class DBSCANFragmenter(torch.nn.Module):
                                                   type_threshold = self.ppn_type_threshold,
                                                   distance_threshold = self.ppn_distance_threshold)
         point_labels = points[:,-1]
-        track_points = points[point_labels == self.track_label,:self.dim+1]
+        track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
 
         # Break down the input data to its components
         bids = np.unique(data[:,self.dim])
@@ -65,6 +67,8 @@ class DBSCANFragmenter(torch.nn.Module):
             for s in range(self.num_classes):
                 # Run DBSCAN
                 mask = batch_mask & (segmentation == s)
+                if s == self.track_label:
+                    mask = batch_mask & ((segmentation == s) | (segmentation == self.delta_label))
                 selection = np.where(mask)[0]
                 if not len(selection):
                     continue
@@ -82,7 +86,9 @@ class DBSCANFragmenter(torch.nn.Module):
                     sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
 
                 # Build clusters for this class
-                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if np.sum(labels == i) >= self.min_size[s]]
+                if s == self.track_label:
+                    labels[segmentation[selection] == self.delta_label] = -1
+                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if (i > -1 and np.sum(labels == i) >= self.min_size[s])]
                 clusts.extend(cls_idx)
 
         return np.array(clusts)
