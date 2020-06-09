@@ -117,7 +117,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
                 handlers.csv_logger = utils.CSVData(logname)
 
 
-def prepare(cfg):
+def prepare(cfg, event_list=None):
     """
     Prepares high level API handlers, namely trainval instance and torch DataLoader (w/ iterator)
     INPUT
@@ -129,7 +129,7 @@ def prepare(cfg):
     handlers.cfg = cfg
 
     # Instantiate DataLoader
-    handlers.data_io = loader_factory(cfg)
+    handlers.data_io = loader_factory(cfg, event_list=event_list)
 
     # IO iterator
     handlers.data_io_iter = itertools.cycle(handlers.data_io)
