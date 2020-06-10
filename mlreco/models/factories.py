@@ -15,6 +15,7 @@ def model_dict():
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
     from . import cluster_full_gnn
+    from . import cluster_gnn_types
     from . import cluster_group_prior_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
@@ -111,7 +112,9 @@ def model_dict():
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
         "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
-        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss)
+        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
+        # Flow and Particle Type
+        "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
