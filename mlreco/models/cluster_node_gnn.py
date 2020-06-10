@@ -309,7 +309,7 @@ class NodeTypeLoss(torch.nn.Module):
         self.high_purity = chain_config.get('high_purity', False)
 
         if self.loss == 'CE':
-            self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
+            self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
         elif self.loss == 'MM':
             p = chain_config.get('p', 1)
             margin = chain_config.get('margin', 1.0)
@@ -325,7 +325,7 @@ class NodeTypeLoss(torch.nn.Module):
             out (dict):
                 'node_pred' (torch.tensor): (C,2) Two-channel node predictions
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
-            types ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+            types ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, pdg]
         Returns:
             double: loss, accuracy, clustering metrics
         """
@@ -351,22 +351,11 @@ class NodeTypeLoss(torch.nn.Module):
                     continue
                 clusts = out['clusts'][i][j]
                 clust_ids = get_cluster_label(labels, clusts)
-                group_ids = get_cluster_label(labels, clusts, column=6)
-                if self.high_purity:
-                    purity_mask = np.zeros(len(clusts), dtype=bool)
-                    for g in np.unique(group_ids):
-                        group_mask = group_ids == g
-                        if np.sum(group_mask) > 1 and g in clust_ids[group_mask]:
-                            purity_mask[group_mask] = np.ones(np.sum(group_mask))
-                    clusts    = clusts[purity_mask]
-                    clust_ids = clust_ids[purity_mask]
-                    group_ids = group_ids[purity_mask]
-                    node_pred = node_pred[np.where(purity_mask)[0]]
-                    if not len(clusts):
-                        continue
+                pdgs = get_cluster_label(labels, clusts, column=7)
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
-                node_assn = torch.tensor(clust_ids == group_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
+                node_assn = torch.tensor(pdgs, dtype=torch.long, device=node_pred.device, requires_grad=False)
+                # print(node_assn)
 
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:
