@@ -503,7 +503,8 @@ def parse_cluster3d_types(data):
                 pdg = np.full(shape=(cluster.as_vector().size()),
                                 fill_value=TYPE_LABELS[t], dtype=np.float32)
             else:
-                pdg = -1
+                pdg = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=-1, dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
             clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)

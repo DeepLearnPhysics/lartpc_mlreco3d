@@ -184,10 +184,10 @@ def main_loop2(train_cfg, **kwargs):
         # print(data_blob['segment_label'][0])
         # print(data_blob['cluster_label'][0])
         semantic_labels = data_blob['cluster_label'][0][:, -1]
-        cluster_labels = data_blob['cluster_label'][0][:, -2]
-        print(data_blob['cluster_label'][0])
-        print(semantic_labels)
-        print(cluster_labels)
+        cluster_labels = data_blob['cluster_label'][0][:, 5]
+        # print(data_blob['segment_label'][0])
+        # print(semantic_labels)
+        # print(np.unique(cluster_labels))
         coords = data_blob['input_data'][0][:, :3]
         index = data_blob['index'][0]
 
@@ -198,8 +198,11 @@ def main_loop2(train_cfg, **kwargs):
                 print('---------------------------------------------')
                 print('p0 = {}, s0 = {}'.format(p, s))
                 for c in (np.unique(semantic_labels)):
+                    if int(c) == 4:
+                        continue
                     semantic_mask = semantic_labels == c
                     clabels = cluster_labels[semantic_mask]
+                    voxel_counts = clabels.shape[0]
                     embedding_class = embedding[semantic_mask]
                     coords_class = coords[semantic_mask]
                     seed_class = seediness[semantic_mask]
@@ -223,13 +226,13 @@ def main_loop2(train_cfg, **kwargs):
                         true_size = np.std(np.linalg.norm(coords_class[clabels == cluster_id] - true_centroids[j], axis=1))
                         row = (index, c, ari, purity, efficiency, fscore, sbd, \
                             true_num_clusters, cluster_count, s, p,
-                            margin, true_size, forward_time, post_time)
+                            margin, true_size, forward_time, post_time, voxel_counts)
                         output.append(row)
                     print("ARI = ", ari)
 
     output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
                 'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters', 'pred_num_clusters',
-                'seed_threshold', 'prob_threshold', 'margin', 'true_size', 'forward_time', 'post_time'])
+                'seed_threshold', 'prob_threshold', 'margin', 'true_size', 'forward_time', 'post_time', 'voxel_counts'])
     return output
 
 
@@ -272,21 +275,22 @@ def main_loop(train_cfg, **kwargs):
         margins = res['margins'][0].reshape(-1, )
         # print(data_blob['segment_label'][0])
         # print(data_blob['cluster_label'][0])
-        semantic_labels = data_blob['segment_label'][0][:, -1]
-        cluster_labels = data_blob['cluster_label'][0][:, -2]
+        semantic_labels = data_blob['cluster_label'][0][:, -1]
+        cluster_labels = data_blob['cluster_label'][0][:, 5]
         coords = data_blob['input_data'][0][:, :3]
         index = data_blob['index'][0]
 
         acc_dict = {}
 
         for c in (np.unique(semantic_labels)):
+            if int(c) == 4:
+                continue
             semantic_mask = semantic_labels == c
             clabels = cluster_labels[semantic_mask]
             embedding_class = embedding[semantic_mask]
             coords_class = coords[semantic_mask]
             seed_class = seediness[semantic_mask]
             margins_class = margins[semantic_mask]
-            voxel_count = clabels.shape[0]
             print(index, c)
             start = time.time()
             pred, spheres, cluster_count, ll = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
@@ -304,6 +308,7 @@ def main_loop(train_cfg, **kwargs):
             for j, cluster_id in enumerate(np.unique(clabels)):
                 margin = np.mean(margins_class[clabels == cluster_id])
                 true_size = np.std(np.linalg.norm(coords_class[clabels == cluster_id] - true_centroids[j], axis=1))
+                voxel_count = (clabels == cluster_id).shape[0]
                 row = (index, c, ari, purity, efficiency, fscore, sbd, \
                     true_num_clusters, cluster_count, s_thresholds[int(c)], p_thresholds[int(c)],
                     margin, true_size, forward_time, post_time, voxel_count)
