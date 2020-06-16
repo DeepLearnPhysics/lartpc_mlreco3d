@@ -234,10 +234,15 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
         cluster_index = (pValues > p_threshold).view(-1) & (seediness_copy > 0).view(-1)
         seediness_copy[cluster_index] = -1
         count += torch.sum(cluster_index).item()
+        if torch.sum(cluster_index).item() == 0:
+            break
     if len(probs) == 0:
         return torch.tensor(pred_labels)
     probs = torch.cat(probs, dim=1)
     pred_labels = torch.argmax(probs, dim=1)
+    if not cluster_all:
+        mask = torch.max(probs, dim=1).values < p_threshold
+        pred_labels[mask] = -1
     return pred_labels
 
 

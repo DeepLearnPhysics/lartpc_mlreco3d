@@ -351,18 +351,18 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_thresho
         final_types = []
         final_softmax = []
         batch_index = batch_ids == b
-        mask = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        mask2 = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
-        ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask2][:, 5:], axis=1), axis=1)
+        ppn_type_softmax = scipy.special.softmax(points[batch_index][mask2][:, 5:], axis=1)
         for c in range(num_classes):
-            uresnet_points = uresnet_predictions[batch_index][mask] == c
+            uresnet_points = uresnet_predictions[batch_index][mask2] == c
             ppn_points = ppn_type_predictions == c
             if ppn_points.shape[0] > 0 and uresnet_points.shape[0] > 0:
-                d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, :3] + 0.5, event_data[batch_index][mask][uresnet_points][:, :3])
-                ppn_mask = (d < type_threshold).any(axis=1)
-                final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
-                final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
+                d = scipy.spatial.distance.cdist(points[batch_index][mask2][ppn_points][:, :3] + event_data[batch_index][mask2][ppn_points][:, :3] + 0.5, event_data[batch_index][mask2][uresnet_points][:, :3])
+                ppn_mask = (d > type_threshold).any(axis=1)
+                final_points.append(points[batch_index][mask2][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask2][ppn_points][ppn_mask][:, :3])
+                final_scores.append(scores[batch_index][mask2][ppn_points][ppn_mask])
                 final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
                 final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
         if len(final_points)>0:

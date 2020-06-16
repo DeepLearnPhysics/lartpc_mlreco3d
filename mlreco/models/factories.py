@@ -32,6 +32,7 @@ def model_dict():
     from . import full_chain_2
     from . import full_chain_3
     from . import full_chain_4
+    from . import full_chain_5
     from . import full_cnn
 
 
@@ -102,7 +103,8 @@ def model_dict():
         #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
         #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
-        "full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
+        #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
+        "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
