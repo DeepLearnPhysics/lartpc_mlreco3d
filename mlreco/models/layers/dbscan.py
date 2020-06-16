@@ -4,6 +4,95 @@ from __future__ import print_function
 import torch
 import numpy as np
 import sklearn
+from mlreco.utils.track_clustering import track_clustering
+
+class DBSCANFragmenter(torch.nn.Module):
+    """
+    DBSCAN Layer that uses sklearn's DBSCAN implementation
+    to fragment each of the particle classes into dense instances.
+    - Runs pure DBSCAN for showers, Michel and Delta
+    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity
+
+    Args:
+        data ([torch.tensor]): (N,5) [x, y, z, batchid, sem_type]
+        output (dict)        : Dictionary that contains the UResNet+PPN output
+    Returns:
+        (torch.tensor): [(C_0^0, C_0^1, ..., C_0^N_0), ...] List of list of clusters (one per class)
+    """
+    def __init__(self, cfg, name='dbscan_frag'):
+        super(DBSCANFragmenter, self).__init__()
+        self.cfg = cfg['dbscan_frag']
+        self.dim = self.cfg.get('dim', 3)
+        self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
+        self.min_samples = self.cfg.get('min_samples', 1)
+        self.min_size = self.cfg.get('min_size', [10,3,3,3])
+        self.num_classes = self.cfg.get('num_classes', 4)
+        self.track_label = self.cfg.get('track_label', 1)
+        self.michel_label = self.cfg.get('michel_label', 2)
+        self.delta_label = self.cfg.get('delta_label', 3)
+        self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
+        self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.9)
+        self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 0.3)
+        self.ppn_distance_threshold = self.cfg.get('ppn_distance_threshold', 1.999)
+        self.ppn_mask_radius = self.cfg.get('ppn_mask_radius', 5)
+
+    def forward(self, data, output):
+
+        from mlreco.utils.ppn import uresnet_ppn_type_point_selector
+        from scipy.spatial.distance import cdist
+
+        # Output one list of fragments
+        clusts = []
+
+        # Get the track points from the PPN output
+        data = data.detach().cpu().numpy()
+        numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
+                        'points':      [output['points'][0].detach().cpu().numpy()],
+                        'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
+        points =  uresnet_ppn_type_point_selector([data], numpy_output,
+                                                  score_threshold = self.ppn_score_threshold,
+                                                  type_threshold = self.ppn_type_threshold,
+                                                  distance_threshold = self.ppn_distance_threshold)
+        point_labels = points[:,-1]
+        track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
+
+        # Break down the input data to its components
+        bids = np.unique(data[:,self.dim])
+        segmentation = data[:,-1]
+        data = data[:,:-1]
+
+        # Loop over batch and semantic classes
+        for bid in bids:
+            batch_mask = data[:,self.dim] == bid
+            for s in range(self.num_classes):
+                # Run DBSCAN
+                mask = batch_mask & (segmentation == s)
+                if s == self.track_label:
+                    mask = batch_mask & ((segmentation == s) | (segmentation == self.delta_label))
+                selection = np.where(mask)[0]
+                if not len(selection):
+                    continue
+
+                voxels = data[selection, :self.dim]
+                labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
+                if s == self.track_label:
+                    labels = track_clustering(voxels = voxels,
+                                              points = track_points[track_points[:,self.dim] == bid,:3],
+                                              method = self.track_clustering_method,
+                                              eps = self.eps[s],
+                                              min_samples = self.min_samples,
+                                              mask_radius = self.ppn_mask_radius)
+                else:
+                    sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
+
+                # Build clusters for this class
+                if s == self.track_label:
+                    labels[segmentation[selection] == self.delta_label] = -1
+                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if (i > -1 and np.sum(labels == i) >= self.min_size[s])]
+                clusts.extend(cls_idx)
+
+        return np.array(clusts)
+
 
 class DBScanClusts(torch.nn.Module):
     """
