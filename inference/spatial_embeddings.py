@@ -207,7 +207,7 @@ def main_loop2(train_cfg, **kwargs):
                     coords_class = coords[semantic_mask]
                     seed_class = seediness[semantic_mask]
                     margins_class = margins[semantic_mask]
-                    print(index, c)
+                    print(index, c, len(np.unique(clabels)))
                     start = time.time()
                     pred, spheres, cluster_count, ll = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
                                         s_threshold=s, p_threshold=p)
@@ -291,7 +291,7 @@ def main_loop(train_cfg, **kwargs):
             coords_class = coords[semantic_mask]
             seed_class = seediness[semantic_mask]
             margins_class = margins[semantic_mask]
-            print(index, c)
+            print(index, c, len(np.unique(clabels)))
             start = time.time()
             pred, spheres, cluster_count, ll = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
                                 s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)])
@@ -333,7 +333,7 @@ if __name__ == "__main__":
     cfg = yaml.load(open(args['test_config'], 'r'), Loader=yaml.Loader)
 
     train_cfg = cfg['config_path']
-    optimize = cfg['optimize']
+    optimize = cfg.get('optimize', False)
 
     # p_thresholds = np.linspace(0.01, 0.95, 20)
     # s_thresholds = np.linspace(0, 0.95, 20)
