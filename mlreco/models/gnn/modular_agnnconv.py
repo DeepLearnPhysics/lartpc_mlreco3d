@@ -63,11 +63,11 @@ class AGNNConvModel(nn.Module):
 
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
+            # add u and batch arguments for not having error in some old version
+            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
             x = self.agnnConvs[i](x, edge_indices)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
-            # add u and batch arguments for not having error in some old version
-            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
