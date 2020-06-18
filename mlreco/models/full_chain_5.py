@@ -55,6 +55,9 @@ class FullChain(torch.nn.Module):
           interaction_gnn_weight: <relative weight of the interaction gnn loss>
     """
 
+    MODULES = ['full_cnn', 'particle_gnn', 'interaction_gnn', 'full_chain_loss', 'uresnet_lonely',
+               'particle_edge_model', 'interaction_edge_model', 'ppn', 'node_encoder', 'edge_encoder', 'dbscan_frag']
+
     def __init__(self, cfg, name='full_chain'):
         super(FullChain, self).__init__()
 
