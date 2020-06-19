@@ -20,6 +20,7 @@ from mlreco.trainval import trainval
 from mlreco.main_funcs import process_config
 from mlreco.iotools.factories import loader_factory
 from mlreco.main_funcs import cycle
+from sklearn.cluster import DBSCAN
 
 
 def make_inference_cfg(train_cfg, gpu=1, snapshot=None, batch_size=1, model_path=None):
@@ -236,6 +237,84 @@ def main_loop2(train_cfg, **kwargs):
     return output
 
 
+def main_loop3(train_cfg, **kwargs):
+    inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
+                        model_path=kwargs['model_path'])
+    start_index = kwargs.get('start_index', 0)
+    end_index = kwargs.get('end_index', 20000)
+    event_list = list(range(start_index, end_index))
+    loader = loader_factory(inference_cfg, event_list=event_list)
+    dataset = iter(cycle(loader))
+    Trainer = trainval(inference_cfg)
+    loaded_iteration = Trainer.initialize()
+    output = []
+
+    inference_cfg['trainval']['iterations'] = len(event_list)
+    iterations = inference_cfg['trainval']['iterations']
+
+    eps_lims = tuple(kwargs['eps_lims'])
+    eps_mesh = int(kwargs['eps_mesh'])
+
+    print(eps_lims)
+    print(eps_mesh)
+
+    eps_range = np.linspace(eps_lims[0], eps_lims[1], eps_mesh)
+    # s_range = np.linspace(s_lims[0], s_lims[1], s_mesh)
+
+    for i in event_list:
+
+        print("Iteration: %d" % i)
+
+        start = time.time()
+        data_blob, res = Trainer.forward(dataset)
+        end = time.time()
+        forward_time = float(end - start)
+        # segmentation = res['segmentation'][0]
+        embedding = res['embeddings'][0]
+        seediness = res['seediness'][0].reshape(-1, )
+        margins = res['margins'][0].reshape(-1, )
+        # print(data_blob['segment_label'][0])
+        # print(data_blob['cluster_label'][0])
+        semantic_labels = data_blob['cluster_label'][0][:, -1]
+        cluster_labels = data_blob['cluster_label'][0][:, 5]
+        # print(data_blob['segment_label'][0])
+        # print(semantic_labels)
+        # print(np.unique(cluster_labels))
+        coords = data_blob['input_data'][0][:, :3]
+        index = data_blob['index'][0]
+
+        acc_dict = {}
+
+        for eps in eps_range:
+            for c in (np.unique(semantic_labels)):
+                if int(c) == 4:
+                    continue
+                semantic_mask = semantic_labels == c
+                clabels = cluster_labels[semantic_mask]
+                embedding_class = embedding[semantic_mask]
+                coords_class = coords[semantic_mask]
+                print(index, c, len(np.unique(clabels)))
+                start = time.time()
+                pred = DBSCAN(eps=eps, min_samples=1).fit_predict(embedding_class)
+                end = time.time()
+                post_time = float(end-start)
+                cluster_count = len(np.unique(pred))
+                purity, efficiency = purity_efficiency(pred, clabels)
+                fscore = 2 * (purity * efficiency) / (purity + efficiency)
+                ari = ARI(pred, clabels)
+                sbd = SBD(pred, clabels)
+                true_num_clusters = len(np.unique(clabels))
+                _, true_centroids = find_cluster_means(coords_class, clabels)
+                row = (index, c, ari, purity, efficiency, fscore, sbd, \
+                    true_num_clusters, cluster_count, eps, forward_time, post_time)
+                output.append(row)
+                print("ARI = ", ari)
+
+    output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
+                'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters', 'pred_num_clusters', 'eps', 
+                'forward_time', 'post_time'])
+    return output
+
 
 def main_loop(train_cfg, **kwargs):
 
@@ -254,12 +333,6 @@ def main_loop(train_cfg, **kwargs):
     iterations = inference_cfg['trainval']['iterations']
     s_thresholds = kwargs['s_thresholds']
     p_thresholds = kwargs['p_thresholds']
-    # s_thresholds = {0: 0.88, 1: 0.92, 2: 0.84, 3: 0.84, 4: 0.8}
-    # p_thresholds = {0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5}
-    # s_thresholds = {0: 0.65, 1: 0.95, 2: 0.25, 3: 0.85, 4: 0.0} # F32D6 Parameters
-    # p_thresholds = {0: 0.31, 1: 0.21, 2: 0.06, 3: 0.26, 4: 0.11}
-    # s_thresholds = { key : s_threshold for key in range(5)}
-    # p_thresholds = { key : p_threshold for key in range(5)}
 
     for i in event_list:
 
@@ -334,6 +407,7 @@ if __name__ == "__main__":
 
     train_cfg = cfg['config_path']
     optimize = cfg.get('optimize', False)
+    print(optimize)
 
     # p_thresholds = np.linspace(0.01, 0.95, 20)
     # s_thresholds = np.linspace(0, 0.95, 20)
@@ -341,8 +415,10 @@ if __name__ == "__main__":
     # for p in p_thresholds:
     #     for t in s_thresholds:
     start = time.time()
-    if optimize:
+    if optimize is True:
         output = main_loop2(train_cfg, **cfg)
+    elif optimize == 'dbscan':
+        output = main_loop3(train_cfg, **cfg)
     else:
         output = main_loop(train_cfg, **cfg)
     end = time.time()
