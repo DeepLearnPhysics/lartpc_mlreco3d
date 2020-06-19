@@ -135,7 +135,7 @@ def main_loop(train_cfg, **kwargs):
             'points': [points],
             'mask_ppn2': [mask_ppn2]
         }
-        points_pred = uresnet_ppn_type_point_selector(semantics, numpy_output,
+        points = uresnet_ppn_type_point_selector(semantics, numpy_output,
             score_threshold=0.9,
             type_threshold=0.3,
             distance_threshold=1.999)
