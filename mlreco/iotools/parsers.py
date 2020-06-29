@@ -20,23 +20,15 @@ def parse_particle_singlep_pdg(data):
     }
     parts = data[0]
     pdgs = []
+    pdg = -1
     for p in parts.as_vector():
         if not p.track_id() == 1: continue
         if int(p.pdg_code()) in TYPE_LABELS.keys():
             pdg = TYPE_LABELS[int(p.pdg_code())]
         else: pdg = -1
-        return pdg
+        return np.asarray([pdg])
         
-    return pdg
-
-
-
-def parse_particle_singlep_pdg2(data):
-    parts = data[0]
-    for p in parts.as_vector():
-        if not p.track_id() == 1: continue
-        return p.pdg_code()
-
+    return np.asarray([pdg])
 
 
 def parse_sparse2d_meta(data):
