@@ -150,8 +150,8 @@ class ResidualEncoder(UResNetEncoder):
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
         batch_size = coords[:, 3].unique().shape[0]
-        # print(batch_size)
 
+        # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
                     / (float(self.spatial_size) / 2)
@@ -166,11 +166,7 @@ class ResidualEncoder(UResNetEncoder):
             features_enc.append(x)
             x = self.encoding_conv[i](x)
 
-        # print(x.get_spatial_locations()[:, -1].unique())
         out = self.output(x)
         out = self.pool(out).view(batch_size, -1)
-        # print(out, out.shape)
-        # for i in range(out.shape[0]):
-        #     print(i, torch.mean(out[i]))
         out = self.linear(out)
         return out
