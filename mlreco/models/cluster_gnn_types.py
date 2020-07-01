@@ -245,9 +245,6 @@ class ClustFullGNN(torch.nn.Module):
         node_pred = out['node_pred'][0]
         edge_pred = out['edge_pred'][0]
 
-        print(edge_pred)
-        print(node_pred)
-
         # Divide the output out into different arrays (one per batch)
         _, counts = torch.unique(data[:,3], return_counts=True)
         vids = np.concatenate([np.arange(n.item()) for n in counts])

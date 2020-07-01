@@ -407,7 +407,6 @@ if __name__ == "__main__":
 
     train_cfg = cfg['config_path']
     optimize = cfg.get('optimize', False)
-    print(optimize)
 
     # p_thresholds = np.linspace(0.01, 0.95, 20)
     # s_thresholds = np.linspace(0, 0.95, 20)
