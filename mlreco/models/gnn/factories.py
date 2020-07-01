@@ -129,6 +129,7 @@ def node_encoder_dict():
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
         "mix" : cluster_mix_encoder.ClustMixNodeEncoder,
         "mix2": cluster_mix_encoder.ClustMixNodeEncoder2,
+        "mix_debug": cluster_mix_encoder.ClustMixNodeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder,
         "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2
     }
@@ -176,6 +177,7 @@ def edge_encoder_dict():
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
         "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
         "mix2": cluster_mix_encoder.ClustMixEdgeEncoder2,
+        "mix_debug": cluster_mix_encoder.ClustMixEdgeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNEdgeEncoder,
         "cnn2" : cluster_cnn_encoder.ClustCNNEdgeEncoder2
     }

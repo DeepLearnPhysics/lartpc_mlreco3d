@@ -83,6 +83,25 @@ def get_cluster_label(data, clusts, column=5):
     return np.array(labels)
 
 
+def get_cluster_label_np(data, clusts, column=5):
+    """
+    Function that returns the majority label of each cluster,
+    as specified in the requested data column.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of cluster IDs
+    """
+    labels = []
+    for c in clusts:
+        v, cts = np.unique(data[c,column], return_counts=True)
+        labels.append(int(v[cts.argmax()].item()))
+
+    return np.array(labels)
+
+
 def get_momenta_labels(data, clusts, columns=[7,8,9]):
     """
     Function that returns the momentum unit vector of each cluster.
