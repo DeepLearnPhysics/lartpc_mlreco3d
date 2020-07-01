@@ -76,6 +76,8 @@ def main_loop(cfg, **kwargs):
                 edge_pred_batch = edge_pred[i]
                 true_edge_index = get_fragment_edges(subgraph, group_ids)
                 edge_assn = edge_assignment_from_graph(edge_index_batch, true_edge_index)
+                if edge_pred_batch.shape[0] < 1:
+                    continue
                 acc = float(np.sum(np.argmax(edge_pred_batch, axis=1) \
                     == edge_assn)) / float(edge_pred_batch.shape[0])
                 edge_acc = np.empty(pdgs.shape[0])
