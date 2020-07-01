@@ -78,32 +78,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     return ret
 
 
-# def filter_duplicate_voxels(data, usebatch=True):
-#     """
-#     return array that will filter out duplicate voxels
-#     Only first instance of voxel will appear
-#     Assume data[:4] = [x,y,z,batchid]
-#     Assumes data is lexicographically sorted in x,y,z,batch order
-#     """
-#     # set number of cols to look at
-#     if usebatch:
-#         k = 4
-#     else:
-#         k = 3
-#     n = data.shape[0]
-#     ret = np.empty(n, dtype=np.bool)
-#     ret[0] = True
-#     for i in range(n-1):
-#         if np.all(data[i,:k] == data[i+1,:k]):
-#             # duplicate voxel
-#             ret[i+1] = False
-#         else:
-#             # new voxel
-#             ret[i+1] = True
-#     return ret
-
-
-def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True):
+def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[2,1,0,3,4]):
     """
     return array that will filter out duplicate voxels
     Sort with respect to a reference and following the specified precedence order
@@ -126,9 +101,8 @@ def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True):
                 duplicates[id].append(i)
             else:
                 duplicates[id] = [i-1, i]
-    precendence = [2, 1, 0, 3, 4]
     for d in duplicates.values():
-        ref = np.array([precendence.index(r) for r in reference[d]])
+        ref = np.array([precedence.index(r) for r in reference[d]])
         args = np.argsort(-ref, kind='mergesort') # Must preserve of order of duplicates
         ret[np.array(d)[args[:-1]]] = False
 
