@@ -432,7 +432,7 @@ def get_cluster_start_points(data, clusts):
     for c in clusts:
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
-        vid = cluster_start_point(x)[0]
+        vid = cluster_start_point(x)[-1]
         points.append(x[vid])
 
     return np.vstack(points)
@@ -456,7 +456,7 @@ def cluster_direction(data, start, max_dist=-1):
     if max_dist > 0:
         from mlreco.utils import local_cdist
         dist_mat = local_cdist(start.reshape(1,-1), voxels).reshape(-1)
-        voxels = voxels[dist_mat < max_dist]
+        voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
             return start-start
 
