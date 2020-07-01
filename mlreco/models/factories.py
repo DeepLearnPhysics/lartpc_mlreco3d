@@ -34,6 +34,7 @@ def model_dict():
     from . import full_chain_4
     from . import full_chain_5
     from . import full_cnn
+    from . import particle_types
 
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -105,7 +106,8 @@ def model_dict():
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
         "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
-        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss)
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
+        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
