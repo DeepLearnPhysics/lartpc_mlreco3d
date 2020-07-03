@@ -255,9 +255,6 @@ def main_loop3(train_cfg, **kwargs):
     eps_lims = tuple(kwargs['eps_lims'])
     eps_mesh = int(kwargs['eps_mesh'])
 
-    print(eps_lims)
-    print(eps_mesh)
-
     eps_range = np.linspace(eps_lims[0], eps_lims[1], eps_mesh)
     # s_range = np.linspace(s_lims[0], s_lims[1], s_mesh)
 

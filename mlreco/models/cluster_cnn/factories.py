@@ -47,7 +47,8 @@ def clustering_loss_dict():
         'se_lovasz_inter': losses.spatial_embeddings.MaskLovaszInterLoss,
         'se_focal': losses.spatial_embeddings.MaskFocalLoss,
         'se_multivariate': losses.spatial_embeddings.MultiVariateLovasz,
-        'se_ce_lovasz': losses.spatial_embeddings.CELovaszLoss
+        'se_ce_lovasz': losses.spatial_embeddings.CELovaszLoss,
+        'se_lovasz_inter_2': losses.spatial_embeddings.MaskLovaszInterLoss2
     }
     return loss
 
