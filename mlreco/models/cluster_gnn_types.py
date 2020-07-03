@@ -228,6 +228,9 @@ class ClustFullGNN(torch.nn.Module):
         # edge_index, e = get_edge_features(x, batch_ids, self.edge_mlp)
         e = self.edge_encoder(data, clusts, edge_index)
 
+        print(x, x.shape)
+        print(e, e.shape)
+
         # Add start point and/or start direction to node features if requested
         if self.add_start_point:
             points = get_cluster_points_label(data, particles, clusts, groupwise=False)

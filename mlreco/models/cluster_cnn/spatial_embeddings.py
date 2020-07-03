@@ -123,19 +123,15 @@ class SpatialEmbeddings1(UResNet):
         return res
 
 
-# class SpatialEmbeddings3(SpatialEmbeddings1):
+# class SpatialEmbeddings3(UResNet):
     
 #     def __init__(self, cfg, name='spatial_embeddings'):
 #         super(SpatialEmbeddings1, self).__init__(cfg, name='uresnet')
-#         self.track_reps = self.model_config.get('track_reps', 2)
 
-#         self.track_convolutions = scn.Sequential()
-#         for i in range(self.track_reps):
-#             m = scn.Sequential()
-#             self._resnet_block(m, self.num_filters, self.num_filters)
-        
-#         self.outputTracks = scn.Sequential()
-#         self._nin_block(self.outputTracks, self.num_filters, self.dimension + self.sigmaDim)
+#         self.ppn_seed_1 = scn.Sequential()
+#         self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
+
+
 
 #     def forward(self, input):
 #         '''
