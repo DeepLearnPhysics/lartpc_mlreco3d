@@ -75,6 +75,14 @@ def gaussian_kernel(centroid, sigma):
     return f
 
 
+def gaussian_kernel_cuda(centroid, sigma):
+    def f(x):
+        dists = torch.sum(torch.pow(x - centroid, 2), dim=1)
+        probs = torch.exp(-dists / (2.0 * sigma**2))
+        return probs
+    return f
+
+
 def ellipsoidal_kernel(centroid, sigma):
     def f(x):
         dists = np.power(x - centroid, 2) / (2.0 * sigma**2)
@@ -107,6 +115,33 @@ def find_cluster_means(features, labels):
         mu_c = features[index].mean(0)
         cluster_means.append(mu_c)
     cluster_means = np.vstack(cluster_means)
+    return group_ids, cluster_means
+
+
+def find_cluster_means_cuda(features, labels):
+    '''
+    For a given image, compute the centroids \mu_c for each
+    cluster label in the embedding space.
+
+    INPUTS:
+        features (torch.Tensor) - the pixel embeddings, shape=(N, d) where
+        N is the number of pixels and d is the embedding space dimension.
+
+        labels (torch.Tensor) - ground-truth group labels, shape=(N, )
+
+    OUTPUT:
+        cluster_means (torch.Tensor) - (n_c, d) tensor where n_c is the number of
+        distinct instances. Each row is a (1,d) vector corresponding to
+        the coordinates of the i-th centroid.
+    '''
+    group_ids = torch.unique(labels).int()
+    cluster_means = []
+    #print(group_ids)
+    for c in group_ids:
+        index = labels.int() == c
+        mu_c = torch.mean(features[index], dim=0)
+        cluster_means.append(mu_c)
+    cluster_means = torch.cat(cluster_means, dim=0)
     return group_ids, cluster_means
 
 
@@ -145,6 +180,31 @@ def fit_predict2(embeddings, seediness, margins, fitfunc,
     # if cluster_all:
     #     pred_labels = cluster_remainder(embeddings, pred_labels)
     return pred_labels, spheres, cluster_count, ll
+
+
+def fit_predict_fast(embeddings, seediness, margins, fitfunc, s_threshold=0.0, p_threshold=0.5):
+    device = embeddings.device
+    num_points = embeddings.shape[0]
+    count = 0
+    probs = []
+    unclustered = torch.ones(num_points, device=device).byte()
+    while count < num_points:
+        seed_idx = (seediness * unclustered.float()).argmax()
+#         print(seediness[seed_idx])
+        if seediness[seed_idx] < s_threshold:
+            break
+#         print(seed_idx)
+        centroid, sigma = embeddings[seed_idx], margins[seed_idx]
+        f = fitfunc(centroid, sigma)
+        p = f(embeddings)
+        probs.append(p.view(-1, 1))
+        unclustered[p > p_threshold] = 0
+        count += torch.sum(p > p_threshold)
+    if len(probs) == 0:
+        return torch.ones(num_points, device=device).long()
+    probs = torch.cat(probs, dim=1)
+    labels = probs.argmax(dim=1)
+    return labels
 
 
 def main_loop2(train_cfg, **kwargs):
@@ -393,6 +453,89 @@ def main_loop(train_cfg, **kwargs):
     return output
 
 
+def main_loop_cuda(train_cfg, **kwargs):
+
+    inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
+                        model_path=kwargs['model_path'])
+    start_index = kwargs.get('start_index', 0)
+    end_index = kwargs.get('end_index', 20000)
+    event_list = list(range(start_index, end_index))
+    loader = loader_factory(inference_cfg, event_list=event_list)
+    dataset = iter(cycle(loader))
+    Trainer = trainval(inference_cfg)
+    loaded_iteration = Trainer.initialize()
+    output = []
+
+    inference_cfg['trainval']['iterations'] = len(event_list)
+    iterations = inference_cfg['trainval']['iterations']
+    s_thresholds = kwargs['s_thresholds']
+    p_thresholds = kwargs['p_thresholds']
+
+    for i in event_list:
+
+        print("Iteration: %d" % i)
+
+        start = time.time()
+        data_blob, res = Trainer.forward(dataset)
+        end = time.time()
+        forward_time = float(end - start)
+        # segmentation = res['segmentation'][0]
+        embedding = torch.as_tensor(res['embeddings'][0]).cuda()
+        seediness = torch.as_tensor(res['seediness'][0].reshape(-1, )).cuda()
+        margins = torch.as_tensor(res['margins'][0].reshape(-1, )).cuda()
+        # print(data_blob['segment_label'][0])
+        # print(data_blob['cluster_label'][0])
+        semantic_labels = torch.as_tensor(data_blob['cluster_label'][0][:, -1]).cuda()
+        cluster_labels = torch.as_tensor(data_blob['cluster_label'][0][:, 5]).cuda()
+        coords = torch.as_tensor(data_blob['input_data'][0][:, :3]).cuda()
+        index = data_blob['index'][0]
+
+        acc_dict = {}
+
+        for c in (torch.unique(semantic_labels)):
+            if int(c) == 4:
+                continue
+            semantic_mask = semantic_labels == c
+            clabels = cluster_labels[semantic_mask]
+            embedding_class = embedding[semantic_mask]
+            coords_class = coords[semantic_mask]
+            seed_class = seediness[semantic_mask]
+            margins_class = margins[semantic_mask]
+            print(index, c, len(torch.unique(clabels)))
+            start = time.time()
+            pred = fit_predict_fast(embedding_class, seed_class, margins_class, gaussian_kernel_cuda,
+                                s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)])
+            cluster_count = torch.unique(pred).shape[0]
+            end = time.time()
+            post_time = float(end-start)
+            print(post_time)
+            # pred, spheres, cluster_count = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
+            #                     s_threshold=s_threshold, p_threshold=p_threshold, cluster_all=True)
+            pred_np, clabels_np = pred.cpu().numpy(), clabels.cpu().numpy()
+            purity, efficiency = purity_efficiency(pred_np, clabels_np)
+            fscore = 2 * (purity * efficiency) / (purity + efficiency)
+            ari = ARI(pred_np, clabels_np)
+            sbd = SBD(pred_np, clabels_np)
+            true_num_clusters = len(torch.unique(clabels))
+            _, true_centroids = find_cluster_means_cuda(coords_class, clabels)
+            for j, cluster_id in enumerate(torch.unique(clabels)):
+                margin = torch.mean(margins_class[clabels == cluster_id])
+                true_size = torch.std(torch.norm(coords_class[clabels == cluster_id] - true_centroids[j], dim=1))
+                voxel_count = (clabels == cluster_id).shape[0]
+                row = (index, c, ari, purity, efficiency, fscore, sbd, \
+                    int(true_num_clusters), int(cluster_count), s_thresholds[int(c)], p_thresholds[int(c)],
+                    float(margin), float(true_size), forward_time, post_time, int(voxel_count))
+                output.append(row)
+            print("ARI = ", ari)
+            print("SBD = ", sbd)
+            # print("LL = ", ll)
+
+    output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
+                'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters', 'pred_num_clusters',
+                'seed_threshold', 'prob_threshold', 'margin', 'true_size', 'forward_time', 'post_time', 'voxel_count'])
+    return output
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -415,6 +558,8 @@ if __name__ == "__main__":
         output = main_loop2(train_cfg, **cfg)
     elif optimize == 'dbscan':
         output = main_loop3(train_cfg, **cfg)
+    elif optimize == 'cuda':
+        output = main_loop_cuda(train_cfg, **cfg)
     else:
         output = main_loop(train_cfg, **cfg)
     end = time.time()
