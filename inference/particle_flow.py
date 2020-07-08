@@ -25,11 +25,12 @@ from mlreco.utils.gnn.cluster import get_cluster_label_np
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 
 
-def main_loop(cfg, **kwargs):
+def main_loop(cfg, model_path='', **kwargs):
 
     cfg = yaml.load(open(cfg, 'r'), Loader=yaml.Loader)
     process_config(cfg)
-
+    cfg['trainval']['model_path'] = model_path
+    cfg['trainval']['train'] = False
     start_index = kwargs.get('start_index', 0)
     end_index = kwargs.get('end_index', 20000)
     event_list = list(range(start_index, end_index))
@@ -113,11 +114,17 @@ if __name__ == "__main__":
     train_cfg = cfg['config_path']
 
     start = time.time()
-    output = main_loop(train_cfg, **cfg)
-    end = time.time()
-    print("Time = {}".format(end - start))
-    name = '{}.csv'.format(cfg['name'])
-    if not os.path.exists(cfg['target']):
-        os.mkdir(cfg['target'])
-    target = os.path.join(cfg['target'], name)
-    output.to_csv(target, index=False, mode='a', chunksize=50)
+    model_path = cfg.pop('model_path')
+    snapshots = cfg.pop('snapshots')
+    model_paths = [model_path + '-{}.ckpt'.format(it-1) for it in snapshots]
+    print(model_paths)
+    print(snapshots)
+    for i, mp in enumerate(model_paths):
+        output = main_loop(train_cfg, model_path=mp, **cfg)
+        end = time.time()
+        print("Time = {}".format(end - start))
+        name = '{}_{}.csv'.format(cfg['name'], snapshots[i])
+        if not os.path.exists(cfg['target']):
+            os.mkdir(cfg['target'])
+        target = os.path.join(cfg['target'], name)
+        output.to_csv(target, index=False, mode='a', chunksize=50)
