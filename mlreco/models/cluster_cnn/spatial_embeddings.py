@@ -289,3 +289,80 @@ class SpatialEmbeddings2(StackUNet):
         }
 
         return res
+
+
+class SpatialEmbeddingsLite(UResNet):
+
+    def __init__(self, cfg, name='spatial_embeddings'):
+        super(SpatialEmbeddingsLite, self).__init__(cfg, name='uresnet')
+        self.model_config = cfg[name]
+        self.seedDim = self.model_config.get('seediness_dim', 1)
+        self.coordConv = self.model_config.get('coordConv', False)
+        self.sigmaDim = self.model_config.get('sigma_dim', 1)
+        self.seed_freeze = self.model_config.get('seed_freeze', False)
+        self.coordConv = self.model_config.get('coordConv', True)
+        # Define Separate Sparse UResNet Decoder for seediness.
+        self.seed_head = scn.Sequential()
+        self._resnet_block(self.seed_head, self.num_filters, self.num_filters)
+
+        # Define outputlayers
+        self.outputEmbeddings = scn.Sequential()
+        self._nin_block(self.outputEmbeddings, self.num_filters, self.dimension + self.sigmaDim)
+        self.outputEmbeddings.add(scn.OutputLayer(self.dimension))
+        self.outputSeediness = scn.Sequential()
+        self._nin_block(self.outputSeediness, self.num_filters, self.seedDim)
+        self.outputSeediness.add(scn.OutputLayer(self.dimension))
+
+        if self.seed_freeze:
+            for p in self.seed_head.parameters():
+                p.requires_grad = False
+            for p in self.outputSeediness.parameters():
+                p.requires_grad = False
+            print('Seediness Branch Freezed')
+
+        # Pytorch Activations
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
+
+
+    def forward(self, input):
+        '''
+        point_cloud is a list of length minibatch size (assumes mbs = 1)
+        point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
+        label has shape (point_cloud.shape[0] + 5*num_labels, 1)
+        label contains segmentation labels for each point + coords of gt points
+
+        RETURNS:
+            - feature_enc: encoder features at each spatial resolution.
+            - feature_dec: decoder features at each spatial resolution.
+        '''
+        point_cloud, = input
+        # print("Point Cloud: ", point_cloud)
+        coords = point_cloud[:, 0:self.dimension+1].float()
+        features = point_cloud[:, self.dimension+1:].float()
+        features = features[:, -1].view(-1, 1)
+
+        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+        if self.coordConv:
+            features = torch.cat([normalized_coords, features], dim=1)
+
+        x = self.input((coords, features))
+        encoder_res = self.encoder(x)
+        features_enc = encoder_res['features_enc']
+        deepest_layer = encoder_res['deepest_layer']
+        features_cluster = self.decoder(features_enc, deepest_layer)
+        features_seediness = self.seed_head(features_cluster[-1])
+
+        embeddings = self.outputEmbeddings(features_cluster[-1])
+        embeddings[:, :self.dimension] = self.tanh(embeddings[:, :self.dimension])
+        embeddings[:, :self.dimension] += normalized_coords
+        seediness = self.outputSeediness(features_seediness)
+
+        res = {
+            "embeddings": [embeddings[:, :self.dimension]],
+            "margins": [2 * self.sigmoid(embeddings[:, self.dimension:])],
+            "seediness": [self.sigmoid(seediness)]
+        }
+
+        return res

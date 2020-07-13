@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import sparseconvnet as scn
 
-from .cluster_cnn.spatial_embeddings import SpatialEmbeddings1, SpatialEmbeddings2
+from .cluster_cnn.spatial_embeddings import SpatialEmbeddings1, SpatialEmbeddingsLite
 from .cluster_cnn.losses.spatial_embeddings import *
 from .cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
 
@@ -24,7 +24,7 @@ class ClusterCNN(SpatialEmbeddings1):
         #print(self)
 
 
-class ClusterCNN2(SpatialEmbeddings2):
+class ClusterCNN2(SpatialEmbeddingsLite):
     '''
     UResNet with coordinate convolution block in final layer for clustering.
 

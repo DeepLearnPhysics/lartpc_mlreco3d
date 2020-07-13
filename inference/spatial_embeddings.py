@@ -453,6 +453,98 @@ def main_loop(train_cfg, **kwargs):
     return output
 
 
+def main_loop_voxel_cut(train_cfg, **kwargs):
+
+    inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
+                        model_path=kwargs['model_path'])
+    start_index = kwargs.get('start_index', 0)
+    end_index = kwargs.get('end_index', 20000)
+    event_list = list(range(start_index, end_index))
+    loader = loader_factory(inference_cfg, event_list=event_list)
+    dataset = iter(cycle(loader))
+    Trainer = trainval(inference_cfg)
+    loaded_iteration = Trainer.initialize()
+    output = []
+
+    inference_cfg['trainval']['iterations'] = len(event_list)
+    iterations = inference_cfg['trainval']['iterations']
+    s_thresholds = kwargs['s_thresholds']
+    p_thresholds = kwargs['p_thresholds']
+    # s_thresholds = {0: 0.88, 1: 0.92, 2: 0.84, 3: 0.84, 4: 0.8}
+    # p_thresholds = {0: 0.5, 1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5}
+    # s_thresholds = {0: 0.65, 1: 0.95, 2: 0.25, 3: 0.85, 4: 0.0} # F32D6 Parameters
+    # p_thresholds = {0: 0.31, 1: 0.21, 2: 0.06, 3: 0.26, 4: 0.11}
+    # s_thresholds = { key : s_threshold for key in range(5)}
+    # p_thresholds = { key : p_threshold for key in range(5)}
+
+    for i in event_list:
+
+        print("Iteration: %d" % i)
+
+        start = time.time()
+        data_blob, res = Trainer.forward(dataset)
+        end = time.time()
+        forward_time = float(end - start)
+        # segmentation = res['segmentation'][0]
+        embedding = res['embeddings'][0]
+        seediness = res['seediness'][0].reshape(-1, )
+        margins = res['margins'][0].reshape(-1, )
+        # print(data_blob['segment_label'][0])
+        # print(data_blob['cluster_label'][0])
+        semantic_labels = data_blob['cluster_label'][0][:, -1]
+        cluster_labels = data_blob['cluster_label'][0][:, 5]
+        coords = data_blob['input_data'][0][:, :3]
+        index = data_blob['index'][0]
+
+        acc_dict = {}
+
+        for c in (np.unique(semantic_labels)):
+            if int(c) == 4:
+                continue
+            semantic_mask = semantic_labels == c
+            clabels = cluster_labels[semantic_mask]
+            embedding_class = embedding[semantic_mask]
+            coords_class = coords[semantic_mask]
+            seed_class = seediness[semantic_mask]
+            margins_class = margins[semantic_mask]
+            print(index, c)
+            voxel_mask = np.ones(clabels.shape[0]).astype(bool)
+            for j, cluster_id in enumerate(np.unique(clabels)):
+                if sum(clabels == cluster_id) < 10:
+                    voxel_mask[clabels == cluster_id] = False
+            if sum(voxel_mask) < 10:
+                continue
+            start = time.time()
+            pred, spheres, cluster_count, ll = fit_predict2(embedding_class[voxel_mask], seed_class[voxel_mask], margins_class[voxel_mask], gaussian_kernel,
+                                s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)])
+            end = time.time()
+            post_time = float(end-start)
+            # pred, spheres, cluster_count = fit_predict2(embedding_class, seed_class, margins_class, gaussian_kernel,
+            #                     s_threshold=s_threshold, p_threshold=p_threshold, cluster_all=True)
+            purity, efficiency = purity_efficiency(pred, clabels[voxel_mask])
+            fscore = 2 * (purity * efficiency) / (purity + efficiency)
+            ari = ARI(pred, clabels[voxel_mask])
+            sbd = SBD(pred, clabels[voxel_mask])
+            true_num_clusters = len(np.unique(clabels[voxel_mask]))
+            _, true_centroids = find_cluster_means(coords_class[voxel_mask], clabels[voxel_mask])
+            for j, cluster_id in enumerate(np.unique(clabels[voxel_mask])):
+                margin = np.mean(margins_class[clabels == cluster_id])
+                true_size = np.std(np.linalg.norm(coords_class[clabels == cluster_id] - true_centroids[j], axis=1))
+                voxel_count = sum(clabels == cluster_id)
+                row = (index, c, ari, purity, efficiency, fscore, sbd, \
+                    true_num_clusters, cluster_count, s_thresholds[int(c)], p_thresholds[int(c)],
+                    margin, true_size, forward_time, post_time, voxel_count)
+                output.append(row)
+            print("ARI = ", ari)
+            print("SBD = ", sbd)
+            # print("LL = ", ll)
+
+    output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
+                'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters', 'pred_num_clusters',
+                'seed_threshold', 'prob_threshold', 'margin', 'true_size', 'forward_time', 'post_time', 'voxel_count'])
+    return output
+
+
 def main_loop_cuda(train_cfg, **kwargs):
 
     inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
@@ -560,6 +652,8 @@ if __name__ == "__main__":
         output = main_loop3(train_cfg, **cfg)
     elif optimize == 'cuda':
         output = main_loop_cuda(train_cfg, **cfg)
+    elif optimize == 'voxel_cut':
+        output = main_loop_voxel_cut(train_cfg, **cfg)
     else:
         output = main_loop(train_cfg, **cfg)
     end = time.time()
