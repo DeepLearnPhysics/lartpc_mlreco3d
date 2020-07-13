@@ -31,6 +31,15 @@ def parse_particle_singlep_pdg(data):
     return np.asarray([pdg])
 
 
+def parse_particle_singlep_einit(data):
+    parts = data[0]
+    for p in parts.as_vector():
+        is_primary = p.track_id() == p.parent_track_id()
+        if not p.track_id() == 1: continue
+        return p.energy_init()
+    return -1
+
+
 def parse_sparse2d_meta(data):
     event_tensor2d = data[0]
     projection_id = 0  # default
