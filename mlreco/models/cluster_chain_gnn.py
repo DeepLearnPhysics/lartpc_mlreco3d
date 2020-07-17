@@ -9,7 +9,7 @@ from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.layers.dbscan import DBScanClusts2
 from mlreco.models.cluster_node_gnn import NodeChannelLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
-from mlreco.utils.gnn.cluster import relabel_groups
+from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
 from mlreco.utils.gnn.network import complete_graph
 import mlreco.utils
@@ -37,6 +37,8 @@ class ChainDBSCANGNN(torch.nn.Module):
         self.shower_class = int(chain_config.get('shower_class', 0))
         self.node_min_size = chain_config.get('node_min_size', -1)
         self.group_pred = chain_config.get('group_pred', 'threshold')
+        self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
+        self.start_dir_opt = chain_config.get('start_dir_opt', False)
 
         # Initialize the modules
         self.uresnet_lonely = UResNet(model_config)
@@ -104,9 +106,7 @@ class ChainDBSCANGNN(torch.nn.Module):
             scores = torch.softmax(result['points'][0][clust][:,3:5], dim=1)
             argmax = torch.argmax(scores[:,-1])
             start  = data[0][clust][argmax,:3].float()+result['points'][0][clust][argmax,:3]+0.5
-            dir = (data[0][clust][:,:3].float()-start).mean(dim=0)
-            if dir.norm():
-                dir /= dir.norm()
+            dir = cluster_direction(data[0][clust][:,:3].float(), start, self.start_dir_max_dist, self.start_dir_opt)
             ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
 
         x = torch.cat([x, ppn_feats], dim=1)
@@ -179,8 +179,11 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         loss.update(ppn_loss)
         loss.update(node_loss)
         loss.update(edge_loss)
+        loss['seg_loss'] = uresnet_loss['loss']
         loss['edge_loss'] = edge_loss['loss']
         loss['node_loss'] = node_loss['loss']
+        loss['seg_accuracy'] = uresnet_loss['accuracy']
+        loss['ppn_accuracy'] = ppn_loss['ppn_acc']
         loss['edge_accuracy'] = edge_loss['accuracy']
         loss['node_accuracy'] = node_loss['accuracy']
         loss['loss'] = uresnet_loss['loss'] + ppn_loss['ppn_loss'] + node_loss['loss'] + edge_loss['loss']
