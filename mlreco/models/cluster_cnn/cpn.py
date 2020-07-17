@@ -1,10 +1,10 @@
 import torch
 import numpy as np
 
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 
 
-class CPN(NetworkBase):
+class CPN(SCNNetworkBase):
     '''
     Centroid Proposal Network
 

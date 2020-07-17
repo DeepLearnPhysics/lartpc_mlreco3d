@@ -4,11 +4,11 @@ import numpy as np
 import sparseconvnet as scn
 from collections import defaultdict
 
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 from .utils import add_normalized_coordinates, distance_matrix
 
 
-class ClusterEmbeddings(NetworkBase):
+class ClusterEmbeddings(SCNNetworkBase):
 
     def __init__(self, cfg, backbone, name='embeddings'):
         '''

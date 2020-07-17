@@ -38,6 +38,10 @@ def model_dict():
     from . import hierarchy
     from . import particle_types
 
+    # MinkowskiNet
+    from . import mink_uresnet
+    from . import mink_full_chain
+
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -49,6 +53,9 @@ def model_dict():
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
+        # URESNET MINKOWSKINET
+        "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss), 
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
