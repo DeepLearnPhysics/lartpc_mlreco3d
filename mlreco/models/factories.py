@@ -36,6 +36,7 @@ def model_dict():
     from . import full_cnn
     from . import hierarchy
     from . import ghost_chain
+    from . import ghost_cluster_full_gnn
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -109,7 +110,8 @@ def model_dict():
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
         "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
-        "ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss)
+        "ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
+        "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }

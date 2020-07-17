@@ -10,3 +10,4 @@ from .uresnet_metrics import uresnet_metrics
 from .michel_reconstruction_noghost import michel_reconstruction_noghost
 from .ppn_metrics import ppn_metrics
 from .cluster_gnn_metrics import cluster_gnn_metrics
+from .cluster_gnn_metrics_ghost import cluster_gnn_metrics_ghost
