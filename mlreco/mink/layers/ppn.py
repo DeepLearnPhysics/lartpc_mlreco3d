@@ -255,7 +255,7 @@ class PPN(nn.Module):
         # target = get_target(attention, target_key)
         print(feature_map2, feature_map2.C.shape)
         mask = (self.sigmoid(x.F) > 0.8).cpu()
-        y = self.prune(x, mask).
+        y = self.prune(x, mask)
         y = self.ppn2_conv(y)
         ppn2_scores = self.ppn2_scores(y)
         mask = (self.sigmoid(ppn2_scores.F) > 0.8).cpu()
