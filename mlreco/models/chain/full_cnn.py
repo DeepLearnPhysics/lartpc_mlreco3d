@@ -5,7 +5,7 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 from mlreco.models.layers.uresnet import UResNetEncoder, UResNetDecoder
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 
 from mlreco.models.ppn import PPN
 
@@ -249,7 +249,7 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
 # --------------------------CHAINS------------------------------
 
 
-class FullCNN(NetworkBase):
+class FullCNN(SCNNetworkBase):
     '''
     CNN Part of Full Reconstruction Chain for LArTPC Event Reconstruction
 
@@ -504,7 +504,7 @@ class FullCNN(NetworkBase):
         return res
 
 
-class FullCNNSELU(NetworkBase):
+class FullCNNSELU(SCNNetworkBase):
 
     def __init__(self, cfg, name='full_cnn'):
         super(FullCNNSELU, self).__init__(cfg, name='network_base')

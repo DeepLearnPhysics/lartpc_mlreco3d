@@ -13,7 +13,7 @@ import torch.nn.init as init
 
 from mlreco.models.layers.uresnet import *
 from mlreco.models.discriminative_loss import DiscriminativeLoss
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 from mlreco.models.layers.normalizations import *
 from scipy.spatial import cKDTree
 
@@ -162,7 +162,7 @@ class RelativeCoordConv(nn.Module):
         return out
 
 
-class InstanceBranch(NetworkBase):
+class InstanceBranch(SCNNetworkBase):
     '''
     Instance mask generating branch for AdaptIS.
 
@@ -261,7 +261,7 @@ class InstanceBranch(NetworkBase):
         return mask_logits
 
 
-class AdaptIS(NetworkBase):
+class AdaptIS(SCNNetworkBase):
 
     def __init__(self, cfg, name='adaptis'):
         super(AdaptIS, self).__init__(cfg, name='network_base')
@@ -343,7 +343,7 @@ class AdaptIS(NetworkBase):
 
 
 
-# class AdaptIS(NetworkBase):
+# class AdaptIS(SCNNetworkBase):
 #     '''
 #     Wrapper module for entire AdaptIS network chain.
 
