@@ -15,9 +15,8 @@ class GhostChain(torch.nn.Module):
     """
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (float,), (3, 1)],
-    #     ["parse_particle_points", (int, int), (3, 2)]
     # ]
-    # MODULES = ['ppn', 'uresnet_lonely']
+    MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
 
     def __init__(self, model_config):
         super(GhostChain, self).__init__()
@@ -59,7 +58,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         super(GhostChainLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
         self.clustering_loss = ClusteringLoss(cfg)
-        self._num_classes = cfg['uresnet_lonely']['num_classes']
+        self._num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
 
     def forward(self, result, label_seg, label_clustering):
         uresnet_res = self.uresnet_loss(result, label_seg)
