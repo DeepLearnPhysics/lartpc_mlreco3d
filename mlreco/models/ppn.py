@@ -119,7 +119,6 @@ class PPN(torch.nn.Module):
         self.ppn3_scores = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], 2, 3, False)
         self.ppn3_type = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], num_classes, 3, False)
 
-
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
 
