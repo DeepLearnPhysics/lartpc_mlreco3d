@@ -89,6 +89,7 @@ class PPN(nn.Module):
         self._ppn1_size = self.model_config.get('ppn1_size', -1)
         self._ppn2_size = self.model_config.get('ppn2_size', -1)
         self._spatial_size = self.model_config.get('spatial_size', 512)
+        self._ppn_threshold = self.model_config.get('ppn_threshold', 0.8)
         self.ppn1_stride, self.ppn2_stride = define_ppn12(
             self._ppn1_size, self._ppn2_size,
             self._spatial_size, self._num_strides)
@@ -194,6 +195,7 @@ class PPN(nn.Module):
 
         self.prune = ME.MinkowskiPruning()
 
+
     def forward(self, input):
         """
         spatial size of feature_map1 (PPN1) = spatial_size / 2**self.ppn1_stride
@@ -234,7 +236,7 @@ class PPN(nn.Module):
         # Feature map 1 = deepest
         x = self.ppn1_conv(feature_map1)
         ppn1_scores = self.ppn1_scores(x)
-        mask = (self.sigmoid(ppn1_scores.F) > 0.8).cpu()
+        mask = (self.sigmoid(ppn1_scores.F) > self._ppn_threshold).cpu()
         x = self.prune(x, mask)
         for i, layer in enumerate(self.unpool1):
             x = self.unpool_norm1[i](x)
@@ -254,11 +256,11 @@ class PPN(nn.Module):
         #     allow_duplicate_coords=True)
         # target = get_target(attention, target_key)
         print(feature_map2, feature_map2.C.shape)
-        mask = (self.sigmoid(x.F) > 0.8).cpu()
+        mask = (self.sigmoid(x.F) > self._ppn_threshold).cpu()
         y = self.prune(x, mask)
         y = self.ppn2_conv(y)
         ppn2_scores = self.ppn2_scores(y)
-        mask = (self.sigmoid(ppn2_scores.F) > 0.8).cpu()
+        mask = (self.sigmoid(ppn2_scores.F) > self._ppn_threshold).cpu()
         y = self.prune(feature_map2, mask)
         y = self.selection2(ppn2_scores)
         attention2 = self.unpool2(y)
