@@ -65,11 +65,10 @@ def CollateMinkowski(batch):
     concat = np.concatenate
     for key in batch[0].keys():
         if isinstance(batch[0][key], tuple) and isinstance(batch[0][key][0], np.ndarray) and len(batch[0][key][0].shape)==2:
-            data_list = []
             coords = [sample[key][0] for sample in batch]
             features = [sample[key][1] for sample in batch]
             coords, features = ME.utils.sparse_collate(coords, features)
-            result[key] = torch.cat([coords.float(), features], dim=1)
+            result[key] = torch.cat([coords.float(), features.float()], dim=1)
         elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==1 and batch[0][key].size == 1:
             result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
                                              np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],

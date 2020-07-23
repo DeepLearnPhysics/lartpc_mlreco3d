@@ -6,17 +6,40 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.mink.chain.full_chain import FullChainCNN1
+from mlreco.mink.layers.ppn import PPNLoss
 from mlreco.mink.chain.factories import *
 from collections import defaultdict
 
-from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_points_label, get_cluster_directions
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, knn_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
+from mlreco.utils.gnn.cluster import (
+    get_cluster_label, 
+    get_cluster_points_label, 
+    get_cluster_directions
+)
+
+from mlreco.utils.gnn.network import (
+    complete_graph, 
+    delaunay_graph, 
+    mst_graph, 
+    knn_graph, 
+    bipartite_graph, 
+    inter_cluster_distance, 
+    get_fragment_edges
+)
+
+from mlreco.utils.gnn.evaluation import (
+    edge_assignment, 
+    edge_assignment_from_graph
+)
+
 from mlreco.models.cluster_node_gnn import NodeTypeLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
 
 # Node Encoders
-from mlreco.models.gnn.factories import node_encoder_construct, edge_encoder_construct, edge_model_construct
+from mlreco.models.gnn.factories import (
+    node_encoder_construct, 
+    edge_encoder_construct, 
+    edge_model_construct
+)
 
 from pprint import pprint
 
@@ -72,6 +95,7 @@ class FullChain(nn.Module):
     def __init__(self, cfg, name='full_chain'):
         super(FullChain, self).__init__()
         self.model_cfg = cfg[name]
+        print('-------------Full Chain Model Config----------------')
         pprint(self.model_cfg)
         self.net = chain_construct(self.model_cfg['name'], self.model_cfg)
 
@@ -85,10 +109,6 @@ class FullChain(nn.Module):
         self.fragment_col = self.model_cfg.get('fragment_col', 5)
         self.group_col = self.model_cfg.get('group_col', 6)
 
-        self.segmentation = ME.MinkowskiLinear(self.seg_F, self.num_classes)
-        self.embedding = ME.MinkowskiLinear(
-            self.ins_F, self.embedding_dim + self.sigma_dim)
-
         pprint(self.model_cfg)
         # Node and Edge Encoder
         self.node_encoder1 = node_encoder_construct(self.model_cfg)
@@ -101,6 +121,8 @@ class FullChain(nn.Module):
         self.gnn2 = edge_model_construct(self.model_cfg, model_name='edge_model_types')
         self.gnn3 = edge_model_construct(self.model_cfg)
 
+        self.skip_gnn = self.model_cfg.get('skip_gnn', True)
+
         print('Total Number of Trainable Parameters = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
@@ -112,12 +134,16 @@ class FullChain(nn.Module):
 
             # CNN Phase
             res = self.net(input_data)
-            segmentation = self.segmentation(res['seg_features'][0])
-            embeddings = self.embedding(res['ins_features'][0])
-            out['segmentation'].append(segmentation.F)
-            out['embeddings'].append(embeddings.F[:, :self.embedding_dim])
-            out['margins'].append(embeddings.F[:, self.embedding_dim:])
+            for key, val in res.items():
+                out[key].append(val[igpu])
+            # print([k for k in ppn_output.keys()])
+            # print([k for k in res.keys()])
+            segmentation = res['segmentation'][igpu]
+            embeddings = res['embeddings'][igpu]
+            margins = res['margins'][igpu]
 
+            if self.skip_gnn:
+                continue
             # Shower Grouping and Primary Prediction
             highE = x[x[:, -1] != 4]
 
@@ -137,8 +163,8 @@ class FullChain(nn.Module):
             node_primary_pred = gnn_output1['node_pred'][0]
             edge_grouping_pred = gnn_output1['edge_pred'][0]
 
-            print(node_primary_pred)
-            print(edge_grouping_pred)
+            # print(node_primary_pred)
+            # print(edge_grouping_pred)
 
             # Particle Type and Flow Prediciton
 
@@ -158,8 +184,8 @@ class FullChain(nn.Module):
             node_type_pred = gnn_output2['node_pred'][0]
             edge_flow_pred = gnn_output2['edge_pred'][0]
 
-            print(node_type_pred)
-            print(edge_flow_pred)
+            # print(node_type_pred)
+            # print(edge_flow_pred)
 
             gnn_output3 = self.gnn3(x2, index2, e2, xbatch2)
 
@@ -175,10 +201,14 @@ class ChainLoss(nn.Module):
     def __init__(self, cfg, name='segmentation_loss'):
         super(ChainLoss, self).__init__()
         self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
-
+        self.loss_config = cfg['full_chain']
+        self.ppn_type_weight = self.loss_config['ppn'].get('ppn_type_weight', 1.0)
+        self.ppn_loss_weight = self.loss_config['ppn'].get('ppn_loss_weight', 1.0)
+        print(self.ppn_type_weight)
         # Semantic Segmentation Loss
 
         # PPN Loss
+        self.ppn_loss = PPNLoss(self.loss_config)
 
         # Dense Clustering Loss
 
@@ -192,7 +222,7 @@ class ChainLoss(nn.Module):
 
         # Flow Reconstruction Loss
 
-    def forward(self, outputs, label, weight=None):
+    def forward(self, outputs, segment_label, particles_label, weight=None):
         '''
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -201,19 +231,26 @@ class ChainLoss(nn.Module):
         '''
         # TODO Add weighting
         segmentation = outputs['segmentation']
-        assert len(segmentation) == len(label)
+        # print(segmentation)
+        # print(label)
+        assert len(segmentation) == len(segment_label)
         # if weight is not None:
         #     assert len(data) == len(weight)
-        batch_ids = [d[:, 0] for d in label]
+        batch_ids = [d[:, 0] for d in segment_label]
         total_loss = 0
         total_acc = 0
         count = 0
+
+        # print(outputs)
+
+        ppn_results = self.ppn_loss(outputs, segment_label, particles_label)
+
         # Loop over GPUS
         for i in range(len(segmentation)):
             for b in batch_ids[i].unique():
                 batch_index = batch_ids[i] == b
                 event_segmentation = segmentation[i][batch_index]
-                event_label = label[i][:, -1][batch_index]
+                event_label = segment_label[i][:, -1][batch_index]
                 event_label = torch.squeeze(event_label, dim=-1).long()
                 loss_seg = self.cross_entropy(event_segmentation, event_label)
                 if weight is not None:
@@ -224,11 +261,20 @@ class ChainLoss(nn.Module):
                     total_loss += torch.mean(loss_seg)
                 # Accuracy
                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
+                acc = (predicted_labels == event_label).sum().item() / \
+                    float(predicted_labels.nelement())
                 total_acc += acc
                 count += 1
 
-        return {
+        res = {
             'accuracy': total_acc/count,
             'loss': total_loss/count
         }
+
+        res['loss'] += self.ppn_loss_weight * ppn_results['ppn_loss'] + \
+            self.ppn_type_weight * ppn_results['loss_type']
+        res['accuracy'] += self.ppn_loss_weight * ppn_results['ppn_acc'] + \
+            self.ppn_type_weight * ppn_results['acc_ppn_type']
+        res['accuracy'] /= (self.ppn_loss_weight + self.ppn_type_weight + 1)
+
+        return res
