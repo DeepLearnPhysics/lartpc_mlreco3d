@@ -128,7 +128,7 @@ class SparseEncoder(MENetworkBase):
 
     def forward(self, input_tensor):
 
-        print(input_tensor)
+        # print(input_tensor)
         x = ME.SparseTensor(coords=input_tensor[:, :4],
                             feats=input_tensor[:, -1].view(-1, 1))
         # Encoder

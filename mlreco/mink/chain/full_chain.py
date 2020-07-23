@@ -33,6 +33,8 @@ class FullChainCNN1(MENetworkBase):
         self.encoder_name = self.encoder_cfg['name']
         # print(self.encoder_name)
         self.encoder = cnn_construct(self.encoder_name, self.encoder_cfg)
+        print("Encoder # Parameters = ", 
+            sum(p.numel() for p in self.encoder.parameters() if p.requires_grad))
         # print(self.encoder)
 
         # Segmentation Decoder
@@ -42,6 +44,8 @@ class FullChainCNN1(MENetworkBase):
         self.segment_decoder_name = self.segment_decoder_cfg['name']
         self.segment_decoder = cnn_construct(
             self.segment_decoder_name, self.segment_decoder_cfg)
+        print("Segmentation Decoder # Parameters = ", 
+            sum(p.numel() for p in self.segment_decoder.parameters() if p.requires_grad))
         # print(self.segment_decoder)
 
         # Instance Decoder
@@ -51,9 +55,25 @@ class FullChainCNN1(MENetworkBase):
         self.instance_decoder_name = self.instance_decoder_cfg['name']
         self.instance_decoder = cnn_construct(
             self.instance_decoder_name, self.instance_decoder_cfg)
+        print("Instance Decoder # Parameters = ", 
+            sum(p.numel() for p in self.instance_decoder.parameters() if p.requires_grad))
+
         # PPN
         self.ppn = PPN(cfg)
+        print("PPN # Parameters = ", 
+            sum(p.numel() for p in self.ppn.parameters() if p.requires_grad))
         # Seediness
+        # print(cfg.keys())
+        # OutputLayers 
+        self.segmentation = ME.MinkowskiLinear(
+            self.segment_decoder_cfg['uresnet_decoder']['num_filters'], 
+            self.segment_decoder_cfg['uresnet_decoder']['num_classes'])
+        self.embedding = ME.MinkowskiLinear(
+            self.instance_decoder_cfg['uresnet_decoder']['num_filters'], 
+            cfg['embedding_dim'] + cfg['sigma_dim'])
+
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
 
 
     def forward(self, input):
@@ -79,15 +99,18 @@ class FullChainCNN1(MENetworkBase):
         seg_features = seg_decoderTensors[-1]
         ins_features = ins_decoderTensors[-1]
 
+        embeddings = self.embedding(ins_features)
+        segmentation = self.segmentation(seg_features)
+
         res = {
-            'seg_features': [seg_features],
-            'seg_decoderTensors': [seg_decoderTensors],
-            'ins_decoderTensors': [ins_decoderTensors],
-            'finalTensor': [finalTensor],
-            'ins_features': [ins_features],
-            'ppn_output': {},
-            'seediness': []
+            'segmentation': [segmentation.F],
+            'embeddings': [self.tanh(embeddings.F[:, :3])],
+            'margins': [torch.exp(embeddings.F[:, 3:])]
+            # 'seediness': [None]
         }
+
+        for key, val in ppn_output.items():
+            res[key] = val
 
         return res
 
