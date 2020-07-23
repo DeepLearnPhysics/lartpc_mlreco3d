@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
+from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
@@ -17,7 +17,7 @@ from mlreco.models.gnn.losses.grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
-from mlreco.utils.gnn.cluster import cluster_direction
+from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch
 
 class FullChain(torch.nn.Module):
     """
@@ -207,40 +207,40 @@ class FullChain(torch.nn.Module):
 
         result.update({'frag_group_pred': [group_ids]})
 
-        # Merge fragments into particle instances, retain primary id of showers
-        non_em_mask = np.where((frag_seg != 0) & (frag_seg != 4))[0]
-        particles = fragments[non_em_mask].tolist()
-        part_batch_ids = frag_batch_ids[non_em_mask]
-        part_primary_ids = -1*np.ones(len(non_em_mask), dtype=np.int32)
-        part_seg = frag_seg[non_em_mask]
+        # Merge fragments into particle instances, retain primary fragment id of showers
+        particles, part_primary_ids = [], []
         for b in range(len(counts)):
-            batch_mask = np.where(frag_batch_ids[em_mask] == b)[0]
+            # Append one particle per shower group
+            voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
             primary_labels = primary_assignment(node_pred[b].detach().cpu().numpy(), group_ids[b])
             for g in np.unique(group_ids[b]):
                 group_mask = np.where(group_ids[b] == g)[0]
-                voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
                 particles.append(voxel_inds[np.concatenate(frags[b][group_mask])])
-                group_batch = np.unique(frag_batch_ids[em_mask][batch_mask][group_mask])
-                primary_id = group_mask[primary_labels[group_mask]]
-                assert len(group_batch) == 1
-                part_batch_ids = np.concatenate((part_batch_ids, group_batch[0].reshape(1)))
-                part_seg = np.concatenate((part_seg, [0]))
-                part_primary_ids = np.concatenate((part_primary_ids, primary_id))
+                primary_id = group_mask[primary_labels[group_mask]][0]
+                part_primary_ids.append(primary_id)
 
-        part_order = np.argsort(part_batch_ids)
-        particles = np.array(particles)[part_order]
-        part_batch_ids = part_batch_ids[part_order]
-        part_seg = part_seg[part_order]
-        part_primary_ids = part_primary_ids[part_order]
+            # Append non-shower fragments as is
+            mask = (frag_batch_ids == b) & (frag_seg != 0)
+            particles.extend(fragments[mask])
+            part_primary_ids.extend(-np.ones(np.sum(mask)))
+
+        particles = np.array(particles)
+        part_batch_ids = get_cluster_batch(input[0], particles)
+        part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
+        part_seg = np.empty(len(particles), dtype=np.int32)
+        for i, p in enumerate(particles):
+            vals, cnts = semantic_labels[p].unique(return_counts=True)
+            assert len(vals) == 1
+            part_seg[i] = vals[torch.argmax(cnts)].item()
 
         # Initialize a complete graph for edge prediction, get particle and edge features
         edge_index = complete_graph(part_batch_ids)
-        x = self.node_encoder(input[0], particles, )
+        x = self.node_encoder(input[0], particles)
         e = self.edge_encoder(input[0], particles, edge_index)
 
-        # Extract intersting points for particles, add semantic class, mean value and rms value
+        # Extract interesting points for particles, add semantic class, mean value and rms value
         # - For showers, take the most likely PPN voxel of the primary fragment
-        # - For tracks, take the points furthest removed from each other (why not ?)
+        # - For tracks, take the points furthest removed from each other
         # - For Michel and Delta, take the most likely PPN voxel
         ppn_feats = torch.empty((0,12), device=input[0].device, dtype=torch.float)
         for i, p in enumerate(particles):

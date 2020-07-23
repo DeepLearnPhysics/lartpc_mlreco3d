@@ -413,13 +413,13 @@ def get_cluster_start_points(data, clusts):
     for c in clusts:
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
-        vid = cluster_start_point(x)[0]
+        vid = cluster_start_point(x)[-1]
         points.append(x[vid])
 
     return np.vstack(points)
 
 
-def cluster_direction(data, start, max_dist=-1):
+def cluster_direction(data, start, max_dist=-1, optimize=False):
     """
     Finds the orientation of the cluster by computing the
     mean direction from the start point.
@@ -428,18 +428,47 @@ def cluster_direction(data, start, max_dist=-1):
         data (torch.tensor) : (N,3) Voxel coordinates [x, y, z]
         start (torch.tensor): (3) Start voxel coordinates [x, y, z]
         max_dist (float)    : Max distance between start voxel and other voxels in the mean
+        optimize (bool)      : Optimizes the number of points involved in the estimate
     Returns:
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within
     # a sphere of radius max_dist
     voxels = data[:,:3]
-    if max_dist > 0:
+    if max_dist > 0 and not optimize:
         from mlreco.utils import local_cdist
         dist_mat = local_cdist(start.reshape(1,-1), voxels).reshape(-1)
-        voxels = voxels[dist_mat < max_dist]
+        voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
             return start-start
+    elif optimize:
+        # Order the cluster points by increasing distance to the start point
+        from mlreco.utils import local_cdist
+        dist_mat = local_cdist(start.reshape(1,-1), voxels).reshape(-1)
+        order = torch.argsort(dist_mat)
+        voxels = voxels[order]
+        dist_mat = dist_mat[order]
+
+        # Find the PCA relative secondary spread for each point
+        labels = torch.zeros(len(voxels))
+        meank = torch.mean(voxels[:3], dim=0)
+        covk = (voxels[:3]-meank).t().mm(voxels[:3]-meank)/3
+        for i in range(2, len(voxels)):
+            # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
+            w, _ = torch.eig(covk)
+            w, _ = w[:,0].reshape(-1).sort()
+            labels[i] = torch.sqrt(w[2]/(w[0]+w[1])) if (w[0]+w[1]) else 0.
+            if dist_mat[i] == dist_mat[i-1]:
+                labels[i-1] = 0.
+
+            # Increment mean and matrix
+            if i != len(voxels)-1:
+                meank = ((i+1)*meank+voxels[i+1])/(i+2)
+                covk = (i+1)*covk/(i+2) + (voxels[i+1]-meank).reshape(-1,1)*(voxels[i+1]-meank)/(i+1)
+
+        # Subselect voxels that are most track-like
+        max_id = torch.argmax(labels)
+        voxels = voxels[:max_id+1]
 
     # Compute mean direction with respect to start point, normalize it
     mean = torch.mean(torch.stack([v-start for v in voxels]), dim=0)
@@ -448,7 +477,7 @@ def cluster_direction(data, start, max_dist=-1):
     return mean
 
 
-def get_cluster_directions(data, starts, clusts, max_dist=-1):
+def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     """
     Finds the orientation of all the clusters by computing the
     mean direction from the start point.
@@ -458,6 +487,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1):
         starts (torch.tensor): (C,3) Coordinates of the start points
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         max_dist (float)     : Max distance between start voxel and other voxels
+        optimize (bool)      : Optimizes the number of points involved in the estimate
     Returns:
         torch.tensor: (3) Orientation
     """
@@ -467,7 +497,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1):
     for i, c in enumerate(clusts):
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
-        dir = cluster_direction(x, starts[i], max_dist)
+        dir = cluster_direction(x, starts[i], max_dist, optimize)
         dirs.append(dir)
 
     return torch.stack(dirs)

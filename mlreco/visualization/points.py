@@ -7,8 +7,8 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     - labels is a list of voxel labels (N vector)
     INPUTS:
      - points is (N,2+) shaped array for N points of (x,y,[z],...) coordinate information
-     - markersize specifies the size of a marker (drawn per point) 
-     - color can be a string to specify a color for all points, or an array of (N) values for gradient color 
+     - markersize specifies the size of a marker (drawn per point)
+     - color can be a string to specify a color for all points, or an array of (N) values for gradient color
      - colorscale defines the gradient colors to be used when color values are specified per point
      - opacity is a transparency of each points when drawn
      - hovertext is an additional text to be shown when a cursor hovers on a point (interactive legend)
@@ -27,7 +27,7 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
         raise ValueError
     if points.shape[1] == 2:
         dim = 2
-        
+
     args=dict(
         x=points[:,0],
         y=points[:,1],
@@ -43,11 +43,10 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
         hoverinfo = ['x','y'] if hovertext is None else ['x','y','text'],
         hovertext = hovertext,
         )
-    
+
     if dim == 3:
         args['z'] = points[:,2]
         args['hoverinfo'] = ['x','y','z'] if hovertext is None else ['x','y','z','text']
         return [go.Scatter3d(**args)]
     else:
         return [go.Scatter(**args)]
-    

@@ -168,7 +168,7 @@ class ClustEdgeGNN(torch.nn.Module):
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'knn':
-            edge_index = knn_graph(batch_ids, dist_mat, k=5)
+            edge_index = knn_graph(batch_ids, dist_mat, k=5, undirected=True)
         elif self.network == 'bipartite':
             primary_ids = [i for i, c in enumerate(clusts) if (data[c,-3] == data[c,-2]).any()]
             edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
@@ -186,6 +186,10 @@ class ClustEdgeGNN(torch.nn.Module):
         # Add start point and/or start direction to node features if requested
         if self.add_start_point:
             points = get_cluster_points_label(data, particles, clusts, self.source_col==6)
+            from mlreco.utils import local_cdist
+            for i, c in enumerate(clusts):
+                dist_mat = local_cdist(points[i].reshape(-1,3), data[c,:3])
+                points[i] = data[c][torch.argmin(dist_mat,dim=1),:3].reshape(-1)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
                 dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist)
@@ -229,7 +233,7 @@ class EdgeChannelLoss(torch.nn.Module):
           loss            : <loss function: 'CE' or 'MM' (default 'CE')>
           reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
           balance_classes : <balance loss per class: True or False (default False)>
-          target          : <basis to form target adjacency matrix:'group', 'group_max', 'photon' (default 'group')>
+          target          : <type of target adjacency matrix: 'group', 'forest', 'particle_forest' (default 'group')>
           high_purity     : <only penalize loss on groups with a primary (default False)>
     """
     def __init__(self, cfg, name='chain'):
@@ -313,7 +317,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 # Use group information or particle tree to determine the true edge assigment
                 if self.target == 'group':
                     edge_assn = edge_assignment(edge_index, group_ids)
-                elif self.target == 'group_mst':
+                elif self.target == 'forest':
                     # For each group, find the most likely spanning tree, label the edges in the
                     # tree as 1. For all other edges, apply loss only if in separate group.
                     # If undirected, also assign symmetric path to 1.
@@ -328,7 +332,7 @@ class EdgeChannelLoss(torch.nn.Module):
                         if len(clust_ids) < 2:
                             continue
 
-                        mst_mat = minimum_spanning_tree(score_mat[np.ix_(clust_ids,clust_ids)]).toarray().astype(float)
+                        mst_mat = minimum_spanning_tree(score_mat[np.ix_(clust_ids,clust_ids)]+1e-6).toarray().astype(float)
                         inds = np.where(mst_mat.flatten() > 0.)[0]
                         ind_pairs = np.array(np.unravel_index(inds, mst_mat.shape)).T
                         edges = np.array([[clust_ids[i], clust_ids[j]] for i, j in ind_pairs])
@@ -345,18 +349,11 @@ class EdgeChannelLoss(torch.nn.Module):
                     edge_pred = edge_pred[np.where(max_mask)[0]]
                     if not len(edge_pred):
                         continue
-                elif 'photon' in self.target:
+                elif 'particle_forest' in self.target:
                     clust_ids = get_cluster_label(labels, clusts, self.source_col)
                     subgraph = graph[i][graph[i][:,-1] == j, :2]
                     true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
-                    if self.target == 'photon_relax':
-                        adjacency  = [group_ids[e[0]] == group_ids[e[1]] for e in edge_index]
-                        relax_mask = adjacency == edge_assn
-                        edge_assn  = edge_assn[relax_mask]
-                        edge_pred  = edge_pred[np.where(relax_mask)[0]]
-                        if not len(edge_pred):
-                            continue
                 else:
                     raise ValueError('Prediction target not recognized:', self.target)
 
