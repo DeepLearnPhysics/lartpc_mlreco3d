@@ -158,6 +158,10 @@ class ClustFullGNN(torch.nn.Module):
         # Add start point and/or start direction to node features if requested
         if self.add_start_point:
             points = get_cluster_points_label(data, particles, clusts, groupwise=False)
+            from mlreco.utils import local_cdist
+            for i, c in enumerate(clusts):
+                dist_mat = local_cdist(points[i,:3].reshape(1,-1), data[c,:3])
+                points[i] = data[c][torch.argmin(dist_mat,dim=1),:3]
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
                 dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist)

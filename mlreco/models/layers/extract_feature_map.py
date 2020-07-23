@@ -37,7 +37,6 @@ class Multiply(torch.nn.Module):
         output = scn.SparseConvNetTensor()
         output.metadata = x.metadata
         output.spatial_size = x.spatial_size
-        output.features = x.features.new().resize_(1).expand_as(x.features).fill_(0.0)
         output.features = x.features * y.features[:, 1][:, None]
         return output
 
