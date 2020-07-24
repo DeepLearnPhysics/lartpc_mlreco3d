@@ -60,6 +60,8 @@ def construct_edge_features_batch(x, ids):
             if i != j:
                 edge_indices.append([ids[i], ids[j]])
                 e.append(torch.cat([xi, xj]))
+    if len(e) == 0:
+        return [], []
     e = torch.stack(e)
     edge_indices = torch.Tensor(edge_indices).to(device, dtype=torch.long)
     return e, edge_indices
@@ -74,6 +76,8 @@ def construct_edge_features(x, batch):
         batch_ids = ids[mask]
         nodes = x[mask]
         e, ei = construct_edge_features_batch(nodes, batch_ids)
+        if len(e) == 0 or len(ei) == 0:
+            continue
         edge_features.append(e)
         edge_indices.append(ei)
     edge_features = torch.cat(edge_features, dim=0)
@@ -362,7 +366,7 @@ class ChainLoss(nn.Module):
 
         res['loss'] = loss
         res['accuracy'] = accuracy
-    
+
         pprint(res)
 
         return res
