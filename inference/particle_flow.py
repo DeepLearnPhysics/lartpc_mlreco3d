@@ -9,6 +9,7 @@ from scipy.spatial.distance import cdist
 from scipy.special import softmax
 from pathlib import Path
 import argparse
+from pprint import pprint
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
@@ -30,12 +31,14 @@ def main_loop(cfg, model_path='', **kwargs):
     cfg = yaml.load(open(cfg, 'r'), Loader=yaml.Loader)
     process_config(cfg)
     cfg['trainval']['model_path'] = model_path
+    cfg['iotool']['dataset']['data_keys'] = kwargs['data_keys']
     cfg['trainval']['train'] = False
     start_index = kwargs.get('start_index', 0)
     end_index = kwargs.get('end_index', 20000)
     event_list = list(range(start_index, end_index))
     loader = loader_factory(cfg, event_list=event_list)
     dataset = iter(cycle(loader))
+    pprint(cfg)
     Trainer = trainval(cfg)
     loaded_iteration = Trainer.initialize()
     for m in Trainer._net.modules():
