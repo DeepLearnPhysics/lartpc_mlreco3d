@@ -245,6 +245,8 @@ class EdgeChannelLoss(torch.nn.Module):
         # Sets the source and target for the loss_seg
         self.source_col = chain_config.get('source_col', 5)
         self.target_col = chain_config.get('target_col', 6)
+        self.batch_col = chain_config.get('batch_col', 3)
+        print("Batch Col = ", self.batch_col)
 
         # Set the loss
         self.loss = chain_config.get('loss', 'CE')
@@ -285,7 +287,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 continue
 
             # Get the list of batch ids, loop over individual batches
-            batches = clusters[i][:,3]
+            batches = clusters[i][:,self.batch_col]
             nbatches = len(batches.unique())
             for j in range(nbatches):
 
