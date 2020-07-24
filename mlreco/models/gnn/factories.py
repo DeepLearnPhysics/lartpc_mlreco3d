@@ -22,9 +22,11 @@ def edge_model_dict():
     from . import edge_meta
     from . import dir_meta
     from . import modular_nnconv
+    from . import modular_nnconv_elu
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
+        "modular_nnconv_elu": modular_nnconv_elu.NNConvModel,
         "modular_econv" : modular_econv.EConvModel,
         "modular_gatconv" : modular_gatconv.GATConvModel,
         "modular_agnnconv" : modular_agnnconv.AGNNConvModel,
