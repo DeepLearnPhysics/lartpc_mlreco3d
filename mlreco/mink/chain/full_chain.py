@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import time
 
 # MinkowskiEngine Backend
 import MinkowskiEngine as ME
@@ -79,12 +80,21 @@ class FullChainCNN1(MENetworkBase):
     def forward(self, input):
 
         x = ME.SparseTensor(coords=input[:, :4], feats=input[:, -1].view(-1, 1))
+        start = time.time()
         res_encoder = self.encoder(x)
+        end = time.time()
+        print("Encoder Time = {:.4f}".format(end - start))
         encoderTensors = res_encoder['encoderTensors']
         finalTensor = res_encoder['finalTensor']
 
+        start = time.time()
         seg_decoderTensors = self.segment_decoder(finalTensor, encoderTensors)
+        end = time.time()
+        print("Segment Decoder Time = {:.4f}".format(end - start))
+        start = time.time()
         ins_decoderTensors = self.instance_decoder(finalTensor, encoderTensors)
+        end = time.time()
+        print("Instance Decoder Time = {:.4f}".format(end - start))
 
         features_ppn = res_encoder['features_ppn']
         features_ppn2 = [finalTensor] + seg_decoderTensors
@@ -94,7 +104,10 @@ class FullChainCNN1(MENetworkBase):
             'ppn_feature_dec': features_ppn2
         }
 
-        ppn_output = self.ppn(ppn_input)
+        # start = time.time()
+        # ppn_output = self.ppn(ppn_input)
+        # end = time.time()
+        # print("PPN Time = {:.4f}".format(end - start))
 
         seg_features = seg_decoderTensors[-1]
         ins_features = ins_decoderTensors[-1]
@@ -109,8 +122,8 @@ class FullChainCNN1(MENetworkBase):
             # 'seediness': [None]
         }
 
-        for key, val in ppn_output.items():
-            res[key] = val
+        # for key, val in ppn_output.items():
+        #     res[key] = val
 
         return res
 
