@@ -37,6 +37,7 @@ def model_dict():
     from . import full_cnn
     from . import hierarchy
     from . import particle_types
+    from . import cluster_gnn_kinematics
 
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -115,6 +116,7 @@ def model_dict():
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Flow and Particle Type
         "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
+        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }

@@ -46,7 +46,7 @@ def edge_model_dict():
     return models
 
 
-def edge_model_construct(cfg):
+def edge_model_construct(cfg, model_name='edge_model'):
     """
     Instanties the appropriate edge model from
     the provided configuration.
@@ -59,7 +59,7 @@ def edge_model_construct(cfg):
         object: Instantiated edge model
     """
     models = edge_model_dict()
-    model_cfg = cfg['edge_model']
+    model_cfg = cfg[model_name]
     name = model_cfg.get('name', 'modular_nnconv')
     if not name in models:
         raise Exception("Unknown edge model name provided:", name)

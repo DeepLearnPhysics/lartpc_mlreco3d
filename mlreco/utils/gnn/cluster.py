@@ -102,7 +102,7 @@ def get_cluster_label_np(data, clusts, column=5):
     return np.array(labels)
 
 
-def get_momenta_labels(data, clusts, columns=[7,8,9]):
+def get_momenta_label(data, clusts, column=8):
     """
     Function that returns the momentum unit vector of each cluster.
 
@@ -116,7 +116,7 @@ def get_momenta_labels(data, clusts, columns=[7,8,9]):
     for c in clusts:
         v = data[c,:]
         # print(v[:, columns].mean(dim=0))
-        labels.append(v[:, columns].mean(dim=0))
+        labels.append(v[:, column].mean(dim=0))
     labels = torch.stack(labels, dim=0)
     return labels.to(dtype=torch.float32)
 
