@@ -6,9 +6,25 @@ import torch
 import numpy as np
 from .gnn import node_model_construct, node_encoder_construct, edge_encoder_construct
 from .layers.dbscan import DBScanClusts2
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_momenta_label
 from mlreco.utils.gnn.network import loop_graph, complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
+
+
+def log_rmse(inputs, targets, reduction='sum', eps=1e-7):
+    x = torch.log(inputs + eps)
+    y = torch.log(targets + eps)
+    print(x, y)
+    out = torch.nn.functional.mseloss(x, y, reduction='none')
+    out = torch.sqrt(out + eps)
+    print(out)
+    if reduction == 'mean':
+        out = out.mean()
+    elif reduction == 'sum':
+        out = out.sum()
+    else:
+        pass
+    return out
 
 class ClustNodeGNN(torch.nn.Module):
     """
@@ -383,5 +399,130 @@ class NodeTypeLoss(torch.nn.Module):
         return {
             'accuracy': total_acc/n_clusts,
             'loss': total_loss/n_clusts,
+            'n_clusts': n_clusts
+        }
+
+
+class NodeKinematicsLoss(torch.nn.Module):
+    """
+    Takes the output of EdgeModel and computes the channel-loss.
+
+    For use in config:
+    model:
+      name: cluster_gnn
+      modules:
+        chain:
+          loss            : <loss function: 'CE' or 'MM' (default 'CE')>
+          reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
+          balance_classes : <balance loss per class: True or False (default False)>
+          high_purity     : <only penalize loss on groups with a primary (default False)>
+    """
+    def __init__(self, cfg, name='chain'):
+        super(NodeKinematicsLoss, self).__init__()
+
+        # Get the chain input parameters
+        chain_config = cfg[name]
+
+        # Set the loss
+        self.reg_loss = chain_config.get('reg_loss', 'CE')
+        self.type_loss = chain_config.get('type_loss', 'l2')
+        self.reduction = chain_config.get('reduction', 'sum')
+        self.balance_classes = chain_config.get('balance_classes', False)
+        self.high_purity = chain_config.get('high_purity', False)
+
+        if self.reg_loss == 'l2':
+            self.reg_lossfn = torch.nn.MSELoss(reduction=self.reduction)
+        elif self.reg_loss == 'l1':
+            self.reg_lossfn = torch.nn.L1Loss(reduction=self.reduction)
+        elif self.reg_loss == 'log_rmse':
+            self.reg_loss = log_rmse
+        else:
+            raise Exception('Loss not recognized: ' + self.reg_loss)
+
+
+        if self.type_loss == 'CE':
+            self.type_lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
+        elif self.type_loss == 'MM':
+            p = chain_config.get('p', 1)
+            margin = chain_config.get('margin', 1.0)
+            self.type_lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
+        else:
+            raise Exception('Loss not recognized: ' + self.type_loss)
+
+
+    def forward(self, out, types):
+        """
+        Applies the requested loss on the node prediction.
+
+        Args:
+            out (dict):
+                'node_pred' (torch.tensor): (C,2) Two-channel node predictions
+                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
+            types ([torch.tensor])     : (N,9) [x, y, z, batchid, value, id, groupid, pdg, p]
+        Returns:
+            double: loss, accuracy, clustering metrics
+        """
+        total_loss, total_acc = 0., 0.
+        type_loss, p_loss = 0., 0.
+        n_clusts = 0
+
+        for i in range(len(types)):
+
+            # Get the list of batch ids, loop over individual batches
+            batches = types[i][:,3]
+            nbatches = len(batches.unique())
+            for j in range(nbatches):
+
+                # Narrow down the tensor to the rows in the batch
+                labels = types[i][batches==j]
+
+                # Use the primary information to determine the true node assignment
+                node_pred_type = out['node_pred_type'][i][j]
+                node_pred_p = out['node_pred_p'][i][j]
+                if not node_pred_type.shape[0] or not node_pred_p.shape[0]:
+                    continue
+                clusts = out['clusts'][i][j]
+                clust_ids = get_cluster_label(labels, clusts)
+                pdgs = get_cluster_label(labels, clusts, column=7)
+                momenta = get_momenta_label(labels, clusts, column=8)
+
+                print("pdgs = ", pdgs)
+                print("momenta pred = ", node_pred_p)
+                print("momenta = ", momenta.view(-1, 1))
+
+                # If the majority cluster ID agrees with the majority group ID, assign as primary
+                node_assn_type = torch.tensor(pdgs, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
+                # node_assn_p = torch.tensor(momenta, dtype=torch.float32, device=node_pred_p.device, requires_grad=False)
+                # print(node_assn)
+
+                # Increment the loss, balance classes if requested
+                loss = self.type_lossfn(node_pred_type, node_assn_type)
+                total_loss += loss
+                type_loss += float(loss)
+                loss = self.reg_lossfn(node_pred_p.squeeze(), momenta)
+                total_loss += loss
+                p_loss += float(loss)
+
+                # Compute accuracy of assignment (fraction of correctly assigned nodes)
+                total_acc += torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type).float()
+
+                # Increment the number of events
+                n_clusts += len(clusts)
+
+        # Handle the case where no cluster/edge were found
+        if not n_clusts:
+            return {
+                'accuracy': 0.,
+                'loss': torch.tensor(0., requires_grad=True, device=types[0].device),
+                'type_loss': 0., 
+                'p_loss': 0.,
+                'n_clusts': n_clusts
+            }
+
+        return {
+            'accuracy': total_acc/n_clusts,
+            'loss': total_loss/n_clusts,
+            'type_loss': type_loss / n_clusts, 
+            'p_loss': p_loss / n_clusts,
             'n_clusts': n_clusts
         }
