@@ -347,13 +347,13 @@ class trainval(object):
         iteration = 0
         model_paths = []
         if self._model_path and self._model_path != '':
-            model_paths.append(('', self._model_path))
+            model_paths.append(('', self._model_path, ''))
         for module in module_config:
             if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
-                model_paths.append((module, module_config[module]['model_path']))
+                model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', '')))
 
         if model_paths: #self._model_path and self._model_path != '':
-            for module, model_path in model_paths:
+            for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights for %s from %s...' % (module,model_path))
@@ -361,9 +361,8 @@ class trainval(object):
                     checkpoint = torch.load(f, map_location='cpu')
                     # Edit checkpoint variable names
                     for name in self._net.state_dict():
-                        other_name = re.sub(module + '.', '', name)
-                        # print(module, name, other_name, other_name in checkpoint['state_dict'])
-                        if other_name in checkpoint['state_dict']:
+                        other_name = re.sub(module + '.', model_name + '.' if len(model_name) else '', name)
+                        if module in name and other_name in checkpoint['state_dict']:
                             checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
                     bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)

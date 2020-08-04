@@ -62,25 +62,9 @@ class GhostChain(torch.nn.Module):
         self.particle_gnn  = GNN(cfg['particle_edge_model'])
         self.inter_gnn     = GNN(cfg['interaction_edge_model'])
         self.min_frag_size = cfg['particle_gnn'].get('node_min_size', -1)
+        self._use_ppn_shower = cfg['particle_gnn'].get('use_ppn_shower', False)
 
-    def full_chain(self, x):
-        '''
-        Forward for full reconstruction chain.
-
-        INPUTS:
-            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
-
-        RETURNS:
-            - result (tuple of dicts): (cnn_result, gnn_result)
-        '''
-        input, result = x
-        device = input[0].device
-
-        # Get fragment predictions from the CNN clustering algorithm
-        spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
-        result.update(spatial_embeddings_output)
-
-        # Extract fragment predictions to input into the GNN
+    def extract_fragment(self, input, result):
         batch_labels = input[0][:,3]
         fragments = []
         frag_batch_ids = []
@@ -112,6 +96,29 @@ class GhostChain(torch.nn.Module):
             assert len(vals) == 1
             frag_seg[i] = vals[torch.argmax(cnts)].item()
 
+        return fragments, frag_batch_ids, frag_seg
+
+    def full_chain(self, x):
+        '''
+        Forward for full reconstruction chain.
+
+        INPUTS:
+            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
+
+        RETURNS:
+            - result (tuple of dicts): (cnn_result, gnn_result)
+        '''
+        input, result = x
+        device = input[0].device
+
+        # Get fragment predictions from the CNN clustering algorithm
+        spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
+        result.update(spatial_embeddings_output)
+
+        # Extract fragment predictions to input into the GNN
+        fragments, frag_batch_ids, frag_seg = self.extract_fragment(input, result)
+        semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
+
         # Initialize a complete graph for edge prediction, get shower fragment and edge features
         em_mask = np.where(frag_seg == 0)[0]
         edge_index = complete_graph(frag_batch_ids[em_mask])
@@ -120,15 +127,16 @@ class GhostChain(torch.nn.Module):
 
         # Extract shower starts from PPN predictions (most likely prediction)
         ppn_points = result['points'][0].detach()
-        ppn_feats = torch.empty((0,6), device=device, dtype=torch.float)
-        for f in fragments[em_mask]:
-            scores = torch.softmax(ppn_points[f,3:5], dim=1)
-            argmax = torch.argmax(scores[:,-1])
-            start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-            dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=5)
-            ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir]).reshape(1,-1)), dim=0)
+        if self._use_ppn_shower:
+            ppn_feats = torch.empty((0,6), device=device, dtype=torch.float)
+            for f in fragments[em_mask]:
+                scores = torch.softmax(ppn_points[f,3:5], dim=1)
+                argmax = torch.argmax(scores[:,-1])
+                start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
+                dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=5)
+                ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir]).reshape(1,-1)), dim=0)
 
-        x = torch.cat([x, ppn_feats], dim=1)
+            x = torch.cat([x, ppn_feats], dim=1)
 
         # Pass shower fragment features through GNN
         index = torch.tensor(edge_index, dtype=torch.long, device=device)
@@ -264,20 +272,17 @@ class GhostChain(torch.nn.Module):
 
         # Update input based on deghosting results
         deghost = result['ghost'][0].argmax(dim=1) == 0
-        input[0] = input[0][deghost]
+        new_input = [input[0][deghost]]
 
         segmentation, points = result['segmentation'][0].clone(), result['points'][0].clone()
 
         deghost_result = {}
         deghost_result.update(result)
         deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
-        # result['embeddings'][0] = result['embeddings'][0][deghost]
-        # result['seediness'][0] = result['seediness'][0][deghost]
-        # result['margins'][0] = result['margins'][0][deghost]
         deghost_result['points'][0] = result['points'][0][deghost]
         # Run the rest of the full chain
 
-        full_chain_result = self.full_chain((input, deghost_result))
+        full_chain_result = self.full_chain((new_input, deghost_result))
 
         result.update(full_chain_result)
         result['segmentation'][0] = segmentation
@@ -311,7 +316,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
         self.ppn_weight = self.loss_config.get('ppn_weight', 0.0)
         self.particle_gnn_weight = self.loss_config.get('particle_gnn_weight', 0.0)
-        self.inter_gnn_weight = self.loss_config.get('particle_gnn_weight', 0.0)
+        self.inter_gnn_weight = self.loss_config.get('inter_gnn_weight', 0.0)
 
     def full_chain_loss(self, out, res_seg, res_ppn, segment_label, cluster_label):
         # Apply the CNN dense clustering loss to HE voxels only
@@ -390,8 +395,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         cluster_label = adapt_labels(out, seg_label, cluster_label)
 
         deghost = out['ghost'][0].argmax(dim=1) == 0
-        seg_label[0] = seg_label[0][deghost]
         #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
-        result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][:, -1], cluster_label)
+        result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][deghost][:, -1], cluster_label)
 
         return result
