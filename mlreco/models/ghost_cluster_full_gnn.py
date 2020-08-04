@@ -80,6 +80,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     def forward(self, result, clust_label, seg_label):
         uresnet_res = self.uresnet_loss(result, seg_label)
         # Make adapted labels to include ghost points
+        print(seg_label[0].shape, (seg_label[0][:, -1] < 5).sum(), clust_label[0].shape, result['segmentation'][0].shape, (result['ghost'][0].argmax(dim=1) == 0).sum())
+
         clust_label = adapt_labels(result, seg_label, clust_label)
         seg_label = [seg_label[i][result['ghost'][i].argmax(dim=1) == 0] for i in range(len(seg_label))]
         # Now we can apply the GNN loss without risking size mismatches

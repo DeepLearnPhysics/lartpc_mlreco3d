@@ -11,7 +11,8 @@ def cluster_gnn_metrics_ghost(cfg, data_blob, res, logdir, iteration):
     if not 'edge_pred' in res: return
 
     # Get the post processor parameters
-    bipartite = cfg['model']['modules']['chain']['network'] == 'bipartite'
+    column = cfg['post_processing']['cluster_gnn_metrics_ghost'].get('column', 6)
+    bipartite = cfg['model']['modules']['chain'].get('network', 'complete') == 'bipartite'
     store_method = cfg['post_processing']['cluster_gnn_metrics_ghost']['store_method']
     assert store_method in ['single-file', 'per-iteration', 'per-event']
     store_per_event = store_method == 'per-event'
@@ -30,9 +31,9 @@ def cluster_gnn_metrics_ghost(cfg, data_blob, res, logdir, iteration):
     seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
     #clust_data = [clust_data[i][res['segmentation'][i][(res['ghost'][i].argmax(axis=1) == 0)].argmax(axis=1) == 0] for i in range(len(clust_data))]
 
-    edge_pred = res['edge_pred']
-    edge_index = res['edge_index']
-    clusts = res['clusts']
+    edge_pred = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('edge_pred', 'edge_pred')]
+    edge_index = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('edge_index', 'edge_index')]
+    clusts = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('clusts', 'clusts')]
 
     # Loop over events
     for data_idx, tree_idx in enumerate(index):
@@ -50,7 +51,7 @@ def cluster_gnn_metrics_ghost(cfg, data_blob, res, logdir, iteration):
         # Use group id to make node labels
         group_ids = []
         for c in clusts[data_idx]:
-            v, cts = np.unique(clust_data[data_idx][c,6], return_counts=True)
+            v, cts = np.unique(clust_data[data_idx][c,column], return_counts=True)
             group_ids.append(int(v[cts.argmax()]))
 
         # Assign predicted group ids
