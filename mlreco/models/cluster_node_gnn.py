@@ -335,6 +335,8 @@ class NodeTypeLoss(torch.nn.Module):
         total_loss, total_acc = 0., 0.
         n_clusts = 0
         # print(types[0][:, self.pdg_col].unique())
+        # print(len(out['node_pred'][0]))
+        # print(len(out['clusts'][0]))
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
@@ -359,6 +361,8 @@ class NodeTypeLoss(torch.nn.Module):
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
                 node_assn = torch.tensor(pdgs, dtype=torch.long, device=node_pred.device, requires_grad=False)
                 # print(node_assn)
+                # print(node_pred)
+                # print(torch.argmax(node_pred, dim=1))
 
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:
@@ -370,6 +374,7 @@ class NodeTypeLoss(torch.nn.Module):
                     total_loss += self.lossfn(node_pred, node_assn)
 
                 # Compute accuracy of assignment (fraction of correctly assigned nodes)
+                
                 total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
 
                 # Increment the number of events

@@ -122,6 +122,8 @@ class FullChain(nn.Module):
         self.gnn2 = edge_model_construct(self.model_cfg, model_name='edge_model_types')
         self.gnn3 = edge_model_construct(self.model_cfg)
 
+        self.linear1 = nn.Linear(self.model_cfg['edge_model']['node_feats'], 5)
+
         self.skip_gnn = self.model_cfg.get('skip_gnn', True)
 
         print('Total Number of Trainable Parameters = {}'.format(
@@ -146,6 +148,7 @@ class FullChain(nn.Module):
 
             if self.skip_gnn:
                 continue
+
             # Shower Grouping and Primary Prediction
             highE = x[x[:, -1].long() != 4]
 
@@ -165,6 +168,12 @@ class FullChain(nn.Module):
 
             node_pred = gnn_output1['node_pred'][igpu]
             edge_pred = gnn_output1['edge_pred'][igpu]
+            # print("1 GNN")
+            # for i, row in enumerate(node_pred):
+            #     print(i, float(row[0]), float(x1[i][0]))
+            # print('edges')
+            # for i, row in enumerate(edge_pred):
+            #     print(row[0], e1[i][0])
             edge_index1 = edge_index1.cpu().numpy()
 
             # Divide the output out into different arrays (one per batch)
@@ -194,15 +203,17 @@ class FullChain(nn.Module):
             batch_ids2 = get_cluster_batch(highE, groups, batch_index=0)
 
             x2 = self.node_encoder2(highE, groups)
+            before_gnn = self.linear1(x2)
             e2, edge_index2_ = construct_edge_features(x2, batch_ids2)
             e2 = self.edge_net2(e2)
+            # print("2", x2, e2)
             xbatch2 = torch.tensor(batch_ids2, device=device)
 
             gnn_output2 = self.gnn2(x2, edge_index2_, e2, xbatch2)
             node_pred2 = gnn_output2['node_pred'][igpu]
             edge_pred2 = gnn_output2['edge_pred'][igpu]
             edge_index2 = edge_index2_.cpu().numpy()
-
+            # print("2 GNN", node_pred2, edge_pred2)
             # Divide the output out into different arrays (one per batch)
             # _, counts = torch.unique(highE[:,0], return_counts=True)
             # vids = np.concatenate([np.arange(n.item()) for n in counts])
@@ -211,6 +222,7 @@ class FullChain(nn.Module):
             beids = [np.where(batch_ids2[edge_index2[0]] == b)[0] for b in range(len(counts))]
 
             node_pred2 = [node_pred2[b] for b in bcids]
+            before_gnn = [before_gnn[b] for b in bcids]
             edge_pred2 = [edge_pred2[b] for b in beids]
             edge_index2 = [cids[edge_index2[:,b]].T for b in beids]
             groups = [np.array([vids[c] for c in np.array(groups)[b]]) for b in bcids]
@@ -219,6 +231,7 @@ class FullChain(nn.Module):
             out['flow_edge_pred'].append(edge_pred2)
             out['flow_edge_index'].append(edge_index2)
             out['group_clusts'].append(groups)
+            out['node_features_2'].append(before_gnn)
 
             gnn_output3 = self.gnn3(x2, edge_index2_, e2, xbatch2)
             edge_pred3 = gnn_output3['edge_pred'][igpu]

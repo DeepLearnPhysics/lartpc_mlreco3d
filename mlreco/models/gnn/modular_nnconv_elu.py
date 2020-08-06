@@ -7,6 +7,43 @@ from torch_scatter import scatter_mean, scatter_std
 from torch_geometric.nn import MetaLayer, NNConv
 from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
 
+
+class Identity(nn.Module):
+    
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+class ResBlock1D(nn.Module):
+
+    def __init__(self, num_input, num_output):
+        super(ResBlock1D, self).__init__()
+        if num_input != num_output:
+            self.identity = nn.Linear(num_input, num_output)
+        else:
+            self.identity = Identity()
+        self.bn1 = nn.BatchNorm1d(num_input)
+        self.act1 = nn.ELU()
+        self.linear1 = nn.Linear(num_input, num_output)
+        self.bn2 = nn.BatchNorm1d(num_output)
+        self.act2 = nn.ELU()
+        self.linear2 = nn.Linear(num_output, num_output)
+    
+    def forward(self, x):
+        res = self.identity(x)
+        out = self.bn1(x)
+        out = self.act1(out)
+        out = self.linear1(out)
+        out = self.bn2(out)
+        out = self.act2(out)
+        out = self.linear2(out)
+        out += res
+        return out
+
+
 class NNConvModel(nn.Module):
     '''
     NNConv GNN Module for extracting node/edge/global features
@@ -22,6 +59,7 @@ class NNConvModel(nn.Module):
         self.global_output  = self.model_config.get('global_output_feats', 32)
         self.aggr           = self.model_config.get('aggr', 'add')
         self.leakiness      = self.model_config.get('leakiness', 0.1)
+        self.reps           = self.model_config.get('reps', 2)
 
         self.edge_mlps = torch.nn.ModuleList()
         self.nnConvs = torch.nn.ModuleList()
@@ -38,19 +76,13 @@ class NNConvModel(nn.Module):
         edge_input  = self.edge_input
         edge_output = self.edge_output
         for i in range(self.num_mp):
-            self.edge_mlps.append(
-                Seq(
-                    BatchNorm1d(edge_input),
-                    Lin(edge_input, node_input),
-                    ELU(),
-                    BatchNorm1d(node_input),
-                    Lin(node_input, node_input),
-                    ELU(),
-                    BatchNorm1d(node_input),
-                    Lin(node_input, node_input*node_output)
-                )
-            )
-            self.bn_node.append(BatchNorm(node_input))
+            edge_mlp = []
+            edge_mlp.append(ResBlock1D(edge_input, node_input))
+            edge_mlp.append(ResBlock1D(node_input, node_input * node_output))
+            edge_mlp = nn.Sequential(*edge_mlp)
+            self.edge_mlps.append(edge_mlp)
+            # print(i, edge_mlp)
+            # self.bn_node.append(BatchNorm(node_input))
             self.nnConvs.append(
                 NNConv(node_input, node_output, self.edge_mlps[i], aggr=self.aggr))
             # self.bn_node.append(BatchNorm(node_output))
@@ -77,10 +109,10 @@ class NNConvModel(nn.Module):
         e = edge_features.view(-1, self.edge_input)
 
         for i in range(self.num_mp):
-            x = self.bn_node[i](x)
+            # x = self.bn_node[i](x)
             x = self.nnConvs[i](x, edge_indices, e)
             # x = self.bn_node(x)
-            x = F.elu(x)
+            # x = F.elu(x)
             # add u and batch arguments for not having error in some old version
             _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
         # print(edge_indices.shape)
@@ -135,14 +167,8 @@ class EdgeLayer(nn.Module):
         super(EdgeLayer, self).__init__()
         # TODO: Construct Edge MLP
         self.edge_mlp = nn.Sequential(
-            BatchNorm1d(2 * node_in + edge_in),
-            nn.Linear(2 * node_in + edge_in, edge_out),
-            nn.ELU(),
-            BatchNorm1d(edge_out),
-            nn.Linear(edge_out, edge_out),
-            nn.ELU(),
-            BatchNorm1d(edge_out),
-            nn.Linear(edge_out, edge_out)
+            ResBlock1D(2 * node_in + edge_in, edge_out),
+            ResBlock1D(edge_out, edge_out)
         )
 
     def forward(self, src, dest, edge_attr, u=None, batch=None):
