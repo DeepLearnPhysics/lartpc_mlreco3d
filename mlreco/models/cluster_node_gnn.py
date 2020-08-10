@@ -384,6 +384,9 @@ class NodeTypeLoss(torch.nn.Module):
 
                 # Compute accuracy of assignment (fraction of correctly assigned nodes)
                 total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
+                # print(torch.argmax(node_pred, dim=1))
+                # print("node_assn = ", node_assn)
+                print(torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float() / len(clusts))
 
                 # Increment the number of events
                 n_clusts += len(clusts)
@@ -514,7 +517,7 @@ class NodeKinematicsLoss(torch.nn.Module):
             return {
                 'accuracy': 0.,
                 'loss': torch.tensor(0., requires_grad=True, device=types[0].device),
-                'type_loss': 0., 
+                'type_loss': 0.,
                 'p_loss': 0.,
                 'n_clusts': n_clusts
             }
@@ -522,7 +525,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         return {
             'accuracy': total_acc/n_clusts,
             'loss': total_loss/n_clusts,
-            'type_loss': type_loss / n_clusts, 
+            'type_loss': type_loss / n_clusts,
             'p_loss': p_loss / n_clusts,
             'n_clusts': n_clusts
         }

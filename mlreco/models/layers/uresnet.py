@@ -170,7 +170,7 @@ class UResNetEncoder(NetworkBase):
         super(UResNetEncoder, self).__init__(cfg, name='network_base')
         self.model_config = cfg[name]
         # print(name)
-        # print(self.model_config)
+        print(self.model_config)
         # print('\n')
         # UResNet Configurations
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
