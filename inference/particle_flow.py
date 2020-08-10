@@ -45,7 +45,7 @@ def main_loop(cfg, model_path='', **kwargs):
         m.eval()
     Trainer._net.eval()
 
-    output = pd.DataFrame(columns=['logit_0', 'logit_1', 'logit_2', 'logit_3', 
+    output = pd.DataFrame(columns=['logit_0', 'logit_1', 'logit_2', 'logit_3',
         'logit_4', 'prediction', 'truth', 'index', 'edge_acc'])
     counts = 0
     with torch.no_grad():
@@ -70,10 +70,11 @@ def main_loop(cfg, model_path='', **kwargs):
                 data_batch = clust_label[batches == i]
                 cl = clusts[i]
                 pred = np.argmax(node_pred[i], axis=1).astype(int)
-                pdgs = get_cluster_label_np(data_batch, cl, column=7).astype(int)
+                pdgs = get_cluster_label_np(data_batch, cl, column=-1).astype(int)
+                # print("pdgs = ", pdgs)
                 indices = np.empty(pdgs.shape[0]).astype(int)
                 indices.fill(data_blob['index'][i])
-
+                # print(indices)
                 group_ids = get_cluster_label_np(data_batch, cl, column=6).astype(int)
                 subgraph = graph_batch[:, :2]
                 edge_index_batch = edge_index[i]
@@ -89,10 +90,15 @@ def main_loop(cfg, model_path='', **kwargs):
 
                 probs = softmax(node_pred[i], axis=1)
 
-                df = pd.DataFrame(np.concatenate([probs, pred.reshape(-1, 1), 
-                    pdgs.reshape(-1, 1), indices.reshape(-1, 1), 
+                # print(pred)
+                # print(pdgs)
+                node_acc = sum(pred == pdgs) / float(len(pred))
+                print(node_acc)
+
+                df = pd.DataFrame(np.concatenate([probs, pred.reshape(-1, 1),
+                    pdgs.reshape(-1, 1), indices.reshape(-1, 1),
                     edge_acc.reshape(-1, 1)], axis=1), columns=[
-                        'logit_0', 'logit_1', 'logit_2', 'logit_3', 
+                        'logit_0', 'logit_1', 'logit_2', 'logit_3',
                         'logit_4', 'prediction', 'truth', 'index', 'edge_acc'])
 
                 output = output.append(df)

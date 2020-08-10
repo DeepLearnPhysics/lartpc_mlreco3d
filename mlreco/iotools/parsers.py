@@ -22,6 +22,7 @@ def parse_particle_singlep_pdg(data):
     pdgs = []
     pdg = -1
     for p in parts.as_vector():
+        # print(p.track_id())
         if not p.track_id() == 1: continue
         if int(p.pdg_code()) in TYPE_LABELS.keys():
             pdg = TYPE_LABELS[int(p.pdg_code())]
