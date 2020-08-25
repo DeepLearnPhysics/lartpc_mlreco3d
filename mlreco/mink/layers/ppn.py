@@ -537,3 +537,189 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         pprint(output_dict)
 
         return output_dict
+
+
+class PPN2Loss(torch.nn.modules.loss._Loss):
+    
+    def __init__(self, cfg, reduction='sum'):
+        super(PPN2Loss, self).__init__(reduction=reduction)
+        pprint(cfg)
+        self.loss_config = cfg['ppn']
+        self._dimension = self.loss_config.get('data_dim', 3)
+        self._num_strides = self.loss_config.get('num_strides', 5)
+        self._num_classes = self.loss_config.get('num_classes', 5)
+        self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
+
+        self.half_stride = int((self._num_strides-1)/2.0)
+        self.half_stride2 = int(self._num_strides/2.0)
+        self._downsample_ghost = self.loss_config.get('downsample_ghost', False)
+        self._weight_ppn1 = self.loss_config.get('weight_ppn1', 1.0)
+        self._weight_ppn2 = self.loss_config.get('weight_ppn2', 1.0)
+        self._true_distance_ppn1 = self.loss_config.get('true_distance_ppn1', 1.0)
+        self._true_distance_ppn2 = self.loss_config.get('true_distance_ppn2', 1.0)
+        self._true_distance_ppn3 = self.loss_config.get('true_distance_ppn3', 5.0)
+        self._score_threshold = self.loss_config.get('score_threshold', 0.5)
+        self._random_sample_negatives = self.loss_config.get(
+            'random_sample_negatives', False)
+        self._near_sampling = self.loss_config.get('near_sampling', False)
+        self._sampling_factor = self.loss_config.get('sampling_factor', 20)
+
+        self._spatial_size = self.loss_config.get('spatial_size', 512)
+
+        self.bceloss = nn.functional.binary_cross_entropy_with_logits
+        self.cross_entropy = nn.CrossEntropyLoss(reduction='mean')
+
+
+    def distances(self, v1, v2):
+        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
+
+
+    def forward(self, result, segment_label, particle_label):
+        '''
+        Forward function for PPNLoss
+
+        INPUTS:
+            - result: dict output of PPN
+            - segment_label: list of semantic label tensors
+            - particle_label: list of PPN point label tensors.
+        '''
+        assert len(result['points']) == len(particle_label)
+        assert len(result['points']) == len(segment_label)
+
+        device = segment_label[0].device
+        # print(particle_label)
+        batch_ids = [d[:, 0] for d in segment_label]
+        total_loss = 0.
+        total_acc = 0.
+        ppn_count = 0.
+        total_distance, total_class = 0., 0.
+        total_loss_ppn1, total_loss_ppn2 = 0., 0.
+        total_acc_ppn1, total_acc_ppn2 = 0., 0.
+        total_fraction_positives_ppn1, total_fraction_negatives_ppn1 = 0., 0.
+        total_fraction_positives_ppn2, total_fraction_negatives_ppn2 = 0., 0.
+        total_acc_type, total_loss_type = 0., 0.
+        num_labels = 0.
+        num_discarded_labels_ppn1, num_discarded_labels_ppn2 = 0., 0.
+        total_num_positives_ppn1, total_num_positives_ppn2 = 0., 0.
+        data_dim = self._dimension
+
+        output_dict = defaultdict(list)
+
+        for i in range(len(segment_label)):
+            particles_event = particle_label[i]
+            for b in batch_ids[i].unique():
+                batch_index = batch_ids[i] == b
+                event_data = segment_label[i][batch_index][:, 1:data_dim+1]
+                ppn1_batch_index = result['ppn1'][i][:, 0] == b.float()
+                ppn2_batch_index = result['ppn2'][i][:, 0] == b.float()
+                ppn1_batch = result['ppn1'][i][ppn1_batch_index][:, :4]
+                ppn2_batch = result['ppn2'][i][ppn2_batch_index][:, :4]
+
+                points_batch_index = result['points'][i][:, 0] == b
+                event_pixel_pred = result['points'][i][points_batch_index][:, 4:4+data_dim]
+                event_scores = result['points'][i][points_batch_index][:, 4+data_dim:(4+data_dim+1)]
+                event_types = result['points'][i][points_batch_index][:, (4+data_dim+1):]
+                ppn1_scores = result['ppn1'][i][ppn1_batch_index][:, 4:]
+                ppn2_scores = result['ppn2'][i][ppn2_batch_index][:, 4:]
+
+                event_label = particles_event[particles_event[:, 0] == b][:, 1:4]
+                if event_label.shape[0] < 1:
+                    continue
+                output_dict['num_labels'].append(event_label.shape[0])
+                event_types_label = particles_event[particles_event[:, 0] == b][:, -2]
+                ppn_loss = 0
+
+                d = self.distances(event_label, event_pixel_pred)
+                d_true = self.distances(event_label, event_data)
+                positives = (d < self._true_distance_ppn3).any(dim=0) 
+                num_positives = positives.long().sum()
+                num_negatives = positives.nelement() - num_positives
+                w = num_positives.float() / (num_positives + num_negatives).float()
+                weight_ppn3 = torch.zeros(positives.shape[0]).to(device)
+                weight_ppn3[positives] = 1 - w
+                weight_ppn3[~positives] = w
+
+                # PPN1 Segmentation 
+                distances_ppn1 = self.distances(event_label, ppn1_batch[:, 1:])
+                positives_ppn1 = (distances_ppn1 < self._true_distance_ppn3 \
+                    * 2**self.ppn1_stride).any(dim=0)
+
+                num_positives_ppn1 = positives_ppn1.long().sum()
+                num_negatives_ppn1 = positives_ppn1.nelement() - num_positives_ppn1
+                w1 = num_positives_ppn1.float() / \
+                    (num_positives_ppn1 + num_negatives_ppn1).float()
+                weight_ppn1 = torch.zeros(positives_ppn1.shape[0]).to(device)
+                weight_ppn1[~positives_ppn1] = w1
+                weight_ppn1[positives_ppn1] = 1 - w1
+
+                pred_ppn1 = ppn1_scores.squeeze() > 0
+                if pred_ppn1.nelement() > 0:
+                    acc_ppn1 = (pred_ppn1 == positives_ppn1).sum().item() / \
+                        float(pred_ppn1.nelement())
+                    ppn1_loss = self.bceloss(ppn1_scores.squeeze(1), 
+                        positives_ppn1.float(), 
+                        weight=weight_ppn1, reduction='mean')
+                    ppn_loss += self._weight_ppn1 * ppn1_loss
+                    output_dict['loss_ppn1'].append(float(ppn1_loss))
+                    output_dict['acc_ppn1'].append(float(acc_ppn1))
+                    output_dict['num_positives_ppn1'].append(int(num_positives_ppn1))
+
+                # PPN2 Segmentation 
+                distances_ppn2 = self.distances(event_label, ppn2_batch[:, 1:])
+                positives_ppn2 = (distances_ppn2 < self._true_distance_ppn3 \
+                    * 2**self.ppn2_stride).any(dim=0)
+
+                num_positives_ppn2 = positives_ppn2.long().sum()
+                num_negatives_ppn2 = positives_ppn2.nelement() - num_positives_ppn2
+                w2 = num_positives_ppn2.float() / (num_positives_ppn2 + num_negatives_ppn2).float()
+                weight_ppn2 = torch.zeros(positives_ppn2.shape[0]).to(device)
+                weight_ppn2[~positives_ppn2] = w2
+                weight_ppn2[positives_ppn2] = 1 - w2
+                
+                pred_ppn2 = ppn2_scores.squeeze() > 0
+
+                if pred_ppn2.nelement() > 0:
+                    acc_ppn2 = (pred_ppn2 == positives_ppn2).sum().item() / \
+                        float(pred_ppn2.nelement())
+                    ppn2_loss = self.bceloss(ppn2_scores.squeeze(1), 
+                        positives_ppn2.float(), 
+                        weight=weight_ppn2, reduction='mean')
+                    ppn_loss += self._weight_ppn2 * ppn2_loss
+                    output_dict['loss_ppn2'].append(float(ppn2_loss))
+                    output_dict['acc_ppn2'].append(float(acc_ppn2))
+                    output_dict['num_positives_ppn2'].append(int(num_positives_ppn2))
+
+                # PPN3 (Final) Segmentation
+                pred_ppn3 = event_scores.squeeze() > 0
+
+                if pred_ppn3.nelement() > 0 and positives.shape[0] > 0:
+                    acc_ppn3 = (pred_ppn3 == positives).sum().item() / \
+                        float(pred_ppn3.nelement())
+                    ppn3_loss = self.bceloss(event_scores.squeeze(1), 
+                        positives.float(), weight=weight_ppn3)
+                    ppn_loss += ppn3_loss
+                    output_dict['loss_class'].append(float(ppn3_loss))
+                    output_dict['ppn_acc'].append(float(acc_ppn3))
+
+                    types_indices = torch.argmin(d, dim=0)
+                    event_semantic_label = event_types_label[types_indices]
+                    loss_seg = self.cross_entropy(event_types, event_semantic_label.long())
+                    pred_seg = torch.argmax(event_types, dim=1)
+                    acc_seg = float((pred_seg.long() == event_semantic_label.long()).sum()) \
+                        / float(pred_seg.shape[0])
+                    output_dict['loss_type'].append(loss_seg)
+                    output_dict['acc_ppn_type'].append(float(acc_seg))
+
+                ppn_count += 1
+                output_dict['ppn_loss'].append(ppn_loss)
+        
+        for key, val in output_dict.items():
+            if len(val) > 0:
+                output_dict[key] = sum(val) / len(val)
+            else:
+                output_dict[key] = 0
+        pprint(output_dict)
+
+        return output_dict
