@@ -121,6 +121,25 @@ def get_momenta_label(data, clusts, column=8):
     return labels.to(dtype=torch.float32)
 
 
+def get_momenta_label_np(data, clusts, column=8):
+    """
+    Function that returns the momentum unit vector of each cluster.
+
+    Args:
+        data (np.ndarray)    : (N,12) [x, y, z, batchid, value, id, groupid, px, py, pz, p, pdg]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of cluster IDs
+    """
+    labels = []
+    for c in clusts:
+        v = data[c,:]
+        # print(v[:, columns].mean(dim=0))
+        labels.append(v[:, column].mean(axis=0))
+    labels = np.vstack(labels)
+    return labels
+
+
 def get_cluster_voxels(data, clust):
     """
     Function that returns the voxel coordinates associated

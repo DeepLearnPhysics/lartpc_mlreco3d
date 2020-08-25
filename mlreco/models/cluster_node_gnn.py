@@ -10,21 +10,44 @@ from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_clust
 from mlreco.utils.gnn.network import loop_graph, complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
 
+class LogRMSE(torch.nn.modules.loss._Loss):
 
-def log_rmse(inputs, targets, reduction='sum', eps=1e-7):
-    x = torch.log(inputs + eps)
-    y = torch.log(targets + eps)
-    print(x, y)
-    out = torch.nn.functional.mseloss(x, y, reduction='none')
-    out = torch.sqrt(out + eps)
-    print(out)
-    if reduction == 'mean':
-        out = out.mean()
-    elif reduction == 'sum':
-        out = out.sum()
-    else:
-        pass
-    return out
+    def __init__(self, reduction='none', eps=1e-7):
+        super(LogRMSE, self).__init__()
+        self.reduction = reduction
+        self.mseloss = torch.nn.MSELoss(reduction='none')
+        self.eps = eps
+
+    def forward(self, inputs, targets):
+        x = torch.log(inputs + self.eps)
+        y = torch.log(targets + self.eps)
+        out = self.mseloss(x, y)
+        out = torch.sqrt(out + self.eps)
+        if self.reduction == 'mean':
+            return out.mean()
+        elif self.reduction == 'sum':
+            return out.sum()
+        else:
+            return out
+
+
+class BerHuLoss(torch.nn.modules.loss._Loss):
+
+    def __init__(self, reduction='none'):
+        super(BerHuLoss, self).__init__()
+        self.reduction == reduction
+    
+    def forward(self, inputs, targets):
+        norm = torch.abs(inputs - targets)
+        c = norm.max() * 0.20
+        out = torch.where(norm <= c, norm, (norm**2 + c**2) / (2.0 * c))
+        if self.reduction == 'sum':
+            return out.sum()
+        elif self.reduction == 'mean':
+            return out.mean()
+        else:
+            return out
+
 
 class ClustNodeGNN(torch.nn.Module):
     """
@@ -438,7 +461,11 @@ class NodeKinematicsLoss(torch.nn.Module):
         elif self.reg_loss == 'l1':
             self.reg_lossfn = torch.nn.L1Loss(reduction=self.reduction)
         elif self.reg_loss == 'log_rmse':
-            self.reg_loss = log_rmse
+            self.reg_lossfn = LogRMSE(reduction=self.reduction)
+        elif self.reg_loss == 'huber':
+            self.reg_lossfn = torch.nn.SmoothL1Loss(reduction=self.reduction)
+        elif self.reg_loss == 'berhu':
+            self.reg_lossfn = BerHuLoss(reduction=self.reduction)
         else:
             raise Exception('Loss not recognized: ' + self.reg_loss)
 
@@ -488,10 +515,6 @@ class NodeKinematicsLoss(torch.nn.Module):
                 clust_ids = get_cluster_label(labels, clusts)
                 pdgs = get_cluster_label(labels, clusts, column=7)
                 momenta = get_momenta_label(labels, clusts, column=8)
-
-                print("pdgs = ", pdgs)
-                print("momenta pred = ", node_pred_p)
-                print("momenta = ", momenta.view(-1, 1))
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
                 node_assn_type = torch.tensor(pdgs, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
