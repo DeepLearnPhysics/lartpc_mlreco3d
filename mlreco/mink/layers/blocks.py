@@ -575,7 +575,7 @@ class MBResConv(ME.MinkowskiNetwork):
 
 class SEBlock(ME.MinkowskiNetwork):
     '''
-    Squeeze and Excitation Residual Blocks
+    Squeeze and Excitation Blocks
     '''
     def __init__(self, channels, ratio=8, dimension=3):
         super(SEBlock, self).__init__(dimension)
@@ -601,7 +601,7 @@ class SEBlock(ME.MinkowskiNetwork):
 
 class SEResNetBlock(ME.MinkowskiNetwork):
     '''
-    ResNet Block with Leaky ReLU nonlinearities.
+    Squeeze and Excitation ResNet Block with Leaky ReLU nonlinearities.
     '''
     expansion = 1
 
