@@ -118,7 +118,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
     """
     def __init__(self,model_config):
         super(ClustMixNodeEncoder3, self).__init__()
-        # print(model_config)
+        print("ClustMixNodeEncoder3 = ", model_config)
         self.normalize = model_config.get('normalize', True)
         # require sub-config key
         if 'geo_encoder' not in model_config:
@@ -149,6 +149,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
+        print(out.shape)
         return out
 
 
@@ -184,4 +185,5 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
+        print(out.shape)
         return out
