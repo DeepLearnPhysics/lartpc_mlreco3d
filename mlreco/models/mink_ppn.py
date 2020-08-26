@@ -6,23 +6,16 @@ import time
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.mink.chain.full_chain import FullChainCNN1
-from mlreco.mink.layers.ppn import PPNLoss
+from mlreco.mink.layers.ppnplus import PPNTest
 from mlreco.mink.chain.factories import *
 from collections import defaultdict
 
 
-class FullChain(nn.Module):
+class PPNLonely(nn.Module):
 
     def __init__(self, cfg, name='full_chain'):
-        super(FullChain, self).__init__()
-        self.model_cfg = cfg[name]
-        # print('-------------Full Chain Model Config----------------')
-        # pprint(self.model_cfg)
-        self.net = chain_construct(self.model_cfg['name'], self.model_cfg)
-
-        self.seg_F = self.model_cfg.get('seg_features', 16)
-        self.num_classes = self.model_cfg.get('num_classes', 5)
+        super(PPNLonely, self).__init__()
+        self.net = PPNTest(cfg, name='ppn')
 
 
     def forward(self, input):
@@ -31,36 +24,39 @@ class FullChain(nn.Module):
 
         for igpu, x in enumerate(input):
             input_data = x[:, :5]
-
-            # CNN Phase
             res = self.net(input_data)
-            for key, val in res.items():
-                out[key].append(val[igpu])
-            # print([k for k in ppn_output.keys()])
-            # print([k for k in res.keys()])
-            segmentation = res['segmentation'][igpu]
-            embeddings = res['embeddings'][igpu]
-            margins = res['margins'][igpu]
-
-            out['segmentation']
-
+            out['ppn_scores'] += res['ppn_scores']
+            out['ppn_logits'] += res['ppn_logits']
+            out['points'] += res['points']
             
         return out
 
 
-class ChainLoss(nn.Module):
+class PPNLonelyLoss(nn.Module):
 
-    def __init__(self, cfg, name='segmentation_loss'):
-        super(ChainLoss, self).__init__()
-        self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
-        self.loss_config = cfg['full_chain']
-        self.ppn_type_weight = self.loss_config['ppn'].get('ppn_type_weight', 1.0)
-        self.ppn_loss_weight = self.loss_config['ppn'].get('ppn_loss_weight', 1.0)
-        # PPN Loss
-        self.ppn_loss = PPNLoss(self.loss_config)
+    def __init__(self, cfg, name='ppn_loss'):
+        super(PPNLonelyLoss, self).__init__()
+        self.loss_config = cfg[name]
+        self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
+        self.resolution = self.loss_config.get('ppn_resolution', 5.0)
 
 
-    def forward(self, outputs, segment_label, particles_label, graph, weight=None):
+    def pairwise_distances(self, x, y, eps=1e-8):
+        '''
+        Input: x is a Nxd matrix
+            y is an optional Mxd matirx
+        Output: dist is a NxM matrix where dist[i,j] is the square norm between x[i,:] and y[j,:]
+                if y is not given then use 'y=x'.
+        i.e. dist[i,j] = ||x[i,:]-y[j,:]||^2
+        '''
+        x_norm = (x**2).sum(1).view(-1, 1)
+        y_norm = (y**2).sum(1).view(1, -1)
+
+        dist = x_norm + y_norm - 2.0 * torch.mm(x, torch.transpose(y, 0, 1))
+        return torch.sqrt(dist + eps)
+
+
+    def forward(self, outputs, segment_label, particles_label):
         '''
         segmentation[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -68,53 +64,52 @@ class ChainLoss(nn.Module):
         where N is #pts across minibatch_size events.
         '''
         # TODO Add weighting
-        segmentation = outputs['segmentation']
-        assert len(segmentation) == len(segment_label)
+        ppn_scores = outputs['ppn_scores']
+        assert len(ppn_scores) == len(segment_label)
         batch_ids = [d[:, 0] for d in segment_label]
+        num_batches = len(batch_ids[0].unique())
         highE = [t[t[:, -1].long() != 4] for t in segment_label]
         total_loss = 0
         total_acc = 0
         count = 0
+        device = segment_label[0].device
 
         loss, accuracy = 0, []
         res = {}
         # Semantic Segmentation Loss
-        for i in range(len(segmentation)):
-            for b in batch_ids[i].unique():
-                batch_index = batch_ids[i] == b
-                event_segmentation = segmentation[i][batch_index]
-                event_label = segment_label[i][:, -1][batch_index]
-                event_label = torch.squeeze(event_label, dim=-1).long()
-                loss_seg = self.cross_entropy(event_segmentation, event_label)
-                if weight is not None:
-                    event_weight = weight[i][batch_index]
-                    event_weight = torch.squeeze(event_weight, dim=-1).float()
-                    total_loss += torch.mean(loss_seg * event_weight)
-                else:
-                    total_loss += torch.mean(loss_seg)
-                # Accuracy
-                predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                acc = (predicted_labels == event_label).sum().item() / \
-                    float(predicted_labels.nelement())
-                total_acc += acc
-                count += 1
+        for igpu in range(len(segment_label)):
+            particles = particles_label[igpu]
+            ppn_logits = outputs['ppn_logits'][igpu]
+            points = outputs['points'][igpu]
+            loss_gpu, acc_gpu = 0.0, 0.0
+            for layer in range(len(ppn_logits)):
+                ppn_score_layer = ppn_logits[layer]
+                points_layer = points[layer]
+                loss_layer = 0.0
+                for b in batch_ids[igpu].unique():
+                    batch_index = batch_ids[igpu] == b
+                    points_label = particles[particles[:, 0] == b][:, 1:4]
+                    scores_event = ppn_score_layer[points_layer[:, 0] == b].squeeze()
+                    points_event = points_layer[points_layer[:, 0] == b]
+                    d = self.pairwise_distances(points_label, points_event[:, 1:4])
+                    d_positives = (d < self.resolution * 2**(len(ppn_logits) - layer)).any(dim=0)
+                    num_positives = d_positives.sum()
+                    num_negatives = d_positives.nelement() - num_positives
+                    w = num_positives.float() / (num_positives + num_negatives).float()
+                    weight_ppn = torch.zeros(d_positives.shape[0]).to(device)
+                    weight_ppn[d_positives] = 1 - w
+                    weight_ppn[~d_positives] = w
+                    loss_batch = self.lossfn(scores_event, d_positives.float(), weight=weight_ppn, reduction='mean')
+                    loss_layer += loss_batch
+                    if layer == len(ppn_logits)-1:
+                        acc = (d_positives == (scores_event > 0)).sum().float() / float(scores_event.shape[0])
+                        total_acc += acc
+                loss_layer /= num_batches
+                total_loss += loss_layer
 
-        loss_seg = total_loss / count
-        acc_seg = total_acc / count
-        res['loss_seg'] = float(loss_seg)
-        res['acc_seg'] = float(acc_seg)
-        loss += loss_seg
-        accuracy.append(acc_seg)
+        total_acc /= num_batches
+        res['loss'] = total_loss
+        res['accuracy'] = total_acc
 
-        # PPN Loss
-        # ppn_results = self.ppn_loss(outputs, segment_label, particles_label)
-        # loss += ppn_results['ppn_loss'] * self.ppn_loss_weight
-        # loss += ppn_results['loss_type'] * self.ppn_type_weight
-        # accuracy.append(float(ppn_results['ppn_acc']))
-        # accuracy.append(float(ppn_results['acc_ppn_type']))
-        # res['ppn_loss'] = float(ppn_results['ppn_loss'] * self.ppn_loss_weight)
-        # res['ppn_type_loss'] = float(ppn_results['loss_type'] * self.ppn_type_weight)
-        # res['ppn_acc'] = ppn_results['ppn_acc']
-        # res['ppn_type_acc'] = ppn_results['acc_ppn_type']
 
         return res

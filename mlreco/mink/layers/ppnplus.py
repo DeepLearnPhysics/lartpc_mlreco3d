@@ -9,7 +9,34 @@ from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, AS
 from mlreco.mink.layers.factories import activations_dict, activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 
-class UResNet(MENetworkBase):
+
+class Attention(nn.Module):
+    def __init__(self):
+        super(Attention, self).__init__()
+
+    def forward(self, x, scores):
+        features = x.F
+        features = features * scores
+        coords = x.C
+        output = ME.SparseTensor(
+            coords=coords, feats=features)
+        return output
+
+
+class ExpandAs(nn.Module):
+    def __init__(self):
+        super(ExpandAs, self).__init__()
+
+    def forward(self, x, shape):
+        device = x.F.device
+        features = x.F.expand(*shape)
+        output = ME.SparseTensor(
+            feats=features,
+            coords_key=x.coords_key,
+            coords_manager=x.coords_man)
+        return output
+
+class PPNTest(MENetworkBase):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -27,14 +54,15 @@ class UResNet(MENetworkBase):
     input_kernel : int, optional
         Receptive field size for very first convolution after input layer.
     '''
-    def __init__(self, cfg, name='uresnet'):
-        super(UResNet, self).__init__(cfg)
+    def __init__(self, cfg, name='ppn'):
+        super(PPNTest, self).__init__(cfg)
         model_cfg = cfg[name]
         # UResNet Configurations
         self.reps = model_cfg.get('reps', 2)
         self.depth = model_cfg.get('depth', 5)
         self.num_filters = model_cfg.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
+        self.ppn_score_threshold = model_cfg.get('ppn_score_threshold', 0.5)
         # self.kernel_size = cfg.get('kernel_size', 3)
         # self.downsample = cfg.get(downsample, 2)
         self.input_kernel = model_cfg.get('input_kernel', 3)
@@ -100,7 +128,11 @@ class UResNet(MENetworkBase):
             self.ppn_pred.append(ME.MinkowskiLinear(self.nPlanes[i], 1))
         self.decoding_block = nn.Sequential(*self.decoding_block)
         self.decoding_conv = nn.Sequential(*self.decoding_conv)
-        self.sigmoid = nn.Sigmoid()
+
+        self.sigmoid = ME.MinkowskiSigmoid()
+        self.bcst = ME.MinkowskiBroadcastMultiplication()
+        self.pool = ME.MinkowskiGlobalPooling()
+        self.expand_as = ExpandAs()
 
 
     def encoder(self, x):
@@ -141,7 +173,8 @@ class UResNet(MENetworkBase):
             list of feature tensors in decoding path at each spatial resolution.
         '''
         decoderTensors = []
-        ppn_scores = []
+        ppn_scores, ppn_logits = [], []
+        tmp = []
         x = final
         for i, layer in enumerate(self.decoding_conv):
             eTensor = encoderTensors[-i-2]
@@ -150,9 +183,20 @@ class UResNet(MENetworkBase):
             x = self.decoding_block[i](x)
             decoderTensors.append(x)
             scores = self.ppn_pred[i](x)
-            ppn_scores.append(scores)
-            x = x * scores
-        return decoderTensors, ppn_scores
+            ppn_logits.append(scores.F)
+            scores = self.sigmoid(scores)
+            tmp.append(x.C)
+            ppn_scores.append(scores.F)
+            with torch.no_grad():
+                s_expanded = self.expand_as(scores, x.F.shape)
+            x = x * s_expanded
+        device = x.F.device
+        points = []
+        for p in tmp:
+            a = p.to(dtype=torch.float32, device=device)
+            points.append(a)
+        return decoderTensors, ppn_scores, ppn_logits, points
+
 
     def forward(self, input):
         coords = input[:, 0:self.D+1].cpu().int()
@@ -162,12 +206,14 @@ class UResNet(MENetworkBase):
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
-        decoderTensors, ppn_scores = self.decoder(finalTensor, encoderTensors)
+        decoderTensors, ppn_scores, ppn_logits, points = self.decoder(finalTensor, encoderTensors)
 
         res = {
-            'encoderTensors': encoderTensors,
-            'decoderTensors': decoderTensors,
-            'ppn_scores': ppn_scores,
-            'finalTensor': finalTensor
+            'encoderTensors': [encoderTensors],
+            'decoderTensors': [decoderTensors],
+            'ppn_scores': [ppn_scores],
+            'ppn_logits': [ppn_logits],
+            'points': [points], 
+            'finalTensor': [finalTensor]
         }
         return res
