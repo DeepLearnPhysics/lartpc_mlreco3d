@@ -64,6 +64,12 @@ class GhostChain(torch.nn.Module):
         self.min_frag_size = cfg['particle_gnn'].get('node_min_size', -1)
         self._use_ppn_shower = cfg['particle_gnn'].get('use_ppn_shower', False)
 
+        self.input_features = cfg['uresnet_lonely'].get('features', 1)
+
+        # self.loss_cfg = cfg['full_chain_loss']
+        # self.ppn_active = self.loss_cfg.get('ppn_weight', 0.0) > 0.
+        #
+
     def extract_fragment(self, input, result):
         batch_labels = input[0][:,3]
         fragments = []
@@ -260,7 +266,7 @@ class GhostChain(torch.nn.Module):
         Assumes single GPU/CPU.
         """
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
-        result = self.uresnet_lonely([input[0][:,:5]])
+        result = self.uresnet_lonely([input[0][:,:4+self.input_features]])
         ppn_input = {}
         ppn_input.update(result)
         ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
@@ -272,6 +278,7 @@ class GhostChain(torch.nn.Module):
 
         # Update input based on deghosting results
         deghost = result['ghost'][0].argmax(dim=1) == 0
+        # Also remove any extra features
         new_input = [input[0][deghost]]
 
         segmentation, points = result['segmentation'][0].clone(), result['points'][0].clone()

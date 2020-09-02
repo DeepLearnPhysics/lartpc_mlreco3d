@@ -36,6 +36,7 @@ def model_dict():
     from . import full_cnn
     from . import hierarchy
     from . import ghost_chain
+    from . import ghost_chain_2
     from . import ghost_cluster_full_gnn
     from . import ghost_spatial_embeddings
     from . import ghost_cluster_chain_gnn
@@ -115,7 +116,8 @@ def model_dict():
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
         "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         # Deghosting models
-        "ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
+        #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
+        "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
         "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
         "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
         "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),

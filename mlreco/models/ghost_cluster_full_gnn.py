@@ -33,6 +33,7 @@ class GhostClustFullGNN(torch.nn.Module):
         super(GhostClustFullGNN, self).__init__()
         self.chain = ClustFullGNN(cfg)
         self.uresnet_lonely = UResNet(cfg)
+        self.features = cfg['uresnet_lonely'].get('features', 1)
 
     def forward(self, data):
         """
@@ -54,7 +55,7 @@ class GhostClustFullGNN(torch.nn.Module):
         # + Keep only 1 data feature
         predicted_nonghost = (result1['ghost'][0].argmax(dim=1) == 0)
         new_point_cloud = point_cloud[predicted_nonghost]
-        new_point_cloud = torch.cat([new_point_cloud[:, :-1], result1['segmentation'][0][predicted_nonghost].argmax(dim=1).double().view((-1, 1))], dim=1)
+        new_point_cloud = torch.cat([new_point_cloud[:, :-self.features], result1['segmentation'][0][predicted_nonghost].argmax(dim=1).double().view((-1, 1))], dim=1)
 
         new_input = (new_point_cloud,)
         if len(data) > 1:
