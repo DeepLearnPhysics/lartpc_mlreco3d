@@ -8,11 +8,13 @@ from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 
 def cluster_gnn_metrics_ghost(cfg, data_blob, res, logdir, iteration):
     # If there is no prediction, proceed
-    if not 'edge_pred' in res: return
+    edge_pred = cfg['post_processing']['cluster_gnn_metrics_ghost'].get('edge_pred', 'edge_pred')
+    if not edge_pred in res: return
 
     # Get the post processor parameters
     column = cfg['post_processing']['cluster_gnn_metrics_ghost'].get('column', 6)
-    bipartite = cfg['model']['modules']['chain'].get('network', 'complete') == 'bipartite'
+    chain = cfg['post_processing']['cluster_gnn_metrics_ghost'].get('chain', 'chain')
+    bipartite = cfg['model']['modules'][chain].get('network', 'complete') == 'bipartite'
     store_method = cfg['post_processing']['cluster_gnn_metrics_ghost']['store_method']
     assert store_method in ['single-file', 'per-iteration', 'per-event']
     store_per_event = store_method == 'per-event'
@@ -31,7 +33,7 @@ def cluster_gnn_metrics_ghost(cfg, data_blob, res, logdir, iteration):
     seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
     #clust_data = [clust_data[i][res['segmentation'][i][(res['ghost'][i].argmax(axis=1) == 0)].argmax(axis=1) == 0] for i in range(len(clust_data))]
 
-    edge_pred = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('edge_pred', 'edge_pred')]
+    edge_pred = res[edge_pred]
     edge_index = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('edge_index', 'edge_index')]
     clusts = res[cfg['post_processing']['cluster_gnn_metrics_ghost'].get('clusts', 'clusts')]
 

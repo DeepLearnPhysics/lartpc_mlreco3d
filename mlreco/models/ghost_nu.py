@@ -31,12 +31,15 @@ class GhostNuClassification(GhostChain):
 
         #self.classifier = torch.nn.Linear(self._input_features, 2)
         self.classifier = torch.nn.Linear(m, 2)
-        self.interaction_encoder = node_encoder_construct(model_config)
+
+        #self.interaction_encoder = node_encoder_construct(model_config)
         self.interaction_cnn = scn.Sequential()\
-            .add(scn.BatchNormLeakyReLU(model_config['uresnet_lonely']['filters'], leakiness=0))\
+            .add(scn.BatchNormLeakyReLU(model_config['uresnet_lonely']['filters'], leakiness=0.1))\
             .add(scn.SubmanifoldConvolution(self._dimension, model_config['uresnet_lonely']['filters'], m, 3, False))\
-            .add(scn.BatchNormLeakyReLU(m, leakiness=0))\
-            .add(scn.SubmanifoldConvolution(self._dimension, m, m, 3, False))
+            .add(scn.BatchNormLeakyReLU(m, leakiness=0.1))\
+            .add(scn.SubmanifoldConvolution(self._dimension, m, 2*m, 3, False))\
+            .add(scn.BatchNormLeakyReLU(2*m, leakiness=0.1))\
+            .add(scn.SubmanifoldConvolution(self._dimension, 2*m, m, 3, False))
         self.multiply = Multiply()
 
     def forward(self, input):

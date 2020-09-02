@@ -359,18 +359,34 @@ class trainval(object):
                 print('Restoring weights for %s from %s...' % (module,model_path))
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f, map_location='cpu')
-                    # Edit checkpoint variable names
-                    for name in self._net.state_dict():
-                        other_name = re.sub(module + '.', model_name + '.' if len(model_name) else '', name)
-                        if module in name and other_name in checkpoint['state_dict']:
-                            checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+                    ckpt = {} # we will filter the checkpoint for weights related to current module
+                    if module == '':
+                        ckpt = checkpoint['state_dict']
+                    else:
+                        # Edit checkpoint variable names using model_name
+                        # e.g. if your module is named uresnet1 but it is uresnet2 in the weights
+                        for name in self._net.state_dict():
+                            # Replace 'uresnet1.' with 'uresnet2.'
+                            # include a dot to avoid accidentally replacing in unrelated places
+                            # eg if there is a different module called something_uresnet1_something
+                            other_name = name if len(model_name) == 0 else re.sub(module + '.', model_name + '.', name)
+                            # Additionally, only select weights related to current module
+                            if module in name and other_name in checkpoint['state_dict']:
+                                ckpt[name] = checkpoint['state_dict'][other_name]
+                                checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
 
-                    bad_keys = self._net.load_state_dict(checkpoint['state_dict'], strict=False)
+                            # other_name = re.sub('module.', 'module.' + model_name + '.' if len(model_name) else 'module.', name)
+                            # print(name, other_name)
+                            # if other_name in checkpoint['state_dict']:
+                            #     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+
+                    bad_keys = self._net.load_state_dict(ckpt, strict=False)
 
                     if len(bad_keys.unexpected_keys) > 0:
                         print("INCOMPATIBLE KEYS!")
                         print(bad_keys.unexpected_keys)
                         print("make sure your module is named ", module)
+                        #print(self._net.state_dict().keys())
 
                     # FIXME only restore optimizer for whole model?
                     # To restore it partially we need to implement our own

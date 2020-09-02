@@ -40,6 +40,7 @@ class GhostChainDBSCANGNN(torch.nn.Module):
         self.group_pred = chain_config.get('group_pred', 'threshold')
         self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
         self.start_dir_opt = chain_config.get('start_dir_opt', False)
+        self.input_features = model_config['uresnet_lonely'].get('features', 1)
 
         # Initialize the modules
         self.uresnet_lonely = UResNet(model_config)
@@ -156,6 +157,8 @@ class GhostChainDBSCANGNN(torch.nn.Module):
         # Update input based on deghosting results
         deghost = result['ghost'][0].argmax(dim=1) == 0
         data[0] = data[0][deghost]
+        if self.input_features > 1:
+            data[0] = data[0][:, :-self.input_features+1]
 
         segmentation, points = result['segmentation'][0].clone(), result['points'][0].clone()
 

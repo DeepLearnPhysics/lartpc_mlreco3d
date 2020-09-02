@@ -11,7 +11,7 @@ from mlreco.utils.deghosting import adapt_labels
 
 class GhostSpatialEmbeddings(torch.nn.Module):
     """
-    Run UResNet and use its encoding/decoding feature maps for PPN layers
+    Run UResNet deghosting + Spatial Embeddings (CNN clustering)
     """
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (float,), (3, 1)],
@@ -22,6 +22,7 @@ class GhostSpatialEmbeddings(torch.nn.Module):
         super(GhostSpatialEmbeddings, self).__init__()
         self.uresnet_lonely = UResNet(model_config)
         self.spatial_embeddings = ClusterCNN(model_config)
+        self.input_features = model_config['uresnet_lonely'].get('features', 1)
         # self._freeze_uresnet = model_config['uresnet_lonely'].get('freeze', False)
         #
         # if self._freeze_uresnet:
@@ -30,12 +31,15 @@ class GhostSpatialEmbeddings(torch.nn.Module):
 
     def forward(self, input):
         """
-        Assumes single GPU/CPU.
+        Input can have several features, but only the 1st one will be passed
+        to the CNN clustering step.
         """
         point_cloud = input[0]
         result1 = self.uresnet_lonely((point_cloud,))
         #print((result1['ghost'][0].argmax(dim=1) == 1).sum(), (result1['ghost'][0].argmax(dim=1) == 0).sum())
         new_point_cloud = point_cloud[result1['ghost'][0].argmax(dim=1) == 0]
+        if self.input_features > 1:
+            new_point_cloud = new_point_cloud[:, :-self.input_features+1]
         #print(new_point_cloud.size())
         result2 = self.spatial_embeddings((new_point_cloud,))
         result = {}
@@ -47,7 +51,7 @@ class GhostSpatialEmbeddings(torch.nn.Module):
 
 class GhostSpatialEmbeddingsLoss(torch.nn.modules.loss._Loss):
     """
-    Loss for UResNet + PPN chain
+    Loss for UResNet + CNN spatial embeddings chain
     """
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (int,), (3, 1)],

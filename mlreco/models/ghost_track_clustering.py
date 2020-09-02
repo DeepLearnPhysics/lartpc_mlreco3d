@@ -36,6 +36,8 @@ class GhostTrackClustering(torch.nn.Module):
         self.uresnet_lonely = UResNet(cfg)
         self.spatial_embeddings = ClusterCNN(cfg)
 
+        self.input_features = cfg['uresnet_lonely'].get('features', 1)
+        
         # Fragment formation parameters
         self.frag_cfg     = cfg['fragment_clustering']
         self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
@@ -94,6 +96,8 @@ class GhostTrackClustering(torch.nn.Module):
         #print((result1['ghost'][0].argmax(dim=1) == 1).sum(), (result1['ghost'][0].argmax(dim=1) == 0).sum())
         deghost = result1['ghost'][0].argmax(dim=1) == 0
         input[0] = input[0][deghost]
+        if self.input_features > 1:
+            input[0] = input[0][:, :-self.input_features+1]
 
         #print(new_point_cloud.size())
         result2 = self.spatial_embeddings(input)
