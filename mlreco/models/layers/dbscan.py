@@ -49,7 +49,7 @@ class DBSCANFragmenter(torch.nn.Module):
         numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
                         'points':      [output['points'][0].detach().cpu().numpy()],
                         'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
-        points =  uresnet_ppn_type_point_selector([data], numpy_output,
+        points =  uresnet_ppn_type_point_selector(data, numpy_output,
                                                   score_threshold = self.ppn_score_threshold,
                                                   type_threshold = self.ppn_type_threshold,
                                                   distance_threshold = self.ppn_distance_threshold)
