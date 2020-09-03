@@ -123,7 +123,7 @@ def model_dict():
         "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
         "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
         "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
-        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss)
+        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Cluster grouping GNN with MST
