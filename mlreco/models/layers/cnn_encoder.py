@@ -96,10 +96,22 @@ class EncoderModel(torch.nn.Module):
         return x
 
 
+class Flatten(nn.Module):
+
+    def __init__(self, start_dim=1, end_dim=-1):
+        super(Flatten, self).__init__()
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    def forward(self, input):
+        batch_size = input.shape[0]
+        return input.view(batch_size, -1)
+
+
 class ResidualEncoder(UResNetEncoder):
 
     def __init__(self, cfg, name='res_encoder'):
-        super(ResidualEncoder, self).__init__(cfg)
+        super(ResidualEncoder, self).__init__(cfg,'res_encoder')
         self.model_config = cfg[name]
         self.num_features = self.model_config.get('num_features', 32)
 
@@ -112,10 +124,14 @@ class ResidualEncoder(UResNetEncoder):
 
         self.coordConv = self.model_config.get('coordConv', True)
         self.pool_mode = self.model_config.get('pool_mode', 'max')
+        self.final_tensor_shape = self.spatial_size // (2**(self.num_strides-1))
+
         if self.pool_mode == 'max':
-            self.pool = nn.MaxPool3d(3)
+            self.pool = nn.MaxPool3d(self.final_tensor_shape)
+        elif self.pool_mode == 'flatten':
+            self.pool = Flatten()
         else:
-            self.pool = nn.AvgPool3d(3)
+            self.pool = nn.AvgPool3d(self.final_tensor_shape)
         self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
 
     def forward(self, point_cloud):
@@ -133,8 +149,7 @@ class ResidualEncoder(UResNetEncoder):
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
         batch_size = coords[:, 3].unique().shape[0]
-        # print(batch_size)
-
+        # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
                     / (float(self.spatial_size) / 2)
