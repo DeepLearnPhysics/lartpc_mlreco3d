@@ -7,27 +7,6 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
 
-def parse_particle_singlep_pdg(data):
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
-    parts = data[0]
-    pdgs = []
-    pdg = -1
-    for p in parts.as_vector():
-        if not p.track_id() == 1: continue
-        t = TYPE_LABELS.get(p.pdg_code(),-1)
-        if t >= 0: return np.asarray([t])
-        pdgs.append(p.pdg_code())
-    raise TypeError('Found primary PDGs %s do not match any predefined types %s' % (pdgs,TYPE_LABELS.keys()))
-
 def parse_sparse2d_meta(data):
     event_tensor2d = data[0]
     projection_id = 0  # default

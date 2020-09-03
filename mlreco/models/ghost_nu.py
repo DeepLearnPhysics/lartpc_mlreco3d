@@ -19,7 +19,7 @@ class GhostNuClassification(GhostChain):
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (float,), (3, 1)],
     # ]
-    # MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
+    MODULES = GhostChain.MODULES + ['spatial_embeddings', 'ghost_nu']
 
     def __init__(self, model_config):
         import sparseconvnet as scn
@@ -33,9 +33,10 @@ class GhostNuClassification(GhostChain):
         self.classifier = torch.nn.Linear(m, 2)
 
         #self.interaction_encoder = node_encoder_construct(model_config)
+        filters = model_config['uresnet_lonely'].get('filters', 64)
         self.interaction_cnn = scn.Sequential()\
-            .add(scn.BatchNormLeakyReLU(model_config['uresnet_lonely']['filters'], leakiness=0.1))\
-            .add(scn.SubmanifoldConvolution(self._dimension, model_config['uresnet_lonely']['filters'], m, 3, False))\
+            .add(scn.BatchNormLeakyReLU(filters, leakiness=0.1))\
+            .add(scn.SubmanifoldConvolution(self._dimension, filters, m, 3, False))\
             .add(scn.BatchNormLeakyReLU(m, leakiness=0.1))\
             .add(scn.SubmanifoldConvolution(self._dimension, m, 2*m, 3, False))\
             .add(scn.BatchNormLeakyReLU(2*m, leakiness=0.1))\

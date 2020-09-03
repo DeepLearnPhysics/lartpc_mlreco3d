@@ -29,7 +29,8 @@ class GhostTrackClustering(torch.nn.Module):
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (float,), (3, 1)],
     # ]
-    MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
+    MODULES = ['spatial_embeddings', 'uresnet_lonely', 'fragment_clustering',
+                'node_encoder', 'edge_encoder', 'track_edge_model', 'track_gnn', 'full_chain_loss'] + ClusterCNN.MODULES
 
     def __init__(self,cfg):
         super(GhostTrackClustering, self).__init__()
@@ -37,7 +38,7 @@ class GhostTrackClustering(torch.nn.Module):
         self.spatial_embeddings = ClusterCNN(cfg)
 
         self.input_features = cfg['uresnet_lonely'].get('features', 1)
-        
+
         # Fragment formation parameters
         self.frag_cfg     = cfg['fragment_clustering']
         self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])

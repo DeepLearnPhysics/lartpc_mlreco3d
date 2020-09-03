@@ -39,7 +39,7 @@ class GhostChain(torch.nn.Module):
     MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
             'embedding_decoder', 'particle_gnn', 'interaction_gnn', 'particle_edge_model',
             'interaction_edge_model', 'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss']
+            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss', 'chain']
 
     def __init__(self, cfg):
         super(GhostChain, self).__init__()
