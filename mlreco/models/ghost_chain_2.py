@@ -114,6 +114,7 @@ class GhostChain2(torch.nn.Module):
         if self.enable_gnn_shower:
             self.particle_gnn  = GNN(cfg['particle_edge_model'])
             self.min_frag_size = max(self.min_frag_size, cfg['particle_gnn'].get('node_min_size', -1))
+            self.start_dir_max_dist = cfg['particle_edge_model'].get('start_dir_max_dist', 5)
 
         if self.enable_gnn_tracks:
             self.track_gnn  = GNN(cfg['track_edge_model'])
@@ -254,13 +255,13 @@ class GhostChain2(torch.nn.Module):
             if self.use_ppn_in_gnn:
                 # Extract shower starts from PPN predictions (most likely prediction)
                 ppn_points = result['points'][0].detach()
-                ppn_feats = torch.empty((0,6), device=device, dtype=torch.float)
+                ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
                 for f in fragments[em_mask]:
                     scores = torch.softmax(ppn_points[f,3:5], dim=1)
                     argmax = torch.argmax(scores[:,-1])
                     start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-                    dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=5)
-                    ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir]).reshape(1,-1)), dim=0)
+                    dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
+                    ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
 
                 x = torch.cat([x, ppn_feats], dim=1)
 
@@ -576,8 +577,9 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
         if self.enable_gnn_shower:
             print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
-        if self.enable_gnn_tracks:
             print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
+        if self.enable_gnn_tracks:
+            print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
         if self.enable_gnn_int:
             print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
 
