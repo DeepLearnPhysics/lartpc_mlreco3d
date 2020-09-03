@@ -25,6 +25,7 @@ from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignmen
 from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch
 from mlreco.utils.deghosting import adapt_labels
+from mlreco.models.layers.dbscan import DBSCANFragmenter, DBScanClusts2
 
 
 def setup_chain_cfg(self, cfg):
@@ -100,6 +101,10 @@ class GhostChain2(torch.nn.Module):
             self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
             self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
+        else:
+            # Initialize the DBSCAN fragmenter
+            self.dbscan_frag = DBSCANFragmenter(cfg)
+            #self.dbscan = DBScanClusts2(cfg)
 
         if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Initialize the geometric encoders
@@ -402,10 +407,12 @@ class GhostChain2(torch.nn.Module):
 
             deghost_result = {}
             deghost_result.update(result)
+            deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             deghost_result['points'][0] = result['points'][0][deghost]
             # Run the rest of the full chain
             full_chain_result = self.full_chain((new_input, deghost_result))
+            full_chain_result['ghost'] = result['ghost']
         else:
             full_chain_result = self.full_chain((input, result))
 
@@ -561,11 +568,17 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         res['loss'] = loss
         res['accuracy'] = accuracy
 
-        print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
-        print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
-        print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
-        print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
-        print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
-        print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
+        if self.enable_uresnet:
+            print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
+        if self.enable_ppn:
+            print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
+        if self.enable_cnn_clust:
+            print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
+        if self.enable_gnn_shower:
+            print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
+        if self.enable_gnn_tracks:
+            print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
+        if self.enable_gnn_int:
+            print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
 
         return res

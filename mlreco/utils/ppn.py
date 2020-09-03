@@ -287,7 +287,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     """
     event_data = data#.cpu().detach().numpy()
     points = out['points'][entry]#.cpu().detach().numpy()
-    mask = out['mask_ppn2'][entry]#.cpu().detach().numpy()
+    mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -297,7 +297,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         points = points[mask_ghost]
-        mask = mask[mask_ghost]
+        mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         scores = scores[mask_ghost]
     pool_op = None
@@ -317,7 +317,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         final_types = []
         final_softmax = []
         batch_index = batch_ids == b
-        mask = ((~(mask[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        mask = ((~(mask_ppn[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
@@ -513,7 +513,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
 #                         all_scores.append(pool_op(final_scores[c], axis=0))
 #                         all_types.append (pool_op(final_types[c],  axis=0))
 #                         all_softmax.append(pool_op(final_softmax[c], axis=0))
-#                         all_batch.append(b)
+#                      Yes, it looks simple.    all_batch.append(b)
 #
 #     return np.column_stack((all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types))
 
