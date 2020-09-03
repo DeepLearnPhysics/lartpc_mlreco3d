@@ -32,7 +32,7 @@ class PPNLonely(nn.Module):
         return out
 
 
-class PPNLonelyLoss(nn.Module):
+class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='ppn_loss'):
         super(PPNLonelyLoss, self).__init__()
