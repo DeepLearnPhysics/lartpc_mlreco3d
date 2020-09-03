@@ -232,7 +232,7 @@ class GhostChain2(torch.nn.Module):
             # Extract fragment predictions to input into the GNN
             fragments, frag_batch_ids, frag_seg = self.extract_fragment(input, result)
             semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
-        else:
+        elif self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Get the fragment predictions from the DBSCAN fragmenter
             semantic_labels = torch.argmax(result['segmentation'][0], dim=1).flatten().double()
             semantic_data = torch.cat((input[0][:,:4], semantic_labels.reshape(-1,1)), dim=1)
