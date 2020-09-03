@@ -34,14 +34,14 @@ def setup_chain_cfg(self, cfg):
     Make sure config is logically sound with some basic checks
     """
     chain_cfg = cfg['chain']
-    self.enable_ghost      = chain_cfg.get('enable_ghost', True)
+    self.enable_ghost      = chain_cfg.get('enable_ghost', False)
 
     self.enable_uresnet    = chain_cfg.get('enable_uresnet', True)
     self.enable_ppn        = chain_cfg.get('enable_ppn', True)
-    self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', True)
-    self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', True)
-    self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', True)
-    self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', True)
+    self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
+    self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', False)
+    self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
+    self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
 
     # whether to use CNN clustering or "dumb" DBSCAN clustering
     #self.use_dbscan_clust  = chain_cfg.get('use_dbscan_clust', False)
@@ -76,7 +76,7 @@ class GhostChain2(torch.nn.Module):
     MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
             'embedding_decoder', 'particle_gnn', 'interaction_gnn', 'particle_edge_model',
             'interaction_edge_model', 'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss']
+            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss', 'chain', 'dbscan_frag']
 
     def __init__(self, cfg):
         super(GhostChain2, self).__init__()
@@ -101,7 +101,7 @@ class GhostChain2(torch.nn.Module):
             self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
             self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
-        else:
+        elif self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Initialize the DBSCAN fragmenter
             self.dbscan_frag = DBSCANFragmenter(cfg)
             #self.dbscan = DBScanClusts2(cfg)
