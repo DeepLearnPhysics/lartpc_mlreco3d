@@ -350,7 +350,7 @@ class trainval(object):
             model_paths.append(('', self._model_path, ''))
         for module in module_config:
             if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
-                model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', '')))
+                model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', module)))
 
         if model_paths: #self._model_path and self._model_path != '':
             for module, model_path, model_name in model_paths:
@@ -365,15 +365,23 @@ class trainval(object):
                     else:
                         # Edit checkpoint variable names using model_name
                         # e.g. if your module is named uresnet1 but it is uresnet2 in the weights
+                        missing_keys = []
                         for name in self._net.state_dict():
                             # Replace 'uresnet1.' with 'uresnet2.'
                             # include a dot to avoid accidentally replacing in unrelated places
                             # eg if there is a different module called something_uresnet1_something
-                            other_name = name if len(model_name) == 0 else re.sub(module + '.', model_name + '.', name)
+                            other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
                             # Additionally, only select weights related to current module
-                            if module in name and other_name in checkpoint['state_dict']:
-                                ckpt[name] = checkpoint['state_dict'][other_name]
-                                checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+                            if module in name:
+                                if other_name in checkpoint['state_dict'].keys():
+                                    ckpt[name] = checkpoint['state_dict'][other_name]
+                                    checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+                                else:
+                                    missing_keys.append((name, other_name))
+                        if missing_keys:
+                            print(checkpoint['state_dict'].keys())
+                            for m in missing_keys:
+                                print("WARNING Missing key %s (%s)" % m)
 
                             # other_name = re.sub('module.', 'module.' + model_name + '.' if len(model_name) else 'module.', name)
                             # print(name, other_name)
