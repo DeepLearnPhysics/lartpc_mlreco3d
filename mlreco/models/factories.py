@@ -42,6 +42,7 @@ def model_dict():
     from . import ghost_cluster_chain_gnn
     from . import ghost_track_clustering
     from . import ghost_nu
+    from . import particle_types
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -123,6 +124,8 @@ def model_dict():
         "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
         "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
         "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss)
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
+        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
