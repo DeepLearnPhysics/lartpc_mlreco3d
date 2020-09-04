@@ -144,7 +144,7 @@ def efficiency(pred, truth, bid=None):
     efficiencies = table.max(axis=0) / tcts
     return efficiencies.mean()
 
-def purity_efficiency(pred, truth, bid=None):
+def purity_efficiency(pred, truth, bid=None, mean=True):
     """
     function that combines purity and efficiency calculation into one go
     """
@@ -157,4 +157,7 @@ def purity_efficiency(pred, truth, bid=None):
     table = contingency_table(pred, truth, len(pcts), len(tcts))
     efficiencies = table.max(axis=0) / tcts
     purities = table.max(axis=1) / pcts
-    return purities.mean(), efficiencies.mean()
+    if mean:
+        return purities.mean(), efficiencies.mean()
+    else:
+        return purities, efficiencies
