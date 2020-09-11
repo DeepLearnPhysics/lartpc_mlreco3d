@@ -29,10 +29,6 @@ def model_dict():
     from . import clustercnn_adaptis
     # from . import cluster_chain
     from . import full_chain
-    from . import full_chain_2
-    from . import full_chain_3
-    from . import full_chain_4
-    from . import full_chain_5
     from . import full_cnn
     from . import hierarchy
     from . import ghost_chain
