@@ -35,7 +35,7 @@ def setup_chain_cfg(self, cfg):
     """
     chain_cfg = cfg['chain']
     self.enable_ghost      = chain_cfg.get('enable_ghost', False)
-
+    self.verbose           = chain_cfg.get('verbose', False)
     self.enable_uresnet    = chain_cfg.get('enable_uresnet', True)
     self.enable_ppn        = chain_cfg.get('enable_ppn', True)
     self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
@@ -462,7 +462,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         self.track_gnn_weight = self.loss_config.get('track_gnn_weight', 0.0)
         self.inter_gnn_weight = self.loss_config.get('inter_gnn_weight', 0.0)
 
-    def forward(self, out, seg_label, cluster_label, ppn_label):
+    def forward(self, out, seg_label, ppn_label=None, cluster_label=None):
         res = {}
         accuracy, loss = 0., 0.
 
@@ -568,19 +568,20 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         res['loss'] = loss
         res['accuracy'] = accuracy
-
-        if self.enable_uresnet:
-            print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
-        if self.enable_ppn:
-            print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
-        if self.enable_cnn_clust:
-            print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
-        if self.enable_gnn_shower:
-            print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
-            print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
-        if self.enable_gnn_tracks:
-            print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
-        if self.enable_gnn_int:
-            print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
+    
+        if self.verbose:
+            if self.enable_uresnet:
+                print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
+            if self.enable_ppn:
+                print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
+            if self.enable_cnn_clust:
+                print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
+            if self.enable_gnn_shower:
+                print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
+                print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
+            if self.enable_gnn_tracks:
+                print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
+            if self.enable_gnn_int:
+                print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
 
         return res
