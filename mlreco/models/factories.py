@@ -34,8 +34,15 @@ def model_dict():
     from . import full_chain_4
     from . import full_chain_5
     from . import full_cnn
+    from . import hierarchy
+    from . import ghost_chain
+    from . import ghost_chain_2
+    from . import ghost_cluster_full_gnn
+    from . import ghost_spatial_embeddings
+    from . import ghost_cluster_chain_gnn
+    from . import ghost_track_clustering
+    from . import ghost_nu
     from . import particle_types
-
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -103,9 +110,20 @@ def model_dict():
         # CNN Clustering + GNN Chain
         #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
         #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
+        # "full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
+        # "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
+        'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
         "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        # Deghosting models
+        #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
+        "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
+        "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
+        "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
+        "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
+        "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
+        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Cluster grouping GNN with MST

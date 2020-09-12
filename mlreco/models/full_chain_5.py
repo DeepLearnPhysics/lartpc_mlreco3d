@@ -7,7 +7,7 @@ from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.layers.dbscan import DBSCANFragmenter
 from .gnn import node_encoder_construct, edge_encoder_construct
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
+from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
 
@@ -54,6 +54,9 @@ class FullChain(torch.nn.Module):
           particle_gnn_weight: <relative weight of the particle gnn loss>
           interaction_gnn_weight: <relative weight of the interaction gnn loss>
     """
+
+    MODULES = ['full_cnn', 'particle_gnn', 'interaction_gnn', 'full_chain_loss', 'uresnet_lonely',
+               'particle_edge_model', 'interaction_edge_model', 'ppn', 'node_encoder', 'edge_encoder', 'dbscan_frag']
 
     def __init__(self, cfg, name='full_chain'):
         super(FullChain, self).__init__()

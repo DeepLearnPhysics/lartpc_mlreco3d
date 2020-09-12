@@ -37,8 +37,8 @@ class Multiply(torch.nn.Module):
         output = scn.SparseConvNetTensor()
         output.metadata = x.metadata
         output.spatial_size = x.spatial_size
-        output.features = x.features.new().resize_(1).expand_as(x.features).fill_(0.0)
-        output.features = x.features * y.features[:, 1][:, None]
+        attention = y if torch.is_tensor(y) else y.features[:, 1][:, None]
+        output.features = x.features * attention
         return output
 
     def input_spatial_size(self, out_size):
