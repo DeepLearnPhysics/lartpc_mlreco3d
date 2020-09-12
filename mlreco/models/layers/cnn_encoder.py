@@ -124,7 +124,6 @@ class ResidualEncoder(UResNetEncoder):
 
         self.coordConv = self.model_config.get('coordConv', True)
         self.pool_mode = self.model_config.get('pool_mode', 'max')
-
         self.final_tensor_shape = self.spatial_size // (2**(self.num_strides-1))
 
         if self.pool_mode == 'max':
@@ -138,8 +137,10 @@ class ResidualEncoder(UResNetEncoder):
     def forward(self, point_cloud):
         '''
         Vanilla UResNet Encoder
+
         INPUTS:
             - x (scn.SparseConvNetTensor): output from inputlayer (self.input)
+
         RETURNS:
             - features_encoder (list of SparseConvNetTensor): list of feature
             tensors in encoding path at each spatial resolution.
@@ -148,7 +149,6 @@ class ResidualEncoder(UResNetEncoder):
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
         batch_size = coords[:, 3].unique().shape[0]
-
         # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \

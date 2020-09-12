@@ -42,7 +42,7 @@ class GATConvModel(nn.Module):
             # self.bn_node.append(BatchNorm(node_output))
             # print(node_input, node_output)
             self.edge_updates.append(
-                MetaLayer(edge_model=EdgeLayer(node_output, edge_input, edge_output,
+                MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
                                     leakiness=self.leakiness)#,
                           #node_model=NodeLayer(node_output, node_output, self.edge_input,
                                                 #leakiness=self.leakiness)
@@ -64,11 +64,11 @@ class GATConvModel(nn.Module):
 
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
+            # add u and batch arguments for not having error in some old version
+            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
             x = self.gatConvs[i](x, edge_indices)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
-            # add u and batch arguments for not having error in some old version
-            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)

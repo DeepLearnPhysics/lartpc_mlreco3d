@@ -15,7 +15,6 @@ def plotly_layout3d(ranges=None, titles=None, **kwargs):
         - titles can be specified as a length 3 array of strings for (x,y,z) axis title respectively
     OUTPUTS
         - The return is go.Layout object that can be given to go.Figure for visualization (together with traces)
-
     """
     xrange,yrange,zrange=None,None,None
     if ranges is None:
