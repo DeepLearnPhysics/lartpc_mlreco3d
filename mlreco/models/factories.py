@@ -29,10 +29,6 @@ def model_dict():
     from . import clustercnn_adaptis
     # from . import cluster_chain
     from . import full_chain
-    from . import full_chain_2
-    from . import full_chain_3
-    from . import full_chain_4
-    from . import full_chain_5
     from . import full_cnn
     from . import hierarchy
     from . import ghost_chain
@@ -115,7 +111,7 @@ def model_dict():
         'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
-        "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         # Deghosting models
         #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
         "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
