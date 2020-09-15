@@ -280,7 +280,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     out - uresnet_ppn_type output
     score_threshold - minimal detection score
     type_score_threshold - minimal score for a point type prediction to be considered
-    type_threshold -
+    type_threshold - distance threshold for matching w/ semantic type prediction
     Returns
     -------
     [x,y,z,bid,label] of ppn-predicted points

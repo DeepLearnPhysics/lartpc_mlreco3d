@@ -31,9 +31,9 @@ class DBSCANFragmenter(torch.nn.Module):
         self.michel_label = self.cfg.get('michel_label', 2)
         self.delta_label = self.cfg.get('delta_label', 3)
         self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
-        self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.9)
-        self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 0.3)
-        self.ppn_distance_threshold = self.cfg.get('ppn_distance_threshold', 1.999)
+        self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.5)
+        self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 1.999)
+        self.ppn_type_score_threshold = self.cfg.get('ppn_type_score_threshold', 0.5)
         self.ppn_mask_radius = self.cfg.get('ppn_mask_radius', 5)
 
     def forward(self, data, output):
@@ -52,7 +52,7 @@ class DBSCANFragmenter(torch.nn.Module):
         points =  uresnet_ppn_type_point_selector(data, numpy_output,
                                                   score_threshold = self.ppn_score_threshold,
                                                   type_threshold = self.ppn_type_threshold,
-                                                  distance_threshold = self.ppn_distance_threshold)
+                                                  type_score_threshold = self.ppn_type_score_threshold)
         point_labels = points[:,-1]
         track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
 
@@ -74,7 +74,6 @@ class DBSCANFragmenter(torch.nn.Module):
                     continue
 
                 voxels = data[selection, :self.dim]
-                labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
                 if s == self.track_label:
                     labels = track_clustering(voxels = voxels,
                                               points = track_points[track_points[:,self.dim] == bid,:3],
@@ -83,7 +82,7 @@ class DBSCANFragmenter(torch.nn.Module):
                                               min_samples = self.min_samples,
                                               mask_radius = self.ppn_mask_radius)
                 else:
-                    sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
+                    labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
 
                 # Build clusters for this class
                 if s == self.track_label:
