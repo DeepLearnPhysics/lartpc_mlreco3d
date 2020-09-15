@@ -193,8 +193,7 @@ class GhostChain2(torch.nn.Module):
         node_pred = [gnn_output['node_pred'][0][b] for b in bcids]
         edge_pred = [gnn_output['edge_pred'][0][b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        frags = [np.array([vids[c] for c in fragments[b]]) for b in bcids]
-
+        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object) for b in bcids]
         result.update({
             labels['frags']: [frags],
             labels['node_pred']: [node_pred],
@@ -304,7 +303,7 @@ class GhostChain2(torch.nn.Module):
                 particles.extend(fragments[mask])
                 part_primary_ids.extend(-np.ones(np.sum(mask)))
 
-            particles = np.array(particles)
+            particles = np.array(particles, dtype=object)
             part_batch_ids = get_cluster_batch(input[0], particles)
             part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
             part_seg = np.empty(len(particles), dtype=np.int32)
@@ -362,7 +361,7 @@ class GhostChain2(torch.nn.Module):
 
             edge_pred = [gnn_output['edge_pred'][0][b] for b in beids]
             edge_index = [cids[edge_index[:,b]].T for b in beids]
-            particles = [np.array([vids[c] for c in particles[b]]) for b in bcids]
+            particles = [np.array([vids[c] for c in particles[b]], dtype=object) for b in bcids]
 
             result.update({
                 'particles': [particles],
