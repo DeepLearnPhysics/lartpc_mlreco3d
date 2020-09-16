@@ -244,11 +244,12 @@ class GhostChain2(torch.nn.Module):
                 assert len(vals) == 1
                 frag_seg[i] = vals[torch.argmax(cnts)].item()
 
-        result.update({
-            'clust_fragments': [fragments],
-            'clust_frag_batch_ids': [frag_batch_ids],
-            'clust_frag_seg': [frag_seg]
-        })
+        if self.enable_cnn_clust or self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+            result.update({
+                'clust_fragments': [fragments],
+                'clust_frag_batch_ids': [frag_batch_ids],
+                'clust_frag_seg': [frag_seg]
+            })
 
         if self.enable_gnn_shower:
             # Initialize a complete graph for edge prediction, get shower fragment and edge features
@@ -409,15 +410,17 @@ class GhostChain2(torch.nn.Module):
             deghost = result['ghost'][0].argmax(dim=1) == 0
             new_input = [input[0][deghost]]
 
-            segmentation, points, mask_ppn2 = result['segmentation'][0].clone(), result['points'][0].clone(), result['mask_ppn2'][0].clone()
+            segmentation = result['segmentation'][0].clone()
+            if self.enable_ppn:
+                points, mask_ppn2 = result['points'][0].clone(), result['mask_ppn2'][0].clone()
 
             deghost_result = {}
             deghost_result.update(result)
             deghost_result.pop('ghost')
-            print(result['mask_ppn2'][0].shape, result['segmentation'][0].shape)
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
-            deghost_result['points'][0] = result['points'][0][deghost]
-            deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
+            if self.enable_ppn:
+                deghost_result['points'][0] = result['points'][0][deghost]
+                deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
             # Run the rest of the full chain
             full_chain_result = self.full_chain((new_input, deghost_result))
             full_chain_result['ghost'] = result['ghost']
@@ -428,8 +431,9 @@ class GhostChain2(torch.nn.Module):
 
         if self.enable_ghost:
             result['segmentation'][0] = segmentation
-            result['points'][0] = points
-            result['mask_ppn2'][0] = mask_ppn2
+            if self.enable_ppn:
+                result['points'][0] = points
+                result['mask_ppn2'][0] = mask_ppn2
 
         return result
 
