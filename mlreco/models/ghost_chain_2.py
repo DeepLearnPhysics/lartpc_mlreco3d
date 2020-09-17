@@ -517,7 +517,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         if self.enable_ghost:
             # Adapt to ghost points
-            cluster_label = adapt_labels(out, seg_label, cluster_label)
+            if cluster_label is not None:
+                cluster_label = adapt_labels(out, seg_label, cluster_label)
 
             deghost = out['ghost'][0].argmax(dim=1) == 0
             #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
