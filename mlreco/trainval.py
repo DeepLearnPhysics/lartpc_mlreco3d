@@ -34,7 +34,7 @@ class trainval(object):
         self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
         self._learning_rate = self._trainval_config.get('learning_rate') # deprecate to move to optimizer args
-        self._model_path = self._trainval_config.get('model_path', '')
+        #self._model_path = self._trainval_config.get('model_path', '')
         self._restore_optimizer = self._trainval_config.get('restore_optimizer',False)
         # optimizer
         optim_cfg = self._trainval_config.get('optimizer')
@@ -346,8 +346,8 @@ class trainval(object):
 
         iteration = 0
         model_paths = []
-        if self._model_path and self._model_path != '':
-            model_paths.append(('', self._model_path, ''))
+        if self._trainval_config.get('model_path',''):
+            model_paths.append(('', self._trainval_config['model_path'], ''))
         for module in module_config:
             if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
                 model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', module)))
@@ -355,7 +355,10 @@ class trainval(object):
         if model_paths: #self._model_path and self._model_path != '':
             for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
-                    raise ValueError('File not found: %s for module %s\n' % (model_path, module))
+                    if self._train:
+                        raise ValueError('File not found: %s for module %s\n' % (model_path, module))
+                    else:
+                        continue
                 print('Restoring weights for %s from %s...' % (module,model_path))
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f, map_location='cpu')
