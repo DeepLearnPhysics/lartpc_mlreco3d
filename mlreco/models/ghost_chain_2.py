@@ -152,7 +152,8 @@ class GhostChain2(torch.nn.Module):
                     fragments.append(mask[pred_labels == c])
                     frag_batch_ids.append(int(batch_id))
 
-        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], dtype=object)
+        same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
+        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], dtype=object if not same_length else np.int64)
         frag_batch_ids = np.array(frag_batch_ids)
         frag_seg = np.empty(len(fragments), dtype=np.int32)
         for i, f in enumerate(fragments):
