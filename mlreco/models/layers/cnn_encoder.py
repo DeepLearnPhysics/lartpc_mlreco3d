@@ -7,7 +7,7 @@ from torch_geometric.nn import MetaLayer, NNConv
 import sparseconvnet as scn
 
 from mlreco.models.layers.uresnet import UResNetEncoder
-
+from pprint import pprint
 
 class EncoderModel(torch.nn.Module):
 
