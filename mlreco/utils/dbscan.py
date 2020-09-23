@@ -13,8 +13,10 @@ def dbscan_points(voxels, epsilon = 1.01, minpts = 3):
                min_samples=minpts,
                metric='euclidean'
               ).fit(voxels)
-    clusters = [ index[np.where(res.labels_ == i)[0]] for i in range(np.max(res.labels_)+1) ]
-    return np.array(clusters)
+    clusters = [ index[np.where(res.labels_ == i)[0]].astype(np.int64) for i in range(np.max(res.labels_)+1) ]
+    same_length = np.all([len(c) == len(clusters[0]) for c in clusters] )
+    return np.array(clusters, dtype=object if not same_length else np.int64)
+
 
 def dbscan_types(voxels, types, epsilon = 1.01, minpts = 3, typemin=2, typemax=5):
     """

@@ -152,7 +152,8 @@ class GhostChain2(torch.nn.Module):
                     fragments.append(mask[pred_labels == c])
                     frag_batch_ids.append(int(batch_id))
 
-        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)])
+        same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
+        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], dtype=object if not same_length else np.int64)
         frag_batch_ids = np.array(frag_batch_ids)
         frag_seg = np.empty(len(fragments), dtype=np.int32)
         for i, f in enumerate(fragments):
@@ -193,7 +194,23 @@ class GhostChain2(torch.nn.Module):
         node_pred = [gnn_output['node_pred'][0][b] for b in bcids]
         edge_pred = [gnn_output['edge_pred'][0][b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
-        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object) for b in bcids]
+
+        # Justification for the dtype below `np.object if not same_length[idx] else np.int64`:
+        # If all elements have the same length (!= ragged array) then numpy converts
+        # them all to dtype object, instead of letting them be a dtype `np.int64`.
+        #
+        # >>> a = np.array([np.array([0,1,2,3]).astype(np.int64)], dtype=object)
+        # >>> [x.dtype for x in a]
+        # [dtype('O')]
+        # >>> a = np.array([np.array([5]).astype(np.int64), np.array([6,7]).astype(np.int64)], dtype=object)
+        # >>> [x.dtype for x in a]
+        # [dtype('int64'), dtype('int64')]
+        # >>> a = np.array([np.array([5,6]).astype(np.int64), np.array([6,7]).astype(np.int64)], dtype=object)
+        # >>> [x.dtype for x in a]
+        # [dtype('O'), dtype('O')]
+        same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
+        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
+
         result.update({
             labels['frags']: [frags],
             labels['node_pred']: [node_pred],
@@ -362,7 +379,9 @@ class GhostChain2(torch.nn.Module):
 
             edge_pred = [gnn_output['edge_pred'][0][b] for b in beids]
             edge_index = [cids[edge_index[:,b]].T for b in beids]
-            particles = [np.array([vids[c] for c in particles[b]], dtype=object) for b in bcids]
+
+            same_length = [np.all([len(c) == len(particles[b][0]) for c in particles[b]] ) for b in bcids]
+            particles = [np.array([vids[c] for c in particles[b]], dtype=object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
 
             result.update({
                 'particles': [particles],
@@ -498,7 +517,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         if self.enable_ghost:
             # Adapt to ghost points
-            cluster_label = adapt_labels(out, seg_label, cluster_label)
+            if cluster_label is not None:
+                cluster_label = adapt_labels(out, seg_label, cluster_label)
 
             deghost = out['ghost'][0].argmax(dim=1) == 0
             #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
@@ -580,7 +600,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         res['loss'] = loss
         res['accuracy'] = accuracy
-    
+
         if self.verbose:
             if self.enable_uresnet:
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
