@@ -4,7 +4,7 @@ import numpy as np
 import sparseconvnet as scn
 
 from .cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 
 ###########################################################
 #
@@ -18,7 +18,7 @@ from mlreco.models.layers.base import NetworkBase
 #
 ###########################################################
 
-class ClusterCNN(NetworkBase):
+class ClusterCNN(SCNNetworkBase):
     '''
     CNN Based Multiscale Clustering Module.
 

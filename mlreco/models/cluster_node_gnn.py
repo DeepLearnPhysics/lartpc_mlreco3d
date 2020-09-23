@@ -230,6 +230,7 @@ class NodeChannelLoss(torch.nn.Module):
         self.reduction = chain_config.get('reduction', 'sum')
         self.balance_classes = chain_config.get('balance_classes', False)
         self.high_purity = chain_config.get('high_purity', False)
+        self.batch_index = chain_config.get('batch_index', 3)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -261,7 +262,7 @@ class NodeChannelLoss(torch.nn.Module):
                 continue
 
             # Get the list of batch ids, loop over individual batches
-            batches = clusters[i][:,3]
+            batches = clusters[i][:,self.batch_index]
             nbatches = len(batches.unique())
             for j in range(nbatches):
 
@@ -346,6 +347,8 @@ class NodeTypeLoss(torch.nn.Module):
         self.reduction = chain_config.get('reduction', 'sum')
         self.balance_classes = chain_config.get('balance_classes', False)
         self.high_purity = chain_config.get('high_purity', False)
+        self.batch_col = chain_config.get('batch_col', 3)
+        self.pdg_col = chain_config.get('pdg_col', 7)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
@@ -370,6 +373,9 @@ class NodeTypeLoss(torch.nn.Module):
         """
         total_loss, total_acc = 0., 0.
         n_clusts = 0
+        # print(types[0][:, self.pdg_col].unique())
+        # print(len(out['node_pred'][0]))
+        # print(len(out['clusts'][0]))
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
@@ -377,7 +383,7 @@ class NodeTypeLoss(torch.nn.Module):
                 continue
 
             # Get the list of batch ids, loop over individual batches
-            batches = types[i][:,3]
+            batches = types[i][:,self.batch_col]
             nbatches = len(batches.unique())
             for j in range(nbatches):
 
@@ -389,12 +395,13 @@ class NodeTypeLoss(torch.nn.Module):
                 if not node_pred.shape[0]:
                     continue
                 clusts = out['clusts'][i][j]
-                clust_ids = get_cluster_label(labels, clusts)
-                pdgs = get_cluster_label(labels, clusts, column=7)
+                pdgs = get_cluster_label(labels, clusts, column=self.pdg_col)
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
                 node_assn = torch.tensor(pdgs, dtype=torch.long, device=node_pred.device, requires_grad=False)
                 # print(node_assn)
+                # print(node_pred)
+                # print(torch.argmax(node_pred, dim=1))
 
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:
@@ -406,6 +413,7 @@ class NodeTypeLoss(torch.nn.Module):
                     total_loss += self.lossfn(node_pred, node_assn)
 
                 # Compute accuracy of assignment (fraction of correctly assigned nodes)
+                
                 total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
                 # print(torch.argmax(node_pred, dim=1))
                 # print("node_assn = ", node_assn)
