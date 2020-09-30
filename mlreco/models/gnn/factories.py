@@ -127,7 +127,9 @@ def node_encoder_dict():
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
+        "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2,
         "mix" : cluster_mix_encoder.ClustMixNodeEncoder,
+        "mix2" : cluster_mix_encoder.ClustMixNodeEncoder2,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder
     }
 
@@ -172,7 +174,9 @@ def edge_encoder_dict():
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
+        "cnn2" : cluster_cnn_encoder.ClustCNNEdgeEncoder2,
         "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
+        "mix2" : cluster_mix_encoder.ClustMixEdgeEncoder2,
         "gnn" : cluster_gnn_encoder.ClustGNNEdgeEncoder
     }
 
