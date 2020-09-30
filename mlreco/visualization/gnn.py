@@ -1,7 +1,7 @@
 import numpy as np
 import plotly.graph_objs as go
 
-def scatter_clusters(voxels, labels, clusts, markersize=5, colorscale='Viridis'):
+def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis'):
     """
     Scatter plot of cluster voxels colored by cluster order
 

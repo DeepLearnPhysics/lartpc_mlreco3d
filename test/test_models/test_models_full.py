@@ -78,4 +78,4 @@ def test_model_full(config_full, xfail_models):
     except FileNotFoundError:
         pytest.skip('File not found to test the loader.')
 
-    train_loop(config, handlers)
+    train_loop(handlers)

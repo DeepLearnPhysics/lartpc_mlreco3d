@@ -236,10 +236,10 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     target_density_intercluster: float or list
     target_density_intracluster: float or list
     """
-    INPUT_SCHEMA = [
-        ["parse_sparse3d_scn_scales", (int,), [(3, 1)]*5],
-        ["parse_cluster3d_scales", (int,), [(3, 1)]*5]
-    ]
+    # INPUT_SCHEMA = [
+    #     ["parse_sparse3d_scn_scales", (int,), [(3, 1)]*5],
+    #     ["parse_cluster3d_scales", (int,), [(3, 1)]*5]
+    # ]
 
     def __init__(self, cfg, reduction='sum'):
         super(SegmentationLoss, self).__init__(reduction=reduction)

@@ -5,10 +5,10 @@ branches:
     - develop
 services:
 - docker
-install:
-- git clone https://github.com/DeepLearnPhysics/lartpc_mlreco3d.git 
+before_script:
+- git log
 script:
-- docker run --mount type=bind,source=$PWD/lartpc_mlreco3d,target=/app/lartpc_mlreco3d deeplearnphysics/larcv2:ub18.04-gpu-ana0-ml-larcv2 pytest /app/lartpc_mlreco3d/test
+- docker run --mount type=bind,source=$PWD,target=/app/lartpc_mlreco3d deeplearnphysics/larcv2:ub18.04-gpu-ana0-ml-larcv2 pytest /app/lartpc_mlreco3d/test
 notifications:
   email:
     on_success: always
