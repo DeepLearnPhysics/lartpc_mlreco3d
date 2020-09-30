@@ -133,6 +133,8 @@ class MaskBCELoss(nn.Module):
         semantic_classes = slabels.unique()
         #print(semantic_classes)
         for sc in semantic_classes:
+            if int(sc) == 4:
+                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, probs, acc = self.get_per_class_probabilities(
                 embeddings[index], margins[index], clabels[index], coords[index])
@@ -159,11 +161,11 @@ class MaskBCELoss(nn.Module):
 
         for i in range(num_gpus):
             slabels = segment_label[i][:, -1]
-            coords = segment_label[i][:, :3].float()
-            if torch.cuda.is_available():
-                coords = coords.cuda()
+            #coords = segment_label[i][:, :3].float()
+            #if torch.cuda.is_available():
+            #    coords = coords.cuda()
             slabels = slabels.int()
-            clabels = group_label[i][:, -2]
+            clabels = group_label[i][:, -1]
             batch_idx = segment_label[i][:, 3]
             embedding = out['embeddings'][i]
             seediness = out['seediness'][i]
@@ -176,7 +178,6 @@ class MaskBCELoss(nn.Module):
                 clabels_batch = clabels[batch_idx == bidx]
                 seed_batch = seediness[batch_idx == bidx]
                 margins_batch = margins[batch_idx == bidx]
-                coords_batch = coords[batch_idx == bidx] / self.spatial_size
 
                 loss_class, acc_class = self.combine_multiclass(
                     embedding_batch, margins_batch,
@@ -199,6 +200,8 @@ class MaskBCELoss(nn.Module):
         res = {}
         res.update(loss_avg)
         res.update(acc_avg)
+
+        print(acc_avg)
 
         return res
 
@@ -478,6 +481,8 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
+            if int(sc) == 4:
+                continue
             index = (slabels == sc)
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(

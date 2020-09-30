@@ -26,6 +26,28 @@ class ClustCNNNodeEncoder(torch.nn.Module):
         return self.encoder(cnn_data)
 
 
+class ClustCNNNodeEncoder2(nn.Module):
+    """
+    Uses a CNN to produce node features for cluster GNN
+
+    """
+    def __init__(self, model_config):
+        super(ClustCNNNodeEncoder2, self).__init__()
+
+        # Initialize the CNN
+        self.encoder = ResidualEncoder(model_config)
+
+    def forward(self, data, clusts):
+
+        # Use cluster ID as a batch ID, pass through CNN
+        device = data.device
+        cnn_data = torch.empty((0,5), device=device, dtype=torch.float)
+        for i, c in enumerate(clusts):
+            cnn_data = torch.cat((cnn_data, data[c,:5].float()))
+            cnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
+        return self.encoder(cnn_data)
+
+
 class ClustCNNEdgeEncoder(torch.nn.Module):
     """
     Uses a CNN to produce edge features for cluster GNN
@@ -62,34 +84,14 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
         return feats
 
 
-class ClustCNNNodeEncoder2(nn.Module):
-    """
-    Uses a CNN to produce node features for cluster GNN
-    """
-    def __init__(self, model_config):
-        super(ClustCNNNodeEncoder2, self).__init__()
-
-        # Initialize the CNN
-        self.encoder = ResidualEncoder(model_config)
-
-    def forward(self, data, clusts):
-
-        # Use cluster ID as a batch ID, pass through CNN
-        device = data.device
-        cnn_data = torch.empty((0,5), device=device, dtype=torch.float)
-        for i, c in enumerate(clusts):
-            cnn_data = torch.cat((cnn_data, data[c,:5].float()))
-            cnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
-        return self.encoder(cnn_data)
-
-
 class ClustCNNEdgeEncoder2(nn.Module):
     """
     Uses a CNN to produce node features for cluster GNN
+
     """
     def __init__(self, model_config):
         super(ClustCNNEdgeEncoder2, self).__init__()
-
+        print(model_config)
         # Initialize the CNN
         self.encoder = ResidualEncoder(model_config)
 

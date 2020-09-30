@@ -20,7 +20,10 @@ def config_simple(request):
         'modules': {}
     }
     for module in model.MODULES:
-        model_config['modules'][module] = {}
+        if isinstance(module, str):
+            model_config['modules'][module] = {}
+        else:
+            model_config['modules'][module[0]] = module[1]
     # else:
     #     model_config = {
     #         'name': model_name,
@@ -57,7 +60,10 @@ def config_full(request, tmp_path, data):
         'modules': {}
     }
     for module in model.MODULES:
-        model_config['modules'][module] = {}
+        if isinstance(module, str):
+            model_config['modules'][module] = {}
+        else:
+            model_config['modules'][module[0]] = module[1]
     # else:
     #     model_config = {
     #         'name': model_name,

@@ -7,6 +7,29 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
 
+
+def parse_particle_singlep_pdg(data):
+    TYPE_LABELS = {
+        22: 0,  # photon
+        11: 1,  # e-
+        -11: 1, # e+
+        13: 2,  # mu-
+        -13: 2, # mu+
+        211: 3, # pi+
+        -211: 3, # pi-
+        2212: 4, # protons
+    }
+    parts = data[0]
+    pdgs = []
+    pdg = -1
+    for p in parts.as_vector():
+        if not p.track_id() == 1: continue
+        t = TYPE_LABELS.get(p.pdg_code(),-1)
+        if t >= 0: return np.asarray([t])
+        pdgs.append(p.pdg_code())
+    raise TypeError('Found primary PDGs %s do not match any predefined types %s' % (pdgs,TYPE_LABELS.keys()))
+
+
 def parse_sparse2d_meta(data):
     event_tensor2d = data[0]
     projection_id = 0  # default
@@ -417,6 +440,112 @@ def parse_cluster3d_full(data):
     return np_voxels, np_features
 
 
+def parse_cluster3d_kinematics(data):
+    """
+    a function to retrieve clusters tensor
+    args:
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+    return:
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (n,6) where 6 is voxel value,
+        cluster id, group id interaction id, nu id and semantic type, respectively
+    """
+    cluster_event = data[0]
+    particles_v = data[1].as_vector()
+    TYPE_LABELS = {
+        22: 0,  # photon
+        11: 1,  # e-
+        -11: 1, # e+
+        13: 2,  # mu-
+        -13: 2, # mu+
+        211: 3, # pi+
+        -211: 3, # pi-
+        2212: 4, # protons
+    }
+    # print(cluster_event)
+    # assert False
+    meta = cluster_event.meta()
+    num_clusters = cluster_event.as_vector().size()
+    clusters_voxels, clusters_features = [], []
+
+    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
+    group_ids = get_valid_group_id(cluster_event, particles_v)
+    inter_ids = get_interaction_id(particles_v)
+    nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids)
+
+    for i in range(num_clusters):
+        cluster = cluster_event.as_vector()[i]
+        num_points = cluster.as_vector().size()
+        if num_points > 0:
+            x = np.empty(shape=(num_points,), dtype=np.int32)
+            y = np.empty(shape=(num_points,), dtype=np.int32)
+            z = np.empty(shape=(num_points,), dtype=np.int32)
+            value = np.empty(shape=(num_points,), dtype=np.float32)
+            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            assert i == particles_v[i].id()
+            cluster_id = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=particles_v[i].id(), dtype=np.float32)
+            group_id = np.full(shape=(cluster.as_vector().size()),
+                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
+                               fill_value=group_ids[i], dtype=np.float32)
+            p = particles_v[i].p()
+            px = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=particles_v[i].px() / p, dtype=np.float32)
+            py = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].py() / p, dtype=np.float32)
+            pz = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].pz() / p, dtype=np.float32)
+            p = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=p, dtype=np.float32)
+            t = int(particles_v[i].pdg_code())
+            if t in TYPE_LABELS.keys():
+                pdg = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=TYPE_LABELS[t], dtype=np.float32)
+            else:
+                continue
+            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            clusters_features.append(np.column_stack([value, cluster_id, group_id, px,py,pz,p,pdg]))
+    np_voxels   = np.concatenate(clusters_voxels, axis=0)
+    np_features = np.concatenate(clusters_features, axis=0)
+    mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
+
+    # print(np_features[mask][:, [0, 1, 5, 6]])
+    return np_voxels, np_features
+
+
+def parse_cluster3d_full_fragment(data):
+    """
+    A function to retrieve clusters tensor
+    Args:
+        length 1 array of larcv::EventClusterVoxel3D
+    Return:
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
+    """
+    cluster_event = data[0]
+    meta = cluster_event.meta()
+    num_clusters = cluster_event.as_vector().size()
+    clusters_voxels, clusters_features = [], []
+    for i in range(num_clusters):
+        cluster = cluster_event.as_vector()[i]
+        num_points = cluster.as_vector().size()
+        if num_points > 0:
+            x = np.empty(shape=(num_points,), dtype=np.int32)
+            y = np.empty(shape=(num_points,), dtype=np.int32)
+            z = np.empty(shape=(num_points,), dtype=np.int32)
+            value = np.empty(shape=(num_points,), dtype=np.float32)
+            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            cluster_id = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=i, dtype=np.float32)
+            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            clusters_features.append(np.column_stack([cluster_id,value]))
+    np_voxels   = np.concatenate(clusters_voxels, axis=0)
+    np_features = np.concatenate(clusters_features, axis=0)
+    return np_voxels, np_features
+
+
 def parse_cluster3d_fragment(data):
     """
     A function to retrieve clusters tensor
@@ -623,7 +752,7 @@ def parse_cluster3d_scales(data):
     -------
     list of tuples
     """
-    grp_voxels, grp_data = parse_cluster3d_clean(data)
+    grp_voxels, grp_data = parse_cluster3d_clean_full(data)
     spatial_size = data[0].meta().num_voxel_x()
     max_depth = int(np.floor(np.log2(spatial_size))-1)
     scales = []

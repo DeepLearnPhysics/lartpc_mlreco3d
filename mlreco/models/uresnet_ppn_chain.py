@@ -18,7 +18,7 @@ class Chain(torch.nn.Module):
 
     def __init__(self, model_config):
         super(Chain, self).__init__()
-        self.ppn = PPN(model_config)
+        self.ppn            = PPN(model_config)
         self.uresnet_lonely = UResNet(model_config)
         self._freeze_uresnet = model_config['uresnet_lonely'].get('freeze', False)
 
@@ -32,24 +32,18 @@ class Chain(torch.nn.Module):
         No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
         """
         point_cloud = input[0]
-        # if self._freeze_uresnet:
-        #     with torch.no_grad():
-        #         x = self.uresnet_lonely((point_cloud,))
-        # else:
-        #     x = self.uresnet_lonely((point_cloud,))
-        x = self.uresnet_lonely((point_cloud,))
+        result = self.uresnet_lonely((point_cloud,))
         if len(input) > 1:
-            x['label'] = input[1]
-        y = {}
-        y.update(x)
-        y['ppn_feature_enc'] = y['ppn_feature_enc'][0]
-        y['ppn_feature_dec'] = y['ppn_feature_dec'][0]
-        if 'ghost' in y:
-            y['ghost'] = y['ghost'][0]
-        z = self.ppn(y)
-        x.update(z)
-        #print((x['points'][0]>0).sum())
-        return x
+            result['label'] = input[1]
+        ppn_input = {}
+        ppn_input.update(result)
+        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
+        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
+        if 'ghost' in ppn_input:
+            ppn_input['ghost'] = ppn_input['ghost'][0]
+        ppn_output = self.ppn(ppn_input)
+        result.update(ppn_output)
+        return result
 
 
 class ChainLoss(torch.nn.modules.loss._Loss):
@@ -69,7 +63,13 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     def forward(self, result, label, particles):
         uresnet_res = self.uresnet_loss(result, label)
         ppn_res = self.ppn_loss(result, label, particles)
-        uresnet_res.update(ppn_res)
+
+        result = {}
+        result.update(uresnet_res)
+        result.update(ppn_res)
+
         # Don't forget to sum all losses
-        uresnet_res['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
-        return uresnet_res
+        result['uresnet_loss'] = uresnet_res['loss'].float()
+        result['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
+
+        return result
