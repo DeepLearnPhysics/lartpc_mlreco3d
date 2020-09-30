@@ -400,7 +400,7 @@ def get_cluster_start_points(data, clusts):
     return np.vstack(points)
 
 
-def cluster_direction(data, start, max_dist=-1, optimize=False):
+def cluster_direction(data, start, max_dist=-1, optimize=False, use_cpu=False):
     """
     Finds the orientation of the cluster by computing the
     mean direction from the start point.
@@ -409,12 +409,17 @@ def cluster_direction(data, start, max_dist=-1, optimize=False):
         data (torch.tensor) : (N,3) Voxel coordinates [x, y, z]
         start (torch.tensor): (3) Start voxel coordinates [x, y, z]
         max_dist (float)    : Max distance between start voxel and other voxels in the mean
-        optimize (bool)      : Optimizes the number of points involved in the estimate
+        optimize (bool)     : Optimizes the number of points involved in the estimate
+        use_cpu (bool)      : Bring data to CPU to hasten optimization
     Returns:
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within
     # a sphere of radius max_dist
+    device = data.device
+    if use_cpu:
+        data = data.detach().cpu()
+        start = start.detach().cpu()
     voxels = data[:,:3]
     if max_dist > 0 and not optimize:
         from mlreco.utils import local_cdist
@@ -453,12 +458,14 @@ def cluster_direction(data, start, max_dist=-1, optimize=False):
 
     # Compute mean direction with respect to start point, normalize it
     mean = torch.mean(torch.stack([v-start for v in voxels]), dim=0)
+    if use_cpu:
+        mean = mean.to(device)
     if torch.norm(mean):
         return mean/torch.norm(mean)
     return mean
 
 
-def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
+def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False, use_cpu=False):
     """
     Finds the orientation of all the clusters by computing the
     mean direction from the start point.
@@ -469,6 +476,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         max_dist (float)     : Max distance between start voxel and other voxels
         optimize (bool)      : Optimizes the number of points involved in the estimate
+        use_cpu (bool)       : Bring data to CPU to hasten optimization
     Returns:
         torch.tensor: (3) Orientation
     """
@@ -478,7 +486,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     for i, c in enumerate(clusts):
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
-        dir = cluster_direction(x, starts[i], max_dist, optimize)
+        dir = cluster_direction(x, starts[i], max_dist, optimize, use_cpu)
         dirs.append(dir)
 
     return torch.stack(dirs)
