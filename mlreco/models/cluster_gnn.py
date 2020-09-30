@@ -75,6 +75,8 @@ class ClustEdgeGNN(torch.nn.Module):
         self.add_start_point = chain_config.get('add_start_point', False)
         self.add_start_dir = chain_config.get('add_start_dir', False)
         self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
+        self.start_dir_opt = chain_config.get('start_dir_opt', False)
+        self.start_dir_cpu = chain_config.get('start_dir_cpu', False)
 
         # Choose what type of network to use
         self.network = chain_config.get('network', 'complete')
@@ -147,8 +149,11 @@ class ClustEdgeGNN(torch.nn.Module):
             random.shuffle(clusts)
 
         # If requested, merge images together within the batch
+        kwoutput = {}
         if self.merge_batch:
-            data, particles = merge_batch(data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
+            data, particles, batch_list = merge_batch(data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
+            _, batch_counts = np.unique(batch_list, return_counts=True)
+            kwoutput['batch_counts'] = [batch_counts]
 
         # Get the batch id for each cluster
         batch_ids = get_cluster_batch(data, clusts)
@@ -192,7 +197,7 @@ class ClustEdgeGNN(torch.nn.Module):
                 points[i] = data[c][torch.argmin(dist_mat,dim=1),:3].reshape(-1)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
-                dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist)
+                dirs = get_cluster_directions(data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt, self.start_dir_cpu)
                 x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
@@ -216,7 +221,8 @@ class ClustEdgeGNN(torch.nn.Module):
 
         return {'edge_pred': [edge_pred],
                 'edge_index': [edge_index],
-                'clusts': [clusts]}
+                'clusts': [clusts],
+                **kwoutput}
 
 
 class EdgeChannelLoss(torch.nn.Module):

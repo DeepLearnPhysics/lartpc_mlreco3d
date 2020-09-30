@@ -257,4 +257,4 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
         particles[batch_selection,3] = int(i)
 
-    return data, particles
+    return data, particles, merging_batch_id_list
