@@ -19,16 +19,6 @@ TYPE_LABELS = {
 }
 
 def parse_particle_singlep_pdg(data):
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
     parts = data[0]
     pdgs = []
     pdg = -1
@@ -772,9 +762,7 @@ def parse_cluster3d_clean(data):
         coordinate
         a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
     """
-    grp_voxels, grp_data = parse_cluster3d_clean_full(data)
-    return grp_voxels, grp_data[:,:2]
-    grp_voxels, grp_data = parse_cluster3d([data[0], data[2]])
+    grp_voxels, grp_data = parse_cluster3d_full([data[0], data[2]])
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
 
     # step 1: lexicographically sort group data
@@ -826,7 +814,7 @@ def parse_cluster3d_clean_full(data):
     img_data = img_data[perm]
 
     # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True, precedence=[0,2,1,3,4])
+    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True)
     inds1 = np.where(sel1)[0]
     grp_voxels = grp_voxels[inds1,:]
     grp_data = grp_data[inds1]
