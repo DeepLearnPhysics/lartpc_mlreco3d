@@ -50,6 +50,7 @@ class NNConvModel(nn.Module):
                     Lin(node_input, node_input*node_output)
                 )
             )
+            # print(i, self.edge_mlps[i])
             self.bn_node.append(BatchNorm(node_input))
             self.nnConvs.append(
                 NNConv(node_input, node_output, self.edge_mlps[i], aggr=self.aggr))

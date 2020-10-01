@@ -15,6 +15,7 @@ def model_dict():
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
     from . import cluster_full_gnn
+    from . import cluster_gnn_types
     from . import cluster_group_prior_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
@@ -31,14 +32,14 @@ def model_dict():
     from . import full_chain
     from . import full_cnn
     from . import hierarchy
-    from . import ghost_chain
-    from . import ghost_chain_2
-    from . import ghost_cluster_full_gnn
-    from . import ghost_spatial_embeddings
-    from . import ghost_cluster_chain_gnn
-    from . import ghost_track_clustering
-    from . import ghost_nu
     from . import particle_types
+    from . import cluster_gnn_kinematics
+
+    # MinkowskiNet
+    from . import mink_uresnet
+    from . import mink_full_chain
+    from . import mink_ppn
+    from . import mink_clusternet
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -50,6 +51,11 @@ def model_dict():
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
+        # URESNET MINKOWSKINET
+        "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss),
+        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss),
+        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss),
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
@@ -79,8 +85,8 @@ def model_dict():
         "clustercnn_density": (clustercnn_density.ClusterCNN, clustercnn_density.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
-        # Spatial Embeddings Stack
-        "spatial_embeddings_stack": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
+        # Spatial Embeddings Lite
+        "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # AdaptIS
         "adaptis": (clustercnn_adaptis.ClusterCNN, clustercnn_adaptis.ClusteringLoss),
         # Spatial Embeddings Lovasz free
@@ -122,6 +128,11 @@ def model_dict():
         "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
+        "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
+        # Flow and Particle Type
+        "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
+        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }

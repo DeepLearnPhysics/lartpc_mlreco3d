@@ -8,10 +8,10 @@ import torch
 import torch.nn as nn
 import sparseconvnet as scn
 
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 
 
-class UResNet(NetworkBase):
+class UResNet(SCNNetworkBase):
     '''
     Vanilla UResNet with access to intermediate layers in
     encoder/decoder path.
@@ -164,14 +164,11 @@ class UResNet(NetworkBase):
         return res
 
 
-class UResNetEncoder(NetworkBase):
+class UResNetEncoder(SCNNetworkBase):
 
     def __init__(self, cfg, name='uresnet_encoder'):
         super(UResNetEncoder, self).__init__(cfg, name='network_base')
         self.model_config = cfg[name]
-        # print(name)
-        # print(self.model_config)
-        # print('\n')
         # UResNet Configurations
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
         self.kernel_size = self.model_config.get('kernel_size', 2)
@@ -224,7 +221,7 @@ class UResNetEncoder(NetworkBase):
         return res
 
 
-class UResNetDecoder(NetworkBase):
+class UResNetDecoder(SCNNetworkBase):
 
     def __init__(self, cfg, name='uresnet_decoder'):
         super(UResNetDecoder, self).__init__(cfg, name='network_base')
