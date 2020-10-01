@@ -30,6 +30,8 @@ class Handlers:
         return list(self.__dict__.keys())
 
 
+# Use this function instead of itertools.cycle to avoid creating  a memory leak.
+# (itertools.cycle attempts to save all outputs in order to re-cycle through them)
 def cycle(data_io):
     while True:
         for x in data_io:
