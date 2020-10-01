@@ -136,9 +136,9 @@ class MomentumNet(nn.Module):
 class GraphEncoder(nn.Module):
     '''
     Graph Encoder Module, using the first half of GraphUNet implementation in
-    Pytorch Geometric. 
+    Pytorch Geometric.
     '''
-    def __init__(self, in_channels, hidden_channels, out_channels, 
+    def __init__(self, in_channels, hidden_channels, out_channels,
                  depth, pool_ratio=0.5, sum_res=True, act=F.elu):
         super(GraphEncoder, self).__init__()
         assert depth > 1
@@ -265,8 +265,11 @@ def subgraph(subset, edge_index, edge_attr=None, relabel_nodes=False,
 class ParticleFlowModel(nn.Module):
     '''
     Particle Flow Prediction and Particle Classification using induced subgraph
-    encoder module. 
+    encoder module.
     '''
+
+    MODULES = [('node_encoder', {'network_base': {}, 'uresnet_encoder': {}, 'res_encoder': {}}),
+                'edge_model', 'particle_flow', 'subgraph_loss', 'chain']
 
     def __init__(self, cfg, name='particle_flow'):
         super(ParticleFlowModel, self).__init__()
@@ -283,7 +286,7 @@ class ParticleFlowModel(nn.Module):
             self.num_node_features, self.num_edge_features)
         self.graph_encoder = GraphEncoder(128, [256, 512, 1024], 512, 3)
         self.particle_pred = nn.Linear(1024, 5)
-        
+
 
     def forward(self, input):
         device = input[0].device
@@ -326,7 +329,7 @@ class ParticleFlowModel(nn.Module):
         edge_assn = torch.argmax(edge_pred, dim=1).to(dtype=torch.bool)
         pruned_edge_features = pruned_edge_features[edge_assn]
         node_features = res['node_features'][0]
-        
+
         pgraph_xbatch = []
         pgraph_nodes = []
         pgraph_edges = []
@@ -346,8 +349,8 @@ class ParticleFlowModel(nn.Module):
                 # print(sg_nodes.shape)
                 # print(torch.sum(particle_mask))
                 # if torch.sum(particle_mask) > 3:
-                sg_index, sg_attr = subgraph(particle_mask, 
-                    pruned_index, 
+                sg_index, sg_attr = subgraph(particle_mask,
+                    pruned_index,
                     edge_attr=pruned_edge_features)
                     # print(sg_idnex, sg_attr)
                 # print(torch.sum(particle_mask).item(), sg_index, sg_attr.shape)
@@ -356,7 +359,7 @@ class ParticleFlowModel(nn.Module):
                 pgraph_edges.append(sg_attr)
                 pgraph_eindex.append(sg_index)
                 xbatch_count += 1
-        
+
         pgraph_xbatch = torch.cat(pgraph_xbatch)
         pgraph_nodes = torch.cat(pgraph_nodes, dim=0)
         pgraph_edges = torch.cat(pgraph_edges, dim=0)
@@ -505,7 +508,7 @@ class SubgraphLoss(nn.Module):
             # If the input did not have any node, proceed
             if 'node_pred' not in out:
                 continue
-            
+
             # true_labels = []
             # # Get the list of batch ids, loop over individual batches
             # batches = kinematics[i][:,3]
@@ -538,9 +541,9 @@ class SubgraphLoss(nn.Module):
             # print(Counter(pdg_ids))
 
             # If the majority cluster ID agrees with the majority group ID, assign as primary
-            node_assn = torch.tensor(pdg_ids, 
-                dtype=torch.long, 
-                device=particles_logits.device, 
+            node_assn = torch.tensor(pdg_ids,
+                dtype=torch.long,
+                device=particles_logits.device,
                 requires_grad=False)
 
             # Increment the loss, balance classes if requested
@@ -578,7 +581,7 @@ class SubgraphLoss(nn.Module):
         if not n_clusts:
             return {
                 'type_accuracy': 0.,
-                'type_loss': torch.tensor(0., requires_grad=True, 
+                'type_loss': torch.tensor(0., requires_grad=True,
                     device=clusters[0].device),
                 'n_clusts': n_clusts,
                 'acc_type': 0.,
@@ -719,7 +722,7 @@ class SubgraphLoss(nn.Module):
 #                 #     clust_ids = clust_ids[purity_mask]
 #                 #     pdg_ids = pdg_ids[purity_mask]
 #                 #     node_pred = node_pred[np.where(purity_mask)[0]]
-#                     # if not len(clusts): 
+#                     # if not len(clusts):
 #                     #     continue
 
 #                 # If the majority cluster ID agrees with the majority group ID, assign as primary
