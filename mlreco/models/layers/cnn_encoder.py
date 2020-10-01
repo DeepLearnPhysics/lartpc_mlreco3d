@@ -7,7 +7,7 @@ from torch_geometric.nn import MetaLayer, NNConv
 import sparseconvnet as scn
 
 from mlreco.models.layers.uresnet import UResNetEncoder
-
+from pprint import pprint
 
 class EncoderModel(torch.nn.Module):
 
@@ -120,19 +120,31 @@ class ResidualEncoder(UResNetEncoder):
            scn.SubmanifoldConvolution(
                self.dimension, self.nInputFeatures, self.num_filters, 3, False))
 
-        self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-
         self.coordConv = self.model_config.get('coordConv', True)
         self.pool_mode = self.model_config.get('pool_mode', 'max')
+
         self.final_tensor_shape = self.spatial_size // (2**(self.num_strides-1))
+        print("Final Tensor Shape = ", self.final_tensor_shape)
 
         if self.pool_mode == 'max':
+            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
             self.pool = nn.MaxPool3d(self.final_tensor_shape)
         elif self.pool_mode == 'flatten':
+            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
             self.pool = Flatten()
-        else:
+        elif self.pool_mode == 'avg':
+            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
             self.pool = nn.AvgPool3d(self.final_tensor_shape)
+        else:
+            self.output = scn.Sequential().add(
+                scn.Convolution(
+                    self.dimension, self.nPlanes[-1], self.nPlanes[-1],
+                    self.final_tensor_shape, 1,
+                    self.allow_bias)).add(
+                scn.SparseToDense(self.dimension, self.nPlanes[-1]))
+            self.pool = nn.MaxPool3d(1)
         self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
+
 
     def forward(self, point_cloud):
         '''
@@ -149,6 +161,7 @@ class ResidualEncoder(UResNetEncoder):
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
         batch_size = coords[:, 3].unique().shape[0]
+
         # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
@@ -163,7 +176,6 @@ class ResidualEncoder(UResNetEncoder):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-
         out = self.output(x)
         out = self.pool(out).view(batch_size, -1)
         out = self.linear(out)

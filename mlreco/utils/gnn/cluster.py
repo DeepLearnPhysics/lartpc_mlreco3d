@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 
-def form_clusters(data, min_size=-1, column=5):
+def form_clusters(data, min_size=-1, column=5, batch_index=3):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up each of the clusters in the input tensor.
@@ -15,8 +15,8 @@ def form_clusters(data, min_size=-1, column=5):
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
     clusts = []
-    for b in data[:, 3].unique():
-        binds = torch.nonzero(data[:, 3] == b).flatten()
+    for b in data[:, batch_index].unique():
+        binds = torch.nonzero(data[:, batch_index] == b).flatten()
         for c in data[binds,column].unique():
             # Skip if the cluster ID is -1 (not defined)
             if c < 0:
@@ -45,7 +45,7 @@ def reform_clusters(data, clust_ids, batch_ids, column=5):
     return np.array([np.where((data[:,3] == batch_ids[j]) & (data[:,column] == clust_ids[j]))[0] for j in range(len(batch_ids))])
 
 
-def get_cluster_batch(data, clusts):
+def get_cluster_batch(data, clusts, batch_index=3):
     """
     Function that returns the batch ID of each cluster.
     This should be unique for each cluster, assert that it is.
@@ -58,8 +58,8 @@ def get_cluster_batch(data, clusts):
     """
     labels = []
     for c in clusts:
-        assert len(data[c,3].unique()) == 1
-        labels.append(int(data[c[0],3].item()))
+        assert len(data[c,batch_index].unique()) == 1
+        labels.append(int(data[c[0],batch_index].item()))
 
     return np.array(labels)
 
@@ -83,7 +83,26 @@ def get_cluster_label(data, clusts, column=5):
     return np.array(labels)
 
 
-def get_momenta_labels(data, clusts, columns=[7,8,9]):
+def get_cluster_label_np(data, clusts, column=5):
+    """
+    Function that returns the majority label of each cluster,
+    as specified in the requested data column.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of cluster IDs
+    """
+    labels = []
+    for c in clusts:
+        v, cts = np.unique(data[c,column], return_counts=True)
+        labels.append(int(v[cts.argmax()].item()))
+
+    return np.array(labels)
+
+
+def get_momenta_label(data, clusts, column=8):
     """
     Function that returns the momentum unit vector of each cluster.
 
@@ -97,9 +116,28 @@ def get_momenta_labels(data, clusts, columns=[7,8,9]):
     for c in clusts:
         v = data[c,:]
         # print(v[:, columns].mean(dim=0))
-        labels.append(v[:, columns].mean(dim=0))
+        labels.append(v[:, column].mean(dim=0))
     labels = torch.stack(labels, dim=0)
     return labels.to(dtype=torch.float32)
+
+
+def get_momenta_label_np(data, clusts, column=8):
+    """
+    Function that returns the momentum unit vector of each cluster.
+
+    Args:
+        data (np.ndarray)    : (N,12) [x, y, z, batchid, value, id, groupid, px, py, pz, p, pdg]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C) List of cluster IDs
+    """
+    labels = []
+    for c in clusts:
+        v = data[c,:]
+        # print(v[:, columns].mean(dim=0))
+        labels.append(v[:, column].mean(axis=0))
+    labels = np.vstack(labels)
+    return labels
 
 
 def get_cluster_voxels(data, clust):
