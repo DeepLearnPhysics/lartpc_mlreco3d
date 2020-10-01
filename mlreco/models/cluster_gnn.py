@@ -334,7 +334,7 @@ class EdgeChannelLoss(torch.nn.Module):
                         if len(clust_ids) < 2:
                             continue
 
-                        mst_mat = minimum_spanning_tree(score_mat[np.ix_(clust_ids,clust_ids)]).toarray().astype(float)
+                        mst_mat = minimum_spanning_tree(score_mat[np.ix_(clust_ids,clust_ids)]+1e-6).toarray().astype(float)
                         inds = np.where(mst_mat.flatten() > 0.)[0]
                         ind_pairs = np.array(np.unravel_index(inds, mst_mat.shape)).T
                         edges = np.array([[clust_ids[i], clust_ids[j]] for i, j in ind_pairs])

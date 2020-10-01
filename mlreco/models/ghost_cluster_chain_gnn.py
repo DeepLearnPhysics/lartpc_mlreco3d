@@ -13,9 +13,10 @@ from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
 from mlreco.utils.gnn.network import complete_graph
 import mlreco.utils
+from mlreco.utils.deghosting import adapt_labels
 # chain UResNet + PPN + DBSCAN + GNN for showers
 
-class ChainDBSCANGNN(torch.nn.Module):
+class GhostChainDBSCANGNN(torch.nn.Module):
     """
     Chain of Networks
     1) UResNet - for voxel labels
@@ -30,7 +31,7 @@ class ChainDBSCANGNN(torch.nn.Module):
     MODULES = ['chain', 'dbscan', 'uresnet_lonely', 'attention_gnn', 'ppn', 'node_encoder', 'edge_encoder', 'edge_model', 'node_model']
 
     def __init__(self, model_config):
-        super(ChainDBSCANGNN, self).__init__()
+        super(GhostChainDBSCANGNN, self).__init__()
 
         # Initialize the chain parameters
         chain_config = model_config['chain']
@@ -39,6 +40,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         self.group_pred = chain_config.get('group_pred', 'threshold')
         self.start_dir_max_dist = chain_config.get('start_dir_max_dist', -1)
         self.start_dir_opt = chain_config.get('start_dir_opt', False)
+        self.input_features = model_config['uresnet_lonely'].get('features', 1)
 
         # Initialize the modules
         self.uresnet_lonely = UResNet(model_config)
@@ -48,19 +50,7 @@ class ChainDBSCANGNN(torch.nn.Module):
         self.edge_encoder   = edge_encoder_construct(model_config)
         self.full_predictor = edge_model_construct(model_config)
 
-    def forward(self, data):
-
-        # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
-        result = self.uresnet_lonely([data[0]])
-        ppn_input = {}
-        ppn_input.update(result)
-        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
-        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
-        if 'ghost' in ppn_input:
-            ppn_input['ghost'] = ppn_input['ghost'][0]
-        ppn_output = self.ppn(ppn_input)
-        result.update(ppn_output)
-
+    def full_chain(self, data, result):
         # Run DBSCAN
         semantic = torch.argmax(result['segmentation'][0],1).view(-1,1)
         dbscan_input = torch.cat([data[0].to(torch.float32),semantic.to(torch.float32)],dim=1)
@@ -149,23 +139,53 @@ class ChainDBSCANGNN(torch.nn.Module):
             edge_pred = [edge_pred],
             group_pred = [split_group_ids]
         ))
+        return result
+
+    def forward(self, data):
+
+        # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
+        result = self.uresnet_lonely([data[0]])
+        ppn_input = {}
+        ppn_input.update(result)
+        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
+        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
+        if 'ghost' in ppn_input:
+            ppn_input['ghost'] = ppn_input['ghost'][0]
+        ppn_output = self.ppn(ppn_input)
+        result.update(ppn_output)
+
+        # Update input based on deghosting results
+        deghost = result['ghost'][0].argmax(dim=1) == 0
+        data[0] = data[0][deghost]
+        if self.input_features > 1:
+            data[0] = data[0][:, :-self.input_features+1]
+
+        segmentation, points = result['segmentation'][0].clone(), result['points'][0].clone()
+
+        deghost_result = {}
+        deghost_result.update(result)
+        deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
+        deghost_result['points'][0] = result['points'][0][deghost]
+        # Run the rest of the full chain
+
+        full_chain_result = self.full_chain(data, deghost_result)
+
+        result.update(full_chain_result)
+        result['segmentation'][0] = segmentation
+        result['points'][0] = points
 
         return result
 
 
-class ChainLoss(torch.nn.modules.loss._Loss):
+class GhostChainLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
-        super(ChainLoss, self).__init__()
+        super(GhostChainLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
         self.ppn_loss     = PPNLoss(cfg)
         self.node_loss    = NodeChannelLoss(cfg)
         self.edge_loss    = EdgeChannelLoss(cfg)
 
-    def forward(self, result, sem_label, particles, clust_label):
-
-        loss = {}
-        uresnet_loss = self.uresnet_loss(result, sem_label)
-        ppn_loss = self.ppn_loss(result, sem_label, particles)
+    def full_chain_loss(self, result, clust_label):
         if 'shower_fragments' in result:
             result['clusts'] = result['shower_fragments']
         edge_loss = self.edge_loss(result, clust_label, None)
@@ -175,6 +195,18 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         node_loss = self.node_loss(result, clust_label_new)
         if 'clusts' in result:
             del result['clusts']
+        return edge_loss, node_loss
+
+    def forward(self, result, sem_label, particles, clust_label):
+        loss = {}
+        uresnet_loss = self.uresnet_loss(result, sem_label)
+        ppn_loss = self.ppn_loss(result, sem_label, particles)
+
+        # Adapt to ghost points
+        clust_label = adapt_labels(result, sem_label, clust_label)
+
+        edge_loss, node_loss = self.full_chain_loss(result, clust_label)
+
         loss.update(uresnet_loss)
         loss.update(ppn_loss)
         loss.update(node_loss)
