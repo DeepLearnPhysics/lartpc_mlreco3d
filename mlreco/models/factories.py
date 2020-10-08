@@ -30,15 +30,19 @@ def model_dict():
     from . import clustercnn_adaptis
     # from . import cluster_chain
     from . import full_chain
-    from . import full_chain_2
-    from . import full_chain_3
-    from . import full_chain_4
-    from . import full_chain_5
     from . import full_cnn
     from . import hierarchy
     from . import particle_types
     from . import cluster_gnn_kinematics
 
+    from . import ghost_chain
+    from . import ghost_chain_2
+    from . import ghost_cluster_full_gnn
+    from . import ghost_spatial_embeddings
+    from . import ghost_cluster_chain_gnn
+    from . import ghost_track_clustering
+    from . import ghost_nu
+    from . import particle_types
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -117,6 +121,15 @@ def model_dict():
         # Flow and Particle Type
         "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
         "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss)
+        #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        # Deghosting models
+        #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
+        "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
+        "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
+        "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
+        "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
+        "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
+        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }

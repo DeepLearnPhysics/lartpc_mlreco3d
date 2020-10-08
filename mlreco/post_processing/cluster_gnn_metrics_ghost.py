@@ -10,7 +10,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
     deghosting = cfg['post_processing']['cluster_gnn_metrics'].get('ghost', False)
 
     # If there is no prediction, proceed
-    cfg_edge_pred = cfg['post_processing']['cluster_gnn_metrics'].get('edge_pred', 'edge_pred')
+    edge_pred = cfg['post_processing']['cluster_gnn_metrics'].get('edge_pred', 'edge_pred')
 
     # Get the post processor parameters
     cfg_column = cfg['post_processing']['cluster_gnn_metrics'].get('column', 6)
@@ -19,8 +19,8 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
     cfg_store_method = cfg['post_processing']['cluster_gnn_metrics']['store_method']
 
     cfg_filename = cfg['post_processing']['cluster_gnn_metrics'].get('filename', 'cluster-gnn-metrics')
-    cfg_edge_index = cfg['post_processing']['cluster_gnn_metrics'].get('edge_index', 'edge_index')
-    cfg_clusts = cfg['post_processing']['cluster_gnn_metrics'].get('clusts', 'clusts')
+    cfg_edge_index = res[cfg['post_processing']['cluster_gnn_metrics'].get('edge_index', 'edge_index')]
+    cfg_clusts = res[cfg['post_processing']['cluster_gnn_metrics'].get('clusts', 'clusts')]
     if isinstance(cfg_column, list):
         assert isinstance(cfg_chain, list)
         assert isinstance(cfg_store_method, list)
@@ -44,26 +44,22 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
 
     seg_label = data_blob['segment_label']
     clust_data = data_blob['clust_label']
-    particles = data_blob['particles']
-
     if deghosting:
         clust_data = adapt_labels(res, seg_label, data_blob['clust_label'])
         seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
 
-    for column, chain, store_method, filename, edge_pred_label, edge_index_label, clusts_label in zip(cfg_column, cfg_chain, cfg_store_method, cfg_filename, cfg_edge_pred, cfg_edge_index, cfg_clusts):
-        if not edge_pred_label in res: continue
+    for column, chain, store_method, filename, edge_pred, edge_index, clusts in zip(cfg_column, cfg_chain, cfg_store_method, cfg_filename, cfg_edge_pred, cfg_edge_index, cfg_clusts):
+        if not edge_pred in res: continue
         bipartite = cfg['model']['modules'][chain].get('network', 'complete') == 'bipartite'
         store_per_event = store_method == 'per-event'
 
         if store_method == 'per-iteration':
-            fout = CSVData(os.path.join(logdir, '%s-iter-%07d.csv' % (filename, iteration)))
+            fout = CSVData(os.path.join(logdir, 'cluster-gnn-metrics-iter-%07d.csv' % iteration))
         if store_method == 'single-file':
             append = True if iteration else False
-            fout = CSVData(os.path.join(logdir, '%s.csv' % filename), append=append)
+            fout = CSVData(os.path.join(logdir, 'cluster-gnn-metric.csv'), append=append)
 
-        edge_pred = res[edge_pred_label]
-        clusts = res[clusts_label]
-        edge_index = res[edge_index_label]
+        edge_pred = res[edge_pred]
 
         # Loop over events
         for data_idx, tree_idx in enumerate(index):
@@ -71,12 +67,11 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
                 continue
             # Initialize log if one per event
             if store_per_event:
-                fout = CSVData(os.path.join(logdir, '%s-event-%07d.csv' % (filename, tree_idx)))
+                fout = CSVData(os.path.join(logdir, 'cluster-gnn-metrics-event-%07d.csv' % tree_idx))
 
             # If there is no node, append default
             if not len(clusts[data_idx]) or not len(clust_data[data_idx]):
-                fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff', 'num_clusts', 'num_pix'],
-                            [iteration, tree_idx, -1, -1, -1, -1, -1, -1, -1])
+                fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff'], [iteration, tree_idx, -1, -1, -1, -1, -1])
                 continue
 
             # Use group id to make node labels
@@ -87,7 +82,6 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
 
             # Assign predicted group ids
             n = len(clusts[data_idx])
-            num_pix = np.sum([len(c) for c in clusts[data_idx]])
             if not bipartite:
                 # Determine the predicted group IDs by using union find
                 edge_assn = np.argmax(edge_pred[data_idx], axis=1)
@@ -101,8 +95,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
             ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
 
             # Store
-            fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff', 'num_clusts', 'num_pix'],
-                        [iteration, tree_idx, ari, ami, sbd, pur, eff, n, num_pix])
+            fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff'], [iteration, tree_idx, ari, ami, sbd, pur, eff])
             fout.write()
             if store_per_event:
                 fout.close()

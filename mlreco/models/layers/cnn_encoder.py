@@ -111,7 +111,7 @@ class Flatten(nn.Module):
 class ResidualEncoder(UResNetEncoder):
 
     def __init__(self, cfg, name='res_encoder'):
-        super(ResidualEncoder, self).__init__(cfg)
+        super(ResidualEncoder, self).__init__(cfg,'res_encoder')
         self.model_config = cfg[name]
         self.num_features = self.model_config.get('num_features', 32)
 
@@ -161,7 +161,6 @@ class ResidualEncoder(UResNetEncoder):
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
         batch_size = coords[:, 3].unique().shape[0]
-
         # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \

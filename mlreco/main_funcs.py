@@ -9,7 +9,6 @@ import sys
 import numpy as np
 import torch
 import pprint
-import itertools
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
@@ -31,6 +30,8 @@ class Handlers:
         return list(self.__dict__.keys())
 
 
+# Use this function instead of itertools.cycle to avoid creating  a memory leak.
+# (itertools.cycle attempts to save all outputs in order to re-cycle through them)
 def cycle(data_io):
     while True:
         for x in data_io:
@@ -39,12 +40,12 @@ def cycle(data_io):
 
 def train(cfg):
     handlers = prepare(cfg)
-    train_loop(cfg, handlers)
+    train_loop(handlers)
 
 
 def inference(cfg):
     handlers = prepare(cfg)
-    inference_loop(cfg, handlers)
+    inference_loop(handlers)
 
 
 def process_config(cfg, verbose=True):
@@ -114,6 +115,8 @@ def make_directories(cfg, loaded_iteration, handlers=None):
             if not cfg['trainval']['train']:
                 logname = '%s/inference_log-%07d.csv' % (cfg['trainval']['log_dir'], loaded_iteration)
             if handlers is not None:
+                if hasattr(handlers,'csv_logger') and handlers.csv_logger:
+                    handlers.csv_logger.close()
                 handlers.csv_logger = utils.CSVData(logname)
 
 
@@ -132,7 +135,7 @@ def prepare(cfg, event_list=None):
     handlers.data_io = loader_factory(cfg, event_list=event_list)
 
     # IO iterator
-    handlers.data_io_iter = itertools.cycle(handlers.data_io)
+    handlers.data_io_iter = iter(cycle(handlers.data_io))
 
     if 'trainval' in cfg:
         # Set random seed for reproducibility
@@ -142,11 +145,6 @@ def prepare(cfg, event_list=None):
         # Set primary device
         if len(cfg['trainval']['gpus']) > 0:
             torch.cuda.set_device(cfg['trainval']['gpus'][0])
-
-        # TODO check that it does what we want (cycle through dataloader)
-        # check on a small sample, check 1/ it cycles through and 2/ randomness
-        if cfg['trainval']['train']:
-            handlers.data_io_iter = iter(cycle(handlers.data_io))
 
         # Trainer configuration
         handlers.trainer = trainval(cfg)
@@ -176,10 +174,7 @@ def apply_event_filter(handlers,event_list=None):
     handlers.data_io = loader_factory(handlers.cfg,event_list)
 
     # IO iterator
-    handlers.data_io_iter = itertools.cycle(handlers.data_io)
-
-    if 'trainval' in handlers.cfg and handlers.cfg['trainval']['train']:
-        handlers.data_io_iter = iter(cycle(handlers.data_io))
+    handlers.data_io_iter = iter(cycle(handlers.data_io))
 
 
 def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
@@ -256,11 +251,12 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         if handlers.train_logger: handlers.train_logger.flush()
 
 
-def train_loop(cfg, handlers):
+def train_loop(handlers):
     """
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
+    cfg=handlers.cfg
     tsum = 0.
     while handlers.iteration < cfg['trainval']['iterations']:
         epoch = handlers.iteration / float(len(handlers.data_io))
@@ -303,7 +299,7 @@ def train_loop(cfg, handlers):
         handlers.csv_logger.close()
 
 
-def inference_loop(cfg, handlers):
+def inference_loop(handlers):
     """
     Inference loop. Loops over weight files specified in
     cfg['trainval']['model_path']. For each weight file,
@@ -314,37 +310,40 @@ def inference_loop(cfg, handlers):
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}
-    weights = glob.glob(cfg['trainval']['model_path'])
+    weights = glob.glob(handlers.cfg['trainval']['model_path'])
     # if len(weights) > 0:
-    print("Loading weights: ", weights)
+    print("Looping over weights: ", len(weights))
+    for w in weights: print('  -',w)
     for weight in weights:
-        cfg['trainval']['model_path'] = weight
-        _ = handlers.trainer.initialize()
+        print('Setting weights',weight)
+        handlers.cfg['trainval']['model_path'] = weight
+        loaded_iteration = handlers.trainer.initialize()
+        make_directories(handlers.cfg,loaded_iteration,handlers)
         handlers.iteration = 0
-        while handlers.iteration < cfg['trainval']['iterations']:
+        handlers.data_io_iter = iter(cycle(handlers.data_io))
+        while handlers.iteration < handlers.cfg['trainval']['iterations']:
 
             epoch = handlers.iteration / float(len(handlers.data_io))
             tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             handlers.watch.start('iteration')
 
-            checkpt_step = cfg['trainval']['checkpoint_step'] and \
-                           cfg['trainval']['weight_prefix'] and \
-                           ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
+            checkpt_step = handlers.cfg['trainval']['checkpoint_step'] and \
+                           handlers.cfg['trainval']['weight_prefix'] and \
+                           ((handlers.iteration+1) % handlers.cfg['trainval']['checkpoint_step'] == 0)
 
             # Run inference
             data_blob, result_blob = handlers.trainer.forward(handlers.data_io_iter)
-
             # Store output if requested
-            if 'post_processing' in cfg:
-                for processor_name,processor_cfg in cfg['post_processing'].items():
+            if 'post_processing' in handlers.cfg:
+                for processor_name,processor_cfg in handlers.cfg['post_processing'].items():
                     processor = getattr(post_processing,str(processor_name))
-                    processor(cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
+                    processor(handlers.cfg,data_blob,result_blob,handlers.cfg['trainval']['log_dir'],handlers.iteration)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')
 
             log(handlers, tstamp_iteration,
-                tsum, result_blob, cfg, epoch, data_blob['index'][0])
+                tsum, result_blob, handlers.cfg, epoch, data_blob['index'][0])
 
             handlers.iteration += 1
 
