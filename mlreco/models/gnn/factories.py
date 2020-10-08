@@ -8,6 +8,7 @@ def edge_model_dict():
     """
 
     from . import modular_nnconv
+    from . import modular_nnconv_old
     from . import modular_econv
     from . import modular_gatconv
     from . import modular_agnnconv
@@ -26,6 +27,7 @@ def edge_model_dict():
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
+        "modular_nnconv_old" : modular_nnconv_old.NNConvModel,
         "modular_nnconv_elu": modular_nnconv_elu.NNConvModel,
         "modular_econv" : modular_econv.EConvModel,
         "modular_gatconv" : modular_gatconv.GATConvModel,
