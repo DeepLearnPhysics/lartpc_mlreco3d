@@ -99,9 +99,39 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         # Michel_particles = particles[particles[:, 4] == Michel_label]
         MIP_coords = data[label == MIP_label][:, :3]
         # Michel_coords = data[label == Michel_label][:, :3]
-        Michel_coords = clusters[clusters_semantics == Michel_label][:, :3]
-        if Michel_coords.shape[0] == 0:  # FIXME
+        Michel_all = clusters[clusters_semantics == Michel_label]
+        if Michel_all.shape[0] == 0:  # FIXME
             continue
+        #print(Michel_all.shape)
+        if method_cfg.get('dbscan', False):
+            shower_label = 0
+            lowE_label = 4
+            #Michel_coords = clusters[(clusters_semantics == Michel_label) | (clusters_semantics == shower_label) | (clusters_semantics == lowE_label)][:, :3]
+            shower_lowE = clusters[(clusters_semantics == shower_label) | (clusters_semantics == lowE_label)]
+            if shower_lowE.shape[0] > 0:
+                shower_lowE_clusters = DBSCAN(eps=one_pixel, min_samples=1).fit(shower_lowE[:, :3]).labels_
+
+                d = cdist(Michel_all[:, :3], shower_lowE[:, :3])
+                select_shower = (d.min(axis=0) < method_cfg.get('threshold', 2.))
+                select_shower_clusters = np.unique(shower_lowE_clusters[(shower_lowE_clusters>-1) & select_shower])
+                fragments = []
+                for shower_id in select_shower_clusters:
+                    fragment = shower_lowE[shower_lowE_clusters == shower_id]
+                    print(batch_id, "merging", fragment.shape[0])
+                    #print(fragment[:, -3][:20])
+                    temp = fragment[:, -3]
+                    print(temp, Michel_all[d[:, shower_lowE_clusters == shower_id].min(axis=1).argmin(), -3])
+                    fragment[:, -3] = Michel_all[d[:, shower_lowE_clusters == shower_id].min(axis=1).argmin(), -3]
+                    print(np.count_nonzero(temp != fragment[:, -3]))
+                    fragments.append(fragment)
+                Michel_all = np.concatenate([Michel_all] + fragments, axis=0)
+                print(Michel_all.shape)
+            # Michel_true_clusters = DBSCAN(eps=2., min_samples=5).fit(Michel_coords).labels_
+            # Michel_coords = Michel_coords[Michel_true_clusters>-1]
+            # Michel_true_clusters = Michel_true_clusters[Michel_true_clusters>-1]
+            # Michel_all = Michel_all[Michel_true_clusters>-1]
+
+        Michel_coords = Michel_all[:, :3]
         MIP_coords_pred = data_pred[(predictions == MIP_label).reshape((-1,)), ...][:, :3]
         Michel_coords_pred = data_pred[(predictions == Michel_label).reshape((-1,)), ...][:, :3]
 
@@ -109,7 +139,8 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         # Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
         # Michel_true_clusters = [Michel_coords[Michel_coords[:, -2] == gid] for gid in np.unique(Michel_coords[:, -2])]
         #print(clusters.shape, label.shape)
-        Michel_true_clusters = clusters[clusters_semantics == Michel_label][:, -3].astype(np.int64)
+        Michel_true_clusters = Michel_all[:, -3].astype(np.int64)
+
         # Michel_start = Michel_particles[:, :3]
         for cluster in np.unique(Michel_true_clusters):
             # print("True", np.count_nonzero(Michel_true_clusters == cluster))
@@ -117,7 +148,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
             fout_true.record(('batch_id', 'iteration', 'event_idx', 'num_pix', 'sum_pix'),
                              (batch_id, iteration, event_idx,
                               np.count_nonzero(Michel_true_clusters == cluster),
-                              clusters[clusters_semantics == Michel_label][Michel_true_clusters == cluster][:, -4].sum()))
+                              Michel_all[Michel_true_clusters == cluster][:, -4].sum()))
             fout_true.write()
 
         # TODO how do we count events where there are no predictions but true?
@@ -184,7 +215,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                                 michel_pred_sum_pix_true += v[-1]
 
                         michel_true_num_pix = particles[closest_true_id].num_voxels()
-                        michel_true_sum_pix = clusters[clusters_semantics == Michel_label][Michel_true_clusters == closest_true_id][:, -4].sum()
+                        michel_true_sum_pix = Michel_all[Michel_true_clusters == closest_true_id][:, -4].sum()
                         # Register true energy
                         # Match to MC Michel
                         # distances2 = cdist(Michel_coords[Michel_true_clusters == closest_true_id], Michel_start)

@@ -1,9 +1,15 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import torch
 import numpy as np
 from collections import defaultdict
 
+from mlreco.models.layers.dbscan import distances
+
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
+from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
@@ -17,70 +23,30 @@ from mlreco.models.gnn.losses.grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
-from mlreco.utils.gnn.cluster import cluster_direction
+from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch
+from mlreco.utils.deghosting import adapt_labels
 
-class FullChain(torch.nn.Module):
+
+class GhostChain(torch.nn.Module):
     """
-    Driver class for the end-to-end reconstruction chain
-    1) UResNet
-        1) Semantic - for point classification
-        2) PPN - for particle point locations
-        3) Fragment - to form particle fragments
-    2) GNN
-        1) Particle - to group showers and identify their primaries
-        2) Interaction - to group particles
-
-    For use in config:
-    model:
-      name: full_chain
-      modules:
-        full_cnn:
-          <full CNN global parameters, see mlreco/models/chain/full_cnn.py>
-        network_base:
-          <uresnet archicteture core parameters, see mlreco/models/layers/base.py>
-        uresnet_encoder:
-          <uresnet encoder parameters, see mlreco/models/layers/uresnet.py>
-        segmentation_decoder:
-          <uresnet segmention decoder paraters, see mlreco/models/chain/full_cnn.py>
-        seediness_decoder:
-          <uresnet seediness decoder paraters, see mlreco/models/chain/full_cnn.py>
-        embedding_decoder:
-          <uresnet embedding decoder paraters, see mlreco/models/chain/full_cnn.py>
-        particle_gnn:
-          node_type    : <fragment semantic class to include in the particle grouping task>
-          node_min_size: <fragment size to include in the particle grouping task>
-        interaction_gnn:
-          node_type    : <particle semantic class to include in the interaction grouping task>
-          node_min_size: <particle size to include in the interaction grouping task>
-        particle_edge_model:
-          <GNN parameters for particle clustering, see mlreco/models/gnn/modular_nnconv.py>
-        interaction_edge_model:
-          <GNN parameters for interaction clustering, see mlreco/models/gnn/modular_nnconv.py>
-        full_chain_loss:
-          name: <name of the loss function for the CNN fragment clustering model>
-          spatial_size: <spatial size of input images>
-          segmentation_weight: <relative weight of the segmentation loss>
-          clustering_weight: <relative weight of the clustering loss>
-          seediness_weight: <relative weight of the seediness loss>
-          embedding_weight: <relative weight of the embedding loss>
-          smoothing_weight: <relative weight of the smoothing loss>
-          ppn_weight: <relative weight of the ppn loss>
-          particle_gnn_weight: <relative weight of the particle gnn loss>
-          interaction_gnn_weight: <relative weight of the interaction gnn loss>
+    Full Chain using deghosting input
+    Based on mlreco.models.full_chain_4
     """
-
+    # INPUT_SCHEMA = [
+    #     ["parse_sparse3d_scn", (float,), (3, 1)],
+    # ]
+    # MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
     MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
             'embedding_decoder', 'particle_gnn', 'interaction_gnn', 'particle_edge_model',
             'interaction_edge_model', 'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss']
+            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss', 'chain']
 
-    def __init__(self, cfg, name='full_chain'):
-        super(FullChain, self).__init__()
-
-        # Initialize the UResNet+PPN modules
+    def __init__(self, cfg):
+        super(GhostChain, self).__init__()
         self.uresnet_lonely = UResNet(cfg)
         self.ppn            = PPN(cfg)
-        self.cluster_cnn    = ClusterCNN(cfg)
+        # Initialize the UResNet+PPN modules
+        self.spatial_embeddings    = ClusterCNN(cfg)
 
         # Fragment formation parameters
         self.frag_cfg     = cfg['fragment_clustering']
@@ -96,34 +62,15 @@ class FullChain(torch.nn.Module):
         self.particle_gnn  = GNN(cfg['particle_edge_model'])
         self.inter_gnn     = GNN(cfg['interaction_edge_model'])
         self.min_frag_size = cfg['particle_gnn'].get('node_min_size', -1)
+        self._use_ppn_shower = cfg['particle_gnn'].get('use_ppn_shower', False)
 
-    def forward(self, input):
-        '''
-        Forward for full reconstruction chain.
+        self.input_features = cfg['uresnet_lonely'].get('features', 1)
 
-        INPUTS:
-            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
+        # self.loss_cfg = cfg['full_chain_loss']
+        # self.ppn_active = self.loss_cfg.get('ppn_weight', 0.0) > 0.
+        #
 
-        RETURNS:
-            - result (tuple of dicts): (cnn_result, gnn_result)
-        '''
-        # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
-        device = input[0].device
-        result = self.uresnet_lonely([input[0][:,:5]])
-        ppn_input = {}
-        ppn_input.update(result)
-        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
-        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
-        if 'ghost' in ppn_input:
-            ppn_input['ghost'] = ppn_input['ghost'][0]
-        ppn_output = self.ppn(ppn_input)
-        result.update(ppn_output)
-
-        # Get fragment predictions from the CNN clustering algorithm
-        cluster_cnn_output = self.cluster_cnn([input[0][:,:5]])
-        result.update(cluster_cnn_output)
-
-        # Extract fragment predictions to input into the GNN
+    def extract_fragment(self, input, result):
         batch_labels = input[0][:,3]
         fragments = []
         frag_batch_ids = []
@@ -155,6 +102,29 @@ class FullChain(torch.nn.Module):
             assert len(vals) == 1
             frag_seg[i] = vals[torch.argmax(cnts)].item()
 
+        return fragments, frag_batch_ids, frag_seg
+
+    def full_chain(self, x):
+        '''
+        Forward for full reconstruction chain.
+
+        INPUTS:
+            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
+
+        RETURNS:
+            - result (tuple of dicts): (cnn_result, gnn_result)
+        '''
+        input, result = x
+        device = input[0].device
+
+        # Get fragment predictions from the CNN clustering algorithm
+        spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
+        result.update(spatial_embeddings_output)
+
+        # Extract fragment predictions to input into the GNN
+        fragments, frag_batch_ids, frag_seg = self.extract_fragment(input, result)
+        semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
+
         # Initialize a complete graph for edge prediction, get shower fragment and edge features
         em_mask = np.where(frag_seg == 0)[0]
         edge_index = complete_graph(frag_batch_ids[em_mask])
@@ -163,15 +133,16 @@ class FullChain(torch.nn.Module):
 
         # Extract shower starts from PPN predictions (most likely prediction)
         ppn_points = result['points'][0].detach()
-        ppn_feats = torch.empty((0,6), device=device, dtype=torch.float)
-        for f in fragments[em_mask]:
-            scores = torch.softmax(ppn_points[f,3:5], dim=1)
-            argmax = torch.argmax(scores[:,-1])
-            start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-            dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=5)
-            ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir]).reshape(1,-1)), dim=0)
+        if self._use_ppn_shower:
+            ppn_feats = torch.empty((0,6), device=device, dtype=torch.float)
+            for f in fragments[em_mask]:
+                scores = torch.softmax(ppn_points[f,3:5], dim=1)
+                argmax = torch.argmax(scores[:,-1])
+                start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
+                dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=5)
+                ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir]).reshape(1,-1)), dim=0)
 
-        x = torch.cat([x, ppn_feats], dim=1)
+            x = torch.cat([x, ppn_feats], dim=1)
 
         # Pass shower fragment features through GNN
         index = torch.tensor(edge_index, dtype=torch.long, device=device)
@@ -207,31 +178,31 @@ class FullChain(torch.nn.Module):
 
         result.update({'frag_group_pred': [group_ids]})
 
-        # Merge fragments into particle instances, retain primary id of showers
-        non_em_mask = np.where((frag_seg != 0) & (frag_seg != 4))[0]
-        particles = fragments[non_em_mask].tolist()
-        part_batch_ids = frag_batch_ids[non_em_mask]
-        part_primary_ids = -1*np.ones(len(non_em_mask), dtype=np.int32)
-        part_seg = frag_seg[non_em_mask]
+        # Merge fragments into particle instances, retain primary fragment id of showers
+        particles, part_primary_ids = [], []
         for b in range(len(counts)):
-            batch_mask = np.where(frag_batch_ids[em_mask] == b)[0]
+            # Append one particle per shower group
+            voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
             primary_labels = primary_assignment(node_pred[b].detach().cpu().numpy(), group_ids[b])
             for g in np.unique(group_ids[b]):
                 group_mask = np.where(group_ids[b] == g)[0]
-                voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
                 particles.append(voxel_inds[np.concatenate(frags[b][group_mask])])
-                group_batch = np.unique(frag_batch_ids[em_mask][batch_mask][group_mask])
-                primary_id = group_mask[primary_labels[group_mask]]
-                assert len(group_batch) == 1
-                part_batch_ids = np.concatenate((part_batch_ids, group_batch[0].reshape(1)))
-                part_seg = np.concatenate((part_seg, [0]))
-                part_primary_ids = np.concatenate((part_primary_ids, primary_id))
+                primary_id = group_mask[primary_labels[group_mask]][0]
+                part_primary_ids.append(primary_id)
 
-        part_order = np.argsort(part_batch_ids)
-        particles = np.array(particles)[part_order]
-        part_batch_ids = part_batch_ids[part_order]
-        part_seg = part_seg[part_order]
-        part_primary_ids = part_primary_ids[part_order]
+            # Append non-shower fragments as is
+            mask = (frag_batch_ids == b) & (frag_seg != 0)
+            particles.extend(fragments[mask])
+            part_primary_ids.extend(-np.ones(np.sum(mask)))
+
+        particles = np.array(particles)
+        part_batch_ids = get_cluster_batch(input[0], particles)
+        part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
+        part_seg = np.empty(len(particles), dtype=np.int32)
+        for i, p in enumerate(particles):
+            vals, cnts = semantic_labels[p].unique(return_counts=True)
+            assert len(vals) == 1
+            part_seg[i] = vals[torch.argmax(cnts)].item()
 
         # Initialize a complete graph for edge prediction, get particle and edge features
         edge_index = complete_graph(part_batch_ids)
@@ -290,15 +261,59 @@ class FullChain(torch.nn.Module):
 
         return result
 
+    def forward(self, input):
+        """
+        Assumes single GPU/CPU.
+        """
+        # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
+        result = self.uresnet_lonely([input[0][:,:4+self.input_features]])
+        ppn_input = {}
+        ppn_input.update(result)
+        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
+        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
+        if 'ghost' in ppn_input:
+            ppn_input['ghost'] = ppn_input['ghost'][0]
+        ppn_output = self.ppn(ppn_input)
+        result.update(ppn_output)
 
-class FullChainLoss(torch.nn.modules.loss._Loss):
+        # Update input based on deghosting results
+        deghost = result['ghost'][0].argmax(dim=1) == 0
+        # Also remove any extra features
+        new_input = [input[0][deghost]]
+
+        segmentation, points = result['segmentation'][0].clone(), result['points'][0].clone()
+
+        deghost_result = {}
+        deghost_result.update(result)
+        deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
+        deghost_result['points'][0] = result['points'][0][deghost]
+        # Run the rest of the full chain
+
+        full_chain_result = self.full_chain((new_input, deghost_result))
+
+        result.update(full_chain_result)
+        result['segmentation'][0] = segmentation
+        result['points'][0] = points
+
+        return result
+
+
+class GhostChainLoss(torch.nn.modules.loss._Loss):
+    """
+    Loss for UResNet + PPN chain
+    """
+    # INPUT_SCHEMA = [
+    #     ["parse_sparse3d_scn", (int,), (3, 1)],
+    #     ["parse_particle_points", (int,), (3, 1)]
+    # ]
+
     def __init__(self, cfg):
-        super(FullChainLoss, self).__init__()
+        super(GhostChainLoss, self).__init__()
+        self.uresnet_loss    = SegmentationLoss(cfg)
+        self.ppn_loss        = PPNLoss(cfg)
 
         # Initialize loss components
-        self.segmentation_loss = SegmentationLoss(cfg)
-        self.ppn_loss = PPNLoss(cfg)
-        self.cluster_cnn_loss = ClusteringLoss(cfg)
+        self.spatial_embeddings_loss = ClusteringLoss(cfg)
         self.particle_gnn_loss = FullGNNLoss(cfg, 'particle_gnn')
         self.inter_gnn_loss  = EdgeGNNLoss(cfg, 'interaction_gnn')
 
@@ -308,49 +323,17 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
         self.ppn_weight = self.loss_config.get('ppn_weight', 0.0)
         self.particle_gnn_weight = self.loss_config.get('particle_gnn_weight', 0.0)
-        self.inter_gnn_weight = self.loss_config.get('particle_gnn_weight', 0.0)
+        self.inter_gnn_weight = self.loss_config.get('inter_gnn_weight', 0.0)
 
-    def forward(self, out, cluster_label, ppn_label):
-        '''
-        Forward propagation for FullChain
-
-        INPUTS:
-            - out (dict): result from forwarding three-tailed UResNet, with
-            1) segmenation decoder 2) clustering decoder 3) seediness decoder,
-            and PPN attachment to the segmentation branch.
-
-            - cluster_label (list of Tensors): input data tensor of shape N x 10
-              In row-index order:
-              1. x coordinates
-              2. y coordinates
-              3. z coordinates
-              4. batch indices
-              5. energy depositions
-              6. fragment labels
-              7. group labels
-              8. interaction labels
-              9. neutrino labels
-              10. segmentation labels (0-5, includes ghosts)
-
-            - ppn_label (list of Tensors): particle labels for ppn ground truth
-        '''
-
-        # Apply the segmenation loss
-        coords = cluster_label[0][:, :4]
-        segment_label = cluster_label[0][:, -1]
-        segment_label_tensor = torch.cat((coords, segment_label.reshape(-1,1)), dim=1)
-        res_seg = self.segmentation_loss(out, [segment_label_tensor])
-        seg_acc, seg_loss = res_seg['accuracy'], res_seg['loss']
-
-        # Apply the PPN loss
-        res_ppn = self.ppn_loss(out, [segment_label_tensor], ppn_label)
-
+    def full_chain_loss(self, out, res_seg, res_ppn, segment_label, cluster_label):
         # Apply the CNN dense clustering loss to HE voxels only
         he_mask = segment_label < 4
-        sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
-        clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
+        # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
+        #clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
+        clust_label = [cluster_label[0][he_mask].clone()]
         cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
-        res_cnn_clust = self.cluster_cnn_loss(cnn_clust_output, sem_label, clust_label)
+        #cluster_label[0] = cluster_label[0][he_mask]
+        res_cnn_clust = self.spatial_embeddings_loss(cnn_clust_output, clust_label)
         cnn_clust_acc, cnn_clust_loss = res_cnn_clust['accuracy'], res_cnn_clust['loss']
 
         # Apply the GNN particle clustering loss
@@ -384,8 +367,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         res.update(res_seg)
         res.update(res_ppn)
         res.update(res_cnn_clust)
-        res['seg_accuracy'] = seg_acc
-        res['seg_loss'] = seg_loss
+        res['seg_accuracy'] = res_seg['accuracy']
+        res['seg_loss'] = res_seg['loss']
         res['ppn_accuracy'] = res_ppn['ppn_acc']
         res['ppn_loss'] = res_ppn['ppn_loss']
         res['cnn_clust_accuracy'] = cnn_clust_acc
@@ -407,3 +390,19 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
 
         return res
+
+    def forward(self, out, seg_label, cluster_label, ppn_label):
+        res_seg = self.uresnet_loss(out, seg_label)
+        seg_acc, seg_loss = res_seg['accuracy'], res_seg['loss']
+
+        # Apply the PPN loss
+        res_ppn = self.ppn_loss(out, seg_label, ppn_label)
+
+        # Adapt to ghost points
+        cluster_label = adapt_labels(out, seg_label, cluster_label)
+
+        deghost = out['ghost'][0].argmax(dim=1) == 0
+        #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
+        result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][deghost][:, -1], cluster_label)
+
+        return result
