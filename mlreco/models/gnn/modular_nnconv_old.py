@@ -86,11 +86,14 @@ class NNConvModel(nn.Module):
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
-
+        
         res = {
             'node_pred': [x_pred],
-            'edge_pred': [e_pred]
+            'edge_pred': [e_pred],
+            'node_features': [x],
+            'edge_features': [e]
             }
+
 
         return res
 
