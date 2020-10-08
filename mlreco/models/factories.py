@@ -108,22 +108,13 @@ def model_dict():
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # CNN Clustering + GNN Chain
-        #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
-        #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
-        # "full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
-        # "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
-        #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
-        #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
-        "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Flow and Particle Type
         "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
         "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss),
-        #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         # Deghosting models
-        #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
         "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
         "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
         "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
