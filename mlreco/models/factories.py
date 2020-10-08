@@ -126,14 +126,12 @@ def model_dict():
         'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
         #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
-<<<<<<< HEAD
-        "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        # "full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Flow and Particle Type
         "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
-        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss)
-=======
+        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss),
         #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         # Deghosting models
         #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
@@ -145,7 +143,6 @@ def model_dict():
         "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
->>>>>>> bd341495e4fe5abedce729a48f6284f869dae1de
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
