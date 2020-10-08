@@ -94,6 +94,7 @@ class GhostChain2(torch.nn.Module):
 
         # CNN clustering
         self.min_frag_size = -1
+        self.cluster_classes = []
         if self.enable_cnn_clust:
             self.spatial_embeddings    = ClusterCNN(cfg)
             # Fragment formation parameters
@@ -101,9 +102,16 @@ class GhostChain2(torch.nn.Module):
             self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
             self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
-        elif self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+            self.cluster_classes = self.frag_cfg.get('cluster_classes', [])
+
+        num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
+        for s in self.cluster_classes:
+            assert s <num_classes and s > 0
+
+        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Initialize the DBSCAN fragmenter
-            self.dbscan_frag = DBSCANFragmenter(cfg)
+            # Give a default value to cluster_classes in case the dbscan cfg does not specify it
+            self.dbscan_frag = DBSCANFragmenter(cfg, cluster_classes=[s for s in range(num_classes) if (s not in self.cluster_classes)])
             #self.dbscan = DBScanClusts2(cfg)
 
         if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
@@ -134,8 +142,8 @@ class GhostChain2(torch.nn.Module):
         frag_batch_ids = []
         semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
         for batch_id in batch_labels.unique():
-            for s in semantic_labels.unique():
-                if s > 3: continue
+            for s in self.cluster_classes:
+                #if s > 3: continue
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
@@ -210,7 +218,7 @@ class GhostChain2(torch.nn.Module):
         # [dtype('O'), dtype('O')]
         same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
         frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
-
+        #print(labels['frags'], len(frags), frags[0].shape)
         result.update({
             labels['frags']: [frags],
             labels['node_pred']: [node_pred],
@@ -234,12 +242,24 @@ class GhostChain2(torch.nn.Module):
 
         INPUTS:
             - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
+            - result (dict)
 
         RETURNS:
-            - result (tuple of dicts): (cnn_result, gnn_result)
+            - result (dict) (updated with new outputs)
         '''
         input, result = x
         device = input[0].device
+
+        # ---
+        # 1. Clustering w/ CNN or DBSCAN will produce
+        # - fragments (list of list of integer indexing the input data)
+        # - frag_batch_ids (list of batch ids for each fragment)
+        # - frag_seg (list of integers, semantic label for each fragment)
+        # ---
+
+        semantic_labels = torch.argmax(result['segmentation'][0], dim=1).flatten().double()
+        semantic_data = torch.cat((input[0][:,:4], semantic_labels.reshape(-1,1)), dim=1)
+        fragments, frag_batch_ids, frag_seg = [], [], []
 
         if self.enable_cnn_clust:
             # Get fragment predictions from the CNN clustering algorithm
@@ -247,19 +267,30 @@ class GhostChain2(torch.nn.Module):
             result.update(spatial_embeddings_output)
 
             # Extract fragment predictions to input into the GNN
-            fragments, frag_batch_ids, frag_seg = self.extract_fragment(input, result)
-            semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
-        elif self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+            fragments_cnn, frag_batch_ids_cnn, frag_seg_cnn = self.extract_fragment(input, result)
+            #semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
+            fragments.extend(fragments_cnn)
+            frag_batch_ids.extend(frag_batch_ids_cnn)
+            frag_seg.extend(frag_seg_cnn)
+
+        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Get the fragment predictions from the DBSCAN fragmenter
-            semantic_labels = torch.argmax(result['segmentation'][0], dim=1).flatten().double()
-            semantic_data = torch.cat((input[0][:,:4], semantic_labels.reshape(-1,1)), dim=1)
-            fragments = self.dbscan_frag(semantic_data, result)
-            frag_batch_ids = get_cluster_batch(input[0], fragments)
-            frag_seg = np.empty(len(fragments), dtype=np.int32)
-            for i, f in enumerate(fragments):
+            fragments_dbscan = self.dbscan_frag(semantic_data, result)
+            frag_batch_ids_dbscan = get_cluster_batch(input[0], fragments_dbscan)
+            frag_seg_dbscan = np.empty(len(fragments_dbscan), dtype=np.int32)
+            for i, f in enumerate(fragments_dbscan):
                 vals, cnts = semantic_labels[f].unique(return_counts=True)
                 assert len(vals) == 1
-                frag_seg[i] = vals[torch.argmax(cnts)].item()
+                frag_seg_dbscan[i] = vals[torch.argmax(cnts)].item()
+            fragments.extend(fragments_dbscan)
+            frag_batch_ids.extend(frag_batch_ids_dbscan)
+            frag_seg.extend(frag_seg_dbscan)
+
+        # Make np.array
+        same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
+        fragments = np.array(fragments, dtype=object if not same_length else np.int64)
+        frag_batch_ids = np.array(frag_batch_ids)
+        frag_seg = np.array(frag_seg)
 
         if self.enable_cnn_clust or self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             result.update({
@@ -267,6 +298,10 @@ class GhostChain2(torch.nn.Module):
                 'clust_frag_batch_ids': [frag_batch_ids],
                 'clust_frag_seg': [frag_seg]
             })
+
+        # ---
+        # 2. GNN clustering: shower, track & interaction clustering
+        # ---
 
         if self.enable_gnn_shower:
             # Initialize a complete graph for edge prediction, get shower fragment and edge features
@@ -480,7 +515,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_gnn_shower:
             self.particle_gnn_loss = FullGNNLoss(cfg, 'particle_gnn')
         if self.enable_gnn_tracks:
-            self.track_gnn_loss = FullGNNLoss(cfg, 'track_gnn')
+            #self.track_gnn_loss = FullGNNLoss(cfg, 'track_gnn')
+            self.track_gnn_loss = EdgeGNNLoss(cfg, 'track_gnn')
         if self.enable_gnn_int:
             self.inter_gnn_loss  = EdgeGNNLoss(cfg, 'interaction_gnn')
 
@@ -515,7 +551,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['ppn_acc']
             loss += self.ppn_weight*res_ppn['ppn_loss']
 
-        if self.enable_ghost:
+        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_tracks or self.enable_gnn_shower or self.enable_gnn_int):
             # Adapt to ghost points
             if cluster_label is not None:
                 cluster_label = adapt_labels(out, seg_label, cluster_label)
@@ -536,6 +572,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             clust_label = [cluster_label[0][he_mask].clone()]
             cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
             #cluster_label[0] = cluster_label[0][he_mask]
+            # FIXME does this suppose that clust_label has same ordering as embeddings?
             res_cnn_clust = self.spatial_embeddings_loss(cnn_clust_output, clust_label)
             res.update(res_cnn_clust)
             res['cnn_clust_accuracy'] = res_cnn_clust['accuracy']
@@ -566,16 +603,18 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             # Apply the GNN particle clustering loss
             gnn_out = {
                 'clusts':out['track_fragments'],
-                'node_pred':out['track_node_pred'],
+                #'node_pred':out['track_node_pred'],
                 'edge_pred':out['track_edge_pred'],
-                'group_pred':out['track_group_pred'],
+                #'group_pred':out['track_group_pred'],
                 'edge_index':out['track_edge_index'],
             }
-            res_gnn_track = self.track_gnn_loss(gnn_out, cluster_label)
-            res['track_edge_loss'] = res_gnn_track['edge_loss']
-            res['track_node_loss'] = res_gnn_track['node_loss']
-            res['track_edge_accuracy'] = res_gnn_track['edge_accuracy']
-            res['track_node_accuracy'] = res_gnn_track['node_accuracy']
+            res_gnn_track = self.track_gnn_loss(gnn_out, cluster_label, None)
+            #res['track_edge_loss'] = res_gnn_track['edge_loss']
+            #res['track_node_loss'] = res_gnn_track['node_loss']
+            #res['track_edge_accuracy'] = res_gnn_track['edge_accuracy']
+            #res['track_node_accuracy'] = res_gnn_track['node_accuracy']
+            res['track_edge_loss'] = res_gnn_track['loss']
+            res['track_edge_accuracy'] = res_gnn_track['accuracy']
 
             accuracy += res_gnn_track['accuracy']
             loss += self.track_gnn_weight*res_gnn_track['loss']
