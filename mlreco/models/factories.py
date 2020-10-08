@@ -120,7 +120,7 @@ def model_dict():
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Flow and Particle Type
         "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
-        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss)
+        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss),
         #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
         # Deghosting models
         #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
