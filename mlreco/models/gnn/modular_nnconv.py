@@ -13,7 +13,7 @@ class NNConvModel(nn.Module):
     '''
     def __init__(self, cfg, name='modular_nnconv'):
         super(NNConvModel, self).__init__()
-        self.model_config = cfg
+        self.model_config = cfgz
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
         self.global_input   = self.model_config.get('global_feats', 16)
