@@ -12,7 +12,7 @@ class ClustCNNNodeEncoder(torch.nn.Module):
         super(ClustCNNNodeEncoder, self).__init__()
 
         # Initialize the CNN
-        self.encoder = EncoderModel(model_config)
+        self.encoder = EncoderModel(model_config['cnn_encoder'])
 
     def forward(self, data, clusts):
 
@@ -35,6 +35,7 @@ class ClustCNNNodeEncoder2(nn.Module):
         super(ClustCNNNodeEncoder2, self).__init__()
 
         # Initialize the CNN
+        print(model_config)
         self.encoder = ResidualEncoder(model_config)
 
     def forward(self, data, clusts):
@@ -57,7 +58,7 @@ class ClustCNNEdgeEncoder(torch.nn.Module):
         super(ClustCNNEdgeEncoder, self).__init__()
 
         # Initialize the CNN
-        self.encoder = EncoderModel(model_config)
+        self.encoder = EncoderModel(model_config['cnn_encoder'])
 
     def forward(self, data, clusts, edge_index):
 

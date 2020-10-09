@@ -13,10 +13,14 @@ class ParticleImageClassifier(nn.Module):
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
         self.encoder = ResidualEncoder(cfg)
+        self.num_classes = cfg[name].get('num_classes', 5)
+        self.final_layer = nn.Linear(self.encoder.num_features, self.num_classes)
 
     def forward(self, input):
         point_cloud, = input
         out = self.encoder(point_cloud)
+        out = self.final_layer(out)
+        print(out.shape)
         res = {
             'logits': [out]
         }
@@ -30,8 +34,10 @@ class ParticleTypeLoss(nn.Module):
         self.xentropy = nn.CrossEntropyLoss(ignore_index=-1)
 
     def forward(self, out, type_labels):
+        # print(type_labels)
         logits = out['logits'][0]
         labels = type_labels[0][:, 0].to(dtype=torch.long)
+        # print(labels)
         loss = self.xentropy(logits, labels)
         pred = torch.argmax(logits, dim=1)
 

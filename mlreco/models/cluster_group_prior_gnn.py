@@ -5,6 +5,7 @@ from __future__ import print_function
 import torch
 import copy
 import numpy as np
+from .layers.dbscan import DBScanClusts2
 from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, relabel_groups
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
