@@ -182,6 +182,8 @@ class ClustFullGNN(torch.nn.Module):
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
         self.group_pred = chain_config.get('group_pred','score')
 
+        node_output_feats = cfg['edge_model'].get('node_output_feats', 64)
+
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
         if 'dbscan' in cfg:
@@ -194,8 +196,8 @@ class ClustFullGNN(torch.nn.Module):
 
         # Construct the models
         self.edge_predictor = edge_model_construct(cfg)
-        self.momentum_net = MomentumNet(cfg['edge_model']['node_output_feats'], 1)
-        self.type_net = MomentumNet(cfg['edge_model']['node_output_feats'], 5)
+        self.momentum_net = MomentumNet(node_output_feats, 1)
+        self.type_net = MomentumNet(node_output_feats, 5)
 
     def forward(self, data):
         """
