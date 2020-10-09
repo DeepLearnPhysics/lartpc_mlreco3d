@@ -30,7 +30,7 @@ def main():
         inference(cfg)
 
 if __name__ == '__main__':
-    # import torch
+    import torch
     # with torch.autograd.detect_anomaly():
     #     main()
     main()

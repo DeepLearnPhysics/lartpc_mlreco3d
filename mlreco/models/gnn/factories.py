@@ -8,6 +8,7 @@ def edge_model_dict():
     """
 
     from . import modular_nnconv
+    from . import modular_nnconv_old
     from . import modular_econv
     from . import modular_gatconv
     from . import modular_agnnconv
@@ -22,9 +23,12 @@ def edge_model_dict():
     from . import edge_meta
     from . import dir_meta
     from . import modular_nnconv
+    from . import modular_nnconv_elu
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
+        "modular_nnconv_old" : modular_nnconv_old.NNConvModel,
+        "modular_nnconv_elu": modular_nnconv_elu.NNConvModel,
         "modular_econv" : modular_econv.EConvModel,
         "modular_gatconv" : modular_gatconv.GATConvModel,
         "modular_agnnconv" : modular_agnnconv.AGNNConvModel,
@@ -44,7 +48,7 @@ def edge_model_dict():
     return models
 
 
-def edge_model_construct(cfg):
+def edge_model_construct(cfg, model_name='edge_model'):
     """
     Instanties the appropriate edge model from
     the provided configuration.
@@ -57,7 +61,7 @@ def edge_model_construct(cfg):
         object: Instantiated edge model
     """
     models = edge_model_dict()
-    model_cfg = cfg['edge_model']
+    model_cfg = cfg[model_name]
     name = model_cfg.get('name', 'modular_nnconv')
     if not name in models:
         raise Exception("Unknown edge model name provided:", name)
@@ -128,6 +132,8 @@ def node_encoder_dict():
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
         "mix" : cluster_mix_encoder.ClustMixNodeEncoder,
+        "mix2": cluster_mix_encoder.ClustMixNodeEncoder2,
+        "mix_debug": cluster_mix_encoder.ClustMixNodeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder,
         "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2
     }
@@ -174,6 +180,8 @@ def edge_encoder_dict():
         "geo" : cluster_geo_encoder.ClustGeoEdgeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNEdgeEncoder,
         "mix" : cluster_mix_encoder.ClustMixEdgeEncoder,
+        "mix2": cluster_mix_encoder.ClustMixEdgeEncoder2,
+        "mix_debug": cluster_mix_encoder.ClustMixEdgeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNEdgeEncoder,
         "cnn2" : cluster_cnn_encoder.ClustCNNEdgeEncoder2
     }
