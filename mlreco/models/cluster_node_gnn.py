@@ -467,7 +467,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         elif self.reg_loss == 'berhu':
             self.reg_lossfn = BerHuLoss(reduction=self.reduction)
         else:
-            raise Exception('Loss not recognized: ' + self.reg_loss)
+            self.reg_lossfn = torch.nn.MSELoss(reduction=self.reduction)
 
 
         if self.type_loss == 'CE':
