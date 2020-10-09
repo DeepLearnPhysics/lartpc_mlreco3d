@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
+from .layers.dbscan import DBScanClusts2
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, knn_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
