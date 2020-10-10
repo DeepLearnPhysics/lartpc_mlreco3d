@@ -34,8 +34,6 @@ class ClustCNNNodeEncoder2(nn.Module):
     def __init__(self, model_config):
         super(ClustCNNNodeEncoder2, self).__init__()
 
-        # Initialize the CNN
-        # print(model_config['cnn_encoder'])
         self.encoder = ResidualEncoder(model_config)
 
     def forward(self, data, clusts):
