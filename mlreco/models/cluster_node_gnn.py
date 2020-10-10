@@ -475,7 +475,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         elif self.reg_loss == 'berhu':
             self.reg_lossfn = BerHuLoss(reduction=self.reduction)
         else:
-            raise Exception('Loss not recognized: ' + self.reg_loss)
+            self.reg_lossfn = torch.nn.MSELoss(reduction=self.reduction)
 
 
         if self.type_loss == 'CE':
@@ -485,7 +485,7 @@ class NodeKinematicsLoss(torch.nn.Module):
             margin = chain_config.get('margin', 1.0)
             self.type_lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
         else:
-            raise Exception('Loss not recognized: ' + self.type_loss)
+            self.type_lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
 
 
     def forward(self, out, types):

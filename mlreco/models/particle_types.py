@@ -8,6 +8,8 @@ from mlreco.models.layers.cnn_encoder import *
 
 class ParticleImageClassifier(nn.Module):
 
+    MODULES = ['particle_image_classifier', 'network_base', 'res_encoder', 'uresnet_encoder']
+
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
         self.encoder = ResidualEncoder(cfg)
