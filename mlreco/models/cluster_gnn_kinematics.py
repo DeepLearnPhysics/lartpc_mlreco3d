@@ -6,13 +6,48 @@ import torch
 import torch.nn as nn
 import numpy as np
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
+from .layers.dbscan import DBScanClusts2
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, knn_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
-from mlreco.models.cluster_node_gnn import NodeTypeLoss
+from mlreco.models.cluster_node_gnn import NodeKinematicsLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
-from .layers.dbscan import DBScanClusts2
+
+
+class MomentumNet(nn.Module):
+    '''
+    Small MLP for extracting input edge features from two node features.
+
+    USAGE:
+        net = EdgeFeatureNet(16, 16)
+        node_x = torch.randn(16, 5)
+        node_y = torch.randn(16, 5)
+        edge_feature_x2y = net(node_x, node_y) # (16, 5)
+    '''
+    def __init__(self, num_input, num_output=1, num_hidden=128):
+        super(MomentumNet, self).__init__()
+        self.linear1 = nn.Linear(num_input, num_hidden)
+        self.norm1 = nn.BatchNorm1d(num_hidden)
+        self.linear2 = nn.Linear(num_hidden, num_hidden)
+        self.norm2 = nn.BatchNorm1d(num_hidden)
+        self.linear3 = nn.Linear(num_hidden, num_output)
+
+        self.elu = nn.LeakyReLU(negative_slope=0.33)
+        self.softplus = nn.Softplus()
+
+    def forward(self, x):
+        if x.shape[0] > 1:
+            self.norm1(x)
+        x = self.linear1(x)
+        x = self.elu(x)
+        if x.shape[0] > 1:
+            x = self.norm2(x)
+        x = self.linear2(x)
+        x = self.elu(x)
+        x = self.linear3(x)
+        out = self.softplus(x)
+        return out
 
 
 def get_edge_features(nodes, batch_idx, edge_net):
@@ -52,36 +87,36 @@ def get_edge_features(nodes, batch_idx, edge_net):
     return edge_index, edge_features
 
 
-class EdgeFeatureNet(nn.Module):
-    '''
-    Small MLP for extracting input edge features from two node features.
+# class EdgeFeatureNet(nn.Module):
+#     '''
+#     Small MLP for extracting input edge features from two node features.
 
-    USAGE:
-        net = EdgeFeatureNet(16, 16)
-        node_x = torch.randn(16, 5)
-        node_y = torch.randn(16, 5)
-        edge_feature_x2y = net(node_x, node_y) # (16, 5)
-    '''
-    def __init__(self, num_input, num_output):
-        super(EdgeFeatureNet, self).__init__()
-        self.linear1 = nn.Linear(num_input * 2, 64)
-        self.norm1 = nn.BatchNorm1d(64)
-        self.linear2 = nn.Linear(64, 64)
-        self.norm2 = nn.BatchNorm1d(64)
-        self.linear3 = nn.Linear(64, num_output)
+#     USAGE:
+#         net = EdgeFeatureNet(16, 16)
+#         node_x = torch.randn(16, 5)
+#         node_y = torch.randn(16, 5)
+#         edge_feature_x2y = net(node_x, node_y) # (16, 5)
+#     '''
+#     def __init__(self, num_input, num_output):
+#         super(EdgeFeatureNet, self).__init__()
+#         self.linear1 = nn.Linear(num_input * 2, 64)
+#         self.norm1 = nn.BatchNorm1d(64)
+#         self.linear2 = nn.Linear(64, 64)
+#         self.norm2 = nn.BatchNorm1d(64)
+#         self.linear3 = nn.Linear(64, num_output)
 
-        self.elu = nn.ELU()
+#         self.elu = nn.ELU()
 
-    def forward(self, x1, x2):
-        x = torch.cat([x1, x2], dim=1)
-        x = self.linear1(x)
-        if x.shape[0] > 1:
-            x = self.elu(self.norm1(x))
-        x = self.linear2(x)
-        if x.shape[0] > 1:
-            x = self.elu(self.norm2(x))
-        x = self.linear3(x)
-        return x
+#     def forward(self, x1, x2):
+#         x = torch.cat([x1, x2], dim=1)
+#         x = self.linear1(x)
+#         if x.shape[0] > 1:
+#             x = self.elu(self.norm1(x))
+#         x = self.linear2(x)
+#         if x.shape[0] > 1:
+#             x = self.elu(self.norm2(x))
+#         x = self.linear3(x)
+#         return x
 
 
 class ClustFullGNN(torch.nn.Module):
@@ -147,6 +182,8 @@ class ClustFullGNN(torch.nn.Module):
         self.edge_dist_numpy = chain_config.get('edge_dist_numpy',False)
         self.group_pred = chain_config.get('group_pred','score')
 
+        node_output_feats = cfg['edge_model'].get('node_output_feats', 64)
+
         # If requested, use DBSCAN to form clusters from semantics
         self.do_dbscan = False
         if 'dbscan' in cfg:
@@ -159,6 +196,8 @@ class ClustFullGNN(torch.nn.Module):
 
         # Construct the models
         self.edge_predictor = edge_model_construct(cfg)
+        self.momentum_net = MomentumNet(node_output_feats, 1)
+        self.type_net = MomentumNet(node_output_feats, 5)
 
     def forward(self, data):
         """
@@ -246,8 +285,16 @@ class ClustFullGNN(torch.nn.Module):
 
         # Pass through the model, get output (long edge_index)
         out = self.edge_predictor(x, index, e, xbatch)
-        node_pred = out['node_pred'][0]
+        node_F = out['node_features'][0]
         edge_pred = out['edge_pred'][0]
+
+        # print("node_F = ", node_F)
+
+        node_pred_type = self.type_net(node_F)
+        node_pred_p = self.momentum_net(node_F)
+
+        # print("node_pred_type = ", node_pred_type)
+        # print("node_pred_p = ", node_pred_p)
 
         # Divide the output out into different arrays (one per batch)
         _, counts = torch.unique(data[:,3], return_counts=True)
@@ -256,7 +303,8 @@ class ClustFullGNN(torch.nn.Module):
         bcids = [np.where(batch_ids == b)[0] for b in range(len(counts))]
         beids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
 
-        node_pred = [node_pred[b] for b in bcids]
+        node_pred_type = [node_pred_type[b] for b in bcids]
+        node_pred_p = [node_pred_p[b] for b in bcids]
         edge_pred = [edge_pred[b] for b in beids]
         edge_index = [cids[edge_index[:,b]].T for b in beids]
         clusts = [np.array([vids[c] for c in np.array(clusts)[b]]) for b in bcids]
@@ -272,12 +320,16 @@ class ClustFullGNN(torch.nn.Module):
         #             group_pred.append(node_assignment_score(edge_index[b], edge_pred[b].detach().cpu().numpy(), len(clusts[b])))
         #         else:
         #             group_pred.append(np.array([], dtype = np.int64))
-
-        return {'node_pred': [node_pred],
+        res = {'node_pred_type': [node_pred_type],
+                'node_pred_p': [node_pred_p], 
                 'edge_pred': [edge_pred],
                 # 'group_pred': [group_pred],
                 'edge_index': [edge_index],
                 'clusts': [clusts]}
+
+        # print(res)
+
+        return res
 
 
 
@@ -298,7 +350,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     """
     def __init__(self, cfg, name='chain'):
         super(ChainLoss, self).__init__()
-        self.node_loss = NodeTypeLoss(cfg, name)
+        self.node_loss = NodeKinematicsLoss(cfg, name)
+        print(self.node_loss)
         self.edge_loss = EdgeChannelLoss(cfg, name)
 
     def forward(self, result, clust_label, graph):

@@ -15,6 +15,7 @@ def model_dict():
     from . import cluster_iter_gnn
     from . import cluster_chain_gnn
     from . import cluster_full_gnn
+    from . import cluster_gnn_types
     from . import cluster_group_prior_gnn
     #from . import cluster_mst_gnn
     from . import uresnet_clustering
@@ -31,6 +32,9 @@ def model_dict():
     from . import full_chain
     from . import full_cnn
     from . import hierarchy
+    from . import particle_types
+    from . import cluster_gnn_kinematics
+
     from . import ghost_chain
     from . import ghost_chain_2
     from . import ghost_cluster_full_gnn
@@ -79,8 +83,8 @@ def model_dict():
         "clustercnn_density": (clustercnn_density.ClusterCNN, clustercnn_density.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
-        # Spatial Embeddings Stack
-        "spatial_embeddings_stack": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
+        # Spatial Embeddings Lite
+        "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # AdaptIS
         "adaptis": (clustercnn_adaptis.ClusterCNN, clustercnn_adaptis.ClusteringLoss),
         # Spatial Embeddings Lovasz free
@@ -104,24 +108,19 @@ def model_dict():
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # CNN Clustering + GNN Chain
-        #"full_chain": (full_chain.FullChain, full_chain.FullChainLoss)
-        #"full_chain": (full_chain_2.FullChain, full_chain_2.FullChainLoss)
-        # "full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
-        # "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
-        #"full_chain": (full_chain_3.FullChain, full_chain_3.FullChainLoss),
-        #"full_chain": (full_chain_4.FullChain, full_chain_4.FullChainLoss),
-        #"full_chain": (full_chain_5.FullChain, full_chain_5.FullChainLoss),
+        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
+        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
+        # Flow and Particle Type
+        "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
+        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss),
         # Deghosting models
-        #"ghost_chain": (ghost_chain.GhostChain, ghost_chain.GhostChainLoss),
         "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
         "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
         "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
         "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
         "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
-        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss),
-        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
-        "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
+        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
