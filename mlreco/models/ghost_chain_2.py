@@ -334,11 +334,19 @@ class GhostChain2(torch.nn.Module):
         frag_batch_ids = np.array(frag_batch_ids)
         frag_seg = np.array(frag_seg)
 
+        # Store in result the intermediate fragments
         if self.enable_cnn_clust or self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+            _, counts = torch.unique(input[0][:,3], return_counts=True)
+            vids = np.concatenate([np.arange(n.item()) for n in counts])
+            bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
+            same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
+            frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
+            frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
+
             result.update({
-                'clust_fragments': [fragments],
-                'clust_frag_batch_ids': [frag_batch_ids],
-                'clust_frag_seg': [frag_seg]
+                'clust_fragments': [frags],
+                #'clust_frag_batch_ids': [frag_batch_ids],
+                'clust_frag_seg': [frags_seg]
             })
 
         # ---
