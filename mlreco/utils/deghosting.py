@@ -20,6 +20,7 @@ def adapt_labels(result, label_seg, label_clustering, num_classes=5):
         for batch_id in coords[:, -1].unique():
             batch_mask = coords[:, -1] == batch_id
             batch_coords = coords[batch_mask]
+            #print(torch.unique(label_clustering[i][:, 3]), batch_id)
             batch_clustering = label_clustering[i][label_clustering[i][:, 3] == batch_id]
             nonghost_mask = (result['ghost'][i][batch_mask].argmax(dim=1) == 0)
             # Select voxels predicted as nonghost, but true ghosts
@@ -34,6 +35,7 @@ def adapt_labels(result, label_seg, label_clustering, num_classes=5):
             new_label_clustering[mask] = additional_label_clustering
             #print(new_label_clustering.size(), label_seg[i][batch_mask, -1].size(), batch_clustering.size())
             new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = batch_clustering
+            #print(label_seg[i][batch_mask][[label_seg[i][batch_mask, -1] < num_classes]][:10, :3], batch_clustering[:10, :3])
             label_c.append(new_label_clustering[nonghost_mask])
         label_c = torch.cat(label_c, dim=0)
         complete_label_clustering.append(label_c)

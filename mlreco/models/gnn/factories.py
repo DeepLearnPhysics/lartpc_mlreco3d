@@ -93,7 +93,7 @@ def node_model_dict():
     return models
 
 
-def node_model_construct(cfg):
+def node_model_construct(cfg, model_name='node_model'):
     """
     Instanties the appropriate node model from
     the provided configuration.
@@ -106,7 +106,7 @@ def node_model_construct(cfg):
         object: Instantiated node model
     """
     models = node_model_dict()
-    model_cfg = cfg['node_model']
+    model_cfg = cfg[model_name]
     name = model_cfg.get('name', 'modular_nnconv')
     if not name in models:
         raise Exception("Unknown node model name provided:", name)
@@ -141,7 +141,7 @@ def node_encoder_dict():
     return encoders
 
 
-def node_encoder_construct(cfg):
+def node_encoder_construct(cfg, model_name='node_encoder'):
     """
     Instanties the appropriate node encoder from
     the provided configuration.
@@ -154,7 +154,7 @@ def node_encoder_construct(cfg):
         object: Instantiated node encoder
     """
     encoders = node_encoder_dict()
-    encoder_cfg = cfg['node_encoder']
+    encoder_cfg = cfg[model_name]
     name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown node encoder name provided:", name)
@@ -189,7 +189,7 @@ def edge_encoder_dict():
     return encoders
 
 
-def edge_encoder_construct(cfg):
+def edge_encoder_construct(cfg, model_name='edge_encoder'):
     """
     Instanties the appropriate edge encoder from
     the provided configuration.
@@ -202,7 +202,7 @@ def edge_encoder_construct(cfg):
         object: Instantiated edge encoder
     """
     encoders = edge_encoder_dict()
-    encoder_cfg = cfg['edge_encoder']
+    encoder_cfg = cfg[model_name]
     name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown edge encoder name provided:", name)

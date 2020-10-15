@@ -124,7 +124,7 @@ class ResidualEncoder(UResNetEncoder):
         self.pool_mode = self.model_config.get('pool_mode', 'max')
 
         self.final_tensor_shape = self.spatial_size // (2**(self.num_strides-1))
-        print("Final Tensor Shape = ", self.final_tensor_shape)
+        #print("Final Tensor Shape = ", self.final_tensor_shape)
 
         if self.pool_mode == 'max':
             self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
