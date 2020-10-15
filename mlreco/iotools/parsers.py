@@ -29,7 +29,7 @@ def parse_particle_singlep_pdg(data):
             pdg = TYPE_LABELS[int(p.pdg_code())]
         else: pdg = -1
         return np.asarray([pdg])
-        
+
     return np.asarray([pdg])
 
 
@@ -650,6 +650,17 @@ def parse_cluster3d_kinematics(data):
     return np_voxels, np_features
 
 
+def parse_cluster3d_kinematics_clean(data):
+    grp_voxels, grp_data = parse_cluster3d_kinematics(data)
+    _, cluster_data = parse_cluster3d_full(data)
+    img_voxels, img_data = parse_sparse3d_scn([data[2]])
+
+    grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
+    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
+    return grp_voxels, grp_data[:, :-1]
+
+
+
 def parse_cluster3d_full_fragment(data):
     """
     A function to retrieve clusters tensor
@@ -785,6 +796,31 @@ def parse_cluster3d_clean(data):
 
     return grp_voxels, grp_data
 
+
+def clean_data(grp_voxels, grp_data, img_voxels, img_data, meta):
+    # step 1: lexicographically sort group data
+    perm = np.lexsort(grp_voxels.T)
+    grp_voxels = grp_voxels[perm,:]
+    grp_data = grp_data[perm]
+
+    perm = np.lexsort(img_voxels.T)
+    img_voxels = img_voxels[perm,:]
+    img_data = img_data[perm]
+
+    # step 2: remove duplicates
+    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], meta, usebatch=True, precedence=[0,2,1,3,4])
+    inds1 = np.where(sel1)[0]
+    grp_voxels = grp_voxels[inds1,:]
+    grp_data = grp_data[inds1]
+
+    # step 3: remove voxels not in image
+    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
+    inds2 = np.where(sel2)[0]
+    grp_voxels = grp_voxels[inds2,:]
+    grp_data = grp_data[inds2]
+    return grp_voxels, grp_data
+
+
 def parse_cluster3d_clean_full(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
@@ -801,26 +837,7 @@ def parse_cluster3d_clean_full(data):
     grp_voxels, grp_data = parse_cluster3d_full(data)
     img_voxels, img_data = parse_sparse3d_scn([data[2]])
 
-    # step 1: lexicographically sort group data
-    perm = np.lexsort(grp_voxels.T)
-    grp_voxels = grp_voxels[perm,:]
-    grp_data = grp_data[perm]
-
-    perm = np.lexsort(img_voxels.T)
-    img_voxels = img_voxels[perm,:]
-    img_data = img_data[perm]
-
-    # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True, precedence=[0,2,1,3,4])
-    inds1 = np.where(sel1)[0]
-    grp_voxels = grp_voxels[inds1,:]
-    grp_data = grp_data[inds1]
-
-    # step 3: remove voxels not in image
-    sel2 = filter_nonimg_voxels(grp_voxels, img_voxels, usebatch=False)
-    inds2 = np.where(sel2)[0]
-    grp_voxels = grp_voxels[inds2,:]
-    grp_data = grp_data[inds2]
+    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
 
     # step 4: override semantic labels with those from sparse3d
     # and give labels -1 to all voxels of class 4 and above
