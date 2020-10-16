@@ -20,30 +20,13 @@ class CoordinateEmbeddings(UResNet):
         else:
             self.model_config = cfg[name]
         self.seedDim = self.model_config.get('seediness_dim', 1)
-        self.coordConv = self.model_config.get('coordConv', False)
-        self.seed_freeze = self.model_config.get('seed_freeze', False)
+        self.embeddingDim = self.model_config.get('embedding_dim', 3)
         self.coordConv = self.model_config.get('coordConv', True)
-        # Define Separate Sparse UResNet Decoder for seediness.
-        self.decoding_block2 = scn.Sequential()
-        self.decoding_conv2 = scn.Sequential()
-        for i in range(self.num_strides-2, -1, -1):
-            m = scn.Sequential().add(
-                scn.BatchNormLeakyReLU(self.nPlanes[i+1], leakiness=self.leakiness)).add(
-                scn.Deconvolution(self.dimension, self.nPlanes[i+1], self.nPlanes[i],
-                    self.downsample[0], self.downsample[1], self.allow_bias))
-            self.decoding_conv2.add(m)
-            m = scn.Sequential()
-            for j in range(self.reps):
-                self._resnet_block(m, self.nPlanes[i] * (2 if j == 0 else 1), self.nPlanes[i])
-            self.decoding_block2.add(m)
 
         # Define outputlayers
         self.outputEmbeddings = scn.Sequential()
-        self._nin_block(self.outputEmbeddings, self.num_filters, self.dimension)
+        self._nin_block(self.outputEmbeddings, self.num_filters, self.embeddingDim)
         self.outputEmbeddings.add(scn.OutputLayer(self.dimension))
-        self.outputSeediness = scn.Sequential()
-        self._nin_block(self.outputSeediness, self.num_filters, self.seedDim)
-        self.outputSeediness.add(scn.OutputLayer(self.dimension))
 
         # Pytorch Activations
         self.tanh = nn.Tanh()
@@ -203,7 +186,7 @@ class SpatialEmbeddings1(UResNet):
 
 
 # class SpatialEmbeddings3(UResNet):
-    
+
 #     def __init__(self, cfg, name='spatial_embeddings'):
 #         super(SpatialEmbeddings1, self).__init__(cfg, name='uresnet')
 
