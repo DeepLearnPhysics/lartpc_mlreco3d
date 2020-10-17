@@ -128,6 +128,8 @@ def node_encoder_dict():
     from . import cluster_mix_encoder
     from . import cluster_gnn_encoder
 
+    from mlreco.mink.layers.cnn_encoder import MinkCNNNodeEncoder
+
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
@@ -135,13 +137,14 @@ def node_encoder_dict():
         "mix2": cluster_mix_encoder.ClustMixNodeEncoder2,
         "mix_debug": cluster_mix_encoder.ClustMixNodeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder,
-        "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2
+        "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2,
+        "mink_cnn": MinkCNNNodeEncoder
     }
 
     return encoders
 
 
-def node_encoder_construct(cfg):
+def node_encoder_construct(cfg, model_name='node_encoder'):
     """
     Instanties the appropriate node encoder from
     the provided configuration.
@@ -154,7 +157,7 @@ def node_encoder_construct(cfg):
         object: Instantiated node encoder
     """
     encoders = node_encoder_dict()
-    encoder_cfg = cfg['node_encoder']
+    encoder_cfg = cfg[model_name]
     name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown node encoder name provided:", name)
@@ -189,7 +192,7 @@ def edge_encoder_dict():
     return encoders
 
 
-def edge_encoder_construct(cfg):
+def edge_encoder_construct(cfg, model_name='edge_encoder'):
     """
     Instanties the appropriate edge encoder from
     the provided configuration.
@@ -202,7 +205,7 @@ def edge_encoder_construct(cfg):
         object: Instantiated edge encoder
     """
     encoders = edge_encoder_dict()
-    encoder_cfg = cfg['edge_encoder']
+    encoder_cfg = cfg[model_name]
     name = encoder_cfg.get('name', 'geo')
     if not name in encoders:
         raise Exception("Unknown edge encoder name provided:", name)
