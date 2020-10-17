@@ -5,6 +5,7 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 from mlreco.models.layers.uresnet import UResNet
+from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
 
 
 class SparseOccuSeg(UResNet):
@@ -12,10 +13,7 @@ class SparseOccuSeg(UResNet):
 
     def __init__(self, cfg, name='sparse_occuseg'):
         super(SparseOccuSeg, self).__init__(cfg, name='uresnet')
-        if 'modules' in cfg:
-            self.model_config = cfg['modules'][name]
-        else:
-            self.model_config = cfg[name]
+        self.model_config = cfg[name]
         self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
         self.spatial_embedding_dim = self.model_config.get('spatial_embedding_dim', 3)
         self.num_classses = self.model_config.get('num_classes', 5)
@@ -34,42 +32,44 @@ class SparseOccuSeg(UResNet):
 
         if self.occupancy_mode == 'exp':
             self.occ_func = torch.exp
-        else self.occupancy_mode == 'softplus':
+        elif self.occupancy_mode == 'softplus':
             self.occ_func = nn.Softplus()
+        else:
+            self.occ_func = torch.exp
 
         # Define outputlayers
         self.outputSpatialEmbeddings = scn.Sequential()
         self.outputSpatialEmbeddings.add(
-            scn.NetworkInNetwork(self.num_filters, 
-                                 self.spatial_embedding_dim, 
+            scn.NetworkInNetwork(self.num_filters,
+                                 self.spatial_embedding_dim,
                                  self.allow_bias))
         self.outputSpatialEmbeddings.add(scn.OutputLayer(self.dimension))
 
         self.outputFeatureEmbeddings = scn.Sequential()
         self.outputFeatureEmbeddings.add(
-            scn.NetworkInNetwork(self.num_filters, 
-                                 self.feature_embedding_dim, 
+            scn.NetworkInNetwork(self.num_filters,
+                                 self.feature_embedding_dim,
                                  self.allow_bias))
         self.outputFeatureEmbeddings.add(scn.OutputLayer(self.dimension))
 
         self.outputSegmentation = scn.Sequential()
         self.outputSegmentation.add(
-            scn.NetworkInNetwork(self.num_filters, 
-                                 self.num_classses, 
+            scn.NetworkInNetwork(self.num_filters,
+                                 self.num_classses,
                                  self.allow_bias))
         self.outputSegmentation.add(scn.OutputLayer(self.dimension))
 
         self.outputCovariance = scn.Sequential()
         self.outputCovariance.add(
-            scn.NetworkInNetwork(self.num_filters, 
-                                 2, 
+            scn.NetworkInNetwork(self.num_filters,
+                                 2,
                                  self.allow_bias))
         self.outputCovariance.add(scn.OutputLayer(self.dimension))
 
         self.outputOccupancy = scn.Sequential()
         self.outputOccupancy.add(
-            scn.NetworkInNetwork(self.num_filters, 
-                                 1, 
+            scn.NetworkInNetwork(self.num_filters,
+                                 1,
                                  self.allow_bias))
         self.outputOccupancy.add(scn.OutputLayer(self.dimension))
 
@@ -109,31 +109,34 @@ class SparseOccuSeg(UResNet):
         output_features = features_cluster[-1]
 
         # Spatial Embeddings
-        spatial_embeddings = self.outputSpatialEmbeddings(output_features)
-        spatial_embeddings = self.tanh(spatial_embeddings)
-        spatial_embeddings += normalized_coords
+        out = self.outputSpatialEmbeddings(output_features)
+        spatial_embeddings = self.tanh(out)
+        # spatial_embeddings += normalized_coords
 
         # Covariance
-        cov = self.outputCovariance(output_features)
-        covariance = self.cov_func(cov)
+        out = self.outputCovariance(output_features)
+        covariance = self.cov_func(out)
 
         # Feature Embeddings
         feature_embeddings = self.outputFeatureEmbeddings(output_features)
 
         # Occupancy
-        occ = self.outputOccupancy(output_features)
-        occupancy = self.occ_func(occ)
+        out = self.outputOccupancy(output_features)
+        occupancy = self.occ_func(out)
 
         # Segmentation
         segmentation = self.outputSegmentation(output_features)
 
         res = {
-            "spatial_embeddings": [spatial_embeddings],
+            "spatial_embeddings": [spatial_embeddings + normalized_coords],
             "covariance": [covariance],
-            "feature_embeddings": [feature_embeddings], 
+            "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
             "segmentation": [segmentation]
         }
+
+        # for key, val in res.items():
+        #     print((val[0] != val[0]).any())
 
         return res
 
@@ -142,9 +145,13 @@ class SparseOccuSegLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='occuseg_loss'):
         super(SparseOccuSegLoss, self).__init__()
+        self.loss_fn = OccuSegLoss(cfg)
 
 
     def forward(self, result, label):
 
-        segment_label = [cluster_label[0][:, [0, 1, 2, 3, -1]]]
-        group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
+        segment_label = [label[0][:, [0, 1, 2, 3, -1]]]
+        group_label = [label[0][:, [0, 1, 2, 3, 5]]]
+
+        res = self.loss_fn(result, segment_label, group_label)
+        return res
