@@ -53,6 +53,11 @@ def model_dict():
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
+        # URESNET MINKOWSKINET
+        "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss),
+        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss), 
+        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss), 
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),

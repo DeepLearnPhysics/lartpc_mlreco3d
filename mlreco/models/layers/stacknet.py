@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import sparseconvnet as scn
 
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 from mlreco.models.layers.uresnet import UResNet
 from mlreco.models.layers.fpn import FPN
 
