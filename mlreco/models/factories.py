@@ -23,10 +23,11 @@ def model_dict():
 
     from . import clustercnn_single
     from . import clustercnn_se
-
     from . import clusternet
     from . import clustercnn_neural_dbscan
+    from . import sparse_occuseg
     # from . import cluster_chain
+
     from . import full_chain
     from . import full_cnn
     from . import hierarchy
@@ -79,6 +80,8 @@ def model_dict():
         "clustercnn_density": (clustercnn_neural_dbscan.ClusterCNN, clustercnn_neural_dbscan.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
+        # OccuSeg
+        "occuseg": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lovasz free
