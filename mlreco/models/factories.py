@@ -21,13 +21,10 @@ def model_dict():
     from . import uresnet_clustering
     from . import flashmatching_model
 
-    from . import discriminative_loss
     from . import clustercnn_single
     from . import clustercnn_se
-    from . import clustercnn_density
 
     from . import clusternet
-    from . import clustercnn_adaptis
     # from . import cluster_chain
     from . import full_chain
     from . import full_cnn
@@ -35,15 +32,11 @@ def model_dict():
     from . import particle_types
     from . import cluster_gnn_kinematics
 
-<<<<<<< HEAD
-    # MinkowskiNet
     from . import mink_uresnet
     from . import mink_full_chain
     from . import mink_ppn
     from . import mink_clusternet
 
-=======
->>>>>>> chain
     from . import ghost_chain
     from . import ghost_chain_2
     from . import ghost_cluster_full_gnn
@@ -66,8 +59,8 @@ def model_dict():
         # URESNET MINKOWSKINET
         "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
         "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss),
-        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss), 
-        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss), 
+        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss),
+        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss),
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
@@ -89,18 +82,12 @@ def model_dict():
         #"clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
         # ClusterUNet Single
         "clustercnn_single": (clustercnn_single.ClusterCNN, clustercnn_single.ClusteringLoss),
-        # Same as ClusterUNet Single, but coordinate concat is done in first input layer.
-        "discriminative_loss": (discriminative_loss.UResNet, discriminative_loss.DiscriminativeLoss),
         # Colossal ClusterNet Model to Wrap them all
         "clusternet": (clusternet.ClusterCNN, clusternet.ClusteringLoss),
-        # Density Loss
-        "clustercnn_density": (clustercnn_density.ClusterCNN, clustercnn_density.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
-        # AdaptIS
-        "adaptis": (clustercnn_adaptis.ClusterCNN, clustercnn_adaptis.ClusteringLoss),
         # Spatial Embeddings Lovasz free
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Cluster grouping GNN
