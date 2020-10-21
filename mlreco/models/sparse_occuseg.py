@@ -38,40 +38,21 @@ class SparseOccuSeg(UResNet):
             self.occ_func = torch.exp
 
         # Define outputlayers
-        self.outputSpatialEmbeddings = scn.Sequential()
-        self.outputSpatialEmbeddings.add(
-            scn.NetworkInNetwork(self.num_filters,
-                                 self.spatial_embedding_dim,
-                                 self.allow_bias))
-        self.outputSpatialEmbeddings.add(scn.OutputLayer(self.dimension))
+        self.outputLayer = scn.OutputLayer(self.dimension)
 
-        self.outputFeatureEmbeddings = scn.Sequential()
-        self.outputFeatureEmbeddings.add(
-            scn.NetworkInNetwork(self.num_filters,
-                                 self.feature_embedding_dim,
-                                 self.allow_bias))
-        self.outputFeatureEmbeddings.add(scn.OutputLayer(self.dimension))
+        self.outputSpatialEmbeddings = nn.Linear(self.num_filters,
+                                           self.spatial_embedding_dim)
 
-        self.outputSegmentation = scn.Sequential()
-        self.outputSegmentation.add(
-            scn.NetworkInNetwork(self.num_filters,
-                                 self.num_classses,
-                                 self.allow_bias))
-        self.outputSegmentation.add(scn.OutputLayer(self.dimension))
+        self.outputFeatureEmbeddings = nn.Linear(self.num_filters,
+                                           self.feature_embedding_dim)
 
-        self.outputCovariance = scn.Sequential()
-        self.outputCovariance.add(
-            scn.NetworkInNetwork(self.num_filters,
-                                 2,
-                                 self.allow_bias))
-        self.outputCovariance.add(scn.OutputLayer(self.dimension))
+        self.outputSegmentation = nn.Linear(self.num_filters,
+                                            self.num_classses)
 
-        self.outputOccupancy = scn.Sequential()
-        self.outputOccupancy.add(
-            scn.NetworkInNetwork(self.num_filters,
-                                 1,
-                                 self.allow_bias))
-        self.outputOccupancy.add(scn.OutputLayer(self.dimension))
+
+        self.outputCovariance = nn.Linear(self.num_filters, 2)
+
+        self.outputOccupancy = nn.Linear(self.num_filters, 1)
 
         # Pytorch Activations
         self.tanh = nn.Tanh()
@@ -106,7 +87,7 @@ class SparseOccuSeg(UResNet):
         deepest_layer = encoder_res['deepest_layer']
         features_cluster = self.decoder(features_enc, deepest_layer)
 
-        output_features = features_cluster[-1]
+        output_features = self.outputLayer(features_cluster[-1])
 
         # Spatial Embeddings
         out = self.outputSpatialEmbeddings(output_features)
@@ -132,7 +113,8 @@ class SparseOccuSeg(UResNet):
             "covariance": [covariance],
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
-            "segmentation": [segmentation]
+            "segmentation": [segmentation],
+            "features": [output_features]
         }
 
         # for key, val in res.items():
