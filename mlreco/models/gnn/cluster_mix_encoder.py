@@ -2,7 +2,7 @@
 import torch
 from mlreco.models.gnn.cluster_geo_encoder import *
 from mlreco.models.gnn.cluster_cnn_encoder import *
-
+from pprint import pprint
 
 class ClustMixNodeEncoder(torch.nn.Module):
     """
@@ -127,6 +127,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
             raise ValueError("Require cnn_encoder config!")
 
         self.geo_encoder = ClustGeoNodeEncoder(model_config['geo_encoder'])
+        pprint(model_config['cnn_encoder'])
         self.cnn_encoder = ClustCNNNodeEncoder2(model_config['cnn_encoder'])
 
         if self.geo_encoder.more_feats:

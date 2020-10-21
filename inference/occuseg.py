@@ -13,7 +13,7 @@ current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
 
 from mlreco.main_funcs import process_config, train, inference
-from mlreco.utils.dense_cluster import *
+from mlreco.utils.occuseg import *
 from pprint import pprint
 
 if __name__ == "__main__":
@@ -25,19 +25,14 @@ if __name__ == "__main__":
     args = vars(args)
     cfg = yaml.load(open(args['test_config'], 'r'), Loader=yaml.Loader)
 
-    train_cfg = cfg['config_path']
+    inference_cfg = cfg['config_path']
     print("-------------__CFG__---------------")
     pprint(cfg)
-    mode = cfg.get('mode', False)
-    print(mode)
 
+    inference_cfg = yaml.load(open(inference_cfg, 'r'), Loader=yaml.Loader)
+    process_config(inference_cfg)
     start = time.time()
-    if mode == 'optimize':
-        output = main_loop_parameter_search(train_cfg, **cfg)
-    elif mode == 'voxel_cut':
-        output = main_loop_voxel_cut(train_cfg, **cfg)
-    else:
-        output = main_loop(train_cfg, **cfg)
+    output = main_loop(inference_cfg, **cfg)
     end = time.time()
     print("Time = {}".format(end - start))
     name = '{}.csv'.format(cfg['name'])

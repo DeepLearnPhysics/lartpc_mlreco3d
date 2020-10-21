@@ -1,7 +1,3 @@
-from . import losses
-from . import embeddings
-
-
 def backbone_dict():
     """
     returns dictionary of clustering models
@@ -22,6 +18,7 @@ def cluster_model_dict():
     '''
     Returns dictionary of implemented clustering layers.
     '''
+    from . import embeddings
     models = {
         "single": None,
         "multi": embeddings.ClusterEmbeddings,
@@ -31,16 +28,19 @@ def cluster_model_dict():
     return models
 
 
-def clustering_loss_dict():
+def spice_loss_dict():
     '''
     Returns dictionary of various clustering losses with enhancements.
     '''
+    from . import losses
     loss = {
+        # Hyperspace Clustering Losses
         'single': losses.single_layers.DiscriminativeLoss,
         'multi': losses.multi_layers.MultiScaleLoss,
         'multi-weighted': losses.multi_layers.DistanceEstimationLoss3,
         'multi-repel': losses.multi_layers.DistanceEstimationLoss2,
         'multi-distance': losses.multi_layers.DistanceEstimationLoss,
+        # SPICE Losses
         'se_bce': losses.spatial_embeddings.MaskBCELoss2,
         'se_bce_ellipse': losses.spatial_embeddings.MaskBCELossBivariate,
         'se_lovasz': losses.spatial_embeddings.MaskLovaszHingeLoss,
@@ -49,7 +49,10 @@ def clustering_loss_dict():
         'se_multivariate': losses.spatial_embeddings.MultiVariateLovasz,
         'se_ce_lovasz': losses.spatial_embeddings.CELovaszLoss,
         'se_lovasz_inter_2': losses.spatial_embeddings.MaskLovaszInterLoss2,
-        'se_lovasz_inter_bc': losses.spatial_embeddings.MaskLovaszInterBC
+        'se_lovasz_inter_bc': losses.spatial_embeddings.MaskLovaszInterBC,
+        # SPICE Losses Vectorized
+        'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
+        'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss
     }
     return loss
 
@@ -68,8 +71,8 @@ def cluster_model_construct(name):
     return models[name]
 
 
-def clustering_loss_construct(name):
-    loss_fns = clustering_loss_dict()
+def spice_loss_construct(name):
+    loss_fns = spice_loss_dict()
     print(name)
     if not name in loss_fns:
         raise Exception("Unknown clustering loss function name provided")
