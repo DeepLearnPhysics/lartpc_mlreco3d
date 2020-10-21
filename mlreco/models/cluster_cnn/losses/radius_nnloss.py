@@ -12,7 +12,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.metrics import adjusted_rand_score as ari
 
 from torch_cluster import knn, radius
-from torch_scatter import scatter_mean, scatter_sum
+from torch_scatter import scatter_mean, scatter_add
 
 
 class DensityBasedNNLoss(torch.nn.modules.loss._Loss):
@@ -45,7 +45,7 @@ class DensityBasedNNLoss(torch.nn.modules.loss._Loss):
             dist = dist[index[0, :] != index[1, :]]
             ally_loss = torch.pow(dist, 2)
             scatter_index = index[0, :][index[0, :] != index[1, :]]
-            ally_loss = scatter_sum(ally_loss, scatter_index)
+            ally_loss = scatter_add(ally_loss, scatter_index)
             ally_len = ally_loss.shape[0]
             ally_loss = torch.mean(ally_loss)
             ally_loss_list.append(float(ally_loss))
@@ -59,7 +59,7 @@ class DensityBasedNNLoss(torch.nn.modules.loss._Loss):
             enemy_loss = torch.clamp(1.0 - torch.exp(-dist**2), min=0.001, max=1-0.001)
             enemy_loss = -torch.log(enemy_loss)
             scatter_index = index[0, :]
-            enemy_loss = scatter_sum(enemy_loss, scatter_index)
+            enemy_loss = scatter_add(enemy_loss, scatter_index)
             enemy_len = enemy_loss.shape[0]
             assert(ally_len == enemy_len)
             enemy_loss = torch.mean(enemy_loss)
