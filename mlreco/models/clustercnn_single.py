@@ -18,7 +18,7 @@ class ClusterCNN(UResNet):
         - embedding_dim: dimension of final embedding space for clustering.
     '''
 
-    MODULES = ['clustercnn_single', 'clustering_loss']
+    MODULES = ['clustercnn_single', 'spice_loss']
 
     def __init__(self, cfg, name='clustercnn_single'):
         super(ClusterCNN, self).__init__(cfg, name)
@@ -59,5 +59,5 @@ class ClusteringLoss(DiscriminativeLoss):
     '''
     Vanilla discriminative clustering loss applied to final embedding layer.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(ClusteringLoss, self).__init__(cfg)

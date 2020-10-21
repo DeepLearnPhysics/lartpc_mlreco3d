@@ -12,7 +12,7 @@ from mlreco.models.chain.full_cnn import *
 from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
-from .cluster_cnn import clustering_loss_construct
+from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
 from mlreco.models.gnn.losses.grouping import *
@@ -174,7 +174,7 @@ class GhostTrackClusteringLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
         super(GhostTrackClusteringLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
-        self.clustering_loss = ClusteringLoss(cfg)
+        self.spice_loss = ClusteringLoss(cfg)
         self.track_gnn_loss = FullGNNLoss(cfg, 'track_gnn')
         self._num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
         # Initialize the loss weights
@@ -196,7 +196,7 @@ class GhostTrackClusteringLoss(torch.nn.modules.loss._Loss):
         clust_label = [cluster_label[0][he_mask].clone()]
         cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
         #cluster_label[0] = cluster_label[0][he_mask]
-        res_cnn_clust = self.clustering_loss(cnn_clust_output, clust_label)
+        res_cnn_clust = self.spice_loss(cnn_clust_output, clust_label)
         cnn_clust_acc, cnn_clust_loss = res_cnn_clust['accuracy'], res_cnn_clust['loss']
 
         # Apply the GNN particle clustering loss

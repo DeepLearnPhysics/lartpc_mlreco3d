@@ -16,7 +16,7 @@ class OccuSegLoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(OccuSegLoss, self).__init__()
         self.loss_config = cfg[name]
         self.batch_column = self.loss_config.get('batch_column', 3)

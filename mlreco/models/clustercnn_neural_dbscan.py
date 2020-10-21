@@ -27,7 +27,7 @@ class ClusteringLoss(nn.Module):
     '''
     Loss function for Proposal-Free Mask Generators.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(ClusteringLoss, self).__init__()
 
         self.loss_func = DensityBasedNNLoss(cfg)

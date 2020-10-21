@@ -14,7 +14,7 @@ class SPICELoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(SPICELoss, self).__init__()
         self.loss_config = cfg[name]
         self.seediness_weight = self.loss_config.get('seediness_weight', 1.0)
@@ -189,7 +189,7 @@ class SPICELoss(nn.Module):
 
 class SPICEInterLoss(SPICELoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(SPICEInterLoss, self).__init__(cfg, name)
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.inter_margin = self.loss_config.get('inter_margin', 0.2)
