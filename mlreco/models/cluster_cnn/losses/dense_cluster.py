@@ -14,7 +14,7 @@ class EmbeddingLoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(EmbeddingLoss, self).__init__()
         self.loss_config = cfg[name]
         self.embedding_weight = self.loss_config.get('embedding_weight', 1.0)

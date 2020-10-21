@@ -5,7 +5,7 @@ import sparseconvnet as scn
 
 from .cluster_cnn.spatial_embeddings import SpatialEmbeddings1, SpatialEmbeddingsLite
 from .cluster_cnn.losses.spatial_embeddings import *
-from .cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
+from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
 
 class ClusterCNN(SpatialEmbeddings1):
     '''
@@ -17,7 +17,7 @@ class ClusterCNN(SpatialEmbeddings1):
         - embedding_dim: dimension of final embedding space for clustering.
     '''
 
-    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'spatial_embeddings']
+    MODULES = ['network_base', 'uresnet', 'spice_loss', 'spatial_embeddings']
 
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
@@ -34,7 +34,7 @@ class ClusterCNN2(SpatialEmbeddingsLite):
         - embedding_dim: dimension of final embedding space for clustering.
     '''
 
-    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'spatial_embeddings']
+    MODULES = ['network_base', 'uresnet', 'spice_loss', 'spatial_embeddings']
 
     def __init__(self, cfg):
         super(ClusterCNN2, self).__init__(cfg)
@@ -50,13 +50,13 @@ class ClusteringLoss(nn.Module):
     '''
     Loss function for Proposal-Free Mask Generators.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(ClusteringLoss, self).__init__()
 
         self.loss_config = cfg[name]
 
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.loss_func = clustering_loss_construct(self.loss_func_name)
+        self.loss_func = spice_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
 
     def forward(self, result, cluster_label):

@@ -28,7 +28,7 @@ def cluster_model_dict():
     return models
 
 
-def clustering_loss_dict():
+def spice_loss_dict():
     '''
     Returns dictionary of various clustering losses with enhancements.
     '''
@@ -71,8 +71,8 @@ def cluster_model_construct(name):
     return models[name]
 
 
-def clustering_loss_construct(name):
-    loss_fns = clustering_loss_dict()
+def spice_loss_construct(name):
+    loss_fns = spice_loss_dict()
     print(name)
     if not name in loss_fns:
         raise Exception("Unknown clustering loss function name provided")

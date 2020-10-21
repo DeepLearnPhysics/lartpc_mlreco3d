@@ -33,7 +33,7 @@ class WeightedEdgeLoss(nn.Module):
 
 class SparseOccuSegGNN(nn.Module):
 
-    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'sparse_occuseg', 'predictor_cfg', 'constructor', 'modular_nnconv']
+    MODULES = ['network_base', 'uresnet', 'spice_loss', 'sparse_occuseg', 'predictor_cfg', 'constructor', 'modular_nnconv']
 
     def __init__(self, cfg, name='sparse_occuseg_gnn'):
         super(SparseOccuSegGNN, self).__init__()
