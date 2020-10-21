@@ -58,48 +58,8 @@ class ClusteringLoss(nn.Module):
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.loss_func = clustering_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
-        #print(self.loss_func)
 
     def forward(self, result, cluster_label):
         segment_label = [cluster_label[0][:, [0, 1, 2, 3, -1]]]
         group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
         return self.loss_func(result, segment_label, group_label)
-
-# class ClusteringLoss1(MaskBCELoss2):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss1, self).__init__(cfg)
-
-
-# class ClusteringLoss2(MaskBCELossBivariate):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss2, self).__init__(cfg)
-
-
-# class ClusteringLoss3(MaskLovaszHingeLoss):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss3, self).__init__(cfg)
-
-
-# class ClusteringLoss4(MaskLovaszInterLoss):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss4, self).__init__(cfg)
-
-
-# class ClusteringLoss6(EllipsoidalKernelLoss):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss6, self).__init__(cfg)
-
-# class ClusteringLoss7(MaskFocalLoss):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss7, self).__init__(cfg)
-
-# class ClusteringLoss8(MaskWeightedFocalLoss):
-
-#     def __init__(self, cfg, name='clustering_loss'):
-#         super(ClusteringLoss8, self).__init__(cfg)

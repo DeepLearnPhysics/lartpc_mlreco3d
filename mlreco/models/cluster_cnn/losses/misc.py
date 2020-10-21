@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_mean, scatter_add
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
@@ -95,6 +95,45 @@ def inter_cluster_loss(cluster_means, margin=0.2):
         dist = distances(cluster_means, cluster_means)
         return torch.pow(torch.clamp(2.0 * margin - dist[indices[0, :], \
             indices[1, :]], min=0), 2).mean()
+
+def regularization_loss(cluster_means):
+    return torch.mean(torch.norm(cluster_means, dim=1))
+
+
+def margin_smoothing_loss(sigma, sigma_means, labels, margin=0):
+    x = sigma[:, None]
+    mu = sigma_means[None, :]
+    l = torch.clamp(torch.abs(x-mu) - margin, min=0)**2
+    l = torch.gather(l, 1, labels.view(-1, 1)).squeeze()
+    loss = torch.mean(scatter_mean(l, labels))
+    return loss
+
+
+def get_probs(embeddings, margins, labels, eps=1e-6):
+
+    device = embeddings.device
+    n = labels.shape[0]
+    centroids = find_cluster_means(embeddings, labels)
+    sigma = scatter_mean(margins.squeeze(), labels)
+    num_clusters = labels.unique().shape[0]
+
+    # Compute spatial term
+    em = embeddings[:, None, :]
+    centroids = centroids[None, :, :]
+    sqdists = ((em - centroids)**2).sum(-1)
+
+    p = sqdists / (2.0 * sigma.view(1, -1)**2)
+    p = torch.clamp(torch.exp(-p), min=eps, max=1-eps)
+    logits = logit_fn(p, eps=eps)
+    eye = torch.eye(len(labels.unique()), dtype=torch.float32, device=device)
+    targets = eye[labels]
+    loss_tensor = nn.BCEWithLogitsLoss(reduction='none')(logits, targets)
+    loss = loss_tensor.mean(dim=0).mean()
+    with torch.no_grad():
+        acc = iou_batch(logits > 0, targets.bool())
+    smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.detach(), labels, margin=0)
+    p = torch.gather(p, 1, labels.view(-1, 1))
+    return loss, smoothing_loss, p.squeeze(), acc
 
 
 def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
