@@ -247,8 +247,8 @@ class OccuSegLoss(nn.Module):
                 occupancy_batch = occupancy[batch_mask]
 
                 loss_seg = self.seg_loss_fn(segmentation_batch, slabels_batch)
-                acc_seg = torch.sum(torch.argmax(
-                    segmentation_batch, dim=1) == slabels_batch) / segmentation_batch.shape[0]
+                acc_seg = float(torch.sum(torch.argmax(
+                    segmentation_batch, dim=1) == slabels_batch)) / float(segmentation_batch.shape[0])
 
                 loss_class, acc_class = self.combine_multiclass(
                     sp_embedding_batch, ft_embedding_batch,

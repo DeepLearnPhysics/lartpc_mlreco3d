@@ -26,6 +26,7 @@ def model_dict():
     from . import clusternet
     from . import clustercnn_neural_dbscan
     from . import sparse_occuseg
+    from . import sparseoccuseg_gnn
     # from . import cluster_chain
 
     from . import full_chain
@@ -53,11 +54,6 @@ def model_dict():
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
-        # URESNET MINKOWSKINET
-        "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
-        "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss),
-        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss), 
-        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss), 
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
@@ -87,6 +83,8 @@ def model_dict():
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # OccuSeg
         "occuseg": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegLoss),
+        # OccuSeg with GNN
+        "occuseg_gnn": (sparseoccuseg_gnn.SparseOccuSegGNN, sparseoccuseg_gnn.SparseOccuSegGNNLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lovasz free
