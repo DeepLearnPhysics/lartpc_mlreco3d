@@ -31,7 +31,6 @@ class WeightedEdgeLoss(nn.Module):
         return loss
 
 
-
 class SparseOccuSegGNN(nn.Module):
 
     def __init__(self, cfg, name='sparse_occuseg_gnn'):
