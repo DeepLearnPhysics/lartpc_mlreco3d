@@ -61,13 +61,13 @@ class GhostSpatialEmbeddingsLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg):
         super(GhostSpatialEmbeddingsLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
-        self.clustering_loss = ClusteringLoss(cfg)
+        self.spice_loss = ClusteringLoss(cfg)
         self._num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
 
     def forward(self, result, label_seg, label_clustering):
         uresnet_res = self.uresnet_loss(result, label_seg)
         complete_label_clustering = adapt_labels(result, label_seg, label_clustering)
-        clustering_res = self.clustering_loss(result, complete_label_clustering)
+        clustering_res = self.spice_loss(result, complete_label_clustering)
 
         result = {}
         result.update(uresnet_res)
@@ -76,7 +76,7 @@ class GhostSpatialEmbeddingsLoss(torch.nn.modules.loss._Loss):
         # Don't forget to sum all losses
         result['uresnet_loss'] = uresnet_res['loss'].float()
         result['uresnet_accuracy'] = uresnet_res['accuracy']
-        result['clustering_loss'] = clustering_res['loss'].float()
+        result['spice_loss'] = clustering_res['loss'].float()
         result['clustering_accuracy'] = clustering_res['accuracy']
         result['loss'] = clustering_res['loss'].float() + uresnet_res['loss'].float()
 

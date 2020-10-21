@@ -7,18 +7,19 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
 
+# Global type labels for PDG to Particle Type Label (nominal) conversion. 
+TYPE_LABELS = {
+    22: 0,  # photon
+    11: 1,  # e-
+    -11: 1, # e+
+    13: 2,  # mu-
+    -13: 2, # mu+
+    211: 3, # pi+
+    -211: 3, # pi-
+    2212: 4, # protons
+}
 
 def parse_particle_singlep_pdg(data):
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
     parts = data[0]
     pdgs = []
     pdg = -1
@@ -29,14 +30,12 @@ def parse_particle_singlep_pdg(data):
             pdg = TYPE_LABELS[int(p.pdg_code())]
         else: pdg = -1
         return np.asarray([pdg])
-        
+
     return np.asarray([pdg])
 
 
 def parse_particle_singlep_einit(data):
     parts = data[0]
-    pdgs = []
-    pdg = -1
     for p in parts.as_vector():
         is_primary = p.track_id() == p.parent_track_id()
         if not p.track_id() == 1: continue
@@ -500,12 +499,19 @@ def parse_cluster3d_full(data):
                                fill_value=group_ids[i], dtype=np.float32)
             inter_id = np.full(shape=(cluster.as_vector().size()),
                                fill_value=inter_ids[i], dtype=np.float32)
+            t = int(particles_v[i].pdg_code())
+            if t in TYPE_LABELS.keys():
+                pdg = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=TYPE_LABELS[t], dtype=np.float32)
+            else:
+                pdg = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=-1, dtype=np.float32)
             nu_id = np.full(shape=(cluster.as_vector().size()),
                             fill_value=nu_ids[i], dtype=np.float32)
             sem_type = np.full(shape=(cluster.as_vector().size()),
                                fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,sem_type]))
+            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,pdg,sem_type]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
 
@@ -757,9 +763,7 @@ def parse_cluster3d_clean(data):
         coordinate
         a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
     """
-    grp_voxels, grp_data = parse_cluster3d_clean_full(data)
-    return grp_voxels, grp_data[:,:2]
-    grp_voxels, grp_data = parse_cluster3d([data[0], data[2]])
+    grp_voxels, grp_data = parse_cluster3d_full([data[0], data[2]])
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
 
     # step 1: lexicographically sort group data
@@ -811,7 +815,7 @@ def parse_cluster3d_clean_full(data):
     img_data = img_data[perm]
 
     # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True, precedence=[0,2,1,3,4])
+    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True)
     inds1 = np.where(sel1)[0]
     grp_voxels = grp_voxels[inds1,:]
     grp_data = grp_data[inds1]

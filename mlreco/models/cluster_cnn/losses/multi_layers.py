@@ -12,9 +12,9 @@ from .single_layers import DiscriminativeLoss
 
 class MultiScaleLoss(DiscriminativeLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MultiScaleLoss, self).__init__(cfg)
-        self.loss_config = cfg['clustering_loss']
+        self.loss_config = cfg['spice_loss']
         self.num_strides = self.loss_config.get('num_strides', 5)
 
         self.intra_margins = self.loss_config.get('intra_margins',
@@ -130,7 +130,7 @@ class MultiScaleLoss2(MultiScaleLoss):
     '''
     Same as multi scale loss, but we include enemy loss in intra loss.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MultiScaleLoss2, self).__init__(cfg, name=name)
         self.ally_weight = self.loss_config.get('ally_weight', 1.0)
         self.ally_margins = self.intra_margins
@@ -280,7 +280,7 @@ class WeightedMultiLoss(MultiScaleLoss):
     '''
     Same as MultiScaleLoss, but with attention weighting.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(WeightedMultiLoss, self).__init__(cfg, name=name)
         self.attention_kernel = self.loss_config.get('attention_kernel', 1)
         if self.attention_kernel == 0:
@@ -445,7 +445,7 @@ class WeightedMultiLoss(MultiScaleLoss):
 
 class DistanceEstimationLoss(MultiScaleLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super().__init__(cfg)
         print('Distance Estimation')
         self.loss_config = cfg[name]
@@ -593,7 +593,7 @@ class DistanceEstimationLoss(MultiScaleLoss):
 
 class DistanceEstimationLoss2(MultiScaleLoss2):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(DistanceEstimationLoss2, self).__init__(cfg, name='uresnet')
         self.loss_config = cfg[name]
         self.huber_loss = torch.nn.SmoothL1Loss(reduction='mean')
@@ -733,7 +733,7 @@ class DistanceEstimationLoss2(MultiScaleLoss2):
 
 class DistanceEstimationLoss3(WeightedMultiLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(DistanceEstimationLoss3, self).__init__(cfg, name='uresnet')
         self.loss_config = cfg[name]
         self.huber_loss = torch.nn.SmoothL1Loss(reduction='mean')
@@ -878,7 +878,7 @@ class DensityLoss(MultiScaleLoss2):
     '''
     Trainable Density Loss
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(DensityLoss, self).__init__(cfg)
         self.density_radius = self.loss_config.get('density_radius', 0.1)
         self.sigma = self.density_radius / np.sqrt(2 * np.log(2))
@@ -1002,7 +1002,7 @@ class DensityLoss(MultiScaleLoss2):
 
 class DensityDistanceEstimationLoss(DistanceEstimationLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(DensityDistanceEstimationLoss, self).__init__(cfg)
         self.density_radius = self.loss_config.get('density_radius', 0.1)
         self.sigma = self.density_radius / np.sqrt(2 * np.log(2))
