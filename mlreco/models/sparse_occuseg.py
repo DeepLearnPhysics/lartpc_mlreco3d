@@ -10,6 +10,7 @@ from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
 
 class SparseOccuSeg(UResNet):
 
+    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'sparse_occuseg']
 
     def __init__(self, cfg, name='sparse_occuseg'):
         super(SparseOccuSeg, self).__init__(cfg, name='uresnet')

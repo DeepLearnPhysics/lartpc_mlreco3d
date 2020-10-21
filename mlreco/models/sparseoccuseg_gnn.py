@@ -33,6 +33,8 @@ class WeightedEdgeLoss(nn.Module):
 
 class SparseOccuSegGNN(nn.Module):
 
+    MODULES = ['network_base', 'uresnet', 'clustering_loss', 'sparse_occuseg', 'predictor_cfg', 'constructor']
+
     def __init__(self, cfg, name='sparse_occuseg_gnn'):
         super(SparseOccuSegGNN, self).__init__()
         self.sparse_occuseg = SparseOccuSeg(cfg)
@@ -109,5 +111,4 @@ class SparseOccuSegGNNLoss(nn.Module):
         res['edge_accuracy'] = f1
         res['loss'] += edge_loss
         res['edge_loss'] = float(edge_loss)
-        pprint(res)
         return res
