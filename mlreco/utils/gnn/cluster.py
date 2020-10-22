@@ -2,7 +2,7 @@
 import numpy as np
 import torch
 
-def form_clusters(data, min_size=-1, column=5):
+def form_clusters(data, min_size=-1, column=5, batch_index=3):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up each of the clusters in the input tensor.
@@ -15,8 +15,8 @@ def form_clusters(data, min_size=-1, column=5):
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
     clusts = []
-    for b in data[:, 3].unique():
-        binds = torch.nonzero(data[:, 3] == b).flatten()
+    for b in data[:, batch_index].unique():
+        binds = torch.nonzero(data[:, batch_index] == b).flatten()
         for c in data[binds,column].unique():
             # Skip if the cluster ID is -1 (not defined)
             if c < 0:
@@ -45,7 +45,7 @@ def reform_clusters(data, clust_ids, batch_ids, column=5):
     return np.array([np.where((data[:,3] == batch_ids[j]) & (data[:,column] == clust_ids[j]))[0] for j in range(len(batch_ids))])
 
 
-def get_cluster_batch(data, clusts):
+def get_cluster_batch(data, clusts, batch_index=3):
     """
     Function that returns the batch ID of each cluster.
     This should be unique for each cluster, assert that it is.
@@ -58,8 +58,8 @@ def get_cluster_batch(data, clusts):
     """
     labels = []
     for c in clusts:
-        assert len(data[c,3].unique()) == 1
-        labels.append(int(data[c[0],3].item()))
+        assert len(data[c,batch_index].unique()) == 1
+        labels.append(int(data[c[0],batch_index].item()))
 
     return np.array(labels)
 

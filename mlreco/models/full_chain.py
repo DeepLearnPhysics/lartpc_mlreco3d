@@ -12,7 +12,7 @@ from mlreco.models.cluster_gnn import ClustEdgeGNN as EdgeGNN
 from mlreco.utils.gnn.cluster import relabel_groups
 
 from mlreco.models.ppn import PPNLoss
-from .cluster_cnn import clustering_loss_construct
+from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
 from mlreco.models.gnn.losses.grouping import *
@@ -117,10 +117,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #print(self.loss_config)
         self.gnn_loss = self.loss_config.get('gnn_loss', False)
 
-        self.clustering_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.clustering_loss = clustering_loss_construct(self.clustering_loss_name)
-        self.clustering_loss = self.clustering_loss(cfg, name='full_chain_loss')
-        #print(self.clustering_loss)
+        self.spice_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
+        self.spice_loss = spice_loss_construct(self.spice_loss_name)
+        self.spice_loss = self.spice_loss(cfg, name='full_chain_loss')
+        #print(self.spice_loss)
 
         #self.node_loss = GNNGroupingLoss(cfg)
         #self.node_loss_weight = self.loss_config.get('node_loss_weight', 1.0)
@@ -239,7 +239,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             seed_batch_highE = seed_batch[highE_mask]
             margins_batch_highE = margins_batch[highE_mask]
 
-            loss_class, acc_class = self.clustering_loss.combine_multiclass(
+            loss_class, acc_class = self.spice_loss.combine_multiclass(
                 embedding_batch_highE, margins_batch_highE,
                 seed_batch_highE, slabels_highE, clabels_batch_highE)
             for key, val in loss_class.items():
@@ -265,7 +265,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         res.update(acc_avg)
         # pprint(res)
 
-        res['clustering_loss'] = float(self.clustering_weight * res['loss'])
+        res['spice_loss'] = float(self.clustering_weight * res['loss'])
         res['acc_seg'] = float(res['accuracy'])
         res['ppn_loss'] = float(ppn_loss)
         res['ppn_acc'] = float(ppn_res['ppn_acc'])
@@ -314,7 +314,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #    res['grouping_loss'] = float(self.node_loss_weight * gnn_loss['loss'])
         #    res['accuracy_grouping'] = gnn_loss['accuracy']
         #    # GNN Grouping Loss
-        #    print('Clustering Loss = ', res['clustering_loss'])
+        #    print('Clustering Loss = ', res['spice_loss'])
         #    print('Grouping Loss = ', res['grouping_loss'])
         #    print('Clustering Accuracy = ', res['accuracy_clustering'])
         #    print('Grouping Accuracy  = ', res['accuracy_grouping'])

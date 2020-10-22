@@ -17,7 +17,7 @@ from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
 from mlreco.models.cluster_gnn_kinematics import MomentumNet
 
-from .cluster_cnn import clustering_loss_construct
+from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
 from mlreco.models.cluster_node_gnn import NodeKinematicsLoss
@@ -80,7 +80,7 @@ class GhostChain2(torch.nn.Module):
     MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
             'embedding_decoder', 'particle_gnn', 'interaction_gnn', 'particle_edge_model',
             'interaction_edge_model', 'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'node_encoder', 'edge_encoder', 'clustering_loss', 'chain', 'dbscan_frag']
+            'fragment_clustering', 'node_encoder', 'edge_encoder', 'spice_loss', 'chain', 'dbscan_frag']
 
     def __init__(self, cfg):
         super(GhostChain2, self).__init__()

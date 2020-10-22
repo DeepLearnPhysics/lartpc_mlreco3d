@@ -128,6 +128,8 @@ def node_encoder_dict():
     from . import cluster_mix_encoder
     from . import cluster_gnn_encoder
 
+    # from mlreco.mink.layers.cnn_encoder import MinkCNNNodeEncoder
+
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
         "cnn" : cluster_cnn_encoder.ClustCNNNodeEncoder,
@@ -135,7 +137,8 @@ def node_encoder_dict():
         "mix2": cluster_mix_encoder.ClustMixNodeEncoder2,
         "mix_debug": cluster_mix_encoder.ClustMixNodeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder,
-        "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2
+        "cnn2" : cluster_cnn_encoder.ClustCNNNodeEncoder2,
+        # "mink_cnn": MinkCNNNodeEncoder
     }
 
     return encoders

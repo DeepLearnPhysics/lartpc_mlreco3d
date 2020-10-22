@@ -5,7 +5,7 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 from mlreco.models.layers.uresnet import UResNetEncoder, UResNetDecoder
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 
 from mlreco.models.ppn import PPN
 
@@ -71,20 +71,17 @@ class EdgeFeatureNet(nn.Module):
     '''
     def __init__(self, num_input, num_output):
         super(EdgeFeatureNet, self).__init__()
-        self.linear1 = nn.Linear(num_input * 2, 16)
-        self.norm1 = nn.BatchNorm1d(16)
-        self.linear2 = nn.Linear(16, 16)
-        self.norm2 = nn.BatchNorm1d(16)
-        self.linear3 = nn.Linear(16, num_output)
+        self.linear1 = nn.Linear(num_input, num_output)
+        self.norm1 = nn.BatchNorm1d(num_output)
+        self.linear2 = nn.Linear(num_output, num_output)
+        self.norm2 = nn.BatchNorm1d(num_output)
+        self.linear3 = nn.Linear(num_output, num_output)
 
-    def forward(self, x1, x2):
-        x = torch.cat([x1, x2], dim=1)
+    def forward(self, x):
         x = self.linear1(x)
-        if x.shape[0] > 1:
-            x = self.norm1(x)
+        x = self.norm1(x)
         x = self.linear2(x)
-        if x.shape[0] > 1:
-            x = self.norm2(x)
+        x = self.norm2(x)
         x = self.linear3(x)
         return x
 
@@ -249,7 +246,7 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
 # --------------------------CHAINS------------------------------
 
 
-class FullCNN(NetworkBase):
+class FullCNN(SCNNetworkBase):
     '''
     CNN Part of Full Reconstruction Chain for LArTPC Event Reconstruction
 
@@ -504,7 +501,7 @@ class FullCNN(NetworkBase):
         return res
 
 
-class FullCNNSELU(NetworkBase):
+class FullCNNSELU(SCNNetworkBase):
 
     def __init__(self, cfg, name='full_cnn'):
         super(FullCNNSELU, self).__init__(cfg, name='network_base')
