@@ -476,8 +476,8 @@ def parse_cluster3d_full(data):
     clusters_voxels, clusters_features = [], []
 
     from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
-    # group_ids = get_valid_group_id(cluster_event, particles_v)
-    group_ids = np.array([p.group_id() for p in particles_v])
+    group_ids = get_valid_group_id(cluster_event, particles_v)
+    #group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids)
 

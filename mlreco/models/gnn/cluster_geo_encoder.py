@@ -27,7 +27,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         self.adjust_node_direction = model_config.get('adjust_node_direction', False)
 
 
-    def forward(self, data, clusts, delta=0.):
+    def forward(self, data, clusts):
 
         # Get the voxel set
         voxels = data[:,:3].float()
@@ -58,35 +58,18 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         # Here is a torch-based implementation of cluster_vtx_features
         feats = []
         for c in clusts:
+
             # Get list of voxels in the cluster
             x = voxels[c]
-            size = torch.tensor([len(c)], dtype=dtype).to(device)
+            size = torch.tensor([len(c)], dtype=dtype, device=device)
 
-            # Get value, sem_types for the clusts
-            vs = values[c]
-            ts = sem_types[c]
-
-            # mean value
-            mean_value = vs.mean()
-            std_value = vs.std()
-
-            # get majority of semantic types
-            major_sem_type = ts.mode()[0]
-
-            # extra features
-            extra_feats = torch.tensor([mean_value, std_value, major_sem_type], dtype=dtype).to(device)
-
-            # Handle size 1 clusters seperately
+            # Do not waste time with computations with size 1 clusters, default to zeros
             if len(c) < 2:
-                # Don't waste time with computations, default to regularized
-                # orientation matrix, zero direction
-                center = x.flatten()
-                B = delta * torch.eye(3, dtype=dtype).to(device)
-                v0 = torch.zeros(3, dtype=dtype).to(device)
                 if not self.more_feats:
-                    feats.append(torch.cat((center, B.flatten(), v0, size)))
+                    feats.append(torch.cat((x.flatten(), torch.zeros(9, dtype=dtype, device=device), v0, size)))
                 else:
-                    feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
+                    extra_feats = torch.tensor([values[c[0]], 0., sem_types[c[0]]], dtype=dtype, device=device)
+                    feats.append(torch.cat((x.flatten(), torch.zeros(9, dtype=dtype, device=device), v0, size, extra_feats)))
                 continue
 
             # Center data
@@ -96,40 +79,32 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             # Get orientation matrix
             A = x.t().mm(x)
 
-            # Get eigenvectors
-            w, v = torch.eig(A, eigenvectors=True)
-            w = w[:,0].flatten() # Real part of eigenvalues
-            idxs = torch.argsort(w) # Sort in increasing order of eigenval
-            w = w[idxs]
-            v = v[:,idxs]
-            dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2]
-            w = w + delta
+            # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
+            # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
+            w, v = torch.symeig(A, eigenvectors=True)
+            dirwt = 1.0 - w[1] / w[2]
+            B = A / w[2]
             w = w / w[2]
 
-            # Orientation matrix with regularization
-            B = (1.-delta) * v.mm(torch.diag(w)).mm(v.t()) + delta * torch.eye(3, dtype=dtype).to(device)
-
-            # Get direction - look at direction of spread orthogonal to v[:,maxind]
+            # Get the principal direction, identify the direction of the spread
             v0 = v[:,2]
 
-
-            # Projection of x along v0
+            # Projection all points, x, along the principal axis
             x0 = x.mv(v0)
 
-            # Projection orthogonal to v0
+            # Evaluate the distance from the points to the principal axis
             xp0 = x - torch.ger(x0, v0)
             np0 = torch.norm(xp0, dim=1)
 
-            # Spread coefficient
+            # Flip the principal direction if it is not pointing towards the maximum spread
             sc = torch.dot(x0, np0)
             if sc < 0:
-                # Reverse
                 v0 = -v0
 
             # Weight direction
             v0 = dirwt * v0
 
-            # If adjust the direction
+            # Adjust direction to the start direction if requested
             if self.adjust_node_direction:
                 if torch.dot(
                         x[cluster_start_point(x.detach().cpu().numpy())],
@@ -141,8 +116,8 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             if not self.more_feats:
                 feats.append(torch.cat((center, B.flatten(), v0, size)))
             else:
+                extra_feats = torch.tensor([values[c].mean(), values[c].std(), sem_types[c].mode()[0]], dtype=dtype, device=device)
                 feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
-
 
         return torch.stack(feats, dim=0)
 
@@ -195,11 +170,14 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
                 disp = v1 - v2
 
                 # Distance
-                lend = torch.norm(disp) # length of displacement
+                lend = torch.norm(disp)
                 if lend > 0:
                     disp = disp / lend
+
+                # Outer product
                 B = torch.ger(disp, disp).flatten()
-                feats.append(torch.cat([v1, v2, disp, torch.tensor([lend], dtype=dtype).to(device), B]))
+
+                feats.append(torch.cat([v1, v2, disp, lend.reshape(1), B]))
 
             feats = torch.stack(feats, dim=0)
 
