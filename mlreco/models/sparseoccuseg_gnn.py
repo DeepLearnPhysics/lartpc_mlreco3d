@@ -62,6 +62,7 @@ class SparseOccuSegGNN(nn.Module):
         out['node_pred'] = gnn_out['node_pred']
         out['edge_pred'] = gnn_out['edge_pred']
         out['edge_truth'] = [graph_data.edge_truth]
+        out['graph'] = [graph_data]
         return out
 
     def forward(self, input):
@@ -75,13 +76,14 @@ class SparseOccuSegGNN(nn.Module):
             out = self.sparse_occuseg(input)
             out['coordinates'] = [coordinates]
             out['batch_indices'] = [batch_indices]
-            graph_data = self.constructor.construct_batched_graphs(out, labels)
+            graph_data = self.constructor.construct_batched_graphs(out)
             gnn_out = self.gnn(graph_data.x,
                                graph_data.edge_index,
                                graph_data.edge_attr,
                                graph_data.batch)
             out['node_pred'] = gnn_out['node_pred']
             out['edge_pred'] = gnn_out['edge_pred']
+            out['graph'] = [graph_data]
         return out
 
 
@@ -91,24 +93,28 @@ class SparseOccuSegGNNLoss(nn.Module):
         super(SparseOccuSegGNNLoss, self).__init__()
         self.loss_fn = SparseOccuSegLoss(cfg)
         self.edge_loss = WeightedEdgeLoss()
+        self.eval = cfg['occuseg_gnn_loss'].get('eval', False)
 
     def forward(self, result, label):
         res = self.loss_fn(result, label)
         # Add GNN Loss
         node_pred = result['node_pred'][0]
         edge_pred = result['edge_pred'][0]
-        edge_truth = result['edge_truth'][0]
-        edge_loss = self.edge_loss(edge_pred.squeeze(), edge_truth.float())
-        edge_loss = edge_loss.mean()
+        if not self.eval:
+            edge_truth = result['edge_truth'][0]
+            edge_loss = self.edge_loss(edge_pred.squeeze(), edge_truth.float())
+            edge_loss = edge_loss.mean()
+            with torch.no_grad():
+                true_negatives = float(torch.sum(( (edge_pred < 0) & ~edge_truth.bool() ).int()))
+                precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
+                recall = true_negatives / (float(torch.sum( (edge_pred < 0).int() )) + 1e-6)
+                f1 = precision * recall / (precision + recall + 1e-6)
+
+            res['edge_accuracy'] = f1
+            res['loss'] += edge_loss
+            res['edge_loss'] = float(edge_loss)
+        else:
+            return res
 
         edge_pred = edge_pred.squeeze()
-        with torch.no_grad():
-            true_negatives = float(torch.sum(( (edge_pred < 0) & ~edge_truth.bool() ).int()))
-            precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
-            recall = true_negatives / (float(torch.sum( (edge_pred < 0).int() )) + 1e-6)
-            f1 = precision * recall / (precision + recall + 1e-6)
-
-        res['edge_accuracy'] = f1
-        res['loss'] += edge_loss
-        res['edge_loss'] = float(edge_loss)
         return res

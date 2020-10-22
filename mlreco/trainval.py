@@ -12,6 +12,7 @@ import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
 from mlreco.utils.adabound import *
+from torch_geometric.data import Batch
 
 class trainval(object):
     """
@@ -290,6 +291,8 @@ class trainval(object):
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
+                elif isinstance(result[key][0], Batch):
+                    res[key] = result[key]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
 
