@@ -246,7 +246,7 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
     return np.vstack(dirs)
 
 
-def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False):
+def get_cluster_features(data, clusts, whether_adjust_direction=False):
     """
     Function that returns the an array of 16 features for
     each of the clusters in the provided list.
@@ -254,23 +254,18 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
     Args:
         voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
     feats = []
     for c in clusts:
+
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
 
-        # Handle size 1 clusters seperately
+        # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            # Don't waste time with computations, default to regularized
-            # orientation matrix, zero direction
-            center = x.flatten()
-            B = delta * np.eye(3)
-            v0 = np.zeros(3)
-            feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
+            return feats.append(np.concatenate((x.flatten(), np.zeros(9), [len(c)])))
             continue
 
         # Center data
@@ -280,35 +275,32 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
         # Get orientation matrix
         A = x.T.dot(x)
 
-        # Get eigenvectors
+        # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
+        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
         w, v = np.linalg.eigh(A)
-        dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2]
-        w = w + delta
+        dirwt = 1.0 - w[1] / w[2]
+        B = A / w[2]
         w = w / w[2]
 
-        # Orientation matrix with regularization
-        B = (1.-delta) * v.dot(np.diag(w)).dot(v.T) + delta * np.eye(3)
-
-        # get direction - look at direction of spread orthogonal to v[:,maxind]
+        # Get the principal direction, identify the direction of the spread
         v0 = v[:,2]
 
-        # Projection of x along v0
+        # Projection all points, x, along the principal axis
         x0 = x.dot(v0)
 
-        # Projection orthogonal to v0
+        # Evaluate the distance from the points to the principal axis
         xp0 = x - np.outer(x0, v0)
         np0 = np.linalg.norm(xp0, axis=1)
 
-        # spread coefficient
+        # Flip the principal direction if it is not pointing towards the maximum spread
         sc = np.dot(x0, np0)
         if sc < 0:
-            # Reverse
             v0 = -v0
 
         # Weight direction
         v0 = dirwt * v0
 
-        # If adjust the direction
+        # Adjust direction to the start direction if requested
         if whether_adjust_direction:
             if np.dot(
                     x[find_start_point(x.detach().cpu().numpy())],

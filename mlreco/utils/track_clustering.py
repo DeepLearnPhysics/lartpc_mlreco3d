@@ -37,7 +37,7 @@ def track_clustering(voxels, points, method='masked_dbscan', **kwargs):
                 graph *= (graph < kwargs['eps'])
                 cs_graph = scipy.sparse.csr_matrix(graph)
 
-                # Find the shortest path between each of the breaking points, idenify optimal segments
+                # Find the shortest path between each of the breaking points, identify optimal segments
                 shortest_mat, predecessors = scipy.sparse.csgraph.shortest_path(csgraph=cs_graph, directed=False, return_predecessors=True)
                 mst_mat = scipy.sparse.csgraph.minimum_spanning_tree(shortest_mat[:len(group_points),:len(group_points)]).toarray()
                 mst_edges = np.vstack(np.where(mst_mat > 0)).T
