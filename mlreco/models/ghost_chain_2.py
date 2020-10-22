@@ -311,6 +311,8 @@ class GhostChain2(torch.nn.Module):
             # Extract fragment predictions to input into the GNN
             fragments_cnn, frag_batch_ids_cnn, frag_seg_cnn = self.extract_fragment(input, result)
             #semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
+            #print("CNN fragments: ", len(fragments_cnn))
+            #print(len([x for x in fragments_cnn if len(x) > 10]))
             fragments.extend(fragments_cnn)
             frag_batch_ids.extend(frag_batch_ids_cnn)
             frag_seg.extend(frag_seg_cnn)
@@ -324,6 +326,8 @@ class GhostChain2(torch.nn.Module):
                 vals, cnts = semantic_labels[f].unique(return_counts=True)
                 assert len(vals) == 1
                 frag_seg_dbscan[i] = vals[torch.argmax(cnts)].item()
+            #print("DBSCAN fragments: ", len(fragments_dbscan))
+            #print(len([x for x in fragments_dbscan if len(x) > 10]))
             fragments.extend(fragments_dbscan)
             frag_batch_ids.extend(frag_batch_ids_dbscan)
             frag_seg.extend(frag_seg_dbscan)
@@ -467,6 +471,7 @@ class GhostChain2(torch.nn.Module):
         # ---
 
         if self.enable_kinematics:
+            #print(len(particles))
             edge_index = complete_graph(part_batch_ids)
             x = self.kinematics_node_encoder(input[0], particles)
             e = self.kinematics_edge_encoder(input[0], particles, edge_index)
@@ -573,6 +578,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         self.inter_gnn_weight = self.loss_config.get('inter_gnn_weight', 0.0)
         self.kinematics_weight = self.loss_config.get('kinematics_weight', 0.0)
         self.flow_weight = self.loss_config.get('flow_weight', 0.0)
+        self.kinematics_p_weight = self.loss_config.get('kinematics_p_weight', 0.0)
+        self.kinematics_type_weight = self.loss_config.get('kinematics_type_weight', 0.0)
 
     def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None, particle_graph=None):
         res = {}
@@ -688,11 +695,15 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
                 'node_pred_type': out['node_pred_type']
             }
             res_kinematics = self.kinematics_loss(gnn_out, kinematics_label)
-            res['kinematics_loss'] = res_kinematics['loss']
+            res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
             res['kinematics_accuracy'] = res_kinematics['accuracy']
+            res['kinematics_type_loss'] = res_kinematics['type_loss']
+            res['kinematics_p_loss'] = res_kinematics['p_loss']
+            res['kinematics_n_clusts'] = res_kinematics['n_clusts']
 
             accuracy += res_kinematics['accuracy']
-            loss += self.kinematics_weight * res_kinematics['loss']
+            # Do not forget to take p_weight and type_weight into account (above)
+            loss += self.kinematics_weight * res['kinematics_loss']
 
             # Loss on edge predictions (particle hierarchy)
             gnn_out = {
