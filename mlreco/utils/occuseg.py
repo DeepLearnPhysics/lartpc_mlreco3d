@@ -2,12 +2,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from mlreco.main_funcs import process_config, train, inference
+# from mlreco.main_funcs import process_config, train, inference
 from mlreco.utils.metrics import *
-from mlreco.trainval import trainval
-from mlreco.main_funcs import process_config
-from mlreco.iotools.factories import loader_factory
-from mlreco.main_funcs import cycle
+# from mlreco.trainval import trainval
+# from mlreco.main_funcs import process_config
+# from mlreco.iotools.factories import loader_factory
+# from mlreco.main_funcs import cycle
 
 from pprint import pprint
 
@@ -15,6 +15,57 @@ import networkx as nx
 from torch_cluster import knn_graph, radius_graph
 import time
 from torch_geometric.data import Data, Batch
+from scipy.spatial.distance import cdist
+
+
+def get_edge_truth(edge_indices, labels):
+    '''
+
+        - edge_indices: 2 x E
+        - labels: N
+    '''
+    u = labels[edge_indices[0, :]]
+    v = labels[edge_indices[1, :]]
+    return (u == v).astype(bool)
+
+
+def fit_graph(coords, edge_index, edge_pred, features, min_cluster=10):
+    edges = edge_index[edge_pred]
+    edge_indices = edges
+    edges = [(e[0], e[1]) for i, e in enumerate(edges.cpu().numpy())]
+    G = nx.Graph()
+    G.add_nodes_from(np.arange(coords.shape[0]))
+    G.add_edges_from(edges)
+    pred = -np.ones(coords.shape[0], dtype=np.int32)
+    hypernode_features = []
+    singletons = []
+    ccs = []
+    labels = []
+    temp_pred = np.zeros(coords.shape[0], dtype=np.int32)
+    for i, comp in enumerate(nx.connected_components(G)):
+        if len(comp) < min_cluster:
+            singletons.extend(list(comp))
+            x = np.asarray(list(comp))
+            temp_pred[x] = i
+        else:
+            x = np.asarray(list(comp))
+            pred[x] = i
+            ccs.extend(list(comp))
+    if len(singletons) > 0:
+        # Handle Singletons
+        if len(ccs) == 0:   # Current class only contains singletons
+            pred = temp_pred
+        else:
+            singletons = np.asarray(singletons)
+            ccs = np.asarray(ccs)
+            u = features[ccs]
+            v = features[singletons]
+            dist = cdist(v, u)
+            nearest = np.argmin(dist, axis=1)
+            new_labels = pred[ccs][nearest]
+            pred[singletons] = new_labels
+    return pred, edge_indices
+
 
 class OccuSegPredictor:
 
@@ -40,6 +91,8 @@ class OccuSegPredictor:
                         eps=0.001):
 
         device = sp_emb.device
+        if edge_indices.shape[1] == 0:
+            return torch.Tensor([0]).to(device)
         ui, vi = edge_indices[0, :], edge_indices[1, :]
         # Compute spatial term
         sp_cov = (cov[:, 0][ui] + cov[:, 0][vi]) / 2
@@ -75,7 +128,11 @@ class OccuSegPredictor:
                           cov: torch.Tensor,
                           occ=None, cluster_all=True):
 
+        pred = -np.ones(coords.shape[0], dtype=np.int32)
         edge_indices = self.graph_constructor(coords, **self.kwargs)
+        if edge_indices.shape[1] < 1:
+            pred[0] = 0
+            return pred, None, None
         w = self.get_edge_weight(sp_emb, ft_emb, cov, edge_indices, occ=occ.squeeze(), eps=self.eps)
         edge_indices = edge_indices.T[w > self.ths].T
         edges = [(e[0], e[1], w[i].item()) \
@@ -84,7 +141,6 @@ class OccuSegPredictor:
         G = nx.Graph()
         G.add_nodes_from(np.arange(coords.shape[0]))
         G.add_weighted_edges_from(edges)
-        pred = -np.ones(coords.shape[0], dtype=np.int32)
         for i, comp in enumerate(nx.connected_components(G)):
             x = np.asarray(list(comp))
             pred[x] = i
@@ -147,7 +203,11 @@ class GraphDataConstructor:
                 pred, edge_index, w = self.predictor.fit_predict(
                     coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
 
+                if edge_index is None:
+                    continue
+
                 data = self.construct_graph(coords_class, w, edge_index, features_class)
+                data.index = (int(bidx), int(c))
                 data_list.append(data)
 
         graph_batch = Batch().from_data_list(data_list)
@@ -196,104 +256,8 @@ class GraphDataConstructor:
                 data = self.construct_graph(coords_class, w, edge_index, features_class)
                 truth = self.predictor.get_edge_truth(edge_index, frag_labels)
                 data.edge_truth = truth
+                data.index = (int(bidx), int(c))
                 data_list.append(data)
 
         graph_batch = Batch().from_data_list(data_list)
         return graph_batch
-
-
-
-def main_loop(inference_cfg, **kwargs):
-
-    start_index = kwargs.get('start_index', 0)
-    end_index = kwargs.get('end_index', 20000)
-    event_list = list(range(start_index, end_index))
-    loader = loader_factory(inference_cfg, event_list=event_list)
-    dataset = iter(cycle(loader))
-    Trainer = trainval(inference_cfg)
-    loaded_iteration = Trainer.initialize()
-    for m in Trainer._net.modules():
-        m.eval()
-    Trainer._net.eval()
-
-    output = []
-
-    inference_cfg['trainval']['iterations'] = len(event_list)
-    iterations = inference_cfg['trainval']['iterations']
-
-    cluster_label_col = kwargs.get('cluster_label_col', 5)
-    batch_col = kwargs.get('batch_col', 3)
-    predictor_cfg = kwargs.get('predictor_cfg', {})
-
-    counts = 0
-
-    predictor = OccuSegPredictor(**predictor_cfg)
-
-    while counts < len(event_list):
-
-        start = time.time()
-        data_blob, res = Trainer.forward(dataset)
-        event_id = data_blob['index']
-        end = time.time()
-
-        device = torch.cuda.current_device()
-        # Results
-        segmentation = torch.Tensor(res['segmentation'][0]).cuda()
-        covariance = torch.Tensor(res['covariance'][0]).cuda()
-        occupancy = torch.Tensor(res['occupancy'][0]).cuda()
-        sp_embeddings = torch.Tensor(res['spatial_embeddings'][0]).cuda()
-        ft_embeddings = torch.Tensor(res['feature_embeddings'][0]).cuda()
-
-        # Labels
-        input_data = torch.Tensor(data_blob['input_data'][0]).cuda()
-        labels = torch.Tensor(data_blob['cluster_label'][0]).cuda()
-        batch_index = input_data[:, batch_col].int()
-        nbatches = len(torch.unique(batch_index))
-        forward_time_per_image = float(end - start) / float(nbatches)
-
-        for i, bidx in enumerate(torch.unique(batch_index)):
-            seg_batch = segmentation[batch_index == bidx]
-            cov_batch = covariance[batch_index == bidx]
-            occ_batch = occupancy[batch_index == bidx]
-            sp_batch = sp_embeddings[batch_index == bidx]
-            ft_batch = ft_embeddings[batch_index == bidx]
-            labels_batch = labels[batch_index == bidx]
-            idx = event_id[i]
-            print("Counts: {}  |   Index: {}".format(counts, idx))
-            counts += 1
-
-            for c in (torch.unique(labels_batch[:, -1]).int()):
-                if int(c) == 4:
-                    continue
-                class_mask = labels_batch[:, -1] == c
-                seg_class = seg_batch[class_mask]
-                cov_class = cov_batch[class_mask]
-                occ_class = occ_batch[class_mask]
-                sp_class = sp_batch[class_mask]
-                ft_class = ft_batch[class_mask]
-                coords_class = labels_batch[:, :3][class_mask]
-                frag_labels = labels_batch[:, cluster_label_col][class_mask]
-
-                # Run Post-Processing
-                start = time.time()
-                pred, _, _ = predictor.fit_predict(coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
-                end = time.time()
-                post_time = float(end-start)
-
-                # Compute Metrics
-                purity, efficiency = purity_efficiency(pred, frag_labels.cpu().numpy())
-                fscore = 2 * (purity * efficiency) / (purity + efficiency)
-                ari = ARI(pred, frag_labels.cpu().numpy())
-                sbd = SBD(pred, frag_labels.cpu().numpy())
-                true_num_clusters = len(torch.unique(frag_labels))
-                pred_num_clusters = len(np.unique(pred))
-                row = (idx, c, ari, purity, efficiency, fscore, sbd, \
-                    true_num_clusters, pred_num_clusters, forward_time_per_image, post_time)
-                output.append(row)
-                print("Class = {0}  |  ARI = {1:.4f}  |  SBD = {2:.4f}".format(int(c), ari, sbd))
-                # print("LL = ", ll)
-
-    output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
-        'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters',
-        'pred_num_clusters', 'forward_time', 'post_time'])
-    return output
