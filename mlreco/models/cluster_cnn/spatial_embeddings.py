@@ -9,6 +9,68 @@ from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.layers.stacknet import StackUNet
 from .utils import add_normalized_coordinates, distance_matrix
 
+
+class CoordinateEmbeddings(UResNet):
+
+
+    def __init__(self, cfg, name='coordinate_embeddings'):
+        super(CoordinateEmbeddings, self).__init__(cfg, name='uresnet')
+        if 'modules' in cfg:
+            self.model_config = cfg['modules'][name]
+        else:
+            self.model_config = cfg[name]
+        self.seedDim = self.model_config.get('seediness_dim', 1)
+        self.embeddingDim = self.model_config.get('embedding_dim', 3)
+        self.coordConv = self.model_config.get('coordConv', True)
+
+        # Define outputlayers
+        self.outputEmbeddings = scn.Sequential()
+        self._nin_block(self.outputEmbeddings, self.num_filters, self.embeddingDim)
+        self.outputEmbeddings.add(scn.OutputLayer(self.dimension))
+
+        # Pytorch Activations
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
+
+
+    def forward(self, input):
+        '''
+        point_cloud is a list of length minibatch size (assumes mbs = 1)
+        point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
+        label has shape (point_cloud.shape[0] + 5*num_labels, 1)
+        label contains segmentation labels for each point + coords of gt points
+
+        RETURNS:
+            - feature_enc: encoder features at each spatial resolution.
+            - feature_dec: decoder features at each spatial resolution.
+        '''
+        point_cloud, = input
+        # print("Point Cloud: ", point_cloud)
+        coords = point_cloud[:, 0:self.dimension+1].float()
+        features = point_cloud[:, self.dimension+1:].float()
+        features = features[:, -1].view(-1, 1)
+
+        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+        if self.coordConv:
+            features = torch.cat([normalized_coords, features], dim=1)
+
+        x = self.input((coords, features))
+        encoder_res = self.encoder(x)
+        features_enc = encoder_res['features_enc']
+        deepest_layer = encoder_res['deepest_layer']
+        features_cluster = self.decoder(features_enc, deepest_layer)
+
+        embeddings = self.outputEmbeddings(features_cluster[-1])
+        # embeddings[:, :self.dimension] += coords[:, :3]
+
+        res = {
+            "embeddings": [embeddings[:, :self.dimension]]
+        }
+
+        return res
+
+
 class SpatialEmbeddings1(UResNet):
 
     def __init__(self, cfg, name='spatial_embeddings'):
@@ -124,7 +186,7 @@ class SpatialEmbeddings1(UResNet):
 
 
 # class SpatialEmbeddings3(UResNet):
-    
+
 #     def __init__(self, cfg, name='spatial_embeddings'):
 #         super(SpatialEmbeddings1, self).__init__(cfg, name='uresnet')
 

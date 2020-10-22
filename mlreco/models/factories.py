@@ -21,14 +21,14 @@ def model_dict():
     from . import uresnet_clustering
     from . import flashmatching_model
 
-    from . import discriminative_loss
     from . import clustercnn_single
     from . import clustercnn_se
-    from . import clustercnn_density
-
     from . import clusternet
-    from . import clustercnn_adaptis
+    from . import clustercnn_neural_dbscan
+    from . import sparse_occuseg
+    from . import sparseoccuseg_gnn
     # from . import cluster_chain
+
     from . import full_chain
     from . import full_cnn
     from . import hierarchy
@@ -75,18 +75,18 @@ def model_dict():
         #"clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
         # ClusterUNet Single
         "clustercnn_single": (clustercnn_single.ClusterCNN, clustercnn_single.ClusteringLoss),
-        # Same as ClusterUNet Single, but coordinate concat is done in first input layer.
-        "discriminative_loss": (discriminative_loss.UResNet, discriminative_loss.DiscriminativeLoss),
         # Colossal ClusterNet Model to Wrap them all
         "clusternet": (clusternet.ClusterCNN, clusternet.ClusteringLoss),
         # Density Loss
-        "clustercnn_density": (clustercnn_density.ClusterCNN, clustercnn_density.ClusteringLoss),
+        "clustercnn_density": (clustercnn_neural_dbscan.ClusterCNN, clustercnn_neural_dbscan.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
+        # OccuSeg
+        "occuseg": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegLoss),
+        # OccuSeg with GNN
+        "occuseg_gnn": (sparseoccuseg_gnn.SparseOccuSegGNN, sparseoccuseg_gnn.SparseOccuSegGNNLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
-        # AdaptIS
-        "adaptis": (clustercnn_adaptis.ClusterCNN, clustercnn_adaptis.ClusteringLoss),
         # Spatial Embeddings Lovasz free
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Cluster grouping GNN
