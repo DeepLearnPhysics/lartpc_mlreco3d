@@ -8,6 +8,7 @@ def edge_model_dict():
     """
 
     from . import modular_nnconv
+    from . import modular_nnconv_old
     from . import modular_econv
     from . import modular_gatconv
     from . import modular_agnnconv
@@ -26,6 +27,7 @@ def edge_model_dict():
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
+        "modular_nnconv_old" : modular_nnconv_old.NNConvModel,
         "modular_nnconv_elu": modular_nnconv_elu.NNConvModel,
         "modular_econv" : modular_econv.EConvModel,
         "modular_gatconv" : modular_gatconv.GATConvModel,
@@ -126,7 +128,7 @@ def node_encoder_dict():
     from . import cluster_mix_encoder
     from . import cluster_gnn_encoder
 
-    from mlreco.mink.layers.cnn_encoder import MinkCNNNodeEncoder
+    # from mlreco.mink.layers.cnn_encoder import MinkCNNNodeEncoder
 
     encoders = {
         "geo" : cluster_geo_encoder.ClustGeoNodeEncoder,
@@ -136,7 +138,7 @@ def node_encoder_dict():
         "mix2": cluster_mix_encoder.ClustMixNodeEncoder2,
         "mix_debug": cluster_mix_encoder.ClustMixNodeEncoder3,
         "gnn" : cluster_gnn_encoder.ClustGNNNodeEncoder,
-        "mink_cnn": MinkCNNNodeEncoder
+        # "mink_cnn": MinkCNNNodeEncoder
     }
 
     return encoders

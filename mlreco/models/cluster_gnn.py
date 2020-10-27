@@ -4,6 +4,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
+from .layers.dbscan import DBScanClusts2
 from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions

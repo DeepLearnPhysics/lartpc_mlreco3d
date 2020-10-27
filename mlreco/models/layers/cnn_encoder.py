@@ -111,7 +111,7 @@ class Flatten(nn.Module):
 class ResidualEncoder(UResNetEncoder):
 
     def __init__(self, cfg, name='res_encoder'):
-        super(ResidualEncoder, self).__init__(cfg,'res_encoder')
+        super(ResidualEncoder, self).__init__(cfg,'uresnet_encoder')
         self.model_config = cfg[name]
         self.num_features = self.model_config.get('num_features', 32)
 

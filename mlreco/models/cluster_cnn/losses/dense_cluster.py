@@ -4,13 +4,9 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 
-from mlreco.models.cluster_cnn.losses.lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
+from .lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
+from .misc import *
 from collections import defaultdict
-
-
-def logit(input, eps=1e-6):
-    x = torch.clamp(input, min=eps, max=1-eps)
-    return torch.log(x / (1 - x))
 
 
 class EmbeddingLoss(nn.Module):
@@ -18,7 +14,7 @@ class EmbeddingLoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(EmbeddingLoss, self).__init__()
         self.loss_config = cfg[name]
         self.embedding_weight = self.loss_config.get('embedding_weight', 1.0)
@@ -26,6 +22,8 @@ class EmbeddingLoss(nn.Module):
         self.spatial_size = self.loss_config.get('spatial_size', 512)
 
         self.embedding_loss_name = self.loss_config.get('embedding_loss_name', 'BCE')
+        self.intercluster_loss_weight = self.loss_config.get('intercluster_loss_weight', 1.0)
+        self.centroid_loss_weight = self.loss_config.get('centroid_loss_weight', 1.0)
 
         # BCELoss for Embedding Loss
         if self.embedding_loss_name == 'BCE':
@@ -75,7 +73,12 @@ class EmbeddingLoss(nn.Module):
                 indices[1, :]], min=0), 2).mean()
 
 
-    def get_per_class_probabilities(self, embeddings, margins, labels):
+    def centroid_proximity_loss(self, emb_cents, normcoord_cents):
+        dist = torch.norm(emb_cents - normcoord_cents, dim=1)
+        return torch.pow(dist, 2).mean()
+
+
+    def get_per_class_probabilities(self, embeddings, margins, labels, coords=None):
         '''
         Computes binary foreground/background loss.
         '''
@@ -83,6 +86,9 @@ class EmbeddingLoss(nn.Module):
         loss = 0.0
         smoothing_loss = 0.0
         centroids = self.find_cluster_means(embeddings, labels.to(dtype=torch.int64))
+        normcoord_cents = self.find_cluster_means(coords, labels.to(dtype=torch.int64))
+        intercluster_loss = self.inter_cluster_loss(centroids)
+        centroid_loss = self.centroid_proximity_loss(centroids, normcoord_cents)
         n_clusters = len(centroids)
         cluster_labels = labels.unique(sorted=True)
         probs = torch.zeros(embeddings.shape[0]).float().to(device)
@@ -107,6 +113,9 @@ class EmbeddingLoss(nn.Module):
         loss /= n_clusters
         smoothing_loss /= n_clusters
         acc /= n_clusters
+
+        loss += intercluster_loss * self.intercluster_loss_weight
+        loss += centroid_loss * self.centroid_loss_weight
 
         return loss, smoothing_loss, probs, acc
 
