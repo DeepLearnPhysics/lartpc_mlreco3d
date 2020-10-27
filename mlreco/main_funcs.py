@@ -9,7 +9,6 @@ import sys
 import numpy as np
 import torch
 import pprint
-import itertools
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
@@ -31,6 +30,8 @@ class Handlers:
         return list(self.__dict__.keys())
 
 
+# Use this function instead of itertools.cycle to avoid creating  a memory leak.
+# (itertools.cycle attempts to save all outputs in order to re-cycle through them)
 def cycle(data_io):
     while True:
         for x in data_io:
@@ -134,7 +135,7 @@ def prepare(cfg, event_list=None):
     handlers.data_io = loader_factory(cfg, event_list=event_list)
 
     # IO iterator
-    handlers.data_io_iter = itertools.cycle(handlers.data_io)
+    handlers.data_io_iter = iter(cycle(handlers.data_io))
 
     if 'trainval' in cfg:
         # Set random seed for reproducibility
@@ -144,11 +145,6 @@ def prepare(cfg, event_list=None):
         # Set primary device
         if len(cfg['trainval']['gpus']) > 0:
             torch.cuda.set_device(cfg['trainval']['gpus'][0])
-
-        # TODO check that it does what we want (cycle through dataloader)
-        # check on a small sample, check 1/ it cycles through and 2/ randomness
-        if cfg['trainval']['train']:
-            handlers.data_io_iter = iter(cycle(handlers.data_io))
 
         # Trainer configuration
         handlers.trainer = trainval(cfg)
@@ -178,10 +174,7 @@ def apply_event_filter(handlers,event_list=None):
     handlers.data_io = loader_factory(handlers.cfg,event_list)
 
     # IO iterator
-    handlers.data_io_iter = itertools.cycle(handlers.data_io)
-
-    if 'trainval' in handlers.cfg and handlers.cfg['trainval']['train']:
-        handlers.data_io_iter = iter(cycle(handlers.data_io))
+    handlers.data_io_iter = iter(cycle(handlers.data_io))
 
 
 def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
@@ -327,7 +320,7 @@ def inference_loop(handlers):
         loaded_iteration = handlers.trainer.initialize()
         make_directories(handlers.cfg,loaded_iteration,handlers)
         handlers.iteration = 0
-        handlers.data_io_iter = itertools.cycle(handlers.data_io)
+        handlers.data_io_iter = iter(cycle(handlers.data_io))
         while handlers.iteration < handlers.cfg['trainval']['iterations']:
 
             epoch = handlers.iteration / float(len(handlers.data_io))

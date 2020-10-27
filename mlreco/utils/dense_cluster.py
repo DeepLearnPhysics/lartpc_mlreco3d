@@ -214,7 +214,7 @@ def fit_predict_np(embeddings, seediness, margins, fitfunc,
         unclustered[p > p_threshold] = 0
         count += np.sum(p > p_threshold)
     if len(probs) == 0:
-        return np.ones(num_points).long()
+        return np.ones(num_points).astype(np.long)
     probs = np.concatenate(probs, axis=1)
     labels = probs.argmax(axis=1)
     return labels
@@ -297,6 +297,8 @@ def main_loop_parameter_search(train_cfg, **kwargs):
         # print(data_blob['segment_label'][0])
         # print(data_blob['cluster_label'][0])
         semantic_labels = data_blob['cluster_label'][0][:, -1]
+        print(semantic_labels.shape)
+        print(embedding.shape)
         cluster_labels = data_blob['cluster_label'][0][:, 5]
         # print(data_blob['segment_label'][0])
         # print(semantic_labels)

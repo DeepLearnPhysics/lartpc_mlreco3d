@@ -7,6 +7,7 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
 
+# Global type labels for PDG to Particle Type Label (nominal) conversion. 
 TYPE_LABELS = {
     22: 0,  # photon
     11: 1,  # e-

@@ -12,6 +12,7 @@ from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, 
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
 from mlreco.models.cluster_node_gnn import NodeTypeLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss
+from .layers.dbscan import DBScanClusts2
 
 
 def get_edge_features(nodes, batch_idx, edge_net):
