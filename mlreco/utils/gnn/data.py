@@ -49,21 +49,30 @@ def cluster_edge_dir(data, c1, c2):
     Returns:
         np.ndarray: (10) Array of edge direction (orientation, distance)
     """
-    from scipy.spatial.distance import cdist
+    # Get the voxels in the clusters connected by the edge
     x1 = get_cluster_voxels(data, c1)
     x2 = get_cluster_voxels(data, c2)
+
+    # Find the closest set point in each cluster
+    from scipy.spatial.distance import cdist
     d12 = cdist(x1, x2)
     imin = np.argmin(d12)
     i1, i2 = np.unravel_index(imin, d12.shape)
     v1 = x1[i1,:] # closest point in c1
     v2 = x2[i2,:] # closest point in c2
-    disp = v1 - v2 # displacement
-    lend = np.linalg.norm(disp) # length of displacement
+
+    # Displacement
+    disp = v1 - v2
+
+    # Distance
+    lend = np.linalg.norm(disp)
     if lend > 0:
         disp = disp / lend
+
+    # Outer product
     B = np.outer(disp, disp).flatten()
 
-    return np.concatenate([B, [lend]])
+    return np.concatenate([B, lend.reshape(1)])
 
 
 def cluster_edge_dirs(data, clusts, edge_index):
@@ -161,14 +170,23 @@ def edge_feature(data, i, j):
     Returns:
         np.ndarray: (19) Array of edge features (displacement, orientation)
     """
+
+    # Get the voxel coordinates
     xi = data[i,:3]
     xj = data[j,:3]
+
+    # Displacement
     disp = xj - xi
+
+    # Distance
     lend = np.linalg.norm(disp)
     if lend > 0:
         disp = disp / lend
+
+    # Outer product
     B = np.outer(disp, disp).flatten()
-    return np.concatenate([xi, xj, disp, [lend], B])
+
+    return np.concatenate([xi, xj, disp, lend.reshape(1), B])
 
 
 def edge_features(data, edge_index):

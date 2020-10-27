@@ -200,7 +200,7 @@ def get_cluster_energies(data, clusts):
     return np.array([np.sum(data[c,4]) for c in clusts])
 
 
-def get_cluster_dirs(voxels, clusts, delta=0.0):
+def get_cluster_dirs(voxels, clusts):
     """
     Function that returns the direction of the listed clusters,
     expressed as its normalized covariance matrix.
@@ -208,21 +208,18 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
     Args:
         voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,9) Tensor of cluster directions
     """
     dirs = []
     for c in clusts:
+
         # Get list of voxels in the cluster
         x = get_cluster_voxels(voxels, c)
 
-        # Handle size 1 clusters seperately
+        # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            # Don't waste time with computations, default to regularized
-            # orientation matrix
-            B = delta * np.eye(3)
-            dirs.append(B.flatten())
+            return dirs.append(np.concatenate(np.zeros(9)))
             continue
 
         # Center data
@@ -232,13 +229,10 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
         # Get orientation matrix
         A = x.T.dot(x)
 
-        # Get eigenvectors - convention with eigh is that eigenvalues are ascending
+        # Get eigenvectors, normalize orientation matrix
+        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
         w, v = np.linalg.eigh(A)
-        w = w + delta
-        w = w / w[2]
-
-        # Orientation matrix with regularization
-        B = (1.-delta) * v.dot(np.diag(w)).dot(v.T) + delta * np.eye(3)
+        B = A / w[2]
 
         # Append (dirs)
         dirs.append(B.flatten())
