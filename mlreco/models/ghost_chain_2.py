@@ -28,7 +28,47 @@ from mlreco.utils.gnn.network import complete_graph
 from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.models.layers.dbscan import DBSCANFragmenter, DBScanClusts2
+from mlreco.models.layers.cnn_encoder import ResidualEncoder
+from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
 
+
+class CosmicLoss(torch.nn.modules.loss._Loss):
+    def __init__(self, cfg):
+        super(CosmicLoss, self).__init__()
+
+    def forward(self, out, label_clustering):
+        """
+        Simple cross-entropy loss for ResidualEncoder output on nu vs cosmic discrimination.
+        """
+        device = out['inter_cosmic_pred'][0][0].device
+        nu_loss, total_acc = 0., 0.
+        nu_acc, cosmic_acc = 0., 0.
+        n_interactions, n_nu, n_cosmic = 0, 0, 0
+        for i in range(len(label_clustering)):
+            for b in range(len(label_clustering[i][:, 3].unique())):
+                batch_mask = label_clustering[i][:, 3] == b
+                nu_label = get_cluster_label(label_clustering[i][batch_mask], out['interactions'][i][b], column=8)
+                nu_label = torch.tensor(nu_label, requires_grad=False, device=device).view(-1)
+                nu_label = (nu_label > -1).long()
+                nu_count = (nu_label == 1).sum().float()
+                w = torch.tensor([nu_count / float(len(nu_label)) + 0.01, 1 - nu_count / float(len(nu_label)) - 0.01], device=device)
+                #print("Weight: ", w)
+                nu_loss += torch.nn.functional.cross_entropy(out['inter_cosmic_pred'][i][b], nu_label, weight=w.float())
+
+                total_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label).sum().float()
+                nu_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label)[nu_label == 1].sum().float()
+                cosmic_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label)[nu_label == 0].sum().float()
+
+                n_interactions += len(nu_label)
+                n_nu += (nu_label == 1).sum().float()
+                n_cosmic += (nu_label == 0).sum().float()
+
+        return {
+            'loss': nu_loss/n_interactions,
+            'accuracy': total_acc/n_interactions,
+            'cosmic_acc': cosmic_acc/n_cosmic,
+            'nu_acc': nu_acc/n_nu
+        }
 
 def setup_chain_cfg(self, cfg):
     """
@@ -45,6 +85,7 @@ def setup_chain_cfg(self, cfg):
     self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
     self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
     self.enable_kinematics = chain_cfg.get('enable_kinematics', False)
+    self.enable_cosmic = chain_cfg.get('enable_cosmic', False)
 
     # whether to use CNN clustering or "dumb" DBSCAN clustering
     #self.use_dbscan_clust  = chain_cfg.get('use_dbscan_clust', False)
@@ -57,7 +98,8 @@ def setup_chain_cfg(self, cfg):
         or (self.enable_uresnet and self.enable_gnn_shower) \
         or (self.enable_uresnet and self.enable_cnn_clust and self.enable_gnn_tracks) \
         or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int) \
-        or (self.enable_uresnet and self.enable_kinematics)
+        or (self.enable_uresnet and self.enable_kinematics) \
+        or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int and self.enable_cosmic)
     assert (not self.use_ppn_in_gnn) or self.enable_ppn
     #assert self.use_dbscan_clust ^ self.enable_cnn_clust
 
@@ -143,6 +185,9 @@ class GhostChain2(torch.nn.Module):
             self.momentum_net = MomentumNet(cfg['kinematics_edge_model']['node_output_feats'], 1)
             self.type_net = MomentumNet(cfg['kinematics_edge_model']['node_output_feats'], 5)
 
+        if self.enable_cosmic:
+            self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
+
     def extract_fragment(self, input, result):
         """
         Extracting clustering predictions from CNN clustering output
@@ -187,12 +232,17 @@ class GhostChain2(torch.nn.Module):
         Merge fragments into particle instances, retain primary fragment id of each group
         """
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
-        primary_labels = primary_assignment(result[node_pred][0][b].detach().cpu().numpy(), result[group_pred][0][b])
+        primary_labels = None
+        if node_pred is not None:
+            primary_labels = primary_assignment(result[node_pred][0][b].detach().cpu().numpy(), result[group_pred][0][b])
         for g in np.unique(result[group_pred][0][b]):
             group_mask = np.where(result[group_pred][0][b] == g)[0]
             particles.append(voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
-            primary_id = group_mask[primary_labels[group_mask]][0]
-            part_primary_ids.append(primary_id)
+            if node_pred is not None:
+                primary_id = group_mask[primary_labels[group_mask]][0]
+                part_primary_ids.append(primary_id)
+            else:
+                part_primary_ids.append(g)
 
     def run_gnn(self, gnn_model, input, result, frag_batch_ids, fragments, edge_index, x, e, labels, node_predictors=['node_pred']):
         """
@@ -480,6 +530,43 @@ class GhostChain2(torch.nn.Module):
                         {'frags': 'particles', 'edge_index': 'inter_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'},
                         node_predictors=[('node_pred_type', self.type_net), ('node_pred_p', self.momentum_net)])
 
+        if self.enable_cosmic:
+            if not self.enable_gnn_int:
+                raise Exception("Need interaction clustering before cosmic discrimination.")
+
+            _, counts = torch.unique(input[0][:,3], return_counts=True)
+            interactions, inter_primary_ids = [], []
+            for b in range(len(counts)):
+                self.select_particle_in_group(result, counts, b, interactions, inter_primary_ids, None, 'inter_group_pred', 'particles')
+
+            inter_batch_ids = get_cluster_batch(input[0], interactions)
+            inter_cosmic_pred = torch.empty((len(interactions), 2), dtype=torch.float)
+
+            # Replace batch id column with a global "interaction id"
+            # because ResidualEncoder uses the batch id column to shape its output
+            inter_data = torch.empty((0, input[0].size(1)), dtype=torch.float, device=device)
+            for i, interaction in enumerate(interactions):
+                inter_data = torch.cat([inter_data, input[0][interaction].float()], dim=0)
+                inter_data[-len(interaction):, 3] = i * torch.ones(len(interaction)).to(device)
+            inter_cosmic_pred = self.cosmic_discriminator(inter_data)
+
+            # Reorganize into batches before storing in result dictionary
+            same_length = np.all([len(f) == len(interactions[0]) for f in interactions] )
+            interactions = np.array(interactions, dtype=object if not same_length else np.int64)
+            inter_batch_ids = np.array(inter_batch_ids)
+
+            _, counts = torch.unique(input[0][:,3], return_counts=True)
+            vids = np.concatenate([np.arange(n.item()) for n in counts])
+            bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
+            same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
+            interactions_np = [np.array([vids[c].astype(np.int64) for c in interactions[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
+            inter_cosmic_pred_np = [inter_cosmic_pred[b] for idx, b in enumerate(bcids)]
+
+            result.update({
+                'interactions': [interactions_np],
+                'inter_cosmic_pred': [inter_cosmic_pred_np]
+                })
+
         return result
 
     def forward(self, input):
@@ -567,6 +654,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_kinematics:
             self.kinematics_loss = NodeKinematicsLoss(cfg, 'kinematics_gnn')
             self.flow_loss = EdgeGNNLoss(cfg, 'kinematics_gnn')
+        if self.enable_cosmic:
+            self.cosmic_loss = CosmicLoss(cfg)
 
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']
@@ -580,6 +669,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         self.flow_weight = self.loss_config.get('flow_weight', 0.0)
         self.kinematics_p_weight = self.loss_config.get('kinematics_p_weight', 0.0)
         self.kinematics_type_weight = self.loss_config.get('kinematics_type_weight', 0.0)
+        self.cosmic_weight = self.loss_config.get('cosmic_weight', 0.0)
 
     def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None, particle_graph=None):
         res = {}
@@ -718,10 +808,20 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             accuracy += res_flow['accuracy']
             loss += self.flow_weight * res_flow['loss']
 
+        if self.enable_cosmic:
+            res_cosmic = self.cosmic_loss(out, cluster_label)
+            res['cosmic_loss'] = res_cosmic['loss']
+            res['cosmic_accuracy'] = res_cosmic['accuracy']
+            res['cosmic_accuracy_cosmic'] = res_cosmic['cosmic_acc']
+            res['cosmic_accuracy_nu'] = res_cosmic['nu_acc']
+
+            accuracy += res_cosmic['accuracy']
+            loss += self.cosmic_weight * res_cosmic['loss']
+
         # Combine the results
         accuracy /= int(self.enable_uresnet) + int(self.enable_ppn) + int(self.enable_gnn_shower) \
                     + int(self.enable_gnn_int) + int(self.enable_gnn_tracks) + int(self.enable_cnn_clust) \
-                    + 2*int(self.enable_kinematics)
+                    + 2*int(self.enable_kinematics) + int(self.enable_cosmic)
 
         res['loss'] = loss
         res['accuracy'] = accuracy
