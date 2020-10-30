@@ -24,6 +24,7 @@ def edge_model_dict():
     from . import dir_meta
     from . import modular_nnconv
     from . import modular_nnconv_elu
+    from . import pointnet
 
     models = {
         "modular_nnconv" : modular_nnconv.NNConvModel,
@@ -43,6 +44,7 @@ def edge_model_dict():
         "emeta" : edge_meta.EdgeMetaModel,
         "dir_meta" : dir_meta.EdgeMetaModel,
         "modular_nnconv": modular_nnconv.NNConvModel,
+        "pointnet": pointnet.PointConvModel
     }
 
     return models

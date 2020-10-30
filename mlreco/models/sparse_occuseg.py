@@ -1,12 +1,18 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import sparseconvnet as scn
 from collections import defaultdict
 
 from mlreco.models.layers.uresnet import UResNet
 from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
+from mlreco.utils.occuseg import *
+from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
+from torch_cluster import knn_graph, radius_graph
+from functools import partial
 
+from pprint import pprint
 
 class SparseOccuSeg(UResNet):
 
@@ -59,8 +65,19 @@ class SparseOccuSeg(UResNet):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
+        self.predictor = OccuSegPredictor(cfg['predictor_cfg'])
+        self.constructor = GraphDataConstructor(self.predictor, cfg['constructor_cfg'])
 
     def forward(self, input):
+
+        res = self._forward(input)
+        if not self.training:
+            graph_data = self.constructor.construct_batched_graphs(res)
+            res['graph'] = [graph_data]
+        return res
+
+
+    def _forward(self, input):
         '''
         point_cloud is a list of length minibatch size (assumes mbs = 1)
         point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
@@ -81,6 +98,8 @@ class SparseOccuSeg(UResNet):
                     / (float(self.spatial_size) / 2)
         if self.coordConv:
             features = torch.cat([normalized_coords, features], dim=1)
+        else:
+            features = normalized_coords
 
         x = self.input((coords, features))
         encoder_res = self.encoder(x)
@@ -115,7 +134,9 @@ class SparseOccuSeg(UResNet):
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
             "segmentation": [segmentation],
-            "features": [output_features]
+            "features": [output_features],
+            "coordinates": [coords[:, :3]],
+            "batch_indices": [coords[:, 3].long()]
         }
 
         # for key, val in res.items():
@@ -124,12 +145,30 @@ class SparseOccuSeg(UResNet):
         return res
 
 
+class WeightedEdgeLoss(nn.Module):
+
+    def __init__(self, reduction='none'):
+        super(WeightedEdgeLoss, self).__init__()
+        self.reduction = reduction
+        self.loss_fn = F.binary_cross_entropy
+
+    def forward(self, x, y):
+        device = x.device
+        weight = torch.ones(y.shape[0]).to(device)
+        with torch.no_grad():
+            num_pos = torch.sum(y).item()
+            num_edges = y.shape[0]
+            w = 1.0 / (1.0 - float(num_pos) / num_edges)
+            weight[~y.bool()] = w
+        loss = self.loss_fn(x, y, weight=weight, reduction=self.reduction)
+        return loss
+
+
 class SparseOccuSegLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='occuseg_loss'):
         super(SparseOccuSegLoss, self).__init__()
         self.loss_fn = OccuSegLoss(cfg)
-
 
     def forward(self, result, label):
 
@@ -137,4 +176,82 @@ class SparseOccuSegLoss(torch.nn.modules.loss._Loss):
         group_label = [label[0][:, [0, 1, 2, 3, 5]]]
 
         res = self.loss_fn(result, segment_label, group_label)
+        return res
+
+
+class SparseOccuSegEdgeLoss(SparseOccuSegLoss):
+
+    def __init__(self, cfg, name='occuseg_loss'):
+        super(SparseOccuSegEdgeLoss, self).__init__(cfg)
+        self.edge_loss = WeightedEdgeLoss()
+        self.loss_config = cfg['occuseg_loss']
+        self.mode = self.loss_config.get('mode', 'knn')
+        if self.mode == 'knn':
+            self.graph_param = self.loss_config.get('args', dict(k=6))
+            self.graph_gen = partial(knn_graph, **self.graph_param)
+        elif self.mode == 'radius':
+            self.graph_param = self.loss_config.get('args', dict(r=2.0))
+            self.graph_gen = partial(radius_graph, **self.graph_param)
+        else:
+            raise NotImplementedError
+
+    @staticmethod
+    def get_edge_truth(edge_indices, labels):
+        '''
+
+            - edge_indices: 2 x E
+            - labels: N
+        '''
+        with torch.no_grad():
+            u = labels[edge_indices[0, :]]
+            v = labels[edge_indices[1, :]]
+            return (u == v).bool()
+
+
+    def forward(self, result, label):
+
+        segment_label = [label[0][:, [0, 1, 2, 3, -1]]]
+        group_label = [label[0][:, [0, 1, 2, 3, 5]]]
+
+        coords = result['coordinates'][0]
+        batch_indices = result['batch_indices'][0]
+
+        edge_indices = self.graph_gen(coords, batch=batch_indices)
+        res = self.loss_fn(result, segment_label, group_label)
+
+        probs = get_edge_weight(
+            result['spatial_embeddings'][0],
+            result['feature_embeddings'][0],
+            result['covariance'][0],
+            edge_indices,
+            occ=result['occupancy'][0].squeeze())
+
+        edge_truth = self.get_edge_truth(edge_indices, group_label[0][:, -1])
+
+        # for i in range(20):
+        #     print("{0:.4f}, {1}".format(probs[i], edge_truth[i]))
+        edge_loss = self.edge_loss(probs, edge_truth.float()).mean()
+        with torch.no_grad():
+            edge_pred = probs < 0.5
+            tp = float(torch.sum(edge_truth & edge_pred))
+            tn = float(torch.sum(~edge_truth & ~edge_pred))
+            fp = float(torch.sum(~edge_truth & edge_pred))
+            fn = float(torch.sum(edge_truth & ~edge_pred))
+
+            precision = (tp + 1e-6) / (tp + fp + 1e-6)
+            recall = (tp + 1e-6) / (tp + fn + 1e-6)
+            tnr = (tn + 1e-6) / (tn + fp + 1e-6)
+            npv = (tn + 1e-6) / (tn + fn + 1e-6)
+
+            f1_pos = 2.0 * precision * recall / (precision + recall + 1e-6)
+            f1_neg = 2.0 * tnr * npv / (tnr + npv + 1e-6)
+
+            res['precision'] = precision
+            res['recall'] = recall
+            res['tnr'] = tnr
+            res['npv'] = npv
+            res['f1_pos'] = f1_pos
+            res['f1_neg'] = f1_neg
+        res['edge_loss'] = float(edge_loss)
+        res['loss'] += edge_loss
         return res
