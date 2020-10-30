@@ -83,8 +83,12 @@ def model_dict():
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # OccuSeg
         "occuseg": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegLoss),
+        # OccuSeg Edge Prediction
+        "occuseg_edges": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegEdgeLoss),
         # OccuSeg with GNN
         "occuseg_gnn": (sparseoccuseg_gnn.SparseOccuSegGNN, sparseoccuseg_gnn.SparseOccuSegGNNLoss),
+        # GraphSPICE with GNN
+        "graphspice_gnn": (sparseoccuseg_gnn.GraphSPICEGNN, sparseoccuseg_gnn.SparseOccuSegGNNLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lovasz free

@@ -29,6 +29,34 @@ def get_edge_truth(edge_indices, labels):
     return (u == v).astype(bool)
 
 
+def get_edge_weight(sp_emb: torch.Tensor,
+                    ft_emb: torch.Tensor,
+                    cov: torch.Tensor,
+                    edge_indices: torch.Tensor,
+                    occ=None,
+                    eps=0.001):
+
+    device = sp_emb.device
+    if edge_indices.shape[1] == 0:
+        return torch.Tensor([0]).to(device)
+    ui, vi = edge_indices[0, :], edge_indices[1, :]
+    # Compute spatial term
+    sp_cov = (cov[:, 0][ui] + cov[:, 0][vi]) / 2
+    sp = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov**2 + eps)
+
+    # Compute feature term
+    ft_cov = (cov[:, 1][ui] + cov[:, 1][vi]) / 2
+    ft = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov**2 + eps)
+
+    pvec = torch.exp(- sp - ft)
+    if occ is not None:
+        r1 = occ[edge_indices[0, :]]
+        r2 = occ[edge_indices[1, :]]
+        r = torch.max((r2 + eps) / (r1 + eps), (r1 + eps) / (r2 + eps))
+        pvec = pvec / r
+    return pvec
+
+
 def fit_graph(coords, edge_index, edge_pred, features, min_cluster=10):
     edges = edge_index[edge_pred]
     edge_indices = edges
@@ -64,6 +92,7 @@ def fit_graph(coords, edge_index, edge_pred, features, min_cluster=10):
             nearest = np.argmin(dist, axis=1)
             new_labels = pred[ccs][nearest]
             pred[singletons] = new_labels
+    pred, _ = unique_label(pred)
     return pred, edge_indices
 
 
@@ -111,6 +140,23 @@ class OccuSegPredictor:
         return pvec
 
     @staticmethod
+    def get_edge_attr(sp_emb: torch.Tensor,
+                      ft_emb: torch.Tensor,
+                      cov: torch.Tensor,
+                      edge_indices: torch.Tensor,
+                      occ=None,
+                      eps=0.001):
+
+        device = sp_emb.device
+        if edge_indices.shape[1] == 0:
+            return torch.Tensor([0]).to(device)
+        ui, vi = edge_indices[0, :], edge_indices[1, :]
+        # Compute spatial term
+        f = torch.cat([sp_emb, ft_emb, cov, occ], dim=1)
+        dist = torch.abs(f[ui] - f[vi])
+        return dist
+
+    @staticmethod
     def get_edge_truth(edge_indices: torch.Tensor, labels: torch.Tensor):
         '''
 
@@ -120,6 +166,17 @@ class OccuSegPredictor:
         u = labels[edge_indices[0, :]]
         v = labels[edge_indices[1, :]]
         return (u == v).long()
+
+    
+    def get_edge_and_attr(self, coords: torch.Tensor,
+                          sp_emb: torch.Tensor,
+                          ft_emb: torch.Tensor,
+                          cov: torch.Tensor,
+                          occ=None, cluster_all=True):
+        edge_indices = self.graph_constructor(coords, **self.kwargs)
+        edge_attr = self.get_edge_attr(
+            sp_emb, ft_emb, cov, edge_indices, occ, eps=self.eps)
+        return edge_indices, edge_attr            
 
 
     def fit_predict(self, coords: torch.Tensor,
@@ -153,6 +210,7 @@ class GraphDataConstructor:
         self.predictor = predictor
         self.seg_col = cfg.get('seg_col', -1)
         self.cluster_col = cfg.get('cluster_col', 5)
+        self.edge_mode = cfg.get('edge_mode', 'probability')
 
     def construct_graph(self, coords: torch.Tensor,
                               edge_weights: torch.Tensor,
@@ -200,8 +258,14 @@ class GraphDataConstructor:
                 coords_class = coords_batch[class_mask]
                 features_class = features_batch[class_mask]
 
-                pred, edge_index, w = self.predictor.fit_predict(
-                    coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
+                if self.edge_mode == 'probability':
+                    _, edge_index, w = self.predictor.fit_predict(
+                        coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
+                elif self.edge_mode == 'attributes':
+                    edge_index, w = self.predictor.get_edge_and_attr(
+                        coords_class, sp_class, ft_class, cov_class, occ=occ_class)
+                else:
+                    raise NotImplementedError
 
                 if edge_index is None:
                     continue
@@ -250,8 +314,14 @@ class GraphDataConstructor:
                 features_class = features_batch[class_mask]
                 frag_labels = labels_batch[class_mask][:, self.cluster_col]
 
-                pred, edge_index, w = self.predictor.fit_predict(
-                    coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
+                if self.edge_mode == 'probability':
+                    _, edge_index, w = self.predictor.fit_predict(
+                        coords_class, sp_class, ft_class, cov_class, occ=occ_class.squeeze())
+                elif self.edge_mode == 'attributes':
+                    edge_index, w = self.predictor.get_edge_and_attr(
+                        coords_class, sp_class, ft_class, cov_class, occ=occ_class)
+                else:
+                    raise NotImplementedError
 
                 data = self.construct_graph(coords_class, w, edge_index, features_class)
                 truth = self.predictor.get_edge_truth(edge_index, frag_labels)

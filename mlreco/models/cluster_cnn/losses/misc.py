@@ -63,14 +63,7 @@ def find_cluster_means(features, labels):
         distinct instances. Each row is a (1,d) vector corresponding to
         the coordinates of the i-th centroid.
     '''
-    device = features.device
-    bincount = torch.bincount(labels)
-    zero_bins = bincount > 0
-    bincount[bincount == 0] = 1.0
-    numerator = torch.zeros(bincount.shape[0], features.shape[1]).to(device)
-    numerator = numerator.index_add(0, labels, features)
-    centroids = numerator / bincount.view(-1, 1)
-    centroids = centroids[zero_bins]
+    centroids = scatter_mean(features, labels, dim=0)
     return centroids
 
 

@@ -12,3 +12,4 @@ from .ppn_metrics import ppn_metrics
 from .cluster_gnn_metrics import cluster_gnn_metrics
 from .cluster_cnn_metrics import cluster_cnn_metrics
 from .cluster_simplex_metrics import cluster_simplex_metrics
+from .graphspice_nognn import graphspice_nognn
