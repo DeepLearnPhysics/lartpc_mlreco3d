@@ -138,8 +138,8 @@ class ResidualEncoder(UResNetEncoder):
         else:
             self.output = scn.Sequential().add(
                 scn.Convolution(
-                    self.dimension, self.nPlanes[-1], self.nPlanes[-1], 
-                    self.final_tensor_shape, 1, 
+                    self.dimension, self.nPlanes[-1], self.nPlanes[-1],
+                    self.final_tensor_shape, 1,
                     self.allow_bias)).add(
                 scn.SparseToDense(self.dimension, self.nPlanes[-1]))
             self.pool = nn.MaxPool3d(1)

@@ -812,7 +812,7 @@ def clean_data(grp_voxels, grp_data, img_voxels, img_data, meta):
     img_data = img_data[perm]
 
     # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1], data[0].meta(), usebatch=True)
+    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1],meta, usebatch=True)
     inds1 = np.where(sel1)[0]
     grp_voxels = grp_voxels[inds1,:]
     grp_data = grp_data[inds1]
