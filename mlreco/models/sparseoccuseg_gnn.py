@@ -8,7 +8,7 @@ from collections import defaultdict
 import time
 
 from .sparse_occuseg import SparseOccuSeg, SparseOccuSegLoss
-from mlreco.models.gnn.modular_nnconv import NNConvModel
+from mlreco.models.gnn.message_passing.nnconv import NNConvModel
 from mlreco.utils.occuseg import *
 from pprint import pprint
 

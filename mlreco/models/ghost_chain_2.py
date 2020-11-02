@@ -9,7 +9,7 @@ from collections import defaultdict
 from mlreco.models.layers.dbscan import distances
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
+from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
@@ -17,9 +17,8 @@ from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
 
 from .cluster_cnn import spice_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from mlreco.models.grappa import GNNLoss
+from mlreco.models.gnn.losses.node_grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
@@ -74,9 +73,10 @@ class GhostChain2(torch.nn.Module):
     # ]
     # MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
     MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
-            'embedding_decoder', 'particle_gnn', 'interaction_gnn', 'particle_edge_model',
-            'interaction_edge_model', 'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'node_encoder', 'edge_encoder', 'spice_loss', 'chain', 'dbscan_frag']
+            'embedding_decoder', 'grappa_shower', 'grappa_track', 'grappa_inter',
+            'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
+            'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
+            'fragment_clustering', 'spice_loss', 'chain', 'dbscan_frag']
 
     def __init__(self, cfg):
         super(GhostChain2, self).__init__()
@@ -108,21 +108,21 @@ class GhostChain2(torch.nn.Module):
 
         if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
             # Initialize the geometric encoders
-            self.node_encoder = node_encoder_construct(cfg)
-            self.edge_encoder = edge_encoder_construct(cfg)
+            self.node_encoder = node_encoder_construct(cfg['grappa_shower'])
+            self.edge_encoder = edge_encoder_construct(cfg['grappa_shower'])
 
         if self.enable_gnn_shower:
-            self.particle_gnn  = GNN(cfg['particle_edge_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['particle_gnn'].get('node_min_size', -1))
-            self.start_dir_max_dist = cfg['particle_edge_model'].get('start_dir_max_dist', 5)
+            self.particle_gnn  = GNN(cfg['grappa_shower']['gnn_model'])
+            self.min_frag_size = max(self.min_frag_size, cfg['grappa_shower']['base'].get('node_min_size', -1))
+            self.start_dir_max_dist = cfg['grappa_shower']['base'].get('start_dir_max_dist', 5)
 
         if self.enable_gnn_tracks:
-            self.track_gnn  = GNN(cfg['track_edge_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['track_gnn'].get('node_min_size', -1))
+            self.track_gnn  = GNN(cfg['grappa_track']['gnn_model'])
+            self.min_frag_size = max(self.min_frag_size, cfg['grappa_track']['base'].get('node_min_size', -1))
 
         if self.enable_gnn_int:
             # Initialize the GNN models
-            self.inter_gnn     = GNN(cfg['interaction_edge_model'])
+            self.inter_gnn     = GNN(cfg['grappa_inter']['gnn_model'])
 
 
     def extract_fragment(self, input, result):
@@ -478,11 +478,11 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_cnn_clust:
             self.spatial_embeddings_loss = ClusteringLoss(cfg)
         if self.enable_gnn_shower:
-            self.particle_gnn_loss = FullGNNLoss(cfg, 'particle_gnn')
+            self.particle_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
         if self.enable_gnn_tracks:
-            self.track_gnn_loss = FullGNNLoss(cfg, 'track_gnn')
+            self.track_gnn_loss = GNNLoss(cfg, 'grappa_track_loss')
         if self.enable_gnn_int:
-            self.inter_gnn_loss  = EdgeGNNLoss(cfg, 'interaction_gnn')
+            self.inter_gnn_loss  = GNNLoss(cfg, 'grappa_inter_loss')
 
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']

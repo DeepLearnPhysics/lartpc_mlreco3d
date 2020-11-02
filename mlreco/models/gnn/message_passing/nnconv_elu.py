@@ -11,7 +11,7 @@ class NNConvModel(nn.Module):
     '''
     NNConv GNN Module for extracting node/edge/global features
     '''
-    def __init__(self, cfg, name='modular_nnconv'):
+    def __init__(self, cfg):
         super(NNConvModel, self).__init__()
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)

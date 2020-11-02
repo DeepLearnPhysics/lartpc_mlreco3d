@@ -7,7 +7,7 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
 
-# Global type labels for PDG to Particle Type Label (nominal) conversion. 
+# Global type labels for PDG to Particle Type Label (nominal) conversion.
 TYPE_LABELS = {
     22: 0,  # photon
     11: 1,  # e-
@@ -477,8 +477,8 @@ def parse_cluster3d_full(data):
     clusters_voxels, clusters_features = [], []
 
     from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
-    group_ids = get_valid_group_id(cluster_event, particles_v)
-    #group_ids = np.array([p.group_id() for p in particles_v])
+    #group_ids = get_valid_group_id(cluster_event, particles_v)
+    group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids)
 
@@ -548,7 +548,8 @@ def parse_cluster3d_types(data):
     clusters_voxels, clusters_features = [], []
 
     from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
-    group_ids = get_valid_group_id(cluster_event, particles_v)
+    #group_ids = get_valid_group_id(cluster_event, particles_v)
+    group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids)
 
@@ -614,7 +615,8 @@ def parse_cluster3d_kinematics(data):
     clusters_voxels, clusters_features = [], []
 
     from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
-    group_ids = get_valid_group_id(cluster_event, particles_v)
+    #group_ids = get_valid_group_id(cluster_event, particles_v)
+    group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids)
 
