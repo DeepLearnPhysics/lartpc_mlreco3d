@@ -61,7 +61,7 @@ class GhostChain(torch.nn.Module):
         self.particle_gnn  = GNN(cfg['grappa_shower'])
         self.inter_gnn     = GNN(cfg['grappa_inter'])
         self.min_frag_size = cfg['grappa_shower']['base'].get('node_min_size', -1)
-        self._use_ppn_shower = cfg['grappa_shower']['base']..get('use_ppn_shower', False)
+        self._use_ppn_shower = cfg['grappa_shower']['base'].get('use_ppn_shower', False)
 
         self.input_features = cfg['uresnet_lonely'].get('features', 1)
 
