@@ -3,12 +3,11 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from .gnn import node_model_construct, edge_model_construct, node_encoder_construct, edge_encoder_construct
+from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.layers.dbscan import DBScanClusts2
-from mlreco.models.cluster_node_gnn import NodeChannelLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss
+from mlreco.models.grappa import GNNLoss
 from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
 from mlreco.utils.gnn.network import complete_graph
@@ -46,9 +45,9 @@ class GhostChainDBSCANGNN(torch.nn.Module):
         self.uresnet_lonely = UResNet(model_config)
         self.ppn            = PPN(model_config)
         self.dbscan         = DBScanClusts2(model_config)
-        self.node_encoder   = node_encoder_construct(model_config)
-        self.edge_encoder   = edge_encoder_construct(model_config)
-        self.full_predictor = edge_model_construct(model_config)
+        self.node_encoder   = node_encoder_construct(model_config['grappa'])
+        self.edge_encoder   = edge_encoder_construct(model_config['grappa'])
+        self.full_predictor = gnn_model_construct(model_config['grappa'])
 
     def full_chain(self, data, result):
         # Run DBSCAN
@@ -182,20 +181,13 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         super(GhostChainLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
         self.ppn_loss     = PPNLoss(cfg)
-        self.node_loss    = NodeChannelLoss(cfg)
-        self.edge_loss    = EdgeChannelLoss(cfg)
+        self.gnn_loss    = GNNLoss(cfg['grappa_loss'])
 
     def full_chain_loss(self, result, clust_label):
         if 'shower_fragments' in result:
             result['clusts'] = result['shower_fragments']
-        edge_loss = self.edge_loss(result, clust_label, None)
-        clust_label_new = clust_label
-        if 'node_pred' in result:
-            clust_label_new = relabel_groups(clust_label, result['clusts'], result['group_pred'], new_array=True)
-        node_loss = self.node_loss(result, clust_label_new)
-        if 'clusts' in result:
-            del result['clusts']
-        return edge_loss, node_loss
+        gnn_loss = self.gnn_loss(result, clust_label)
+        return gnn_loss
 
     def forward(self, result, sem_label, particles, clust_label):
         loss = {}
@@ -205,19 +197,14 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         # Adapt to ghost points
         clust_label = adapt_labels(result, sem_label, clust_label)
 
-        edge_loss, node_loss = self.full_chain_loss(result, clust_label)
+        gnn_loss = self.full_chain_loss(result, clust_label)
 
         loss.update(uresnet_loss)
         loss.update(ppn_loss)
-        loss.update(node_loss)
-        loss.update(edge_loss)
+        loss.update(gnn_loss)
         loss['seg_loss'] = uresnet_loss['loss']
-        loss['edge_loss'] = edge_loss['loss']
-        loss['node_loss'] = node_loss['loss']
         loss['seg_accuracy'] = uresnet_loss['accuracy']
         loss['ppn_accuracy'] = ppn_loss['ppn_acc']
-        loss['edge_accuracy'] = edge_loss['accuracy']
-        loss['node_accuracy'] = node_loss['accuracy']
-        loss['loss'] = uresnet_loss['loss'] + ppn_loss['ppn_loss'] + node_loss['loss'] + edge_loss['loss']
-        loss['accuracy'] = (uresnet_loss['accuracy'] + ppn_loss['ppn_acc'] + node_loss['accuracy'] + edge_loss['accuracy'])/4
+        loss['loss'] = uresnet_loss['loss'] + ppn_loss['ppn_loss'] + gnn_loss['loss']
+        loss['accuracy'] = (uresnet_loss['accuracy'] + ppn_loss['ppn_acc'] + gnn_loss['accuracy'])/3
         return loss

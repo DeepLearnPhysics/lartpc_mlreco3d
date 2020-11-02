@@ -16,12 +16,12 @@ def form_clusters(data, min_size=-1, column=5, batch_index=3):
     """
     clusts = []
     for b in data[:, batch_index].unique():
-        binds = torch.nonzero(data[:, batch_index] == b).flatten()
+        binds = torch.nonzero(data[:, batch_index] == b, as_tuple=True)[0]
         for c in data[binds,column].unique():
             # Skip if the cluster ID is -1 (not defined)
             if c < 0:
                 continue
-            clust = torch.nonzero(data[binds,column] == c).flatten()
+            clust = torch.nonzero(data[binds,column] == c, as_tuple=True)[0]
             if len(clust) < min_size:
                 continue
             clusts.append(binds[clust])
@@ -380,12 +380,12 @@ def get_cluster_points_label(data, particles, clusts, groupwise=False):
     if not groupwise:
         clust_ids = get_cluster_label(data, clusts)
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i], as_tuple=True)[0]
             idx = batch_mask[clust_ids[i]]
             points.append(particles[idx,:3])
     else:
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i], as_tuple=True)[0]
             clust_ids  = data[c,5].unique().long()
             maxid = torch.argmin(particles[batch_mask][clust_ids,-1])
             order = [0, 1, 2, 4, 5, 6] if np.random.choice(2) else [4, 5, 6, 0, 1, 2]
@@ -535,50 +535,31 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False, us
     return torch.stack(dirs)
 
 
-def relabel_groups(data, clusts, groups, new_array=True):
+def relabel_groups(clust_ids, true_group_ids, pred_group_ids):
     """
-    Function that resets the value of the group data column according
-    to the cluster value specified for each cluster.
+    Function that resets the value of the group ids according
+    to the predicted group ids, enforcing that clus_id=group_id
+    if the cluster corresponds to a primary
 
     Args:
-        data (torch.Tensor)    : N_GPU array of (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([[np.ndarray]]): N_GPU array of (C) List of arrays of voxel IDs in each cluster
-        groups ([np.ndarray])  : N_GPU array of (C) List of group ids for each cluster
-        new_array (bool)       : Whether or not to deep copy the data array
+        clust_ids (np.ndarray)       : (C) List of label cluster ids
+        true_group_ids (np.ndarray)  : (C) List of label group ids
+        pred_groups_ids (np.ndarray) : (C) List of predicted group ids
     Returns:
-        torch.Tensor: (N,8) Relabeled [x, y, z, batchid, value, id, groupid, shape]
+        torch.Tensor: (C) Relabeled group ids
     """
-    data_new = data
-    if new_array:
-        import copy
-        data_new = copy.deepcopy(data)
+    new_group_ids = np.empty(len(pred_group_ids))
+    primary_mask = clust_ids == true_group_ids
+    new_id = max(clust_ids)+1
+    for g in np.unique(pred_group_ids):
+        group_mask     = pred_group_ids == g
+        primary_labels = np.where(primary_mask & group_mask)[0]
+        group_id = -1
+        if len(primary_labels) != 1:
+            group_id = new_id
+            new_id += 1
+        else:
+            group_id = clust_ids[primary_labels[0]]
+        new_group_ids[group_mask] = group_id
 
-    device = data[0].device
-    dtype  = data[0].dtype
-    for i in range(len(data)):
-        batches = data[i][:,3]
-        for b in batches.unique():
-            batch_mask = torch.nonzero(batches == b).flatten()
-            labels = data[i][batch_mask]
-            batch_clusts = clusts[i][b.int().item()]
-            if not len(batch_clusts):
-                continue
-            clust_ids = get_cluster_label(labels, batch_clusts, column=5)
-            group_ids = groups[i][b.int().item()]
-            true_group_ids = get_cluster_label(labels, batch_clusts, column=6)
-            primary_mask   = clust_ids == true_group_ids
-            new_id = max(clust_ids)+1
-            for g in np.unique(group_ids):
-                group_mask     = group_ids == g
-                primary_labels = np.where(primary_mask & group_mask)[0]
-                group_id = -1
-                if len(primary_labels) != 1:
-                    group_id = new_id
-                    new_id += 1
-                else:
-                    group_id = clust_ids[primary_labels[0]]
-                for c in batch_clusts[group_mask]:
-                    new_groups = torch.full([len(c)], group_id, dtype=dtype).to(device)
-                    data_new[i][batch_mask[c], 6] = new_groups
-
-    return data_new
+    return new_group_ids

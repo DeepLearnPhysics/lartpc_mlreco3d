@@ -4,15 +4,15 @@ import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_std
-from torch_geometric.nn import MetaLayer, AGNNConv
+from torch_geometric.nn import MetaLayer, NNConv
 from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
 
-class AGNNConvModel(nn.Module):
+class NNConvModel(nn.Module):
     '''
-    AGNNConv GNN Module for extracting node/edge/global features
+    NNConv GNN Module for extracting node/edge/global features
     '''
-    def __init__(self, cfg, name='full_gnn'):
-        super(AGNNConvModel, self).__init__()
+    def __init__(self, cfg):
+        super(NNConvModel, self).__init__()
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
@@ -23,7 +23,8 @@ class AGNNConvModel(nn.Module):
         self.aggr           = self.model_config.get('aggr', 'add')
         self.leakiness      = self.model_config.get('leakiness', 0.1)
 
-        self.agnnConvs = torch.nn.ModuleList()
+        self.edge_mlps = torch.nn.ModuleList()
+        self.nnConvs = torch.nn.ModuleList()
         self.edge_updates = torch.nn.ModuleList()
 
         # perform batch normalization
@@ -37,24 +38,38 @@ class AGNNConvModel(nn.Module):
         edge_input  = self.edge_input
         edge_output = self.edge_output
         for i in range(self.num_mp):
+            self.edge_mlps.append(
+                Seq(
+                    BatchNorm1d(edge_input),
+                    Lin(edge_input, node_input),
+                    LeakyReLU(self.leakiness),
+                    BatchNorm1d(node_input),
+                    Lin(node_input, node_input),
+                    LeakyReLU(self.leakiness),
+                    BatchNorm1d(node_input),
+                    Lin(node_input, node_input*node_output)
+                )
+            )
             self.bn_node.append(BatchNorm(node_input))
-            self.agnnConvs.append(AGNNConv())
+            self.nnConvs.append(
+                NNConv(node_input, node_output, self.edge_mlps[i], aggr=self.aggr))
             # self.bn_node.append(BatchNorm(node_output))
             # print(node_input, node_output)
             self.edge_updates.append(
-                MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
+                MetaLayer(edge_model=EdgeLayer(node_output, edge_input, edge_output,
                                     leakiness=self.leakiness)#,
                           #node_model=NodeLayer(node_output, node_output, self.edge_input,
                                                 #leakiness=self.leakiness)
                           #global_model=GlobalModel(node_output, 1, 32)
                          )
             )
+            node_input = node_output
             edge_input = edge_output
 
         self.node_classes = self.model_config.get('node_classes', 2)
         self.edge_classes = self.model_config.get('edge_classes', 2)
 
-        self.node_predictor = nn.Linear(node_input, self.node_classes)
+        self.node_predictor = nn.Linear(node_output, self.node_classes)
         self.edge_predictor = nn.Linear(edge_output, self.edge_classes)
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
@@ -63,19 +78,22 @@ class AGNNConvModel(nn.Module):
 
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
-            # add u and batch arguments for not having error in some old version
-            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
-            x = self.agnnConvs[i](x, edge_indices)
+            x = self.nnConvs[i](x, edge_indices, e)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
+            # add u and batch arguments for not having error in some old version
+            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
 
         res = {
             'node_pred': [x_pred],
-            'edge_pred': [e_pred]
+            'edge_pred': [e_pred],
+            'node_features': [x],
+            'edge_features': [e]
             }
+
 
         return res
 

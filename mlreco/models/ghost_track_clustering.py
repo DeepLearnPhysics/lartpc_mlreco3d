@@ -9,13 +9,12 @@ from mlreco.models.layers.dbscan import distances
 from mlreco.utils.deghosting import adapt_labels
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
+from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from .cluster_cnn import spice_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from mlreco.models.grappa import GNNLoss
+from mlreco.models.gnn.losses.node_grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
@@ -46,12 +45,12 @@ class GhostTrackClustering(torch.nn.Module):
         self.cluster_all  = self.frag_cfg.get('cluster_all', True)
 
         # Initialize the geometric encoders
-        self.node_encoder = node_encoder_construct(cfg)
-        self.edge_encoder = edge_encoder_construct(cfg)
+        self.node_encoder = node_encoder_construct(cfg['grappa'])
+        self.edge_encoder = edge_encoder_construct(cfg['grappa'])
 
         # Initialize the GNN models
-        self.track_gnn  = GNN(cfg['track_edge_model'])
-        self.min_frag_size = cfg['track_gnn'].get('node_min_size', -1)
+        self.track_gnn  = GNN(cfg['grappa']['gnn_model'])
+        self.min_frag_size = cfg['grappa']['base'].get('node_min_size', -1)
 
     def extract_fragment(self, input, result):
         batch_labels = input[0][:,3]
@@ -175,7 +174,7 @@ class GhostTrackClusteringLoss(torch.nn.modules.loss._Loss):
         super(GhostTrackClusteringLoss, self).__init__()
         self.uresnet_loss = SegmentationLoss(cfg)
         self.spice_loss = ClusteringLoss(cfg)
-        self.track_gnn_loss = FullGNNLoss(cfg, 'track_gnn')
+        self.track_gnn_loss = GNNLoss(cfg, 'grappa_loss')
         self._num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']
