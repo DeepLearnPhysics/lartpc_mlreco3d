@@ -76,7 +76,7 @@ class UResNet(torch.nn.Module):
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
         self.last = None
-        leakiness = 0
+        leakiness = self._model_config.get('leakiness', 0.33)
 
         def block(m, a, b):  # ResNet style blocks
             m.add(scn.ConcatTable()
@@ -93,7 +93,6 @@ class UResNet(torch.nn.Module):
            scn.SubmanifoldConvolution(self._dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
         # Encoding
-        self.bn = scn.BatchNormLeakyReLU(nPlanes[0], leakiness=leakiness)
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
@@ -131,6 +130,10 @@ class UResNet(torch.nn.Module):
         self.linear = torch.nn.Linear(m, num_classes)
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
+
+        print('Total Number of Trainable Parameters = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+
 
     def forward(self, input):
         """

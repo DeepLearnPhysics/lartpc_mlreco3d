@@ -1,10 +1,14 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import sparseconvnet as scn
-from collections import defaultdict
 
-from mlreco.models.layers.cnn_encoder import *
+import MinkowskiEngine as ME
+import MinkowskiFunctional as MF
+
+from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder
+from collections import defaultdict
+from mlreco.mink.layers.factories import activations_construct
+
 
 class ParticleImageClassifier(nn.Module):
 
@@ -12,7 +16,7 @@ class ParticleImageClassifier(nn.Module):
 
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
-        self.encoder = ResidualEncoder(cfg)
+        self.encoder = SparseResidualEncoder(cfg)
         self.num_classes = cfg[name].get('num_classes', 5)
         self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
 
@@ -23,7 +27,6 @@ class ParticleImageClassifier(nn.Module):
         point_cloud, = input
         out = self.encoder(point_cloud)
         out = self.final_layer(out)
-        print(out.shape)
         res = {
             'logits': [out]
         }

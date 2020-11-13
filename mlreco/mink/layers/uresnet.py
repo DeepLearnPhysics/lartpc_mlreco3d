@@ -6,8 +6,9 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
-from mlreco.mink.layers.factories import activations_dict, activations_construct
+from mlreco.mink.layers.factories import activations_dict, activations_construct, normalizations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
+
 
 class UResNet(MENetworkBase):
     '''
@@ -43,7 +44,8 @@ class UResNet(MENetworkBase):
         self.input_layer = ME.MinkowskiConvolution(
             in_channels=self.num_input,
             out_channels=self.num_filters,
-            kernel_size=self.input_kernel, stride=1, dimension=self.D)
+            kernel_size=self.input_kernel, stride=1, dimension=self.D,
+            has_bias=self.allow_bias)
 
         # Initialize Encoder
         self.encoding_conv = []
@@ -54,29 +56,33 @@ class UResNet(MENetworkBase):
                 m.append(ResNetBlock(F, F,
                     dimension=self.D,
                     activation=self.activation_name,
-                    activation_args=self.activation_args))
+                    activation_args=self.activation_args,
+                    normalization=self.norm,
+                    normalization_args=self.norm_args,
+                    has_bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_block.append(m)
             m = []
             if i < self.depth-1:
-                m.append(ME.MinkowskiBatchNorm(F))
+                m.append(normalizations_construct(self.norm, F, **self.norm_args))
                 m.append(activations_construct(
                     self.activation_name, **self.activation_args))
                 m.append(ME.MinkowskiConvolution(
                     in_channels=self.nPlanes[i],
                     out_channels=self.nPlanes[i+1],
-                    kernel_size=2, stride=2, dimension=self.D))
+                    kernel_size=2, stride=2, dimension=self.D,
+                    has_bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_conv.append(m)
-        self.encoding_conv = nn.Sequential(*self.encoding_conv)
         self.encoding_block = nn.Sequential(*self.encoding_block)
+        self.encoding_conv = nn.Sequential(*self.encoding_conv)
 
         # Initialize Decoder
         self.decoding_block = []
         self.decoding_conv = []
         for i in range(self.depth-2, -1, -1):
             m = []
-            m.append(ME.MinkowskiBatchNorm(self.nPlanes[i+1]))
+            m.append(normalizations_construct(self.norm, self.nPlanes[i+1], **self.norm_args))
             m.append(activations_construct(
                 self.activation_name, **self.activation_args))
             m.append(ME.MinkowskiConvolutionTranspose(
@@ -84,7 +90,8 @@ class UResNet(MENetworkBase):
                 out_channels=self.nPlanes[i],
                 kernel_size=2,
                 stride=2,
-                dimension=self.D))
+                dimension=self.D,
+                has_bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)
             m = []
@@ -93,12 +100,15 @@ class UResNet(MENetworkBase):
                                      self.nPlanes[i],
                                      dimension=self.D,
                                      activation=self.activation_name,
-                                     activation_args=self.activation_args))
+                                     activation_args=self.activation_args,
+                                     normalization=self.norm,
+                                     normalization_args=self.norm_args,
+                                     has_bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.decoding_block.append(m)
         self.decoding_block = nn.Sequential(*self.decoding_block)
         self.decoding_conv = nn.Sequential(*self.decoding_conv)
-
+        
 
     def encoder(self, x):
         '''

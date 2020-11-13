@@ -7,12 +7,14 @@ import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.uresnet import UResNet, ACASUNet, ASPPUNet
 from collections import defaultdict
+from mlreco.mink.layers.factories import activations_construct
+
+
 
 class UResNet_Chain(nn.Module):
 
     def __init__(self, cfg, name='uresnet_chain'):
         super(UResNet_Chain, self).__init__()
-        print(cfg)
         self.model_cfg = cfg[name]
         aspp_mode = self.model_cfg.get('aspp_mode', None)
         self.D = self.model_cfg.get('data_dim', 3)
@@ -24,17 +26,24 @@ class UResNet_Chain(nn.Module):
             self.net = UResNet(cfg, name='uresnet')
         self.F = self.model_cfg.get('num_filters', 16)
         self.num_classes = self.model_cfg.get('num_classes', 5)
-        self.segmentation = ME.MinkowskiLinear(self.F, self.num_classes)
+        self.output = [
+            ME.MinkowskiBatchNorm(self.F, 
+                eps=self.net.norm_args.get('eps', 0.00001), 
+                momentum=self.net.norm_args.get('momentum', 0.1)),
+            activations_construct('lrelu', negative_slope=0.33),
+            ME.MinkowskiLinear(self.F, self.num_classes)]
+        self.output = nn.Sequential(*self.output)
 
         print('Total Number of Trainable Parameters = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
+
 
     def forward(self, input):
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             res = self.net(x)
             seg = res['decoderTensors'][-1]
-            seg = self.segmentation(seg)
+            seg = self.output(seg)
             out['segmentation'].append(seg.F)
         return out
 
@@ -57,7 +66,7 @@ class SegmentationLoss(nn.Module):
         assert len(segmentation) == len(label)
         # if weight is not None:
         #     assert len(data) == len(weight)
-        batch_ids = [d[:, -2] for d in label]
+        batch_ids = [d[:, 0] for d in label]
         total_loss = 0
         total_acc = 0
         count = 0
