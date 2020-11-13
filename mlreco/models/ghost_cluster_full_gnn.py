@@ -4,8 +4,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from mlreco.models.cluster_full_gnn import ClustFullGNN
-from mlreco.models.cluster_full_gnn import ChainLoss as GNNLoss
+from mlreco.models.grappa import GNN, GNNLoss
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.utils.deghosting import adapt_labels
 
@@ -31,7 +30,7 @@ class GhostClustFullGNN(torch.nn.Module):
 
     def __init__(self, cfg):
         super(GhostClustFullGNN, self).__init__()
-        self.chain = ClustFullGNN(cfg)
+        self.chain = GNN(cfg['grappa'])
         self.uresnet_lonely = UResNet(cfg)
         self.features = cfg['uresnet_lonely'].get('features', 1)
 
@@ -74,7 +73,7 @@ class ChainLoss(torch.nn.modules.loss._Loss):
     """
     def __init__(self, cfg, name='chain'):
         super(ChainLoss, self).__init__()
-        self.gnn_loss = GNNLoss(cfg)
+        self.gnn_loss = GNNLoss(cfg['grappa_loss'])
         self.uresnet_loss = SegmentationLoss(cfg)
         self._num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
 

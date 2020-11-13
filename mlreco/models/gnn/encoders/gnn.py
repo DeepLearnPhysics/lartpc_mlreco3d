@@ -1,6 +1,6 @@
 # Geometric feature extractor for Cluster GNN
 import torch
-from mlreco.models.gnn.modular_nnconv_2 import NNConvModel
+from mlreco.models.gnn.message_passing.nnconv_2 import NNConvModel
 from mlreco.utils.gnn.data import vtx_features, edge_features, cluster_vtx_features
 from mlreco.utils.gnn.network import complete_graph, kdtree_graph
 

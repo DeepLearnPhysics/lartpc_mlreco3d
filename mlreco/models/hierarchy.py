@@ -5,15 +5,14 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 # from mlreco.models.cluster_node_gnn import NodeChannelLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss
+from mlreco.models.gnn.losses.edge_channel import EdgeChannelLoss
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import *
-from mlreco.models.gnn.cluster_cnn_encoder import *
+from mlreco.models.gnn.message_passing.nnconv import *
+from mlreco.models.gnn.encoders.cnn import *
 from mlreco.models.layers.cnn_encoder import *
 from mlreco.utils.gnn.cluster import *
 from mlreco.utils.gnn.network import complete_graph
-from .gnn import edge_model_construct, node_encoder_construct, edge_encoder_construct
 # from torch_geometric.utils import subgraph
 
 from collections import defaultdict, Counter

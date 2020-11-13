@@ -9,7 +9,7 @@ from collections import defaultdict
 from mlreco.models.layers.dbscan import distances
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
+from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
@@ -17,9 +17,8 @@ from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
 
 from .cluster_cnn import spice_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from mlreco.models.grappa import GNNLoss
+from mlreco.models.gnn.losses.node_grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
@@ -59,10 +58,10 @@ class GhostChain(torch.nn.Module):
         self.edge_encoder = edge_encoder_construct(cfg)
 
         # Initialize the GNN models
-        self.particle_gnn  = GNN(cfg['particle_edge_model'])
-        self.inter_gnn     = GNN(cfg['interaction_edge_model'])
-        self.min_frag_size = cfg['particle_gnn'].get('node_min_size', -1)
-        self._use_ppn_shower = cfg['particle_gnn'].get('use_ppn_shower', False)
+        self.particle_gnn  = GNN(cfg['grappa_shower'])
+        self.inter_gnn     = GNN(cfg['grappa_inter'])
+        self.min_frag_size = cfg['grappa_shower']['base'].get('node_min_size', -1)
+        self._use_ppn_shower = cfg['grappa_shower']['base'].get('use_ppn_shower', False)
 
         self.input_features = cfg['uresnet_lonely'].get('features', 1)
 
@@ -314,8 +313,8 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
 
         # Initialize loss components
         self.spatial_embeddings_loss = ClusteringLoss(cfg)
-        self.particle_gnn_loss = FullGNNLoss(cfg, 'particle_gnn')
-        self.inter_gnn_loss  = EdgeGNNLoss(cfg, 'interaction_gnn')
+        self.particle_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
+        self.inter_gnn_loss  = GNNLoss(cfg, 'grappa_inter_loss')
 
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']
@@ -352,7 +351,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             'edge_pred':out['inter_edge_pred'],
             'edge_index':out['inter_edge_index']
         }
-        res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, None)
+        res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label)
 
         # Combine the results
         accuracy = (res_seg['accuracy'] + res_ppn['ppn_acc'] + res_cnn_clust['accuracy'] \

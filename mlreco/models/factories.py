@@ -8,16 +8,7 @@ def model_dict():
     from . import uresnet
     #from . import chain_track_clustering
     from . import uresnet_ppn_chain
-    from . import cluster_gnn
-    from . import cluster_bipartite_gnn
-    from . import cluster_hierarchy_gnn
-    from . import cluster_node_gnn
-    from . import cluster_iter_gnn
-    from . import cluster_chain_gnn
-    from . import cluster_full_gnn
-    from . import cluster_gnn_types
-    from . import cluster_group_prior_gnn
-    #from . import cluster_mst_gnn
+    from . import grappa
     from . import uresnet_clustering
     from . import flashmatching_model
 
@@ -33,7 +24,6 @@ def model_dict():
     from . import full_cnn
     from . import hierarchy
     from . import particle_types
-    from . import cluster_gnn_kinematics
 
     from . import ghost_chain
     from . import ghost_chain_2
@@ -59,20 +49,6 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Clustering
         "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
-        # Edge Model
-        #"edge_model": (edge_gnn.EdgeModel, edge_gnn.EdgeChannelLoss),
-        # Full Edge Model
-        #"full_edge_model": (full_edge_gnn.FullEdgeModel, full_edge_gnn.FullEdgeChannelLoss),
-        # Full Node Model
-        #"node_model": (node_gnn.NodeModel, node_gnn.NodeChannelLoss),
-        # MST edge model
-        ##"mst_edge_model": (mst_gnn.MSTEdgeModel, mst_gnn.MSTEdgeChannelLoss),
-        # Iterative Edge Model
-        #"iter_edge_model": (iter_edge_gnn.IterativeEdgeModel, iter_edge_gnn.IterEdgeChannelLoss),
-        # full cluster model
-        #"clust_edge_model": (cluster_edge_gnn.EdgeModel, cluster_edge_gnn.EdgeChannelLoss),
-        # direction model
-        #"clust_dir_model": (cluster_dir_gnn.EdgeModel, cluster_dir_gnn.EdgeChannelLoss),
         # ClusterUNet Single
         "clustercnn_single": (clustercnn_single.ClusterCNN, clustercnn_single.ClusteringLoss),
         # Colossal ClusterNet Model to Wrap them all
@@ -89,31 +65,14 @@ def model_dict():
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lovasz free
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
-        # Cluster grouping GNN
-        "cluster_gnn": (cluster_gnn.ClustEdgeGNN, cluster_gnn.EdgeChannelLoss),
-        # Cluster primary node identification + grouping GNN
-        "cluster_full_gnn": (cluster_full_gnn.ClustFullGNN, cluster_full_gnn.ChainLoss),
-        # Cluster shower grouping + primary node identification
-        "cluster_group_prior_gnn": (cluster_group_prior_gnn.ClustGroupPriorGNN, cluster_group_prior_gnn.GroupPriorLoss),
-        # Cluster bipartite grouping GNN
-        "cluster_bipartite_gnn": (cluster_bipartite_gnn.ClustBipartiteGNN, cluster_bipartite_gnn.ChainLoss),
-        # Cluster hierarchical grouping GNN
-        "cluster_hierarchy_gnn": (cluster_hierarchy_gnn.ClustHierarchyGNN, cluster_hierarchy_gnn.ChainLoss),
-        # Cluster primary node identification
-        "cluster_node_gnn": (cluster_node_gnn.ClustNodeGNN, cluster_node_gnn.NodeChannelLoss),
-        # Iterative cluster grouping
-        "cluster_iter_gnn": (cluster_iter_gnn.IterativeEdgeModel, cluster_iter_gnn.IterEdgeChannelLoss),
-        # Chain of uresnet + ppn + dbscan + primary node gnn + fragment clustering gnn
-        "cluster_dbscan_gnn": (cluster_chain_gnn.ChainDBSCANGNN, cluster_chain_gnn.ChainLoss),
+        # Graph neural network Particle Aggregation (GrapPA)
+        "grappa": (grappa.GNN, grappa.GNNLoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # CNN Clustering + GNN Chain
         'hierarchy_gnn': (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
-        # Flow and Particle Type
-        "cluster_gnn_types": (cluster_gnn_types.ClustFullGNN, cluster_gnn_types.ChainLoss),
-        "cluster_gnn_kinematics": (cluster_gnn_kinematics.ClustFullGNN, cluster_gnn_kinematics.ChainLoss),
         # Deghosting models
         "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
         "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
