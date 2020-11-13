@@ -45,7 +45,8 @@ class ConvolutionBlock(ME.MinkowskiNetwork):
                  activation='relu',
                  activation_args={},
                  normalization='batch_norm',
-                 normalization_args={}):
+                 normalization_args={},
+                 has_bias=False):
         super(ConvolutionBlock, self).__init__(dimension)
         assert dimension > 0
         self.act_fn1 = activations_construct(activation, **activation_args)
@@ -53,12 +54,12 @@ class ConvolutionBlock(ME.MinkowskiNetwork):
 
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm1 = normalizations_construct(
             normalization, out_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
@@ -88,34 +89,34 @@ class ResNetBlock(ME.MinkowskiNetwork):
                  activation='relu',
                  activation_args={},
                  normalization='batch_norm',
-                 normalization_args={}):
+                 normalization_args={},
+                 has_bias=False):
         super(ResNetBlock, self).__init__(dimension)
         assert dimension > 0
         self.act_fn1 = activations_construct(activation, **activation_args)
         self.act_fn2 = activations_construct(activation, **activation_args)
 
         if in_features != out_features:
-            self.residual = ME.MinkowskiLinear(in_features, out_features)
+            self.residual = ME.MinkowskiLinear(in_features, out_features, bias=has_bias)
         else:
             self.residual = Identity()
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm1 = normalizations_construct(
-            normalization, out_features, **normalization_args)
+            normalization, in_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
     def forward(self, x):
 
         residual = self.residual(x)
-        out = self.act_fn1(self.norm1(self.conv1(x)))
-        out = self.norm2(self.conv2(out))
+        out = self.conv1(self.act_fn1(self.norm1(x)))
+        out = self.conv2(self.act_fn2(self.norm2(out)))
         out += residual
-        out = self.act_fn2(out)
         return out
 
 

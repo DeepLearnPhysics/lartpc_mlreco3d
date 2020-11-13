@@ -113,7 +113,7 @@ class ResidualEncoder(UResNetEncoder):
     def __init__(self, cfg, name='res_encoder'):
         super(ResidualEncoder, self).__init__(cfg,'uresnet_encoder')
         self.model_config = cfg[name]
-        self.num_features = self.model_config.get('num_features', 32)
+        self.latent_size = self.model_config.get('latent_size', 64)
 
         self.input_layer = scn.Sequential().add(
            scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
@@ -127,23 +127,21 @@ class ResidualEncoder(UResNetEncoder):
         print("Final Tensor Shape = ", self.final_tensor_shape)
 
         if self.pool_mode == 'max':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = nn.MaxPool3d(self.final_tensor_shape)
-        elif self.pool_mode == 'flatten':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = Flatten()
+            self.pool = scn.MaxPooling(self.dimension, self.final_tensor_shape, self.final_tensor_shape)
         elif self.pool_mode == 'avg':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = nn.AvgPool3d(self.final_tensor_shape)
+            self.pool = scn.AveragePooling(self.dimension, self.final_tensor_shape, self.final_tensor_shape)
         else:
-            self.output = scn.Sequential().add(
-                scn.Convolution(
+            self.pool = scn.Convolution(
                     self.dimension, self.nPlanes[-1], self.nPlanes[-1], 
                     self.final_tensor_shape, 1, 
-                    self.allow_bias)).add(
-                scn.SparseToDense(self.dimension, self.nPlanes[-1]))
-            self.pool = nn.MaxPool3d(1)
-        self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
+                    self.allow_bias)
+        
+        self.linear = scn.Sequential(
+            scn.BatchNormLeakyReLU(self.nPlanes[-1], leakiness=self.leakiness),
+            scn.NetworkInNetwork(self.nPlanes[-1], self.latent_size, self.allow_bias),
+            # scn.OutputLayer(self.dimension)
+        )
+        
 
 
     def forward(self, point_cloud):
@@ -175,7 +173,7 @@ class ResidualEncoder(UResNetEncoder):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-        out = self.output(x)
-        out = self.pool(out).view(batch_size, -1)
+        out = self.pool(x)
         out = self.linear(out)
-        return out
+        # print(out)
+        return out.features
