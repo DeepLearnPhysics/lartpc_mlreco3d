@@ -4,15 +4,15 @@ import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_std
-from torch_geometric.nn import MetaLayer, GATConv
+from torch_geometric.nn import MetaLayer, EdgeConv
 from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
 
-class GATConvModel(nn.Module):
+class EConvModel(nn.Module):
     '''
-    GATConv GNN Module for extracting node/edge/global features
+    EConv GNN Module for extracting node/edge/global features
     '''
-    def __init__(self, cfg, name='full_gnn'):
-        super(GATConvModel, self).__init__()
+    def __init__(self, cfg):
+        super(EConvModel, self).__init__()
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
@@ -23,7 +23,8 @@ class GATConvModel(nn.Module):
         self.aggr           = self.model_config.get('aggr', 'add')
         self.leakiness      = self.model_config.get('leakiness', 0.1)
 
-        self.gatConvs = torch.nn.ModuleList()
+        self.edge_mlps = torch.nn.ModuleList()
+        self.eConvs = torch.nn.ModuleList()
         self.edge_updates = torch.nn.ModuleList()
 
         # perform batch normalization
@@ -37,8 +38,21 @@ class GATConvModel(nn.Module):
         edge_input  = self.edge_input
         edge_output = self.edge_output
         for i in range(self.num_mp):
+            self.edge_mlps.append(
+                Seq(
+                    BatchNorm1d(2*node_input),
+                    Lin(2*node_input, 2*node_input),
+                    LeakyReLU(self.leakiness),
+                    BatchNorm1d(2*node_input),
+                    Lin(2*node_input, 2*node_input),
+                    LeakyReLU(self.leakiness),
+                    BatchNorm1d(2*node_input),
+                    Lin(2*node_input, node_output)
+                )
+            )
             self.bn_node.append(BatchNorm(node_input))
-            self.gatConvs.append(GATConv(node_input, node_output))
+            self.eConvs.append(
+                EdgeConv(self.edge_mlps[i], aggr=self.aggr))
             # self.bn_node.append(BatchNorm(node_output))
             # print(node_input, node_output)
             self.edge_updates.append(
@@ -66,7 +80,7 @@ class GATConvModel(nn.Module):
             x = self.bn_node[i](x)
             # add u and batch arguments for not having error in some old version
             _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
-            x = self.gatConvs[i](x, edge_indices)
+            x = self.eConvs[i](x, edge_indices)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
         # print(edge_indices.shape)

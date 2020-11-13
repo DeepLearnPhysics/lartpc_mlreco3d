@@ -1,7 +1,7 @@
 # Mixed feature extractor. (Geo, CNN)
 import torch
-from mlreco.models.gnn.cluster_geo_encoder import *
-from mlreco.models.gnn.cluster_cnn_encoder import *
+from .geometric import *
+from .cnn import *
 from pprint import pprint
 
 class ClustMixNodeEncoder(torch.nn.Module):
@@ -80,7 +80,7 @@ class ClustMixNodeEncoder2(torch.nn.Module):
         features_cnn = features_cnn / torch.norm(features_cnn, dim=0)
         # print(features_cnn.shape, features_cnn)
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
-        print(features_mix.shape)
+        # print(features_mix.shape)
         return features_mix
 
 class ClustMixEdgeEncoder2(torch.nn.Module):
@@ -108,7 +108,7 @@ class ClustMixEdgeEncoder2(torch.nn.Module):
         features_cnn = features_cnn / torch.norm(features_cnn, dim=0)
         # print(features_cnn.shape, features_cnn)
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
-        print(features_mix.shape)
+        # print(features_mix.shape)
         return features_mix
 
 
@@ -118,7 +118,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
     """
     def __init__(self,model_config):
         super(ClustMixNodeEncoder3, self).__init__()
-        print("ClustMixNodeEncoder3 = ", model_config)
+        # print("ClustMixNodeEncoder3 = ", model_config)
         self.normalize = model_config.get('normalize', True)
         # require sub-config key
         if 'geo_encoder' not in model_config:
@@ -127,7 +127,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
             raise ValueError("Require cnn_encoder config!")
 
         self.geo_encoder = ClustGeoNodeEncoder(model_config['geo_encoder'])
-        pprint(model_config['cnn_encoder'])
+        # pprint(model_config['cnn_encoder'])
         self.cnn_encoder = ClustCNNNodeEncoder2(model_config['cnn_encoder'])
 
         if self.geo_encoder.more_feats:
@@ -150,7 +150,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
-        print(out.shape)
+        # print(out.shape)
         return out
 
 
@@ -186,5 +186,5 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
-        print(out.shape)
+        # print(out.shape)
         return out
