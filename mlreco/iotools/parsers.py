@@ -774,7 +774,8 @@ def parse_cluster3d_clean(data):
         coordinate
         a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
     """
-    grp_voxels, grp_data = parse_cluster3d_full([data[0], data[2]])
+    grp_voxels, grp_data = parse_cluster3d_full(data)
+    return grp_voxels, grp_data[:,:2]
     img_voxels, img_data = parse_sparse3d_scn([data[1]])
 
     # step 1: lexicographically sort group data
@@ -812,7 +813,7 @@ def clean_data(grp_voxels, grp_data, img_voxels, img_data, meta):
     img_data = img_data[perm]
 
     # step 2: remove duplicates
-    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1],meta, usebatch=True)
+    sel1 = filter_duplicate_voxels_ref(grp_voxels, grp_data[:,-1],meta, usebatch=True, precedence=[0,2,1,3,4])
     inds1 = np.where(sel1)[0]
     grp_voxels = grp_voxels[inds1,:]
     grp_data = grp_data[inds1]

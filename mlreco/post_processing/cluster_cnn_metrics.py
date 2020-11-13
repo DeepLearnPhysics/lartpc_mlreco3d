@@ -3,7 +3,7 @@ import numpy as np
 from mlreco.utils import CSVData
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-from mlreco.utils.cluster_cnn import gaussian_kernel, ellipsoidal_kernel, fit_predict, find_cluster_means
+from mlreco.utils.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
 from mlreco.utils.metrics import *
 
 
@@ -19,16 +19,16 @@ def cluster_cnn_metrics(cfg, data_blob, res, logdir, iteration):
         fout = CSVData(os.path.join(logdir, 'cluster-cnn-metrics-iter-%07d.csv' % iteration))
     if store_method == 'single-file':
         append = True if iteration else False
-        fout = CSVData(os.path.join(logdir, 'cluster-cnn-metric.csv'), append=append)
+        fout = CSVData(os.path.join(logdir, 'cluster-cnn-metrics.csv'), append=append)
 
     # Get the relevant data products
     index = data_blob['index']
     seg_label = data_blob['segment_label']
-    clust_data = data_blob['clust_label']
+    clust_data = data_blob['cluster_label']
     particles = data_blob['particles']
 
     if deghosting:
-        clust_data = adapt_labels(res, seg_label, data_blob['clust_label'])
+        clust_data = adapt_labels(res, seg_label, data_blob['cluster_label'])
         seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
 
     batch_ids = []
@@ -71,25 +71,23 @@ def cluster_cnn_metrics(cfg, data_blob, res, logdir, iteration):
             coords_class = coords[semantic_mask]
             clabels = clust_data[data_idx][semantic_mask][:, 5]
 
-            pred, true_num_clusters = fit_predict(embedding_class, seed_class, margins_class, gaussian_kernel,
+            pred = fit_predict_np(embedding_class, seed_class, margins_class, gaussian_kernel,
                                 s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)])
             purity, efficiency = purity_efficiency(pred, clabels)
             # purity = purity.mean()
             # efficiency = efficiency.mean()
-
             fscore = 2 * (purity * efficiency) / (purity + efficiency)
             ari = ARI(pred, clabels)
             sbd = SBD(pred, clabels)
             nclusters = len(np.unique(clabels))
             #num_particles = len(particles[data_idx])
-
             event_num_particles = len(np.unique(clust_data[data_idx][:, 6]))
             class_num_particles = len(np.unique(clust_data[data_idx][semantic_mask][:, 6]))
             event_num_pix = seg_label[data_idx].shape[0]
             class_num_pix = seg_label[data_idx][semantic_mask].shape[0]
             event_num_interactions = len(np.unique(clust_data[data_idx][:, 7]))
-
             _, true_centroids = find_cluster_means(coords_class, clabels)
+            true_num_clusters = len(np.unique(clabels))
             for j, cluster_id in enumerate(np.unique(clabels)):
                 margin = np.mean(margins_class[clabels == cluster_id])
                 true_size = np.std(np.linalg.norm(coords_class[clabels == cluster_id] - true_centroids[j], axis=1))
