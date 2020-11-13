@@ -194,6 +194,7 @@ class SPICEInterLoss(SPICELoss):
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.inter_margin = self.loss_config.get('inter_margin', 0.2)
         self.norm = 2
+        self._min_voxels = self.loss_config.get('min_voxels', 2)
 
 
     def regularization(self, cluster_means):
@@ -280,6 +281,8 @@ class SPICEInterLoss(SPICELoss):
             if int(sc) == 4:
                 continue
             index = (slabels == sc)
+            if len(embeddings[index]) < self._min_voxels:
+                continue
             clabels_unique, _ = unique_label_torch(clabels[index])
             mask_loss, smoothing_loss, inter_loss, probs, acc = self.get_per_class_probabilities(
                 embeddings[index], margins[index], clabels_unique)

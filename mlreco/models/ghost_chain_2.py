@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from mlreco.models.layers.dbscan import distances
 
-from mlreco.models.chain.full_cnn import *
+from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct, edge_model_construct
 
@@ -134,6 +134,7 @@ class GhostChain2(torch.nn.Module):
         if self.enable_uresnet:
             self.uresnet_lonely = UResNet(cfg)
             self.input_features = cfg['uresnet_lonely'].get('features', 1)
+            self._num_strides = cfg['uresnet_lonely'].get('num_strides', 5)
 
         if self.enable_ppn:
             self.ppn            = PPN(cfg)
@@ -187,6 +188,7 @@ class GhostChain2(torch.nn.Module):
 
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
+            self._cosmic_use_input_data = cfg['cosmic_discriminator'].get('use_input_data', True)
 
     def extract_fragment(self, input, result):
         """
@@ -203,10 +205,9 @@ class GhostChain2(torch.nn.Module):
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
-                                          fitfunc = gaussian_kernel,
+                                          fitfunc = gaussian_kernel_cuda,
                                           s_threshold = self.s_thresholds[s],
-                                          p_threshold = self.p_thresholds[s],
-                                          cluster_all = self.cluster_all)
+                                          p_threshold = self.p_thresholds[s])
                 for c in pred_labels.unique():
                     if c < 0:
                         continue
@@ -544,9 +545,13 @@ class GhostChain2(torch.nn.Module):
 
             # Replace batch id column with a global "interaction id"
             # because ResidualEncoder uses the batch id column to shape its output
-            inter_data = torch.empty((0, input[0].size(1)), dtype=torch.float, device=device)
+            feature_map = result['ppn_feature_dec'][0][-1]
+            if not torch.is_tensor(feature_map):
+                feature_map = feature_map.features
+            inter_input_data = input[0].float() if self._cosmic_use_input_data else torch.cat([input[0][:, :4].float(), feature_map], dim=1)
+            inter_data = torch.empty((0, inter_input_data.size(1)), dtype=torch.float, device=device)
             for i, interaction in enumerate(interactions):
-                inter_data = torch.cat([inter_data, input[0][interaction].float()], dim=0)
+                inter_data = torch.cat([inter_data, inter_input_data[interaction]], dim=0)
                 inter_data[-len(interaction):, 3] = i * torch.ones(len(interaction)).to(device)
             inter_cosmic_pred = self.cosmic_discriminator(inter_data)
 
@@ -597,6 +602,7 @@ class GhostChain2(torch.nn.Module):
             new_input = [input[0][deghost]]
 
             segmentation = result['segmentation'][0].clone()
+            ppn_feature_dec = [x.features.clone() for x in result['ppn_feature_dec'][0]]
             if self.enable_ppn:
                 points, mask_ppn2 = result['points'][0].clone(), result['mask_ppn2'][0].clone()
 
@@ -604,6 +610,7 @@ class GhostChain2(torch.nn.Module):
             deghost_result.update(result)
             deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
+            deghost_result['ppn_feature_dec'][0] = [result['ppn_feature_dec'][0][-1].features[deghost]]
             if self.enable_ppn:
                 deghost_result['points'][0] = result['points'][0][deghost]
                 deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
@@ -617,6 +624,7 @@ class GhostChain2(torch.nn.Module):
 
         if self.enable_ghost:
             result['segmentation'][0] = segmentation
+            result['ppn_feature_dec'][0] = ppn_feature_dec
             if self.enable_ppn:
                 result['points'][0] = points
                 result['mask_ppn2'][0] = mask_ppn2
