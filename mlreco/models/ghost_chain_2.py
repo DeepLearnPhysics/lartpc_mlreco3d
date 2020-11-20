@@ -24,7 +24,7 @@ from mlreco.models.gnn.losses.node_grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph
-from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch
+from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch, form_clusters
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.models.layers.dbscan import DBSCANFragmenter, DBScanClusts2
 from mlreco.models.layers.cnn_encoder import ResidualEncoder
@@ -108,6 +108,8 @@ def setup_chain_cfg(self, cfg):
         if self.enable_ppn:
             assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
 
+    self.enable_dbscan = self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic
+
 
 class GhostChain2(torch.nn.Module):
     """
@@ -155,7 +157,7 @@ class GhostChain2(torch.nn.Module):
         for s in self.cluster_classes:
             assert s <num_classes and s > 0
 
-        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+        if self.enable_dbscan:
             # Initialize the DBSCAN fragmenter
             # Give a default value to cluster_classes in case the dbscan cfg does not specify it
             self.dbscan_frag = DBSCANFragmenter(cfg, cluster_classes=[s for s in range(num_classes) if (s not in self.cluster_classes)])
@@ -189,6 +191,7 @@ class GhostChain2(torch.nn.Module):
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
             self._cosmic_use_input_data = cfg['cosmic_discriminator'].get('use_input_data', True)
+            self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get('use_true_interactions', False)
 
     def extract_fragment(self, input, result):
         """
@@ -329,7 +332,7 @@ class GhostChain2(torch.nn.Module):
 
             result.update({labels['group_pred']: [group_ids]})
 
-    def full_chain(self, x):
+    def full_chain(self, input, result, label_clustering=None):
         '''
         Forward for full reconstruction chain.
 
@@ -340,7 +343,6 @@ class GhostChain2(torch.nn.Module):
         RETURNS:
             - result (dict) (updated with new outputs)
         '''
-        input, result = x
         device = input[0].device
 
         # ---
@@ -368,7 +370,7 @@ class GhostChain2(torch.nn.Module):
             frag_batch_ids.extend(frag_batch_ids_cnn)
             frag_seg.extend(frag_seg_cnn)
 
-        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+        if self.enable_dbscan:
             # Get the fragment predictions from the DBSCAN fragmenter
             fragments_dbscan = self.dbscan_frag(semantic_data, result)
             frag_batch_ids_dbscan = get_cluster_batch(input[0], fragments_dbscan)
@@ -390,7 +392,7 @@ class GhostChain2(torch.nn.Module):
         frag_seg = np.array(frag_seg)
 
         # Store in result the intermediate fragments
-        if self.enable_cnn_clust or self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+        if self.enable_dbscan:
             _, counts = torch.unique(input[0][:,3], return_counts=True)
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
@@ -447,7 +449,8 @@ class GhostChain2(torch.nn.Module):
             particles, part_primary_ids = [], []
             for b in range(len(counts)):
                 # Append one particle per shower group
-                self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'frag_node_pred', 'frag_group_pred', 'fragments')
+                if self.enable_gnn_shower:
+                    self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'frag_node_pred', 'frag_group_pred', 'fragments')
                 # Append one particle per track group
                 if self.enable_gnn_tracks:
                     self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'track_node_pred', 'track_group_pred', 'track_fragments')
@@ -531,13 +534,22 @@ class GhostChain2(torch.nn.Module):
                         node_predictors=[('node_pred_type', self.type_net), ('node_pred_p', self.momentum_net)])
 
         if self.enable_cosmic:
-            if not self.enable_gnn_int:
+            if not self.enable_gnn_int and not self._cosmic_use_true_interactions:
                 raise Exception("Need interaction clustering before cosmic discrimination.")
 
             _, counts = torch.unique(input[0][:,3], return_counts=True)
             interactions, inter_primary_ids = [], []
-            for b in range(len(counts)):
-                self.select_particle_in_group(result, counts, b, interactions, inter_primary_ids, None, 'inter_group_pred', 'particles')
+            # Note to self: inter_primary_ids is not used as of now
+
+            if self._cosmic_use_true_interactions:
+                if label_clustering is None:
+                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
+                interactions = form_clusters(label_clustering[0], column=7)
+                print(len(label_clustering[0]), len(input[0]))
+                interactions = [inter.cpu().numpy() for inter in interactions]
+            else:
+                for b in range(len(counts)):
+                    self.select_particle_in_group(result, counts, b, interactions, inter_primary_ids, None, 'inter_group_pred', 'particles')
 
             inter_batch_ids = get_cluster_batch(input[0], interactions)
             inter_cosmic_pred = torch.empty((len(interactions), 2), dtype=torch.float)
@@ -576,7 +588,15 @@ class GhostChain2(torch.nn.Module):
     def forward(self, input):
         """
         Assumes single GPU/CPU.
+        input: can contain just the input energy depositions, or include true clusters
         """
+        label_seg, label_clustering = None, None
+        if len(input) == 3:
+            input, label_seg, label_clustering = input
+            input = [input]
+            label_seg = [label_seg]
+            label_clustering = [label_clustering]
+
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
         result = {}
         if self.enable_uresnet:
@@ -599,6 +619,8 @@ class GhostChain2(torch.nn.Module):
             # Update input based on deghosting results
             deghost = result['ghost'][0].argmax(dim=1) == 0
             new_input = [input[0][deghost]]
+            if label_seg is not None and label_clustering is not None:
+                label_clustering = adapt_labels(result, label_seg, label_clustering)
 
             segmentation = result['segmentation'][0].clone()
             ppn_feature_dec = [x.features.clone() for x in result['ppn_feature_dec'][0]]
@@ -614,10 +636,10 @@ class GhostChain2(torch.nn.Module):
                 deghost_result['points'][0] = result['points'][0][deghost]
                 deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
             # Run the rest of the full chain
-            full_chain_result = self.full_chain((new_input, deghost_result))
+            full_chain_result = self.full_chain(new_input, deghost_result, label_clustering=label_clustering)
             full_chain_result['ghost'] = result['ghost']
         else:
-            full_chain_result = self.full_chain((input, result))
+            full_chain_result = self.full_chain(input, result, label_clustering=label_clustering)
 
         result.update(full_chain_result)
 
@@ -699,7 +721,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['ppn_acc']
             loss += self.ppn_weight*res_ppn['ppn_loss']
 
-        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_tracks or self.enable_gnn_shower or self.enable_gnn_int):
+        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_tracks or self.enable_gnn_shower or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic):
             # Adapt to ghost points
             if cluster_label is not None:
                 cluster_label = adapt_labels(out, seg_label, cluster_label)
@@ -843,5 +865,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
                 print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
             if self.enable_gnn_int:
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
-
+            if self.enable_kinematics:
+                print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
+            if self.enable_cosmic:
+                print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
