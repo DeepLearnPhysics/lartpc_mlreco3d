@@ -11,12 +11,12 @@ from mlreco.models.layers.dbscan import distances
 #from mlreco.models.chain.full_cnn import *
 from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
-from .gnn import node_encoder_construct, edge_encoder_construct
+from .gnn import node_encoder_construct, edge_encoder_construct, gnn_model_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
-from mlreco.models.cluster_gnn_kinematics import MomentumNet
+from mlreco.models.layers.momentum import MomentumNet
 
 from .cluster_cnn import spice_loss_construct
 from mlreco.models.grappa import GNNLoss
@@ -104,9 +104,9 @@ def setup_chain_cfg(self, cfg):
 
     # Make sure the deghosting config is consistent
     if self.enable_ghost:
-        assert cfg['uresnet_lonely']['ghost']
+        assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
         if self.enable_ppn:
-            assert cfg['ppn']['downsample_ghost']
+            assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
 
 
 class GhostChain2(torch.nn.Module):
@@ -132,26 +132,26 @@ class GhostChain2(torch.nn.Module):
 
         # Initialize the UResNet+PPN modules
         if self.enable_uresnet:
-            self.uresnet_lonely = UResNet(cfg)
-            self.input_features = cfg['uresnet_lonely'].get('features', 1)
-            self._num_strides = cfg['uresnet_lonely'].get('num_strides', 5)
+            self.uresnet_lonely = UResNet(cfg['uresnet_ppn'])
+            self.input_features = cfg['uresnet_ppn']['uresnet_lonely'].get('features', 1)
+            self._num_strides = cfg['uresnet_ppn']['uresnet_lonely'].get('num_strides', 5)
 
         if self.enable_ppn:
-            self.ppn            = PPN(cfg)
+            self.ppn            = PPN(cfg['uresnet_ppn'])
 
         # CNN clustering
         self.min_frag_size = -1
         self.cluster_classes = []
         if self.enable_cnn_clust:
-            self.spatial_embeddings    = ClusterCNN(cfg)
+            self.spatial_embeddings    = ClusterCNN(cfg['spice'])
             # Fragment formation parameters
-            self.frag_cfg     = cfg['fragment_clustering']
+            self.frag_cfg     = cfg['spice']['fragment_clustering']
             self.s_thresholds = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
             self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
             self.cluster_classes = self.frag_cfg.get('cluster_classes', [])
 
-        num_classes = cfg['uresnet_lonely'].get('num_classes', 5)
+        num_classes = cfg['uresnet_ppn']['uresnet_lonely'].get('num_classes', 5)
         for s in self.cluster_classes:
             assert s <num_classes and s > 0
 
@@ -167,24 +167,24 @@ class GhostChain2(torch.nn.Module):
             self.edge_encoder = edge_encoder_construct(cfg['grappa_shower'])
 
         if self.enable_gnn_shower:
-            self.particle_gnn  = GNN(cfg['grappa_shower']['gnn_model'])
+            self.grappa_shower  = GNN(cfg['grappa_shower']['gnn_model'])
             self.min_frag_size = max(self.min_frag_size, cfg['grappa_shower']['base'].get('node_min_size', -1))
             self.start_dir_max_dist = cfg['grappa_shower']['base'].get('start_dir_max_dist', 5)
 
         if self.enable_gnn_tracks:
-            self.track_gnn  = GNN(cfg['grappa_track']['gnn_model'])
+            self.grappa_track  = GNN(cfg['grappa_track']['gnn_model'])
             self.min_frag_size = max(self.min_frag_size, cfg['grappa_track']['base'].get('node_min_size', -1))
 
         if self.enable_gnn_int:
             # Initialize the GNN models
-            self.inter_gnn     = GNN(cfg['grappa_inter']['gnn_model'])
+            self.grappa_inter     = GNN(cfg['grappa_inter']['gnn_model'])
 
         if self.enable_kinematics:
-            self.kinematics_node_encoder = node_encoder_construct(cfg, model_name='kinematics_node_encoder')
-            self.kinematics_edge_encoder = edge_encoder_construct(cfg, model_name='kinematics_edge_encoder')
-            self.kinematics_edge_predictor = edge_model_construct(cfg, model_name='kinematics_edge_model')
-            self.momentum_net = MomentumNet(cfg['kinematics_edge_model']['node_output_feats'], 1)
-            self.type_net = MomentumNet(cfg['kinematics_edge_model']['node_output_feats'], 5)
+            self.kinematics_node_encoder = node_encoder_construct(cfg['grappa_kinematics'], model_name='node_encoder')
+            self.kinematics_edge_encoder = edge_encoder_construct(cfg['grappa_kinematics'], model_name='edge_encoder')
+            self.kinematics_edge_predictor = gnn_model_construct(cfg['grappa_kinematics'], model_name='gnn_model')
+            self.momentum_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 1)
+            self.type_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 5)
 
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
@@ -428,9 +428,8 @@ class GhostChain2(torch.nn.Module):
 
                 x = torch.cat([x, ppn_feats], dim=1)
 
-            self.run_gnn(self.particle_gnn, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
+            self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                         {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
-
 
         if self.enable_gnn_tracks:
             # Initialize a complete graph for edge prediction, get track fragment and edge features
@@ -439,7 +438,7 @@ class GhostChain2(torch.nn.Module):
             x = self.node_encoder(input[0], fragments[em_mask])
             e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
 
-            self.run_gnn(self.track_gnn, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
+            self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                         {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
 
         # Merge fragments into particle instances, retain primary fragment id of showers
@@ -512,7 +511,7 @@ class GhostChain2(torch.nn.Module):
 
                 x = torch.cat([x, ppn_feats], dim=1)
 
-            self.run_gnn(self.inter_gnn, input, result, part_batch_ids, particles, edge_index, x, e,
+            self.run_gnn(self.grappa_inter, input, result, part_batch_ids, particles, edge_index, x, e,
                         {'frags': 'particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred'},
                         node_predictors=[])
 
@@ -647,9 +646,9 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         # Initialize loss components
         if self.enable_uresnet:
-            self.uresnet_loss    = SegmentationLoss(cfg)
+            self.uresnet_loss    = SegmentationLoss(cfg['uresnet_ppn'])
         if self.enable_ppn:
-            self.ppn_loss        = PPNLoss(cfg)
+            self.ppn_loss        = PPNLoss(cfg['uresnet_ppn'])
         if self.enable_cnn_clust:
             self.spatial_embeddings_loss = ClusteringLoss(cfg)
         if self.enable_gnn_shower:
@@ -659,8 +658,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_gnn_int:
             self.inter_gnn_loss  = GNNLoss(cfg, 'grappa_inter_loss')
         if self.enable_kinematics: #FIXME
-            self.kinematics_loss = GNNLoss(cfg, 'kinematics_gnn') #NodeKinematicsLoss
-            self.flow_loss = GNNLoss(cfg, 'kinematics_gnn') # EdgeLoss
+            self.kinematics_loss = GNNLoss(cfg, 'grappa_kinematics_loss') #NodeKinematicsLoss
+            #self.flow_loss = GNNLoss(cfg, 'grappa_kinematics_loss') # EdgeLoss
         if self.enable_cosmic:
             self.cosmic_loss = CosmicLoss(cfg)
 
@@ -789,31 +788,28 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             gnn_out = {
                 'clusts': out['particles'],
                 'node_pred_p': out['node_pred_p'],
-                'node_pred_type': out['node_pred_type']
+                'node_pred_type': out['node_pred_type'],
+                'edge_pred': out['flow_edge_pred'],
+                'edge_index': out['inter_edge_index']
             }
-            res_kinematics = self.kinematics_loss(gnn_out, kinematics_label)
+            res_kinematics = self.kinematics_loss(gnn_out, kinematics_label, graph=particle_graph)
+
             res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
-            res['kinematics_accuracy'] = res_kinematics['accuracy']
+            res['kinematics_accuracy'] = res_kinematics['node_accuracy']
             res['kinematics_type_loss'] = res_kinematics['type_loss']
             res['kinematics_p_loss'] = res_kinematics['p_loss']
             res['kinematics_n_clusts'] = res_kinematics['n_clusts']
 
-            accuracy += res_kinematics['accuracy']
+            accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
             loss += self.kinematics_weight * res['kinematics_loss']
 
             # Loss on edge predictions (particle hierarchy)
-            gnn_out = {
-                'clusts': out['particles'],
-                'edge_pred': out['flow_edge_pred'],
-                'edge_index': out['inter_edge_index']
-            }
-            res_flow = self.flow_loss(gnn_out, kinematics_label, particle_graph)
-            res['flow_loss'] = res_flow['loss']
-            res['flow_accuracy'] = res_flow['accuracy']
+            res['flow_loss'] = res_kinematics['edge_loss']
+            res['flow_accuracy'] = res_kinematics['edge_accuracy']
 
-            accuracy += res_flow['accuracy']
-            loss += self.flow_weight * res_flow['loss']
+            accuracy += res_kinematics['edge_accuracy']
+            loss += self.flow_weight * res_kinematics['edge_loss']
 
         if self.enable_cosmic:
             res_cosmic = self.cosmic_loss(out, cluster_label)
