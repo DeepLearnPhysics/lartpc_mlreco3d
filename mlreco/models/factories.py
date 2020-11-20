@@ -25,13 +25,7 @@ def model_dict():
     from . import hierarchy
     from . import particle_types
 
-    from . import ghost_chain
     from . import ghost_chain_2
-    from . import ghost_cluster_full_gnn
-    from . import ghost_spatial_embeddings
-    from . import ghost_cluster_chain_gnn
-    from . import ghost_track_clustering
-    from . import ghost_nu
     from . import particle_types
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -75,11 +69,6 @@ def model_dict():
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Deghosting models
         "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
-        "ghost_cluster_full_gnn": (ghost_cluster_full_gnn.GhostClustFullGNN, ghost_cluster_full_gnn.ChainLoss),
-        "ghost_spatial_embeddings": (ghost_spatial_embeddings.GhostSpatialEmbeddings, ghost_spatial_embeddings.GhostSpatialEmbeddingsLoss),
-        "ghost_cluster_chain_gnn": (ghost_cluster_chain_gnn.GhostChainDBSCANGNN, ghost_cluster_chain_gnn.GhostChainLoss),
-        "ghost_track_clustering": (ghost_track_clustering.GhostTrackClustering, ghost_track_clustering.GhostTrackClusteringLoss),
-        "ghost_nu": (ghost_nu.GhostNuClassification, ghost_nu.GhostNuClassificationLoss)
         # Cluster grouping GNN with MST
         #"cluster_mst_gnn": (cluster_mst_gnn.MSTEdgeModel, cluster_mst_gnn.MSTEdgeChannelLoss),
     }
