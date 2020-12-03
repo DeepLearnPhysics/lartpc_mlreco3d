@@ -62,13 +62,13 @@ class GNN(torch.nn.Module):
             model_path      : <path to the model weights>
     """
 
-    MODULES = ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'node_model', 'edge_model']
+    MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
 
     def __init__(self, cfg, name='grappa'):
         super(GNN, self).__init__()
 
         # Get the chain input parameters
-        base_config = cfg[name]['base']
+        base_config = cfg[name].get('base', {})
 
         # Choose what type of node to use
         self.node_type = base_config.get('node_type', 0)
