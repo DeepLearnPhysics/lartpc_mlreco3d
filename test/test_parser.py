@@ -5,6 +5,13 @@ import numpy as np
 import pytest
 
 
+#######################################################################
+# Fixtures for the tests
+# The idea is to generate dummy data products that can be used to run
+# the parsers and check basic assumptions.
+#######################################################################
+
+
 @pytest.fixture(params=[1, 2])
 def event_tensor3d(request, N):
     """
@@ -144,6 +151,10 @@ def event_cluster3d(request, N):
 #     # event.set(voxel_set, meta)
 #     return event
 
+#######################################################################
+# Parsers tests
+#######################################################################
+
 def test_parse_sparse3d_scn(event_tensor3d):
     from mlreco.iotools.parsers import parse_sparse3d_scn
     output = parse_sparse3d_scn(event_tensor3d)
@@ -231,3 +242,129 @@ def test_parse_cluster3d(event_cluster3d):
 #     assert output[0].shape[1] == 3
 #     assert output[1].shape[1] == 6
 #     assert output[0].shape[0] == output[1].shape[0]
+def test_parse_cluster3d_clean():
+    pass
+
+# TODO
+def test_parse_particle_singlep_pdg():
+    pass
+
+def test_parse_particle_singlep_einit():
+    pass
+
+def test_parse_sparse2d_meta():
+    pass
+
+def test_parse_sparse2d_scn():
+    pass
+
+def test_parse_semantics():
+    pass
+
+def test_parse_weights():
+    pass
+
+def test_parse_particle_asis():
+    pass
+
+@pytest.mark.parametrize("event_cluster3d", [3], indirect=True)
+@pytest.mark.parametrize("event_particles", [3], indirect=True)
+def test_parse_particle_coords(event_cluster3d, event_particles):
+    from mlreco.iotools.parsers import parse_particle_coords
+    output = parse_particle_coords((event_particles, event_cluster3d))
+    assert len(output) == 2
+    assert len(output[0].shape) == 2
+    assert len(output[1].shape) == 2
+    assert output[0].shape[1] == 3
+    assert output[1].shape[1] == 4
+    assert output[0].shape[0] == output[1].shape[0]
+
+def test_parse_particle_graph():
+    pass
+
+def test_parse_particle_graph_corrected():
+    pass
+
+def test_parse_cluster2d():
+    pass
+
+def test_parse_cluster3d_full():
+    pass
+
+@pytest.mark.parametrize("event_cluster3d", [3], indirect=True)
+@pytest.mark.parametrize("event_particles", [3], indirect=True)
+def test_parse_cluster3d_types(event_cluster3d, event_particles):
+    from mlreco.iotools.parsers import parse_cluster3d_types
+    output = parse_cluster3d_types((event_cluster3d, event_particles))
+    assert len(output) == 2
+    assert len(output[0].shape) == 2
+    assert len(output[1].shape) == 2
+    assert output[0].shape[1] == 3
+    assert output[1].shape[1] == 4
+    assert output[0].shape[0] == output[1].shape[0]
+
+@pytest.mark.parametrize("event_cluster3d", [3], indirect=True)
+@pytest.mark.parametrize("event_particles", [3], indirect=True)
+def test_parse_cluster3d_kinematics(event_cluster3d, event_particles):
+    from mlreco.iotools.parsers import parse_cluster3d_kinematics
+    output = parse_cluster3d_kinematics((event_cluster3d, event_particles))
+    assert len(output) == 2
+    assert len(output[0].shape) == 2
+    assert len(output[1].shape) == 2
+    assert output[0].shape[1] == 3
+    assert output[1].shape[1] == 5
+    assert output[0].shape[0] == output[1].shape[0]
+
+def test_parse_cluster3d_kinematics_clean():
+    pass
+
+def test_parse_cluster3d_full_fragment():
+    pass
+
+def test_parse_cluster3d_fragment():
+    pass
+
+# Make sure input only has 1 feature
+@pytest.mark.parametrize("event_tensor3d", [1], indirect=True)
+def test_parse_sparse3d_fragment(event_tensor3d):
+    from mlreco.iotools.parsers import parse_sparse3d_fragment
+    output = parse_sparse3d_fragment(event_tensor3d)
+    assert len(output) == 2
+    assert len(output[0].shape) == 2
+    assert len(output[1].shape) == 2
+    assert output[0].shape[1] == 3
+    assert output[1].shape[1] == 1
+    assert output[0].shape[0] == output[1].shape[0]
+
+def test_clean_data():
+    pass
+
+def test_parse_cluster3d_clean_full():
+    pass
+
+def test_parse_sparse3d_clean():
+    pass
+
+def test_parse_cluster3d_scales():
+    pass
+
+# Make sure input only has 2 features
+@pytest.mark.parametrize("event_tensor3d", [2], indirect=True)
+def test_parse_sparse3d_scn_scales(event_tensor3d):
+    from mlreco.iotools.parsers import parse_sparse3d_scn_scales
+    output = parse_sparse3d_scn_scales(event_tensor3d)
+    spatial_size = event_tensor3d[0].meta().num_voxel_x()
+    max_depth = int(np.floor(np.log2(spatial_size))-1)
+    assert len(output) == max_depth
+    for d, x in enumerate(output):
+        assert len(x) == 2
+        assert isinstance(x, tuple)
+
+        assert len(x[0].shape) == 2
+        assert len(x[1].shape) == 2
+        assert x[0].shape[1] == 3
+        assert x[1].shape[1] == 2
+        assert x[0].shape[0] == x[1].shape[0]
+
+        assert x[0].min() >= 0
+        assert x[0].max() < spatial_size/2**d
