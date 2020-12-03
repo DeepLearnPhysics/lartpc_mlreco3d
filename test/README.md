@@ -57,9 +57,11 @@ By default it will run with N = 192px.
 
 ### Test data file
 There are 3 data files available to run the tests:
+
 * [192px](http://stanford.edu/~ldomine/small_192px.root)
 * [512px](http://stanford.edu/~ldomine/small_512px.root)
 * [768px](http://stanford.edu/~ldomine/small_768px.root)
+
 You can specify which one(s) to use in the `pytest.ini` file.
 
 *Note: Each of them contain 5 events. Set the batch size accordingly (<5).*

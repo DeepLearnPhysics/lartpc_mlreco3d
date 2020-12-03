@@ -526,8 +526,8 @@ def parse_cluster3d_types(data):
     return:
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (n,6) where 6 is voxel value,
-        cluster id, group id interaction id, nu id and semantic type, respectively
+        a numpy array with the shape (n,4) where 4 is voxel value,
+        cluster id, group id, pdg, respectively
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
