@@ -120,11 +120,11 @@ class GhostChain2(torch.nn.Module):
     #     ["parse_sparse3d_scn", (float,), (3, 1)],
     # ]
     # MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
-    MODULES = ['full_cnn', 'network_base', 'uresnet_encoder', 'segmentation_decoder',
-            'embedding_decoder', 'grappa_shower', 'grappa_track', 'grappa_inter',
+    MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
             'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
-            'full_chain_loss', 'uresnet_lonely', 'ppn', 'uresnet',
-            'fragment_clustering', 'spice_loss', 'chain', 'dbscan_frag']
+            'full_chain_loss', 'spice', 'spice_loss',
+            'fragment_clustering',  'chain', 'dbscan_frag',
+            ('uresnet_ppn', ['uresnet_lonely', 'ppn'])]
 
     def __init__(self, cfg):
         super(GhostChain2, self).__init__()
