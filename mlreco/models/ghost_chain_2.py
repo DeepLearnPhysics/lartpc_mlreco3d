@@ -187,6 +187,7 @@ class GhostChain2(torch.nn.Module):
             self.kinematics_edge_predictor = gnn_model_construct(cfg['grappa_kinematics'], model_name='gnn_model')
             self.momentum_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 1)
             self.type_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 5)
+            self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
 
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
@@ -525,12 +526,26 @@ class GhostChain2(torch.nn.Module):
 
         if self.enable_kinematics:
             #print(len(particles))
-            edge_index = complete_graph(part_batch_ids)
-            x = self.kinematics_node_encoder(input[0], particles)
-            e = self.kinematics_edge_encoder(input[0], particles, edge_index)
+            if self._kinematics_use_true_particles:
+                if label_clustering is None:
+                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
+                # Also exclude lowE
+                kinematics_particles = form_clusters(label_clustering[0], column=6)
+                kinematics_particles = [part.cpu().numpy() for part in kinematics_particles]
+                kinematics_part_batch_ids = get_cluster_batch(input[0], kinematics_particles)
+                kinematics_particles = np.array(kinematics_particles, dtype=object)
+                kinematics_particles_seg = get_cluster_label(label_clustering[0], kinematics_particles, column=-1)
+                kinematics_particles = kinematics_particles[kinematics_particles_seg<4]
+            else:
+                kinematics_particles = particles
+                kinematics_part_batch_ids = part_batch_ids
 
-            self.run_gnn(self.kinematics_edge_predictor, input, result, part_batch_ids, particles, edge_index, x, e,
-                        {'frags': 'particles', 'edge_index': 'inter_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'},
+            edge_index = complete_graph(kinematics_part_batch_ids)
+            x = self.kinematics_node_encoder(input[0], kinematics_particles)
+            e = self.kinematics_edge_encoder(input[0], kinematics_particles, edge_index)
+
+            self.run_gnn(self.kinematics_edge_predictor, input, result, kinematics_part_batch_ids, kinematics_particles, edge_index, x, e,
+                        {'frags': 'kinematics_particles', 'edge_index': 'kinematics_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'},
                         node_predictors=[('node_pred_type', self.type_net), ('node_pred_p', self.momentum_net)])
 
         if self.enable_cosmic:
@@ -545,7 +560,6 @@ class GhostChain2(torch.nn.Module):
                 if label_clustering is None:
                     raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
                 interactions = form_clusters(label_clustering[0], column=7)
-                print(len(label_clustering[0]), len(input[0]))
                 interactions = [inter.cpu().numpy() for inter in interactions]
             else:
                 for b in range(len(counts)):
@@ -808,16 +822,19 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_kinematics:
             # Loss on node predictions (type & momentum)
             gnn_out = {
-                'clusts': out['particles'],
+                'clusts': out['kinematics_particles'],
                 'node_pred_p': out['node_pred_p'],
                 'node_pred_type': out['node_pred_type'],
                 'edge_pred': out['flow_edge_pred'],
-                'edge_index': out['inter_edge_index']
+                'edge_index': out['kinematics_edge_index']
             }
             res_kinematics = self.kinematics_loss(gnn_out, kinematics_label, graph=particle_graph)
 
-            res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
-            res['kinematics_accuracy'] = res_kinematics['node_accuracy']
+            #res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
+            res['kinematics_loss'] = res_kinematics['node_loss']
+            res['kinematics_accuracy'] = res_kinematics['accuracy']
+            res['p_accuracy'] = res_kinematics['p_accuracy']
+            res['type_accuracy'] = res_kinematics['type_accuracy']
             res['kinematics_type_loss'] = res_kinematics['type_loss']
             res['kinematics_p_loss'] = res_kinematics['p_loss']
             res['kinematics_n_clusts'] = res_kinematics['n_clusts']
@@ -867,6 +884,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
             if self.enable_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
+                print('Type accuracy: {:.4f}'.format(res_kinematics['type_accuracy']))
+                print('Momentum accuracy: {:.4f}'.format(res_kinematics['p_accuracy']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res

@@ -116,7 +116,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
-            if 'node_pred' not in out:
+            if 'node_pred_type' not in out or 'node_pred_p' not in out:
                 continue
 
             # Get the list of batch ids, loop over individual batches
