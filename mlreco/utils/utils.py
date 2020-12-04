@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import sparseconvnet as scn
 import time
+import MinkowskiEngine as ME
 
 # inter-cluster distance calculation: define dumb matrix (vectorized) dist calculation + jit it
 # FIXME in torch 1.3 or 1.4, cdist should be fixed (02-02-2020 the container using v1.1 has slow cdist)
@@ -23,6 +24,8 @@ def to_numpy(s):
         return s.cpu().detach().numpy()
     elif isinstance(s, scn.SparseConvNetTensor):
         return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
+    elif isinstance(s, ME.SparseTensor):
+        return torch.cat([s.C.float(), s.F.cpu()], dim=1).detach().numpy()
     else:
         raise TypeError("Unknown return type %s" % type(s))
 

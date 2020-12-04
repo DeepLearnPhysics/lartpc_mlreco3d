@@ -37,6 +37,7 @@ def model_dict():
     from . import mink_ppn
     from . import mink_clusternet
     from . import mink_singlep
+    from . import vae
 
     from . import ghost_chain
     from . import ghost_chain_2
@@ -63,6 +64,7 @@ def model_dict():
         "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss),
         "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss),
         "mink_singlep": (mink_singlep.ParticleImageClassifier, mink_singlep.ParticleTypeLoss),
+        "mink_vae": (vae.VAE, vae.ReconstructionLoss), 
         # Chain test for track clustering (w/ DBSCAN)
         #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
