@@ -43,11 +43,11 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
     index = data_blob['index']
 
     seg_label = data_blob['segment_label']
-    clust_data = data_blob['clust_label']
+    clust_data = data_blob['cluster_label']
     particles = data_blob['particles']
 
     if deghosting:
-        clust_data = adapt_labels(res, seg_label, data_blob['clust_label'])
+        clust_data = adapt_labels(res, seg_label, data_blob['cluster_label'])
         seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
 
     for column, chain, store_method, filename, edge_pred_label, edge_index_label, clusts_label in zip(cfg_column, cfg_chain, cfg_store_method, cfg_filename, cfg_edge_pred, cfg_edge_index, cfg_clusts):
@@ -101,8 +101,10 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
             ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
 
             # Store
-            fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff', 'num_clusts', 'num_pix'],
-                        [iteration, tree_idx, ari, ami, sbd, pur, eff, n, num_pix])
+            fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff',
+                        'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts'],
+                        [iteration, tree_idx, ari, ami, sbd, pur, eff,
+                        n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred))])
             fout.write()
             if store_per_event:
                 fout.close()
