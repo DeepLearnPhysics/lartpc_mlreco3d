@@ -19,7 +19,7 @@ class DBSCANFragmenter(torch.nn.Module):
     Returns:
         (torch.tensor): [(C_0^0, C_0^1, ..., C_0^N_0), ...] List of list of clusters (one per class)
     """
-    def __init__(self, cfg, name='dbscan_frag'):
+    def __init__(self, cfg, name='dbscan_frag', cluster_classes=None):
         super(DBSCANFragmenter, self).__init__()
         self.cfg = cfg['dbscan_frag']
         self.dim = self.cfg.get('dim', 3)
@@ -27,6 +27,16 @@ class DBSCANFragmenter(torch.nn.Module):
         self.min_samples = self.cfg.get('min_samples', 1)
         self.min_size = self.cfg.get('min_size', [10,3,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
+        
+        # cluster_classes determines which semantic classes will undergo DBSCAN clustering
+        # Priority to set this parameter (from top to bottom):
+        # - configuration of DBScanFragmenter (so you can exclude LE for example)
+        # - otherwise will be set by `ghost_chain_2` model for example
+        #   (complementary set to cluster_classes for CNN clustering, which might include LE class)
+        # - last default option is to cluster all classes defined by num_classes
+        cluster_classes = self.cfg.get('cluster_classes', None)
+        self.cluster_classes = range(self.num_classes) if cluster_classes is None else cluster_classes
+
         self.track_label = self.cfg.get('track_label', 1)
         self.michel_label = self.cfg.get('michel_label', 2)
         self.delta_label = self.cfg.get('delta_label', 3)
@@ -64,7 +74,7 @@ class DBSCANFragmenter(torch.nn.Module):
         # Loop over batch and semantic classes
         for bid in bids:
             batch_mask = data[:,self.dim] == bid
-            for s in range(self.num_classes):
+            for s in self.cluster_classes:
                 # Run DBSCAN
                 mask = batch_mask & (segmentation == s)
                 if s == self.track_label:

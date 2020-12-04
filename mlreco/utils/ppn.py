@@ -271,7 +271,7 @@ def group_points(ppn_pts, batch, label):
     return np.array(ppn_pts_new), np.array(batch_new), np.array(label_new)
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
-                                    type_threshold=0.3, entry=0, score_pool='max', enforce_type=True, **kwargs):
+                                    type_threshold=1.999, entry=0, score_pool='max', enforce_type=True, **kwargs):
     """
     Postprocessing of PPN points.
     Parameters
