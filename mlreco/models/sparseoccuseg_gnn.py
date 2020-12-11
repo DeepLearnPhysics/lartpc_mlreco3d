@@ -131,6 +131,7 @@ class GraphSPICEGNN(nn.Module):
             out = self._forward(input)
         else:
             # TODO
+            print(input)
             assert len(input) == 1
             coordinates = input[0][:, :3]
             batch_indices = input[0][:, 3].int()
