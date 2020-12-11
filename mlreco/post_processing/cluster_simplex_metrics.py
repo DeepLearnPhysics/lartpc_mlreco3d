@@ -6,6 +6,8 @@ from mlreco.utils.metrics import *
 from mlreco.utils.occuseg import *
 import networkx as nx
 
+from collections import OrderedDict
+
 
 def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
     deghosting = cfg['post_processing']['cluster_simplex_metrics'].get('ghost', False)
@@ -25,6 +27,12 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
         append = True if iteration else False
         fout = CSVData(os.path.join(logdir, 'cluster-simplex-metric.csv'), append=append)
 
+    creation_process_types = [
+        'Decay', 'annihil', 'compt', 'eBrem', 'hIoni', 'muIoni', 'muMinusCaptureAtRest',
+            'nCapture', 'neutronInelastic', 'photonNuclear', 'pi+Inelastic',
+            'pi-Inelastic', 'primary', 'protonInelastic', 'hBertiniCaptureAtRest'
+    ]
+
     # Results
     segmentation = res['segmentation'][0]
     covariance = res['covariance'][0]
@@ -40,6 +48,7 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
     # Labels
     input_data = data_blob['input_data'][0]
     labels = data_blob['cluster_label'][0]
+    particles = data_blob['particles'][0]
     batch_index = input_data[:, batch_col].astype(int)
     nbatches = len(np.unique(batch_index))
     # forward_time_per_image = float(end - start) / float(nbatches)
@@ -58,7 +67,9 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
         sp_batch = sp_embeddings[batch_index == bidx]
         ft_batch = ft_embeddings[batch_index == bidx]
         labels_batch = labels[batch_index == bidx]
+        particles_batch = particles[bidx]
 
+        # Get creation process info
         pred_seg = np.argmax(seg_batch, axis=1).astype(int)
         # class_mask = labels_batch[:, -1] == klass
         class_mask = pred_seg == c
@@ -70,7 +81,16 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
         coords_class = labels_batch[:, :batch_col][class_mask]
         frag_labels, _ = unique_label(labels_batch[:, cluster_col][class_mask])
 
+        fragments = np.unique(ft_class.astype(int))
+
+
+        # print(graph_index, type(graph_index))
+        # print(bidx, c)
+        # print(graph_index == (bidx, c))
+        # print(np.where((graph_index[:,0] == 0) & (graph_index[:,1]==1))[0])
+
         graph_id = int( np.where( (graph_index == (bidx, c) ).all(axis=1))[0] )
+        # graph_id = int( np.where((graph_index[:,0] == 0) & (graph_index[:,1]==1))[0] )
         node_indices = np.arange(graph.batch.shape[0])[graph.batch == graph_id]
 
         subgraph = graph_list[graph_id]
@@ -109,11 +129,21 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
         f1_pos = 2.0 * precision * recall / (precision + recall + 1e-6)
         f1_neg = 2.0 * tnr * npv / (tnr + npv + 1e-6)
 
-        row = (
+
+
+        row = [
             iteration, event_id, c, ari, sbd, pur, eff,
             true_num_clusters,
             pred_num_clusters,
-            precision, recall, tnr, npv, f1_pos, f1_neg)
+            precision, recall, tnr, npv, f1_pos, f1_neg]
+
+
+        event_type = OrderedDict([(key, 0) for key in creation_process_types])
+        for i, p in enumerate(particles_batch):
+            if p.id() in fragments:
+                event_type[p.creation_process()] += 1
+        row.extend(list(event_type.values()))
+        row = tuple(row)
 
         print('Class = {}, ARI = {:.4f}'.format(c, ari))
 
@@ -122,7 +152,10 @@ def cluster_simplex_metrics(cfg, data_blob, res, logdir, iteration):
             'Efficiency',
             'true_num_clusters',
             'pred_num_clusters',
-            'Precision', 'Recall', 'THR', 'NPV', 'F1_POS', 'F1_NEG'), row)
+            'Precision', 'Recall', 'THR', 'NPV', 'F1_POS', 'F1_NEG',
+            'Decay', 'annihil', 'compt', 'eBrem', 'hIoni', 'muIoni', 'muMinusCaptureAtRest',
+            'nCapture', 'neutronInelastic', 'photonNuclear', 'pi+Inelastic',
+            'pi-Inelastic', 'primary', 'protonInelastic'), row)
 
         fout.write()
 

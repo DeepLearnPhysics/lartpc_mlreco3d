@@ -211,13 +211,17 @@ class GraphDataConstructor:
         self.seg_col = cfg.get('seg_col', -1)
         self.cluster_col = cfg.get('cluster_col', 5)
         self.edge_mode = cfg.get('edge_mode', 'probability')
+        self.edge_feats = cfg.get('edge_feats', 14)
+        self.node_feats = cfg.get('node_feats', 32)
 
     def construct_graph(self, coords: torch.Tensor,
                               edge_weights: torch.Tensor,
                               edge_index: torch.Tensor,
                               feats: torch.Tensor):
-
-        graph_data = Data(x=feats, edge_index=edge_index, edge_attr=edge_weights, pos=coords)
+        graph_data = Data(x=feats.view(-1, self.node_feats), 
+                          edge_index=edge_index.view(2, -1), 
+                          edge_attr=edge_weights.view(-1, self.edge_feats), 
+                          pos=coords.view(-1, 3))
         return graph_data
 
     def construct_batched_graphs(self, res):
@@ -266,14 +270,13 @@ class GraphDataConstructor:
                         coords_class, sp_class, ft_class, cov_class, occ=occ_class)
                 else:
                     raise NotImplementedError
-
-                if edge_index is None:
+                # print("size = ", edge_index.size())
+                if (edge_index is None) or (edge_index.shape[1] == 0):
                     continue
 
                 data = self.construct_graph(coords_class, w, edge_index, features_class)
                 data.index = (int(bidx), int(c))
                 data_list.append(data)
-
         graph_batch = Batch().from_data_list(data_list)
         return graph_batch
 
@@ -328,6 +331,5 @@ class GraphDataConstructor:
                 data.edge_truth = truth
                 data.index = (int(bidx), int(c))
                 data_list.append(data)
-
         graph_batch = Batch().from_data_list(data_list)
         return graph_batch
