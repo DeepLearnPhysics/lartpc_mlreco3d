@@ -129,7 +129,6 @@ class SparseGenerator(MENetworkBase):
         x = self.linear(latent)
 
         for i, layer in enumerate(self.decoding_conv):
-            print(x.tensor_stride)
             x = layer(x)
             x = self.decoding_block[i](x)
             x_cls = self.layer_cls[i](x)
@@ -137,10 +136,12 @@ class SparseGenerator(MENetworkBase):
             targets.append(target)
             out_cls.append(x_cls)
             keep = (x_cls.F > self.threshold).cpu().squeeze()
-            print(torch.sum(keep))
             if self.training:
                 keep += target
-            x = self.pruning(x, keep.cpu())
+            if keep.sum() > 0:
+                x = self.pruning(x, keep.cpu())
+            else:
+                break
 
         return {
             'reconstruction': x,
