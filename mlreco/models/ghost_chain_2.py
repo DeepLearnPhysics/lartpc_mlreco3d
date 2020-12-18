@@ -50,9 +50,13 @@ class CosmicLoss(torch.nn.modules.loss._Loss):
                 nu_label = torch.tensor(nu_label, requires_grad=False, device=device).view(-1)
                 nu_label = (nu_label > -1).long()
                 nu_count = (nu_label == 1).sum().float()
-                w = torch.tensor([nu_count / float(len(nu_label)) + 0.01, 1 - nu_count / float(len(nu_label)) - 0.01], device=device)
+                interaction_count = float(len(nu_label))
+                #w = torch.tensor([nu_count / float(len(nu_label)) + 0.01, 1 - nu_count / float(len(nu_label)) - 0.01], device=device)
                 #print("Weight: ", w)
-                nu_loss += torch.nn.functional.cross_entropy(out['inter_cosmic_pred'][i][b], nu_label, weight=w.float())
+                if nu_count < interaction_count:
+                    nu_loss += interaction_count / (interaction_count - nu_count) * torch.nn.functional.cross_entropy(out['inter_cosmic_pred'][i][b][nu_label != 1], nu_label[nu_label != 1])
+                if nu_count > 0:
+                    nu_loss += interaction_count / nu_count * torch.nn.functional.cross_entropy(out['inter_cosmic_pred'][i][b][nu_label == 1], nu_label[nu_label == 1])
 
                 total_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label).sum().float()
                 nu_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label)[nu_label == 1].sum().float()
@@ -82,6 +86,7 @@ def setup_chain_cfg(self, cfg):
     self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
     self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', False)
     self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
+    self.enable_gnn_particle = chain_cfg.get('enable_gnn_particle', False)
     self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
     self.enable_kinematics = chain_cfg.get('enable_kinematics', False)
     self.enable_cosmic = chain_cfg.get('enable_cosmic', False)
@@ -98,8 +103,11 @@ def setup_chain_cfg(self, cfg):
         or (self.enable_uresnet and self.enable_cnn_clust and self.enable_gnn_tracks) \
         or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int) \
         or (self.enable_uresnet and self.enable_kinematics) \
-        or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int and self.enable_cosmic)
+        or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int and self.enable_cosmic) \
+        or (self.enable_uresnet and self.enable_gnn_particle)
     assert (not self.use_ppn_in_gnn) or self.enable_ppn
+    if self.enable_gnn_particle and (self.enable_gnn_shower or self.enable_gnn_tracks):
+        raise Exception("The option `enable_gnn_particle` should not be used simultaneously with `enable_gnn_shower` nor `enable_gnn_tracks`.")
     #assert self.use_dbscan_clust ^ self.enable_cnn_clust
 
     # Make sure the deghosting config is consistent
@@ -108,7 +116,7 @@ def setup_chain_cfg(self, cfg):
         if self.enable_ppn:
             assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
 
-    self.enable_dbscan = self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic
+    self.enable_dbscan = self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_particle or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic
 
 
 class GhostChain2(torch.nn.Module):
@@ -152,6 +160,7 @@ class GhostChain2(torch.nn.Module):
             self.p_thresholds = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
             self.cluster_classes = self.frag_cfg.get('cluster_classes', [])
+            self.min_frag_size = self.frag_cfg.get('min_frag_size', 10)
 
         num_classes = cfg['uresnet_ppn']['uresnet_lonely'].get('num_classes', 5)
         for s in self.cluster_classes:
@@ -163,19 +172,24 @@ class GhostChain2(torch.nn.Module):
             self.dbscan_frag = DBSCANFragmenter(cfg, cluster_classes=[s for s in range(num_classes) if (s not in self.cluster_classes)])
             #self.dbscan = DBScanClusts2(cfg)
 
-        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
+        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int or self.enable_gnn_particle:
             # Initialize the geometric encoders
             self.node_encoder = node_encoder_construct(cfg['grappa_shower'])
             self.edge_encoder = edge_encoder_construct(cfg['grappa_shower'])
 
         if self.enable_gnn_shower:
             self.grappa_shower  = GNN(cfg['grappa_shower']['gnn_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['grappa_shower']['base'].get('node_min_size', -1))
+            #self.min_frag_size_shower = max(self.min_frag_size, cfg['grappa_shower']['base'].get('node_min_size', -1))
             self.start_dir_max_dist = cfg['grappa_shower']['base'].get('start_dir_max_dist', 5)
 
         if self.enable_gnn_tracks:
             self.grappa_track  = GNN(cfg['grappa_track']['gnn_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['grappa_track']['base'].get('node_min_size', -1))
+            #self.min_frag_size_track = max(self.min_frag_size, cfg['grappa_track']['base'].get('node_min_size', -1))
+
+        if self.enable_gnn_particle:
+            self.grappa_particle = GNN(cfg['grappa_particle']['gnn_model'])
+            self.start_dir_max_dist = cfg['grappa_particle']['base'].get('start_dir_max_dist', 5)
+            #self.min_frag_size_particle = max(self.min_frag_size, cfg['grappa_particle']['base'].get('node_min_size', -1))
 
         if self.enable_gnn_int:
             # Initialize the GNN models
@@ -411,9 +425,9 @@ class GhostChain2(torch.nn.Module):
         # 2. GNN clustering: shower & track
         # ---
 
-        if self.enable_gnn_shower:
-            # Initialize a complete graph for edge prediction, get shower fragment and edge features
-            em_mask = np.where(frag_seg == 0)[0]
+        if self.enable_gnn_particle:
+            # Initialize a complete graph for edge prediction, get track fragment and edge features
+            em_mask = np.where((frag_seg == 1))[0]
             edge_index = complete_graph(frag_batch_ids[em_mask])
             x = self.node_encoder(input[0], fragments[em_mask])
             e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
@@ -431,18 +445,41 @@ class GhostChain2(torch.nn.Module):
 
                 x = torch.cat([x, ppn_feats], dim=1)
 
-            self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
-                        {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
+            self.run_gnn(self.grappa_particle, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
+                        {'frags': 'particle_fragments', 'node_pred': 'particle_node_pred', 'edge_pred': 'particle_edge_pred', 'edge_index': 'particle_edge_index', 'group_pred': 'particle_group_pred'})
+        else:
+            if self.enable_gnn_shower:
+                # Initialize a complete graph for edge prediction, get shower fragment and edge features
+                em_mask = np.where(frag_seg == 0)[0]
+                edge_index = complete_graph(frag_batch_ids[em_mask])
+                x = self.node_encoder(input[0], fragments[em_mask])
+                e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
 
-        if self.enable_gnn_tracks:
-            # Initialize a complete graph for edge prediction, get track fragment and edge features
-            em_mask = np.where(frag_seg == 1)[0]
-            edge_index = complete_graph(frag_batch_ids[em_mask])
-            x = self.node_encoder(input[0], fragments[em_mask])
-            e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
+                if self.use_ppn_in_gnn:
+                    # Extract shower starts from PPN predictions (most likely prediction)
+                    ppn_points = result['points'][0].detach()
+                    ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
+                    for f in fragments[em_mask]:
+                        scores = torch.softmax(ppn_points[f,3:5], dim=1)
+                        argmax = torch.argmax(scores[:,-1])
+                        start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
+                        dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
+                        ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
 
-            self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
-                        {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
+                    x = torch.cat([x, ppn_feats], dim=1)
+
+                self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
+                            {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
+
+            if self.enable_gnn_tracks:
+                # Initialize a complete graph for edge prediction, get track fragment and edge features
+                em_mask = np.where(frag_seg == 1)[0]
+                edge_index = complete_graph(frag_batch_ids[em_mask])
+                x = self.node_encoder(input[0], fragments[em_mask])
+                e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
+
+                self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
+                            {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         if self.enable_gnn_int or self.enable_kinematics:
@@ -688,11 +725,13 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         if self.enable_cnn_clust:
             self.spatial_embeddings_loss = ClusteringLoss(cfg)
         if self.enable_gnn_shower:
-            self.particle_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
+            self.shower_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
         if self.enable_gnn_tracks:
             self.track_gnn_loss = GNNLoss(cfg, 'grappa_track_loss')
         if self.enable_gnn_int:
             self.inter_gnn_loss  = GNNLoss(cfg, 'grappa_inter_loss')
+        if self.enable_gnn_particle:
+            self.particle_gnn_loss  = GNNLoss(cfg, 'grappa_particle_loss')
         if self.enable_kinematics: #FIXME
             self.kinematics_loss = GNNLoss(cfg, 'grappa_kinematics_loss') #NodeKinematicsLoss
             #self.flow_loss = GNNLoss(cfg, 'grappa_kinematics_loss') # EdgeLoss
@@ -705,6 +744,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         self.clustering_weight = self.loss_config.get('clustering_weight', 1.0)
         self.ppn_weight = self.loss_config.get('ppn_weight', 0.0)
         self.particle_gnn_weight = self.loss_config.get('particle_gnn_weight', 0.0)
+        self.shower_gnn_weight = self.loss_config.get('shower_gnn_weight', 0.0)
         self.track_gnn_weight = self.loss_config.get('track_gnn_weight', 0.0)
         self.inter_gnn_weight = self.loss_config.get('inter_gnn_weight', 0.0)
         self.kinematics_weight = self.loss_config.get('kinematics_weight', 0.0)
@@ -767,43 +807,62 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             accuracy += res_cnn_clust['accuracy']
             loss += self.clustering_weight*res_cnn_clust['loss']
 
-        if self.enable_gnn_shower:
+        if self.enable_gnn_particle:
             # Apply the GNN particle clustering loss
             gnn_out = {
-                'clusts':out['fragments'],
-                'node_pred':out['frag_node_pred'],
-                'edge_pred':out['frag_edge_pred'],
-                'group_pred':out['frag_group_pred'],
-                'edge_index':out['frag_edge_index'],
+                'clusts':out['particle_fragments'],
+                'node_pred':out['particle_node_pred'],
+                'edge_pred':out['particle_edge_pred'],
+                'group_pred':out['particle_group_pred'],
+                'edge_index':out['particle_edge_index'],
             }
             res_gnn_part = self.particle_gnn_loss(gnn_out, cluster_label)
-            res['frag_edge_loss'] = res_gnn_part['edge_loss']
-            res['frag_node_loss'] = res_gnn_part['node_loss']
-            res['frag_edge_accuracy'] = res_gnn_part['edge_accuracy']
-            res['frag_node_accuracy'] = res_gnn_part['node_accuracy']
+            res['particle_edge_loss'] = res_gnn_part['edge_loss']
+            res['particle_node_loss'] = res_gnn_part['node_loss']
+            res['particle_edge_accuracy'] = res_gnn_part['edge_accuracy']
+            res['particle_node_accuracy'] = res_gnn_part['node_accuracy']
 
             accuracy += res_gnn_part['accuracy']
             loss += self.particle_gnn_weight*res_gnn_part['loss']
 
-        if self.enable_gnn_tracks:
-            # Apply the GNN particle clustering loss
-            gnn_out = {
-                'clusts':out['track_fragments'],
-                #'node_pred':out['track_node_pred'],
-                'edge_pred':out['track_edge_pred'],
-                #'group_pred':out['track_group_pred'],
-                'edge_index':out['track_edge_index'],
-            }
-            res_gnn_track = self.track_gnn_loss(gnn_out, cluster_label, None)
-            #res['track_edge_loss'] = res_gnn_track['edge_loss']
-            #res['track_node_loss'] = res_gnn_track['node_loss']
-            #res['track_edge_accuracy'] = res_gnn_track['edge_accuracy']
-            #res['track_node_accuracy'] = res_gnn_track['node_accuracy']
-            res['track_edge_loss'] = res_gnn_track['loss']
-            res['track_edge_accuracy'] = res_gnn_track['accuracy']
+        else:
+            if self.enable_gnn_shower:
+                # Apply the GNN particle clustering loss
+                gnn_out = {
+                    'clusts':out['fragments'],
+                    'node_pred':out['frag_node_pred'],
+                    'edge_pred':out['frag_edge_pred'],
+                    'group_pred':out['frag_group_pred'],
+                    'edge_index':out['frag_edge_index'],
+                }
+                res_gnn_shower = self.shower_gnn_loss(gnn_out, cluster_label)
+                res['frag_edge_loss'] = res_gnn_shower['edge_loss']
+                res['frag_node_loss'] = res_gnn_shower['node_loss']
+                res['frag_edge_accuracy'] = res_gnn_shower['edge_accuracy']
+                res['frag_node_accuracy'] = res_gnn_shower['node_accuracy']
 
-            accuracy += res_gnn_track['accuracy']
-            loss += self.track_gnn_weight*res_gnn_track['loss']
+                accuracy += res_gnn_shower['accuracy']
+                loss += self.shower_gnn_weight*res_gnn_shower['loss']
+
+            if self.enable_gnn_tracks:
+                # Apply the GNN particle clustering loss
+                gnn_out = {
+                    'clusts':out['track_fragments'],
+                    #'node_pred':out['track_node_pred'],
+                    'edge_pred':out['track_edge_pred'],
+                    #'group_pred':out['track_group_pred'],
+                    'edge_index':out['track_edge_index'],
+                }
+                res_gnn_track = self.track_gnn_loss(gnn_out, cluster_label, None)
+                #res['track_edge_loss'] = res_gnn_track['edge_loss']
+                #res['track_node_loss'] = res_gnn_track['node_loss']
+                #res['track_edge_accuracy'] = res_gnn_track['edge_accuracy']
+                #res['track_node_accuracy'] = res_gnn_track['node_accuracy']
+                res['track_edge_loss'] = res_gnn_track['loss']
+                res['track_edge_accuracy'] = res_gnn_track['accuracy']
+
+                accuracy += res_gnn_track['accuracy']
+                loss += self.track_gnn_weight*res_gnn_track['loss']
 
         if self.enable_gnn_int:
             # Apply the GNN interaction grouping loss
@@ -876,10 +935,13 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             if self.enable_cnn_clust:
                 print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
             if self.enable_gnn_shower:
-                print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
-                print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
+                print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_shower['edge_accuracy']))
+                print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_shower['node_accuracy']))
             if self.enable_gnn_tracks:
                 print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
+            if self.enable_gnn_particle:
+                print('Particle fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
+                print('Particle primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
             if self.enable_gnn_int:
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
             if self.enable_kinematics:
