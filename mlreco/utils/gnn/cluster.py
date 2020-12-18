@@ -259,7 +259,7 @@ def get_cluster_features(data, clusts, whether_adjust_direction=False):
 
         # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            return feats.append(np.concatenate((x.flatten(), np.zeros(9), [len(c)])))
+            feats.append(np.concatenate((x.flatten(), np.zeros(12), [len(c)])))
             continue
 
         # Center data
