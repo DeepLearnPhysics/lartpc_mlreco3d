@@ -161,6 +161,7 @@ class GhostChain2(torch.nn.Module):
             self.cluster_all  = self.frag_cfg.get('cluster_all', True)
             self.cluster_classes = self.frag_cfg.get('cluster_classes', [])
             self.min_frag_size = self.frag_cfg.get('min_frag_size', 10)
+            self.spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
 
         num_classes = cfg['uresnet_ppn']['uresnet_lonely'].get('num_classes', 5)
         for s in self.cluster_classes:
@@ -220,6 +221,8 @@ class GhostChain2(torch.nn.Module):
             for s in self.cluster_classes:
                 #if s > 3: continue
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
+                if len(result['embeddings'][0][mask]) < self.spice_min_voxels:
+                    continue
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
@@ -262,6 +265,29 @@ class GhostChain2(torch.nn.Module):
                 part_primary_ids.append(primary_id)
             else:
                 part_primary_ids.append(g)
+
+    def get_gnn_input(self, semantic_label, frag_seg, frag_batch_ids, fragments, input, result):
+        device = input[0].device
+
+        em_mask = np.where((frag_seg == semantic_label))[0]
+        edge_index = complete_graph(frag_batch_ids[em_mask])
+        x = self.node_encoder(input[0], fragments[em_mask])
+        e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
+
+        if self.use_ppn_in_gnn:
+            # Extract shower starts from PPN predictions (most likely prediction)
+            ppn_points = result['points'][0].detach()
+            ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
+            for f in fragments[em_mask]:
+                scores = torch.softmax(ppn_points[f,3:5], dim=1)
+                argmax = torch.argmax(scores[:,-1])
+                start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
+                dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
+                ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
+
+            x = torch.cat([x, ppn_feats], dim=1)
+
+        return em_mask, edge_index, x, e
 
     def run_gnn(self, gnn_model, input, result, frag_batch_ids, fragments, edge_index, x, e, labels, node_predictors=['node_pred']):
         """
@@ -426,57 +452,44 @@ class GhostChain2(torch.nn.Module):
         # ---
 
         if self.enable_gnn_particle:
-            # Initialize a complete graph for edge prediction, get track fragment and edge features
-            em_mask = np.where((frag_seg == 1))[0]
-            edge_index = complete_graph(frag_batch_ids[em_mask])
-            x = self.node_encoder(input[0], fragments[em_mask])
-            e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
+            # Shower GNN input
+            em_mask_shower, edge_index_shower, x_shower, e_shower = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
 
-            if self.use_ppn_in_gnn:
-                # Extract shower starts from PPN predictions (most likely prediction)
-                ppn_points = result['points'][0].detach()
-                ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
-                for f in fragments[em_mask]:
-                    scores = torch.softmax(ppn_points[f,3:5], dim=1)
-                    argmax = torch.argmax(scores[:,-1])
-                    start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-                    dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
-                    ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
+            # Track GNN input
+            em_mask_track, edge_index_track, x_track, e_track = self.get_gnn_input(1, frag_seg, frag_batch_ids, fragments, input, result)
 
-                x = torch.cat([x, ppn_feats], dim=1)
+            # Merge both GNN inputs - requires some gymnastics to get
+            # consecutive batch ids in both nodes (x) and edges (e) features
+            # without forgetting to update the edge index, too.
+            em_mask = np.concatenate([em_mask_shower, em_mask_track], axis=0)
+            n_shower = len(em_mask_shower)
+            # Reorder to have consecutive batch ids (implicit assumption in run_gnn)
+            perm = np.argsort(frag_batch_ids[em_mask], kind='stable')
+            x = torch.cat([x_shower, x_track], dim=0)[perm, :]
+            # Offset edge_index_track indices by the total shower fragments count
+            edge_index = np.concatenate([edge_index_shower, (edge_index_track + n_shower)], axis=1)
+            edge_perm = np.argsort(frag_batch_ids[em_mask][edge_index[0]], kind='stable')
+            # Now reorder the edge index too, for consecutive batch ids
+            e = torch.cat([e_shower, e_track], dim=0)[edge_perm, :]
+            edge_index = edge_index[:, edge_perm]
+            # Need to replace indices stored in edge_index with their
+            # corresponding indices - from inverted permutation
+            edge_index = np.argsort(perm)[edge_index]
+            em_mask = em_mask[perm]
 
             self.run_gnn(self.grappa_particle, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                         {'frags': 'particle_fragments', 'node_pred': 'particle_node_pred', 'edge_pred': 'particle_edge_pred', 'edge_index': 'particle_edge_index', 'group_pred': 'particle_group_pred'})
         else:
             if self.enable_gnn_shower:
                 # Initialize a complete graph for edge prediction, get shower fragment and edge features
-                em_mask = np.where(frag_seg == 0)[0]
-                edge_index = complete_graph(frag_batch_ids[em_mask])
-                x = self.node_encoder(input[0], fragments[em_mask])
-                e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
-
-                if self.use_ppn_in_gnn:
-                    # Extract shower starts from PPN predictions (most likely prediction)
-                    ppn_points = result['points'][0].detach()
-                    ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
-                    for f in fragments[em_mask]:
-                        scores = torch.softmax(ppn_points[f,3:5], dim=1)
-                        argmax = torch.argmax(scores[:,-1])
-                        start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-                        dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
-                        ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
-
-                    x = torch.cat([x, ppn_feats], dim=1)
+                em_mask, edge_index, x, e = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
 
                 self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                             {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
 
             if self.enable_gnn_tracks:
                 # Initialize a complete graph for edge prediction, get track fragment and edge features
-                em_mask = np.where(frag_seg == 1)[0]
-                edge_index = complete_graph(frag_batch_ids[em_mask])
-                x = self.node_encoder(input[0], fragments[em_mask])
-                e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
+                em_mask, edge_index, x, e = self.get_gnn_input(1, frag_seg, frag_batch_ids, fragments, input, result)
 
                 self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                             {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
@@ -922,7 +935,7 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
         # Combine the results
         accuracy /= int(self.enable_uresnet) + int(self.enable_ppn) + int(self.enable_gnn_shower) \
                     + int(self.enable_gnn_int) + int(self.enable_gnn_tracks) + int(self.enable_cnn_clust) \
-                    + 2*int(self.enable_kinematics) + int(self.enable_cosmic)
+                    + 2*int(self.enable_kinematics) + int(self.enable_cosmic) + int(self.enable_gnn_particle)
 
         res['loss'] = loss
         res['accuracy'] = accuracy
