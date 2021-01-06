@@ -79,28 +79,16 @@ def setup_chain_cfg(self, cfg):
     self.verbose           = chain_cfg.get('verbose', False)
     self.enable_uresnet    = chain_cfg.get('enable_uresnet', True)
     self.enable_ppn        = chain_cfg.get('enable_ppn', True)
+    self.enable_dbscan     = chain_cfg.get('enable_dbscan', True)
     self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
     self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', False)
     self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
     self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
     self.enable_kinematics = chain_cfg.get('enable_kinematics', False)
-    self.enable_cosmic = chain_cfg.get('enable_cosmic', False)
+    self.enable_cosmic     = chain_cfg.get('enable_cosmic', False)
 
-    # whether to use CNN clustering or "dumb" DBSCAN clustering
-    #self.use_dbscan_clust  = chain_cfg.get('use_dbscan_clust', False)
-    # Whether to use PPN shower start information (GNN shower clustering step only)
+    # Whether to use PPN information (GNN shower clustering step only)
     self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
-
-    # Enforce basic logical order
-    assert self.enable_uresnet or (self.enable_uresnet and self.enable_ppn) \
-        or (self.enable_uresnet and self.enable_cnn_clust) \
-        or (self.enable_uresnet and self.enable_gnn_shower) \
-        or (self.enable_uresnet and self.enable_cnn_clust and self.enable_gnn_tracks) \
-        or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int) \
-        or (self.enable_uresnet and self.enable_kinematics) \
-        or (self.enable_uresnet and self.enable_ppn and self.enable_gnn_shower and self.enable_gnn_int and self.enable_cosmic)
-    assert (not self.use_ppn_in_gnn) or self.enable_ppn
-    #assert self.use_dbscan_clust ^ self.enable_cnn_clust
 
     # Make sure the deghosting config is consistent
     if self.enable_ghost:
@@ -108,7 +96,11 @@ def setup_chain_cfg(self, cfg):
         if self.enable_ppn:
             assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
 
-    self.enable_dbscan = self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic
+    # Enforce basic logical order
+    assert self.enable_uresnet # Need semantics for everything
+    assert self.enable_ppn or (not self.use_ppn_in_gnn) # If PPN is used in GNN, need PPN
+    assert self.enable_dbscan or self.enable_cnn_clust # Need at least one of two dense clusterer
+    if self.enable_cosmic: assert self.enable_gnn_int # Cosmic classification needs int. clustering
 
 
 class GhostChain2(torch.nn.Module):
@@ -141,7 +133,7 @@ class GhostChain2(torch.nn.Module):
         if self.enable_ppn:
             self.ppn            = PPN(cfg['uresnet_ppn'])
 
-        # CNN clustering
+        # Dense clustering
         self.min_frag_size = -1
         self.cluster_classes = []
         if self.enable_cnn_clust:
@@ -155,16 +147,16 @@ class GhostChain2(torch.nn.Module):
 
         num_classes = cfg['uresnet_ppn']['uresnet_lonely'].get('num_classes', 5)
         for s in self.cluster_classes:
-            assert s <num_classes and s > 0
+            assert s < num_classes
 
         if self.enable_dbscan:
             # Initialize the DBSCAN fragmenter
-            # Give a default value to cluster_classes in case the dbscan cfg does not specify it
+            # Clusters whatever classes the CNN clustering does not
             self.dbscan_frag = DBSCANFragmenter(cfg, cluster_classes=[s for s in range(num_classes) if (s not in self.cluster_classes)])
-            #self.dbscan = DBScanClusts2(cfg)
 
+        # GNNs
         if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
-            # Initialize the geometric encoders
+            # Initialize the encoders
             self.node_encoder = node_encoder_construct(cfg['grappa_shower'])
             self.edge_encoder = edge_encoder_construct(cfg['grappa_shower'])
 
