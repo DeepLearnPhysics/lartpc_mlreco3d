@@ -197,11 +197,11 @@ class GhostChain2(torch.nn.Module):
             self.grappa_inter     = GNN(cfg['grappa_inter']['gnn_model'])
 
         if self.enable_kinematics:
-            self.kinematics_node_encoder = node_encoder_construct(cfg['grappa_kinematics'], model_name='node_encoder')
-            self.kinematics_edge_encoder = edge_encoder_construct(cfg['grappa_kinematics'], model_name='edge_encoder')
-            self.kinematics_edge_predictor = gnn_model_construct(cfg['grappa_kinematics'], model_name='gnn_model')
-            self.momentum_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 1)
-            self.type_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 5)
+            self.kinematics_node_encoder = node_encoder_construct(cfg['grappa_kinematics'], model_name='kinematics_node_encoder')
+            self.kinematics_edge_encoder = edge_encoder_construct(cfg['grappa_kinematics'], model_name='kinematics_edge_encoder')
+            self.grappa_kinematics = gnn_model_construct(cfg['grappa_kinematics'], model_name='gnn_model')
+            self.momentum_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], num_output=1, num_hidden=cfg['grappa_kinematics']['momentum_net']['num_hidden'])
+            self.type_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], num_output=5, num_hidden=cfg['grappa_kinematics']['type_net']['num_hidden'])
             self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
 
         if self.enable_cosmic:
@@ -266,7 +266,7 @@ class GhostChain2(torch.nn.Module):
             else:
                 part_primary_ids.append(g)
 
-    def get_gnn_input(self, semantic_label, frag_seg, frag_batch_ids, fragments, input, result):
+    def get_gnn_input(self, semantic_label, frag_seg, frag_batch_ids, fragments, input, result, use_ppn=True):
         device = input[0].device
 
         em_mask = np.where((frag_seg == semantic_label))[0]
@@ -274,7 +274,7 @@ class GhostChain2(torch.nn.Module):
         x = self.node_encoder(input[0], fragments[em_mask])
         e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
 
-        if self.use_ppn_in_gnn:
+        if self.use_ppn_in_gnn and use_ppn:
             # Extract shower starts from PPN predictions (most likely prediction)
             ppn_points = result['points'][0].detach()
             ppn_feats = torch.empty((0,8), device=device, dtype=torch.float)
@@ -489,7 +489,7 @@ class GhostChain2(torch.nn.Module):
 
             if self.enable_gnn_tracks:
                 # Initialize a complete graph for edge prediction, get track fragment and edge features
-                em_mask, edge_index, x, e = self.get_gnn_input(1, frag_seg, frag_batch_ids, fragments, input, result)
+                em_mask, edge_index, x, e = self.get_gnn_input(1, frag_seg, frag_batch_ids, fragments, input, result, use_ppn=False)
 
                 self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                             {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
@@ -594,7 +594,7 @@ class GhostChain2(torch.nn.Module):
             x = self.kinematics_node_encoder(input[0], kinematics_particles)
             e = self.kinematics_edge_encoder(input[0], kinematics_particles, edge_index)
 
-            self.run_gnn(self.kinematics_edge_predictor, input, result, kinematics_part_batch_ids, kinematics_particles, edge_index, x, e,
+            self.run_gnn(self.grappa_kinematics, input, result, kinematics_part_batch_ids, kinematics_particles, edge_index, x, e,
                         {'frags': 'kinematics_particles', 'edge_index': 'kinematics_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'},
                         node_predictors=[('node_pred_type', self.type_net), ('node_pred_p', self.momentum_net)])
 
