@@ -59,7 +59,7 @@ class MaskBCELoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskBCELoss, self).__init__()
         self.loss_config = cfg[name]
         self.seediness_weight = self.loss_config.get('seediness_weight', 0.0)
@@ -239,7 +239,7 @@ class MaskBCELoss2(MaskBCELoss):
     '''
     Spatial Embeddings Loss with trainable center of attention.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskBCELoss2, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
@@ -281,7 +281,7 @@ class MaskBCELossBivariate(MaskBCELoss):
     Spatial Embeddings Loss with trainable center of attraction and
     bivariate gaussian probability kernels.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskBCELossBivariate, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
@@ -323,7 +323,7 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
     Spatial Embeddings Loss using Lovasz Hinge for foreground/background
     segmentation and trainable center of attention.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskLovaszHingeLoss, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels):
@@ -361,7 +361,7 @@ class MaskLovaszHingeLoss(MaskBCELoss2):
 
 class CELovaszLoss(MaskBCELoss2):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(CELovaszLoss, self).__init__(cfg, name)
 
     def get_per_class_probabilities(self, embeddings, margins, labels, coords):
@@ -400,7 +400,7 @@ class CELovaszLoss(MaskBCELoss2):
 
 class MaskLovaszInterLoss(MaskLovaszHingeLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskLovaszInterLoss, self).__init__(cfg, name)
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.norm = 2
@@ -540,7 +540,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
 
 class MaskLovaszInterLoss2(MaskLovaszInterLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskLovaszInterLoss2, self).__init__(cfg, name)
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.norm = 2
@@ -639,7 +639,7 @@ class MaskLovaszInterLoss2(MaskLovaszInterLoss):
 
 class MaskLovaszInterBC(MaskLovaszInterLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskLovaszInterBC, self).__init__(cfg, name)
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.norm = 2
@@ -753,7 +753,7 @@ class MaskFocalLoss(MaskBCELoss2):
     '''
     Spatial Embeddings Loss with trainable center of attention.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MaskFocalLoss, self).__init__(cfg, name)
         self.bceloss = FocalLoss(logits=False)
 
@@ -794,7 +794,7 @@ class MaskFocalLoss(MaskBCELoss2):
 
 class MultiVariateLovasz(MaskLovaszInterLoss):
 
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(MultiVariateLovasz, self).__init__(cfg, name)
 
 

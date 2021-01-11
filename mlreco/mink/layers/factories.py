@@ -27,7 +27,9 @@ def activations_construct(name, **kwargs):
 def normalizations_dict():
     import MinkowskiEngine as ME
     from . import normalizations
+    from .blocks import Identity
     norm_layers = {
+        'none': Identity,
         'batch_norm': ME.MinkowskiBatchNorm,
         'instance_norm': ME.MinkowskiInstanceNorm,
         'pixel_norm': normalizations.MinkowskiPixelNorm

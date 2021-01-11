@@ -1,5 +1,4 @@
-from . import losses
-from . import embeddings
+from mlreco.models.cluster_cnn import losses
 
 
 def backbone_dict():
@@ -49,7 +48,10 @@ def clustering_loss_dict():
         'se_multivariate': losses.spatial_embeddings.MultiVariateLovasz,
         'se_ce_lovasz': losses.spatial_embeddings.CELovaszLoss,
         'se_lovasz_inter_2': losses.spatial_embeddings.MaskLovaszInterLoss2,
-        'se_lovasz_inter_bc': losses.spatial_embeddings.MaskLovaszInterBC
+        'se_lovasz_inter_bc': losses.spatial_embeddings.MaskLovaszInterBC,
+        # SPICE Losses Vectorized
+        'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
+        'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss
     }
     return loss
 

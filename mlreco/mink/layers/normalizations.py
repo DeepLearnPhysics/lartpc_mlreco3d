@@ -19,16 +19,15 @@ class MinkowskiPixelNorm(nn.Module):
         - NVIDIA ProGAN: https://arxiv.org/pdf/1710.10196.pdf
     '''
     def __init__(self,
-                 num_features,
-                 eps=1e-5,
+                 eps=1e-8,
                  dimension=3):
         super(MinkowskiPixelNorm, self).__init__()
-        self.num_features = num_features
         self.dimension = dimension
         self.eps = eps
 
     def forward(self, input):
         features = input.F
+        coords = input.C
         norm = torch.sum(torch.pow(features, 2), dim=1, keepdim=True)
         out = features / (norm + self.eps).sqrt()
         return ME.SparseTensor(

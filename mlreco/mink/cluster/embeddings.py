@@ -235,11 +235,79 @@ class ClusterResNet(MENetworkBase):
         return res
 
 
-class ClusterSENet(nn.Module):
+class SPICE(MENetworkBase):
 
-    pass
+    def __init__(self, cfg, name='spice'):
+        super(SPICE, self).__init__(cfg)
+        self.model_config = cfg[name]
+        self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
+        self.embedding_decoder = UResNetDecoder(cfg, name='embedding_decoder')
+        self.seed_decoder = UResNetDecoder(cfg, name='seediness_decoder')
+
+        self.num_filters = self.model_config.get('num_filters', 16)
+        self.seedDim = self.model_config.get('seediness_dim', 1)
+        self.coordConv = self.model_config.get('coordConv', False)
+        self.sigmaDim = self.model_config.get('sigma_dim', 1)
+        self.seed_freeze = self.model_config.get('seed_freeze', False)
+        self.coordConv = self.model_config.get('coordConv', True)
+
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
 
 
-class ClusterResNeXt(nn.Module):
+        self.outputEmbeddings = nn.Sequential(
+            ME.MinkowskiBatchNorm(self.num_filters, **self.norm_args),
+            ME.MinkowskiLinear(self.num_filters, self.D + self.sigmaDim, bias=False)
+        )
 
-    pass
+        self.outputSeediness = nn.Sequential(
+            ME.MinkowskiBatchNorm(self.num_filters, **self.norm_args),
+            ME.MinkowskiLinear(self.num_filters, self.seedDim, bias=False)
+        )
+
+        if self.seed_freeze:
+            print('Seediness Branch Freezed')
+            for p in self.seed_decoder.parameters():
+                p.requires_grad = False
+            for p in self.outputSeediness.parameters():
+                p.requires_grad = False
+
+
+
+    def forward(self, input):
+
+        point_cloud, = input
+
+        coords = point_cloud[:, 0:self.D+1].cpu().int()
+        features = point_cloud[:, self.D+1:].float().view(-1, 1)
+
+        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+        normalized_coords = normalized_coords.float().cuda()
+        if self.coordConv:
+            features = torch.cat([normalized_coords, features], dim=1)
+
+
+        x = ME.SparseTensor(features, coords=coords)
+
+        encoderOutput = self.encoder(x)
+        encoderTensors = encoderOutput['encoderTensors']
+        finalTensor = encoderOutput['finalTensor']
+        features_cluster = self.embedding_decoder(finalTensor, encoderTensors)
+        features_seediness = self.seed_decoder(finalTensor, encoderTensors)
+
+        embeddings = self.outputEmbeddings(features_cluster[-1])
+        embeddings_feats = embeddings.F
+        embeddings_feats[:, :self.D] = self.tanh(embeddings_feats[:, :self.D])
+        embeddings_feats[:, :self.D] += normalized_coords
+        seediness = self.outputSeediness(features_seediness[-1])
+
+        res = {
+            'embeddings': [embeddings_feats[:, :self.D]],
+            'seediness': [self.sigmoid(seediness.F)],
+            'margins': [2 * self.sigmoid(embeddings_feats[:, self.D:])], 
+        }
+        return res
+
+
+

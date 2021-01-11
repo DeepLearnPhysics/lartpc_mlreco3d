@@ -12,6 +12,7 @@ class MENetworkBase(nn.Module):
     def __init__(self, cfg, name='network_base'):
         super(MENetworkBase, self).__init__()
         model_cfg = cfg[name]
+        print(model_cfg)
         # Dimension of dataset
         self.D = model_cfg.get('D', 3)
         # Number of input data features

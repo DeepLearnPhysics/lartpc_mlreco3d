@@ -1,15 +1,117 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 # For MinkowskiEngine
 import MinkowskiEngine as ME
 from .factories import *
-
+from typing import Union
 
 # Custom Network Units/Blocks
 class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
     def forward(self, input):
         return input
+
+
+def dense_coordinates(shape: Union[list, torch.Size]):
+    """
+    coordinates = dense_coordinates(tensor.shape)
+    """
+    r"""
+    Assume the input to have BxCxD1xD2x....xDN format.
+    If the shape of the tensor do not change, use 
+    """
+    spatial_dim = len(shape) - 2
+    assert (
+        spatial_dim > 0
+    ), "Invalid shape. Shape must be batch x channel x spatial dimensions."
+
+    # Generate coordinates
+    size = [i for i in shape]
+    B = size[0]
+    coordinates = torch.from_numpy(
+        np.stack(
+            [
+                s.reshape(-1)
+                for s in np.meshgrid(
+                    np.linspace(0, B - 1, B),
+                    *(np.linspace(0, s - 1, s) for s in size[2:]),
+                    indexing="ij"
+                )
+            ],
+            1,
+        )
+    ).int()
+    return coordinates
+
+
+def to_sparse(dense_tensor: torch.Tensor, 
+              resolution: int, 
+              coordinates: torch.Tensor = None,
+              coords_key = None,
+              coords_man = None):
+    r"""Converts a (differentiable) dense tensor to a sparse tensor.
+    Assume the input to have BxCxD1xD2x....xDN format.
+    If the shape of the tensor do not change, use `dense_coordinates` to cache the coordinates.
+    Please refer to tests/python/dense.py for usage
+    Example::
+       >>> dense_tensor = torch.rand(3, 4, 5, 6, 7, 8)  # BxCxD1xD2xD3xD4
+       >>> dense_tensor.requires_grad = True
+       >>> stensor = to_sparse(dense_tensor)
+    """
+    spatial_dim = dense_tensor.ndim - 2
+    assert (
+        spatial_dim > 0
+    ), "Invalid shape. Shape must be batch x channel x spatial dimensions."
+
+    if coordinates is None:
+        coordinates = dense_coordinates(dense_tensor.shape)
+
+    coordinates[:, 1:] *= resolution
+
+    feat_tensor = dense_tensor.permute(0, *(2 + i for i in range(spatial_dim)), 1)
+    return ME.SparseTensor(
+        feats=feat_tensor.reshape(-1, dense_tensor.size(1)),
+        coords=coordinates,
+        force_creation=True,
+        # coords_key=coords_key,
+        coords_manager=coords_man,
+        tensor_stride=resolution
+    )
+
+
+class SparseToDense(nn.Module):
+
+    def __init__(self):
+        super(SparseToDense, self).__init__()
+
+    def forward(self, x: ME.SparseTensor):
+        x_dense, _, _ = x.dense()
+        return x_dense
+
+
+class DenseResBlock(nn.Module):
+
+    def __init__(self, 
+                 in_channels, 
+                 out_channels):
+        super(DenseResBlock, self).__init__()
+
+        self.norm_1 = nn.BatchNorm3d(in_channels)
+        self.act_1 = nn.LeakyReLU(0.2)
+        self.conv_1 = nn.Conv3d(in_channels, out_channels, 3, 1, 1)
+
+        self.norm_2 = nn.BatchNorm3d(out_channels)
+        self.act_2 = nn.LeakyReLU(0.2)
+        self.conv_2 = nn.Conv3d(out_channels, out_channels, 3, 1, 1)
+
+    def forward(self, x):
+
+        y = self.conv_1(self.act_1(self.norm_1(x)))
+        y = self.conv_2(self.act_2(self.norm_2(y)))
+        return y
 
 
 def normalize_coords(coords, spatial_size=512):
