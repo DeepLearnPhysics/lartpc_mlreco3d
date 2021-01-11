@@ -5,8 +5,9 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.mink.layers.sparse_generator import SparseGenerator
-from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder2
+from mlreco.mink.layers.sparse_generator import SparseGenerator, SparseGenerator2, SparseGeneratorSimple
+from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder2, SparseResEncoderNoPooling
+from mlreco.mink.layers.blocks import SparseToDense, DenseResBlock, to_sparse
 from collections import defaultdict
 
 
@@ -39,6 +40,88 @@ class VAE(nn.Module):
             log_var = self.log_var(latent)
             z = mean + torch.exp(0.5 * log_var.F) * torch.randn_like(log_var.F)
             out_train = self.decoder(z, target_key)
+            out['out_cls'].append(out_train['out_cls'])
+            out['targets'].append(out_train['targets'])
+            out['mean'].append(mean)
+            out['log_var'].append(log_var)
+
+        return out
+
+
+class VAE3(nn.Module):
+
+    def __init__(self, cfg, name='vae'):
+        super(VAE3, self).__init__()
+        self.model_config = cfg[name]
+        self.coordConv = self.model_config.get('coordConv', False)
+        self.encoder = SparseResidualEncoder2(cfg)
+        latent_size = self.encoder.latent_size
+        self.mean = ME.MinkowskiLinear(latent_size, latent_size)
+        self.log_var = ME.MinkowskiLinear(latent_size, latent_size)
+        self.decoder = SparseGeneratorSimple(cfg)
+
+
+    def forward(self, input):
+        out = defaultdict(list)
+        for igpu, x in enumerate(input):
+            coords, features = x[:, :4], x[:, 4:]
+            if self.coordConv:
+                normalized_coords = (coords[:, 1:4] - float(self.encoder.spatial_size) / 2) \
+                        / (float(self.encoder.spatial_size) / 2)
+                features = torch.cat([normalized_coords, features], dim=1)
+            x = ME.SparseTensor(coords=coords, feats=features, allow_duplicate_coords=True)
+            target_key = x.coords_key
+            latent = self.encoder(x)
+            mean = self.mean(latent)
+            log_var = self.log_var(latent)
+            z = mean + torch.exp(0.5 * log_var.F) * torch.randn_like(log_var.F)
+            out_train = self.decoder(z, target_key)
+            out['out_cls'].append(out_train['out_cls'])
+            out['targets'].append(out_train['targets'])
+            out['mean'].append(mean)
+            out['log_var'].append(log_var)
+
+        return out
+
+
+class VAE2(nn.Module):
+
+    def __init__(self, cfg, name='vae'):
+        super(VAE2, self).__init__()
+        self.model_config = cfg[name]
+        self.coordConv = self.model_config.get('coordConv', False)
+        self.encoder = SparseResEncoderNoPooling(cfg)
+        latent_size = self.encoder.latent_size
+        print(latent_size)
+        self.mean = nn.Conv3d(latent_size, latent_size, 1, 1)
+        self.log_var = nn.Conv3d(latent_size, latent_size, 1, 1)
+        self.decoder = SparseGenerator2(cfg)
+        self.sparse2Dense = SparseToDense()
+        self.dense_encoder = DenseResBlock(latent_size, latent_size)
+        # self.dense2Sparse = DenseToSparse()
+
+    def forward(self, input):
+        out = defaultdict(list)
+        for igpu, x in enumerate(input):
+            coords, features = x[:, :4], x[:, 4:]
+            # print(coords)
+            if self.coordConv:
+                normalized_coords = (coords[:, 1:4] - float(self.encoder.spatial_size) / 2) \
+                        / (float(self.encoder.spatial_size) / 2)
+                features = torch.cat([normalized_coords, features], dim=1)
+            x = ME.SparseTensor(coords=coords, feats=features, allow_duplicate_coords=True)
+            target_key = x.coords_key
+            z_sparse = self.encoder(x)
+            # print(z_sparse.C, z_sparse.tensor_stride)
+            z = self.sparse2Dense(z_sparse)
+            code = self.dense_encoder(z)
+            # print(code.shape)
+            mean = self.mean(code)
+            log_var = self.log_var(code)
+            z = mean + torch.exp(0.5 * log_var) * torch.randn_like(log_var)
+            decoder_input = to_sparse(z, 64, None, target_key, x.coords_man)
+            # print(decoder_input)
+            out_train = self.decoder(decoder_input, target_key)
             out['out_cls'].append(out_train['out_cls'])
             out['targets'].append(out_train['targets'])
             out['mean'].append(mean)
@@ -100,11 +183,12 @@ class ReconstructionLoss(nn.Module):
                                 target.type(out_cl.F.dtype).to(device), pos_weight=pos_weight)
                 bce += curr_loss / num_layers
                 count += 1
-            kld = -0.5 * torch.mean(
-                torch.mean(1 + log_var.F - mean.F.pow(2) - log_var.F.exp(), 1))
+            # kld = -0.5 * torch.mean(
+            #     torch.mean(1 + log_var.F - mean.F.pow(2) - log_var.F.exp(), 1))
             acc_i = acc_i / num_layers
-            print(bce, kld)
-            loss += self.bce_weight * bce + self.kld_weight * kld
+            # print(bce, kld)
+            loss += self.bce_weight * bce
+            # loss += self.bce_weight * bce + self.kld_weight * kld
             accuracy += acc_i / num_gpus
 
         return {

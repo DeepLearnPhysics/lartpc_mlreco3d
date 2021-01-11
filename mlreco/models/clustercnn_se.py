@@ -22,6 +22,8 @@ class ClusterCNN(SpatialEmbeddings1):
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
         #print(self)
+        print('Total Number of Trainable Parameters = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
 
 class ClusterCNN2(SpatialEmbeddingsLite):
@@ -50,7 +52,7 @@ class ClusteringLoss(nn.Module):
     '''
     Loss function for Proposal-Free Mask Generators.
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(ClusteringLoss, self).__init__()
 
         self.loss_config = cfg[name]
