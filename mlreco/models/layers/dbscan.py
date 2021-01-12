@@ -11,7 +11,8 @@ class DBSCANFragmenter(torch.nn.Module):
     DBSCAN Layer that uses sklearn's DBSCAN implementation
     to fragment each of the particle classes into dense instances.
     - Runs pure DBSCAN for showers, Michel and Delta
-    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity
+    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity.
+      Alternatively, uses a graph-based method to cluster tracks based on PPN vertices
 
     Args:
         data ([torch.tensor]): (N,5) [x, y, z, batchid, sem_type]
@@ -27,16 +28,8 @@ class DBSCANFragmenter(torch.nn.Module):
         self.min_samples = self.cfg.get('min_samples', 1)
         self.min_size = self.cfg.get('min_size', [10,3,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
-        
-        # cluster_classes determines which semantic classes will undergo DBSCAN clustering
-        # Priority to set this parameter (from top to bottom):
-        # - configuration of DBScanFragmenter (so you can exclude LE for example)
-        # - otherwise will be set by `ghost_chain_2` model for example
-        #   (complementary set to cluster_classes for CNN clustering, which might include LE class)
-        # - last default option is to cluster all classes defined by num_classes
-        cluster_classes = self.cfg.get('cluster_classes', None)
-        self.cluster_classes = range(self.num_classes) if cluster_classes is None else cluster_classes
-
+        if not cluster_classes: cluster_classes = range(self.num_classes)
+        self.cluster_classes = self.cfg.get('cluster_classes', cluster_classes)
         self.track_label = self.cfg.get('track_label', 1)
         self.michel_label = self.cfg.get('michel_label', 2)
         self.delta_label = self.cfg.get('delta_label', 3)
@@ -54,17 +47,18 @@ class DBSCANFragmenter(torch.nn.Module):
         # Output one list of fragments
         clusts = []
 
-        # Get the track points from the PPN output
+        # If tracks are clustered, get the track points from the PPN output
         data = data.detach().cpu().numpy()
-        numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
-                        'points':      [output['points'][0].detach().cpu().numpy()],
-                        'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
-        points =  uresnet_ppn_type_point_selector(data, numpy_output,
-                                                  score_threshold = self.ppn_score_threshold,
-                                                  type_threshold = self.ppn_type_threshold,
-                                                  type_score_threshold = self.ppn_type_score_threshold)
-        point_labels = points[:,-1]
-        track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
+        if self.track_label in self.cluster_classes:
+            numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
+                            'points':      [output['points'][0].detach().cpu().numpy()],
+                            'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
+            points =  uresnet_ppn_type_point_selector(data, numpy_output,
+                                                      score_threshold = self.ppn_score_threshold,
+                                                      type_threshold = self.ppn_type_threshold,
+                                                      type_score_threshold = self.ppn_type_score_threshold)
+            point_labels = points[:,-1]
+            track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
 
         # Break down the input data to its components
         bids = np.unique(data[:,self.dim])

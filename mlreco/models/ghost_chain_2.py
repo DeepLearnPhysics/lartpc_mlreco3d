@@ -4,122 +4,38 @@ from __future__ import print_function
 
 import torch
 import numpy as np
-from collections import defaultdict
-
-from mlreco.models.layers.dbscan import distances
-
-#from mlreco.models.chain.full_cnn import *
-from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
-from .gnn import node_encoder_construct, edge_encoder_construct, gnn_model_construct
 
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
-from mlreco.models.layers.momentum import MomentumNet
+from mlreco.models.grappa import GNN, GNNLoss
 
-from .cluster_cnn import spice_loss_construct
-from mlreco.models.grappa import GNNLoss
-from mlreco.models.gnn.losses.node_grouping import *
-
-from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
-from mlreco.utils.gnn.network import complete_graph
-from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_batch, form_clusters
-from mlreco.utils.deghosting import adapt_labels
-from mlreco.models.layers.dbscan import DBSCANFragmenter, DBScanClusts2
+from mlreco.models.layers.dbscan import DBSCANFragmenter
 from mlreco.models.layers.cnn_encoder import ResidualEncoder
-from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
 
+from mlreco.utils.deghosting import adapt_labels
+from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
+from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
+from mlreco.utils.gnn.cluster import cluster_direction, get_cluster_label, get_cluster_batch, form_clusters
 
-class CosmicLoss(torch.nn.modules.loss._Loss):
-    def __init__(self, cfg):
-        super(CosmicLoss, self).__init__()
-
-    def forward(self, out, label_clustering):
-        """
-        Simple cross-entropy loss for ResidualEncoder output on nu vs cosmic discrimination.
-        """
-        device = out['inter_cosmic_pred'][0][0].device
-        nu_loss, total_acc = 0., 0.
-        nu_acc, cosmic_acc = 0., 0.
-        n_interactions, n_nu, n_cosmic = 0, 0, 0
-        for i in range(len(label_clustering)):
-            for b in range(len(label_clustering[i][:, 3].unique())):
-                batch_mask = label_clustering[i][:, 3] == b
-                nu_label = get_cluster_label(label_clustering[i][batch_mask], out['interactions'][i][b], column=8)
-                nu_label = torch.tensor(nu_label, requires_grad=False, device=device).view(-1)
-                nu_label = (nu_label > -1).long()
-                nu_count = (nu_label == 1).sum().float()
-                w = torch.tensor([nu_count / float(len(nu_label)) + 0.01, 1 - nu_count / float(len(nu_label)) - 0.01], device=device)
-                #print("Weight: ", w)
-                nu_loss += torch.nn.functional.cross_entropy(out['inter_cosmic_pred'][i][b], nu_label, weight=w.float())
-
-                total_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label).sum().float()
-                nu_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label)[nu_label == 1].sum().float()
-                cosmic_acc += (out['inter_cosmic_pred'][i][b].argmax(dim=1) == nu_label)[nu_label == 0].sum().float()
-
-                n_interactions += len(nu_label)
-                n_nu += (nu_label == 1).sum().float()
-                n_cosmic += (nu_label == 0).sum().float()
-
-        return {
-            'loss': nu_loss/n_interactions,
-            'accuracy': total_acc/n_interactions,
-            'cosmic_acc': cosmic_acc/n_cosmic,
-            'nu_acc': nu_acc/n_nu
-        }
-
-def setup_chain_cfg(self, cfg):
+class GhostChain(torch.nn.Module):
     """
-    Prepare both GhostChain2 and GhostChain2Loss
-    Make sure config is logically sound with some basic checks
+    Modular, End-to-end LArTPC Reconstruction Chain:
+    - Deghosting for 3D tomographic reconstruction artifiact removal
+    - UResNet for voxel-wise semantic segmentation
+    - PPN for point proposal
+    - DBSCAN/PILOT/SPICE for dense particle clustering
+    - GrapPA for particle aggregation and identification
+    - CNN for interaction classification
     """
-    chain_cfg = cfg['chain']
-    self.enable_ghost      = chain_cfg.get('enable_ghost', False)
-    self.verbose           = chain_cfg.get('verbose', False)
-    self.enable_uresnet    = chain_cfg.get('enable_uresnet', True)
-    self.enable_ppn        = chain_cfg.get('enable_ppn', True)
-    self.enable_dbscan     = chain_cfg.get('enable_dbscan', True)
-    self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
-    self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', False)
-    self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
-    self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
-    self.enable_kinematics = chain_cfg.get('enable_kinematics', False)
-    self.enable_cosmic     = chain_cfg.get('enable_cosmic', False)
-
-    # Whether to use PPN information (GNN shower clustering step only)
-    self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
-
-    # Make sure the deghosting config is consistent
-    if self.enable_ghost:
-        assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
-        if self.enable_ppn:
-            assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
-
-    # Enforce basic logical order
-    assert self.enable_uresnet # Need semantics for everything
-    assert self.enable_ppn or (not self.use_ppn_in_gnn) # If PPN is used in GNN, need PPN
-    assert self.enable_dbscan or self.enable_cnn_clust # Need at least one of two dense clusterer
-    if self.enable_cosmic: assert self.enable_gnn_int # Cosmic classification needs int. clustering
-
-
-class GhostChain2(torch.nn.Module):
-    """
-    Full Chain using deghosting input
-    Based on mlreco.models.full_chain_4
-    """
-    # INPUT_SCHEMA = [
-    #     ["parse_sparse3d_scn", (float,), (3, 1)],
-    # ]
-    # MODULES = ['spatial_embeddings', 'uresnet_lonely'] + ClusterCNN.MODULES
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
-            'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
-            'full_chain_loss', 'spice', 'spice_loss',
-            'fragment_clustering',  'chain', 'dbscan_frag',
-            ('uresnet_ppn', ['uresnet_lonely', 'ppn'])]
+               'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
+               'full_chain_loss', 'spice', 'spice_loss',
+               'fragment_clustering',  'chain', 'dbscan_frag',
+               ('uresnet_ppn', ['uresnet_lonely', 'ppn'])]
 
     def __init__(self, cfg):
-        super(GhostChain2, self).__init__()
+        super(GhostChain, self).__init__()
 
         # Configure the chain first
         setup_chain_cfg(self, cfg)
@@ -128,13 +44,11 @@ class GhostChain2(torch.nn.Module):
         if self.enable_uresnet:
             self.uresnet_lonely = UResNet(cfg['uresnet_ppn'])
             self.input_features = cfg['uresnet_ppn']['uresnet_lonely'].get('features', 1)
-            self._num_strides = cfg['uresnet_ppn']['uresnet_lonely'].get('num_strides', 5)
 
         if self.enable_ppn:
             self.ppn            = PPN(cfg['uresnet_ppn'])
 
-        # Dense clustering
-        self.min_frag_size = -1
+        # Initialize the dense clustering modules
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self.spatial_embeddings    = ClusterCNN(cfg['spice'])
@@ -149,42 +63,31 @@ class GhostChain2(torch.nn.Module):
         for s in self.cluster_classes:
             assert s < num_classes
 
+        # If enabled, DBSCAN fragmenter clusters whatever classes the CNN clustering does not
         if self.enable_dbscan:
-            # Initialize the DBSCAN fragmenter
-            # Clusters whatever classes the CNN clustering does not
             self.dbscan_frag = DBSCANFragmenter(cfg, cluster_classes=[s for s in range(num_classes) if (s not in self.cluster_classes)])
 
-        # GNNs
-        if self.enable_gnn_shower or self.enable_gnn_tracks or self.enable_gnn_int:
-            # Initialize the encoders
-            self.node_encoder = node_encoder_construct(cfg['grappa_shower'])
-            self.edge_encoder = edge_encoder_construct(cfg['grappa_shower'])
-
+        # Initialize the particle aggregators
         if self.enable_gnn_shower:
-            self.grappa_shower  = GNN(cfg['grappa_shower']['gnn_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['grappa_shower']['base'].get('node_min_size', -1))
-            self.start_dir_max_dist = cfg['grappa_shower']['base'].get('start_dir_max_dist', 5)
+            self.grappa_shower = GNN(cfg, name='grappa_shower')
+            self._start_dir_max_dist = cfg['grappa_shower']['base'].get('start_dir_max_dist', 5)
 
         if self.enable_gnn_tracks:
-            self.grappa_track  = GNN(cfg['grappa_track']['gnn_model'])
-            self.min_frag_size = max(self.min_frag_size, cfg['grappa_track']['base'].get('node_min_size', -1))
+            self.grappa_track = GNN(cfg, name='grappa_track')
 
         if self.enable_gnn_int:
-            # Initialize the GNN models
-            self.grappa_inter     = GNN(cfg['grappa_inter']['gnn_model'])
+            self.grappa_inter = GNN(cfg, name='grappa_inter')
 
         if self.enable_kinematics:
-            self.kinematics_node_encoder = node_encoder_construct(cfg['grappa_kinematics'], model_name='node_encoder')
-            self.kinematics_edge_encoder = edge_encoder_construct(cfg['grappa_kinematics'], model_name='edge_encoder')
-            self.kinematics_edge_predictor = gnn_model_construct(cfg['grappa_kinematics'], model_name='gnn_model')
-            self.momentum_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 1)
-            self.type_net = MomentumNet(cfg['grappa_kinematics']['gnn_model']['node_output_feats'], 5)
+            self.grappa_kinematics = GNN(cfg, name='grappa_kinematics')
             self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
 
+        # Initialize the interaction classifier
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
             self._cosmic_use_input_data = cfg['cosmic_discriminator'].get('use_input_data', True)
             self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get('use_true_interactions', False)
+
 
     def extract_fragment(self, input, result):
         """
@@ -207,8 +110,6 @@ class GhostChain2(torch.nn.Module):
                 for c in pred_labels.unique():
                     if c < 0:
                         continue
-                    if torch.sum(pred_labels == c) < self.min_frag_size:
-                        continue
                     fragments.append(mask[pred_labels == c])
                     frag_batch_ids.append(int(batch_id))
 
@@ -224,106 +125,59 @@ class GhostChain2(torch.nn.Module):
         return fragments, frag_batch_ids, frag_seg
 
 
+    def run_gnn(self, grappa, input, result, clusts, labels, extra_feats=None):
+        """
+        Generic function to group in one place the common code to run a GNN model.
+
+        INPUTS
+        - grappa: GrapPA module to run
+        - input: input data
+        - result: dictionary
+        - clusts: list of list of indices (indexing input data)
+        - labels: dictionary of strings to label the final result
+        - extra_feats: features to add to the encoded features
+
+        OUTPUTS
+            None (modifies the result dict in place)
+        """
+
+        # Pass data through the GrapPA model
+        gnn_output = grappa(input, clusts, extra_feats)
+
+        # Update the result dictionary if the corresponding label exists
+        for l, tag in labels.items():
+            if l in gnn_output.keys():
+                result.update({tag: gnn_output[l]})
+
+        # Make group predictions based on the GNN output, if requested
+        if 'group_pred' in labels:
+            group_ids = []
+            for b in range(len(gnn_output['clusts'][0])):
+                if len(gnn_output['clusts'][0][b]) < 2:
+                    group_ids.append(np.zeros(len(gnn_output['clusts'][0][b]), dtype = np.int64))
+                else:
+                    group_ids.append(node_assignment_score(gnn_output['edge_index'][0][b], gnn_output['edge_pred'][0][b].detach().cpu().numpy(), len(gnn_output['clusts'][0][b])))
+
+            result.update({labels['group_pred']: [group_ids]})
+
+
     def select_particle_in_group(self, result, counts, b, particles, part_primary_ids, node_pred, group_pred, fragments):
         """
         Merge fragments into particle instances, retain primary fragment id of each group
         """
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
         primary_labels = None
-        if node_pred is not None:
+        if node_pred in result:
             primary_labels = primary_assignment(result[node_pred][0][b].detach().cpu().numpy(), result[group_pred][0][b])
         for g in np.unique(result[group_pred][0][b]):
             group_mask = np.where(result[group_pred][0][b] == g)[0]
             particles.append(voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
-            if node_pred is not None:
+            if node_pred in result:
                 primary_id = group_mask[primary_labels[group_mask]][0]
                 part_primary_ids.append(primary_id)
             else:
                 part_primary_ids.append(g)
 
-    def run_gnn(self, gnn_model, input, result, frag_batch_ids, fragments, edge_index, x, e, labels, node_predictors=['node_pred']):
-        """
-        Generic function to group in one place the common code to run a GNN model.
-
-        INPUTS
-        - gnn_model: PyTorch module to run
-        - input: input data
-        - result: dictionary
-        - frag_batch_ids: list of batch ids
-        - fragments: list of list of indices (indexing input data)
-        - edge_index: defining the graph
-        - x: nodes features
-        - e: edge features
-        - labels: dictionary of strings to label the final result
-        - node_predictors: list of either str or (str, torch.nn.Module).
-          Can run extra node prediction models, or ignore node predictions if empty.
-
-        OUTPUTS
-            None (modifies the result dict in place)
-        """
-        device = input[0].device
-
-        # Pass fragment features through GNN
-        index = torch.tensor(edge_index, dtype=torch.long, device=device)
-        xbatch = torch.tensor(frag_batch_ids, dtype=torch.long, device=device)
-        gnn_output = gnn_model(x, index, e, xbatch)
-
-        # Divide the particle GNN output out into different arrays (one per batch)
-        _, counts = torch.unique(input[0][:,3], return_counts=True)
-        vids = np.concatenate([np.arange(n.item()) for n in counts])
-        cids = np.concatenate([np.arange(n) for n in np.unique(frag_batch_ids, return_counts=True)[1]])
-        bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
-        beids = [np.where(frag_batch_ids[edge_index[0]] == b)[0] for b in range(len(counts))]
-
-        for net in node_predictors:
-            if isinstance(net, str):
-                node_pred = [gnn_output[net][0][b] for b in bcids]
-                result.update({ labels[net]: [node_pred] })
-            elif isinstance(net, tuple): # Assume it is an instance of torch.nn.Module
-                name, model = net
-                node_pred_out = model(gnn_output['node_features'][0])
-                node_pred = [node_pred_out[b] for b in bcids]
-                result.update({ labels[name]: [node_pred]})
-            else:
-                raise Exception("Expected either a string or a tuple of (string, torch.nn.Module)")
-
-        #node_pred = [gnn_output['node_pred'][0][b] for b in bcids]
-        edge_pred = [gnn_output['edge_pred'][0][b] for b in beids]
-        edge_index = [cids[edge_index[:,b]].T for b in beids]
-
-        # Justification for the dtype below `np.object if not same_length[idx] else np.int64`:
-        # If all elements have the same length (!= ragged array) then numpy converts
-        # them all to dtype object, instead of letting them be a dtype `np.int64`.
-        #
-        # >>> a = np.array([np.array([0,1,2,3]).astype(np.int64)], dtype=object)
-        # >>> [x.dtype for x in a]
-        # [dtype('O')]
-        # >>> a = np.array([np.array([5]).astype(np.int64), np.array([6,7]).astype(np.int64)], dtype=object)
-        # >>> [x.dtype for x in a]
-        # [dtype('int64'), dtype('int64')]
-        # >>> a = np.array([np.array([5,6]).astype(np.int64), np.array([6,7]).astype(np.int64)], dtype=object)
-        # >>> [x.dtype for x in a]
-        # [dtype('O'), dtype('O')]
-        same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
-        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
-
-        if 'frags' in labels:
-            result.update({ labels['frags']: [frags] })
-        if 'edge_pred' in labels:
-            result.update({ labels['edge_pred']: [edge_pred] })
-        if 'edge_index' in labels:
-            result.update({ labels['edge_index']: [edge_index] })
-
-        # Make shower group predictions based on the GNN output, use truth during training
-        if 'group_pred' in labels:
-            group_ids = []
-            for b in range(len(counts)):
-                if not len(frags[b]):
-                    group_ids.append(np.array([], dtype = np.int64))
-                else:
-                    group_ids.append(node_assignment_score(edge_index[b], edge_pred[b].detach().cpu().numpy(), len(frags[b])))
-
-            result.update({labels['group_pred']: [group_ids]})
 
     def full_chain(self, input, result, label_clustering=None):
         '''
@@ -332,7 +186,6 @@ class GhostChain2(torch.nn.Module):
         INPUTS:
             - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
             - result (dict)
-
         RETURNS:
             - result (dict) (updated with new outputs)
         '''
@@ -385,31 +238,26 @@ class GhostChain2(torch.nn.Module):
         frag_seg = np.array(frag_seg)
 
         # Store in result the intermediate fragments
-        if self.enable_dbscan:
-            _, counts = torch.unique(input[0][:,3], return_counts=True)
-            vids = np.concatenate([np.arange(n.item()) for n in counts])
-            bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
-            same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
-            frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
-            frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
+        _, counts = torch.unique(input[0][:,3], return_counts=True)
+        vids = np.concatenate([np.arange(n.item()) for n in counts])
+        bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
+        same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
+        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(bcids)]
+        frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
 
-            result.update({
-                'clust_fragments': [frags],
-                #'clust_frag_batch_ids': [frag_batch_ids],
-                'clust_frag_seg': [frags_seg]
-            })
+        result.update({
+            'fragments': [frags],
+            'fragments_seg': [frags_seg]
+        })
 
         # ---
         # 2. GNN clustering: shower & track
         # ---
 
         if self.enable_gnn_shower:
-            # Initialize a complete graph for edge prediction, get shower fragment and edge features
+            # Add PPN features to the node features specified in the config file, if requested
             em_mask = np.where(frag_seg == 0)[0]
-            edge_index = complete_graph(frag_batch_ids[em_mask])
-            x = self.node_encoder(input[0], fragments[em_mask])
-            e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
-
+            ppn_feats = None
             if self.use_ppn_in_gnn:
                 # Extract shower starts from PPN predictions (most likely prediction)
                 ppn_points = result['points'][0].detach()
@@ -418,23 +266,19 @@ class GhostChain2(torch.nn.Module):
                     scores = torch.softmax(ppn_points[f,3:5], dim=1)
                     argmax = torch.argmax(scores[:,-1])
                     start  = input[0][f][argmax,:3].float()+ppn_points[f][argmax,:3]+0.5
-                    dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self.start_dir_max_dist)
+                    dir = cluster_direction(input[0][f][:,:3].float(), start, max_dist=self._start_dir_max_dist)
                     ppn_feats = torch.cat((ppn_feats, torch.cat([start, dir, scores[argmax]]).reshape(1,-1)), dim=0)
 
-                x = torch.cat([x, ppn_feats], dim=1)
-
-            self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
-                        {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
+            # Run shower GrapPA
+            self.run_gnn(self.grappa_shower, input, result, fragments[em_mask],
+                         {'clusts': 'shower_fragments', 'node_pred': 'shower_node_pred', 'edge_pred': 'shower_edge_pred', 'edge_index': 'shower_edge_index', 'group_pred': 'shower_group_pred'},
+                         extra_feats = ppn_feats)
 
         if self.enable_gnn_tracks:
-            # Initialize a complete graph for edge prediction, get track fragment and edge features
-            em_mask = np.where(frag_seg == 1)[0]
-            edge_index = complete_graph(frag_batch_ids[em_mask])
-            x = self.node_encoder(input[0], fragments[em_mask])
-            e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
-
-            self.run_gnn(self.grappa_track, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
-                        {'frags': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
+            # Run track GrapPA
+            track_mask = np.where(frag_seg == 1)[0]
+            self.run_gnn(self.grappa_track, input, result, fragments[track_mask],
+                        {'clusts': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'})
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         if self.enable_gnn_int or self.enable_kinematics:
@@ -443,7 +287,7 @@ class GhostChain2(torch.nn.Module):
             for b in range(len(counts)):
                 # Append one particle per shower group
                 if self.enable_gnn_shower:
-                    self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'frag_node_pred', 'frag_group_pred', 'fragments')
+                    self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'shower_node_pred', 'shower_group_pred', 'shower_fragments')
                 # Append one particle per track group
                 if self.enable_gnn_tracks:
                     self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'track_node_pred', 'track_group_pred', 'track_fragments')
@@ -470,15 +314,12 @@ class GhostChain2(torch.nn.Module):
         # ---
 
         if self.enable_gnn_int:
-            # Initialize a complete graph for edge prediction, get particle and edge features
-            edge_index = complete_graph(part_batch_ids)
-            x = self.node_encoder(input[0], particles, )
-            e = self.edge_encoder(input[0], particles, edge_index)
 
             # Extract interesting points for particles, add semantic class, mean value and rms value
             # - For showers, take the most likely PPN voxel of the primary fragment
             # - For tracks, take the points furthest removed from each other (why not ?)
             # - For Michel and Delta, take the most likely PPN voxel
+            ppn_feats = None
             if self.enable_ppn:
                 ppn_points = result['points'][0].detach()
                 ppn_feats = torch.empty((0,12), device=input[0].device, dtype=torch.float)
@@ -499,17 +340,17 @@ class GhostChain2(torch.nn.Module):
                         scores = torch.softmax(ppn_points[p,3:5], dim=1)
                         argmax = torch.argmax(scores[:,-1])
                         start = end = input[0][p][argmax,:3].float()+ppn_points[p][argmax,:3]+0.5
-                        dir = cluster_direction(input[0][p][:,:3].float(), start, max_dist=5)
+                        dir = cluster_direction(input[0][p][:,:3].float(), start, max_dist=self._start_dir_max_dist)
 
                     sem_type = torch.tensor([part_seg[i]], dtype=torch.float, device=device)
                     values = torch.cat((input[0][p,4].mean().reshape(1), input[0][p,4].std().reshape(1))).float()
+                    if torch.isnan(values[1]): # Handle size-1 particles
+                        values[1] = input[0][p,4] - input[0][p,4]
                     ppn_feats = torch.cat((ppn_feats, torch.cat([values, sem_type.reshape(1), start, end, dir]).reshape(1,-1)), dim=0)
 
-                x = torch.cat([x, ppn_feats], dim=1)
-
-            self.run_gnn(self.grappa_inter, input, result, part_batch_ids, particles, edge_index, x, e,
-                        {'frags': 'particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred'},
-                        node_predictors=[])
+            self.run_gnn(self.grappa_inter, input, result, particles,
+                        {'clusts': 'particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred'},
+                        extra_feats = ppn_feats)
 
         # ---
         # 4. GNN for particle flow & kinematics
@@ -532,13 +373,8 @@ class GhostChain2(torch.nn.Module):
                 kinematics_particles = particles
                 kinematics_part_batch_ids = part_batch_ids
 
-            edge_index = complete_graph(kinematics_part_batch_ids)
-            x = self.kinematics_node_encoder(input[0], kinematics_particles)
-            e = self.kinematics_edge_encoder(input[0], kinematics_particles, edge_index)
-
-            self.run_gnn(self.kinematics_edge_predictor, input, result, kinematics_part_batch_ids, kinematics_particles, edge_index, x, e,
-                        {'frags': 'kinematics_particles', 'edge_index': 'kinematics_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'},
-                        node_predictors=[('node_pred_type', self.type_net), ('node_pred_p', self.momentum_net)])
+            self.run_gnn(self.grappa_kinematics, input, result, kinematics_particles,
+                        {'clusts': 'kinematics_particles', 'edge_index': 'kinematics_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'})
 
         if self.enable_cosmic:
             if not self.enable_gnn_int and not self._cosmic_use_true_interactions:
@@ -659,7 +495,7 @@ class GhostChain2(torch.nn.Module):
         return result
 
 
-class GhostChain2Loss(torch.nn.modules.loss._Loss):
+class GhostChainLoss(torch.nn.modules.loss._Loss):
     """
     Loss for UResNet + PPN chain
     """
@@ -669,27 +505,28 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
     # ]
 
     def __init__(self, cfg):
-        super(GhostChain2Loss, self).__init__()
+        super(GhostChainLoss, self).__init__()
+
+        # Configure the chain first
         setup_chain_cfg(self, cfg)
 
         # Initialize loss components
         if self.enable_uresnet:
-            self.uresnet_loss    = SegmentationLoss(cfg['uresnet_ppn'])
+            self.uresnet_loss            = SegmentationLoss(cfg['uresnet_ppn'])
         if self.enable_ppn:
-            self.ppn_loss        = PPNLoss(cfg['uresnet_ppn'])
+            self.ppn_loss                = PPNLoss(cfg['uresnet_ppn'])
         if self.enable_cnn_clust:
             self.spatial_embeddings_loss = ClusteringLoss(cfg)
         if self.enable_gnn_shower:
-            self.particle_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
+            self.particle_gnn_loss       = GNNLoss(cfg, 'grappa_shower_loss')
         if self.enable_gnn_tracks:
-            self.track_gnn_loss = GNNLoss(cfg, 'grappa_track_loss')
+            self.track_gnn_loss          = GNNLoss(cfg, 'grappa_track_loss')
         if self.enable_gnn_int:
-            self.inter_gnn_loss  = GNNLoss(cfg, 'grappa_inter_loss')
-        if self.enable_kinematics: #FIXME
-            self.kinematics_loss = GNNLoss(cfg, 'grappa_kinematics_loss') #NodeKinematicsLoss
-            #self.flow_loss = GNNLoss(cfg, 'grappa_kinematics_loss') # EdgeLoss
+            self.inter_gnn_loss          = GNNLoss(cfg, 'grappa_inter_loss')
+        if self.enable_kinematics:
+            self.kinematics_loss         = GNNLoss(cfg, 'grappa_kinematics_loss')
         if self.enable_cosmic:
-            self.cosmic_loss = CosmicLoss(cfg)
+            self.cosmic_loss             = CosmicLoss(cfg)
 
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']
@@ -761,21 +598,27 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
 
         if self.enable_gnn_shower:
             # Apply the GNN particle clustering loss
-            gnn_out = {
-                'clusts':out['fragments'],
-                'node_pred':out['frag_node_pred'],
-                'edge_pred':out['frag_edge_pred'],
-                'group_pred':out['frag_group_pred'],
-                'edge_index':out['frag_edge_index'],
-            }
-            res_gnn_part = self.particle_gnn_loss(gnn_out, cluster_label)
-            res['frag_edge_loss'] = res_gnn_part['edge_loss']
-            res['frag_node_loss'] = res_gnn_part['node_loss']
-            res['frag_edge_accuracy'] = res_gnn_part['edge_accuracy']
-            res['frag_node_accuracy'] = res_gnn_part['node_accuracy']
+            if 'shower_edge_pred' in out:
+                gnn_out = {
+                    'clusts':out['shower_fragments'],
+                    'node_pred':out['shower_node_pred'],
+                    'edge_pred':out['shower_edge_pred'],
+                    'group_pred':out['shower_group_pred'],
+                    'edge_index':out['shower_edge_index'],
+                }
+                res_gnn_part = self.particle_gnn_loss(gnn_out, cluster_label)
+                res['shower_edge_loss'] = res_gnn_part['edge_loss']
+                res['shower_node_loss'] = res_gnn_part['node_loss']
+                res['shower_edge_accuracy'] = res_gnn_part['edge_accuracy']
+                res['shower_node_accuracy'] = res_gnn_part['node_accuracy']
 
-            accuracy += res_gnn_part['accuracy']
-            loss += self.particle_gnn_weight*res_gnn_part['loss']
+                accuracy += res_gnn_part['accuracy']
+                loss += self.particle_gnn_weight*res_gnn_part['loss']
+            else:
+                res['shower_edge_loss'] = 0.
+                res['shower_node_loss'] = 0.
+                res['shower_edge_accuracy'] = 1.
+                res['shower_node_accuracy'] = 1.
 
         if self.enable_gnn_tracks:
             # Apply the GNN particle clustering loss
@@ -868,8 +711,8 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             if self.enable_cnn_clust:
                 print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
             if self.enable_gnn_shower:
-                print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
-                print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
+                print('Shower fragment clustering accuracy: {:.4f}'.format(res['shower_edge_accuracy']))
+                print('Shower primary prediction accuracy: {:.4f}'.format(res['shower_node_accuracy']))
             if self.enable_gnn_tracks:
                 print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
             if self.enable_gnn_int:
@@ -881,3 +724,36 @@ class GhostChain2Loss(torch.nn.modules.loss._Loss):
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
+
+def setup_chain_cfg(self, cfg):
+    """
+    Prepare both GhostChain and GhostChainLoss
+    Make sure config is logically sound with some basic checks
+    """
+    chain_cfg = cfg['chain']
+    self.enable_ghost      = chain_cfg.get('enable_ghost', False)
+    self.verbose           = chain_cfg.get('verbose', False)
+    self.enable_uresnet    = chain_cfg.get('enable_uresnet', True)
+    self.enable_ppn        = chain_cfg.get('enable_ppn', True)
+    self.enable_dbscan     = chain_cfg.get('enable_dbscan', True)
+    self.enable_cnn_clust  = chain_cfg.get('enable_cnn_clust', False)
+    self.enable_gnn_shower = chain_cfg.get('enable_gnn_shower', False)
+    self.enable_gnn_tracks = chain_cfg.get('enable_gnn_tracks', False)
+    self.enable_gnn_int    = chain_cfg.get('enable_gnn_int', False)
+    self.enable_kinematics = chain_cfg.get('enable_kinematics', False)
+    self.enable_cosmic     = chain_cfg.get('enable_cosmic', False)
+
+    # Whether to use PPN information (GNN shower clustering step only)
+    self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
+
+    # Make sure the deghosting config is consistent
+    if self.enable_ghost:
+        assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
+        if self.enable_ppn:
+            assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
+
+    # Enforce basic logical order
+    assert self.enable_uresnet # Need semantics for everything
+    assert self.enable_ppn or (not self.use_ppn_in_gnn) # If PPN is used in GNN, need PPN
+    assert self.enable_dbscan or self.enable_cnn_clust # Need at least one of two dense clusterer
+    if self.enable_cosmic: assert self.enable_gnn_int # Cosmic classification needs int. clustering

@@ -87,7 +87,6 @@ class GNN(torch.nn.Module):
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
         self.edge_dist_numpy = base_config.get('edge_dist_numpy',False)
-        self.group_pred = base_config.get('group_pred','score')
 
         # If requested, merge images together within the batch
         self.merge_batch = base_config.get('merge_batch', False)
@@ -110,9 +109,9 @@ class GNN(torch.nn.Module):
         self.edge_encoder = edge_encoder_construct(cfg[name])
 
         # Construct the GNN
-        self.edge_predictor = gnn_model_construct(cfg[name])
+        self.gnn_model = gnn_model_construct(cfg[name])
 
-    def forward(self, data):
+    def forward(self, data, clusts=None, extra_feats=None):
         """
         Prepares particle clusters and feed them to the GNN model.
 
@@ -121,19 +120,26 @@ class GNN(torch.nn.Module):
                 data[0] ([torch.tensor]): (N,5-10) [x, y, z, batch_id(, value), part_id(, group_id, int_id, nu_id, sem_type)]
                                        or (N,5) [x, y, z, batch_id, sem_type] (with DBSCAN)
                 data[1] ([torch.tensor]): (N,8) [first_x, first_y, first_z, batch_id, last_x, last_y, last_z, first_step_t] (optional)
+            clusts: [(N_0), (N_1), ..., (N_C)] Cluster ids (optional)
+            extra_feats: (N,F) tensor of features to add to the encoded features
         Returns:
             dict:
-                'node_pred' (torch.tensor): (N,2) Two-channel node predictions
-                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions
-                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
-                'edge_index' (np.ndarray) : (E,2) Incidence matrix
+                'node_pred' (torch.tensor): (N,2) Two-channel node predictions (split batch-wise)
+                'edge_pred' (torch.tensor): (E,2) Two-channel edge predictions (split batch-wise)
+                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids (split batch-wise)
+                'edge_index' (np.ndarray) : (E,2) Incidence matrix (split batch-wise)
         """
 
         # Form list of list of voxel indices, one list per cluster in the requested class
         cluster_data = data[0]
         if len(data) > 1: particles = data[1]
         result = {}
-        if hasattr(self, 'dbscan'):
+        if clusts is not None:
+            mask = np.array([len(c) >= self.node_min_size for c in clusts], dtype=np.bool)
+            clusts = [c for c in clusts if len(c) >= self.node_min_size]
+            if extra_feats is not None:
+                extra_feats = extra_feats[mask]
+        elif hasattr(self, 'dbscan'):
             clusts = self.dbscan(cluster_data, onehot=False)
             clusts = clusts[self.node_type] if self.node_type > -1 else np.concatenate(clusts).tolist()
         else:
@@ -214,13 +220,17 @@ class GNN(torch.nn.Module):
                 dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt, self.start_dir_cpu)
                 x = torch.cat([x, dirs.float()], dim=1)
 
+        # If extra features are provided separately, add them
+        if extra_feats is not None:
+            x = torch.cat([x, extra_feats.float()], dim=1)
+
         # Bring edge_index and batch_ids to device
         device = cluster_data.device
         index = torch.tensor(edge_index, device=device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=device)
 
         # Pass through the model, update result
-        out = self.edge_predictor(x, index, e, xbatch)
+        out = self.gnn_model(x, index, e, xbatch)
         result['node_pred'] = [[out['node_pred'][0][b] for b in cbids]]
         result['edge_pred'] = [[out['edge_pred'][0][b] for b in ebids]]
 
