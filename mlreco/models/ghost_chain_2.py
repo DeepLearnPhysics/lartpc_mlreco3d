@@ -526,7 +526,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
         if self.enable_kinematics:
             self.kinematics_loss         = GNNLoss(cfg, 'grappa_kinematics_loss')
         if self.enable_cosmic:
-            self.cosmic_loss             = CosmicLoss(cfg)
+            self.cosmic_loss             = GNNLoss(cfg, 'cosmic_loss')
 
         # Initialize the loss weights
         self.loss_config = cfg['full_chain_loss']
@@ -686,11 +686,16 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             loss += self.flow_weight * res_kinematics['edge_loss']
 
         if self.enable_cosmic:
-            res_cosmic = self.cosmic_loss(out, cluster_label)
+            gnn_out = {
+                'clusts':out['interactions'],
+                'node_pred':out['inter_cosmic_pred']
+            }
+
+            res_cosmic = self.cosmic_loss(gnn_out, cluster_label)
             res['cosmic_loss'] = res_cosmic['loss']
             res['cosmic_accuracy'] = res_cosmic['accuracy']
-            res['cosmic_accuracy_cosmic'] = res_cosmic['cosmic_acc']
-            res['cosmic_accuracy_nu'] = res_cosmic['nu_acc']
+            #res['cosmic_accuracy_cosmic'] = res_cosmic['cosmic_acc']
+            #res['cosmic_accuracy_nu'] = res_cosmic['nu_acc']
 
             accuracy += res_cosmic['accuracy']
             loss += self.cosmic_weight * res_cosmic['loss']
