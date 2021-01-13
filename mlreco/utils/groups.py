@@ -286,7 +286,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
 
 def get_nu_id(cluster_event, particle_v, interaction_ids):
     '''
-    A function to sort out nu ids (0 for cosmic, 1 to n_nu for nu).
+    A function to sorts interactions into nu or not nu (0 for cosmic, 1 for nu).
     CAVEAT: Dirty way to sort out nu_ids
             Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
     Inputs:
@@ -297,7 +297,7 @@ def get_nu_id(cluster_event, particle_v, interaction_ids):
         - nu_id: a numpy array with the shape (n,1)
     '''
     # initiate the nu_id
-    nu_id = np.ones(len(particle_v))*(-1)
+    nu_id = np.zeros(len(particle_v))
     # find the first cluster that has nonzero size
     sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
     nonzero = np.where(sizes > 0)[0]
@@ -305,16 +305,17 @@ def get_nu_id(cluster_event, particle_v, interaction_ids):
     # the corresponding interaction id
     nu_interaction_id = interaction_ids[first_clust_id]
     # Get clust indexes for interaction_id = nu_interaction_id
-    inds = np.where(interaction_ids==nu_interaction_id)[0]
+    inds = np.where(interaction_ids == nu_interaction_id)[0]
     # Check whether there're at least two clusts coming from 'primary' process
     num_primary = 0
     for i, part in enumerate(particle_v):
         if i not in inds:
             continue
         create_prc = part.creation_process()
-        if create_prc=='primary':
+        parent_pdg = part.parent_pdg_code()
+        if create_prc == 'primary' or parent_pdg == 111:
             num_primary += 1
     # if there is nu interaction
-    if num_primary>1:
-        nu_id[inds]=1
+    if num_primary > 1:
+        nu_id[inds] = 1
     return nu_id
