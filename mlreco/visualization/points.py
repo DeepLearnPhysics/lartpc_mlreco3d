@@ -1,6 +1,7 @@
 import plotly.graph_objs as go
+import numpy as np
 
-def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None, opacity=0.8, hovertext=None, cmin=None, cmax=None):
+def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None, opacity=0.8, hovertext=None, cmin=None, cmax=None, **kwargs):
     """
     Produces go.Scatter3d or go.Scatter object to be plotted in plotly
     - voxels is a list of voxel coordinates (Nx2 or Nx3 matrix)
@@ -15,8 +16,24 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     OUTPUT:
      - go.Scatter3d object
     """
-    if hovertext is None and color is not None and not type(color) == type(str()):
-        hovertext = ['%.2f' % float(v) for v in color]
+    hoverinfo=['x','y','text'] if dim == 2 else ['x','y','z','text']
+    if not type(color) == type(str()):
+        if not len(points) == len(color): 
+            print('ERROR: size of the points (%d) not matching with the color (%d)' % (len(points),len(color)))
+            raise ValueError
+    if hovertext is None:
+        if color is not None and not type(color) == type(str()):
+            if dim == 2:
+                hovertext = ['x: %.2f<br>y: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,:2].flatten(),color[i].flatten()])) for i in range(len(points))]
+            elif dim == 3:
+                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,:3].flatten(),color[i].flatten()])) for i in range(len(points))]
+            hoverinfo = 'text'
+        else:
+            if dim == 2:
+                hovertext = ['x: %.2f<br>y: %.2f' % tuple(points[i,:2].flatten()) for i in range(len(points))]
+            if dim == 3:
+                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f' % tuple(points[i,:3].flatten()) for i in range(len(points))]
+            hoverinfo = 'text'            
     if cmin is None and color is not None and not type(color) == type(str()):
         cmin = min(color)
     if cmax is None and color is not None and not type(color) == type(str()):
@@ -40,13 +57,13 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
             cmin=cmin,
             cmax=cmax,
         ),
-        hoverinfo = ['x','y'] if hovertext is None else ['x','y','text'],
-        hovertext = hovertext,
+        hoverinfo = hoverinfo,
+        text = hovertext,
         )
+    args.update(kwargs)
 
     if dim == 3:
         args['z'] = points[:,2]
-        args['hoverinfo'] = ['x','y','z'] if hovertext is None else ['x','y','z','text']
         return [go.Scatter3d(**args)]
     else:
         return [go.Scatter(**args)]
