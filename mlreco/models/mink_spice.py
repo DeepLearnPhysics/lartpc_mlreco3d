@@ -17,7 +17,7 @@ class MinkSPICE(SPICE):
         
         print('Total Number of Trainable Parameters = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        # print(self)
+        print(self)
 
 
 class SPICELoss(nn.Module):

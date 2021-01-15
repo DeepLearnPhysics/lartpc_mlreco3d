@@ -281,7 +281,7 @@ class SPICE(MENetworkBase):
         coords = point_cloud[:, 0:self.D+1].cpu().int()
         features = point_cloud[:, self.D+1:].float().view(-1, 1)
 
-        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+        normalized_coords = (coords[:, 1:self.D+1] - float(self.spatial_size) / 2) \
                     / (float(self.spatial_size) / 2)
         normalized_coords = normalized_coords.float().cuda()
         if self.coordConv:
