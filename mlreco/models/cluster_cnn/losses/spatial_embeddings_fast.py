@@ -229,11 +229,10 @@ class SPICEInterLoss(SPICELoss):
         '''
         Computes binary foreground/background loss.
         '''
-        # print(margins)
         device = embeddings.device
         n = labels.shape[0]
         centroids = self.find_cluster_means(embeddings, labels)
-        sigma = scatter_mean(margins.squeeze(), labels).view(-1, 1)
+        sigma = self.find_cluster_means(margins, labels).view(-1, 1)
         smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.view(-1).detach(), labels, margin=0)
 
         num_clusters = labels.unique().shape[0]
@@ -307,6 +306,5 @@ class SPICEInterLoss(SPICELoss):
             loss['mask_loss_{}'.format(int(sc))].append(float(mask_loss))
             loss['seed_loss_{}'.format(int(sc))].append(float(seed_loss))
             accuracy['accuracy_{}'.format(int(sc))] = acc
-        pprint(loss)
 
         return loss, accuracy

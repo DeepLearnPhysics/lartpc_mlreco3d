@@ -186,8 +186,6 @@ class MaskBCELoss(nn.Module):
         res.update(loss_avg)
         res.update(acc_avg)
 
-        print(acc_avg)
-
         return res
 
 
@@ -411,7 +409,6 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         '''
         Computes binary foreground/background loss.
         '''
-        # print(margins)
         device = embeddings.device
         loss = 0.0
         smoothing_loss = 0.0
@@ -431,7 +428,7 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
             p = torch.clamp(torch.exp(-dists / (2 * torch.pow(sigma, 2))), min=0, max=1)
             logits = logit_fn(p, eps=1e-6)
-            # print(logits)
+            # print(logits.shape)
             probs[index] = p[index]
             loss += lovasz_hinge_flat(logits, mask).mean()
             accuracy += float(iou_binary(p > 0.5, mask, per_image=False))
@@ -494,7 +491,6 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             loss['mask_loss_{}'.format(int(sc))].append(float(mask_loss))
             loss['seed_loss_{}'.format(int(sc))].append(float(seed_loss))
             accuracy['accuracy_{}'.format(int(sc))] = acc
-        pprint(loss)
 
         return loss, accuracy
 
