@@ -3,18 +3,11 @@ import numpy as np
 from collections import defaultdict
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import SegmentationLoss
 from mlreco.models.ppn import PPNLoss
 from .cluster_cnn import spice_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
-
-from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
-from mlreco.utils.gnn.network import complete_graph
 
 class FullChain(torch.nn.Module):
     """
@@ -68,7 +61,7 @@ class FullChain(torch.nn.Module):
             - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
 
         RETURNS:
-            - result (tuple of dicts): (cnn_result, gnn_result)
+            - result (tuple of dicts): (cnn_result)
         '''
         # Run all CNN modules
         return self.full_cnn(input)

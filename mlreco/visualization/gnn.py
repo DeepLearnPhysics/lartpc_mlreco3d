@@ -29,7 +29,7 @@ def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis
                          hovertext=vfeats)
     return [trace]
 
-def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labels=[], mode='scatter', markersize=3, linewidth=2, colorscale='Inferno', cmin=None, cmax=None):
+def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labels=[], mode='scatter', markersize=3, linewidth=2, colorscale='Inferno', cmin=None, cmax=None, **kwargs):
     """
     Network 3D topological representation
 
@@ -52,7 +52,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
     # Define the node features (label, color)
     n = len(clusters)
     if not len(clust_labels): clust_labels = np.ones(n)
-    node_labels = ['Cluster ID: %d<br>Cluster label: %0.3f<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    node_labels = ['Instance ID: %d<br>Group ID: %d<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, int(clust_labels[i]), pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
 
     # Assert if there is edges to draw
     draw_edges = bool(len(edge_index))
@@ -83,7 +83,9 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                            line = dict(color='rgb(50,50,50)', width=0.5)
                                        ),
                                        text = node_labels,
-                                       hoverinfo = 'text'))
+                                       hoverinfo = 'text',
+                                       **kwargs)
+                         )
 
         # Define the edges center to center
         if draw_edges:
@@ -125,7 +127,9 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                         opacity = 0.5,
                                         color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
                                         hoverinfo = 'text',
-                                        text = node_labels[i]))
+                                        text = node_labels[i],
+                                        **kwargs),
+                             )
 
         # Define the edges center to center
         if draw_edges:
@@ -192,7 +196,9 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                            colorscale = colorscale
                                        ),
                                        text = node_labels,
-                                       hoverinfo = 'text'))
+                                       hoverinfo = 'text',
+                                       **kwargs)
+                         )
 
         # Join end points of primary cones to starting points of secondary cones
         for e in edge_index:
@@ -211,7 +217,8 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                  color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
                                  opacity = 0.3,
                                  text = node_labels[i],
-                                 hoverinfo = 'text') for i, c in enumerate(clusters)]
+                                 hoverinfo = 'text', 
+                                 **kwargs) for i, c in enumerate(clusters)]
 
         # Define the edges closest pixel to closest pixel
         import scipy as sp
@@ -234,7 +241,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
         mask = np.where(cids != -1)[0]
         colors = [clust_labels[i] for i in cids[mask]]
         node_labels = [node_labels[i] for i in cids[mask]]
-
+        
         graph_data = [go.Scatter3d(x = voxels[mask][:,0],
                                    y = voxels[mask][:,1],
                                    z = voxels[mask][:,2],
@@ -249,7 +256,9 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                      size = markersize
                                    ),
                                    text = node_labels,
-                                   hoverinfo = 'text')]
+                                   hoverinfo = 'text',
+                                   **kwargs
+                                   )]
 
         # Define the edges closest pixel to closest pixel
         if draw_edges:
@@ -276,7 +285,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                        line = dict(
                                            color = edge_colors,
                                            width = linewidth,
-                                           colorscale = 'Blues',
+                                           colorscale = 'Picnic',
                                            cmin = 0,
                                            cmax = 1
                                        ),

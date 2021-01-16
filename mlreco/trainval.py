@@ -351,9 +351,16 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
-        for module in module_config:
-            if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
-                model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', module)))
+        # Breadth first search of model_path
+        #module_keys = list(module_config.items())
+        module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
+        while len(module_keys) > 0:
+            module, config = module_keys.pop()
+            if 'model_path' in config and config['model_path'] != '':
+                model_paths.append((module, config['model_path'], config.get('model_name', module)))
+            for key in config:
+                if isinstance(config[key], dict):
+                    module_keys.append((key, config[key]))
 
         if model_paths: #self._model_path and self._model_path != '':
             for module, model_path, model_name in model_paths:
