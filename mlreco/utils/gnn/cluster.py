@@ -259,7 +259,7 @@ def get_cluster_features(data, clusts, whether_adjust_direction=False):
 
         # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            feats.append(np.concatenate((x.flatten(), np.zeros(9), [len(c)])))
+            feats.append(np.concatenate((x.flatten(), np.zeros(12), [len(c)])))
             continue
 
         # Center data
@@ -465,15 +465,13 @@ def cluster_direction(data, start, max_dist=-1, optimize=False, use_cpu=False):
         start = start.detach().cpu()
     voxels = data[:,:3]
     if max_dist > 0 and not optimize:
-        from mlreco.utils import local_cdist
-        dist_mat = local_cdist(start.reshape(1,-1), voxels).reshape(-1)
+        dist_mat = torch.cdist(start.reshape(1,-1), voxels).reshape(-1)
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
             return start-start
     elif optimize:
         # Order the cluster points by increasing distance to the start point
-        from mlreco.utils import local_cdist
-        dist_mat = local_cdist(start.reshape(1,-1), voxels).reshape(-1)
+        dist_mat = torch.cdist(start.reshape(1,-1), voxels).reshape(-1)
         order = torch.argsort(dist_mat)
         voxels = voxels[order]
         dist_mat = dist_mat[order]

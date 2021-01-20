@@ -2,14 +2,17 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 import torch
 import numpy as np
+
 from .layers.dbscan import DBScanClusts2 as DBSCAN
 from .layers.momentum import MomentumNet
 from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
+
 from mlreco.utils.gnn.data import merge_batch
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, relabel_groups, get_cluster_points_label, get_cluster_directions
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, get_fragment_edges
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
 
 class GNN(torch.nn.Module):
     """
@@ -111,7 +114,7 @@ class GNN(torch.nn.Module):
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
 
-    def forward(self, data, clusts=None, extra_feats=None):
+    def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None):
         """
         Prepares particle clusters and feed them to the GNN model.
 
@@ -121,6 +124,8 @@ class GNN(torch.nn.Module):
                                        or (N,5) [x, y, z, batch_id, sem_type] (with DBSCAN)
                 data[1] ([torch.tensor]): (N,8) [first_x, first_y, first_z, batch_id, last_x, last_y, last_z, first_step_t] (optional)
             clusts: [(N_0), (N_1), ..., (N_C)] Cluster ids (optional)
+            groups: (C) vectors of groups IDs (one per cluster) to enforce connections only within each group
+            points: (N,3/6) tensor of start (and end) points of clusters
             extra_feats: (N,F) tensor of features to add to the encoded features
         Returns:
             dict:
@@ -130,21 +135,23 @@ class GNN(torch.nn.Module):
                 'edge_index' (np.ndarray) : (E,2) Incidence matrix (split batch-wise)
         """
 
-        # Form list of list of voxel indices, one list per cluster in the requested class
         cluster_data = data[0]
         if len(data) > 1: particles = data[1]
         result = {}
+
+        # Form list of list of voxel indices, one list per cluster in the requested class
         if clusts is not None:
             mask = np.array([len(c) >= self.node_min_size for c in clusts], dtype=np.bool)
             clusts = [c for c in clusts if len(c) >= self.node_min_size]
-            if extra_feats is not None:
-                extra_feats = extra_feats[mask]
+            if groups is not None: groups = groups[mask]
+            if points is not None: points = points[mask]
+            if extra_feats is not None: extra_feats = extra_feats[mask]
         elif hasattr(self, 'dbscan'):
             clusts = self.dbscan(cluster_data, onehot=False)
             clusts = clusts[self.node_type] if self.node_type > -1 else np.concatenate(clusts).tolist()
         else:
             if self.node_type > -1:
-                mask = torch.nonzero(cluster_data[:,-1] == self.node_type, as_tuple=True)[0]
+                mask   = torch.nonzero(cluster_data[:,-1] == self.node_type, as_tuple=True)[0]
                 clusts = form_clusters(cluster_data[mask], self.node_min_size, self.source_col)
                 clusts = [mask[c].cpu().numpy() for c in clusts]
             else:
@@ -197,6 +204,11 @@ class GNN(torch.nn.Module):
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
+        # If groups is sepecified, only keep edges that belong to the same group (cluster graph)
+        if groups is not None:
+            mask = groups[edges_index][0] == groups[edges_index][1]
+            edge_index = edge_index[:,mask]
+
         # Update result with a list of edges for each batch id
         if not edge_index.shape[1]:
             return {**result, 'edge_index':[np.empty((2,0)) for _ in batches]}
@@ -209,20 +221,21 @@ class GNN(torch.nn.Module):
         x = self.node_encoder(cluster_data, clusts)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
 
+        # If extra features are provided separately, add them
+        if extra_feats is not None:
+            x = torch.cat([x, extra_feats.float()], dim=1)
+
         # Add start point and/or start direction to node features if requested
-        if self.add_start_point:
-            points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6)
-            for i, c in enumerate(clusts):
-                dist_mat = torch.cdist(points[i].reshape(-1,3), cluster_data[c,:3])
-                points[i] = cluster_data[c][torch.argmin(dist_mat,dim=1),:3].reshape(-1)
+        if self.add_start_point or points is not None:
+            if points is None:
+                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6)
+                for i, c in enumerate(clusts):
+                    dist_mat = torch.cdist(points[i].reshape(-1,3), cluster_data[c,:3])
+                    points[i] = cluster_data[c][torch.argmin(dist_mat,dim=1),:3].reshape(-1)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
                 dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt, self.start_dir_cpu)
                 x = torch.cat([x, dirs.float()], dim=1)
-
-        # If extra features are provided separately, add them
-        if extra_feats is not None:
-            x = torch.cat([x, extra_feats.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         device = cluster_data.device

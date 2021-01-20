@@ -20,16 +20,15 @@ class DBSCANFragmenter(torch.nn.Module):
     Returns:
         (torch.tensor): [(C_0^0, C_0^1, ..., C_0^N_0), ...] List of list of clusters (one per class)
     """
-    def __init__(self, cfg, name='dbscan_frag', cluster_classes=None):
+    def __init__(self, cfg, name='dbscan_frag'):
         super(DBSCANFragmenter, self).__init__()
-        self.cfg = cfg['dbscan_frag']
+        self.cfg = cfg[name]
         self.dim = self.cfg.get('dim', 3)
         self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
         self.min_samples = self.cfg.get('min_samples', 1)
         self.min_size = self.cfg.get('min_size', [10,3,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
-        if not cluster_classes: cluster_classes = range(self.num_classes)
-        self.cluster_classes = self.cfg.get('cluster_classes', cluster_classes)
+        self.cluster_classes = self.cfg.get('cluster_classes', range(self.num_classes))
         self.track_label = self.cfg.get('track_label', 1)
         self.michel_label = self.cfg.get('michel_label', 2)
         self.delta_label = self.cfg.get('delta_label', 3)
