@@ -20,7 +20,7 @@ def model_dict():
     from . import particle_types
 
     from . import full_cnn
-    from . import ghost_chain_2
+    from . import full_chain
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -59,7 +59,7 @@ def model_dict():
         # CNN chain with UResNet+PPN+SPICE with a single encoder
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         # Full reconstruction chain, including an option for deghosting
-        "ghost_chain": (ghost_chain_2.GhostChain, ghost_chain_2.GhostChainLoss),
+        "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
     }
     return models
 

@@ -18,7 +18,7 @@ from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, cluster_direction
 
-class GhostChain(torch.nn.Module):
+class FullChain(torch.nn.Module):
     """
     Modular, End-to-end LArTPC Reconstruction Chain:
     - Deghosting for 3D tomographic reconstruction artifiact removal
@@ -35,7 +35,7 @@ class GhostChain(torch.nn.Module):
                ('uresnet_ppn', ['uresnet_lonely', 'ppn'])]
 
     def __init__(self, cfg):
-        super(GhostChain, self).__init__()
+        super(FullChain, self).__init__()
 
         # Configure the chain first
         setup_chain_cfg(self, cfg)
@@ -65,7 +65,7 @@ class GhostChain(torch.nn.Module):
             self.grappa_shower = GNN(cfg, name='grappa_shower')
             self._shower_id = cfg['grappa_shower']['base'].get('node_type', 0)
 
-        if self.enable_gnn_tracks:
+        if self.enable_gnn_track:
             self.grappa_track = GNN(cfg, name='grappa_track')
             self._track_id = cfg['grappa_track']['base'].get('node_type', 1)
 
@@ -73,11 +73,11 @@ class GhostChain(torch.nn.Module):
             self.grappa_particle = GNN(cfg, name='grappa_particle')
             self._particle_ids = cfg['grappa_particle']['base'].get('node_type', [0,1])
 
-        if self.enable_gnn_int:
+        if self.enable_gnn_inter:
             self.grappa_inter = GNN(cfg, name='grappa_inter')
             self._inter_ids = cfg['grappa_inter']['base'].get('node_type', [0,1,2,3])
 
-        if self.enable_kinematics:
+        if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics')
             self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
 
@@ -299,7 +299,7 @@ class GhostChain(torch.nn.Module):
             output_keys = {'clusts': 'shower_fragments', 'node_pred': 'shower_node_pred', 'edge_pred': 'shower_edge_pred', 'edge_index': 'shower_edge_index', 'group_pred': 'shower_group_pred'}
             self.run_gnn(self.grappa_shower, input, result, fragments[em_mask], output_keys, kwargs)
 
-        if self.enable_gnn_tracks:
+        if self.enable_gnn_track:
             # Run track GrapPA: merges tracks fragments into track instances
             track_mask, kwargs = self.get_extra_gnn_features(fragments, frag_seg, [self._track_id], input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
             output_keys = {'clusts': 'track_fragments', 'node_pred': 'track_node_pred', 'edge_pred': 'track_edge_pred', 'edge_index': 'track_edge_index', 'group_pred': 'track_group_pred'}
@@ -326,7 +326,7 @@ class GhostChain(torch.nn.Module):
                 self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'shower_node_pred', 'shower_group_pred', 'shower_fragments')
                 mask &= (frag_seg != self._shower_id)
             # Append one particle per track group
-            if self.enable_gnn_tracks:
+            if self.enable_gnn_track:
                 self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 'track_node_pred', 'track_group_pred', 'track_fragments')
                 mask &= (frag_seg != self._track_id)
 
@@ -358,7 +358,7 @@ class GhostChain(torch.nn.Module):
         # 3. GNN interaction clustering
         # ---
 
-        if self.enable_gnn_int:
+        if self.enable_gnn_inter:
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
@@ -377,7 +377,7 @@ class GhostChain(torch.nn.Module):
         # 4. GNN for particle flow & kinematics
         # ---
 
-        if self.enable_kinematics:
+        if self.enable_gnn_kinematics:
             #print(len(particles))
             if self._kinematics_use_true_particles:
                 if label_clustering is None:
@@ -397,7 +397,7 @@ class GhostChain(torch.nn.Module):
             self.run_gnn(self.grappa_kinematics, input, result, kinematics_particles, output_keys)
 
         if self.enable_cosmic:
-            if not self.enable_gnn_int and not self._cosmic_use_true_interactions:
+            if not self.enable_gnn_inter and not self._cosmic_use_true_interactions:
                 raise Exception("Need interaction clustering before cosmic discrimination.")
 
             _, counts = torch.unique(input[0][:,3], return_counts=True)
@@ -515,7 +515,7 @@ class GhostChain(torch.nn.Module):
         return result
 
 
-class GhostChainLoss(torch.nn.modules.loss._Loss):
+class FullChainLoss(torch.nn.modules.loss._Loss):
     """
     Loss for UResNet + PPN chain
     """
@@ -525,7 +525,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
     # ]
 
     def __init__(self, cfg):
-        super(GhostChainLoss, self).__init__()
+        super(FullChainLoss, self).__init__()
 
         # Configure the chain first
         setup_chain_cfg(self, cfg)
@@ -539,13 +539,13 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             self.spatial_embeddings_loss = ClusteringLoss(cfg)
         if self.enable_gnn_shower:
             self.shower_gnn_loss         = GNNLoss(cfg, 'grappa_shower_loss')
-        if self.enable_gnn_tracks:
+        if self.enable_gnn_track:
             self.track_gnn_loss          = GNNLoss(cfg, 'grappa_track_loss')
         if self.enable_gnn_particle:
             self.particle_gnn_loss       = GNNLoss(cfg, 'grappa_particle_loss')
-        if self.enable_gnn_int:
+        if self.enable_gnn_inter:
             self.inter_gnn_loss          = GNNLoss(cfg, 'grappa_inter_loss')
-        if self.enable_kinematics:
+        if self.enable_gnn_kinematics:
             self.kinematics_loss         = GNNLoss(cfg, 'grappa_kinematics_loss')
         if self.enable_cosmic:
             self.cosmic_loss             = GNNLoss(cfg, 'cosmic_loss')
@@ -588,7 +588,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['ppn_acc']
             loss += self.ppn_weight*res_ppn['ppn_loss']
 
-        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_tracks or self.enable_gnn_shower or self.enable_gnn_int or self.enable_kinematics or self.enable_cosmic):
+        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_kinematics or self.enable_cosmic):
             # Adapt to ghost points
             if cluster_label is not None:
                 cluster_label = adapt_labels(out, seg_label, cluster_label)
@@ -639,7 +639,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_gnn_shower['accuracy']
             loss += self.shower_gnn_weight*res_gnn_shower['loss']
 
-        if self.enable_gnn_tracks:
+        if self.enable_gnn_track:
             # Apply the GNN track clustering loss
             gnn_out = {}
             if 'track_edge_pred' in out:
@@ -674,7 +674,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_gnn_part['accuracy']
             loss += self.particle_gnn_weight*res_gnn_part['loss']
 
-        if self.enable_gnn_int:
+        if self.enable_gnn_inter:
             # Apply the GNN interaction grouping loss
             gnn_out = {}
             if 'inter_edge_pred' in out:
@@ -690,7 +690,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_gnn_inter['accuracy']
             loss += self.inter_gnn_weight*res_gnn_inter['loss']
 
-        if self.enable_kinematics:
+        if self.enable_gnn_kinematics:
             # Loss on node predictions (type & momentum)
             gnn_out = {}
             if 'flow_edge_pred' in out:
@@ -740,8 +740,8 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
 
         # Combine the results
         accuracy /= int(self.enable_uresnet) + int(self.enable_ppn) + int(self.enable_gnn_shower) \
-                    + int(self.enable_gnn_int) + int(self.enable_gnn_tracks) + int(self.enable_cnn_clust) \
-                    + 2*int(self.enable_kinematics) + int(self.enable_cosmic) + int(self.enable_gnn_particle)
+                    + int(self.enable_gnn_inter) + int(self.enable_gnn_track) + int(self.enable_cnn_clust) \
+                    + 2*int(self.enable_gnn_kinematics) + int(self.enable_cosmic) + int(self.enable_gnn_particle)
 
         res['loss'] = loss
         res['accuracy'] = accuracy
@@ -756,14 +756,14 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
             if self.enable_gnn_shower:
                 print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_shower['edge_accuracy']))
                 print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_shower['node_accuracy']))
-            if self.enable_gnn_tracks:
+            if self.enable_gnn_track:
                 print('Track fragment clustering accuracy: {:.4f}'.format(res_gnn_track['edge_accuracy']))
             if self.enable_gnn_particle:
                 print('Particle fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
                 print('Particle primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
-            if self.enable_gnn_int:
+            if self.enable_gnn_inter:
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
-            if self.enable_kinematics:
+            if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
                 print('Type accuracy: {:.4f}'.format(res_kinematics['type_accuracy']))
                 print('Momentum accuracy: {:.4f}'.format(res_kinematics['p_accuracy']))
@@ -773,7 +773,7 @@ class GhostChainLoss(torch.nn.modules.loss._Loss):
 
 def setup_chain_cfg(self, cfg):
     """
-    Prepare both GhostChain and GhostChainLoss
+    Prepare both FullChain and FullChainLoss
     Make sure config is logically sound with some basic checks
     """
     chain_cfg = cfg['chain']
@@ -784,10 +784,10 @@ def setup_chain_cfg(self, cfg):
     self.enable_dbscan       = chain_cfg.get('enable_dbscan', True)
     self.enable_cnn_clust    = chain_cfg.get('enable_cnn_clust', False)
     self.enable_gnn_shower   = chain_cfg.get('enable_gnn_shower', False)
-    self.enable_gnn_tracks   = chain_cfg.get('enable_gnn_tracks', False)
+    self.enable_gnn_track   = chain_cfg.get('enable_gnn_track', False)
     self.enable_gnn_particle = chain_cfg.get('enable_gnn_particle', False)
-    self.enable_gnn_int      = chain_cfg.get('enable_gnn_int', False)
-    self.enable_kinematics   = chain_cfg.get('enable_kinematics', False)
+    self.enable_gnn_inter      = chain_cfg.get('enable_gnn_inter', False)
+    self.enable_gnn_kinematics   = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic       = chain_cfg.get('enable_cosmic', False)
 
     # Whether to use PPN information (GNN shower clustering step only)
@@ -807,5 +807,5 @@ def setup_chain_cfg(self, cfg):
         assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
     if self.enable_gnn_particle: # If particle fragment GNN is used, make sure it is not redundant
         if self.enable_gnn_shower: assert cfg['grappa_shower']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
-        if self.enable_gnn_tracks: assert cfg['grappa_track']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
-    if self.enable_cosmic: assert self.enable_gnn_int # Cosmic classification needs interaction clustering
+        if self.enable_gnn_track: assert cfg['grappa_track']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
+    if self.enable_cosmic: assert self.enable_gnn_inter # Cosmic classification needs interaction clustering
