@@ -97,7 +97,7 @@ class FullChain(torch.nn.Module):
         semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
         for batch_id in batch_labels.unique():
             for s in self._spice_classes:
-                mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
+                mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s), as_tuple=True)[0]
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
@@ -143,7 +143,7 @@ class FullChain(torch.nn.Module):
                 if frag_seg[mask][i] == 1:
                     dist_mat = torch.cdist(input[0][f,:3], input[0][f,:3])
                     idx = torch.argmax(dist_mat)
-                    idxs = int(idx/len(f)), int(idx%len(f))
+                    idxs = int(idx)//len(f), int(idx)%len(f)
                     end_points = torch.cat([input[0][f[idxs[0]],:3], input[0][f[idxs[1]],:3]]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
@@ -160,7 +160,7 @@ class FullChain(torch.nn.Module):
             for i, f in enumerate(fragments[mask]):
                 values = torch.cat((input[0][f,4].mean().reshape(1), input[0][f,4].std().reshape(1))).float()
                 if torch.isnan(values[1]): # Handle size-1 particles
-                    values[1] = input[0][p,4] - input[0][p,4]
+                    values[1] = input[0][f,4] - input[0][f,4]
                 sem_type = torch.tensor([frag_seg[mask][i]], dtype=torch.float, device=input[0].device)
                 supp_feats = torch.cat((supp_feats, torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
 
@@ -554,8 +554,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.loss_config = cfg['full_chain_loss']
 
         self.segmentation_weight    = self.loss_config.get('segmentation_weight', 1.0)
-        self.clustering_weight      = self.loss_config.get('clustering_weight', 1.0)
         self.ppn_weight             = self.loss_config.get('ppn_weight', 0.0)
+        self.cnn_clust_weight       = self.loss_config.get('cnn_clust_weight', 1.0)
         self.shower_gnn_weight      = self.loss_config.get('shower_gnn_weight', 0.0)
         self.track_gnn_weight       = self.loss_config.get('track_gnn_weight', 0.0)
         self.particle_gnn_weight    = self.loss_config.get('particle_gnn_weight', 0.0)
@@ -618,7 +618,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             res['cnn_clust_loss'] = res_cnn_clust['loss']
 
             accuracy += res_cnn_clust['accuracy']
-            loss += self.clustering_weight*res_cnn_clust['loss']
+            loss += self.cnn_clust_weight*res_cnn_clust['loss']
 
         if self.enable_gnn_shower:
             # Apply the GNN shower clustering loss

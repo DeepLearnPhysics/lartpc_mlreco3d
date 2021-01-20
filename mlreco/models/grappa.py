@@ -206,7 +206,7 @@ class GNN(torch.nn.Module):
 
         # If groups is sepecified, only keep edges that belong to the same group (cluster graph)
         if groups is not None:
-            mask = groups[edges_index][0] == groups[edges_index][1]
+            mask = groups[edge_index[0]] == groups[edge_index[1]]
             edge_index = edge_index[:,mask]
 
         # Update result with a list of edges for each batch id
