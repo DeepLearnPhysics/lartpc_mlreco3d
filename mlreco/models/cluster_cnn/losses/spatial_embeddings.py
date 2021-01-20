@@ -186,7 +186,7 @@ class MaskBCELoss(nn.Module):
         res.update(loss_avg)
         res.update(acc_avg)
 
-        print(acc_avg)
+        # print(acc_avg)
 
         return res
 
