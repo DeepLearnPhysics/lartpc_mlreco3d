@@ -334,7 +334,8 @@ class FullChain(torch.nn.Module):
             particles.extend(fragments[mask])
             part_primary_ids.extend(-np.ones(np.sum(mask)))
 
-        particles = np.array(particles, dtype=object)
+        same_length = np.all([len(p) == len(particles[0]) for p in particles])
+        particles = np.array(particles, dtype=object if not same_length else np.int64)
         part_batch_ids = get_cluster_batch(input[0], particles)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
         part_seg = np.empty(len(particles), dtype=np.int32)
@@ -366,7 +367,8 @@ class FullChain(torch.nn.Module):
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + np.arange(counts[part_batch_ids[i]].item())
                     p = voxel_inds[result['fragments'][0][part_batch_ids[i]][part_primary_ids[i]]]
                 extra_feats_particles.append(p)
-            extra_feats_particles = np.array(extra_feats_particles, dtype=object)
+            same_length = np.all([len(p) == len(extra_feats_particles[0]) for p in extra_feats_particles])
+            extra_feats_particles = np.array(extra_feats_particles, dtype=object if not same_length else np.int64)
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, part_seg, self._inter_ids, input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
@@ -777,18 +779,18 @@ def setup_chain_cfg(self, cfg):
     Make sure config is logically sound with some basic checks
     """
     chain_cfg = cfg['chain']
-    self.enable_ghost        = chain_cfg.get('enable_ghost', False)
-    self.verbose             = chain_cfg.get('verbose', False)
-    self.enable_uresnet      = chain_cfg.get('enable_uresnet', True)
-    self.enable_ppn          = chain_cfg.get('enable_ppn', True)
-    self.enable_dbscan       = chain_cfg.get('enable_dbscan', True)
-    self.enable_cnn_clust    = chain_cfg.get('enable_cnn_clust', False)
-    self.enable_gnn_shower   = chain_cfg.get('enable_gnn_shower', False)
-    self.enable_gnn_track   = chain_cfg.get('enable_gnn_track', False)
-    self.enable_gnn_particle = chain_cfg.get('enable_gnn_particle', False)
+    self.enable_ghost          = chain_cfg.get('enable_ghost', False)
+    self.verbose               = chain_cfg.get('verbose', False)
+    self.enable_uresnet        = chain_cfg.get('enable_uresnet', True)
+    self.enable_ppn            = chain_cfg.get('enable_ppn', True)
+    self.enable_dbscan         = chain_cfg.get('enable_dbscan', True)
+    self.enable_cnn_clust      = chain_cfg.get('enable_cnn_clust', False)
+    self.enable_gnn_shower     = chain_cfg.get('enable_gnn_shower', False)
+    self.enable_gnn_track      = chain_cfg.get('enable_gnn_track', False)
+    self.enable_gnn_particle   = chain_cfg.get('enable_gnn_particle', False)
     self.enable_gnn_inter      = chain_cfg.get('enable_gnn_inter', False)
-    self.enable_gnn_kinematics   = chain_cfg.get('enable_gnn_kinematics', False)
-    self.enable_cosmic       = chain_cfg.get('enable_cosmic', False)
+    self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
+    self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
 
     # Whether to use PPN information (GNN shower clustering step only)
     self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
