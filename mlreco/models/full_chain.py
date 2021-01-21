@@ -147,8 +147,9 @@ class FullChain(torch.nn.Module):
                     end_points = torch.cat([input[0][f[idxs[0]],:3], input[0][f[idxs[1]],:3]]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
+                    dmask  = torch.nonzero(torch.max(torch.abs(points_tensor[f,:3]), dim=1).values < 1., as_tuple=True)[0]
                     scores = torch.softmax(points_tensor[f,3:5], dim=1)
-                    argmax = torch.argmax(scores[:,-1])
+                    argmax = dmask[torch.argmax(scores[dmask,-1])] if len(dmask) else torch.argmax(scores[:,-1])
                     start  = input[0][f][argmax,:3] + points_tensor[f][argmax,:3] + 0.5
                     ppn_points = torch.cat((ppn_points, torch.cat([start, start]).reshape(1,-1)), dim=0)
 
@@ -397,6 +398,10 @@ class FullChain(torch.nn.Module):
 
             output_keys = {'clusts': 'kinematics_particles', 'edge_index': 'kinematics_edge_index', 'node_pred_p': 'node_pred_p', 'node_pred_type': 'node_pred_type', 'edge_pred': 'flow_edge_pred'}
             self.run_gnn(self.grappa_kinematics, input, result, kinematics_particles, output_keys)
+
+        # ---
+        # 5. CNN for interaction classification
+        # ---
 
         if self.enable_cosmic:
             if not self.enable_gnn_inter and not self._cosmic_use_true_interactions:
