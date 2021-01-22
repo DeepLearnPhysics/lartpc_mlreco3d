@@ -383,11 +383,18 @@ class trainval(object):
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
                             # Additionally, only select weights related to current module
                             if module in name:
+                                # if module == 'grappa_inter' :
+                                #     print(name, other_name, other_name in checkpoint['state_dict'].keys())
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
                                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
                                 else:
                                     missing_keys.append((name, other_name))
+                        # if module == 'grappa_inter':
+                        #     print("missing keys", missing_keys)
+                        #     for key in checkpoint['state_dict'].keys():
+                        #         if 'node_encoder'  in key or 'edge_encoder' in key:
+                        #             print(key)
                         if missing_keys:
                             print(checkpoint['state_dict'].keys())
                             for m in missing_keys:

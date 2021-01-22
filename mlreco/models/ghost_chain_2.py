@@ -223,6 +223,7 @@ class GhostChain2(torch.nn.Module):
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s)).flatten()
                 if len(result['embeddings'][0][mask]) < self.spice_min_voxels:
                     continue
+                #print(s, result['embeddings'][0][mask].size(), torch.isnan(result['margins'][0][mask]).any())
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
