@@ -605,8 +605,8 @@ def parse_cluster3d_kinematics(data):
     return:
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (n,6) where 6 is voxel value,
-        cluster id, group id interaction id, nu id and semantic type, respectively
+        a numpy array with the shape (n,5) where 5 is voxel value,
+        cluster id, group id, pdg and momentum respectively
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
@@ -859,7 +859,7 @@ def parse_cluster3d_clean_full(data):
         coordinate
         a numpy array with the shape (N,4) where 4 represens (value, cluster_id, group_id, sem_type)
     """
-    grp_voxels, grp_data = parse_cluster3d_full(data)
+    grp_voxels, grp_data = parse_cluster3d_full(data[:-1])
     img_voxels, img_data = parse_sparse3d_scn([data[-1]])
 
     grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
