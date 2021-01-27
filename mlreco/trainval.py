@@ -319,6 +319,30 @@ class trainval(object):
                 for param in module.parameters():
                     param.requires_grad = False
 
+        # Breadth-first search for freeze_weight parameter in config
+        # (very similar to weight loading below)
+        module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
+        while len(module_keys) > 0:
+            module, config = module_keys.pop()
+            if 'freeze_weights' in config:
+                model_name = config.get('model_name', module)
+                model_path = config['model_path']
+
+                count = 0
+                with open(model_path, 'rb') as f:
+                    checkpoint = torch.load(f, map_location='cpu')
+                    for name, param in self._model.named_parameters():
+                        other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                        if module in name and 'module.' + other_name in checkpoint['state_dict'].keys():
+                            param.requires_grad = False
+                            count += 1
+                print('Freezing %d weights for a sub-module' % count,module)
+
+            # Keep the BFS going
+            for key in config:
+                if isinstance(config[key], dict):
+                    module_keys.append((key, config[key]))
+
         self._net = DataParallel(self._model,device_ids=self._gpus)
 
         if self._train:
