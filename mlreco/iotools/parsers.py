@@ -684,7 +684,7 @@ def parse_cluster3d_kinematics_clean(data):
 
     grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
     grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-    return grp_voxels, grp_data[:, :-1]
+    return grp_voxels, grp_data#[:, :-1]
 
 
 def parse_cluster3d_full_fragment(data):

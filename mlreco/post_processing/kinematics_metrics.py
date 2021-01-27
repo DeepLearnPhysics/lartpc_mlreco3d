@@ -6,7 +6,7 @@ from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 from mlreco.utils.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
 from mlreco.utils.metrics import *
 from mlreco.utils.gnn.network import get_fragment_edges
-from mlreco.utils.gnn.cluster import get_cluster_label_np
+from mlreco.utils.gnn.cluster import get_cluster_label_np, get_momenta_label_np
 
 
 def extent(voxels):
@@ -63,7 +63,7 @@ def kinematics_metrics(cfg, data_blob, res, logdir, iteration):
         edge_index = res['kinematics_edge_index'][data_idx] # shape (E, 2)
 
         node_true_type = get_cluster_label_np(kinematics[data_idx], pred_particles, column=7) # pdg label
-        node_true_p = get_cluster_label_np(kinematics[data_idx], pred_particles, column=8) # momentum label
+        node_true_p = get_momenta_label_np(kinematics[data_idx], pred_particles, column=8).reshape((-1,)) # momentum label
         node_true_cluster_id = get_cluster_label_np(kinematics[data_idx], pred_particles, column=6) # cluster id
 
         clust_ids = get_cluster_label_np(clust_data[data_idx], pred_particles, 5) # or 6 ?
@@ -71,6 +71,13 @@ def kinematics_metrics(cfg, data_blob, res, logdir, iteration):
         true_edge_index = get_fragment_edges(subgraph, clust_ids)
         edge_assn = edge_assignment_from_graph(edge_index, true_edge_index) # shape (E,), values 0 or 1
 
+        edge_accuracy = (edge_pred == edge_assn).sum()
+        existing_edge_accuracy = (edge_pred == edge_assn)[edge_assn == 1].sum()
+        nonexisting_edge_accuracy = (edge_pred == edge_assn)[edge_assn == 0].sum()
+        num_existing_edges = np.count_nonzero(edge_assn == 1)
+        num_nonexisting_edges = np.count_nonzero(edge_assn == 0)
+
+        # Loop over particles
         for i in range(len(node_true_type)):
             true_cluster_id = node_true_cluster_id[i]
             p = particles[data_idx][true_cluster_id]
@@ -97,14 +104,16 @@ def kinematics_metrics(cfg, data_blob, res, logdir, iteration):
             len(true_voxels), true_voxels[:, 4].sum(), p.pdg_code(), p.energy_deposit(), p.energy_init(),
             p.px(), p.py(), p.pz(), true_d.max(), true_d.std(), pred_d.max(), pred_d.std(),
             boundaries, true_num_children, pred_num_children, overlap_num_children,
-            true_num_parents, pred_num_parents, overlap_num_parents)
+            true_num_parents, pred_num_parents, overlap_num_parents,
+            edge_accuracy, existing_edge_accuracy, nonexisting_edge_accuracy, num_existing_edges, num_nonexisting_edges)
 
             fout.record(('iter', 'idx', 'true_cluster_id', 'true_type', 'pred_type',
                         'true_p', 'pred_p', 'pred_num_voxels', 'pred_sum_voxels',
                         'true_num_voxels', 'true_sum_voxels', 'pdg', 'energy_deposit', 'energy_init',
                         'px', 'py', 'pz', 'true_spatial_extent', 'true_spatial_std', 'pred_spatial_extent', 'pred_spatial_std',
                         'distance_to_boundary', 'true_num_children', 'pred_num_children', 'overlap_num_children',
-                        'true_num_parents', 'pred_num_parents', 'overlap_num_parents'),
+                        'true_num_parents', 'pred_num_parents', 'overlap_num_parents',
+                        'edge_accuracy', 'existing_edge_accuracy', 'nonexisting_edge_accuracy', 'num_existing_edges', 'num_nonexisting_edges'),
                         row)
             fout.write()
 

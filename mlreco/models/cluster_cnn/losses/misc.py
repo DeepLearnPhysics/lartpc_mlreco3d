@@ -236,4 +236,3 @@ class WeightedFocalLoss(FocalLoss):
             return torch.mean(F_loss)
         else:
             return F_loss
-       
