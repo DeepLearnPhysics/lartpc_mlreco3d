@@ -2,7 +2,7 @@
 import os
 import numpy as np
 from mlreco.utils import CSVData
-from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
+from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics, primary_assignment
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 from mlreco.utils.gnn.cluster import form_clusters
 
@@ -29,6 +29,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
     cfg_filename = cfg['post_processing']['cluster_gnn_metrics'].get('filename', 'cluster-gnn-metrics')
     cfg_edge_index = cfg['post_processing']['cluster_gnn_metrics'].get('edge_index', 'edge_index')
     cfg_clusts = cfg['post_processing']['cluster_gnn_metrics'].get('clusts', 'clusts')
+    cfg_node_pred = cfg['post_processing']['cluster_gnn_metrics'].get('node_pred', 'node_pred')
     if isinstance(cfg_column, list):
         assert isinstance(cfg_chain, list)
         assert isinstance(cfg_store_method, list)
@@ -36,6 +37,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
         assert isinstance(cfg_edge_pred, list)
         assert isinstance(cfg_edge_index, list)
         assert isinstance(cfg_clusts, list)
+        assert isinstance(cfg_node_pred, list)
         for s in cfg_store_method:
             assert s in ['single-file', 'per-iteration', 'per-event']
     else:
@@ -47,6 +49,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
         cfg_edge_pred = [cfg_edge_pred]
         cfg_edge_index = [cfg_edge_index]
         cfg_clusts = [cfg_clusts]
+        cfg_node_pred = [cfg_node_pred]
 
     # Get the relevant data products
     index = data_blob['index']
@@ -59,7 +62,7 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
         clust_data = adapt_labels(res, seg_label, data_blob['cluster_label'])
         # seg_label = [seg_label[i][res['ghost'][i].argmax(axis=1) == 0] for i in range(len(seg_label))]
 
-    for column, column_source, chain, store_method, filename, edge_pred_label, edge_index_label, clusts_label in zip(cfg_column, cfg_column_source, cfg_chain, cfg_store_method, cfg_filename, cfg_edge_pred, cfg_edge_index, cfg_clusts):
+    for column, column_source, chain, store_method, filename, edge_pred_label, edge_index_label, clusts_label, node_pred_label in zip(cfg_column, cfg_column_source, cfg_chain, cfg_store_method, cfg_filename, cfg_edge_pred, cfg_edge_index, cfg_clusts, cfg_node_pred):
         if not edge_pred_label in res: continue
         bipartite = cfg['model']['modules'][chain].get('network', 'complete') == 'bipartite'
         store_per_event = store_method == 'per-event'
@@ -90,10 +93,12 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
                 continue
 
             # Use group id to make node labels
-            group_ids = []
+            group_ids, cluster_ids = [], []
             for c in clusts[data_idx]:
                 v, cts = np.unique(clust_data[data_idx][c,column], return_counts=True)
                 group_ids.append(int(v[cts.argmax()]))
+                v, cts = np.unique(clust_data[data_idx][c,5], return_counts=True)
+                cluster_ids.append(int(v[cts.argmax()]))
 
             # Assign predicted group ids
             n = len(clusts[data_idx])
@@ -106,6 +111,12 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
                 # Determine the predicted group by chosing the most likely primary for each secondary
                 primary_ids = np.unique(edge_index[data_idx][:,0])
                 node_pred = node_assignment_bipartite(edge_index[data_idx], edge_pred[data_idx][:,1], primary_ids, n)
+
+            # primary prediction
+            node_pred_primary = None
+            if node_pred_label:
+                node_pred_primary = primary_assignment(res[node_pred_label][data_idx], group_ids=node_pred)
+                node_true_primary = np.equal(cluster_ids, group_ids)
 
             if cfg_enable_physics_metrics:
                 # Loop over true clusters
@@ -127,6 +138,12 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
                     overlap_voxel_count = np.sum([len(c) for c in overlap_cluster])
                     efficiency = overlap_voxel_count / true_voxel_count
                     purity = overlap_voxel_count / pred_voxel_count
+
+                    # Primary identification
+                    pred_primaries_accuracy = -1
+                    if node_pred_primary is not None:
+                        pred_primaries = node_true_primary[node_pred == pred_id] & node_pred_primary[node_pred == pred_id]
+                        pred_primaries_accuracy = pred_primaries.sum()
 
                     # True particle information
                     true_particles_idx = np.unique(clust_data[data_idx][np.hstack(true_cluster), 6])
@@ -174,13 +191,13 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
 
                     fout.record(('Iteration', 'Index', 'true_id', 'pred_id',
                                 'true_voxel_count', 'pred_voxel_count', 'overlap_voxel_count', 'original_voxel_count',
-                                'purity', 'efficiency', 'true_voxels_sum', 'pred_voxels_sum', 'original_voxels_sum', 
+                                'purity', 'efficiency', 'true_voxels_sum', 'pred_voxels_sum', 'original_voxels_sum',
                                 'true_fragments_count', 'pred_fragments_count', 'overlap_fragments_count', 'original_fragments_count',
                                 'true_spatial_extent', 'true_spatial_std', 'distance_to_boundary',
                                 'pred_spatial_extent', 'pred_spatial_std', 'particle_count',
                                 'original_spatial_extent', 'original_spatial_std',
                                 'true_energy_deposit', 'true_energy_init', 'true_pdg',
-                                'true_px', 'true_py', 'true_pz', 'nu_idx'),
+                                'true_px', 'true_py', 'true_pz', 'nu_idx', 'pred_primaries_accuracy'),
                                 (iteration, tree_idx, true_id, pred_id,
                                 true_voxel_count, pred_voxel_count, overlap_voxel_count, original_voxel_count,
                                 purity, efficiency, true_voxels[:, -1].sum(), pred_voxels[:, -1].sum(), original_voxels[:, -1].sum(),
@@ -189,17 +206,19 @@ def cluster_gnn_metrics(cfg, data_blob, res, logdir, iteration):
                                 pred_d.max(), pred_d.std(), len(true_particles_idx),
                                 original_d.max(), original_d.std(),
                                 energy_deposit, energy_init, pdg[0],
-                                np.sum(px), np.sum(py), np.sum(pz), nu_id[0]))
+                                np.sum(px), np.sum(py), np.sum(pz), nu_id[0], pred_primaries_accuracy))
 
             else:
                 # Evaluate clustering metrics
                 ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
-
+                primary_accuracy = -1.
+                if node_pred_primary is not None:
+                    primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
                 # Store
                 fout.record(['ite', 'idx', 'ari', 'ami', 'sbd', 'pur', 'eff',
-                            'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts'],
+                            'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts', 'primary_accuracy'],
                             [iteration, tree_idx, ari, ami, sbd, pur, eff,
-                            n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred))])
+                            n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred)), primary_accuracy])
 
             fout.write()
             if store_per_event:
