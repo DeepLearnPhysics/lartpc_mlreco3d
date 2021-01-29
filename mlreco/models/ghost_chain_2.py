@@ -362,6 +362,9 @@ class GhostChain2(torch.nn.Module):
             result.update({ labels['edge_pred']: [edge_pred] })
         if 'edge_index' in labels:
             result.update({ labels['edge_index']: [edge_index] })
+        if 'node_pred' in labels:
+            node_pred = [gnn_output['node_pred'][0][b] for b in bcids]
+            result.update({ labels['node_pred']: [node_pred]})
 
         # Make shower group predictions based on the GNN output, use truth during training
         if 'group_pred' in labels:
