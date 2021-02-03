@@ -8,6 +8,7 @@ import MinkowskiFunctional as MF
 from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
 from mlreco.mink.layers.factories import activations_dict, activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
+from mlreco.models.ppn import define_ppn12
 
 
 class Attention(nn.Module):
@@ -36,9 +37,10 @@ class ExpandAs(nn.Module):
             coords_manager=x.coords_man)
         return output
 
-class PPNTest(MENetworkBase):
+
+class PPN(MENetworkBase):
     '''
-    Vanilla UResNet with access to intermediate feature planes.
+    MinkowskiEngine PPN 
 
     Configurations
     --------------
@@ -55,49 +57,29 @@ class PPNTest(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='ppn'):
-        super(PPNTest, self).__init__(cfg)
-        model_cfg = cfg[name]
+        super(PPN, self).__init__(cfg)
+        self.model_cfg = cfg[name]
         # UResNet Configurations
-        self.reps = model_cfg.get('reps', 2)
-        self.depth = model_cfg.get('depth', 5)
-        self.num_filters = model_cfg.get('num_filters', 16)
+        self.reps = self.model_cfg.get('reps', 2)
+        self.depth = self.model_cfg.get('depth', 5)
+        self.num_classes = self.model_cfg.get('num_classes', 5)
+        self.num_filters = self.model_cfg.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
-        self.ppn_score_threshold = model_cfg.get('ppn_score_threshold', 0.5)
+        self.ppn_score_threshold = self.model_cfg.get('ppn_score_threshold', 0.5)
         # self.kernel_size = cfg.get('kernel_size', 3)
         # self.downsample = cfg.get(downsample, 2)
-        self.input_kernel = model_cfg.get('input_kernel', 3)
+        self.input_kernel = self.model_cfg.get('input_kernel', 3)
 
-        # Initialize Input Layer
-        self.input_layer = ME.MinkowskiConvolution(
-            in_channels=self.num_input,
-            out_channels=self.num_filters,
-            kernel_size=self.input_kernel, stride=1, dimension=self.D)
+        # self.ppn1_size = self.model_cfg.get('ppn1_size', -1)
+        # self.ppn2_size = self.model_cfg.get('ppn2_size', -1)
+        # self.ppn1_stride, self.ppn2_stride = define_ppn12(
+        #     self.ppn1_size, 
+        #     self.ppn2_size, 
+        #     self.spatial_size, 
+        #     self.depth)
 
-        # Initialize Encoder
-        self.encoding_conv = []
-        self.encoding_block = []
-        for i, F in enumerate(self.nPlanes):
-            m = []
-            for _ in range(self.reps):
-                m.append(ResNetBlock(F, F,
-                    dimension=self.D,
-                    activation=self.activation_name,
-                    activation_args=self.activation_args))
-            m = nn.Sequential(*m)
-            self.encoding_block.append(m)
-            m = []
-            if i < self.depth-1:
-                m.append(ME.MinkowskiBatchNorm(F))
-                m.append(activations_construct(
-                    self.activation_name, **self.activation_args))
-                m.append(ME.MinkowskiConvolution(
-                    in_channels=self.nPlanes[i],
-                    out_channels=self.nPlanes[i+1],
-                    kernel_size=2, stride=2, dimension=self.D))
-            m = nn.Sequential(*m)
-            self.encoding_conv.append(m)
-        self.encoding_conv = nn.Sequential(*self.encoding_conv)
-        self.encoding_block = nn.Sequential(*self.encoding_block)
+        # print(self.ppn1_stride, self.ppn2_stride)
+        # assert False
 
         # Initialize Decoder
         self.decoding_block = []
@@ -130,40 +112,20 @@ class PPNTest(MENetworkBase):
         self.decoding_conv = nn.Sequential(*self.decoding_conv)
 
         self.sigmoid = ME.MinkowskiSigmoid()
-        self.bcst = ME.MinkowskiBroadcastMultiplication()
-        self.pool = ME.MinkowskiGlobalPooling()
         self.expand_as = ExpandAs()
 
+        self.final_block = ResNetBlock(self.nPlanes[0],
+                                       self.nPlanes[0],
+                                       dimension=self.D,
+                                       activation=self.activation_name,
+                                       activation_args=self.activation_args)
 
-    def encoder(self, x):
-        '''
-        Vanilla UResNet Encoder.
-
-        INPUTS:
-            - x (SparseTensor): MinkowskiEngine SparseTensor
-
-        RETURNS:
-            - result (dict): dictionary of encoder output with
-            intermediate feature planes:
-              1) encoderTensors (list): list of intermediate SparseTensors
-              2) finalTensor (SparseTensor): feature tensor at
-              deepest layer.
-        '''
-        x = self.input_layer(x)
-        encoderTensors = [x]
-        for i, layer in enumerate(self.encoding_block):
-            x = self.encoding_block[i](x)
-            encoderTensors.append(x)
-            x = self.encoding_conv[i](x)
-
-        result = {
-            "encoderTensors": encoderTensors,
-            "finalTensor": x
-        }
-        return result
+        self.ppn_pixel_pred = ME.MinkowskiLinear(self.nPlanes[0], self.D)
+        self.ppn_type = ME.MinkowskiLinear(self.nPlanes[0], self.num_classes)
+        self.ppn_final_score = ME.MinkowskiLinear(self.nPlanes[0], 1)
 
 
-    def decoder(self, final, encoderTensors):
+    def forward(self, final, encoderTensors):
         '''
         Vanilla UResNet Decoder
         INPUTS:
@@ -172,48 +134,136 @@ class PPNTest(MENetworkBase):
             - decoderTensors (list of SparseTensor):
             list of feature tensors in decoding path at each spatial resolution.
         '''
-        decoderTensors = []
-        ppn_scores, ppn_logits = [], []
+        ppn_layers, ppn_coords = [], []
         tmp = []
+        mask_ppn = []
         x = final
         for i, layer in enumerate(self.decoding_conv):
             eTensor = encoderTensors[-i-2]
             x = layer(x)
             x = ME.cat(eTensor, x)
             x = self.decoding_block[i](x)
-            decoderTensors.append(x)
             scores = self.ppn_pred[i](x)
-            ppn_logits.append(scores.F)
+            tmp.append(scores.F)
+            ppn_coords.append(scores.C)
             scores = self.sigmoid(scores)
-            tmp.append(x.C)
-            ppn_scores.append(scores.F)
+            mask_ppn.append((scores.F > self.ppn_score_threshold))
             with torch.no_grad():
                 s_expanded = self.expand_as(scores, x.F.shape)
             x = x * s_expanded
         device = x.F.device
-        points = []
         for p in tmp:
             a = p.to(dtype=torch.float32, device=device)
-            points.append(a)
-        return decoderTensors, ppn_scores, ppn_logits, points
+            ppn_layers.append(a)
 
+        x = self.final_block(x)
+        pixel_pred = self.ppn_pixel_pred(x)
+        ppn_type = self.ppn_type(x)
+        ppn_final_score = self.ppn_final_score(x)
 
-    def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
-        features = input[:, self.D+1:].float()
-
-        x = ME.SparseTensor(features, coords=coords)
-        encoderOutput = self.encoder(x)
-        encoderTensors = encoderOutput['encoderTensors']
-        finalTensor = encoderOutput['finalTensor']
-        decoderTensors, ppn_scores, ppn_logits, points = self.decoder(finalTensor, encoderTensors)
+        points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
 
         res = {
-            'encoderTensors': [encoderTensors],
-            'decoderTensors': [decoderTensors],
-            'ppn_scores': [ppn_scores],
-            'ppn_logits': [ppn_logits],
-            'points': [points], 
-            'finalTensor': [finalTensor]
+            'points': points,
+            'mask_ppn': mask_ppn,
+            'ppn_layers': ppn_layers,
+            'ppn_coords': ppn_coords
         }
+
+        return res
+
+
+class PPNLonelyLoss(torch.nn.modules.loss._Loss):
+
+    def __init__(self, cfg, name='ppn_loss'):
+        super(PPNLonelyLoss, self).__init__()
+        self.loss_config = cfg[name]
+        self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
+        self.resolution = self.loss_config.get('ppn_resolution', 5.0)
+        self.regloss = torch.nn.MSELoss()
+        self.segloss = torch.nn.CrossEntropyLoss()
+
+    def pairwise_distances(self, v1, v2):
+        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
+
+
+    def forward(self, outputs, segment_label, particles_label):
+        '''
+        segmentation[0], label and weight are lists of size #gpus = batch_size.
+        segmentation has as many elements as UResNet returns.
+        label[0] has shape (N, dim + batch_id + 1)
+        where N is #pts across minibatch_size events.
+        '''
+        # TODO Add weighting
+        assert len(particles_label) == len(segment_label)
+        batch_ids = [d[:, 0] for d in segment_label]
+        num_batches = len(batch_ids[0].unique())
+        highE = [t[t[:, -1].long() != 4] for t in segment_label]
+        total_loss = 0
+        total_acc = 0
+        count = 0
+        device = segment_label[0].device
+
+        loss, accuracy = 0, []
+        res = {}
+        # Semantic Segmentation Loss
+        for igpu in range(len(segment_label)):
+            particles = particles_label[igpu]
+            ppn_layers = outputs['ppn_layers'][igpu]
+            ppn_coords = outputs['ppn_coords'][igpu]
+            points = outputs['points'][igpu]
+            loss_gpu, acc_gpu = 0.0, 0.0
+            for layer in range(len(ppn_layers)):
+                ppn_score_layer = ppn_layers[layer]
+                coords_layer = ppn_coords[layer]
+                loss_layer = 0.0
+                for b in batch_ids[igpu].int().unique():
+                    batch_index_layer = coords_layer[:, 0].int() == b
+                    batch_particle_index = batch_ids[igpu].int() == b
+                    points_label = particles[particles[:, 0] == b][:, 1:4]
+                    scores_event = ppn_score_layer[batch_index_layer].squeeze()
+                    points_event = coords_layer[batch_index_layer]
+                    d = self.pairwise_distances(points_label, points_event[:, 1:4].float().cuda())
+                    d_positives = (d < self.resolution * 2**(len(ppn_layers) - layer)).any(dim=0)
+                    num_positives = d_positives.sum()
+                    num_negatives = d_positives.nelement() - num_positives
+                    w = num_positives.float() / (num_positives + num_negatives).float()
+                    weight_ppn = torch.zeros(d_positives.shape[0]).to(device)
+                    weight_ppn[d_positives] = 1 - w
+                    weight_ppn[~d_positives] = w
+                    loss_batch = self.lossfn(scores_event, d_positives.float(), weight=weight_ppn, reduction='mean')
+                    loss_layer += loss_batch
+                    if layer == len(ppn_layers)-1:
+                        pixel_pred = points[batch_particle_index][:, 0:3] + coords_layer[batch_particle_index][:, 1:4].float().cuda()
+                        pixel_score = points[batch_particle_index][:, -1]
+                        pixel_logits = points[batch_particle_index][:, 3:8]
+
+                        d = self.pairwise_distances(points_label, pixel_pred)
+                        positives = (d < self.resolution).any(dim=0)
+                        if (torch.sum(positives) < 1):
+                            continue
+                        acc = (positives == (pixel_score > 0)).sum().float() / float(pixel_score.shape[0])
+                        total_acc += acc
+                        distance_positives = d[:, positives]
+                        # Mask Loss
+                        mask_loss_final = self.lossfn(pixel_score, positives.float(), weight=weight_ppn, reduction='mean')
+                        # Type Segmentation Loss
+                        event_types_label = particles[particles[:, 0] == b][:, -2]
+                        positive_labels = event_types_label[torch.argmin(distance_positives, dim=0)]
+                        type_loss = self.segloss(pixel_logits[positives], positive_labels.long())
+                        # Distance Loss
+                        d2, _ = torch.min(distance_positives, dim=0)
+                        reg_loss = d2.mean()
+                        # print(reg_loss + type_loss + mask_loss_final)
+                        total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches
+                loss_layer /= num_batches
+                loss_gpu += loss_layer
+            loss_gpu /= len(ppn_layers)
+            total_loss += loss_gpu
+
+        total_acc /= num_batches
+        res['loss'] = total_loss
+        res['accuracy'] = float(total_acc)
         return res

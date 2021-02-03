@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 def list_concat(data_blob, outputs, avoid_keys=[]):
     result_data = {}
@@ -50,6 +51,13 @@ def unwrap_3d_scn(data_blob, outputs, avoid_keys=[]):
     See unwrap_scn
     """
     return unwrap_scn(data_blob, outputs, 3, avoid_keys)
+
+
+def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
+    """
+    See unwrap_scn
+    """
+    return unwrap_scn(data_blob, outputs, 0, avoid_keys)
 
 
 def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
@@ -210,6 +218,7 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
     # ensure outputs[key] length is same for all key in target_list_keys
     # for target in target_list_keys:
     #     print(target,len(outputs[target]))
+
     num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
     assert len(num_elements)<1 or len(num_elements) == 1
     num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])

@@ -21,7 +21,7 @@ class Attention(nn.Module):
         features = features * scores
         coords = x.C
         output = ME.SparseTensor(
-            coords=coords, feats=features)
+            coordinates=coords, feats=features)
         return output
 
 
@@ -210,7 +210,7 @@ class ClusterResNet(MENetworkBase):
         if self.coordConv:
             features = torch.cat([normalized_coords, features], dim=1)
 
-        x = ME.SparseTensor(features, coords=coords.cpu().int())
+        x = ME.SparseTensor(features, coordinates=coords.cpu().int())
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
@@ -277,8 +277,9 @@ class SPICE(MENetworkBase):
     def forward(self, input):
 
         point_cloud, = input
+        device = point_cloud.device
 
-        coords = point_cloud[:, 0:self.D+1].cpu().int()
+        coords = point_cloud[:, 0:self.D+1].to(device)
         features = point_cloud[:, self.D+1:].float().view(-1, 1)
 
         normalized_coords = (coords[:, 1:self.D+1] - float(self.spatial_size) / 2) \
@@ -288,7 +289,7 @@ class SPICE(MENetworkBase):
             features = torch.cat([normalized_coords, features], dim=1)
 
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coords)
 
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']

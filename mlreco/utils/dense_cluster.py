@@ -296,14 +296,24 @@ def main_loop_parameter_search(train_cfg, **kwargs):
         margins = res['margins'][0].reshape(-1, )
         # print(data_blob['segment_label'][0])
         # print(data_blob['cluster_label'][0])
-        semantic_labels = data_blob['cluster_label'][0][:, -1]
-        print(semantic_labels.shape)
-        print(embedding.shape)
-        cluster_labels = data_blob['cluster_label'][0][:, 5]
-        # print(data_blob['segment_label'][0])
-        # print(semantic_labels)
-        # print(np.unique(cluster_labels))
-        coords = data_blob['input_data'][0][:, :3]
+        if isinstance(data_blob['cluster_label'][0], torch.Tensor):
+            semantic_labels = data_blob['cluster_label'][0][:, -1].detach().cpu().numpy()
+            print(semantic_labels.shape)
+            print(embedding.shape)
+            cluster_labels = data_blob['cluster_label'][0][:, 5].detach().cpu().numpy()
+            # print(data_blob['segment_label'][0])
+            # print(semantic_labels)
+            # print(np.unique(cluster_labels))
+            coords = data_blob['input_data'][0][:, :3].detach().cpu().numpy()
+        else:
+            semantic_labels = data_blob['cluster_label'][0][:, -1]
+            print(semantic_labels.shape)
+            print(embedding.shape)
+            cluster_labels = data_blob['cluster_label'][0][:, 5]
+            # print(data_blob['segment_label'][0])
+            # print(semantic_labels)
+            # print(np.unique(cluster_labels))
+            coords = data_blob['input_data'][0][:, :3]
         index = data_blob['index'][0]
 
         acc_dict = {}
@@ -377,9 +387,20 @@ def main_loop(train_cfg, **kwargs):
         margins = res['margins'][0].reshape(-1, )
         # print(data_blob['segment_label'][0])
         # print(data_blob['cluster_label'][0])
-        semantic_labels = data_blob['cluster_label'][0][:, -1]
-        cluster_labels = data_blob['cluster_label'][0][:, 5]
-        coords = data_blob['input_data'][0][:, :3]
+        if isinstance(data_blob['cluster_label'][0], torch.Tensor):
+            semantic_labels = data_blob['cluster_label'][0][:, -1].detach().cpu().numpy()
+            cluster_labels = data_blob['cluster_label'][0][:, 5].detach().cpu().numpy()
+            # print(data_blob['segment_label'][0])
+            # print(semantic_labels)
+            # print(np.unique(cluster_labels))
+            coords = data_blob['input_data'][0][:, :3].detach().cpu().numpy()
+        else:
+            semantic_labels = data_blob['cluster_label'][0][:, -1]
+            cluster_labels = data_blob['cluster_label'][0][:, 5]
+            # print(data_blob['segment_label'][0])
+            # print(semantic_labels)
+            # print(np.unique(cluster_labels))
+            coords = data_blob['input_data'][0][:, :3]
         index = data_blob['index'][0]
 
         acc_dict = {}
@@ -395,7 +416,7 @@ def main_loop(train_cfg, **kwargs):
             margins_class = margins[semantic_mask]
 
             start = time.time()
-            pred = fit_predict(embedding_class, seed_class, margins_class, gaussian_kernel,
+            pred = fit_predict_np(embedding_class, seed_class, margins_class, gaussian_kernel,
                                 s_threshold=s_thresholds[int(c)], p_threshold=p_thresholds[int(c)])
             end = time.time()
             post_time = float(end-start)
@@ -409,7 +430,7 @@ def main_loop(train_cfg, **kwargs):
             pred_num_clusters = len(np.unique(pred))
             row = (index, c, ari, purity, efficiency, fscore, sbd, \
                 true_num_clusters, pred_num_clusters, s_thresholds[int(c)], p_thresholds[int(c)],
-                forward_time, post_time, voxel_count)
+                forward_time, post_time)
             output.append(row)
             print("ARI = ", ari)
             print("SBD = ", sbd)
@@ -417,7 +438,7 @@ def main_loop(train_cfg, **kwargs):
 
     output = pd.DataFrame(output, columns=['Index', 'Class', 'ARI',
                 'Purity', 'Efficiency', 'FScore', 'SBD', 'true_num_clusters', 'pred_num_clusters',
-                'seed_threshold', 'prob_threshold', 'forward_time', 'post_time', 'voxel_count'])
+                'seed_threshold', 'prob_threshold', 'forward_time', 'post_time'])
     return output
 
 

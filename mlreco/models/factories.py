@@ -33,9 +33,7 @@ def model_dict():
     from . import cluster_gnn_kinematics
 
     from . import mink_uresnet
-    from . import mink_full_chain
-    from . import mink_ppn
-    from . import mink_clusternet
+    from . import mink_uresnet_ppn_chain
     from . import mink_singlep
     from . import mink_spice
     from . import vae
@@ -61,10 +59,8 @@ def model_dict():
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
         # URESNET MINKOWSKINET
-        "uresnet_mink": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
-        "mink_full_chain": (mink_full_chain.FullChain, mink_full_chain.ChainLoss),
-        "mink_ppn":(mink_ppn.PPNLonely, mink_ppn.PPNLonelyLoss),
-        "mink_clusternet": (mink_clusternet.ClusterNetPP, mink_clusternet.ClusterChainLoss),
+        "mink_uresnet": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss), 
         "mink_singlep": (mink_singlep.ParticleImageClassifier, mink_singlep.ParticleTypeLoss),
         "mink_vae": (vae.VAE, vae.ReconstructionLoss), 
         "mink_vae_2": (vae.VAE2, vae.ReconstructionLoss),
