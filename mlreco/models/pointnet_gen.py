@@ -10,7 +10,7 @@ from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder2
 from collections import defaultdict
 
 from torch_geometric.data import Data, Batch
-from chamferdist import ChamferDistance
+# from chamferdist import ChamferDistance
 
 
 class VAE(nn.Module):
@@ -89,7 +89,7 @@ class ReconstructionLoss(nn.Module):
         self.bce_weight = self.loss_config.get('bce_weight', 1.0)
         self.kld_weight = self.loss_config.get('kld_weight', 0.0)
         self.layer = self.loss_config.get('layer', -1)
-        self.loss_fn = ChamferDistance()
+        # self.loss_fn = ChamferDistance()
         self.spatial_size = self.loss_config.get('spatial_size', 256)
 
     def forward(self, out, label, weight=None):

@@ -34,6 +34,8 @@ if __name__ == "__main__":
     start = time.time()
     if mode == 'optimize':
         output = main_loop_parameter_search(train_cfg, **cfg)
+    elif mode == 'optimize_me':
+        output = main_loop_parameter_search_2(train_cfg, **cfg)
     elif mode == 'voxel_cut':
         output = main_loop_voxel_cut(train_cfg, **cfg)
     else:

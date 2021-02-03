@@ -211,7 +211,7 @@ class trainval(object):
             unwrapper = self._trainval_config.get('unwrapper',None)
             if unwrapper is not None:
                 try:
-                    unwrapper = getattr(utils,unwrapper)
+                    unwrapper = getattr(utils.unwrap,unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % output_cfg['unwrapper'])
