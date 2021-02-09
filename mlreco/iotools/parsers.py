@@ -231,7 +231,7 @@ def parse_particle_asis(data):
     meta = clusters.meta()
 
 
-    funcs = ["first_step","last_step","position","end_position"]
+    funcs = ["first_step","last_step","position","end_position","ancestor_position"]
     for p in particles:
         for f in funcs:
             pos = getattr(p,f)()
