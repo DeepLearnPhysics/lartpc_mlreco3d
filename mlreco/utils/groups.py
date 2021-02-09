@@ -286,7 +286,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
 
 def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
     '''
-    A function to sort out nu ids (0 for cosmic, 1 to n_nu for nu).
+    A function to sorts interactions into nu or not nu (0 for cosmic, 1 for nu).
     CAVEAT: Dirty way to sort out nu_ids
             Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
     Inputs:
@@ -299,7 +299,7 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         - nu_id: a numpy array with the shape (n,1)
     '''
     # initiate the nu_id
-    nu_id = np.ones(len(particle_v))*(-1)
+    nu_id = np.zeros(len(particle_v))
 
     if particle_mpv is None:
         # find the first cluster that has nonzero size
@@ -309,18 +309,19 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         # the corresponding interaction id
         nu_interaction_id = interaction_ids[first_clust_id]
         # Get clust indexes for interaction_id = nu_interaction_id
-        inds = np.where(interaction_ids==nu_interaction_id)[0]
+        inds = np.where(interaction_ids == nu_interaction_id)[0]
         # Check whether there're at least two clusts coming from 'primary' process
         num_primary = 0
         for i, part in enumerate(particle_v):
             if i not in inds:
                 continue
             create_prc = part.creation_process()
-            if create_prc=='primary':
+            parent_pdg = part.parent_pdg_code()
+            if create_prc == 'primary' or parent_pdg == 111:
                 num_primary += 1
         # if there is nu interaction
-        if num_primary>1:
-            nu_id[inds]=1
+        if num_primary > 1:
+            nu_id[inds] = 1
     else:
         # Find mpv particles
         is_mpv = np.zeros((len(particle_v),))
@@ -338,6 +339,7 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
             #     if part.creation_process() == 'primary':
             #         num_primary += 1
             # if num_primary > 1:
-            nu_id[interaction_ids == x] = idx
+            nu_id[interaction_ids == x] = 1 # Only tells whether neutrino or not
+            # nu_id[interaction_ids == x] = idx
 
     return nu_id
