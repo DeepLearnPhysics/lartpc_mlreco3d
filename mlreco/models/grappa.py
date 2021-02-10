@@ -104,8 +104,12 @@ class GNN(torch.nn.Module):
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
         if self.kinematics_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
-            self.type_net = MomentumNet(node_output_feats, 5)
-            self.momentum_net = MomentumNet(node_output_feats, 1)
+            self.kinematics_type = base_config.get('kinematics_type', True)
+            self.kinematics_momentum = base_config.get('kinematics_momentum', True)
+            if self.kinematics_type:
+                self.type_net = MomentumNet(node_output_feats, 5)
+            if self.kinematics_momentum:
+                self.momentum_net = MomentumNet(node_output_feats, 1)
 
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg[name])
@@ -249,10 +253,12 @@ class GNN(torch.nn.Module):
 
         # If requested, pass the node features through two MLPs for kinematics predictions
         if self.kinematics_mlp:
-            node_pred_type = self.type_net(out['node_features'][0])
-            node_pred_p = self.momentum_net(out['node_features'][0])
-            result['node_pred_type'] = [[node_pred_type[b] for b in cbids]]
-            result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
+            if self.kinematics_type:
+                node_pred_type = self.type_net(out['node_features'][0])
+                result['node_pred_type'] = [[node_pred_type[b] for b in cbids]]
+            if self.kinematics_momentum:
+                node_pred_p = self.momentum_net(out['node_features'][0])
+                result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
 
         return result
 
@@ -285,12 +291,14 @@ class GNNLoss(torch.nn.modules.loss._Loss):
             self.apply_edge_loss = True
             self.edge_loss = edge_loss_construct(cfg[name])
 
-    def forward(self, result, clust_label, graph=None):
+    def forward(self, result, clust_label, graph=None, node_label=None):
 
         # Apply edge and node losses, if instantiated
         loss = {}
         if self.apply_node_loss:
-            node_loss = self.node_loss(result, clust_label)
+            if node_label is None:
+                node_label = clust_label
+            node_loss = self.node_loss(result, node_label)
             loss.update(node_loss)
             loss['node_loss'] = node_loss['loss']
             loss['node_accuracy'] = node_loss['accuracy']
