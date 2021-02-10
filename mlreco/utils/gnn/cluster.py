@@ -16,12 +16,12 @@ def form_clusters(data, min_size=-1, column=5, batch_index=3):
     """
     clusts = []
     for b in data[:, batch_index].unique():
-        binds = torch.nonzero(data[:, batch_index] == b).flatten()
+        binds = torch.nonzero(data[:, batch_index] == b, as_tuple=True)[0]
         for c in data[binds,column].unique():
             # Skip if the cluster ID is -1 (not defined)
             if c < 0:
                 continue
-            clust = torch.nonzero(data[binds,column] == c).flatten()
+            clust = torch.nonzero(data[binds,column] == c, as_tuple=True)[0]
             if len(clust) < min_size:
                 continue
             clusts.append(binds[clust])
@@ -200,7 +200,7 @@ def get_cluster_energies(data, clusts):
     return np.array([np.sum(data[c,4]) for c in clusts])
 
 
-def get_cluster_dirs(voxels, clusts, delta=0.0):
+def get_cluster_dirs(voxels, clusts):
     """
     Function that returns the direction of the listed clusters,
     expressed as its normalized covariance matrix.
@@ -208,21 +208,18 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
     Args:
         voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,9) Tensor of cluster directions
     """
     dirs = []
     for c in clusts:
+
         # Get list of voxels in the cluster
         x = get_cluster_voxels(voxels, c)
 
-        # Handle size 1 clusters seperately
+        # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            # Don't waste time with computations, default to regularized
-            # orientation matrix
-            B = delta * np.eye(3)
-            dirs.append(B.flatten())
+            return dirs.append(np.concatenate(np.zeros(9)))
             continue
 
         # Center data
@@ -232,13 +229,10 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
         # Get orientation matrix
         A = x.T.dot(x)
 
-        # Get eigenvectors - convention with eigh is that eigenvalues are ascending
+        # Get eigenvectors, normalize orientation matrix
+        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
         w, v = np.linalg.eigh(A)
-        w = w + delta
-        w = w / w[2]
-
-        # Orientation matrix with regularization
-        B = (1.-delta) * v.dot(np.diag(w)).dot(v.T) + delta * np.eye(3)
+        B = A / w[2]
 
         # Append (dirs)
         dirs.append(B.flatten())
@@ -246,7 +240,7 @@ def get_cluster_dirs(voxels, clusts, delta=0.0):
     return np.vstack(dirs)
 
 
-def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False):
+def get_cluster_features(data, clusts, whether_adjust_direction=False):
     """
     Function that returns the an array of 16 features for
     each of the clusters in the provided list.
@@ -254,23 +248,18 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
     Args:
         voxels (np.ndarray)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
     feats = []
     for c in clusts:
+
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
 
-        # Handle size 1 clusters seperately
+        # Do not waste time with computations with size 1 clusters, default to zeros
         if len(c) < 2:
-            # Don't waste time with computations, default to regularized
-            # orientation matrix, zero direction
-            center = x.flatten()
-            B = delta * np.eye(3)
-            v0 = np.zeros(3)
-            feats.append(np.concatenate((center, B.flatten(), v0, [len(c)])))
+            feats.append(np.concatenate((x.flatten(), np.zeros(12), [len(c)])))
             continue
 
         # Center data
@@ -280,35 +269,32 @@ def get_cluster_features(data, clusts, delta=0.0, whether_adjust_direction=False
         # Get orientation matrix
         A = x.T.dot(x)
 
-        # Get eigenvectors
+        # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
+        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
         w, v = np.linalg.eigh(A)
-        dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2]
-        w = w + delta
+        dirwt = 1.0 - w[1] / w[2]
+        B = A / w[2]
         w = w / w[2]
 
-        # Orientation matrix with regularization
-        B = (1.-delta) * v.dot(np.diag(w)).dot(v.T) + delta * np.eye(3)
-
-        # get direction - look at direction of spread orthogonal to v[:,maxind]
+        # Get the principal direction, identify the direction of the spread
         v0 = v[:,2]
 
-        # Projection of x along v0
+        # Projection all points, x, along the principal axis
         x0 = x.dot(v0)
 
-        # Projection orthogonal to v0
+        # Evaluate the distance from the points to the principal axis
         xp0 = x - np.outer(x0, v0)
         np0 = np.linalg.norm(xp0, axis=1)
 
-        # spread coefficient
+        # Flip the principal direction if it is not pointing towards the maximum spread
         sc = np.dot(x0, np0)
         if sc < 0:
-            # Reverse
             v0 = -v0
 
         # Weight direction
         v0 = dirwt * v0
 
-        # If adjust the direction
+        # Adjust direction to the start direction if requested
         if whether_adjust_direction:
             if np.dot(
                     x[find_start_point(x.detach().cpu().numpy())],
@@ -394,12 +380,12 @@ def get_cluster_points_label(data, particles, clusts, groupwise=False):
     if not groupwise:
         clust_ids = get_cluster_label(data, clusts)
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i], as_tuple=True)[0]
             idx = batch_mask[clust_ids[i]]
             points.append(particles[idx,:3])
     else:
         for i, c in enumerate(clusts):
-            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i]).flatten()
+            batch_mask = torch.nonzero(particles[:,3] == batch_ids[i], as_tuple=True)[0]
             clust_ids  = data[c,5].unique().long()
             maxid = torch.argmin(particles[batch_mask][clust_ids,-1])
             order = [0, 1, 2, 4, 5, 6] if np.random.choice(2) else [4, 5, 6, 0, 1, 2]
@@ -457,7 +443,7 @@ def get_cluster_start_points(data, clusts):
     return np.vstack(points)
 
 
-def cluster_direction(data, start, max_dist=-1, optimize=False):
+def cluster_direction(data, start, max_dist=-1, optimize=False, use_cpu=False):
     """
     Finds the orientation of the cluster by computing the
     mean direction from the start point.
@@ -466,12 +452,17 @@ def cluster_direction(data, start, max_dist=-1, optimize=False):
         data (torch.tensor) : (N,3) Voxel coordinates [x, y, z]
         start (torch.tensor): (3) Start voxel coordinates [x, y, z]
         max_dist (float)    : Max distance between start voxel and other voxels in the mean
-        optimize (bool)      : Optimizes the number of points involved in the estimate
+        optimize (bool)     : Optimizes the number of points involved in the estimate
+        use_cpu (bool)      : Bring data to CPU to hasten optimization
     Returns:
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within
     # a sphere of radius max_dist
+    device = data.device
+    if use_cpu:
+        data = data.detach().cpu()
+        start = start.detach().cpu()
     voxels = data[:,:3]
     if max_dist > 0 and not optimize:
         from mlreco.utils import local_cdist
@@ -510,12 +501,14 @@ def cluster_direction(data, start, max_dist=-1, optimize=False):
 
     # Compute mean direction with respect to start point, normalize it
     mean = torch.mean(torch.stack([v-start for v in voxels]), dim=0)
+    if use_cpu:
+        mean = mean.to(device)
     if torch.norm(mean):
         return mean/torch.norm(mean)
     return mean
 
 
-def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
+def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False, use_cpu=False):
     """
     Finds the orientation of all the clusters by computing the
     mean direction from the start point.
@@ -526,6 +519,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         max_dist (float)     : Max distance between start voxel and other voxels
         optimize (bool)      : Optimizes the number of points involved in the estimate
+        use_cpu (bool)       : Bring data to CPU to hasten optimization
     Returns:
         torch.tensor: (3) Orientation
     """
@@ -535,56 +529,37 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     for i, c in enumerate(clusts):
         # Get list of voxels in the cluster
         x = get_cluster_voxels(data, c)
-        dir = cluster_direction(x, starts[i], max_dist, optimize)
+        dir = cluster_direction(x, starts[i], max_dist, optimize, use_cpu)
         dirs.append(dir)
 
     return torch.stack(dirs)
 
 
-def relabel_groups(data, clusts, groups, new_array=True):
+def relabel_groups(clust_ids, true_group_ids, pred_group_ids):
     """
-    Function that resets the value of the group data column according
-    to the cluster value specified for each cluster.
+    Function that resets the value of the group ids according
+    to the predicted group ids, enforcing that clus_id=group_id
+    if the cluster corresponds to a primary
 
     Args:
-        data (torch.Tensor)    : N_GPU array of (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([[np.ndarray]]): N_GPU array of (C) List of arrays of voxel IDs in each cluster
-        groups ([np.ndarray])  : N_GPU array of (C) List of group ids for each cluster
-        new_array (bool)       : Whether or not to deep copy the data array
+        clust_ids (np.ndarray)       : (C) List of label cluster ids
+        true_group_ids (np.ndarray)  : (C) List of label group ids
+        pred_groups_ids (np.ndarray) : (C) List of predicted group ids
     Returns:
-        torch.Tensor: (N,8) Relabeled [x, y, z, batchid, value, id, groupid, shape]
+        torch.Tensor: (C) Relabeled group ids
     """
-    data_new = data
-    if new_array:
-        import copy
-        data_new = copy.deepcopy(data)
+    new_group_ids = np.empty(len(pred_group_ids))
+    primary_mask = clust_ids == true_group_ids
+    new_id = max(clust_ids)+1
+    for g in np.unique(pred_group_ids):
+        group_mask     = pred_group_ids == g
+        primary_labels = np.where(primary_mask & group_mask)[0]
+        group_id = -1
+        if len(primary_labels) != 1:
+            group_id = new_id
+            new_id += 1
+        else:
+            group_id = clust_ids[primary_labels[0]]
+        new_group_ids[group_mask] = group_id
 
-    device = data[0].device
-    dtype  = data[0].dtype
-    for i in range(len(data)):
-        batches = data[i][:,3]
-        for b in batches.unique():
-            batch_mask = torch.nonzero(batches == b).flatten()
-            labels = data[i][batch_mask]
-            batch_clusts = clusts[i][b.int().item()]
-            if not len(batch_clusts):
-                continue
-            clust_ids = get_cluster_label(labels, batch_clusts, column=5)
-            group_ids = groups[i][b.int().item()]
-            true_group_ids = get_cluster_label(labels, batch_clusts, column=6)
-            primary_mask   = clust_ids == true_group_ids
-            new_id = max(clust_ids)+1
-            for g in np.unique(group_ids):
-                group_mask     = group_ids == g
-                primary_labels = np.where(primary_mask & group_mask)[0]
-                group_id = -1
-                if len(primary_labels) != 1:
-                    group_id = new_id
-                    new_id += 1
-                else:
-                    group_id = clust_ids[primary_labels[0]]
-                for c in batch_clusts[group_mask]:
-                    new_groups = torch.full([len(c)], group_id, dtype=dtype).to(device)
-                    data_new[i][batch_mask[c], 6] = new_groups
-
-    return data_new
+    return new_group_ids

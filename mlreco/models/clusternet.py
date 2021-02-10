@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import sparseconvnet as scn
 
-from .cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
+from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
 from mlreco.models.layers.base import SCNNetworkBase
 
 ###########################################################
@@ -37,7 +37,7 @@ class ClusterCNN(SCNNetworkBase):
     ----------------------------------------------------------
     '''
 
-    MODULES = ['network_base', 'clusternet', 'uresnet', 'clustering_loss']
+    MODULES = ['network_base', 'clusternet', 'uresnet', 'spice_loss']
 
     def __init__(self, cfg, name='clusternet'):
         super(ClusterCNN, self).__init__(cfg)
@@ -131,13 +131,13 @@ class ClusteringLoss(nn.Module):
         - configurations for distance estimation loss.
     ----------------------------------------------------------
     '''
-    def __init__(self, cfg, name='clustering_loss'):
+    def __init__(self, cfg, name='spice_loss'):
         super(ClusteringLoss, self).__init__()
 
         self.loss_config = cfg[name]
 
         self.loss_func_name = self.loss_config.get('name', 'multi')
-        self.loss_func = clustering_loss_construct(self.loss_func_name)
+        self.loss_func = spice_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
         print(self.loss_func)
 

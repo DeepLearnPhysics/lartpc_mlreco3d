@@ -12,3 +12,5 @@ from .ppn_metrics import ppn_metrics
 from .ppn_simple import ppn_simple
 from .cluster_gnn_metrics import cluster_gnn_metrics
 from .cluster_cnn_metrics import cluster_cnn_metrics
+from .cosmic_discriminator_metrics import cosmic_discriminator_metrics
+from .kinematics_metrics import kinematics_metrics
