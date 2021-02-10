@@ -1,3 +1,6 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import pandas as pd
 import sys
@@ -7,21 +10,16 @@ import yaml
 import time
 from scipy.spatial.distance import cdist
 from sklearn.metrics import adjusted_rand_score as ari
-from pathlib import Path
 import argparse
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
 
-from mlreco.main_funcs import process_config, train, inference
 from mlreco.utils.metrics import *
 from mlreco.trainval import trainval
-from mlreco.main_funcs import process_config
 from mlreco.iotools.factories import loader_factory
-from mlreco.main_funcs import cycle
 from sklearn.cluster import DBSCAN
-
 from pprint import pprint
 
 
@@ -31,12 +29,12 @@ def get_optimal_parameters(fname, metric='SBD'):
 
     INPUTS:
         - fname: post-processing output filename (*.csv file)
-        - metric: name of performance metric for which to optimize values on. 
+        - metric: name of performance metric for which to optimize values on.
 
     RETURNS:
         - s_thresholds: dict of { semantic class : optimal seediness threshold } pairs
         - p_thresholds: dict of { semantic class : optimal pvalue threshold } pairs
-        - max_values: maximum value of metric using optimal thresholding values. 
+        - max_values: maximum value of metric using optimal thresholding values.
 
     '''
     data = pd.read_csv(fname)
@@ -60,7 +58,7 @@ def get_optimal_parameters(fname, metric='SBD'):
 
 
 def make_inference_cfg(train_cfg, gpu=1, snapshot=None, batch_size=1, model_path=None):
-
+    from mlreco.main_funcs import process_config
     cfg = yaml.load(open(train_cfg, 'r'), Loader=yaml.Loader)
     process_config(cfg)
     inference_cfg = cfg.copy()
@@ -173,9 +171,10 @@ def find_cluster_means_cuda(features, labels):
     return group_ids, cluster_means
 
 
-def fit_predict(embeddings, seediness, margins, fitfunc, 
+def fit_predict(embeddings, seediness, margins, fitfunc,
                 s_threshold=0.0, p_threshold=0.5):
     device = embeddings.device
+    seediness = torch.squeeze(seediness)
     num_points = embeddings.shape[0]
     count = 0
     probs = []
@@ -197,9 +196,10 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
     return labels
 
 
-def fit_predict_np(embeddings, seediness, margins, fitfunc, 
+def fit_predict_np(embeddings, seediness, margins, fitfunc,
                 s_threshold=0.0, p_threshold=0.5):
     num_points = embeddings.shape[0]
+    seediness = np.squeeze(seediness)
     count = 0
     probs = []
     unclustered = np.ones(num_points, dtype=np.byte)
@@ -260,6 +260,7 @@ def fit_predict_verbose(embeddings, seediness, margins, fitfunc,
 #----------------VARIOUS POST-PROCESSING ROUTINES FOR ANALYSIS---------------
 
 def main_loop_parameter_search(train_cfg, **kwargs):
+    from mlreco.main_funcs import cycle
     inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
                         model_path=kwargs['model_path'])
     start_index = kwargs.get('start_index', 0)
@@ -356,7 +357,7 @@ def main_loop_parameter_search(train_cfg, **kwargs):
 
 
 def main_loop(train_cfg, **kwargs):
-
+    from mlreco.main_funcs import cycle
     inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
                         model_path=kwargs['model_path'])
     start_index = kwargs.get('start_index', 0)
@@ -443,7 +444,7 @@ def main_loop(train_cfg, **kwargs):
 
 
 def main_loop_voxel_cut(train_cfg, **kwargs):
-
+    from mlreco.main_funcs import cycle
     inference_cfg = make_inference_cfg(train_cfg, gpu=kwargs['gpu'], batch_size=1,
                         model_path=kwargs['model_path'])
     start_index = kwargs.get('start_index', 0)

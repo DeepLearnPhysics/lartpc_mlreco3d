@@ -6,16 +6,10 @@ from collections import defaultdict
 import copy
 
 from mlreco.models.chain.full_cnn import *
-#from mlreco.models.gnn.modular_nnconv import NNConvModel as FullGNN
-from mlreco.models.cluster_full_gnn import ClustFullGNN as FullGNN
-from mlreco.models.cluster_gnn import ClustEdgeGNN as EdgeGNN
-from mlreco.utils.gnn.cluster import relabel_groups
-
 from mlreco.models.ppn import PPNLoss
-from .cluster_cnn import clustering_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from .cluster_cnn import spice_loss_construct
+from mlreco.models.grappa import GNN, GNNLoss
+from mlreco.models.gnn.losses.node_grouping import *
 
 from pprint import pprint
 
@@ -28,14 +22,9 @@ class FullChain(nn.Module):
         #self.model_config = cfg[name]
 
         self.full_cnn = FullCNN(cfg)
-        cfg['chain'] = cfg['shower_gnn']
-        cfg['edge_model'] = cfg['shower_edge_model']
-        self.shower_gnn = FullGNN(cfg)
+        self.shower_gnn = GNN(cfg, 'grappa_shower')
+        self.inter_gnn = GNN(cfg, 'grappa_inter')
         self.edge_predictor = self.shower_gnn.edge_predictor
-        cfg['chain'] = cfg['interaction_gnn']
-        cfg['edge_model'] = cfg['interaction_edge_model']
-        cfg['node_encoder']['more_feats'] = True
-        self.inte_gnn = EdgeGNN(cfg)
         self.inte_edge_predictor = self.inte_gnn.edge_predictor
 
         # self.edge_net = EdgeFeatureNet(16, 16)
@@ -100,7 +89,7 @@ class FullChain(nn.Module):
         result.update(gnn_output)
 
         pred_tensor = relabel_groups([pred_tensor], gnn_output['clusts'], gnn_output['group_pred'], new_array=False)[0]
-        gnn_output = self.inte_gnn([pred_tensor, input[1]])
+        gnn_output = self.inter_gnn([pred_tensor, input[1]])
         result['particle_clusts'] = gnn_output['clusts']
         result['particle_edge_index'] = gnn_output['edge_index']
         result['particle_edge_pred']  = gnn_output['edge_pred']
@@ -117,20 +106,16 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #print(self.loss_config)
         self.gnn_loss = self.loss_config.get('gnn_loss', False)
 
-        self.clustering_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.clustering_loss = clustering_loss_construct(self.clustering_loss_name)
-        self.clustering_loss = self.clustering_loss(cfg, name='full_chain_loss')
-        #print(self.clustering_loss)
+        self.spice_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
+        self.spice_loss = spice_loss_construct(self.spice_loss_name)
+        self.spice_loss = self.spice_loss(cfg, name='full_chain_loss')
+        #print(self.spice_loss)
 
         #self.node_loss = GNNGroupingLoss(cfg)
         #self.node_loss_weight = self.loss_config.get('node_loss_weight', 1.0)
 
-        cfg['chain'] = cfg['shower_gnn']
-        cfg['edge_model'] = cfg['shower_edge_model']
-        self.shower_gnn_loss = FullGNNLoss(cfg)
-        cfg['chain'] = cfg['interaction_gnn']
-        cfg['edge_model'] = cfg['interaction_edge_model']
-        self.inte_gnn_loss = EdgeGNNLoss(cfg)
+        self.shower_gnn_loss = GNNLoss(cfg, 'grappa_shower_loss')
+        self.inter_gnn_loss = GNNLoss(cfg, 'grappa_inter_loss')
         self.spatial_size = self.loss_config.get('spatial_size', 768)
 
         self.segmentation_weight = self.loss_config.get('segmentation_weight', 1.0)
@@ -239,7 +224,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             seed_batch_highE = seed_batch[highE_mask]
             margins_batch_highE = margins_batch[highE_mask]
 
-            loss_class, acc_class = self.clustering_loss.combine_multiclass(
+            loss_class, acc_class = self.spice_loss.combine_multiclass(
                 embedding_batch_highE, margins_batch_highE,
                 seed_batch_highE, slabels_highE, clabels_batch_highE)
             for key, val in loss_class.items():
@@ -265,7 +250,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         res.update(acc_avg)
         # pprint(res)
 
-        res['clustering_loss'] = float(self.clustering_weight * res['loss'])
+        res['spice_loss'] = float(self.clustering_weight * res['loss'])
         res['acc_seg'] = float(res['accuracy'])
         res['ppn_loss'] = float(ppn_loss)
         res['ppn_acc'] = float(ppn_res['ppn_acc'])
@@ -294,7 +279,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         inte_out['clusts'] = out['particle_clusts']
         inte_out['edge_index'] = out['particle_edge_index']
         inte_out['edge_pred'] = out['particle_edge_pred']
-        interaction_loss = self.inte_gnn_loss(inte_out, [inte_tensor], None)
+        interaction_loss = self.inter_gnn_loss(inte_out, [inte_tensor], None)
         res['particle_edge_loss'] = interaction_loss['loss']
         res['particle_edge_accuracy'] = interaction_loss['accuracy']
         res['loss'] += interaction_loss['loss']
@@ -314,7 +299,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #    res['grouping_loss'] = float(self.node_loss_weight * gnn_loss['loss'])
         #    res['accuracy_grouping'] = gnn_loss['accuracy']
         #    # GNN Grouping Loss
-        #    print('Clustering Loss = ', res['clustering_loss'])
+        #    print('Clustering Loss = ', res['spice_loss'])
         #    print('Grouping Loss = ', res['grouping_loss'])
         #    print('Clustering Accuracy = ', res['accuracy_clustering'])
         #    print('Grouping Accuracy  = ', res['accuracy_grouping'])

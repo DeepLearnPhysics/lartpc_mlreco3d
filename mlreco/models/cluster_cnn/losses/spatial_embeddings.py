@@ -6,53 +6,9 @@ import numpy as np
 import sparseconvnet as scn
 
 from .lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
-from .misc import FocalLoss, WeightedFocalLoss
+from .misc import *
 from collections import defaultdict
-
-def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
-    def f(x):
-        N = x.shape[0]
-        L = torch.zeros(3, 3)
-        tril_indices = torch.tril_indices(row=3, col=3, offset=-1)
-        L[tril_indices[0], tril_indices[1]] = Lprime
-        sigma = torch.exp(log_sigma) + eps
-        L += torch.diag(sigma)
-        cov = torch.matmul(L, L.T)
-        dist = torch.matmul((x - centroid), torch.inverse(cov))
-        dist = torch.bmm(dist.view(N, 1, -1), (x-centroid).view(N, -1, 1)).squeeze()
-        probs = torch.exp(-dist)
-        return probs
-    return f
-
-
-def squared_distances(v1, v2):
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.pow(v2_2 - v1_2, 2).sum(2)
-
-
-def bhattacharyya_distance_matrix(v1, v2, eps=1e-8):
-    x1, s1 = v1[:, :3], v1[:, 3].view(-1)
-    x2, s2 = v2[:, :3], v1[:, 3].view(-1)
-    g1 = torch.ger(s1**2, 1.0 / (s2**2 + eps))
-    g2 = g1.t()
-    dist = squared_distances(x1.contiguous(), x2.contiguous())
-    denom = 1.0 / (eps + s1.unsqueeze(1)**2 + s2**2)
-    out = 0.25 * torch.log(0.25 * (g1 + g2 + 2)) + 0.25 * dist / denom
-    return out
-
-
-def bhattacharyya_coeff_matrix(v1, v2, eps=1e-6):
-    x1, s1 = v1[:, :3], v1[:, 3].view(-1)
-    x2, s2 = v2[:, :3], v1[:, 3].view(-1)
-    g1 = torch.ger(s1**2, 1.0 / (s2**2 + eps))
-    g2 = g1.t()
-    dist = squared_distances(x1.contiguous(), x2.contiguous())
-    denom = 1.0 / (eps + s1.unsqueeze(1)**2 + s2**2)
-    out = 0.25 * torch.log(0.25 * (g1 + g2 + 2)) + 0.25 * dist / denom
-    out = torch.exp(-out)
-    return out
-
+from pprint import pprint
 
 class MaskBCELoss(nn.Module):
     '''
@@ -229,8 +185,6 @@ class MaskBCELoss(nn.Module):
         res = {}
         res.update(loss_avg)
         res.update(acc_avg)
-
-        print(acc_avg)
 
         return res
 
@@ -468,16 +422,18 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
             mask = torch.zeros(embeddings.shape[0]).to(device)
-            mask[index] = 1
-            mask[~index] = 0
+            mask[index] = 1.0
+            mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-8))
+            p = torch.clamp(torch.exp(-dists / (2 * torch.pow(sigma, 2))), min=0, max=1)
+            logits = logit_fn(p, eps=1e-6)
+            # print(logits.shape)
             probs[index] = p[index]
-            loss += lovasz_hinge_flat(2 * p - 1, mask)
+            loss += lovasz_hinge_flat(logits, mask).mean()
             accuracy += float(iou_binary(p > 0.5, mask, per_image=False))
             sigma_detach = sigma.detach()
-            smoothing_loss += torch.mean(torch.norm(margins[index] - sigma_detach, dim=1))
+            smoothing_loss += torch.mean(torch.norm(margins[index].view(-1, 1) - sigma_detach, dim=1))
 
         loss /= n_clusters
         smoothing_loss /= n_clusters
@@ -513,10 +469,11 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             if int(sc) == 4:
                 continue
             index = (slabels == sc)
+            clabels_unique, _ = unique_label_torch(clabels[index])
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(
                 embeddings[index], margins[index],
-                clabels[index])
+                clabels_unique)
             prob_truth = probs.detach()
             seed_loss = self.l2loss(prob_truth, seediness[index].squeeze(1))
             total_loss = self.embedding_weight * mask_loss \

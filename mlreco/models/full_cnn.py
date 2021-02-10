@@ -3,18 +3,11 @@ import numpy as np
 from collections import defaultdict
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.uresnet_lonely import SegmentationLoss
 from mlreco.models.ppn import PPNLoss
-from .cluster_cnn import clustering_loss_construct
-from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
-from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
-
-from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
-from mlreco.utils.gnn.network import complete_graph
+from .cluster_cnn import spice_loss_construct
 
 class FullChain(torch.nn.Module):
     """
@@ -68,7 +61,7 @@ class FullChain(torch.nn.Module):
             - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
 
         RETURNS:
-            - result (tuple of dicts): (cnn_result, gnn_result)
+            - result (tuple of dicts): (cnn_result)
         '''
         # Run all CNN modules
         return self.full_cnn(input)
@@ -82,9 +75,9 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.loss_config = cfg['full_chain_loss']
         self.segmentation_loss = SegmentationLoss({'uresnet_lonely':cfg['full_cnn']})
         self.ppn_loss = PPNLoss(cfg)
-        self.clustering_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.clustering_loss = clustering_loss_construct(self.clustering_loss_name)
-        self.clustering_loss = self.clustering_loss(cfg, name='full_chain_loss')
+        self.spice_loss_name = self.loss_config.get('name', 'se_lovasz_inter')
+        self.spice_loss = spice_loss_construct(self.spice_loss_name)
+        self.spice_loss = self.spice_loss(cfg, name='full_chain_loss')
 
         # Initialize the loss weights
         self.segmentation_weight = self.loss_config.get('segmentation_weight', 1.0)
@@ -141,7 +134,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             clabels_batch_highE = fragment_label[batch_mask][highE_mask]
 
             # Get the clustering loss, append results
-            loss_class, acc_class = self.clustering_loss.combine_multiclass(
+            loss_class, acc_class = self.spice_loss.combine_multiclass(
                 embedding_batch_highE, margins_batch_highE,
                 seed_batch_highE, slabels_highE, clabels_batch_highE)
 

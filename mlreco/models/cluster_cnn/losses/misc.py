@@ -103,7 +103,11 @@ def regularization_loss(cluster_means):
 def margin_smoothing_loss(sigma, sigma_means, labels, margin=0):
     x = sigma[:, None]
     mu = sigma_means[None, :]
+<<<<<<< HEAD
     l = torch.clamp(torch.abs(x-mu) - margin, min=0)**2
+=======
+    l = torch.sqrt(torch.clamp(torch.abs(x-mu) - margin, min=0)**2 + 1e-6)
+>>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
     l = torch.gather(l, 1, labels.view(-1, 1)).squeeze()
     loss = torch.mean(scatter_mean(l, labels))
     return loss
