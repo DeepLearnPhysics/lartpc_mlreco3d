@@ -156,12 +156,12 @@ class ConvolutionBlock(ME.MinkowskiNetwork):
 
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm1 = normalizations_construct(
             normalization, out_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
@@ -199,17 +199,17 @@ class ResNetBlock(ME.MinkowskiNetwork):
         self.act_fn2 = activations_construct(activation, **activation_args)
 
         if in_features != out_features:
-            self.residual = ME.MinkowskiLinear(in_features, out_features, bias=has_bias)
+            self.residual = ME.MinkowskiLinear(in_features, out_features)
         else:
             self.residual = Identity()
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm1 = normalizations_construct(
             normalization, in_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, has_bias=has_bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
@@ -594,7 +594,7 @@ class MBConv(ME.MinkowskiNetwork):
                 ME.MinkowskiConvolution(
                     in_features, out_features,
                     kernel_size=3, stride=1, dilation=1,
-                    dimension=self.D, bias=has_bias))
+                    dimension=self.D, has_bias=has_bias))
         else:
             self.m = nn.Sequential(
                 normalizations_construct(
@@ -606,10 +606,10 @@ class MBConv(ME.MinkowskiNetwork):
                 activations_construct(activation, **activation_args),
                 ME.MinkowskiChannelwiseConvolution(
                     self.hidden_dim, kernel_size=kernel_size, stride=stride, dilation=dilation,
-                    bias=has_bias, dimension=self.D),
+                    has_bias=has_bias, dimension=self.D),
                 # ME.MinkowskiConvolution(
                 #     self.hidden_dim, self.hidden_dim, kernel_size=kernel_size, stride=stride, dilation=dilation,
-                #     bias=has_bias, dimension=self.D),
+                #     has_bias=has_bias, dimension=self.D),
                 normalizations_construct(
                     normalization, self.hidden_dim, **normalization_args),
                 activations_construct(activation, **activation_args),

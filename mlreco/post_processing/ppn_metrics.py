@@ -87,13 +87,15 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
             ppn_occupancy = np.ones((ppn_score.shape[0],))
         else:
             if mode == 'no_type':
-                ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2, enforce_type=False)
+                ppn = uresnet_ppn_type_point_selector(clusters[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2, enforce_type=False)
             else:
                 #ppn = uresnet_ppn_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.6, window_size=10, nms_score_threshold=0.99 )
-                ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2)
+                ppn = uresnet_ppn_type_point_selector(clusters[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2)
             # Remove delta from predicted points
             #ppn = ppn[ppn[:, -1] != delta]
             #ppn = ppn[ppn[:, -3] < 0.1]
+            if ppn.shape[0] == 0:
+                continue
             #print(ppn.shape, ppn[:5])
             ppn_voxels = ppn[:, :3]
             ppn_score = ppn[:, 5]

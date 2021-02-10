@@ -564,6 +564,7 @@ class PointNetGenerator(nn.Module):
             self.mlp.append(nn.Sequential(*m))
             in_features = out_features
         self.mlp.append(nn.Linear(out_features, self.dimension))
+        self.mlp.append(nn.Tanh())
         self.mlp = nn.Sequential(*self.mlp)
 
     def forward(self, points, latent, batch):
