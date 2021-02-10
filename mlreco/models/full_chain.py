@@ -373,7 +373,7 @@ class FullChain(torch.nn.Module):
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, part_seg, self._inter_ids, input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
-            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred'}
+            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p'}
             self.run_gnn(self.grappa_inter, input, result, particles, output_keys, kwargs)
 
         # ---
@@ -690,9 +690,20 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_pred':out['inter_edge_pred'],
                     'edge_index':out['inter_edge_index']
                 }
-            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label)
+            if 'node_pred_type' in out:
+                gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
+            if 'node_pred_p' in out:
+                gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
+
+            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
             res['inter_edge_loss'] = res_gnn_inter['loss']
             res['inter_edge_accuracy'] = res_gnn_inter['accuracy']
+            if 'type_loss' in res_gnn_inter:
+                res['type_loss'] = res_gnn_inter['type_loss']
+                res['type_accuracy'] = res_gnn_inter['type_accuracy']
+            if 'p_loss' in res_gnn_inter:
+                res['p_loss'] = res_gnn_inter['p_loss']
+                res['p_accuracy'] = res_gnn_inter['p_accuracy']
 
             accuracy += res_gnn_inter['accuracy']
             loss += self.inter_gnn_weight*res_gnn_inter['loss']
@@ -703,20 +714,24 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'flow_edge_pred' in out:
                 gnn_out = {
                     'clusts': out['kinematics_particles'],
-                    'node_pred_p': out['node_pred_p'],
-                    'node_pred_type': out['node_pred_type'],
                     'edge_pred': out['flow_edge_pred'],
                     'edge_index': out['kinematics_edge_index']
                 }
+            if 'node_pred_type' in out:
+                gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
+            if 'node_pred_p' in out:
+                gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             res_kinematics = self.kinematics_loss(gnn_out, kinematics_label, graph=particle_graph)
 
             #res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
             res['kinematics_loss'] = res_kinematics['node_loss']
             res['kinematics_accuracy'] = res_kinematics['accuracy']
-            res['p_accuracy'] = res_kinematics['p_accuracy']
-            res['type_accuracy'] = res_kinematics['type_accuracy']
-            res['kinematics_type_loss'] = res_kinematics['type_loss']
-            res['kinematics_p_loss'] = res_kinematics['p_loss']
+            if 'type_loss' in res_gnn_inter:
+                res['type_loss'] = res_gnn_inter['type_loss']
+                res['type_accuracy'] = res_gnn_inter['type_accuracy']
+            if 'p_loss' in res_gnn_inter:
+                res['p_loss'] = res_gnn_inter['p_loss']
+                res['p_accuracy'] = res_gnn_inter['p_accuracy']
             res['kinematics_n_clusts'] = res_kinematics['n_clusts']
 
             accuracy += res_kinematics['node_accuracy']
@@ -772,8 +787,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
             if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
-                print('Type accuracy: {:.4f}'.format(res_kinematics['type_accuracy']))
-                print('Momentum accuracy: {:.4f}'.format(res_kinematics['p_accuracy']))
+            if 'node_pred_type' in out:
+                print('Type accuracy: {:.4f}'.format(res['type_accuracy']))
+            if 'node_pred_p' in out:
+                print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
