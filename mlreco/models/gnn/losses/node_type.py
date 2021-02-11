@@ -78,6 +78,13 @@ class NodeTypeLoss(torch.nn.Module):
                 node_assn = get_cluster_label(labels, clusts, column=self.target_col)
                 node_assn = torch.tensor(node_assn, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
+                # Do not apply loss to nodes labeled -1 (unknown class)
+                node_mask = np.where(node_assn > -1)[0]
+                if not len(node_mask):
+                    continue
+                node_pred = node_pred[node_mask]
+                node_assn = node_assn[node_mask]
+
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:
                     vals, counts = torch.unique(node_assn, return_counts=True)
@@ -91,7 +98,7 @@ class NodeTypeLoss(torch.nn.Module):
                 total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
 
                 # Increment the number of nodes
-                n_clusts += len(clusts)
+                n_clusts += len(node_mask)
 
         # Handle the case where no cluster/edge were found
         if not n_clusts:
