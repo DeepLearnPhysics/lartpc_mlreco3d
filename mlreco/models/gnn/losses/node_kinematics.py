@@ -113,10 +113,14 @@ class NodeKinematicsLoss(torch.nn.Module):
         total_loss, total_acc = 0., 0.
         type_loss, p_loss, type_acc, p_acc = 0., 0., 0., 0.
         n_clusts = 0
+
+        compute_type = 'node_pred_type' in out
+        compute_momentum = 'node_pred_p' in out
+
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
-            if 'node_pred_type' not in out or 'node_pred_p' not in out:
+            if not compute_type and not compute_momentum:
                 continue
 
             # Get the list of batch ids, loop over individual batches
@@ -127,41 +131,53 @@ class NodeKinematicsLoss(torch.nn.Module):
                 # Narrow down the tensor to the rows in the batch
                 labels = types[i][batches==j]
 
-                # Get the class labels and true momenta from the specified columns
-                node_pred_type = out['node_pred_type'][i][j]
-                node_pred_p = out['node_pred_p'][i][j]
-                if not node_pred_type.shape[0] or not node_pred_p.shape[0]:
-                    continue
                 clusts = out['clusts'][i][j]
-                node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
-                node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
-                node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
 
                 # Increment the type loss, balance classes if requested
-                if self.balance_classes:
-                    vals, counts = torch.unique(node_assn_type, return_counts=True)
-                    weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
-                    for k, v in enumerate(vals):
-                        loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn==v], node_assn[node_assn_type==v])
+                if compute_type:
+                    # Get the class labels and true momenta from the specified columns
+                    node_pred_type = out['node_pred_type'][i][j]
+                    if not node_pred_type.shape[0]:
+                        continue
+                    node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
+                    node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
+
+                    if self.balance_classes:
+                        vals, counts = torch.unique(node_assn_type, return_counts=True)
+                        weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
+                        for k, v in enumerate(vals):
+                            loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn==v], node_assn[node_assn_type==v])
+                            total_loss += loss
+                            type_loss += float(loss)
+                    else:
+                        loss = self.type_lossfn(node_pred_type, node_assn_type)
                         total_loss += loss
                         type_loss += float(loss)
-                else:
-                    loss = self.type_lossfn(node_pred_type, node_assn_type)
-                    total_loss += loss
-                    type_loss += float(loss)
 
                 # Increment the momentum loss
-                loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p)
-                total_loss += loss
-                p_loss += float(loss)
+                if compute_momentum:
+                    # Get the class labels and true momenta from the specified columns
+                    node_pred_p = out['node_pred_p'][i][j]
+                    if not node_pred_p.shape[0]:
+                        continue
+                    node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+
+                    loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p)
+                    total_loss += loss
+                    p_loss += float(loss)
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
-                type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
-                p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
+                if compute_type:
+                    type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
+                    # Increment the number of nodes
+                    n_clusts += len(clusts)
+                if compute_momentum:
+                    p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
+                    # Increment the number of nodes
+                    n_clusts += len(clusts)
 
-                # Increment the number of nodes
-                n_clusts += len(clusts)
+        n_heads = (int(compute_type) + int(compute_momentum))
 
         # Handle the case where no cluster/edge were found
         if not n_clusts:
@@ -174,7 +190,7 @@ class NodeKinematicsLoss(torch.nn.Module):
             }
 
         return {
-            'accuracy': (type_acc+p_acc)/(2*n_clusts),
+            'accuracy': (type_acc+p_acc)/(n_heads*n_clusts),
             'loss': total_loss/n_clusts,
             'type_accuracy': type_acc/n_clusts,
             'p_accuracy': p_acc/n_clusts,
