@@ -79,7 +79,7 @@ class NodeTypeLoss(torch.nn.Module):
                 node_assn = torch.tensor(node_assn, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
                 # Do not apply loss to nodes labeled -1 (unknown class)
-                node_mask = np.where(node_assn > -1)[0]
+                node_mask = torch.nonzero(node_assn > -1, as_tuple=True)[0]
                 if not len(node_mask):
                     continue
                 node_pred = node_pred[node_mask]
