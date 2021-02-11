@@ -55,6 +55,7 @@ class FullChain(torch.nn.Module):
             self._s_thresholds  = cfg['spice']['fragment_clustering'].get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
             self._p_thresholds  = cfg['spice']['fragment_clustering'].get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
             self._spice_classes = cfg['spice']['fragment_clustering'].get('cluster_classes', [])
+            self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
@@ -98,6 +99,8 @@ class FullChain(torch.nn.Module):
         for batch_id in batch_labels.unique():
             for s in self._spice_classes:
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s), as_tuple=True)[0]
+                if len(result['embeddings'][0][mask]) < self._spice_min_voxels:
+                    continue
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
