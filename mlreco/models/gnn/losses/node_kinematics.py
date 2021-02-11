@@ -146,7 +146,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         vals, counts = torch.unique(node_assn_type, return_counts=True)
                         weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
                         for k, v in enumerate(vals):
-                            loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn==v], node_assn[node_assn_type==v])
+                            loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn_type==v], node_assn_type[node_assn_type==v])
                             total_loss += loss
                             type_loss += float(loss)
                     else:
