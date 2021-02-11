@@ -113,6 +113,12 @@ class GNN(torch.nn.Module):
             if self.kinematics_momentum:
                 self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
+        self.vertex_mlp = base_config.get('vertex_mlp', False)
+        if self.vertex_mlp:
+            node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
+            vertex_config = cfg[name].get('vertex_net', {})
+            self.vertex_net = MomentumNet(node_output_feats, num_output=5, num_hidden=vertex_config.get('num_hidden', 128))
+
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg[name])
         self.edge_encoder = edge_encoder_construct(cfg[name])
@@ -261,6 +267,10 @@ class GNN(torch.nn.Module):
             if self.kinematics_momentum:
                 node_pred_p = self.momentum_net(out['node_features'][0])
                 result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
+
+        if self.vertex_mlp:
+            node_pred_vtx = self.vertex_net(out['node_features'][0])
+            result['node_pred_vtx'] = [[node_pred_vtx[b] for b in cbids]]
 
         return result
 

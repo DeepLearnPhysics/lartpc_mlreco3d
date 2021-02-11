@@ -52,9 +52,10 @@ class FullChain(torch.nn.Module):
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self.spatial_embeddings = ClusterCNN(cfg['spice'])
-            self._s_thresholds  = cfg['spice']['fragment_clustering'].get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-            self._p_thresholds  = cfg['spice']['fragment_clustering'].get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-            self._spice_classes = cfg['spice']['fragment_clustering'].get('cluster_classes', [])
+            self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
+            self._s_thresholds  = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+            self._p_thresholds  = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+            self._spice_classes = self.frag_cfg.get('cluster_classes', [])
             self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
 
         # Initialize the DBSCAN fragmenter module
@@ -147,7 +148,10 @@ class FullChain(torch.nn.Module):
                     dist_mat = torch.cdist(input[0][f,:3], input[0][f,:3])
                     idx = torch.argmax(dist_mat)
                     idxs = int(idx)//len(f), int(idx)%len(f)
-                    end_points = torch.cat([input[0][f[idxs[0]],:3], input[0][f[idxs[1]],:3]]).reshape(1,-1)
+                    scores = torch.nn.functional.softmax(points_tensor[f, 3:5], dim=1)[:, 1]
+                    correction0 = points_tensor[f][idxs[0], :3] + 0.5 if scores[idxs[0]] > 0.5 else 0.0
+                    correction1 = points_tensor[f][idxs[1], :3] + 0.5 if scores[idxs[1]] > 0.5 else 0.0
+                    end_points = torch.cat([input[0][f[idxs[0]],:3] + correction0, input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(torch.abs(points_tensor[f,:3]), dim=1).values < 1., as_tuple=True)[0]
@@ -376,7 +380,7 @@ class FullChain(torch.nn.Module):
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, part_seg, self._inter_ids, input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
-            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p'}
+            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p', 'node_pred_vtx': 'node_pred_vtx'}
             self.run_gnn(self.grappa_inter, input, result, particles, output_keys, kwargs)
 
         # ---
@@ -697,6 +701,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
             if 'node_pred_p' in out:
                 gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
+            if 'node_pred_vtx' in out:
+                gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
 
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
             res['inter_edge_loss'] = res_gnn_inter['loss']
@@ -707,6 +713,11 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'p_loss' in res_gnn_inter:
                 res['p_loss'] = res_gnn_inter['p_loss']
                 res['p_accuracy'] = res_gnn_inter['p_accuracy']
+            if 'vtx_position_loss' in res_gnn_inter:
+                res['vtx_position_loss'] = res_gnn_inter['vtx_position_loss']
+                res['vtx_score_loss'] = res_gnn_inter['vtx_score_loss']
+                res['vtx_position_acc'] = res_gnn_inter['vtx_position_acc']
+                res['vtx_score_acc'] = res_gnn_inter['vtx_score_acc']
 
             accuracy += res_gnn_inter['accuracy']
             loss += self.inter_gnn_weight*res_gnn_inter['loss']
@@ -794,6 +805,9 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Type accuracy: {:.4f}'.format(res['type_accuracy']))
             if 'node_pred_p' in out:
                 print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
+            if 'node_pred_vtx' in out:
+                print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
+                print('Vertex score accuracy: {:.4f}'.format(res['vtx_score_acc']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
