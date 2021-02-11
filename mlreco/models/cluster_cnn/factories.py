@@ -1,9 +1,6 @@
-<<<<<<< HEAD
 from mlreco.models.cluster_cnn import losses
 
 
-=======
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
 def backbone_dict():
     """
     returns dictionary of clustering models

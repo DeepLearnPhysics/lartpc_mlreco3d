@@ -3,18 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
-<<<<<<< HEAD
-
-from .misc import *
-from collections import defaultdict
-
-=======
 import sparseconvnet as scn
 
 from .misc import *
 from collections import defaultdict
 from pprint import pprint
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
 
 class SPICELoss(nn.Module):
     '''
@@ -31,10 +24,7 @@ class SPICELoss(nn.Module):
 
         self.mask_loss_fn = self.loss_config.get('mask_loss_fn', 'BCE')
         self.seed_loss_fn = self.loss_config.get('seed_loss_fn', 'L1')
-<<<<<<< HEAD
         self.batch_loc = self.loss_config.get('batch_loc', 3)
-=======
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
 
         if self.mask_loss_fn == 'BCE':
             self.mask_loss = nn.BCEWithLogitsLoss(reduction='none')
@@ -106,25 +96,15 @@ class SPICELoss(nn.Module):
         '''
         Wrapper function for combining different components of the loss,
         in particular when clustering must be done PER SEMANTIC CLASS.
-<<<<<<< HEAD
-        NOTE: When there are multiple semantic classes, we compute the DLoss
-        by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud.
-=======
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
         and then compute the clustering loss over each masked point cloud.
 
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
         INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
-<<<<<<< HEAD
-=======
-
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
         OUTPUT:
             loss_segs (list): list of computed loss values for each semantic class.
             loss[i] = computed DLoss for semantic class <i>.
@@ -169,11 +149,7 @@ class SPICELoss(nn.Module):
             #    coords = coords.cuda()
             slabels = slabels.int()
             clabels = group_label[i][:, -1]
-<<<<<<< HEAD
             batch_idx = segment_label[i][:, self.batch_loc]
-=======
-            batch_idx = segment_label[i][:, 3]
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
             embedding = out['embeddings'][i]
             seediness = out['seediness'][i]
             margins = out['margins'][i]
@@ -218,10 +194,7 @@ class SPICEInterLoss(SPICELoss):
         self.inter_weight = self.loss_config.get('inter_weight', 1.0)
         self.inter_margin = self.loss_config.get('inter_margin', 0.2)
         self.norm = 2
-<<<<<<< HEAD
-=======
         self._min_voxels = self.loss_config.get('min_voxels', 2)
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
 
 
     def regularization(self, cluster_means):
@@ -259,37 +232,15 @@ class SPICEInterLoss(SPICELoss):
         device = embeddings.device
         n = labels.shape[0]
         centroids = self.find_cluster_means(embeddings, labels)
-<<<<<<< HEAD
-        sigma = scatter_mean(margins.squeeze(), labels)
-=======
         sigma = self.find_cluster_means(margins, labels).view(-1, 1)
         smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.view(-1).detach(), labels, margin=0)
 
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
         num_clusters = labels.unique().shape[0]
         inter_loss = self.inter_cluster_loss(centroids, margin=self.inter_margin)
 
         # Compute spatial term
         em = embeddings[:, None, :]
         centroids = centroids[None, :, :]
-<<<<<<< HEAD
-        sqdists = ((em - centroids)**2).sum(-1)
-
-        p = sqdists / (2.0 * sigma.view(1, -1)**2)
-        p = torch.clamp(torch.exp(-p), min=eps, max=1-eps)
-        logits = logit_fn(p, eps=eps)
-        eye = torch.eye(len(labels.unique()), dtype=torch.float32, device=device)
-        targets = eye[labels]
-        loss_tensor = self.mask_loss(logits, targets)
-        loss = loss_tensor.mean(dim=0).mean()
-        with torch.no_grad():
-            acc = iou_batch(logits > 0, targets.bool())
-        smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.detach(), labels, margin=0)
-        p = torch.gather(p, 1, labels.view(-1, 1))
-        loss += inter_loss
-        return loss, smoothing_loss, float(inter_loss), p.squeeze(), acc
-
-=======
         cov = torch.clamp(sigma[:, 0][None, :], min=eps)
         sqdists = ((em - centroids)**2).sum(-1) / (2.0 * cov**2)
 
@@ -307,30 +258,19 @@ class SPICEInterLoss(SPICELoss):
         return loss, smoothing_loss, float(inter_loss), p.squeeze(), acc
 
 
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
     def combine_multiclass(self, embeddings, margins, seediness, slabels, clabels):
         '''
         Wrapper function for combining different components of the loss,
         in particular when clustering must be done PER SEMANTIC CLASS.
-<<<<<<< HEAD
-        NOTE: When there are multiple semantic classes, we compute the DLoss
-        by first masking out by each semantic segmentation (ground-truth/prediction)
-        and then compute the clustering loss over each masked point cloud.
-=======
 
         NOTE: When there are multiple semantic classes, we compute the DLoss
         by first masking out by each semantic segmentation (ground-truth/prediction)
         and then compute the clustering loss over each masked point cloud.
 
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
         INPUTS:
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
-<<<<<<< HEAD
-=======
-
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
         OUTPUT:
             loss_segs (list): list of computed loss values for each semantic class.
             loss[i] = computed DLoss for semantic class <i>.
@@ -343,11 +283,8 @@ class SPICEInterLoss(SPICELoss):
             if int(sc) == 4:
                 continue
             index = (slabels == sc)
-<<<<<<< HEAD
-=======
             if len(embeddings[index]) < self._min_voxels:
                 continue
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38
             clabels_unique, _ = unique_label_torch(clabels[index])
             mask_loss, smoothing_loss, inter_loss, probs, acc = self.get_per_class_probabilities(
                 embeddings[index], margins[index], clabels_unique)
@@ -369,8 +306,4 @@ class SPICEInterLoss(SPICELoss):
             loss['seed_loss_{}'.format(int(sc))].append(float(seed_loss))
             accuracy['accuracy_{}'.format(int(sc))] = acc
 
-<<<<<<< HEAD
         return loss, accuracy
-=======
-        return loss, accuracy
->>>>>>> 2654582eb68c84834f75ceefd88d8a0b14d8ab38

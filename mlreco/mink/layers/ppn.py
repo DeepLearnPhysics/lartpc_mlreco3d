@@ -16,7 +16,7 @@ class AddLabels(nn.Module):
         features = features * attention.F
         coords = attention.C
         output = ME.SparseTensor(
-            coords=coords, feats=features,
+            coordinates=coords, features=features,
             coords_key=attention.coords_key,
             coords_manager=attention.coords_man)
         for l in label:
@@ -85,8 +85,8 @@ class AttentionMask(torch.nn.Module):
         device = x.F.device
         # Create a mask sparse tensor in x-coordinates
         x0 = ME.SparseTensor(
-            coords=x.C,
-            feats=torch.zeros(x.F.shape[0], mask.F.shape[1]).to(device),
+            coordinates=x.C,
+            features=torch.zeros(x.F.shape[0], mask.F.shape[1]).to(device),
             coords_manager=x.coords_man,
             force_creation=True,
             tensor_stride=x.tensor_stride
@@ -94,8 +94,8 @@ class AttentionMask(torch.nn.Module):
         mask_in_xcoords = x0 + mask
         # print(mask_in_xcoords.F.shape)
         x_expanded = ME.SparseTensor(
-            coords=mask_in_xcoords.C,
-            feats=torch.zeros(mask_in_xcoords.F.shape[0], x.F.shape[1]).to(device),
+            coordinates=mask_in_xcoords.C,
+            features=torch.zeros(mask_in_xcoords.F.shape[0], x.F.shape[1]).to(device),
             coords_manager=x.coords_man,
             force_creation=True,
             tensor_stride=x.tensor_stride
@@ -162,13 +162,13 @@ class PPN(nn.Module):
                     kernel_size=3,
                     stride=1,
                     dilation=1,
-                    has_bias=False,
+                    bias=False,
                     dimension=self._dimension))
         self.ppn1_conv = nn.Sequential(*self.ppn1_conv)
         self.ppn1_scores = ME.MinkowskiConvolution(
             nPlanes[self.ppn1_stride-self._num_strides], 1,
             kernel_size=3,
-            has_bias=False,
+            bias=False,
             dimension=self._dimension)
 
         self.unpool1 = []
@@ -212,14 +212,14 @@ class PPN(nn.Module):
         for i in range(self._ppn_num_conv):
             self.ppn3_conv.append(
                 ME.MinkowskiConvolution(nPlanes[0], nPlanes[0],
-                    kernel_size=3, has_bias=False, dimension=self._dimension))
+                    kernel_size=3, bias=False, dimension=self._dimension))
         self.ppn3_conv = nn.Sequential(*self.ppn3_conv)
         self.ppn3_pixel_pred = ME.MinkowskiConvolution(nPlanes[0], self._dimension,
-            kernel_size=3, has_bias=False, dimension=self._dimension)
+            kernel_size=3, bias=False, dimension=self._dimension)
         self.ppn3_scores = ME.MinkowskiConvolution(nPlanes[0], 1,
-            kernel_size=3, has_bias=False, dimension=self._dimension)
+            kernel_size=3, bias=False, dimension=self._dimension)
         self.ppn3_type = ME.MinkowskiConvolution(nPlanes[0], self._num_classes,
-            kernel_size=3, has_bias=False, dimension=self._dimension)
+            kernel_size=3, bias=False, dimension=self._dimension)
 
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
@@ -312,8 +312,8 @@ class PPN(nn.Module):
         # assert False
 
         anchors = ME.SparseTensor(
-            coords=ppn3_pixel_pred.C,
-            feats=ppn3_pixel_pred.C[:, 1:].float().to(device) + 0.5,
+            coordinates=ppn3_pixel_pred.C,
+            features=ppn3_pixel_pred.C[:, 1:].float().to(device) + 0.5,
             coords_manager=ppn3_pixel_pred.coords_man,
             force_creation=True
         )

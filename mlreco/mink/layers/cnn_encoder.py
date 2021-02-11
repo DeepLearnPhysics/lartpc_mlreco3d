@@ -115,8 +115,8 @@ class SparseEncoder(MENetworkBase):
     def forward(self, input_tensor):
 
         # print(input_tensor)
-        x = ME.SparseTensor(coords=input_tensor[:, :4],
-                            feats=input_tensor[:, -1].view(-1, 1))
+        x = ME.SparseTensor(coordinates=input_tensor[:, :4],
+                            features=input_tensor[:, -1].view(-1, 1))
         # Encoder
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
@@ -127,14 +127,15 @@ class SparseEncoder(MENetworkBase):
         # print(z.C, z.F.sum(dim=1))
         latent = self.linear1(z)
 
-        return latent.F[perm]
+        return latent.F
 
 
 class SparseResidualEncoder(MENetworkBase):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
-    def __init__(self, cfg, name='sparse_encoder'):
+    def __init__(self, cfg, name='mink_encoder'):
+        print("RESENCODER = ", cfg)
         super(SparseResidualEncoder, self).__init__(cfg)
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
@@ -185,7 +186,7 @@ class SparseResidualEncoder(MENetworkBase):
                     in_channels=self.nPlanes[i],
                     out_channels=self.nPlanes[i+1],
                     kernel_size=2, stride=2, dimension=self.D,
-                    has_bias=self.allow_bias))
+                    bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_conv.append(m)
         self.encoding_conv = nn.Sequential(*self.encoding_conv)
@@ -194,23 +195,22 @@ class SparseResidualEncoder(MENetworkBase):
         if self.pool_mode == 'global_average':
             self.pool = ME.MinkowskiGlobalPooling()
         elif self.pool_mode == 'conv':
-            self.pool = ME.MinkowskiConvolution(
-                in_channels=self.nPlanes[-1],
-                out_channels=self.nPlanes[-1],
-                kernel_size=final_tensor_shape,
-                stride=final_tensor_shape,
-                dimension=self.D)
+            self.pool = nn.Sequential(
+                ME.MinkowskiConvolution(
+                    in_channels=self.nPlanes[-1],
+                    out_channels=self.nPlanes[-1],
+                    kernel_size=final_tensor_shape,
+                    stride=final_tensor_shape,
+                    dimension=self.D),
+                ME.MinkowskiGlobalPooling())
         elif self.pool_mode == 'max':
-            ME.MinkowskiMaxPooling(final_tensor_shape, stride=final_tensor_shape)
+            self.pool = nn.Sequential(
+                ME.MinkowskiMaxPooling(final_tensor_shape, stride=final_tensor_shape),
+                ME.MinkowskiGlobalPooling())
         else:
             raise NotImplementedError
 
-        self.linear1 = nn.Sequential(
-            normalizations_construct(self.norm, self.nPlanes[-1], **self.norm_args),
-            activations_construct(
-                self.activation_name, **self.activation_args),
-            ME.MinkowskiLinear(self.nPlanes[-1], self.latent_size)
-        )
+        self.linear1 = ME.MinkowskiLinear(self.nPlanes[-1], self.latent_size)
 
 
     def encoder(self, x):
@@ -244,8 +244,8 @@ class SparseResidualEncoder(MENetworkBase):
     def forward(self, input_tensor):
 
         # print(input_tensor)
-        x = ME.SparseTensor(coords=input_tensor[:, :4],
-                            feats=input_tensor[:, -1].view(-1, 1))
+        x = ME.SparseTensor(coordinates=input_tensor[:, :4],
+                            features=input_tensor[:, -1].view(-1, 1))
         # Encoder
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
@@ -255,34 +255,6 @@ class SparseResidualEncoder(MENetworkBase):
         latent = self.linear1(z)
 
         return latent.F
-
-
-class MinkCNNNodeEncoder(torch.nn.Module):
-    """
-    Uses a CNN to produce node features for cluster GNN
-
-    """
-    def __init__(self, model_config):
-        super(MinkCNNNodeEncoder, self).__init__()
-
-        # Initialize the CNN
-        print(model_config)
-        block_type = model_config['sparse_encoder'].get('block_type', 'residual')
-        if block_type == 'residual':
-            self.encoder = SparseResidualEncoder(model_config)
-        else:
-            self.encoder = SparseEncoder(model_config)
-
-    def forward(self, data, clusts):
-        # Use cluster ID as a batch ID, pass through CNN
-        device = data.device
-        cnn_data = torch.empty((0,5), device=device, dtype=torch.float)
-        for i, c in enumerate(clusts):
-            # print(i, len(c))
-            cnn_data = torch.cat((cnn_data, data[c,:5].float()))
-            cnn_data[-len(c):,0] = i*torch.ones(len(c)).to(device)
-
-        return self.encoder(cnn_data)
 
 
 class SparseResidualEncoder2(MENetworkBase):
@@ -340,7 +312,7 @@ class SparseResidualEncoder2(MENetworkBase):
                     in_channels=self.nPlanes[i],
                     out_channels=self.nPlanes[i+1],
                     kernel_size=2, stride=2, dimension=self.D,
-                    has_bias=self.allow_bias))
+                    bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_conv.append(m)
         self.encoding_conv = nn.Sequential(*self.encoding_conv)
@@ -462,7 +434,7 @@ class SparseResEncoderNoPooling(MENetworkBase):
                     in_channels=self.nPlanes[i],
                     out_channels=self.nPlanes[i+1],
                     kernel_size=2, stride=2, dimension=self.D,
-                    has_bias=self.allow_bias))
+                    bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_conv.append(m)
         self.encoding_conv = nn.Sequential(*self.encoding_conv)
@@ -474,7 +446,7 @@ class SparseResEncoderNoPooling(MENetworkBase):
                 self.activation_name, **self.activation_args),
             ME.MinkowskiConvolution(self.nPlanes[-1], self.latent_size, 
                 kernel_size=3, stride=1, 
-                dimension=self.D, has_bias=self.allow_bias)
+                dimension=self.D, bias=self.allow_bias)
         )
 
 

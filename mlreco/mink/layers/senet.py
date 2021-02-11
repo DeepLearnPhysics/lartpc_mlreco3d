@@ -148,7 +148,7 @@ class SENet(MENetworkBase):
         coords = input[:, 0:self.D + 1].cpu().int()
         features = input[:, self.D + 1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coords)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']

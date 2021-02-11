@@ -20,7 +20,7 @@ class Attention(nn.Module):
         features = features * scores
         coords = x.C
         output = ME.SparseTensor(
-            coords=coords, feats=features)
+            coordinates=coords, features=features)
         return output
 
 
@@ -32,9 +32,9 @@ class ExpandAs(nn.Module):
         device = x.F.device
         features = x.F.expand(*shape)
         output = ME.SparseTensor(
-            feats=features,
-            coords_key=x.coords_key,
-            coords_manager=x.coords_man)
+            features=features,
+            coordinate_map_key=x.coordinate_map_key,
+            coordinate_manager=x.coordinate_manager)
         return output
 
 
@@ -148,8 +148,7 @@ class PPN(MENetworkBase):
             ppn_coords.append(scores.C)
             scores = self.sigmoid(scores)
             mask_ppn.append((scores.F > self.ppn_score_threshold))
-            with torch.no_grad():
-                s_expanded = self.expand_as(scores, x.F.shape)
+            s_expanded = self.expand_as(scores, x.F.shape)
             x = x * s_expanded
         device = x.F.device
         for p in tmp:

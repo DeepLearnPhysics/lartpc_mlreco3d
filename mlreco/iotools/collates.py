@@ -60,6 +60,7 @@ def CollateMinkowski(batch):
     INPUTS:
         - batch: tuple of dictionary?
     '''
+    import MinkowskiEngine as ME
     result = {}
     concat = np.concatenate
     for key in batch[0].keys():
