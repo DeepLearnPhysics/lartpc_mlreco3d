@@ -45,7 +45,7 @@ class SparseGenerator(MENetworkBase):
                 kernel_size=final_tensor_shape,
                 stride=final_tensor_shape,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True)
         )
         # Initialize Decoder
@@ -63,7 +63,7 @@ class SparseGenerator(MENetworkBase):
                 kernel_size=2,
                 stride=2,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)
@@ -176,7 +176,7 @@ class SparseGenerator2(MENetworkBase):
                 kernel_size=3,
                 stride=1,
                 dimension=self.D,
-                has_bias=self.allow_bias)
+                bias=self.allow_bias)
         )
 
         self.initial_prune = ME.MinkowskiLinear(self.nPlanes[-1], 1, bias=self.allow_bias)
@@ -196,7 +196,7 @@ class SparseGenerator2(MENetworkBase):
                 kernel_size=2,
                 stride=2,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)
@@ -312,7 +312,7 @@ class SparseGeneratorSimple(MENetworkBase):
                 kernel_size=final_tensor_shape,
                 stride=final_tensor_shape,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True)
         )
         # Initialize Decoder
@@ -330,7 +330,7 @@ class SparseGeneratorSimple(MENetworkBase):
                 kernel_size=2,
                 stride=2,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)
@@ -443,7 +443,7 @@ class SparseGeneratorAdaIN(MENetworkBase):
                 kernel_size=final_tensor_shape,
                 stride=final_tensor_shape,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True)
         )
         # Initialize Decoder
@@ -461,7 +461,7 @@ class SparseGeneratorAdaIN(MENetworkBase):
                 kernel_size=2,
                 stride=2,
                 dimension=self.D,
-                has_bias=self.allow_bias,
+                bias=self.allow_bias,
                 generate_new_coords=True))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)

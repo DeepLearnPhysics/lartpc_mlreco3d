@@ -150,10 +150,10 @@ class MobileNetV3(MENetworkBase):
         return decoderTensors
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coordinates = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coordinates)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
@@ -260,10 +260,10 @@ class MB3Encoder(MENetworkBase):
 
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coordinates = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coordinates)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']

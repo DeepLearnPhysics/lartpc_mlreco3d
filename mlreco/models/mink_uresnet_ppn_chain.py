@@ -61,4 +61,6 @@ class UResNetPPNLoss(nn.Module):
             'accuracy': (res_segmentation['accuracy'] + res_ppn['accuracy']) / 2.0
         }
 
+        print(res)
+
         return res

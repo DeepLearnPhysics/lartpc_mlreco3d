@@ -144,7 +144,7 @@ class ResidualEncoder(UResNetEncoder):
                 scn.SparseToDense(self.dimension, self.nPlanes[-1]))
             self.pool = nn.MaxPool3d(1)
 
-        self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
+        self.linear = nn.Linear(self.nPlanes[-1], self.latent_size)
 
 
     def forward(self, point_cloud):
@@ -176,8 +176,8 @@ class ResidualEncoder(UResNetEncoder):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-        out = self.output(x)
-        out = self.pool(out).features
+        out = self.pool(x).features
+        # print(out)
         out = out.view(batch_size, -1)
         out = self.linear(out)
         return out

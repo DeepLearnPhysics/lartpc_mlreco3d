@@ -269,9 +269,9 @@ class GhostChain2(torch.nn.Module):
 
     def get_gnn_input(self, semantic_label, frag_seg, frag_batch_ids, fragments, input, result, use_ppn=True):
         device = input[0].device
-
         em_mask = np.where((frag_seg == semantic_label))[0]
         edge_index = complete_graph(frag_batch_ids[em_mask])
+        print("edge -index = ", edge_index)
         x = self.node_encoder(input[0], fragments[em_mask])
         e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
 
@@ -315,6 +315,7 @@ class GhostChain2(torch.nn.Module):
         # Pass fragment features through GNN
         index = torch.tensor(edge_index, dtype=torch.long, device=device)
         xbatch = torch.tensor(frag_batch_ids, dtype=torch.long, device=device)
+        # print(x.shape, index.shape, e.shape, xbatch.shape)
         gnn_output = gnn_model(x, index, e, xbatch)
 
         # Divide the particle GNN output out into different arrays (one per batch)
@@ -434,6 +435,7 @@ class GhostChain2(torch.nn.Module):
         same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
         fragments = np.array(fragments, dtype=object if not same_length else np.int64)
         frag_batch_ids = np.array(frag_batch_ids)
+        # print(frag_batch_ids)
         frag_seg = np.array(frag_seg)
 
         # Store in result the intermediate fragments
@@ -454,7 +456,7 @@ class GhostChain2(torch.nn.Module):
         # ---
         # 2. GNN clustering: shower & track
         # ---
-
+        print(frag_seg, frag_batch_ids.shape)
         if self.enable_gnn_particle:
             # Shower GNN input
             em_mask_shower, edge_index_shower, x_shower, e_shower = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
@@ -487,7 +489,6 @@ class GhostChain2(torch.nn.Module):
             if self.enable_gnn_shower:
                 # Initialize a complete graph for edge prediction, get shower fragment and edge features
                 em_mask, edge_index, x, e = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
-
                 self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,
                             {'frags': 'fragments', 'node_pred': 'frag_node_pred', 'edge_pred': 'frag_edge_pred', 'edge_index': 'frag_edge_index', 'group_pred': 'frag_group_pred'})
 

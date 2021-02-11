@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.mink.cluster.embeddings import SPICE
-from .cluster_cnn import cluster_model_construct, backbone_construct, clustering_loss_construct
+from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
 
 class MinkSPICE(SPICE):
 
@@ -30,7 +30,7 @@ class SPICELoss(nn.Module):
         self.loss_config = cfg[name]
 
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.loss_func = clustering_loss_construct(self.loss_func_name)
+        self.loss_func = spice_loss_construct(self.loss_func_name)
         self.loss_func = self.loss_func(cfg)
         #print(self.loss_func)
 

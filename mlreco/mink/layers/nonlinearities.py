@@ -4,19 +4,13 @@ import torch.nn.functional as F
 
 # For MinkowskiEngine
 import MinkowskiEngine as ME
-from MinkowskiNonlinearity import MinkowskiModuleBase
+from MinkowskiNonlinearity import MinkowskiNonlinearityBase
 
 # Custom Nonlinearities
-class MinkowskiLeakyReLU(MinkowskiModuleBase):
+class MinkowskiLeakyReLU(MinkowskiNonlinearityBase):
     MODULE = nn.LeakyReLU
 
-class MinkowskiSELU(MinkowskiModuleBase):
-    MODULE = nn.SELU
-
-class MinkowskiCELU(MinkowskiModuleBase):
-    MODULE = nn.CELU
-
-class MinkowskiELU(MinkowskiModuleBase):
+class MinkowskiELU(MinkowskiNonlinearityBase):
     MODULE = nn.ELU
 
 # class MinkowskiPReLU(MinkowskiModuleBase):

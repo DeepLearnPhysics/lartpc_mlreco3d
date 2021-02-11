@@ -45,7 +45,7 @@ class UResNet(MENetworkBase):
             in_channels=self.num_input,
             out_channels=self.num_filters,
             kernel_size=self.input_kernel, stride=1, dimension=self.D,
-            has_bias=self.allow_bias)
+            bias=self.allow_bias)
 
         # Initialize Encoder
         self.encoding_conv = []
@@ -71,7 +71,7 @@ class UResNet(MENetworkBase):
                     in_channels=self.nPlanes[i],
                     out_channels=self.nPlanes[i+1],
                     kernel_size=2, stride=2, dimension=self.D,
-                    has_bias=self.allow_bias))
+                    bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_conv.append(m)
         self.encoding_block = nn.Sequential(*self.encoding_block)
@@ -91,7 +91,7 @@ class UResNet(MENetworkBase):
                 kernel_size=2,
                 stride=2,
                 dimension=self.D,
-                has_bias=self.allow_bias))
+                bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.decoding_conv.append(m)
             m = []
@@ -158,10 +158,10 @@ class UResNet(MENetworkBase):
         return decoderTensors
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coords = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coords)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
@@ -275,10 +275,10 @@ class UResNetEncoder(MENetworkBase):
 
 
     def forward(self, input):
-        # coords = input[:, 0:self.D+1].cpu().int()
+        # coords = input[:, 0:self.D+1].int()
         # features = input[:, self.D+1:].float()
         #
-        # x = ME.SparseTensor(features, coords=coords)
+        # x = ME.SparseTensor(features, coordinates=coords)
         encoderOutput = self.encoder(input)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
@@ -375,10 +375,10 @@ class ACASUNet(UResNet):
         self.cascade = CascadeDilationBlock(self.nPlanes[-1], self.nPlanes[-1])
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coords = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coords)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']
@@ -403,10 +403,10 @@ class ASPPUNet(UResNet):
         self.aspp = ASPP(self.nPlanes[-1], self.nPlanes[-1])
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coords = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
-        x = ME.SparseTensor(features, coords=coords)
+        x = ME.SparseTensor(features, coordinates=coords)
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
         finalTensor = encoderOutput['finalTensor']

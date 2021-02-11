@@ -324,6 +324,7 @@ class trainval(object):
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
         while len(module_keys) > 0:
             module, config = module_keys.pop()
+            # print(module, config)
             if 'freeze_weights' in config:
                 model_name = config.get('model_name', module)
                 model_path = config['model_path']

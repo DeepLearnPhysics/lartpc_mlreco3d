@@ -155,7 +155,7 @@ class FPN(MENetworkBase):
         return decoderTensors
 
     def forward(self, input):
-        coords = input[:, 0:self.D+1].cpu().int()
+        coords = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 
         x = ME.SparseTensor(features, coords=coords)
