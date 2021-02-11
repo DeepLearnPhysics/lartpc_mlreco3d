@@ -174,7 +174,7 @@ def find_cluster_means_cuda(features, labels):
 def fit_predict(embeddings, seediness, margins, fitfunc,
                 s_threshold=0.0, p_threshold=0.5):
     device = embeddings.device
-    seediness = torch.squeeze(seediness)
+    seediness = seediness.reshape(-1)
     num_points = embeddings.shape[0]
     count = 0
     probs = []
@@ -199,7 +199,7 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
 def fit_predict_np(embeddings, seediness, margins, fitfunc,
                 s_threshold=0.0, p_threshold=0.5):
     num_points = embeddings.shape[0]
-    seediness = np.squeeze(seediness)
+    seediness = seediness.reshape(-1)
     count = 0
     probs = []
     unclustered = np.ones(num_points, dtype=np.byte)
