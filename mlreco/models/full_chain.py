@@ -707,13 +707,13 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
             res['inter_edge_loss'] = res_gnn_inter['loss']
             res['inter_edge_accuracy'] = res_gnn_inter['accuracy']
-            if 'type_loss' in res_gnn_inter:
+            if 'node_pred_type' in out:
                 res['type_loss'] = res_gnn_inter['type_loss']
                 res['type_accuracy'] = res_gnn_inter['type_accuracy']
-            if 'p_loss' in res_gnn_inter:
+            if 'node_pred_p' in out:
                 res['p_loss'] = res_gnn_inter['p_loss']
                 res['p_accuracy'] = res_gnn_inter['p_accuracy']
-            if 'vtx_position_loss' in res_gnn_inter:
+            if 'node_pred_vtx' in out:
                 res['vtx_position_loss'] = res_gnn_inter['vtx_position_loss']
                 res['vtx_score_loss'] = res_gnn_inter['vtx_score_loss']
                 res['vtx_position_acc'] = res_gnn_inter['vtx_position_acc']
