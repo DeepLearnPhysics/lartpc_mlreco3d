@@ -601,11 +601,12 @@ def parse_cluster3d_kinematics(data):
     return:
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (n,6) where 6 is voxel value,
-        cluster id, group id interaction id, nu id and semantic type, respectively
+        a numpy array with the shape (n,5) where 5 is voxel value,
+        cluster id, group id, pdg and momentum respectively
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
+    particles_v_asis = parse_particle_asis([data[1], data[0]])
     TYPE_LABELS = {
         22: 0,  # photon
         11: 1,  # e-
@@ -659,8 +660,17 @@ def parse_cluster3d_kinematics(data):
             else:
                 pdg = np.full(shape=(cluster.as_vector().size()),
                                 fill_value=-1, dtype=np.float32)
+            vtx_x = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().x(), dtype=np.float32)
+            vtx_y = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
+            vtx_z = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
+            is_primary = np.full(shape=(cluster.as_vector().size()),
+                        fill_value=float((particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
+                        dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p]))
+            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
     # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
@@ -680,7 +690,7 @@ def parse_cluster3d_kinematics_clean(data):
 
     grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
     grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-    return grp_voxels, grp_data[:, :-1]
+    return grp_voxels, grp_data#[:, :-1]
 
 
 def parse_cluster3d_full_fragment(data):

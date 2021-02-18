@@ -8,7 +8,7 @@ import sparseconvnet as scn
 from .lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
 from .misc import *
 from collections import defaultdict
-
+from pprint import pprint
 
 class MaskBCELoss(nn.Module):
     '''
@@ -185,8 +185,6 @@ class MaskBCELoss(nn.Module):
         res = {}
         res.update(loss_avg)
         res.update(acc_avg)
-
-        # print(acc_avg)
 
         return res
 
@@ -424,16 +422,18 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
         for i, c in enumerate(cluster_labels):
             index = (labels == c)
             mask = torch.zeros(embeddings.shape[0]).to(device)
-            mask[index] = 1
-            mask[~index] = 0
+            mask[index] = 1.0
+            mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-8))
+            p = torch.clamp(torch.exp(-dists / (2 * torch.pow(sigma, 2))), min=0, max=1)
+            logits = logit_fn(p, eps=1e-6)
+            # print(logits.shape)
             probs[index] = p[index]
-            loss += lovasz_hinge_flat(2 * p - 1, mask)
+            loss += lovasz_hinge_flat(logits, mask).mean()
             accuracy += float(iou_binary(p > 0.5, mask, per_image=False))
             sigma_detach = sigma.detach()
-            smoothing_loss += torch.mean(torch.norm(margins[index] - sigma_detach, dim=1))
+            smoothing_loss += torch.mean(torch.norm(margins[index].view(-1, 1) - sigma_detach, dim=1))
 
         loss /= n_clusters
         smoothing_loss /= n_clusters
@@ -469,10 +469,11 @@ class MaskLovaszInterLoss(MaskLovaszHingeLoss):
             if int(sc) == 4:
                 continue
             index = (slabels == sc)
+            clabels_unique, _ = unique_label_torch(clabels[index])
             mask_loss, smoothing_loss, inter_loss, probs, acc = \
                 self.get_per_class_probabilities(
                 embeddings[index], margins[index],
-                clabels[index])
+                clabels_unique)
             prob_truth = probs.detach()
             seed_loss = self.l2loss(prob_truth, seediness[index].squeeze(1))
             total_loss = self.embedding_weight * mask_loss \
