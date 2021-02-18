@@ -68,12 +68,15 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.batch_col = loss_config.get('batch_col', 3)
         self.type_col = loss_config.get('target_col', 7)
         self.momentum_col = loss_config.get('target_col', 8)
+        self.vtx_col = loss_config.get('vtx_col', 9)
+        self.vtx_positives_col = loss_config.get('vtx_positives_col', 12)
 
         # Set the losses
         self.type_loss = loss_config.get('type_loss', 'CE')
         self.reg_loss = loss_config.get('reg_loss', 'l2')
         self.reduction = loss_config.get('reduction', 'sum')
         self.balance_classes = loss_config.get('balance_classes', False)
+        self.spatial_size = loss_config.get('spatial_size', 768)
 
         if self.type_loss == 'CE':
             self.type_lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
@@ -97,6 +100,8 @@ class NodeKinematicsLoss(torch.nn.Module):
         else:
             raise ValueError('Regression loss not recognized: ' + self.reg_loss)
 
+        self.vtx_position_loss = torch.nn.MSELoss(reduction='none')
+        self.vtx_score_loss = torch.nn.CrossEntropyLoss(reduction=self.reduction)
 
     def forward(self, out, types):
         """
@@ -112,11 +117,17 @@ class NodeKinematicsLoss(torch.nn.Module):
         """
         total_loss, total_acc = 0., 0.
         type_loss, p_loss, type_acc, p_acc = 0., 0., 0., 0.
+        vtx_position_loss, vtx_score_loss, vtx_position_acc, vtx_score_acc = 0., 0., 0., 0.
         n_clusts = 0
+
+        compute_type = 'node_pred_type' in out
+        compute_momentum = 'node_pred_p' in out
+        compute_vtx = 'node_pred_vtx' in out
+
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
-            if 'node_pred_type' not in out or 'node_pred_p' not in out:
+            if not compute_type and not compute_momentum:
                 continue
 
             # Get the list of batch ids, loop over individual batches
@@ -127,41 +138,79 @@ class NodeKinematicsLoss(torch.nn.Module):
                 # Narrow down the tensor to the rows in the batch
                 labels = types[i][batches==j]
 
-                # Get the class labels and true momenta from the specified columns
-                node_pred_type = out['node_pred_type'][i][j]
-                node_pred_p = out['node_pred_p'][i][j]
-                if not node_pred_type.shape[0] or not node_pred_p.shape[0]:
-                    continue
                 clusts = out['clusts'][i][j]
-                node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
-                node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
-                node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
 
                 # Increment the type loss, balance classes if requested
-                if self.balance_classes:
-                    vals, counts = torch.unique(node_assn_type, return_counts=True)
-                    weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
-                    for k, v in enumerate(vals):
-                        loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn==v], node_assn[node_assn_type==v])
+                if compute_type:
+                    # Get the class labels and true momenta from the specified columns
+                    node_pred_type = out['node_pred_type'][i][j]
+                    if not node_pred_type.shape[0]:
+                        continue
+                    node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
+                    node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
+
+                    if self.balance_classes:
+                        vals, counts = torch.unique(node_assn_type, return_counts=True)
+                        weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
+                        for k, v in enumerate(vals):
+                            loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn_type==v], node_assn_type[node_assn_type==v])
+                            total_loss += loss
+                            type_loss += float(loss)
+                    else:
+                        loss = self.type_lossfn(node_pred_type, node_assn_type)
                         total_loss += loss
                         type_loss += float(loss)
-                else:
-                    loss = self.type_lossfn(node_pred_type, node_assn_type)
-                    total_loss += loss
-                    type_loss += float(loss)
 
                 # Increment the momentum loss
-                loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p)
-                total_loss += loss
-                p_loss += float(loss)
+                if compute_momentum:
+                    # Get the class labels and true momenta from the specified columns
+                    node_pred_p = out['node_pred_p'][i][j]
+                    if not node_pred_p.shape[0]:
+                        continue
+                    node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+
+                    loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p)
+                    total_loss += loss
+                    p_loss += float(loss)
+
+                if compute_vtx:
+                    node_pred_vtx = out['node_pred_vtx'][i][j]
+                    if not node_pred_vtx.shape[0]:
+                        continue
+
+                    node_x_vtx = get_cluster_label(labels, clusts, column=self.vtx_col)
+                    node_y_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+1)
+                    node_z_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+2)
+
+                    node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
+                                                dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
+                    node_assn_vtx = node_assn_vtx/self.spatial_size
+                    loss1 = torch.sum(torch.mean(self.vtx_position_loss(node_pred_vtx[:, :3], node_assn_vtx), dim=1))
+
+                    positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+                    positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
+                    loss2 = self.vtx_score_loss(node_pred_vtx[:, 3:], positives)
+                    total_loss += loss1 + loss2
+
+                    vtx_position_loss += float(loss1)
+                    vtx_score_loss += float(loss2)
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
-                type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
-                p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
+                if compute_type:
+                    type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
+
+                if compute_momentum:
+                    p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
+
+                if compute_vtx:
+                    vtx_position_acc += float(torch.sum(1. - torch.abs(node_pred_vtx[:, :3]-node_assn_vtx)/(torch.abs(node_assn_vtx) + torch.abs(node_pred_vtx[:, :3]))))/3.
+                    vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[:, 3:], dim=1) == positives))
 
                 # Increment the number of nodes
                 n_clusts += len(clusts)
+
+        n_heads = (int(compute_type) + int(compute_momentum))
 
         # Handle the case where no cluster/edge were found
         if not n_clusts:
@@ -170,15 +219,21 @@ class NodeKinematicsLoss(torch.nn.Module):
                 'loss': torch.tensor(0., requires_grad=True, device=types[0].device),
                 'type_loss': 0.,
                 'p_loss': 0.,
+                'vtx_position_loss': 0.,
+                'vtx_score_loss': 0.,
                 'n_clusts': n_clusts
             }
 
         return {
-            'accuracy': (type_acc+p_acc)/(2*n_clusts),
+            'accuracy': (type_acc+p_acc)/(n_heads*n_clusts),
             'loss': total_loss/n_clusts,
             'type_accuracy': type_acc/n_clusts,
             'p_accuracy': p_acc/n_clusts,
             'type_loss': type_loss/n_clusts,
             'p_loss': p_loss/n_clusts,
+            'vtx_position_loss': vtx_position_loss/n_clusts,
+            'vtx_score_loss': vtx_score_loss/n_clusts,
+            'vtx_position_acc': vtx_position_acc/n_clusts,
+            'vtx_score_acc': vtx_score_acc/n_clusts,
             'n_clusts': n_clusts
         }
