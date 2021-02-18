@@ -301,13 +301,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     # Loss for semantic segmentation
                     if self._weight_loss:
                         class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
-                        w = torch.Tensor([1.0 / c if c.item() > 0 else 0. for c in class_count]).double()
-                        #w = torch.Tensor([2.0, 2.0, 5.0, 10.0, 2.0]).double()
-                        #w = 1.0 - w / w.sum()
+                        sum_class_count = len(event_label)
+                        w = torch.Tensor([sum_class_count / c if c.item() > 0 else 0. for c in class_count]).float()
                         if torch.cuda.is_available():
                             w = w.cuda()
                         #print(class_count, w, class_count[0].item() > 0)
-                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
+                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w)
                     else:
                         loss_seg = self.cross_entropy(event_segmentation, event_label)
                         if weights is not None:

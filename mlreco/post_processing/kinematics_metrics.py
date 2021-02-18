@@ -19,7 +19,7 @@ def kinematics_metrics(cfg, data_blob, res, logdir, iteration):
 
     store_method = cfg['post_processing']['kinematics_metrics']['store_method']
     store_per_event = store_method == 'per-event'
-    spatial_size = cfg['post_processing']['kinematics_metrics'].get('spatial_size', False)
+    spatial_size = cfg['post_processing']['kinematics_metrics'].get('spatial_size', 768)
 
     if store_method == 'per-iteration':
         fout = CSVData(os.path.join(logdir, 'kinematics-metrics-iter-%07d.csv' % iteration))
