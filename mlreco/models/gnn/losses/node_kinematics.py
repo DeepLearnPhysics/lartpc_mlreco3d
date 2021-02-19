@@ -127,7 +127,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         for i in range(len(types)):
 
             # If the input did not have any node, proceed
-            if not compute_type and not compute_momentum:
+            if not compute_type and not compute_momentum and not compute_vtx:
                 continue
 
             # Get the list of batch ids, loop over individual batches
@@ -210,7 +210,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 # Increment the number of nodes
                 n_clusts += len(clusts)
 
-        n_heads = (int(compute_type) + int(compute_momentum))
+        n_heads = (int(compute_type) + int(compute_momentum) + 2*int(compute_vtx))
 
         # Handle the case where no cluster/edge were found
         if not n_clusts:
@@ -221,11 +221,13 @@ class NodeKinematicsLoss(torch.nn.Module):
                 'p_loss': 0.,
                 'vtx_position_loss': 0.,
                 'vtx_score_loss': 0.,
+                'vtx_position_acc': 0.,
+                'vtx_score_acc': 0.,
                 'n_clusts': n_clusts
             }
 
         return {
-            'accuracy': (type_acc+p_acc)/(n_heads*n_clusts),
+            'accuracy': (type_acc+p_acc+vtx_position_acc+vtx_score_acc)/(n_heads*n_clusts),
             'loss': total_loss/n_clusts,
             'type_accuracy': type_acc/n_clusts,
             'p_accuracy': p_acc/n_clusts,
