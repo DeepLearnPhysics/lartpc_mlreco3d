@@ -243,7 +243,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         self.half_stride2 = int(self._num_strides/2.0)
         self._downsample_ghost = self._cfg.get('downsample_ghost', False)
         self._weight_ppn1 = self._cfg.get('weight_ppn1', 1.0)
-        self._weight_seg = self._cfg.get('weight_seg', 1.0)
+        self._weight_distance = self._cfg.get('weight_distance', 1.0)
 
         self._weight_ppn = self._cfg.get('weight_ppn', -1)
         self._use_weight_ppn = True
@@ -518,7 +518,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     total_loss_ppn2 += loss_seg_ppn2
                     total_acc_ppn1 += acc_ppn1
                     total_acc_ppn2 += acc_ppn2
-                    total_loss += (self._weight_seg*loss_seg + self._weight_ppn1*loss_seg_ppn1 + loss_seg_ppn2).float()
+                    total_loss += (self._weight_distance*loss_seg + self._weight_ppn1*loss_seg_ppn1 + loss_seg_ppn2).float()
                     total_acc += acc
                     ppn_count += 1
                 else:
