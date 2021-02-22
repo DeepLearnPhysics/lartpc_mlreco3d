@@ -46,51 +46,81 @@ def ppn_simple(cfg, data_blob, res, logdir, iteration):
         batch_mask = batch_index == data_idx
         slabels = seg_label[batch_mask][:, -1].int().numpy()
         lowE_mask = slabels != 4
-        ppn_score_layer = ppn_layers[-1][batch_index == data_idx][lowE_mask]
-        coords_layer = ppn_coords[-1][batch_index == data_idx][lowE_mask]
+        ppn_score_layer = ppn_layers[-1][batch_index == data_idx]
+        coords_layer = ppn_coords[-1][batch_index == data_idx]
 
-        pixel_pred = points[batch_index == data_idx][:, 0:3][lowE_mask] + coords_layer[:, 1:4]
-        pixel_score = points[batch_index == data_idx][:, -1][lowE_mask]
-        pixel_logits = points[batch_index == data_idx][:, 3:8][lowE_mask]
+        pixel_pred = points[batch_index == data_idx][:, 0:3] + coords_layer[:, 1:4]
+        pixel_score = points[batch_index == data_idx][:, -1]
+        pixel_logits = points[batch_index == data_idx][:, 3:8]
         
 
         points_label = particles[particles[:, 0] == data_idx]
 
         # Initialize log if one per event
-        points_batch = points[batch_mask][lowE_mask]
+        points_batch = points[batch_mask]
         segmentation_batch = segmentation[batch_mask]
        
         pred_seg = np.argmax(segmentation_batch, axis=1).astype(int)
         acc_seg = np.sum(pred_seg == slabels) / float(segmentation_batch.shape[0])
 
-        d = pairwise_distances(points_label[:, 1:4].float(), torch.Tensor(coords_layer[:, 1:4])).numpy()
-        positives = (d < ppn_resolution).any(axis=0)
-        if (np.sum(positives) < 1):
-            continue
-        predicted_positives = pixel_score > scipy.special.logit(0.6)
-        point_score_acc = np.sum(positives == predicted_positives) / float(pixel_score.shape[0])
+
+        for c in np.unique(slabels):
+            
+            if int(c) > 2:
+                continue
 
 
-        positive_masked = pixel_pred[pixel_score > scipy.special.logit(0.6)]
+            class_mask = slabels == c
+            num_true = np.sum(pred_seg[class_mask] == slabels[class_mask])
+            num_total = slabels[class_mask].shape[0]
 
-        d = pairwise_distances(points_label[:, 1:4].float(), torch.Tensor(positive_masked)).numpy()
-        d_pred_to_true = d.min(axis=0)
-        d_true_to_pred = d.min(axis=1)
-        num_t2p = np.sum(d_true_to_pred < ppn_resolution)
-        num_p2t = np.sum(d_pred_to_true < ppn_resolution)
+            d = pairwise_distances(points_label[:, 1:4].float(), torch.Tensor(coords_layer[:, 1:4][class_mask])).numpy()
+            positives = (d < ppn_resolution).any(axis=0)
+            if (np.sum(positives) < 1):
+                continue
+            predicted_positives = pixel_score[class_mask] > 0
+            point_score_acc = np.sum(positives == predicted_positives) / float(pixel_score[class_mask].shape[0])
+
+
+            positive_masked = pixel_pred[class_mask][pixel_score[class_mask] > 0]
+
+            d = pairwise_distances(points_label[:, 1:4].float(), torch.Tensor(positive_masked)).numpy()
+
+            if d.shape[0] == 0 or d.shape[1] == 0:
+                continue
+
+            d_pred_to_true = d.min(axis=0)
+            d_true_to_pred = d.min(axis=1)
+            num_t2p = np.sum(d_true_to_pred < ppn_resolution)
+            num_p2t = np.sum(d_pred_to_true < ppn_resolution)
+
+            pixel_seg = pixel_logits[class_mask][pixel_score[class_mask] > 0]
+            pixel_seg_masked = pixel_seg[d_pred_to_true < ppn_resolution]
+
+            pixel_pred_class = np.argmax(pixel_seg_masked, axis=1)
+            pixel_true_class = slabels[class_mask][pixel_score[class_mask] > 0][d_pred_to_true < ppn_resolution]
     
-        row = (tree_idx, acc_seg, point_score_acc, d_pred_to_true.mean(), d_true_to_pred.mean())
-        #output.append(row)
-        fout_all.record(('Index', 'seg_acc', 'score_acc', 'd_p2t', 'd_t2p'), row)
-        fout_all.write()
+            purity = np.sum(pixel_pred_class == c) / float(pixel_pred_class.shape[0])
+            efficiency = np.sum(pixel_true_class == c) / float(pixel_true_class.shape[0])
 
-        for r in d_true_to_pred:
-            fout_gt.record(('Index', 'min_distance'), (tree_idx, r))
-            fout_gt.write()
+            d_pred = pairwise_distances(torch.Tensor(coords_layer[:, 1:4][pred_seg == c]), torch.Tensor(positive_masked)).numpy()
 
-        for r in d_pred_to_true:
-            fout_pred.record(('Index', 'min_distance'), (tree_idx, r))
-            fout_pred.write()
+            row = (tree_idx, int(c), acc_seg, point_score_acc, d_pred_to_true.mean(), \
+                d_true_to_pred.mean(), num_true, num_total, purity, efficiency)
+            #output.append(row)
+            fout_all.record(('Index', 'Class', 'seg_acc', 'score_acc', \
+                'd_p2t', 'd_t2p', 'num_true_segmentation', 'total_num_voxels', 'purity', 'efficiency'), row)
+            fout_all.write()
+
+            if d_pred.shape[0] > 0:
+                d_same_type = d_pred.min(axis=0)
+                for i, r in enumerate(d_pred_to_true):
+                    fout_pred.record(('Index', 'Class', 'min_distance', 'd_pred_to_same_type'), (tree_idx, int(c), r, d_same_type[i]))
+                    fout_pred.write()
+
+            for r in d_true_to_pred:
+                fout_gt.record(('Index', 'Class', 'min_distance'), (tree_idx, int(c), r))
+                fout_gt.write()
 
     # fout_gt.close()
     # fout_pred.close()
