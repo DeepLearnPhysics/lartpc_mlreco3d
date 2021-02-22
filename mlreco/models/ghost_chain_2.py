@@ -271,7 +271,6 @@ class GhostChain2(torch.nn.Module):
         device = input[0].device
         em_mask = np.where((frag_seg == semantic_label))[0]
         edge_index = complete_graph(frag_batch_ids[em_mask])
-        print("edge -index = ", edge_index)
         x = self.node_encoder(input[0], fragments[em_mask])
         e = self.edge_encoder(input[0], fragments[em_mask], edge_index)
 
@@ -390,7 +389,6 @@ class GhostChain2(torch.nn.Module):
             - result (dict) (updated with new outputs)
         '''
         device = input[0].device
-
         # ---
         # 1. Clustering w/ CNN or DBSCAN will produce
         # - fragments (list of list of integer indexing the input data)
@@ -456,7 +454,9 @@ class GhostChain2(torch.nn.Module):
         # ---
         # 2. GNN clustering: shower & track
         # ---
-        print(frag_seg, frag_batch_ids.shape)
+        print("enable_gnn_particle: ", self.enable_gnn_particle)
+        print("enable_gnn_shower: ", self.enable_gnn_shower)
+        print("enable_gnn_tracks: ", self.enable_gnn_tracks)
         if self.enable_gnn_particle:
             # Shower GNN input
             em_mask_shower, edge_index_shower, x_shower, e_shower = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
@@ -487,6 +487,7 @@ class GhostChain2(torch.nn.Module):
                         {'frags': 'particle_fragments', 'node_pred': 'particle_node_pred', 'edge_pred': 'particle_edge_pred', 'edge_index': 'particle_edge_index', 'group_pred': 'particle_group_pred'})
         else:
             if self.enable_gnn_shower:
+
                 # Initialize a complete graph for edge prediction, get shower fragment and edge features
                 em_mask, edge_index, x, e = self.get_gnn_input(0, frag_seg, frag_batch_ids, fragments, input, result)
                 self.run_gnn(self.grappa_shower, input, result, frag_batch_ids[em_mask], fragments[em_mask], edge_index, x, e,

@@ -231,6 +231,7 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
         for target in target_list_keys:
             dlist = outputs[target][data_index]
             for d in dlist:
+                print(d)
                 if not d.shape[0] in element_map:
                     batch_id_loc = data_dim if d.shape[1] > data_dim else -1
                     batch_idx = np.unique(d[:,batch_id_loc])
