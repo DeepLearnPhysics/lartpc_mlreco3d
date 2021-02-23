@@ -237,7 +237,6 @@ def inter_cluster_distance(voxels, clusts, batch_ids, mode='set', use_numpy=True
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
     """
     from scipy.spatial.distance import cdist
-    from mlreco.utils import local_cdist
     from scipy.linalg import block_diag
 
     if mode == 'set':
@@ -251,7 +250,7 @@ def inter_cluster_distance(voxels, clusts, batch_ids, mode='set', use_numpy=True
                         if use_numpy:
                             dist_mat[i,j] = cdist(voxels[ci].detach().cpu().numpy(), voxels[cj].detach().cpu().numpy()).min()
                         else:
-                            dist_mat[i,j] = local_cdist(voxels[ci], voxels[cj]).min()
+                            dist_mat[i,j] = torch.cdist(voxels[ci], voxels[cj]).min()
                     else:
                         dist_mat[i,j] = dist_mat[j,i]
             dist_mats.append(dist_mat)
@@ -266,7 +265,7 @@ def inter_cluster_distance(voxels, clusts, batch_ids, mode='set', use_numpy=True
                 centroids = centroids.detach().cpu().numpy()
                 dist_mat = cdist(centroids, centroids)
             else:
-                dist_mat = local_cdist(centroids, centroids)
+                dist_mat = torch.cdist(centroids, centroids)
             dist_mats.append(dist_mat)
         dist_mat = block_diag(*dist_mats)
 
