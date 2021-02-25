@@ -233,16 +233,34 @@ class NodeKinematicsLoss(torch.nn.Module):
                 'n_clusts': n_clusts
             }
 
-        return {
+        result = {
             'accuracy': (type_acc+p_acc+vtx_position_acc+vtx_score_acc)/(n_heads*n_clusts + n_clusts_vtx + n_clusts_vtx_positives),
             'loss': total_loss/n_clusts,
             'type_accuracy': type_acc/n_clusts,
             'p_accuracy': p_acc/n_clusts,
             'type_loss': type_loss/n_clusts,
             'p_loss': p_loss/n_clusts,
-            'vtx_position_loss': vtx_position_loss/n_clusts_vtx_positives,
-            'vtx_score_loss': vtx_score_loss/n_clusts_vtx,
-            'vtx_position_acc': vtx_position_acc/n_clusts_vtx_positives,
-            'vtx_score_acc': vtx_score_acc/n_clusts_vtx,
             'n_clusts': n_clusts
         }
+        if compute_vtx:
+            if n_clusts_vtx:
+                result.update({
+                    'vtx_score_loss': vtx_score_loss/n_clusts_vtx,
+                    'vtx_score_acc': vtx_score_acc/n_clusts_vtx,
+                })
+            else:
+                result.update({
+                    'vtx_score_loss': 0.,
+                    'vtx_score_acc': 0.
+                })
+            if n_clusts_vtx_positives:
+                result.update({
+                    'vtx_position_loss': vtx_position_loss/n_clusts_vtx_positives,
+                    'vtx_position_acc': vtx_position_acc/n_clusts_vtx_positives,
+                })
+            else:
+                result.update({
+                    'vtx_position_loss': 0.,
+                    'vtx_position_acc': 0.
+                })
+        return result
