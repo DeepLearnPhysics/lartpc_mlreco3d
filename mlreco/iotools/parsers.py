@@ -483,11 +483,12 @@ def parse_cluster3d_full(data):
     if len(data) > 2:
         particle_mpv = data[2].as_vector()
 
-    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
+    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id, get_particle_id
     #group_ids = get_valid_group_id(cluster_event, particles_v)
     group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particle_mpv)
+    pids      = get_particle_id(particles_v, nu_ids)
 
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
@@ -506,13 +507,8 @@ def parse_cluster3d_full(data):
                                fill_value=group_ids[i], dtype=np.float32)
             inter_id = np.full(shape=(cluster.as_vector().size()),
                                fill_value=inter_ids[i], dtype=np.float32)
-            t = int(particles_v[i].pdg_code())
-            if t in TYPE_LABELS.keys():
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=TYPE_LABELS[t], dtype=np.float32)
-            else:
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=-1, dtype=np.float32)
+            pdg = np.full(shape=(cluster.as_vector().size()),
+                          fill_value=pids[i], dtype=np.float32)
             nu_id = np.full(shape=(cluster.as_vector().size()),
                             fill_value=nu_ids[i], dtype=np.float32)
             sem_type = np.full(shape=(cluster.as_vector().size()),

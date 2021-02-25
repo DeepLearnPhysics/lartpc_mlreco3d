@@ -380,7 +380,7 @@ class FullChain(torch.nn.Module):
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, part_seg, self._inter_ids, input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
-            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p', 'node_pred_vtx': 'node_pred_vtx'}
+            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred': 'inter_node_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p', 'node_pred_vtx': 'node_pred_vtx'}
             self.run_gnn(self.grappa_inter, input, result, particles, output_keys, kwargs)
 
         # ---
@@ -697,17 +697,18 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_pred':out['inter_edge_pred'],
                     'edge_index':out['inter_edge_index']
                 }
-            if 'node_pred_type' in out:
-                gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
-            if 'node_pred_p' in out:
-                gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
-            if 'node_pred_vtx' in out:
-                gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
 
+            if 'inter_node_pred' in out: gnn_out.update({ 'node_pred': out['inter_node_pred'] })
+            if 'node_pred_type' in out:  gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
+            if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
+            if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
-            res['inter_edge_loss'] = res_gnn_inter['edge_loss']
-            res['inter_edge_accuracy'] = res_gnn_inter['edge_accuracy']
-            if 'node_pred_type' in out:
+            res['inter_edge_loss'] = res_gnn_inter['loss']
+            res['inter_edge_accuracy'] = res_gnn_inter['accuracy']
+            if 'inter_node_pred' in out:
+                res['inter_node_loss'] = res_gnn_inter['node_loss']
+                res['inter_node_accuracy'] = res_gnn_inter['node_accuracy']
+            if 'node_pred_type' in res_gnn_inter:
                 res['type_loss'] = res_gnn_inter['type_loss']
                 res['type_accuracy'] = res_gnn_inter['type_accuracy']
             if 'node_pred_p' in out:
@@ -798,7 +799,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Particle fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
                 print('Particle primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
             if self.enable_gnn_inter:
-                print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
+                if 'inter_node_pred' in out: print('Particle ID accuracy: {:.4f}'.format(res_gnn_inter['node_accuracy']))
+                print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['edge_accuracy']))
             if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
             if 'node_pred_type' in out:

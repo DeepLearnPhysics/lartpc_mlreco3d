@@ -1,7 +1,6 @@
 # Geometric feature extractor for Cluster GNN
 import torch
 import numpy as np
-from mlreco.utils import local_cdist
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
 from mlreco.utils.gnn.cluster import cluster_start_point
 
@@ -160,7 +159,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
                 x2 = voxels[clusts[e[1]]]
 
                 # Find the closest set point in each cluster
-                d12 = local_cdist(x1,x2)
+                d12 = torch.cdist(x1,x2)
                 imin = torch.argmin(d12)
                 i1, i2 = imin//len(x2), imin%len(x2)
                 v1 = x1[i1,:] # closest point in c1
