@@ -607,18 +607,7 @@ def parse_cluster3d_kinematics(data):
     cluster_event = data[0]
     particles_v = data[1].as_vector()
     particles_v_asis = parse_particle_asis([data[1], data[0]])
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
-    # print(cluster_event)
-    # assert False
+
     meta = cluster_event.meta()
     num_clusters = cluster_event.as_vector().size()
     clusters_voxels, clusters_features = [], []
@@ -626,11 +615,12 @@ def parse_cluster3d_kinematics(data):
     if len(data) > 2:
         particle_mpv = data[2].as_vector()
 
-    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
+    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id, get_particle_id
     #group_ids = get_valid_group_id(cluster_event, particles_v)
     group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
+    pids      = get_particle_id(particles_v, nu_ids)
 
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
@@ -647,19 +637,14 @@ def parse_cluster3d_kinematics(data):
             group_id = np.full(shape=(cluster.as_vector().size()),
                                #fill_value=particles_v[i].group_id(), dtype=np.float32)
                                fill_value=group_ids[i], dtype=np.float32)
-            t = int(particles_v[i].pdg_code())
             px = particles_v[i].px()
             py = particles_v[i].py()
             pz = particles_v[i].pz()
             p = np.sqrt(px**2 + py**2 + pz**2) / 1000.0
             p = np.full(shape=(cluster.as_vector().size()),
                                 fill_value=p, dtype=np.float32)
-            if t in TYPE_LABELS.keys():
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=TYPE_LABELS[t], dtype=np.float32)
-            else:
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=-1, dtype=np.float32)
+            pdg = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=pids[i], dtype=np.float32)
             vtx_x = np.full(shape=(cluster.as_vector().size()),
                             fill_value=particles_v_asis[i].ancestor_position().x(), dtype=np.float32)
             vtx_y = np.full(shape=(cluster.as_vector().size()),
@@ -667,7 +652,7 @@ def parse_cluster3d_kinematics(data):
             vtx_z = np.full(shape=(cluster.as_vector().size()),
                             fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
             is_primary = np.full(shape=(cluster.as_vector().size()),
-                        fill_value=float((particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
+                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
                         dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
             clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
