@@ -206,7 +206,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_assn_vtx = node_assn_vtx/self.spatial_size
 
                     # Exclude vertex that is outside of the volume
-                    good_index = torch.all(torch.abs(node_assn_vtx) <= self.spatial_size, dim=1)
+                    good_index = torch.all(torch.abs(node_assn_vtx) <= 1., dim=1)
 
                     #positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     # Take the max for each cluster - e.g. for a shower, the primary fragment only
