@@ -100,7 +100,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         else:
             raise ValueError('Regression loss not recognized: ' + self.reg_loss)
 
-        self.vtx_position_loss = torch.nn.MSELoss(reduction='none')
+        self.vtx_position_loss = torch.nn.L1Loss(reduction='none')
         self.vtx_score_loss = torch.nn.CrossEntropyLoss(reduction=self.reduction)
 
     def forward(self, out, types):
@@ -118,7 +118,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         total_loss, total_acc = 0., 0.
         type_loss, p_loss, type_acc, p_acc = 0., 0., 0., 0.
         vtx_position_loss, vtx_score_loss, vtx_position_acc, vtx_score_acc = 0., 0., 0., 0.
-        n_clusts, n_clusts_vtx, n_clusts_vtx_positives = 0, 0, 0
+        n_clusts_type, n_clusts_momentum, n_clusts_vtx, n_clusts_vtx_positives = 0, 0, 0, 0
 
         compute_type = 'node_pred_type' in out
         compute_momentum = 'node_pred_p' in out
@@ -149,17 +149,26 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
                     node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
 
-                    if self.balance_classes:
-                        vals, counts = torch.unique(node_assn_type, return_counts=True)
-                        weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
-                        for k, v in enumerate(vals):
-                            loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn_type==v], node_assn_type[node_assn_type==v])
+                    # Do not apply loss to nodes labeled -1 (unknown class)
+                    node_mask = torch.nonzero(node_assn_type > -1, as_tuple=True)[0]
+                    if len(node_mask):
+                        node_pred_type = node_pred_type[node_mask]
+                        node_assn_type = node_assn_type[node_mask]
+
+                        if self.balance_classes:
+                            vals, counts = torch.unique(node_assn_type, return_counts=True)
+                            weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
+                            for k, v in enumerate(vals):
+                                loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn_type==v], node_assn_type[node_assn_type==v])
+                                total_loss += loss
+                                type_loss += float(loss)
+                        else:
+                            loss = self.type_lossfn(node_pred_type, node_assn_type)
                             total_loss += loss
                             type_loss += float(loss)
-                    else:
-                        loss = self.type_lossfn(node_pred_type, node_assn_type)
-                        total_loss += loss
-                        type_loss += float(loss)
+
+                        # Increment the number of nodes
+                        n_clusts_type +=len(node_mask)
 
                 # Increment the momentum loss
                 if compute_momentum:
@@ -173,10 +182,20 @@ class NodeKinematicsLoss(torch.nn.Module):
                     total_loss += loss
                     p_loss += float(loss)
 
+                    # Increment the number of nodes
+                    n_clusts_momentum += len(clusts)
+
                 if compute_vtx:
                     node_pred_vtx = out['node_pred_vtx'][i][j]
                     if not node_pred_vtx.shape[0]:
                         continue
+
+                    # Predictions are shifts w.r.t the barycenter of each cluster
+                    # anchors = []
+                    # for c in clusts:
+                    #     anchors.append(torch.mean(labels[c, :3], dim=0) + 0.5)
+                    # anchors = torch.stack(anchors)
+                    # node_pred_vtx[:, :3] = node_pred_vtx[:, :3] + anchors
 
                     node_x_vtx = get_cluster_label(labels, clusts, column=self.vtx_col)
                     node_y_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+1)
@@ -186,10 +205,20 @@ class NodeKinematicsLoss(torch.nn.Module):
                                                 dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
                     node_assn_vtx = node_assn_vtx/self.spatial_size
 
-                    good_index = torch.all(torch.abs(node_assn_vtx) <= 1, dim=1)
+                    # Exclude vertex that is outside of the volume
+                    good_index = torch.all(torch.abs(node_assn_vtx) <= self.spatial_size, dim=1)
 
-                    positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+                    #positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+                    # Take the max for each cluster - e.g. for a shower, the primary fragment only
+                    # is marked as primary particle, so taking majority count would eliminate the shower
+                    # from primary particles for vertex identification purpose.
+                    positives = []
+                    for c in clusts:
+                        positives.append(labels[c, self.vtx_positives_col].max().item())
+                    positives = np.array(positives)
+
                     positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
+                    # for now only sum losses, they get averaged below in results dictionary
                     loss2 = self.vtx_score_loss(node_pred_vtx[good_index, 3:], positives[good_index])
                     loss1 = torch.sum(torch.mean(self.vtx_position_loss(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()]), dim=1))
 
@@ -197,6 +226,10 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                     vtx_position_loss += float(loss1)
                     vtx_score_loss += float(loss2)
+
+                    n_clusts_vtx += (good_index).sum().item()
+                    n_clusts_vtx_positives += (good_index & positives.bool()).sum().item()
+                    # print("Removing", (~good_index).sum().item(), len(good_index) )
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
@@ -207,60 +240,66 @@ class NodeKinematicsLoss(torch.nn.Module):
                     p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
 
                 if compute_vtx:
+                    # print(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()])
                     vtx_position_acc += float(torch.sum(1. - torch.abs(node_pred_vtx[good_index & positives.bool(), :3]-node_assn_vtx[good_index & positives.bool()])/(torch.abs(node_assn_vtx[good_index & positives.bool()]) + torch.abs(node_pred_vtx[good_index & positives.bool(), :3]))))/3.
                     vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[good_index, 3:], dim=1) == positives[good_index]))
 
-                # Increment the number of nodes
-                n_clusts += len(clusts)
-                if compute_vtx:
-                    n_clusts_vtx += (good_index).sum().item()
-                    n_clusts_vtx_positives += (good_index & positives.bool()).sum().item()
-                    # print("Removing", (~good_index).sum().item(), len(good_index) )
-
-        n_heads = (int(compute_type) + int(compute_momentum))
+        n_clusts = n_clusts_type + n_clusts_momentum + n_clusts_vtx + n_clusts_vtx_positives
 
         # Handle the case where no cluster/edge were found
         if not n_clusts:
-            return {
+            result = {
                 'accuracy': 0.,
                 'loss': torch.tensor(0., requires_grad=True, device=types[0].device),
-                'type_loss': 0.,
-                'p_loss': 0.,
-                'vtx_position_loss': 0.,
-                'vtx_score_loss': 0.,
-                'vtx_position_acc': 0.,
-                'vtx_score_acc': 0.,
-                'n_clusts': n_clusts
+                'n_clusts_momentum': n_clusts_momentum,
+                'n_clusts_type': n_clusts_type,
+                'n_clusts_vtx': n_clusts_vtx,
+                'n_clusts_vtx_positives': n_clusts_vtx_positives
             }
-
-        result = {
-            'accuracy': (type_acc+p_acc+vtx_position_acc+vtx_score_acc)/(n_heads*n_clusts + n_clusts_vtx + n_clusts_vtx_positives),
-            'loss': total_loss/n_clusts,
-            'type_accuracy': type_acc/n_clusts,
-            'p_accuracy': p_acc/n_clusts,
-            'type_loss': type_loss/n_clusts,
-            'p_loss': p_loss/n_clusts,
-            'n_clusts': n_clusts
-        }
-        if compute_vtx:
-            if n_clusts_vtx:
+            if compute_type:
                 result.update({
-                    'vtx_score_loss': vtx_score_loss/n_clusts_vtx,
-                    'vtx_score_acc': vtx_score_acc/n_clusts_vtx,
+                    'type_loss': 0.,
+                    'type_accuracy': 0.,
                 })
-            else:
+            if compute_momentum:
                 result.update({
-                    'vtx_score_loss': 0.,
-                    'vtx_score_acc': 0.
+                    'p_loss': 0.,
+                    'p_accuracy': 0.,
                 })
-            if n_clusts_vtx_positives:
-                result.update({
-                    'vtx_position_loss': vtx_position_loss/n_clusts_vtx_positives,
-                    'vtx_position_acc': vtx_position_acc/n_clusts_vtx_positives,
-                })
-            else:
+            if compute_vtx:
                 result.update({
                     'vtx_position_loss': 0.,
-                    'vtx_position_acc': 0.
+                    'vtx_score_loss': 0.,
+                    'vtx_position_acc': 0.,
+                    'vtx_score_acc': 0.,
                 })
+            return result
+
+        result = {
+            'accuracy': (type_acc+p_acc+vtx_position_acc+vtx_score_acc)/n_clusts,
+            'loss': total_loss/n_clusts,
+            'n_clusts_momentum': n_clusts_momentum,
+            'n_clusts_type': n_clusts_type,
+            'n_clusts_vtx': n_clusts_vtx,
+            'n_clusts_vtx_positives': n_clusts_vtx_positives
+        }
+
+        if compute_type:
+            result.update({
+                'type_accuracy': 0. if not n_clusts_type else type_acc/n_clusts_type,
+                'type_loss': 0. if not n_clusts_type else type_loss/n_clusts_type,
+            })
+        if compute_momentum:
+            result.update({
+                'p_accuracy': 0. if not n_clusts_momentum else p_acc/n_clusts_momentum,
+                'p_loss': 0. if not n_clusts_momentum else p_loss/n_clusts_momentum,
+            })
+        if compute_vtx:
+            result.update({
+                'vtx_score_loss': 0. if not n_clusts_vtx else vtx_score_loss/n_clusts_vtx,
+                'vtx_score_acc': 0. if not n_clusts_vtx else vtx_score_acc/n_clusts_vtx,
+                'vtx_position_loss': 0. if not n_clusts_vtx_positives else vtx_position_loss/n_clusts_vtx_positives,
+                'vtx_position_acc': 0. if not n_clusts_vtx_positives else vtx_position_acc/n_clusts_vtx_positives,
+            })
+
         return result
