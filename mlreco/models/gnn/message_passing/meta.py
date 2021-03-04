@@ -70,7 +70,8 @@ class MetaLayerModel(nn.Module):
 
         res = {
             'node_pred': [x_pred],
-            'edge_pred': [e_pred]
+            'edge_pred': [e_pred],
+            'node_features': [x]
             }
 
         return res
