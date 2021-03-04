@@ -243,8 +243,14 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         self.half_stride2 = int(self._num_strides/2.0)
         self._downsample_ghost = self._cfg.get('downsample_ghost', False)
         self._weight_ppn1 = self._cfg.get('weight_ppn1', 1.0)
-        self._weight_seg = self._cfg.get('weight_seg', 1.0)
-        self._weight_ppn = self._cfg.get('weight_ppn', 1.0)
+        self._weight_distance = self._cfg.get('weight_distance', 1.0)
+
+        self._weight_ppn = self._cfg.get('weight_ppn', -1)
+        self._use_weight_ppn = True
+        if self._weight_ppn == -1:
+            self._weight_ppn = 0.5
+            self._use_weight_ppn = False
+
         self._true_distance_ppn1 = self._cfg.get('true_distance_ppn1', 1.0)
         self._true_distance_ppn2 = self._cfg.get('true_distance_ppn2', 1.0)
         self._true_distance_ppn3 = self._cfg.get('true_distance_ppn3', 5.0)
@@ -398,7 +404,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         #weight_ppn3 = torch.tensor([0.1, 0.9]).double()
                         # loss_seg = torch.mean(self.cross_entropy(event_scores.double(), positives.long()))
                         # loss_seg = torch.nn.functional.cross_entropy(event_scores.double(), positives.long(), weight=weight_ppn3)
-                        loss_seg = torch.nn.functional.cross_entropy(event_scores.double(), positives.long(), weight=weight_ppn)
+                        loss_seg = torch.nn.functional.cross_entropy(event_scores.double(), positives.long(), weight=weight_ppn if self._use_weight_ppn else weight_ppn3)
                     total_class += loss_seg
 
                     # Accuracy for scores
@@ -417,16 +423,16 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     num_positives_ppn1 = positives_ppn1.long().sum()
                     num_negatives_ppn1 = positives_ppn1.nelement() - num_positives_ppn1
                     w = num_positives_ppn1.float() / (num_positives_ppn1 + num_negatives_ppn1).float()
-                    # weight_ppn1 = torch.stack([w, 1-w]).double()
+                    weight_ppn1 = torch.stack([w, 1-w]).double() if not self._use_weight_ppn else weight_ppn
                     # print("ppn1", weight_ppn1)
-                    weight_ppn1 = weight_ppn
+                    # weight_ppn1 = weight_ppn
 
                     num_positives_ppn2 = positives_ppn2.long().sum()
                     num_negatives_ppn2 = positives_ppn2.nelement() - num_positives_ppn2
                     w2 = num_positives_ppn2.float() / (num_positives_ppn2 + num_negatives_ppn2).float()
-                    # weight_ppn2 = torch.stack([w2, 1-w2]).double()
+                    weight_ppn2 = torch.stack([w2, 1-w2]).double() if not self._use_weight_ppn else weight_ppn
                     # print("ppn2", weight_ppn2)
-                    weight_ppn2 = weight_ppn
+                    # weight_ppn2 = weight_ppn
                     # print('num positives ppn1', num_positives_ppn1)
                     # print((~(d_true_ppn1 < self._true_distance).any(dim=1)).sum())
                     # print((~(d_true_ppn2 < self._true_distance).any(dim=1)).sum())
@@ -512,7 +518,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     total_loss_ppn2 += loss_seg_ppn2
                     total_acc_ppn1 += acc_ppn1
                     total_acc_ppn2 += acc_ppn2
-                    total_loss += (self._weight_seg*loss_seg + self._weight_ppn1*loss_seg_ppn1 + loss_seg_ppn2).float()
+                    total_loss += (self._weight_distance*loss_seg + self._weight_ppn1*loss_seg_ppn1 + loss_seg_ppn2).float()
                     total_acc += acc
                     ppn_count += 1
                 else:
