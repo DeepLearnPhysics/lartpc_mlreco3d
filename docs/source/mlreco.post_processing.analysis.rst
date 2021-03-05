@@ -36,10 +36,26 @@ mlreco.post\_processing.analysis.michel\_reconstruction\_noghost module
    :undoc-members:
    :show-inheritance:
 
+mlreco.post\_processing.analysis.nue\_selection module
+------------------------------------------------------
+
+.. automodule:: mlreco.post_processing.analysis.nue_selection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 mlreco.post\_processing.analysis.stopping\_muons module
 -------------------------------------------------------
 
 .. automodule:: mlreco.post_processing.analysis.stopping_muons
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.post\_processing.analysis.through\_muons module
+------------------------------------------------------
+
+.. automodule:: mlreco.post_processing.analysis.through_muons
    :members:
    :undoc-members:
    :show-inheritance:
