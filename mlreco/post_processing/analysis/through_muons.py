@@ -1,10 +1,10 @@
 import numpy as np
 
 
-@post_processing('stopping-muons', ['seg_label', 'clust_data', 'particles'], ['segmentation'])
-def stopping_muons(cfg, data_blob, res, logdir, iteration, **kwargs):
+@post_processing('through-muons', ['seg_label', 'clust_data', 'particles'], ['segmentation'])
+def through_muons(cfg, data_blob, res, logdir, iteration, **kwargs):
     """
-    Find stopping muons for calibration purpose (dE/dx).
+    Find through-going muons for detector calibration purpose.
 
     Parameters
     ----------

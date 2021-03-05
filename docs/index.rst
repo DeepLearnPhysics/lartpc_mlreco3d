@@ -5,15 +5,25 @@
 
 Welcome to lartpc_mlreco3d's documentation!
 ===========================================
+This documentation is meant to host technical details related to ``lartpc_mlreco3d``.
 
 .. toctree::
+   :maxdepth: 3
+   :caption: First steps
+
+   GettingStarted
+   Configuration
+
+.. toctree::
+   :caption: Code documentation
    :maxdepth: 2
-   :caption: Contents:
+
+   mlreco
 
 
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`
