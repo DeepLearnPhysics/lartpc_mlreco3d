@@ -1,14 +1,6 @@
 mlreco.utils package
 ====================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   mlreco.utils.gnn
-
 Submodules
 ----------
 
