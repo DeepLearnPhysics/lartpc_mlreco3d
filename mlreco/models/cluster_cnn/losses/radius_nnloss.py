@@ -11,9 +11,6 @@ from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import adjusted_rand_score as ari
 
-from torch_cluster import knn, radius
-from torch_scatter import scatter_mean, scatter_add
-
 
 class DensityBasedNNLoss(torch.nn.modules.loss._Loss):
 
@@ -27,7 +24,8 @@ class DensityBasedNNLoss(torch.nn.modules.loss._Loss):
         self.dbscan = DBSCAN(eps=self.eps1, min_samples=self.minpts)
 
     def radius_neighbor_loss(self, features, labels, minPoints=5, eps1=1.999, eps2=1.999, compute_accuracy=False):
-
+        from torch_cluster import knn
+        from torch_scatter import scatter_add
         loss = []
 
         ally_loss_list, enemy_loss_list = [], []

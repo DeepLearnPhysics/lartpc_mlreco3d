@@ -18,7 +18,7 @@ def store_input(cfg, data_blob, res, logdir, iteration):
     """
     Store input data blob.
 
-    Configuration
+    Parameters
     -------------
     threshold: float, optional
         Default: 0.

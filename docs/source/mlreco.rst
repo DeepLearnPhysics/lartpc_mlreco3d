@@ -16,21 +16,11 @@ Subpackages
 Submodules
 ----------
 
-mlreco.main\_funcs module
--------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.main_funcs
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.trainval module
-----------------------
-
-.. automodule:: mlreco.trainval
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.main_funcs
+   mlreco.trainval
 
 Module contents
 ---------------

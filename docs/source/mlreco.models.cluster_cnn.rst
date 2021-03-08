@@ -12,45 +12,14 @@ Subpackages
 Submodules
 ----------
 
-mlreco.models.cluster\_cnn.clusternet module
---------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.models.cluster_cnn.clusternet
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.cluster\_cnn.embeddings module
---------------------------------------------
-
-.. automodule:: mlreco.models.cluster_cnn.embeddings
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.cluster\_cnn.factories module
--------------------------------------------
-
-.. automodule:: mlreco.models.cluster_cnn.factories
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.cluster\_cnn.spatial\_embeddings module
------------------------------------------------------
-
-.. automodule:: mlreco.models.cluster_cnn.spatial_embeddings
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.cluster\_cnn.utils module
----------------------------------------
-
-.. automodule:: mlreco.models.cluster_cnn.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.models.cluster_cnn.clusternet
+   mlreco.models.cluster_cnn.embeddings
+   mlreco.models.cluster_cnn.factories
+   mlreco.models.cluster_cnn.spatial_embeddings
+   mlreco.models.cluster_cnn.utils
 
 Module contents
 ---------------

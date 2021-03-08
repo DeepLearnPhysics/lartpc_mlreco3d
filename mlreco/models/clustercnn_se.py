@@ -11,10 +11,48 @@ class ClusterCNN(SpatialEmbeddings1):
     '''
     UResNet with coordinate convolution block in final layer for clustering.
 
-    Congifurations:
-        - coordConv: Option to concat coordinates to input features at
-        final linear layer.
-        - embedding_dim: dimension of final embedding space for clustering.
+    Configurations:
+
+    - coordConv: Option to concat coordinates to input features at
+    final linear layer.
+    - embedding_dim: dimension of final embedding space for clustering.
+
+    A typical configuration of Spice would look like this (`spice` goes
+    directly under the `modules` section of the configuration file):
+
+    ..  code-block:: yaml
+
+        spice:
+          network_base:
+            spatial_size: 768
+            data_dim: 3
+            features: 4
+            leakiness: 0.33
+          spatial_embeddings:
+            seediness_dim: 1
+            sigma_dim: 1
+            embedding_dim: 3
+            coordConv: True
+            # model_path: 'your_weight.ckpt'
+          uresnet:
+            filters: 64
+            input_kernel_size: 7
+            num_strides: 7
+            reps: 2
+          fragment_clustering:
+            s_thresholds: [0., 0., 0., 0.35]
+            p_thresholds: [0.95, 0.95, 0.95, 0.95]
+            cluster_all: False
+            cluster_classes: [1]
+            min_frag_size: 10
+            min_voxels: 2
+        spice_loss:
+          name: se_vectorized_inter
+          seediness_weight: 1.0
+          embedding_weight: 1.0
+          smoothing_weight: 1.0
+          min_voxels: 2
+          mask_loss_fn: lovasz_hinge
     '''
 
     MODULES = ['network_base', 'uresnet', 'spice_loss', 'spatial_embeddings']
@@ -28,10 +66,11 @@ class ClusterCNN2(SpatialEmbeddingsLite):
     '''
     UResNet with coordinate convolution block in final layer for clustering.
 
-    Congifurations:
-        - coordConv: Option to concat coordinates to input features at
-        final linear layer.
-        - embedding_dim: dimension of final embedding space for clustering.
+    Configurations:
+
+    - coordConv: Option to concat coordinates to input features at
+    final linear layer.
+    - embedding_dim: dimension of final embedding space for clustering.
     '''
 
     MODULES = ['network_base', 'uresnet', 'spice_loss', 'spatial_embeddings']

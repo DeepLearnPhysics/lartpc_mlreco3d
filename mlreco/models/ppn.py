@@ -37,6 +37,27 @@ class PPN(torch.nn.Module):
     a UResNet-style network that provides feature maps on top of which PPN will
     run some convolutions and predict point positions.
 
+    A typical configuration goes under `uresnet_ppn` in `modules` section:
+
+    ..  code-block:: yaml
+
+        uresnet_ppn:
+          ppn:
+            num_strides: 6
+            filters: 16
+            num_classes: 5
+            data_dim: 3
+            downsample_ghost: True
+            use_encoding: False
+            ppn_num_conv: 1
+            weight_ppn: 0.9
+            score_threshold: 0.5
+            ppn1_size: 24
+            ppn2_size: 96
+            spatial_size: 768
+            model_path: 'your_snapshot.ckpt'
+            model_name: 'ppn'
+
     Configuration
     -------------
     num_strides : int
@@ -214,6 +235,8 @@ class PPN(torch.nn.Module):
 
 class PPNLoss(torch.nn.modules.loss._Loss):
     """
+    Loss for PPN.
+    
     Configuration TO BE COMPLETED
     -------------
     downsample_ghost: bool, optional
