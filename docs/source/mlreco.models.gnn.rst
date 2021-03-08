@@ -14,29 +14,12 @@ Subpackages
 Submodules
 ----------
 
-mlreco.models.gnn.cluster module
---------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.models.gnn.cluster
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.gnn.factories module
-----------------------------------
-
-.. automodule:: mlreco.models.gnn.factories
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.gnn.normalizations module
----------------------------------------
-
-.. automodule:: mlreco.models.gnn.normalizations
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.models.gnn.cluster
+   mlreco.models.gnn.factories
+   mlreco.models.gnn.normalizations
 
 Module contents
 ---------------

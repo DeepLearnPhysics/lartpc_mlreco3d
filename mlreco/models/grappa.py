@@ -17,52 +17,56 @@ from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, 
 class GNN(torch.nn.Module):
     """
     Driver class for cluster node+edge prediction, assumed to be a GNN model.
+
     This class mostly acts as a wrapper that will hand the graph data to another model.
     If DBSCAN is used, use the semantic label tensor as an input.
 
     For use in config:
-    model:
-      name: grappa
-      modules:
-        grappa:
-          base:
-            node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-            node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
-            source_col        : <column in the input data that specifies the source node ids of each voxel (default 5)>
-            target_col        : <column in the input data that specifies the target instance ids of each voxel (default 6)>
-            use_dbscan        : <use DBSCAN to cluster the input instances of the class specified by node_type (default False)>
-            add_start_point   : <add label start point to the node features (default False)>
-            add_start_dir     : <add predicted start direction to the node features (default False)>
-            start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
-            start_dir_opt     : <optimize start direction by minimizing relative transverse spread of neighborhood (slow, default: False)>
-            start_dir_cpu     : <optimize the start direction on CPU (default: False)>
-            network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
-            edge_max_dist     : <maximal edge Euclidean length (default -1)>
-            edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-            edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
-            merge_batch       : <flag for whether to merge batches (default False)>
-            merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
-            merge_batch_size  : <size of batch merging (default 2)>
-            shuffle_clusters  : <randomize cluster order (default False)>
-            kinematics_mlp    : <applies type and momentum MLPs on the node features (default False)>
-          dbscan:
-            <dictionary of dbscan parameters>
-          node_encoder:
-            name: <name of the node encoder>
-            <dictionary of arguments to pass to the encoder>
-            model_path      : <path to the encoder weights>
-          edge_encoder:
-            name: <name of the edge encoder>
-            <dictionary of arguments to pass to the encoder>
-            model_path      : <path to the encoder weights>
-          node_model:
-            name: <name of the node model>
-            <dictionary of arguments to pass to the model>
-            model_path      : <path to the model weights>
-          edge_model:
-            name: <name of the edge model>
-            <dictionary of arguments to pass to the model>
-            model_path      : <path to the model weights>
+
+    ..  code-block:: yaml
+
+        model:
+          name: grappa
+          modules:
+            grappa:
+              base:
+                node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
+                node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
+                source_col        : <column in the input data that specifies the source node ids of each voxel (default 5)>
+                target_col        : <column in the input data that specifies the target instance ids of each voxel (default 6)>
+                use_dbscan        : <use DBSCAN to cluster the input instances of the class specified by node_type (default False)>
+                add_start_point   : <add label start point to the node features (default False)>
+                add_start_dir     : <add predicted start direction to the node features (default False)>
+                start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
+                start_dir_opt     : <optimize start direction by minimizing relative transverse spread of neighborhood (slow, default: False)>
+                start_dir_cpu     : <optimize the start direction on CPU (default: False)>
+                network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
+                edge_max_dist     : <maximal edge Euclidean length (default -1)>
+                edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
+                edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
+                merge_batch       : <flag for whether to merge batches (default False)>
+                merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
+                merge_batch_size  : <size of batch merging (default 2)>
+                shuffle_clusters  : <randomize cluster order (default False)>
+                kinematics_mlp    : <applies type and momentum MLPs on the node features (default False)>
+              dbscan:
+                <dictionary of dbscan parameters>
+              node_encoder:
+                name: <name of the node encoder>
+                <dictionary of arguments to pass to the encoder>
+                model_path      : <path to the encoder weights>
+              edge_encoder:
+                name: <name of the edge encoder>
+                <dictionary of arguments to pass to the encoder>
+                model_path      : <path to the encoder weights>
+              node_model:
+                name: <name of the node model>
+                <dictionary of arguments to pass to the model>
+                model_path      : <path to the model weights>
+              edge_model:
+                name: <name of the edge model>
+                <dictionary of arguments to pass to the model>
+                model_path      : <path to the model weights>
     """
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
@@ -280,16 +284,19 @@ class GNNLoss(torch.nn.modules.loss._Loss):
     Takes the output of the GNN and computes the total loss.
 
     For use in config:
-    model:
-      name: grappa
-      modules:
-        grappa_loss:
-          node_loss:
-            name: <name of the node loss>
-            <dictionary of arguments to pass to the loss>
-          edge_loss:
-            name: <name of the edge loss>
-            <dictionary of arguments to pass to the loss>
+
+    ..  code-block:: yaml
+
+        model:
+          name: grappa
+          modules:
+            grappa_loss:
+              node_loss:
+                name: <name of the node loss>
+                <dictionary of arguments to pass to the loss>
+              edge_loss:
+                name: <name of the edge loss>
+                <dictionary of arguments to pass to the loss>
     """
     def __init__(self, cfg, name='grappa_loss'):
         super(GNNLoss, self).__init__()

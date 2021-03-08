@@ -8,7 +8,6 @@ import sparseconvnet as scn
 from .lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
 from .misc import *
 from collections import defaultdict
-from torch_scatter import scatter_mean
 
 
 class OccuSegLoss(nn.Module):
@@ -127,6 +126,7 @@ class OccuSegLoss(nn.Module):
             - occ (N x 1)
             - groups (N)
         '''
+        from torch_scatter import scatter_mean
         bincounts = torch.bincount(groups).float()
         bincounts[bincounts == 0] = 1
         occ_truth = torch.log(bincounts)

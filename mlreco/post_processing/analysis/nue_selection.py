@@ -1,5 +1,7 @@
 import numpy as np
 
+from mlreco.post_processing import post_processing
+
 
 @post_processing('nue-selection', ['seg_label', 'clust_data', 'particles'], ['segmentation'])
 def nue_selection(cfg, data_blob, res, logdir, iteration, **kwargs):
