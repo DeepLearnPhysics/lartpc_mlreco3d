@@ -1,3 +1,22 @@
+"""
+I/O parsers are used to read data products from a LArCV ROOT file.
+
+If the configuration looks like this, for example:
+
+..  code-block:: yaml
+
+    schema:
+      input_data:
+        - parse_sparse3d_scn
+        - sparse3d_reco
+        - sparse3d_reco_chi2
+
+Then the parser ``parse_sparse3d_scn`` (first element of the bullet list)
+will be called with a single argument ``data``, which will be a list of 2 elements:
+a ``larcv::EventSparseTensor3D`` coming from the ROOT TTree branch
+``sparse3d_reco``, and another one coming from the branch
+``sparse3d_reco_chi2``.
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -72,14 +91,22 @@ def parse_sparse2d_meta(data):
 
 def parse_sparse2d_scn(data):
     """
-    A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
+    A function to retrieve sparse tensor input from larcv::EventSparseTensor2D object
+
     Returns the data in format to pass to SCN
-    Args:
-        array of larcv::EventSparseTensor2D
-        optionally, array of (larcv::EventSparseTensor2D, int) for projection id
-    Return:
-        voxels - numpy array(int32) with shape (N,2) - coordinates
-        data   - numpy array(float32) with shape (N,C) - pixel values/channels
+
+    Parameters
+    ----------
+    data: list
+        Array of larcv::EventSparseTensor2D.
+        Optionally, array of (larcv::EventSparseTensor2D, int) for projection id
+
+    Returns
+    -------
+    voxels: numpy array(int32) with shape (N,2)
+        Coordinates
+    data: numpy array(float32) with shape (N,C)
+        Pixel values/channels
     """
     meta = None
     output = []
@@ -110,12 +137,20 @@ def parse_sparse2d_scn(data):
 def parse_sparse3d_scn(data):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
+
     Returns the data in format to pass to SCN
-    Args:
-        array of larcv::EventSparseTensor3D
-    Return:
-        voxels - numpy array(int32) with shape (N,3) - coordinates
-        data   - numpy array(float32) with shape (N,C) - pixel values/channels
+
+    Parameters
+    ----------
+    data: list
+        Array of larcv::EventSparseTensor3D
+
+    Returns
+    -------
+    voxels: numpy array(int32) with shape (N,3)
+        Coordinates
+    data: numpy array(float32) with shape (N,C)
+        Pixel values/channels
     """
     meta = None
     output = []
@@ -147,9 +182,14 @@ def parse_semantics(data):
 def parse_sparse3d(data):
     """
     A function to retrieve sparse tensor from larcv::EventSparseTensor3D object
-    Args:
+
+    Parameters
+    ----------
+    data: list
         array of larcv::EventSparseTensor3D (one per channel)
-    Return:
+    Returns
+    -------
+    np.ndarray
         a numpy array with the shape (N,3+C) where 3+C represents
         (x,y,z) coordinate and C stored pixel values (channels).
     """
@@ -173,9 +213,15 @@ def parse_sparse3d(data):
 def parse_tensor3d(data):
     """
     A function to retrieve larcv::EventSparseTensor3D as a dense numpy array
-    Args:
+
+    Parameters
+    ----------
+    data: list
         array of larcv::EventSparseTensor3D
-    Return:
+
+    Returns
+    -------
+    np.ndarray
         a numpy array of a dense 3d tensor object, last dimension = channels
     """
     np_data = []
@@ -192,10 +238,23 @@ def parse_tensor3d(data):
 def parse_weights(data):
     """
     A function to generate weights from larcv::EventSparseTensor3D and larcv::Particle list
-    Args:
+
+    For each voxel belonging to a particle :math:`p`, if the particle has :math:`N_p` voxels,
+    the weight is computed as
+
+    .. math::
+        w_p = 1. / (N_p + 1)
+
+    Parameters
+    ----------
+    data: list
         length 3 array of larcv::EventSparseTensor3D x2 and larcv::EventParticle
-    Return:
-        a numpy array of sparse 3d tensor object
+
+    Returns
+    -------
+    np_voxels: np.ndarray
+    np_values: np.ndarray
+        Weight values for each voxel
     """
     event_tensor3d = data[0]
     num_point = event_tensor3d.as_vector().size()
@@ -216,10 +275,16 @@ def parse_weights(data):
 def parse_particle_asis(data):
     """
     A function to copy construct & return an array of larcv::Particle
-    Args:
-        length 1 array of larcv::EventParticle
-        (optional: larcv::EventClusterVoxel3D, to translate coordinates)
-    Return:
+
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventParticle and
+        larcv::EventClusterVoxel3D, to translate coordinates
+
+    Returns
+    -------
+    list
         a python list of larcv::Particle object
     """
     particles = data[0]
@@ -250,10 +315,20 @@ def parse_particle_asis(data):
 def parse_particle_coords(data):
     '''
     Function that returns particle coordinates (start and end) and start time.
+
     This is used for particle clustering into interactions
-    :param data:
-    :return: numpy.ndarray (N,7) -> [first_step_x, first_step_y, first_step_z,
-                                        last_step_x, last_step_y, last_step_z, first_step_t]
+
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventParticle and
+        larcv::EventClusterVoxel3D, to translate coordinates
+
+    Returns
+    -------
+    numpy.ndarray (N,7)
+        [first_step_x, first_step_y, first_step_z,
+        last_step_x, last_step_y, last_step_z, first_step_t]
     '''
     # Scale particle coordinates to image size
     particles = parse_particle_asis(data)
@@ -272,13 +347,20 @@ def parse_particle_coords(data):
 
 def parse_particle_points(data):
     """
-    A function to retrieve particles ground truth points tensor, includes
-    spatial coordinates and point type.
-    Args:
+    A function to retrieve particles ground truth points tensor, returns
+    points coordinates, types and particle index.
+
+    Parameters
+    ----------
+    data: list
         length 2 array of larcv::EventSparseTensor3D and larcv::EventParticle
-    Return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_values: np.ndarray
         a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
         and the particle data index in this order.
     """
@@ -298,10 +380,20 @@ def parse_particle_points(data):
 def parse_particle_graph(data):
     """
     A function to parse larcv::EventParticle to construct edges between particles (i.e. clusters)
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventParticle
-    Return:
+
+    Returns
+    -------
+    np.ndarray
         a numpy array of directed edges where each edge is (parent,child) batch index ID.
+
+    See Also
+    --------
+    parse_particle_graph_corrected: in addition, remove empty clusters.
     """
     particles = data[0]
 
@@ -324,10 +416,22 @@ def parse_particle_graph(data):
 def parse_particle_graph_corrected(data):
     """
     A function to parse larcv::EventParticle to construct edges between particles (i.e. clusters)
-    Args:
+
+    Also removes edges to clusters that have a zero pixel count.
+
+    Parameters
+    ----------
+    data: list
         length 2 array of larcv::EventParticle and larcv::EventClusterVoxel3D
-    Return:
+
+    Returns
+    -------
+    np.ndarray
         a numpy array of directed edges where each edge is (parent,child) batch index ID.
+
+    See Also
+    --------
+    parse_particle_graph: same parser without correcting for empty clusters.
     """
     particles = data[0]
     cluster_event = data[1]
@@ -382,11 +486,18 @@ def parse_particle_graph_corrected(data):
 def parse_dbscan(data):
     """
     A function to create dbscan tensor
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventSparseTensor3D
-    Return:
-        voxels - numpy array(int32) with shape (N,3) - coordinates
-        data   - numpy array(float32) with shape (N,1) - dbscan cluster. -1 if not assigned
+
+    Returns
+    -------
+    voxels: numpy array(int32) with shape (N,3)
+        Coordinates
+    data: numpy array(float32) with shape (N,1)
+        dbscan cluster. -1 if not assigned
     """
     np_voxels, np_types = parse_sparse3d_scn(data)
     # now run dbscan on data
@@ -401,11 +512,18 @@ def parse_dbscan(data):
 def parse_cluster2d(data):
     """
     A function to retrieve clusters tensor
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventClusterVoxel3D
-    Return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray, (N,3)
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 is pixel value and cluster id, respectively
     """
     cluster_event = data[0].as_vector().front()
@@ -433,12 +551,23 @@ def parse_cluster2d(data):
 def parse_cluster3d(data):
     """
     a function to retrieve clusters tensor
-    args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventClusterVoxel3D
-    return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (n,2) where 2 is voxel value and cluster id, respectively
+
+    See Also
+    --------
+    parse_cluster3d_full
     """
     cluster_event = data[0]
     meta = cluster_event.meta()
@@ -465,14 +594,21 @@ def parse_cluster3d(data):
 def parse_cluster3d_full(data):
     """
     a function to retrieve clusters tensor
-    args:
+
+    Parameters
+    ----------
+    data: list
         length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
         (optional) array of larcv::EventParticle from `particle_mpv_tree`
-    return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
-        a numpy array with the shape (n,6) where 6 is voxel value,
-        cluster id, group id interaction id, nu id and semantic type, respectively
+    np_features: np.ndarray
+        a numpy array with the shape (n,7) where 6 is voxel value,
+        cluster id, group id interaction id, nu id, particle type and semantic type, respectively
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
@@ -524,14 +660,25 @@ def parse_cluster3d_full(data):
 def parse_cluster3d_types(data):
     """
     a function to retrieve clusters tensor
-    args:
+
+    Parameters
+    ----------
+    data: list
         length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
         (optional) array of larcv::EventParticle from `particle_mpv_tree`
-    return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (n,4) where 4 is voxel value,
         cluster id, group id, pdg, respectively
+
+    See Also
+    --------
+    parse_cluster3d_full
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
@@ -595,14 +742,30 @@ def parse_cluster3d_types(data):
 def parse_cluster3d_kinematics(data):
     """
     a function to retrieve clusters tensor
-    args:
+
+    Parameters
+    ----------
+    data: list
         length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
         (optional) array of larcv::EventParticle from `particle_mpv_tree`
-    return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (n,5) where 5 is voxel value,
         cluster id, group id, pdg and momentum respectively
+
+    See Also
+    --------
+    parse_cluster3d_full
+    parse_cluster3d_kinematics_clean
+
+    Note
+    ----
+    Likely to be merged with `parse_cluster3d_full` soon.
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
@@ -667,7 +830,29 @@ def parse_cluster3d_kinematics(data):
 def parse_cluster3d_kinematics_clean(data):
     """
     Similar to parse_cluster3d_kinematics, but removes overlap voxels.
-    Additional input necessary: larcv::EventSparseTensor3D (put it last)
+
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+
+        (optional) array of larcv::EventParticle from `particle_mpv_tree`
+
+        Additional input necessary: larcv::EventSparseTensor3D (put it last)
+
+    Returns
+    -------
+    np_voxels: np.ndarray
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+    np_features: np.ndarray
+        a numpy array with the shape (n,5) where 5 is voxel value,
+        cluster id, group id, pdg and momentum respectively
+
+    See Also
+    --------
+    parse_cluster3d_full
+    parse_cluster3d_kinematics
     """
     grp_voxels, grp_data = parse_cluster3d_kinematics(data)
     _, cluster_data = parse_cluster3d_full(data)
@@ -681,11 +866,18 @@ def parse_cluster3d_kinematics_clean(data):
 def parse_cluster3d_full_fragment(data):
     """
     A function to retrieve clusters tensor
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventClusterVoxel3D
-    Return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
     """
     cluster_event = data[0]
@@ -713,11 +905,18 @@ def parse_cluster3d_full_fragment(data):
 def parse_cluster3d_fragment(data):
     """
     A function to retrieve clusters tensor
-    Args:
-        length 1 array of larcv::EventClusterVoxel3D
-    Return:
+
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
     """
     grp_voxels, grp_data = parse_cluster3d([data[0]])
@@ -749,11 +948,18 @@ def parse_cluster3d_fragment(data):
 def parse_sparse3d_fragment(data):
     """
     A function to retrieve clusters tensor
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 1 array of larcv::EventClusterVoxel3D
-    Return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
     """
     img_voxels, img_data = parse_sparse3d_scn(data)
@@ -774,16 +980,30 @@ def parse_sparse3d_fragment(data):
 def parse_cluster3d_clean(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
+
     1) lexicographically sort group data (images are lexicographically sorted)
+
     2) remove voxels from group data that are not in image
+
     3) choose only one group per voxel (by lexicographic order)
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 3 array of larcv::EventClusterVoxel3D, larcv::EventSparseTensor3D
         and larcv::EventParticle
-    Return:
+
+    Returns
+    -------
+    np_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
+
+    See Also
+    --------
+    parse_cluster3d_full
     """
     grp_voxels, grp_data = parse_cluster3d_full(data)
     return grp_voxels, grp_data[:,:2]
@@ -814,6 +1034,29 @@ def parse_cluster3d_clean(data):
 
 
 def clean_data(grp_voxels, grp_data, img_voxels, img_data, meta):
+    """
+    Helper that factorizes common cleaning operations required
+    when trying to match true sparse3d and cluster3d data products.
+
+    1) lexicographically sort group data (images are lexicographically sorted)
+
+    2) remove voxels from group data that are not in image
+
+    3) choose only one group per voxel (by lexicographic order)
+
+    Parameters
+    ----------
+    grp_voxels: np.ndarray
+    grp_data: np.ndarray
+    img_voxels: np.ndarray
+    img_data: np.ndarray
+    meta: larcv::Meta
+
+    Returns
+    -------
+    grp_voxels: np.ndarray
+    grp_data: np.ndarray
+    """
     # step 1: lexicographically sort group data
     perm = np.lexsort(grp_voxels.T)
     grp_voxels = grp_voxels[perm,:]
@@ -840,15 +1083,29 @@ def clean_data(grp_voxels, grp_data, img_voxels, img_data, meta):
 def parse_cluster3d_clean_full(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
+
     1) lexicographically sort group data (images are lexicographically sorted)
+
     2) remove voxels from group data that are not in image
+
     3) choose only one group per voxel (by lexicographic order)
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 3 array of larcv::EventClusterVoxel3D, larcv::EventParticle and larcv::EventSparseTensor3D
-    Return:
+
+    Returns
+    -------
+    grp_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    grp_data: np.ndarray
         a numpy array with the shape (N,4) where 4 represens (value, cluster_id, group_id, sem_type)
+
+    See Also
+    --------
+    parse_cluster3d_full
     """
     grp_voxels, grp_data = parse_cluster3d_full(data[:-1])
     img_voxels, img_data = parse_sparse3d_scn([data[-1]])
@@ -866,16 +1123,30 @@ def parse_cluster3d_clean_full(data):
 def parse_sparse3d_clean(data):
     """
     A function to retrieve clusters tensor.  Do the following cleaning:
+
     1) lexicographically sort coordinates
+
     2) choose only one group per voxel (by lexicographic order)
+
     3) get labels from the image labels for each voxel in addition to groups
-    Args:
+
+    Parameters
+    ----------
+    data: list
         length 3 array of larcv::EventSparseTensor3D
         Typically [sparse3d_mcst_reco, sparse3d_mcst_reco_group, sparse3d_fivetypes_reco]
-    Return:
+
+    Returns
+    -------
+    grp_voxels: np.ndarray
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
+    grp_data: np.ndarray
         a numpy array with the shape (N,3) where 3 is energy + cluster id + label
+
+    See Also
+    --------
+    parse_sparse3d_scn
     """
     img_voxels, img_data = parse_sparse3d_scn([data[0]])
     perm = np.lexsort(img_voxels.T)
@@ -913,10 +1184,12 @@ def parse_sparse3d_clean(data):
 def parse_cluster3d_scales(data):
     """
     Retrieves clusters tensors at different spatial sizes.
+
     Parameters
     ----------
     data: list
         length 2 array of larcv::EventClusterVoxel3D and larcv::EventSparseTensor3D
+
     Returns
     -------
     list of tuples
@@ -936,10 +1209,12 @@ def parse_cluster3d_scales(data):
 def parse_sparse3d_scn_scales(data):
     """
     Retrieves sparse tensors at different spatial sizes.
+
     Parameters
     ----------
     data: list
         length 1 array of larcv::EventSparseTensor3D
+
     Returns
     -------
     list of tuples

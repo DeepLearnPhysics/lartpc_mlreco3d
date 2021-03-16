@@ -12,13 +12,14 @@ from mlreco.main_funcs import cycle
 from pprint import pprint
 
 import networkx as nx
-from torch_cluster import knn_graph, radius_graph
 import time
-from torch_geometric.data import Data, Batch
+
 
 class OccuSegPredictor:
 
     def __init__(self, cfg):
+        from torch_cluster import knn_graph, radius_graph
+
         mode = cfg.get('mode', 'knn')
         if mode == 'knn':
             self.graph_constructor = knn_graph
@@ -102,12 +103,12 @@ class GraphDataConstructor:
                               edge_weights: torch.Tensor,
                               edge_index: torch.Tensor,
                               feats: torch.Tensor):
-
+        from torch_geometric.data import Data
         graph_data = Data(x=feats, edge_index=edge_index, edge_attr=edge_weights, pos=coords)
         return graph_data
 
     def construct_batched_graphs(self, res):
-
+        from torch_geometric.data import Batch
         data_list = []
 
         coordinates = res['coordinates'][0]
@@ -155,6 +156,8 @@ class GraphDataConstructor:
 
 
     def construct_batched_graphs_with_labels(self, res, labels: torch.Tensor):
+        from torch_geometric.data import Batch
+
         data_list = []
 
         coordinates = res['coordinates'][0]

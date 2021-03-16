@@ -18,13 +18,8 @@ from mlreco.utils.gnn.network import complete_graph
 from collections import defaultdict, Counter
 
 from mlreco.models.gnn.normalizations import BatchNorm
-from torch_geometric.nn import GCNConv, TopKPooling, global_mean_pool
 
 import torch.nn.functional as F
-from torch_sparse import spspmm
-from torch_geometric.utils import (add_self_loops, sort_edge_index,
-                                   remove_self_loops)
-from torch_geometric.utils.repeat import repeat
 
 from mlreco.models.cluster_cnn.losses.lovasz import lovasz_softmax_flat
 
@@ -140,6 +135,8 @@ class GraphEncoder(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels,
                  depth, pool_ratio=0.5, sum_res=True, act=F.elu):
         super(GraphEncoder, self).__init__()
+        from torch_geometric.nn import GCNConv, TopKPooling
+
         assert depth > 1
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
@@ -171,6 +168,9 @@ class GraphEncoder(nn.Module):
 
 
     def augment_adj(self, edge_index, edge_weight, num_nodes):
+        from torch_sparse import spspmm
+        from torch_geometric.utils import (add_self_loops, sort_edge_index,
+                                           remove_self_loops)
         edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
                                                  num_nodes=num_nodes)
         edge_index, edge_weight = sort_edge_index(edge_index, edge_weight,
@@ -184,6 +184,8 @@ class GraphEncoder(nn.Module):
 
     def forward(self, x, edge_index, batch=None):
         """"""
+        from torch_geometric.nn import global_mean_pool
+
         if batch is None:
             batch = edge_index.new_zeros(x.size(0))
         edge_weight = x.new_ones(edge_index.size(1))
@@ -210,8 +212,6 @@ class GraphEncoder(nn.Module):
         return x
 
 
-from torch_geometric.utils.num_nodes import maybe_num_nodes
-
 def subgraph(subset, edge_index, edge_attr=None, relabel_nodes=False,
              num_nodes=None):
     r"""Returns the induced subgraph of :obj:`(edge_index, edge_attr)`
@@ -230,7 +230,8 @@ def subgraph(subset, edge_index, edge_attr=None, relabel_nodes=False,
 
     :rtype: (:class:`LongTensor`, :class:`Tensor`)
     """
-
+    from torch_geometric.utils.num_nodes import maybe_num_nodes
+    
     device = edge_index.device
 
     if isinstance(subset, list) or isinstance(subset, tuple):

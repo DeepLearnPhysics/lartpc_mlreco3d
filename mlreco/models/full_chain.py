@@ -20,13 +20,59 @@ from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_clust
 
 class FullChain(torch.nn.Module):
     """
-    Modular, End-to-end LArTPC Reconstruction Chain:
+    Modular, End-to-end LArTPC Reconstruction Chain
+
     - Deghosting for 3D tomographic reconstruction artifiact removal
     - UResNet for voxel-wise semantic segmentation
     - PPN for point proposal
     - DBSCAN/PILOT/SPICE for dense particle clustering
     - GrapPA(s) for particle aggregation and identification
     - CNN for interaction classification
+
+    Configuration goes under the ``modules`` section.
+    The full chain-related sections (as opposed to each
+    module-specific configuration) look like this:
+
+    ..  code-block:: yaml
+
+          modules:
+            chain:
+              enable_uresnet: True
+              enable_ppn: True
+              enable_cnn_clust: True
+              enable_gnn_shower: True
+              enable_gnn_track: True
+              enable_gnn_particle: False
+              enable_gnn_inter: True
+              enable_gnn_kinematics: False
+              enable_cosmic: False
+              enable_ghost: True
+              use_ppn_in_gnn: True
+              verbose: True
+
+
+            # full chain loss and weighting
+            full_chain_loss:
+              segmentation_weight: 1.
+              clustering_weight: 1.
+              ppn_weight: 1.
+              particle_gnn_weight: 1.
+              shower_gnn_weight: 1.
+              track_gnn_weight: 1.
+              inter_gnn_weight: 1.
+              kinematics_weight: 1.
+              kinematics_p_weight: 1.
+              kinematics_type_weight: 1.
+              flow_weight: 1.
+              cosmic_weight: 1.
+
+    The ``chain`` section enables or disables specific
+    stages of the full chain. When a module is disabled
+    through this section, it will not even be constructed.
+    The section ``full_chain_loss`` allows
+    to set different weights to the losses of different stages.
+    The configuration blocks for each enabled module should
+    also live under the `modules` section of the configuration.
     """
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
@@ -93,6 +139,23 @@ class FullChain(torch.nn.Module):
     def extract_fragment(self, input, result):
         """
         Extracting clustering predictions from CNN clustering output
+
+        Parameters
+        ==========
+        input: list
+            Input data
+        result: dictionary
+            Where to access the Spice results.
+
+        Returns
+        =======
+        fragments: np.ndarray
+            Array of list of indices.
+            Each list of indices corresponds to one fragment.
+        frag_batch_ids: np.ndarray
+            Batch id for each fragment.
+        frag_seg: np.ndarray
+            Semantic segmentation for each fragment.
         """
         batch_labels = input[0][:,3]
         fragments, frag_batch_ids = [], []
@@ -129,8 +192,28 @@ class FullChain(torch.nn.Module):
     def get_extra_gnn_features(self, fragments, frag_seg, classes, input, result, use_ppn=False, use_supp=False):
         """
         Extracting extra features to feed into the GNN particle aggregators
+
         - PPN: Most likely PPN point for showers, end points for tracks (+ direction estimate)
         - Supplemental: Mean/RMS energy in the fragment + semantic class
+
+        Parameters
+        ==========
+        fragments: np.ndarray
+        frag_seg: np.ndarray
+        classes: list
+        input: list
+        result: dictionary
+        use_ppn: bool
+        use_supp: bool
+
+        Returns
+        =======
+        mask: np.ndarray
+            Boolean mask to select fragments belonging to one
+            of the requested classes.
+        kwargs: dictionary
+            Keys can include `points` (if `use_ppn` is `True`)
+            and `extra_feats` (if `use_supp` is True).
         """
         # Build a mask for the requested classes
         mask = np.zeros(len(frag_seg), dtype=np.bool)
@@ -181,7 +264,8 @@ class FullChain(torch.nn.Module):
         """
         Generic function to group in one place the common code to run a GNN model.
 
-        INPUTS
+        Parameters
+        ==========
         - grappa: GrapPA module to run
         - input: input data
         - result: dictionary
@@ -189,8 +273,9 @@ class FullChain(torch.nn.Module):
         - labels: dictionary of strings to label the final result
         - kwargs: extra arguments to pass to the gnn
 
-        OUTPUTS
-            None (modifies the result dict in place)
+        Returns
+        =======
+        None (modifies the result dict in place)
         """
 
         # Pass data through the GrapPA model
@@ -235,11 +320,16 @@ class FullChain(torch.nn.Module):
         '''
         Forward for full reconstruction chain.
 
-        INPUTS:
-            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
-            - result (dict)
-        RETURNS:
-            - result (dict) (updated with new outputs)
+        Parameters
+        ==========
+        input: list of np.ndarray (N x 5 Tensor)
+            Input data [x, y, z, batch_id, val]
+        result: dict
+
+        Returns
+        =======
+        result: dict
+            updated with new outputs
         '''
         device = input[0].device
 
@@ -463,8 +553,9 @@ class FullChain(torch.nn.Module):
 
     def forward(self, input):
         """
-        Assumes single GPU/CPU.
-        input: can contain just the input energy depositions, or include true clusters
+        Parameters
+        ==========
+        input: list of np.ndarray
         """
         label_seg, label_clustering = None, None
         if len(input) == 3:
@@ -821,6 +912,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 def setup_chain_cfg(self, cfg):
     """
     Prepare both FullChain and FullChainLoss
+
     Make sure config is logically sound with some basic checks
     """
     chain_cfg = cfg['chain']

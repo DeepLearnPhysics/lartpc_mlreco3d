@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
-from torch_scatter import scatter_mean, scatter_add
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
@@ -75,6 +74,7 @@ def find_cluster_means(features, labels):
 
 
 def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
+    from torch_scatter import scatter_mean
     x = features[:, None, :]
     mu = cluster_means[None, :, :]
     l = torch.clamp(torch.norm(x - mu, dim=-1) - margin, min=0)**2
@@ -101,6 +101,7 @@ def regularization_loss(cluster_means):
 
 
 def margin_smoothing_loss(sigma, sigma_means, labels, margin=0):
+    from torch_scatter import scatter_mean
     x = sigma[:, None]
     mu = sigma_means[None, :]
     l = torch.sqrt(torch.clamp(torch.abs(x-mu) - margin, min=0)**2 + 1e-6)
@@ -110,7 +111,7 @@ def margin_smoothing_loss(sigma, sigma_means, labels, margin=0):
 
 
 def get_probs(embeddings, margins, labels, eps=1e-6):
-
+    from torch_scatter import scatter_mean
     device = embeddings.device
     n = labels.shape[0]
     centroids = find_cluster_means(embeddings, labels)
