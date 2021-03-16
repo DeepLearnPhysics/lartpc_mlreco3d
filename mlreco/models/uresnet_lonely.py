@@ -15,6 +15,24 @@ class UResNet(torch.nn.Module):
 
     Can also be used in a chain, for example stacking PPN layers on top.
 
+    A typical configuration goes under `uresnet_lonely` in `modules` section:
+
+    ..  code-block:: yaml
+
+        uresnet_ppn:
+          uresnet_lonely:
+            freeze: False
+            num_strides: 6
+            filters: 16
+            num_classes: 5
+            data_dim: 3
+            spatial_size: 768
+            ghost: True
+            features: 2
+            weight_loss: True
+            model_path: 'your_snapshot.ckpt'
+            model_name: 'uresnet_lonely'
+
     Configuration
     -------------
     num_strides : int
@@ -45,10 +63,12 @@ class UResNet(torch.nn.Module):
     -------
     list
         In order:
+
         - segmentation scores (N, num_classes)
         - feature maps of encoding path
         - feature maps of decoding path
         - if `ghost`, segmentation scores for deghosting (N, 2)
+
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (float,), (3, 1)]
@@ -192,6 +212,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
     the number of classes, not counting the ghost point class.
+    
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (int,), (3, 1)]
