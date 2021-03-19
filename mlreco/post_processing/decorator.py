@@ -130,7 +130,7 @@ def post_processing(filename, data_capture, output_capture):
 
                             fout[out_idx].record(row_names, row_values)
                             fout[out_idx].write()
-                    counter += 1 if len(out_names[0]) else 0
+                    counter += 1 if len(out_names) and len(out_names[0]) else 0
 
                 if store_per_event:
                     for f in fout:
