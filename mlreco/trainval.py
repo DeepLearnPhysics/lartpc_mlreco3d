@@ -270,6 +270,7 @@ class trainval(object):
                 train_blob = [train_blob]
 
             # Compute the loss
+            loss_acc = {}
             if len(self._loss_keys):
                 loss_acc = self._criterion(result, *tuple(loss_blob))
 

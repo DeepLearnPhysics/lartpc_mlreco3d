@@ -354,8 +354,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             results = {
                 'accuracy': uresnet_acc/count,
                 'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count,
-                'mask_acc': mask_acc / count,
-                'mask_loss': self._beta * mask_loss / count,
+                'ghost_mask_acc': mask_acc / count,
+                'ghost_mask_loss': self._beta * mask_loss / count,
                 'uresnet_loss': self._alpha * uresnet_loss / count,
                 'uresnet_acc': uresnet_acc / count,
                 'ghost2ghost': ghost2ghost / count,
