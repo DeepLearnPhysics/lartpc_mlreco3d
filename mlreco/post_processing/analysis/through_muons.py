@@ -3,8 +3,8 @@ import numpy as np
 from mlreco.post_processing import post_processing
 
 
-@post_processing('through-muons', ['seg_label', 'clust_data', 'particles'], ['segmentation'])
-def through_muons(cfg, data_blob, res, logdir, iteration, **kwargs):
+@post_processing('through-muons', ['seg_label', 'clust_data', 'particles_asis'], ['segmentation'])
+def through_muons(cfg, module_cfg, data_blob, res, logdir, iteration, **kwargs):
     """
     Find through-going muons for detector calibration purpose.
 
@@ -25,6 +25,18 @@ def through_muons(cfg, data_blob, res, logdir, iteration, **kwargs):
     -----
     N/A.
     """
-    row_names = ()
-    row_values = ()
+    spatial_size = module_cfg.get('spatial_size', 768)
+    track_label = module_cfg.get('track_label', 1)
+    threshold = module_cfg.get('threshold', 5)
+
+    row_names, row_values = [], []
+    for p in particles[data_idx][particles_seg[data_idx] == track_label]:
+        voxels = input_data[data_idx][p][:, :3]
+        delta_x = voxels[:, 0].max() - voxels[:, 0].min()
+        # Is it touching along x axis?
+
+        # Is the delta x consistent with the size of the detector?
+        #if np.abs(delta_x - spatial_size) >= threshold:
+
+
     return row_names, row_values
