@@ -541,6 +541,106 @@ class SparseGeneratorAdaIN(MENetworkBase):
             'targets': targets}
 
 
+class MinkowskiPointNet(ME.MinkowskiNetwork):
+    def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3):
+        ME.MinkowskiNetwork.__init__(self, dimension)
+        self.conv1 = nn.Sequential(
+            ME.MinkowskiLinear(3, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv2 = nn.Sequential(
+            ME.MinkowskiLinear(64, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv3 = nn.Sequential(
+            ME.MinkowskiLinear(64, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv4 = nn.Sequential(
+            ME.MinkowskiLinear(64, 128, bias=False),
+            ME.MinkowskiBatchNorm(128),
+            ME.MinkowskiReLU(),
+        )
+        self.conv5 = nn.Sequential(
+            ME.MinkowskiLinear(128, embedding_channel, bias=False),
+            ME.MinkowskiBatchNorm(embedding_channel),
+            ME.MinkowskiReLU(),
+        )
+        self.max_pool = ME.MinkowskiGlobalMaxPooling()
+
+        self.linear1 = nn.Sequential(
+            ME.MinkowskiLinear(embedding_channel, 512, bias=False),
+            ME.MinkowskiBatchNorm(512),
+            ME.MinkowskiReLU(),
+        )
+        self.dp1 = ME.MinkowskiDropout()
+        self.linear2 = ME.MinkowskiLinear(512, out_channel, bias=True)
+
+    def forward(self, x: ME.TensorField):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.max_pool(x)
+        x = self.linear1(x)
+        x = self.dp1(x)
+        return self.linear2(x).F
+
+
+class MinkowskiPointNet(ME.MinkowskiNetwork):
+    def __init__(self, in_channel, out_channel, embedding_channel=1024, dimension=3):
+        ME.MinkowskiNetwork.__init__(self, dimension)
+        self.conv1 = nn.Sequential(
+            ME.MinkowskiLinear(3, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv2 = nn.Sequential(
+            ME.MinkowskiLinear(64, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv3 = nn.Sequential(
+            ME.MinkowskiLinear(64, 64, bias=False),
+            ME.MinkowskiBatchNorm(64),
+            ME.MinkowskiReLU(),
+        )
+        self.conv4 = nn.Sequential(
+            ME.MinkowskiLinear(64, 128, bias=False),
+            ME.MinkowskiBatchNorm(128),
+            ME.MinkowskiReLU(),
+        )
+        self.conv5 = nn.Sequential(
+            ME.MinkowskiLinear(128, embedding_channel, bias=False),
+            ME.MinkowskiBatchNorm(embedding_channel),
+            ME.MinkowskiReLU(),
+        )
+        self.max_pool = ME.MinkowskiGlobalMaxPooling()
+
+        self.linear1 = nn.Sequential(
+            ME.MinkowskiLinear(embedding_channel, 512, bias=False),
+            ME.MinkowskiBatchNorm(512),
+            ME.MinkowskiReLU(),
+        )
+        # self.dp1 = ME.MinkowskiDropout()
+        self.linear2 = ME.MinkowskiLinear(512, out_channel, bias=True)
+
+    def forward(self, x: ME.TensorField):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.max_pool(x)
+        x = self.linear1(x)
+        # x = self.dp1(x)
+        return self.linear2(x).F
+
+
 class PointNetGenerator(nn.Module):
 
     def __init__(self, cfg, name='pointnet_gen'):
@@ -556,16 +656,21 @@ class PointNetGenerator(nn.Module):
 
         in_features = self.latent_size + self.noise_dim
         out_features = self.num_hidden
+
+        num_hidden = [522, 512, 256, 128, 64, 64]
+
         for i in range(self.num_layers):
             m = []
-            m.append(nn.BatchNorm1d(in_features, out_features))
+            m.append(nn.BatchNorm1d(num_hidden[i]))
             m.append(nn.Softplus())
-            m.append(nn.Linear(in_features, out_features))
+            m.append(nn.Linear(num_hidden[i], num_hidden[i+1]))
             self.mlp.append(nn.Sequential(*m))
-            in_features = out_features
-        self.mlp.append(nn.Linear(out_features, self.dimension))
+            # in_features = out_features
+        self.mlp.append(nn.Linear(num_hidden[-1], self.dimension))
         self.mlp.append(nn.Tanh())
         self.mlp = nn.Sequential(*self.mlp)
+
+        print(self)
 
     def forward(self, points, latent, batch):
         '''
@@ -575,7 +680,8 @@ class PointNetGenerator(nn.Module):
         N is the number of instances. For single particle images = 1
         '''
         latent_expand = latent[batch]
-        latent_expand = latent_expand / (torch.norm(latent_expand).view(-1, 1) + 1e-8)
+        # latent_expand = latent_expand / (torch.norm(latent_expand).view(-1, 1) + 1e-8)
         x = torch.cat([points, latent_expand], dim=1)
+        print(x.shape)
         out = self.mlp(x)
         return out

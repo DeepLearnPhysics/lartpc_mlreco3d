@@ -38,6 +38,8 @@ class UResNetPPN(nn.Module):
             out['ppn_layers'].append(res_ppn['ppn_layers'])
             out['ppn_coords'].append(res_ppn['ppn_coords'])
             
+        for t in out['mask_ppn'][0]:
+            print(t.shape)
         return out
 
 
@@ -60,7 +62,4 @@ class UResNetPPNLoss(nn.Module):
             'loss': res_segmentation['loss'] + res_ppn['loss'],
             'accuracy': (res_segmentation['accuracy'] + res_ppn['accuracy']) / 2.0
         }
-
-        print(res)
-
         return res

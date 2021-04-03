@@ -38,7 +38,6 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
     if method_cfg is not None and method_cfg.get('pool_op', 'max') == 'mean':
         pool_op = np.mean
     for data_idx, tree_idx in enumerate(index):
-
         if not store_per_iteration:
             fout_gt=CSVData(os.path.join(logdir, 'ppn-metrics-gt-event-%07d.csv' % tree_idx))
             fout_pred=CSVData(os.path.join(logdir, 'ppn-metrics-pred-event-%07d.csv' % tree_idx))
@@ -231,6 +230,7 @@ def ppn_metrics(cfg, data_blob, res, logdir, iteration):
             fout_gt.close()
             fout_pred.close()
             fout_all.close()
+        continue
 
     if store_per_iteration:
         fout_gt.close()

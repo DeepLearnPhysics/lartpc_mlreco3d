@@ -9,8 +9,32 @@ from mlreco.mink.layers.sparse_generator import PointNetGenerator
 from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder2
 from collections import defaultdict
 
+from torch_cluster import knn
+
 from torch_geometric.data import Data, Batch
-# from chamferdist import ChamferDistance
+
+
+def chamfer_distance(x, y, sample_x=None, sample_y=None):
+    '''
+    x: N x D point cloud
+    y: M x D point cloud
+    '''
+    N, M = x.shape[0], y.shape[0]
+    if sample_x is not None:
+        xs = x[torch.randint(0, N, (sample_x, ))]
+        N = sample_x
+    else:
+        xs = x
+    if sample_y is not None:
+        ys = y[torch.randint(0, M, (sample_y, ))]
+        M = sample_y
+    else:
+        ys = y
+    index1 = knn(xs, ys, k=1)
+    cd1 = torch.norm(ys[index1[0, :]] - xs[index1[1, :]], dim=1)
+    index2 = knn(ys, xs, k=1)
+    cd2 = torch.norm(xs[index2[0, :]] - ys[index2[1, :]], dim=1)
+    return torch.sum(cd1) / N + torch.sum(cd2) / M
 
 
 class VAE(nn.Module):
@@ -49,9 +73,9 @@ class VAE(nn.Module):
                 normalized_coords = (coords[:, 1:4] - float(self.encoder.spatial_size) / 2) \
                         / (float(self.encoder.spatial_size) / 2)
                 features = torch.cat([normalized_coords, features], dim=1)
-            x = ME.SparseTensor(coords=coords, feats=features, allow_duplicate_coords=True)
+            x = ME.SparseTensor(coordinates=coords, features=features)
             _, counts = torch.unique(x.C[:, 0], return_counts=True)
-            target_key = x.coords_key
+            target_key = x.coordinate_map_key
             latent = self.encoder(x)
             mean = self.mean(latent)
             log_var = self.log_var(latent)
@@ -89,7 +113,7 @@ class ReconstructionLoss(nn.Module):
         self.bce_weight = self.loss_config.get('bce_weight', 1.0)
         self.kld_weight = self.loss_config.get('kld_weight', 0.0)
         self.layer = self.loss_config.get('layer', -1)
-        # self.loss_fn = ChamferDistance()
+        self.loss_fn = chamfer_distance
         self.spatial_size = self.loss_config.get('spatial_size', 256)
 
     def forward(self, out, label, weight=None):
@@ -113,14 +137,16 @@ class ReconstructionLoss(nn.Module):
             batch_gen = out['batch'][i]
             occupancy = out['occupancy'][i]
             batch_gt = label[i][:, 0].int()
-            print(batch_gen)
+            # print(batch_gen)
             for bidx in batch_gen.unique():
                 batch_index = batch_gen == bidx
                 points = points_gen[batch_index]
                 points_gt = label[i][:, 1:4][batch_gt == bidx]
                 points_gt = (points_gt - float(self.spatial_size) / 2) \
                         / (float(self.spatial_size) / 2)
-                loss += self.loss_fn(points.view(1, -1, 3), points_gt.view(1, -1, 3))
+                # print(points)
+                # print(points_gt)
+                loss += self.loss_fn(points.view(-1, 3), points_gt.view(-1, 3))
                 count += 1
 
         return {

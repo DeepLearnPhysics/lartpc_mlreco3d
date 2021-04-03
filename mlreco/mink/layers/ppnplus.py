@@ -10,6 +10,7 @@ from mlreco.mink.layers.factories import activations_dict, activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.models.ppn import define_ppn12
 
+from collections import Counter
 
 class Attention(nn.Module):
     def __init__(self):
@@ -40,7 +41,7 @@ class ExpandAs(nn.Module):
 
 class PPN(MENetworkBase):
     '''
-    MinkowskiEngine PPN 
+    MinkowskiEngine PPN
 
     Configurations
     --------------
@@ -66,20 +67,7 @@ class PPN(MENetworkBase):
         self.num_filters = self.model_cfg.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
         self.ppn_score_threshold = self.model_cfg.get('ppn_score_threshold', 0.5)
-        # self.kernel_size = cfg.get('kernel_size', 3)
-        # self.downsample = cfg.get(downsample, 2)
         self.input_kernel = self.model_cfg.get('input_kernel', 3)
-
-        # self.ppn1_size = self.model_cfg.get('ppn1_size', -1)
-        # self.ppn2_size = self.model_cfg.get('ppn2_size', -1)
-        # self.ppn1_stride, self.ppn2_stride = define_ppn12(
-        #     self.ppn1_size, 
-        #     self.ppn2_size, 
-        #     self.spatial_size, 
-        #     self.depth)
-
-        # print(self.ppn1_stride, self.ppn2_stride)
-        # assert False
 
         # Initialize Decoder
         self.decoding_block = []
@@ -160,6 +148,7 @@ class PPN(MENetworkBase):
         ppn_type = self.ppn_type(x)
         ppn_final_score = self.ppn_final_score(x)
 
+        # X, Y, Z, logits, and prob score
         points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
 
         res = {
@@ -180,7 +169,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
         self.resolution = self.loss_config.get('ppn_resolution', 5.0)
         self.regloss = torch.nn.MSELoss()
-        self.segloss = torch.nn.CrossEntropyLoss()
+        self.segloss = torch.nn.functional.cross_entropy
 
     def pairwise_distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
@@ -190,10 +179,6 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     def forward(self, outputs, segment_label, particles_label):
         '''
-        segmentation[0], label and weight are lists of size #gpus = batch_size.
-        segmentation has as many elements as UResNet returns.
-        label[0] has shape (N, dim + batch_id + 1)
-        where N is #pts across minibatch_size events.
         '''
         # TODO Add weighting
         assert len(particles_label) == len(segment_label)
@@ -235,7 +220,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     loss_batch = self.lossfn(scores_event, d_positives.float(), weight=weight_ppn, reduction='mean')
                     loss_layer += loss_batch
                     if layer == len(ppn_layers)-1:
-                        pixel_pred = points[batch_particle_index][:, 0:3] + coords_layer[batch_particle_index][:, 1:4].float().cuda()
+
+                        # Get Final Layers
+                        pixel_pred = coords_layer[batch_particle_index][:, 1:4].float().cuda()
                         pixel_score = points[batch_particle_index][:, -1]
                         pixel_logits = points[batch_particle_index][:, 3:8]
 
@@ -245,17 +232,26 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                             continue
                         acc = (positives == (pixel_score > 0)).sum().float() / float(pixel_score.shape[0])
                         total_acc += acc
-                        distance_positives = d[:, positives]
+
                         # Mask Loss
                         mask_loss_final = self.lossfn(pixel_score, positives.float(), weight=weight_ppn, reduction='mean')
+
                         # Type Segmentation Loss
+                        pixel_pred += points[batch_particle_index][:, :3]
+                        d = self.pairwise_distances(points_label, pixel_pred + 0.5)
+                        positives = (d < self.resolution).any(dim=0)
+                        distance_positives = d[:, positives]
                         event_types_label = particles[particles[:, 0] == b][:, -2]
+                        counter = Counter({0:0, 1:0, 2:0, 3:0})
+                        counter.update(list(event_types_label.int().cpu().numpy()))
+                        w = torch.Tensor([counter[0], counter[1], counter[2], counter[3], 0]).float()
+                        w = float(sum(counter.values())) / (w + 1.0)
                         positive_labels = event_types_label[torch.argmin(distance_positives, dim=0)]
-                        type_loss = self.segloss(pixel_logits[positives], positive_labels.long())
+                        type_loss = self.segloss(pixel_logits[positives], positive_labels.long(), weight=w.to(device))
+
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)
                         reg_loss = d2.mean()
-                        # print(reg_loss + type_loss + mask_loss_final)
                         total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches
                 loss_layer /= num_batches
                 loss_gpu += loss_layer
