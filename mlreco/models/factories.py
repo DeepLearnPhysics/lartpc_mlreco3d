@@ -6,12 +6,6 @@ def model_dict():
     from . import uresnet_lonely
     from . import uresnet_ppn_chain
 
-    from . import uresnet_clustering
-    from . import clustercnn_single
-    from . import clustercnn_se
-
-    from . import clusternet
-    from . import clustercnn_neural_dbscan
     from . import clustercnn_se
     from . import sparse_occuseg
     from . import sparseoccuseg_gnn
@@ -32,6 +26,7 @@ def model_dict():
     from . import particle_types
     from . import full_cnn
     from . import full_chain
+    from . import graph_spice
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -41,25 +36,15 @@ def model_dict():
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
         # URESNET MINKOWSKINET
         "mink_uresnet": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
-        'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss), 
+        'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss),
         "mink_singlep": (mink_singlep.ParticleImageClassifier, mink_singlep.ParticleTypeLoss),
-        "mink_vae": (vae.VAE, vae.ReconstructionLoss), 
+        "mink_vae": (vae.VAE, vae.ReconstructionLoss),
         "mink_vae_2": (vae.VAE2, vae.ReconstructionLoss),
-        "mink_vae_3": (vae.VAE3, vae.ReconstructionLoss),  
-        "mink_spice": (mink_spice.MinkSPICE, mink_spice.SPICELoss), 
+        "mink_vae_3": (vae.VAE3, vae.ReconstructionLoss),
+        "mink_spice": (mink_spice.MinkSPICE, mink_spice.SPICELoss),
         "pointnet_gen": (pointnet_gen.VAE, pointnet_gen.ReconstructionLoss),
-        # Chain test for track clustering (w/ DBSCAN)
-        #"chain_track_clustering": (chain_track_clustering.Chain, chain_track_clustering.ChainLoss),
         # Chain UResNet and PPN
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
-        # Clustering
-        "uresnet_clustering": (uresnet_clustering.UResNet, uresnet_clustering.SegmentationLoss),
-        # ClusterUNet Single
-        "clustercnn_single": (clustercnn_single.ClusterCNN, clustercnn_single.ClusteringLoss),
-        # Colossal ClusterNet Model to Wrap them all
-        "clusternet": (clusternet.ClusterCNN, clusternet.ClusteringLoss),
-        # Density Loss
-        "clustercnn_density": (clustercnn_neural_dbscan.ClusterCNN, clustercnn_neural_dbscan.ClusteringLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # OccuSeg
@@ -72,6 +57,8 @@ def model_dict():
         "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Graph neural network Particle Aggregation (GrapPA)
         "grappa": (grappa.GNN, grappa.GNNLoss),
+        # GraphSPICE
+        "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # Particle flow reconstruction with GrapPA (TODO: should be merged with GrapPA)

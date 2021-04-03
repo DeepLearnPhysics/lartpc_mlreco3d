@@ -4,8 +4,10 @@ import numpy as np
 import sparseconvnet as scn
 from collections import defaultdict
 
+
 from mlreco.models.layers.uresnet import UResNet
-from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
+from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss, WeightedEdgeLoss
+from mlreco.utils.occuseg import ParametricGDC
 
 
 class SparseOccuSeg(UResNet):
@@ -55,12 +57,18 @@ class SparseOccuSeg(UResNet):
 
         self.outputOccupancy = nn.Linear(self.num_filters, 1)
 
+        self.hyper_dimension = self.spatial_embedding_dim + \
+                               self.feature_embedding_dim + \
+                               3
+
         # Pytorch Activations
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
+        self.constructor = ParametricGDC(cfg['constructor_cfg'])
 
-    def forward(self, input):
+
+    def get_embeddings(self, input):
         '''
         point_cloud is a list of length minibatch size (assumes mbs = 1)
         point_cloud[0] has 3 spatial coordinates + 1 batch coordinate + 1 feature
@@ -109,30 +117,78 @@ class SparseOccuSeg(UResNet):
         # Segmentation
         segmentation = self.outputSegmentation(output_features)
 
+        hypergraph_features = torch.cat([
+            spatial_embeddings,
+            feature_embeddings,
+            covariance,
+            occupancy], dim=1)
+
         res = {
             "spatial_embeddings": [spatial_embeddings + normalized_coords],
             "covariance": [covariance],
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
             "segmentation": [segmentation],
-            "features": [output_features]
+            # "features": [output_features],
+            "hypergraph_features": [hypergraph_features]
         }
 
+        # for key, val in res.items():
+        #     print((val[0] != val[0]).any())
 
         return res
+
+    def forward(self, input):
+        '''
+        Train time forward
+        '''
+        point_cloud, labels = input
+        coordinates = point_cloud[:, :3]
+        batch_indices = point_cloud[:, 3].int()
+        out = self.get_embeddings([point_cloud])
+        out['coordinates'] = [coordinates]
+        out['batch_indices'] = [batch_indices]
+        graph_data = self.constructor(out, labels)
+        out['edge_score'] = [graph_data.edge_attr]
+        out['edge_index'] = [graph_data.edge_index]
+        out['graph'] = [graph_data]
+        if self.training:
+            out['edge_truth'] = [graph_data.edge_truth]
+
+        return out
 
 
 class SparseOccuSegLoss(torch.nn.modules.loss._Loss):
 
-    def __init__(self, cfg, name='occuseg_loss'):
+    def __init__(self, cfg, name='graph_spice_loss'):
         super(SparseOccuSegLoss, self).__init__()
+        # print("CFG + ", cfg)
+        self.loss_config = cfg[name]
         self.loss_fn = OccuSegLoss(cfg)
+        self.edge_loss = WeightedEdgeLoss()
+        self.is_eval = cfg['eval']
 
+    def forward(self, result, segment_label, cluster_label):
 
-    def forward(self, result, label):
-
-        segment_label = [label[0][:, [0, 1, 2, 3, -1]]]
-        group_label = [label[0][:, [0, 1, 2, 3, 5]]]
+        group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
 
         res = self.loss_fn(result, segment_label, group_label)
+        # print(result)
+        edge_score = result['edge_score'][0].squeeze()
+        if not self.is_eval:
+            edge_truth = result['edge_truth'][0]
+            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
+            edge_loss = edge_loss.mean()
+            with torch.no_grad():
+                true_negatives = float(torch.sum(( (edge_score < 0) & ~edge_truth.bool() ).int()))
+                precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
+                recall = true_negatives / (float(torch.sum( (edge_score < 0).int() )) + 1e-6)
+                f1 = precision * recall / (precision + recall + 1e-6)
+
+            res['edge_accuracy'] = f1
+        else:
+            edge_loss = 0
+
+        res['loss'] += edge_loss
+        res['edge_loss'] = float(edge_loss)
         return res
