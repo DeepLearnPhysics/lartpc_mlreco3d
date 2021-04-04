@@ -17,6 +17,26 @@ def backbone_dict():
     return models
 
 
+def gs_kernel_dict():
+    '''
+    Returns dictionary of kernel function models.
+    '''
+    from . import gs_kernels
+    kernels = {
+        'bilinear': gs_kernels.BilinearKernel
+    }
+
+
+def gs_kernel_construct(cfg):
+    models = gs_kernel_dict()
+    name = cfg['name']
+    num_features = cfg['num_features']
+    args = cfg.get('args', {})
+    if not name in models:
+        raise Exception("Unknown kernel function name provided")
+    return models[name](num_features=num_features, **args)
+
+
 def cluster_model_dict():
     '''
     Returns dictionary of implemented clustering layers.
@@ -29,8 +49,8 @@ def cluster_model_dict():
         "spice_cnn": spatial_embeddings.SpatialEmbeddings1,
         "spice_cnn_me": MinkSPICE,
         "spice_cnn_lite": spatial_embeddings.SpatialEmbeddingsLite,
-        "graph_spice": graph_spice.SparseOccuSeg,
-        "graphgnn_spice": graphgnn_spice.SparseOccuSegGNN
+        "graph_spice": graph_spice.GraphSPICEEmbedder,
+        # "graphgnn_spice": graphgnn_spice.SparseOccuSegGNN
     }
     return models
 
@@ -40,8 +60,7 @@ def spice_loss_dict():
     Returns dictionary of various clustering losses with enhancements.
     '''
     from . import losses
-    from .graph_spice import SparseOccuSegLoss
-    from .graphgnn_spice import SparseOccuSegGNNLoss
+    # from .graphgnn_spice import SparseOccuSegGNNLoss
     loss = {
         # Hyperspace Clustering Losses
         'single': losses.single_layers.DiscriminativeLoss,
@@ -62,8 +81,8 @@ def spice_loss_dict():
         # SPICE Losses Vectorized
         'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
         'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss,
-        'graph_spice_loss': SparseOccuSegLoss,
-        'graphgnn_spice_loss': SparseOccuSegGNNLoss
+        'graph_spice_loss': losses.gs_embeddings.NodeEdgeHybridLoss,
+        # 'graphgnn_spice_loss': SparseOccuSegGNNLoss
     }
     return loss
 

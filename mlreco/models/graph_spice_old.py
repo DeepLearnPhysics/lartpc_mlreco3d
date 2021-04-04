@@ -5,6 +5,7 @@ from .cluster_cnn.losses.spatial_embeddings import *
 from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
 
 from pprint import pprint
+from mlreco.models.arxiv.cluster import ParametricGDC
 
 class GraphSPICE(nn.Module):
     '''

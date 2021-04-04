@@ -21,40 +21,6 @@ from sklearn.neighbors import KNeighborsClassifier
 This file will be removed after refactoring.
 '''
 
-
-class StrayAssigner(ABC):
-    '''
-    Abstract Class for orphan assigning functors. 
-    '''
-    def __init__(self, X, Y, metric_fn : Callable = None):
-        self.clustered = X
-        self.d = metric_fn
-        self.partial_labels = Y
-        super().__init__()
-
-    @abstractmethod
-    def assign_orphans(self):
-        pass
-
-class NearestNeighborsAssigner(StrayAssigner):
-    '''
-    Assigns orphans to the k-nearest cluster using simple kNN Classifier. 
-    '''
-    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
-        super(NearestNeighborsAssigner, self).__init__()
-        self.k = kwargs.get('k', 10)
-        self._neigh = KNeighborsClassifier(n_neighbors=10)
-        self._neigh.fit(X)
-    
-    def assign_orphans(self, X, get_proba=False):
-        pred = self._neigh.predict(X)
-        self._pred = pred
-        if get_proba:
-            self._proba = self._neigh.predict_proba(orphans)
-            self._max_proba = np.max(self._proba, axis=1)
-        return pred
-
-
 class ParametricGDC(nn.Module):
     '''
     Parametric Graph-SPICE clustering
