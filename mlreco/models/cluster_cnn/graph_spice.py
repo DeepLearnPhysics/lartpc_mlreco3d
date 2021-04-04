@@ -6,16 +6,15 @@ from collections import defaultdict
 
 
 from mlreco.models.layers.uresnet import UResNet
-from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss, WeightedEdgeLoss
-from mlreco.models.arxiv.cluster import ParametricGDC
+from mlreco.models.cluster_cnn.losses.occuseg import GraphSPICEEmbeddingLoss, WeightedEdgeLoss
 
 
-class SparseOccuSeg(UResNet):
+class GraphSPICEEmbedder(UResNet):
 
     MODULES = ['network_base', 'uresnet', 'spice_loss', 'sparse_occuseg']
 
     def __init__(self, cfg, name='sparse_occuseg'):
-        super(SparseOccuSeg, self).__init__(cfg, name='uresnet')
+        super(GraphSPICEEmbedder, self).__init__(cfg, name='uresnet')
         self.model_config = cfg[name]
         self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
         self.spatial_embedding_dim = self.model_config.get('spatial_embedding_dim', 3)
@@ -64,8 +63,6 @@ class SparseOccuSeg(UResNet):
         # Pytorch Activations
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
-
-        self.constructor = ParametricGDC(cfg['constructor_cfg'])
 
 
     def get_embeddings(self, input):
@@ -157,14 +154,15 @@ class SparseOccuSeg(UResNet):
 
         return out
 
+class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
+    '''
 
-class SparseOccuSegLoss(torch.nn.modules.loss._Loss):
-
+    '''
     def __init__(self, cfg, name='graph_spice_loss'):
-        super(SparseOccuSegLoss, self).__init__()
+        super(NodeEdgeHybridLoss, self).__init__()
         # print("CFG + ", cfg)
         self.loss_config = cfg[name]
-        self.loss_fn = OccuSegLoss(cfg)
+        self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss = WeightedEdgeLoss()
         self.is_eval = cfg['eval']
 
