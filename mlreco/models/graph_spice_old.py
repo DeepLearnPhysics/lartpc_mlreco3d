@@ -18,6 +18,7 @@ class GraphSPICE(nn.Module):
         self.model_config = cfg[name]['spice_model_config']
         self.dimension = cfg[name].get('dimension', 3)
         self.model = cluster_model_construct(self.model_config, self.model_name)
+        self.cluster_manager = ParametricGDC(cfg['constructor_cfg'])
 
     def _forward(self, input):
 

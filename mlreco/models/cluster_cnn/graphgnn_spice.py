@@ -7,54 +7,39 @@ from collections import defaultdict
 
 import time
 
-from .graph_spice import SparseOccuSeg, SparseOccuSegLoss
+from mlreco.models.cluster_cnn.losses.gs_embeddings import *
+from .graph_spice import GraphSPICEEmbedder, NodeEdgeHybridLoss
 from mlreco.models.gnn.factories import gnn_model_construct
 from mlreco.utils.cluster.graph_spice import *
 from pprint import pprint
 
 
-class WeightedEdgeLoss(nn.Module):
-
-    def __init__(self, reduction='none'):
-        super(WeightedEdgeLoss, self).__init__()
-        self.reduction = reduction
-        self.loss_fn = F.binary_cross_entropy_with_logits
-
-    def forward(self, x, y):
-        device = x.device
-        weight = torch.ones(y.shape[0]).to(device)
-        with torch.no_grad():
-            num_pos = torch.sum(y).item()
-            num_edges = y.shape[0]
-            w = 1.0 / (1.0 - float(num_pos) / num_edges)
-            weight[~y.bool()] = w
-        loss = self.loss_fn(x, y, weight=weight, reduction=self.reduction)
-        return loss
-
-
 class PixelGNN(nn.Module):
-
-    MODULES = ['network_base', 'uresnet', 'spice_loss', 'sparse_occuseg', 'predictor_cfg', 'constructor_cfg', 'gnn_model']
+    '''
+    PixelGNN only optimizes output features only with respect to 
+    edge prediction loss between pixels. There are no further constraints
+    on the embeddings. 
+    '''
+    MODULES = ['network_base', 'uresnet', 'spice_loss', \
+               'sparse_occuseg', 'predictor_cfg', \
+               'constructor_cfg', 'gnn_model']
 
     def __init__(self, cfg, name='pixel_gnn'):
         super(PixelGNN, self).__init__()
-
-        # Define Message Passing
-        pprint(cfg['gnn_model'])
         self.gnn = gnn_model_construct(cfg, model_name='gnn_model')
-        self.predictor = OccuSegPredictor(cfg['predictor_cfg'])
-        self.constructor = GraphDataConstructor(self.predictor, cfg['constructor_cfg'])
 
     def _forward(self, input):
         '''
         Train-time forward
         '''
+        raise NotImplementedError('Pixel GNN is not yet implemented.')
         point_cloud, labels = input
         coordinates = point_cloud[:, :3]
         batch_indices = point_cloud[:, 3].int()
         out['coordinates'] = [coordinates]
         out['batch_indices'] = [batch_indices]
-        graph_data = self.constructor.construct_batched_graphs_with_labels(out, labels)
+        # TODO: Need a simple constructor class to feed GNN. 
+        # graph_data = self.constructor.construct_batched_graphs_with_labels(out, labels)
         gnn_out = self.gnn(graph_data.x,
                            graph_data.edge_index,
                            graph_data.edge_attr,
@@ -65,6 +50,7 @@ class PixelGNN(nn.Module):
         return out
 
     def forward(self, input):
+        raise NotImplementedError('Pixel GNN is not yet implemented.')
         if self.training:
             out = self._forward(input)
         else:
@@ -75,7 +61,7 @@ class PixelGNN(nn.Module):
             out = self.sparse_occuseg(input)
             out['coordinates'] = [coordinates]
             out['batch_indices'] = [batch_indices]
-            graph_data = self.constructor.construct_batched_graphs(out, labels)
+            # graph_data = self.constructor.construct_batched_graphs(out, labels)
             out['graph'] = [graph_data]
             # print(graph_data)
             gnn_out = self.gnn(graph_data.x,
