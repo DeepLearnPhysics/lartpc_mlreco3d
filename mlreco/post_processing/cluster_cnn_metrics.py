@@ -3,7 +3,7 @@ import numpy as np
 from mlreco.utils import CSVData
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-from mlreco.utils.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
+from mlreco.utils.cluster.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
 from mlreco.utils.metrics import *
 
 

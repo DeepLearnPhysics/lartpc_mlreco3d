@@ -9,7 +9,7 @@ import time
 
 from .graph_spice import SparseOccuSeg, SparseOccuSegLoss
 from mlreco.models.gnn.factories import gnn_model_construct
-from mlreco.utils.occuseg import *
+from mlreco.utils.cluster.graph_spice import *
 from pprint import pprint
 
 
