@@ -9,7 +9,7 @@ from collections import defaultdict
 from mlreco.models.layers.dbscan import distances
 
 #from mlreco.models.chain.full_cnn import *
-from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
+from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct, gnn_model_construct
 

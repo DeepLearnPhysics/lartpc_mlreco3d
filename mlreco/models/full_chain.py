@@ -14,7 +14,7 @@ from mlreco.models.layers.dbscan import DBSCANFragmenter
 from mlreco.models.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels
-from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
+from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, cluster_direction
 

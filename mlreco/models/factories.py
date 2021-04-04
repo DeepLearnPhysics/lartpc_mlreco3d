@@ -27,6 +27,7 @@ def model_dict():
     from . import full_cnn
     from . import full_chain
     from . import graph_spice
+    from . import graph_spice_old
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -59,6 +60,8 @@ def model_dict():
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
+        # GraphSPICE Old Version, will be removed
+        "graph_spice_old": (graph_spice_old.GraphSPICE, graph_spice_old.GraphSPICELoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # Particle flow reconstruction with GrapPA (TODO: should be merged with GrapPA)

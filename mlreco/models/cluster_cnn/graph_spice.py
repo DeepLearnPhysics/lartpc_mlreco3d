@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from mlreco.models.layers.uresnet import UResNet
 from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss, WeightedEdgeLoss
-from mlreco.utils.occuseg import ParametricGDC
+from mlreco.models.arxiv.cluster import ParametricGDC
 
 
 class SparseOccuSeg(UResNet):
