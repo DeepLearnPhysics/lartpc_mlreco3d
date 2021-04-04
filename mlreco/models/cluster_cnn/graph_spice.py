@@ -6,14 +6,14 @@ from collections import defaultdict
 
 
 from mlreco.models.layers.uresnet import UResNet
-from mlreco.models.cluster_cnn.losses.occuseg import GraphSPICEEmbeddingLoss, WeightedEdgeLoss
+from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
 
 class GraphSPICEEmbedder(UResNet):
 
-    MODULES = ['network_base', 'uresnet', 'spice_loss', 'sparse_occuseg']
+    MODULES = ['network_base', 'uresnet', 'graph_spice_embedder']
 
-    def __init__(self, cfg, name='sparse_occuseg'):
+    def __init__(self, cfg, name='graph_spice_embedder'):
         super(GraphSPICEEmbedder, self).__init__(cfg, name='uresnet')
         self.model_config = cfg[name]
         self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
@@ -145,48 +145,11 @@ class GraphSPICEEmbedder(UResNet):
         out = self.get_embeddings([point_cloud])
         out['coordinates'] = [coordinates]
         out['batch_indices'] = [batch_indices]
-        graph_data = self.constructor(out, labels)
-        out['edge_score'] = [graph_data.edge_attr]
-        out['edge_index'] = [graph_data.edge_index]
-        out['graph'] = [graph_data]
-        if self.training:
-            out['edge_truth'] = [graph_data.edge_truth]
+        # graph_data = self.constructor(out, labels)
+        # out['edge_score'] = [graph_data.edge_attr]
+        # out['edge_index'] = [graph_data.edge_index]
+        # out['graph'] = [graph_data]
+        # if self.training:
+        #     out['edge_truth'] = [graph_data.edge_truth]
 
         return out
-
-class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
-    '''
-
-    '''
-    def __init__(self, cfg, name='graph_spice_loss'):
-        super(NodeEdgeHybridLoss, self).__init__()
-        # print("CFG + ", cfg)
-        self.loss_config = cfg[name]
-        self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
-        self.edge_loss = WeightedEdgeLoss()
-        self.is_eval = cfg['eval']
-
-    def forward(self, result, segment_label, cluster_label):
-
-        group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
-
-        res = self.loss_fn(result, segment_label, group_label)
-        # print(result)
-        edge_score = result['edge_score'][0].squeeze()
-        if not self.is_eval:
-            edge_truth = result['edge_truth'][0]
-            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
-            edge_loss = edge_loss.mean()
-            with torch.no_grad():
-                true_negatives = float(torch.sum(( (edge_score < 0) & ~edge_truth.bool() ).int()))
-                precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
-                recall = true_negatives / (float(torch.sum( (edge_score < 0).int() )) + 1e-6)
-                f1 = precision * recall / (precision + recall + 1e-6)
-
-            res['edge_accuracy'] = f1
-        else:
-            edge_loss = 0
-
-        res['loss'] += edge_loss
-        res['edge_loss'] = float(edge_loss)
-        return res

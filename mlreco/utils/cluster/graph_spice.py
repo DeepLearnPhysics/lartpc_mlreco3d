@@ -51,22 +51,24 @@ class NearestNeighborsAssigner(StrayAssigner):
         return pred
 
 
-class ParametricGDC(nn.Module):
+class ClusterGraphConstructor:
     '''
     Parametric Graph-SPICE clustering
 
     Parametric GDC includes a bilinear layer to predict edge weights, 
     given pairs of node features. 
     '''
-    def __init__(self, cfg):
-        super(ParametricGDC, self).__init__()
+    def __init__(self, constructor_cfg : dict, 
+                       graph_batch : GraphBatch = None):
 
         # Input Data/Label conventions
-        self.seg_col = cfg.get('seg_col', -1)
-        self.cluster_col = cfg.get('cluster_col', 5)
+        self.seg_col = constructor_cfg.get('seg_col', -1)
+        self.cluster_col = constructor_cfg.get('cluster_col', 5)
+        self.batch_col = constructor_cfg.get('batch_col', 3)
+        self.training = False # Default mode is evaluation. 
 
         # Initial Neighbor Graph Construction Mode
-        mode = cfg.get('mode', 'knn')
+        mode = constructor_cfg.get('mode', 'knn')
         if mode == 'knn':
             self._init_graph = knn_graph
         elif mode == 'radius':
@@ -76,12 +78,8 @@ class ParametricGDC(nn.Module):
                 graph construction!'''.format(mode))
 
         # Clustering Algorithm Parameters
-        self.ths = cfg.get('edge_cut_threshold', 0.0)
-        self.kwargs = cfg.get('cluster_kwargs', dict(k=5))
-        self.hyp_dim = cfg['hyper_dimension']
-
-        # Parametrized Model (Edge Attribute Constructor)
-        self.bilinear = nn.Bilinear(self.hyp_dim, self.hyp_dim, 1)
+        self.ths = constructor_cfg.get('edge_cut_threshold', 0.0)
+        self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
 
         # GraphBatch containing graphs per semantic class. 
         self._graph_batch = GraphBatch()
@@ -136,12 +134,9 @@ class ParametricGDC(nn.Module):
             mask = batch_indices == bidx
             coords_batch = coordinates[mask]
             features_batch = features[mask]
-            if labels is not None:
-                labels_batch = labels[mask].int()
+            labels_batch = labels[mask].int()
 
             for c in torch.unique(labels_batch[:, self.seg_col]):
-                if int(c) == 4:
-                    continue
                 class_mask = labels_batch[:, self.seg_col] == c
                 coords_class = coords_batch[class_mask]
                 features_class = features_batch[class_mask]
@@ -157,11 +152,10 @@ class ParametricGDC(nn.Module):
                 graph_id += 1
                 self._info.append(graph_id_key)
 
-                if labels is not None:
-                    if self.training:
-                        frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                        truth = self.get_edge_truth(edge_indices, frag_labels)
-                        data.edge_truth = truth
+                if self.training:
+                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
+                    truth = self.get_edge_truth(edge_indices, frag_labels)
+                    data.edge_truth = truth
                 data_list.append(data)
 
         self._info = pd.DataFrame(self._info)
@@ -172,7 +166,14 @@ class ParametricGDC(nn.Module):
         self._num_total_edges = self._graph_batch.edge_index.shape[1]
 
 
-    def _set_edge_attributes(self):
+    def replace_state(self, graph_batch):
+        self._graph_batch = graph_batch
+        self._num_total_nodes = self._graph_batch.x.shape[0]
+        self._node_dim = self._graph_batch.x.shape[1]
+        self._num_total_edges = self._graph_batch.edge_index.shape[1]
+
+
+    def _set_edge_attributes(self, kernel_fn : Callable):
         '''
         Constructs edge attributes from node feature tensors, and saves 
         edge attributes to current GraphBatch. 
@@ -183,7 +184,7 @@ class ParametricGDC(nn.Module):
             raise ValueError('Edge attributes are already set: {}'\
                 .format(self._graph_batch.edge_attr))
         else:
-            edge_attr = self.bilinear(
+            edge_attr = kernel_fn(
                 self._graph_batch.x[self._graph_batch.edge_index[0, :]],
                 self._graph_batch.x[self._graph_batch.edge_index[1, :]])
             w = edge_attr.squeeze()
@@ -297,7 +298,7 @@ class ParametricGDC(nn.Module):
                                             dtype=torch.long)
 
     
-    def evaluate_nodes(self, node_labels : np.ndarray, 
+    def evaluate_nodes(self, cluster_label : np.ndarray, 
                              metrics : List[ Callable ], 
                              skip=[]):
         '''
@@ -305,7 +306,7 @@ class ParametricGDC(nn.Module):
         scoring functions. 
 
         INPUTS:
-            - node_labels : N x 6 Tensor, with pos, batch id, 
+            - cluster_label : N x 6 Tensor, with pos, batch id, 
             fragment_label, and segmentation label. 
             - metrics : List of accuracy metric evaluation functions.
             - skip: list of graph ids to skip evaluation. 
@@ -321,13 +322,13 @@ class ParametricGDC(nn.Module):
         # Due to different voxel ordering convention, we need to create
         # a separate GraphBatch object for labels
         label_list = []
-        batch_index = node_labels[:, 3]
+        batch_index = cluster_label[:, self.batch_col]
         for bidx in np.unique(batch_index):
             batch_mask = batch_index == bidx
-            labels_batch = node_labels[batch_mask]
-            slabels = labels_batch[:, -1]
+            labels_batch = cluster_label[batch_mask]
+            slabels = labels_batch[:, self.seg_col]
             for c in np.unique(slabels):
-                clabels = labels_batch[:, 4][slabels == c]
+                clabels = labels_batch[:, self.cluster_col][slabels == c]
                 x = torch.Tensor(clabels).to(dtype=torch.long)
                 d = GraphData(x=x)
                 label_list.append(d)
@@ -373,13 +374,21 @@ class ParametricGDC(nn.Module):
         return self._info
 
 
-    def forward(self, res : dict, 
-                      labels: Union[torch.Tensor, None]):
+    def __call__(self, res : dict, 
+                       kernel_fn : Callable,
+                       labels: Union[torch.Tensor, None]):
         '''
         Train time labels include cluster column (default: 5) 
         and segmentation column (default: -1)
         Test time labels only include segment column (default: -1)
         '''
         self.initialize_graph(res, labels)
-        self._set_edge_attributes()
+        self._set_edge_attributes(kernel_fn)
         return self._graph_batch
+
+
+    def __repr__(self):
+        out = '''
+        ClusterGraphConstructor
+        '''
+        return out

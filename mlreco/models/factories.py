@@ -7,8 +7,8 @@ def model_dict():
     from . import uresnet_ppn_chain
 
     from . import clustercnn_se
-    from . import sparse_occuseg
-    from . import sparseoccuseg_gnn
+    from . import graph_spice
+    from . import graph_spice_old
 
     from . import grappa
     from . import flashmatching_model
@@ -26,9 +26,6 @@ def model_dict():
     from . import particle_types
     from . import full_cnn
     from . import full_chain
-    from . import graph_spice
-    from . import graph_spice_old
-
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
         # Using SCN built-in UResNet
@@ -48,10 +45,6 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
-        # OccuSeg
-        "occuseg": (sparse_occuseg.SparseOccuSeg, sparse_occuseg.SparseOccuSegLoss),
-        # OccuSeg with GNN
-        "occuseg_gnn": (sparseoccuseg_gnn.SparseOccuSegGNN, sparseoccuseg_gnn.SparseOccuSegGNNLoss),
         # Spatial Embeddings Lite
         "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
         # Spatial Embeddings Lovasz free

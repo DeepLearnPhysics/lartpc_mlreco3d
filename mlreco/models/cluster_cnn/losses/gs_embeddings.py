@@ -28,6 +28,41 @@ class WeightedEdgeLoss(nn.Module):
         loss = self.loss_fn(x, y, weight=weight, reduction=self.reduction)
         return loss
 
+
+def compute_edge_weight(sp_emb: torch.Tensor,
+                        ft_emb: torch.Tensor,
+                        cov: torch.Tensor,
+                        edge_indices: torch.Tensor,
+                        occ=None,
+                        eps=0.001):
+
+    device = sp_emb.device
+    ui, vi = edge_indices[0, :], edge_indices[1, :]
+
+    sp_cov_i = cov[:, 0][ui]
+    sp_cov_j = cov[:, 0][vi]
+    sp_i = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov_i**2 + eps)
+    sp_j = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov_j**2 + eps)
+
+    ft_cov_i = cov[:, 1][ui]
+    ft_cov_j = cov[:, 1][vi]
+    ft_i = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov_i**2 + eps)
+    ft_j = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov_j**2 + eps)
+
+    p_ij = torch.exp(-sp_i-ft_i)
+    p_ji = torch.exp(-sp_j-ft_j)
+
+    pvec = torch.clamp(p_ij + p_ji - p_ij * p_ji, min=0, max=1)
+
+    # pvec = torch.exp(- sp - ft)
+    if occ is not None:
+        r1 = occ[edge_indices[0, :]]
+        r2 = occ[edge_indices[1, :]]
+        r = torch.max((r2 + eps) / (r1 + eps), (r1 + eps) / (r2 + eps))
+        pvec = pvec / r
+    return pvec
+
+
 class GraphSPICEEmbeddingLoss(nn.Module):
     '''
     Loss function for Sparse Spatial Embeddings Model, with fixed
@@ -46,8 +81,10 @@ class GraphSPICEEmbeddingLoss(nn.Module):
 
         self.eps = self.loss_config.get('eps', 0.001)
 
-        self.ft_loss_params = self.loss_config.get('ft_loss_params', dict(inter=1.0, intra=1.0, reg=0.1))
-        self.sp_loss_params = self.loss_config.get('sp_loss_params', dict(inter=1.0, intra=1.0))
+        self.ft_loss_params = self.loss_config.get(
+            'ft_loss_params', dict(inter=1.0, intra=1.0, reg=0.1))
+        self.sp_loss_params = self.loss_config.get(
+            'sp_loss_params', dict(inter=1.0, intra=1.0))
 
         self.kernel_lossfn_name = self.loss_config.get('kernel_lossfn', 'BCE')
         if self.kernel_lossfn_name == 'BCE':
@@ -75,8 +112,10 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - groups (N)
             - ft_centroids (N_c X F)
         '''
-        intercluster_loss = inter_cluster_loss(ft_centroids, margin=self.ft_interloss)
-        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups, margin=self.ft_intraloss)
+        intercluster_loss = inter_cluster_loss(ft_centroids, 
+                                               margin=self.ft_interloss)
+        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups, 
+                                               margin=self.ft_intraloss)
         reg_loss = torch.mean(torch.norm(ft_centroids, dim=1))
         out = {}
         out['intercluster_loss'] = float(intercluster_loss)
@@ -97,8 +136,10 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - ft_centroids (N_c X F)
         '''
         out = {}
-        intercluster_loss = inter_cluster_loss(sp_centroids, margin=self.sp_interloss)
-        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups, margin=self.sp_intraloss)
+        intercluster_loss = inter_cluster_loss(sp_centroids, 
+                                               margin=self.sp_interloss)
+        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups, 
+                                               margin=self.sp_intraloss)
         out['intercluster_loss'] = float(intercluster_loss)
         out['intracluster_loss'] = float(intracluster_loss)
         out['loss'] = self.sp_loss_params['inter'] * intercluster_loss + \
@@ -109,35 +150,13 @@ class GraphSPICEEmbeddingLoss(nn.Module):
     def covariance_loss(self, sp_emb, ft_emb, cov, groups,
                         sp_centroids, ft_centroids, eps=0.001):
 
-        device = sp_emb.device
-        cov_means = find_cluster_means(cov, groups)
-
-        # Compute spatial term
-        sp_emb_tmp = sp_emb[:, None, :]
-        sp_centroids_tmp = sp_centroids[None, :, :]
-        sp_cov = torch.clamp(cov_means[:, 0][None, :], min=eps)
-        sp_sqdists = ((sp_emb_tmp - sp_centroids_tmp)**2).sum(-1) / (sp_cov**2)
-
-        # Compute feature term
-        ft_emb_tmp = ft_emb[:, None, :]
-        ft_centroids_tmp = ft_centroids[None, :, :]
-        ft_cov = torch.clamp(cov_means[:, 0][None, :], min=eps)
-        ft_sqdists = ((ft_emb_tmp - ft_centroids_tmp)**2).sum(-1) / (ft_cov**2)
-
-        # Compute joint kernel score
-        pvec = torch.exp(-sp_sqdists - ft_sqdists)
-        # probs = (1-pvec).index_put((torch.arange(groups.shape[0]), groups),
-        #     torch.gather(pvec, 1, groups.view(-1, 1)).squeeze())
-        logits = logit_fn(pvec)
-        eye = torch.eye(len(groups.unique()), dtype=torch.float32, device=device)
-        targets = eye[groups]
-
-        acc = iou_batch(logits > 0, targets.bool())
+        logits, acc = get_graphspice_logits_umap(sp_emb, ft_emb, cov, groups,
+            sp_centroids, ft_centroids, eps)
         # Compute kernel score loss
         cov_loss = self.kernel_lossfn(logits, targets)
         return cov_loss, acc
 
-
+    
     def occupancy_loss(self, occ, groups):
         '''
         INPUTS:
@@ -147,7 +166,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         bincounts = torch.bincount(groups).float()
         bincounts[bincounts == 0] = 1
         occ_truth = torch.log(bincounts)
-        occ_loss = torch.abs(torch.gather(occ - occ_truth[None, :], 1, groups.view(-1, 1)))
+        occ_loss = torch.abs(torch.gather(
+            occ - occ_truth[None, :], 1, groups.view(-1, 1)))
         occ_loss = scatter_mean(occ_loss.squeeze(), groups)
         # occ_loss = occ_loss[occ_loss > 0]
 
@@ -265,7 +285,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
 
                 loss_seg = self.seg_loss_fn(segmentation_batch, slabels_batch)
                 acc_seg = float(torch.sum(torch.argmax(
-                    segmentation_batch, dim=1) == slabels_batch)) / float(segmentation_batch.shape[0])
+                    segmentation_batch, dim=1) == slabels_batch)) \
+                        / float(segmentation_batch.shape[0])
 
                 loss_class, acc_class = self.combine_multiclass(
                     sp_embedding_batch, ft_embedding_batch,
@@ -292,4 +313,42 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         res.update(loss_avg)
         res.update(acc_avg)
 
+        return res
+
+
+class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
+    '''
+    Combined Node + Edge Loss
+    '''
+    def __init__(self, cfg, name='graph_spice_loss'):
+        super(NodeEdgeHybridLoss, self).__init__()
+        # print("CFG + ", cfg)
+        self.loss_config = cfg[name]
+        self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
+        self.edge_loss = WeightedEdgeLoss()
+        self.is_eval = cfg['eval']
+
+    def forward(self, result, segment_label, cluster_label):
+
+        group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
+
+        res = self.loss_fn(result, segment_label, group_label)
+        # print(result)
+        edge_score = result['edge_score'][0].squeeze()
+        if not self.is_eval:
+            edge_truth = result['edge_truth'][0]
+            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
+            edge_loss = edge_loss.mean()
+            with torch.no_grad():
+                true_negatives = float(torch.sum(( (edge_score < 0) & ~edge_truth.bool() ).int()))
+                precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
+                recall = true_negatives / (float(torch.sum( (edge_score < 0).int() )) + 1e-6)
+                f1 = precision * recall / (precision + recall + 1e-6)
+
+            res['edge_accuracy'] = f1
+        else:
+            edge_loss = 0
+
+        res['loss'] += edge_loss
+        res['edge_loss'] = float(edge_loss)
         return res
