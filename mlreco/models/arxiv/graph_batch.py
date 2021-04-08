@@ -1,4 +1,4 @@
-from typing import List, AnyStr
+from typing import List
 
 import torch
 from torch import Tensor
@@ -204,33 +204,3 @@ class GraphBatch(Batch):
             data.num_nodes = self.__num_nodes_list__[idx]
 
         return data
-
-
-    def add_node_features(self, node_feats, name : AnyStr, dtype=None):
-        if hasattr(self, name):
-            print('''GraphBatch already has attribute : {}, setting attribute \
-                to new value.''')
-            assert (getattr(self, name).shape == node_feats.shape)
-            setattr(self, name, node_feats)
-        else:
-            device = self.x.device
-            feats = node_feats
-            if not isinstance(node_feats, Tensor):
-                assert dtype is not None
-                feats = Tensor(node_feats).to(device, dtype=dtype)
-            setattr(self, name, feats)
-            self.__slices__[name] = self.__slices__['x']
-            self.__cat_dims__[name] = self.__cat_dims__['x']
-            self.__cumsum__[name] = self.__cumsum__['x']
-        
-
-    def add_edge_features(self, edge_feats, name : AnyStr, dtype=None):
-        device = self.edge_attr.device
-        feats = edge_feats
-        if not isinstance(edge_feats, Tensor):
-            assert dtype is not None
-            feats = Tensor(edge_feats).to(device, dtype=dtype)
-        setattr(self, name, feats)
-        self.__slices__[name] = self.__slices__['edge_index']
-        self.__cat_dims__[name] = self.__cat_dims__['x']
-        self.__cumsum__[name] = self.__cumsum__['x']

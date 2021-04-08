@@ -214,12 +214,12 @@ def get_graphspice_logits(sp_emb, ft_emb, cov, groups,
     logits = logit_fn(pvec)
 
     acc = None
+    eye = torch.eye(len(groups.unique()), dtype=torch.float32, device=device)
+    targets = eye[groups]
     if compute_accuracy:
-        eye = torch.eye(len(groups.unique()), dtype=torch.float32, device=device)
-        targets = eye[groups]
         acc = iou_batch(logits > 0, targets.bool())
 
-    return logits, acc
+    return logits, acc, targets
 
 
 class FocalLoss(nn.Module):

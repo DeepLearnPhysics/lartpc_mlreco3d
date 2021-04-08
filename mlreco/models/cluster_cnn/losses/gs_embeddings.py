@@ -150,7 +150,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
     def covariance_loss(self, sp_emb, ft_emb, cov, groups,
                         sp_centroids, ft_centroids, eps=0.001):
 
-        logits, acc = get_graphspice_logits_umap(sp_emb, ft_emb, cov, groups,
+        logits, acc, targets = get_graphspice_logits(sp_emb, ft_emb, cov, groups,
             sp_centroids, ft_centroids, eps)
         # Compute kernel score loss
         cov_loss = self.kernel_lossfn(logits, targets)
@@ -352,3 +352,5 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         res['loss'] += edge_loss
         res['edge_loss'] = float(edge_loss)
         return res
+
+

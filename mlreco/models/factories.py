@@ -53,6 +53,8 @@ def model_dict():
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
+        # GraphSPICEGNN
+        "graph_spice_gnn": (graph_spice.GraphSPICEGNN, graph_spice.GraphSPICELoss),
         # GraphSPICE Old Version, will be removed
         "graph_spice_old": (graph_spice_old.GraphSPICE, graph_spice_old.GraphSPICELoss),
         # Flashmatching using encoder and gnn
