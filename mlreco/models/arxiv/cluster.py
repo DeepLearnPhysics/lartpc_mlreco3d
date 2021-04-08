@@ -12,7 +12,7 @@ import networkx as nx
 from torch_cluster import knn_graph, radius_graph
 
 from mlreco.utils.metrics import *
-from mlreco.utils.graph_batch import GraphBatch
+from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -30,6 +30,8 @@ class ParametricGDC(nn.Module):
     '''
     def __init__(self, cfg):
         super(ParametricGDC, self).__init__()
+        print('Constructor')
+        pprint(cfg)
 
         # Input Data/Label conventions
         self.seg_col = cfg.get('seg_col', -1)

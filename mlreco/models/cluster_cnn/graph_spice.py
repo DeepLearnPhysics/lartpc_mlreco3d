@@ -8,12 +8,15 @@ from collections import defaultdict
 from mlreco.models.layers.uresnet import UResNet
 from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
+from pprint import pprint
 
 class GraphSPICEEmbedder(UResNet):
 
     MODULES = ['network_base', 'uresnet', 'graph_spice_embedder']
 
     def __init__(self, cfg, name='graph_spice_embedder'):
+        print('-----------------GraphSPICEEmbedder-------------------')
+        pprint(cfg)
         super(GraphSPICEEmbedder, self).__init__(cfg, name='uresnet')
         self.model_config = cfg[name]
         self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
@@ -139,17 +142,7 @@ class GraphSPICEEmbedder(UResNet):
         '''
         Train time forward
         '''
-        point_cloud, labels = input
-        coordinates = point_cloud[:, :3]
-        batch_indices = point_cloud[:, 3].int()
+        point_cloud, = input
         out = self.get_embeddings([point_cloud])
-        out['coordinates'] = [coordinates]
-        out['batch_indices'] = [batch_indices]
-        # graph_data = self.constructor(out, labels)
-        # out['edge_score'] = [graph_data.edge_attr]
-        # out['edge_index'] = [graph_data.edge_index]
-        # out['graph'] = [graph_data]
-        # if self.training:
-        #     out['edge_truth'] = [graph_data.edge_truth]
 
         return out

@@ -30,6 +30,7 @@ class trainval(object):
         self._minibatch_size = self._iotool_config.get('minibatch_size')
         self._input_keys  = self._model_config.get('network_input', [])
         self._output_keys = self._model_config.get('keep_output',[])
+        self._ignore_keys = self._model_config.get('ignore_keys', [])
         self._loss_keys   = self._model_config.get('loss_input', [])
         self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
@@ -247,6 +248,7 @@ class trainval(object):
         """
         loss_keys   = self._loss_keys
         output_keys = self._output_keys
+        ignore_keys = self._ignore_keys
         with torch.set_grad_enabled(self._train):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
@@ -286,6 +288,7 @@ class trainval(object):
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
 
             for key in result.keys():
+                if key in ignore_keys: continue
                 if len(output_keys) and not key in output_keys: continue
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):

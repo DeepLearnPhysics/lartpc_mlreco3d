@@ -12,11 +12,11 @@ import torch.nn as nn
 #     def forward(self, x):
 #         raise NotImplementedError
 
-class BilinearKernel(nn.module):
+class BilinearKernel(nn.Module):
 
     def __init__(self, num_features, bias=False):
         super(BilinearKernel, self).__init__()
         self.m = nn.Bilinear(num_features, num_features, 1, bias=bias)
 
-    def forward(self, x):
-        return self.m(x)
+    def forward(self, x1, x2):
+        return self.m(x1, x2)

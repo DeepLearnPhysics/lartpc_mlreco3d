@@ -25,6 +25,7 @@ def gs_kernel_dict():
     kernels = {
         'bilinear': gs_kernels.BilinearKernel
     }
+    return kernels
 
 
 def gs_kernel_construct(cfg):
@@ -43,13 +44,12 @@ def cluster_model_dict():
     '''
     from . import spatial_embeddings
     from . import graph_spice
-    from . import graphgnn_spice
     from mlreco.mink.cluster.embeddings import SPICE as MinkSPICE
     models = {
         "spice_cnn": spatial_embeddings.SpatialEmbeddings1,
         "spice_cnn_me": MinkSPICE,
         "spice_cnn_lite": spatial_embeddings.SpatialEmbeddingsLite,
-        "graph_spice": graph_spice.GraphSPICEEmbedder,
+        "graph_spice_embedder": graph_spice.GraphSPICEEmbedder,
         # "graphgnn_spice": graphgnn_spice.SparseOccuSegGNN
     }
     return models
