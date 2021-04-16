@@ -13,7 +13,7 @@ class MomentumNet(nn.Module):
     def __init__(self, num_input, num_output=1, num_hidden=128):
         super(MomentumNet, self).__init__()
         self.linear1 = nn.Linear(num_input, num_hidden)
-        self.norm1 = nn.BatchNorm1d(num_hidden)
+        self.norm1 = nn.BatchNorm1d(num_input)
         self.linear2 = nn.Linear(num_hidden, num_hidden)
         self.norm2 = nn.BatchNorm1d(num_hidden)
         self.linear3 = nn.Linear(num_hidden, num_output)

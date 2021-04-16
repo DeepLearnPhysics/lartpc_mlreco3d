@@ -9,7 +9,7 @@ from mlreco.models.layers.base import SCNNetworkBase
 
 from mlreco.models.ppn import PPN
 
-from torch_geometric.data import Batch as GraphData
+#from torch_geometric.data import Batch as GraphData
 
 # ----------------------HELPER FUNCTIONS------------------------
 

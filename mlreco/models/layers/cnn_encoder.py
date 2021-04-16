@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import torch.nn as nn
-from torch_geometric.nn import MetaLayer, NNConv
 import sparseconvnet as scn
 
 from mlreco.models.layers.uresnet import UResNetEncoder
@@ -133,8 +132,12 @@ class ResidualEncoder(UResNetEncoder):
             self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
             self.pool = Flatten()
         elif self.pool_mode == 'avg':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = nn.AvgPool3d(self.final_tensor_shape)
+            # self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
+            # self.pool = nn.AvgPool3d(self.final_tensor_shape)
+            self.output = scn.Sequential()
+            self.pool = scn.Sequential().add(
+                scn.AveragePooling(self.dimension, self.final_tensor_shape, self.final_tensor_shape))#.add(
+                #scn.OutputLayer(self.dimension))
         else:
             self.output = scn.Sequential().add(
                 scn.Convolution(
@@ -143,6 +146,7 @@ class ResidualEncoder(UResNetEncoder):
                     self.allow_bias)).add(
                 scn.SparseToDense(self.dimension, self.nPlanes[-1]))
             self.pool = nn.MaxPool3d(1)
+
         self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
 
 
@@ -176,6 +180,7 @@ class ResidualEncoder(UResNetEncoder):
             features_enc.append(x)
             x = self.encoding_conv[i](x)
         out = self.output(x)
-        out = self.pool(out).view(batch_size, -1)
+        out = self.pool(out).features
+        out = out.view(batch_size, -1)
         out = self.linear(out)
         return out

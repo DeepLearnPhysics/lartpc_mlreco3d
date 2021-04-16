@@ -322,6 +322,36 @@ class trainval(object):
                 for param in module.parameters():
                     param.requires_grad = False
 
+        # Breadth-first search for freeze_weight parameter in config
+        # (very similar to weight loading below)
+        module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
+        while len(module_keys) > 0:
+            module, config = module_keys.pop()
+            if config.get('freeze_weights', False):
+                model_name = config.get('model_name', module)
+                model_path = config.get('model_path', None)
+
+                count = 0
+                # with open(model_path, 'rb') as f:
+                #     checkpoint = torch.load(f, map_location='cpu')
+                #     for name, param in self._model.named_parameters():
+                #         other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                #         if module in name and 'module.' + other_name in checkpoint['state_dict'].keys():
+                #             param.requires_grad = False
+                #             count += 1
+                for name, param in self._model.named_parameters():
+                    other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                    if module in name and other_name in self._model.state_dict().keys():
+                        param.requires_grad = False
+                        count += 1
+
+                print('Freezing %d weights for a sub-module' % count,module)
+
+            # Keep the BFS going
+            for key in config:
+                if isinstance(config[key], dict):
+                    module_keys.append((key, config[key]))
+
         self._net = DataParallel(self._model,device_ids=self._gpus)
 
         if self._train:
@@ -386,11 +416,18 @@ class trainval(object):
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
                             # Additionally, only select weights related to current module
                             if module in name:
+                                # if module == 'grappa_inter' :
+                                #     print(name, other_name, other_name in checkpoint['state_dict'].keys())
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
                                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
                                 else:
                                     missing_keys.append((name, other_name))
+                        # if module == 'grappa_inter':
+                        #     print("missing keys", missing_keys)
+                        #     for key in checkpoint['state_dict'].keys():
+                        #         if 'node_encoder'  in key or 'edge_encoder' in key:
+                        #             print(key)
                         if missing_keys:
                             print(checkpoint['state_dict'].keys())
                             for m in missing_keys:

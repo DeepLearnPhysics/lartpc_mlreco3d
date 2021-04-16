@@ -3,9 +3,6 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
-from torch_scatter import scatter_mean, scatter_std, scatter_add
-from torch_geometric.nn import MetaLayer, NNConv
-from torch_geometric.utils import degree
 
 from torch.nn import BatchNorm1d
 from torch.nn.modules.instancenorm import _InstanceNorm
@@ -95,6 +92,9 @@ class InstanceNorm(_InstanceNorm):
 
     def forward(self, x, batch=None):
         """"""
+        from torch_scatter import scatter_add
+        from torch_geometric.utils import degree
+        
         if batch is None:
             batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
 

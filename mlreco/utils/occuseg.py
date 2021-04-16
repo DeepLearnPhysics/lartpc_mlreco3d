@@ -12,93 +12,14 @@ from mlreco.utils.metrics import *
 from pprint import pprint
 
 import networkx as nx
-from torch_cluster import knn_graph, radius_graph
 import time
-from torch_geometric.data import Data, Batch
-from scipy.spatial.distance import cdist
-
-
-def get_edge_truth(edge_indices, labels):
-    '''
-
-        - edge_indices: 2 x E
-        - labels: N
-    '''
-    u = labels[edge_indices[0, :]]
-    v = labels[edge_indices[1, :]]
-    return (u == v).astype(bool)
-
-
-def get_edge_weight(sp_emb: torch.Tensor,
-                    ft_emb: torch.Tensor,
-                    cov: torch.Tensor,
-                    edge_indices: torch.Tensor,
-                    occ=None,
-                    eps=0.001):
-
-    device = sp_emb.device
-    if edge_indices.shape[1] == 0:
-        return torch.Tensor([0]).to(device)
-    ui, vi = edge_indices[0, :], edge_indices[1, :]
-    # Compute spatial term
-    sp_cov = (cov[:, 0][ui] + cov[:, 0][vi]) / 2
-    sp = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov**2 + eps)
-
-    # Compute feature term
-    ft_cov = (cov[:, 1][ui] + cov[:, 1][vi]) / 2
-    ft = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov**2 + eps)
-
-    pvec = torch.exp(- sp - ft)
-    if occ is not None:
-        r1 = occ[edge_indices[0, :]]
-        r2 = occ[edge_indices[1, :]]
-        r = torch.max((r2 + eps) / (r1 + eps), (r1 + eps) / (r2 + eps))
-        pvec = pvec / r
-    return pvec
-
-
-def fit_graph(coords, edge_index, edge_pred, features, min_cluster=10):
-    edges = edge_index[edge_pred]
-    edge_indices = edges
-    edges = [(e[0], e[1]) for i, e in enumerate(edges.cpu().numpy())]
-    G = nx.Graph()
-    G.add_nodes_from(np.arange(coords.shape[0]))
-    G.add_edges_from(edges)
-    pred = -np.ones(coords.shape[0], dtype=np.int32)
-    hypernode_features = []
-    singletons = []
-    ccs = []
-    labels = []
-    temp_pred = np.zeros(coords.shape[0], dtype=np.int32)
-    for i, comp in enumerate(nx.connected_components(G)):
-        if len(comp) < min_cluster:
-            singletons.extend(list(comp))
-            x = np.asarray(list(comp))
-            temp_pred[x] = i
-        else:
-            x = np.asarray(list(comp))
-            pred[x] = i
-            ccs.extend(list(comp))
-    if len(singletons) > 0:
-        # Handle Singletons
-        if len(ccs) == 0:   # Current class only contains singletons
-            pred = temp_pred
-        else:
-            singletons = np.asarray(singletons)
-            ccs = np.asarray(ccs)
-            u = features[ccs]
-            v = features[singletons]
-            dist = cdist(v, u)
-            nearest = np.argmin(dist, axis=1)
-            new_labels = pred[ccs][nearest]
-            pred[singletons] = new_labels
-    pred, _ = unique_label(pred)
-    return pred, edge_indices
 
 
 class OccuSegPredictor:
 
     def __init__(self, cfg):
+        from torch_cluster import knn_graph, radius_graph
+
         mode = cfg.get('mode', 'knn')
         if mode == 'knn':
             self.graph_constructor = knn_graph
@@ -218,14 +139,12 @@ class GraphDataConstructor:
                               edge_weights: torch.Tensor,
                               edge_index: torch.Tensor,
                               feats: torch.Tensor):
-        graph_data = Data(x=feats.view(-1, self.node_feats), 
-                          edge_index=edge_index.view(2, -1), 
-                          edge_attr=edge_weights.view(-1, self.edge_feats), 
-                          pos=coords.view(-1, 3))
+        from torch_geometric.data import Data
+        graph_data = Data(x=feats, edge_index=edge_index, edge_attr=edge_weights, pos=coords)
         return graph_data
 
     def construct_batched_graphs(self, res):
-
+        from torch_geometric.data import Batch
         data_list = []
 
         coordinates = res['coordinates'][0]
@@ -282,6 +201,8 @@ class GraphDataConstructor:
 
 
     def construct_batched_graphs_with_labels(self, res, labels: torch.Tensor):
+        from torch_geometric.data import Batch
+
         data_list = []
 
         coordinates = res['coordinates'][0]
@@ -294,15 +215,12 @@ class GraphDataConstructor:
         occupancy = res['occupancy'][0]
 
         for i, bidx in enumerate(torch.unique(batch_indices)):
-            mask = batch_indices == bidx
             cov_batch = covariance[mask]
             seg_batch = segmentation[mask]
             occ_batch = occupancy[mask]
             sp_batch = sp_embeddings[mask]
-            ft_batch = ft_embeddings[mask]
             coords_batch = coordinates[mask]
             features_batch = features[mask]
-            labels_batch = labels[mask].int()
 
             for c in torch.unique(labels_batch[:, self.seg_col]):
                 if int(c) == 4:
