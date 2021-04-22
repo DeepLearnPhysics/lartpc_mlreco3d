@@ -20,3 +20,39 @@ class BilinearKernel(nn.Module):
 
     def forward(self, x1, x2):
         return self.m(x1, x2)
+
+
+
+class BilinearNNKernel(nn.Module):
+
+    def __init__(self, num_features, bias=False):
+        super(BilinearNNKernel, self).__init__()
+        
+        self.m = nn.Linear(64, 1, bias=bias)
+
+        self.nn1 = nn.Sequential(
+            nn.Linear(num_features, 32, bias=bias),
+            nn.BatchNorm1d(32),
+            nn.ELU(),
+            nn.Linear(32, 32, bias=bias),
+            nn.BatchNorm1d(32),
+            nn.ELU(),
+        )
+
+        self.nn2 = nn.Sequential(
+            nn.Linear(num_features, 32, bias=bias),
+            nn.BatchNorm1d(32),
+            nn.ELU(),
+            nn.Linear(32, 32, bias=bias),
+            nn.BatchNorm1d(32),
+            nn.ELU(),
+        )
+
+    def forward(self, x1, x2):
+
+        f1 = self.nn1(x1)
+        f2 = self.nn2(x2)
+
+        out = torch.cat([f1, f2], dim=1)
+        
+        return self.m(out)

@@ -23,7 +23,8 @@ def gs_kernel_dict():
     '''
     from . import gs_kernels
     kernels = {
-        'bilinear': gs_kernels.BilinearKernel
+        'bilinear': gs_kernels.BilinearKernel,
+        'bilinear_mlp': gs_kernels.BilinearNNKernel
     }
     return kernels
 

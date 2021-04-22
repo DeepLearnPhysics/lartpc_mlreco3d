@@ -15,3 +15,4 @@ from .cluster_cnn_metrics import cluster_cnn_metrics
 from .cosmic_discriminator_metrics import cosmic_discriminator_metrics
 from .kinematics_metrics import kinematics_metrics
 from .graph_spice_metrics import graph_spice_metrics
+from .graph_spice_metrics import graph_spice_metrics_loop_threshold
