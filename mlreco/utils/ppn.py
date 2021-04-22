@@ -345,7 +345,7 @@ def mink_ppn_selector(data, result,
                     all_types.append (pool_op(final_types[c],  axis=0))
                     all_softmax.append(pool_op(final_softmax[c], axis=0))
                     all_batch.append(b)
-            assert False
+            # assert False
 
     return np.column_stack((all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types))
 

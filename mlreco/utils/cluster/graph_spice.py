@@ -127,7 +127,8 @@ class ClusterGraphConstructor:
                 graph construction!'''.format(mode))
 
         # Clustering Algorithm Parameters
-        self.ths = constructor_cfg.get('edge_cut_threshold', 0.0)
+        self.ths = constructor_cfg.get('edge_cut_threshold', 0.0) # Prob values 0-1
+        print("Edge Threshold Probability Score = ", self.ths)
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
 
         # GraphBatch containing graphs per semantic class. 
@@ -136,6 +137,7 @@ class ClusterGraphConstructor:
         else:
             assert graph_info is not None
             self._info = graph_info
+            self._graph_batch = graph_batch
             self._num_total_nodes = self._graph_batch.x.shape[0]
             self._node_dim = self._graph_batch.x.shape[1]
             self._num_total_edges = self._graph_batch.edge_index.shape[1]
@@ -350,13 +352,18 @@ class ClusterGraphConstructor:
         num_graphs = self._graph_batch.num_graphs
         entry_list = [i for i in range(num_graphs) if i not in skip]
         node_pred = -np.ones(self._num_total_nodes, dtype=np.int32)
+
+        pred_data_list = []
+
         for entry in entry_list:
             pred, G, subgraph = self.fit_predict_one(entry, **kwargs)
             batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
-            node_pred[batch_index] = pred
-        self._node_pred = node_pred
-        self._graph_batch.add_node_features(node_pred, 'node_pred', 
-                                            dtype=torch.long)
+            pred_data_list.append(GraphData(x=torch.Tensor(pred), 
+                                            pos=torch.Tensor(G.pos)))
+            # node_pred[batch_index] = pred
+        self._node_pred = GraphBatch.from_data_list(pred_data_list)
+        # self._graph_batch.add_node_features(node_pred, 'node_pred', 
+        #                                     dtype=torch.long)
 
     
     def evaluate_nodes(self, cluster_label : np.ndarray, 
@@ -387,19 +394,23 @@ class ClusterGraphConstructor:
             batch_index = cluster_label[:, self.batch_col].int().cpu().numpy()
             segment_label = cluster_label[:, self.seg_col].int().cpu().numpy()
             fragment_label = cluster_label[:, self.cluster_col].int().cpu().numpy()
+            label_pos = cluster_label[:, :3].int().cpu().numpy()
         else:
             batch_index = cluster_label[:, self.batch_col].astype(int)
             segment_label = cluster_label[:, self.seg_col].astype(int)
             fragment_label = cluster_label[:, self.cluster_col].astype(int)
+            label_pos = cluster_label[:, :3]
         for bidx in np.unique(batch_index):
             batch_mask = batch_index == bidx
             labels_batch = cluster_label[batch_mask]
             slabels = segment_label[batch_mask]
             clabels = fragment_label[batch_mask]
+            batch_pos = label_pos[batch_mask]
             for c in np.unique(slabels):
                 gt = clabels[slabels == c]
                 x = torch.Tensor(gt).to(dtype=torch.long)
-                d = GraphData(x=x)
+                pos = batch_pos[slabels == c]
+                d = GraphData(x=x, pos=pos)
                 label_list.append(d)
         node_truth = GraphBatch.from_data_list(label_list)
         self._node_truth = node_truth
@@ -409,14 +420,40 @@ class ClusterGraphConstructor:
         for entry in entry_list:
             batch_id, semantic_id = self.get_batch_and_class(entry)
             subgraph = self.get_graph(batch_id, semantic_id)
+
+            # Sort rows
+            if isinstance(subgraph.pos, torch.Tensor):
+                entry_pos = subgraph.pos.cpu().numpy()
+            else:
+                entry_pos = subgraph.pos
+            # entry_perm = np.lexsort(entry_pos.T)
+            # print(entry_pos[entry_perm])
+
+
             batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
             labels = self._node_truth.get_example(entry).x
-            pred = self.node_pred[batch_index]
+            temp = self._node_truth.get_example(entry).pos
+
+            if isinstance(temp, torch.Tensor):
+                label_pos = temp.cpu().numpy()
+            else:
+                label_pos = temp
+            label_perm = np.lexsort(label_pos.T)
+            # print(label_pos)
+            # print(label_pos[label_perm])
+
+            # assert False
+            # print(self.node_pred.get_example(entry).pos)
+            pred = self.node_pred.get_example(entry).x
+            # print(pred.unique())
+            # print(labels.unique())
             for f in metrics:
                 score = f(pred, labels)
+                # print(score)
                 add_columns[f.__name__].append(score)
         
         self._info = self._info.assign(**add_columns)
+        return self.info
 
 
     @property
