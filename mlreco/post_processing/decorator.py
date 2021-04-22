@@ -29,7 +29,8 @@ def post_processing(filename, data_capture, output_capture):
             'clust_data': 'cluster_label',
             'seg_label': 'segment_label',
             'kinematics': 'kinematics_label',
-            'points_label': 'particles_label'
+            'points_label': 'particles_label',
+            'particles': 'particles_asis'
         }
         def wrapper(cfg, module_cfg, data_blob, res, logdir, iteration):
             # The config block should have the same name as the analysis function

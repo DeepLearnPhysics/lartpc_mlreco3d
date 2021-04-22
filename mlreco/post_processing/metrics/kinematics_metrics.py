@@ -17,9 +17,9 @@ def extent(voxels):
                 ['seg_label', 'clust_data', 'particles', 'kinematics', 'particle_graph'],
                 ['kinematics_particles', 'node_pred_type', 'node_pred_p', 'flow_edge_pred', 'kinematics_edge_index'])
 def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        seg_label=None, clust_data=None, particles=None, kinematics=None,
+                        data_idx=None, seg_label=None, clust_data=None, particles=None, kinematics=None,
                         particle_graph=None, kinematics_particles=None, node_pred_type=None,
-                        node_pred_p=None, flow_edge_prd=None, kinematics_edge_index=None, counter=None, **kwargs):
+                        node_pred_p=None, flow_edge_pred=None, kinematics_edge_index=None, counter=None, **kwargs):
     """
     Compute metrics for particle hierarchy + kinematics stage (GNN).
 
@@ -45,7 +45,7 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     # Loop over events
     particle_graph_idx = counter
     if particle_graph_idx >= len(particle_graph) or np.unique(particle_graph[particle_graph_idx][:, -1])[0] != data_idx:
-        print(iteration, tree_idx, "No particle graph")
+        print("No particle graph")
         return (), ()
 
     pred_particles = kinematics_particles[data_idx]
@@ -92,7 +92,7 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         pred_num_parents = np.count_nonzero(edge_pred[parent_index])
         overlap_num_parents = np.count_nonzero(edge_assn[parent_index] & (edge_assn[parent_index] == edge_pred[parent_index]))
 
-        row_values.append((iteration, tree_idx, true_cluster_id, node_true_type[i], node_pred_type[i].argmax(),
+        row_values.append((true_cluster_id, node_true_type[i], node_pred_type[i].argmax(),
                     node_true_p[i], node_pred_p[i][0], len(pred_voxels), pred_voxels[:, 4].sum(),
                     len(true_voxels), true_voxels[:, 4].sum(), p.pdg_code(), p.energy_deposit(), p.energy_init(),
                     p.px(), p.py(), p.pz(), true_d.max(), true_d.std(), pred_d.max(), pred_d.std(),
@@ -100,7 +100,7 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                     true_num_parents, pred_num_parents, overlap_num_parents,
                     edge_accuracy, existing_edge_accuracy, nonexisting_edge_accuracy, num_existing_edges, num_nonexisting_edges))
 
-        row_names.append(('iter', 'idx', 'true_cluster_id', 'true_type', 'pred_type',
+        row_names.append(('true_cluster_id', 'true_type', 'pred_type',
                     'true_p', 'pred_p', 'pred_num_voxels', 'pred_sum_voxels',
                     'true_num_voxels', 'true_sum_voxels', 'pdg', 'energy_deposit', 'energy_init',
                     'px', 'py', 'pz', 'true_spatial_extent', 'true_spatial_std', 'pred_spatial_extent', 'pred_spatial_std',

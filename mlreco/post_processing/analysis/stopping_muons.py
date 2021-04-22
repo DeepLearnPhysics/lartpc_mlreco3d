@@ -34,7 +34,7 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
     spatial_size = module_cfg.get('spatial_size', 768)
     track_label = module_cfg.get('track_label', 1)
     threshold = module_cfg.get('threshold', 10)
-    segment_length = module_cfg.get('segment_length', 7)
+    segment_length = module_cfg.get('segment_length', 10)
     min_overlap = module_cfg.get('min_overlap', 10)
     segment_threshold = module_cfg.get('segment_threshold', 3)
     dEdx_ratio = module_cfg.get('dEdx_ratio', 3.)
@@ -45,10 +45,12 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
     # Use pdg + end position to make sure it is
     # stopping in the volume.
     true_stopping_muons = []
+    true_muons = []
     for part_id in np.unique(clust_data[data_idx][:, 6]):
         p = particles_asis[data_idx][int(part_id)]
         if p.pdg_code() in [13, -13]:
             #print("Muon!")
+            true_muons.append(part_id)
             end_position = np.array([
                 p.end_position().x(),
                 p.end_position().y(),
@@ -56,10 +58,14 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
             ])
             voxels = clust_data[data_idx][clust_data[data_idx][:, 6] == part_id][:, :3]
             d = cdist(voxels, [end_position])
-            end_voxel = voxels[d.argmax(axis=0)]
+            end_voxel = voxels[d.argmin(axis=0)]
             if (end_voxel > threshold).all() and (end_voxel < spatial_size - threshold).all():
                 #print("\t stopping!", end_position, end_voxel)
                 true_stopping_muons.append(part_id)
+            #else:
+            #    print("Discarding", part_id, end_position, end_voxel)
+    print('true stopping muons', true_stopping_muons)
+    true_stopping_muons = np.array(true_stopping_muons)
 
     # Then identify predicted stopping muons.
     # =======================================
@@ -107,18 +113,18 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
         if len(dEdx) <= 2*segment_threshold:
             continue
 
-        keep = True
         # Check if there is a Bragg peak
         # print(np.argmax(dEdx - dEdx.mean()), len(dEdx))
         # keep = keep and not len(dEdx) <= 2*segment_threshold
 
         # Use segment_threshold to exclude when dEdx maximum
         # occurs far from edges
-        keep = keep and not (dEdx.argmax() > segment_threshold and dEdx.argmax() < len(dEdx) - segment_threshold)
+        keep1 = (dEdx.argmax() < segment_threshold or dEdx.argmax() >= len(dEdx) - segment_threshold)
 
         # Compare maximum dEdx to mean far from edges
-        keep = keep and not (dEdx.max() <= dEdx_ratio * dEdx[segment_threshold:-segment_threshold].mean())
+        keep2 = (dEdx.max() > dEdx_ratio * dEdx[segment_threshold:-segment_threshold].mean())
 
+        keep = keep1 and keep2
         # Check if can be associated to one of the true stopping muons
         # using pixel overlap
         matched = False
@@ -126,7 +132,7 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
         true_p = -1
         if len(true_stopping_muons):
             overlaps = np.array([(clust_data[data_idx][p, 6] == true_p).sum() for true_p in true_stopping_muons])
-            #print(overlaps.max())
+            print('max overlap', overlaps)
             if overlaps.max() > min_overlap:
                 matched = True
                 true_p = true_stopping_muons[overlaps.argmax()]
@@ -136,15 +142,26 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
         row_names.append(('argmax_dEdx', 'max_dEdx', 'num_segments',
                         'mean_dEdx', 'mean_dEdx_corr', 'std_dEdx', 'std_dEdx_corr', 'min_dEdx', 'voxel_count',
                         'average_dx', 'average_dE', 'average_dn',
-                        'matched', 'overlap', 'true_p', 'keep'))
+                        'matched', 'overlap', 'true_p', 'keep', 'keep1', 'keep2'))
         row_values.append((np.argmax(dEdx), np.max(dEdx), len(dEdx),
                         dEdx.mean(), dEdx[segment_threshold:-segment_threshold].mean(), dEdx.std(), dEdx[segment_threshold:-segment_threshold].std(), dEdx.min(), voxels.shape[0],
                         dx.mean(), dE.mean(), dn.mean(),
-                        matched, overlap, true_p, keep))
+                        matched, overlap, true_p, keep, keep1, keep2))
+
+    true_stopping_muons_matching = np.array(true_stopping_muons_matching)
 
     row_names_true, row_values_true = [], []
-    for idx, part_id in enumerate(true_stopping_muons):
-        row_names_true.append(("id", "matched"))
-        row_values_true.append((part_id, true_stopping_muons_matching[idx]))
+    for idx, part_id in enumerate(true_muons):
+        p = particles_asis[data_idx][int(part_id)]
+        row_names_true.append(("id", "matched", "keep",
+                                "end_x", "end_y", "end_z",
+                                "pdg"))
+        matched = -1
+        if part_id in true_stopping_muons:
+            matched = true_stopping_muons_matching[np.where(true_stopping_muons == part_id)[0]][0]
+        print('matched', matched)
+        row_values_true.append((part_id, matched, part_id in true_stopping_muons,
+                                p.end_position().x(), p.end_position().y(), p.end_position().z(),
+                                p.pdg_code()))
 
     return [(row_names, row_values), (row_names_true, row_values_true)]

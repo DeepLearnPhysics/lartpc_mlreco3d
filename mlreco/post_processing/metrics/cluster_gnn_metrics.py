@@ -181,8 +181,15 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                         np.sum(px), np.sum(py), np.sum(pz), nu_id[0], pred_primaries_accuracy)
 
     else:
+        integrated_metrics = module_cfg.get('integrated_metrics', False)
         # Evaluate clustering metrics
-        ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
+        if integrated_metrics:
+            print('integrated metrics')
+            ari, ami, sbd, pur, eff = clustering_metrics(np.hstack(clusts[data_idx])[:, None],
+                                                        np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(group_ids)]),
+                                                        np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(node_pred)]))
+        else:
+            ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
         primary_accuracy = -1.
         if node_pred_primary is not None:
             primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
