@@ -41,8 +41,6 @@ class GraphSPICE(nn.Module):
 
     def __init__(self, cfg, name='graph_spice'):
         super(GraphSPICE, self).__init__()
-        print('--------------------CFG----------------------------')
-        pprint(cfg)
         print('--------------------GraphSPICE---------------------')
         self.model_config = cfg[name]
         pprint(self.model_config)
@@ -60,6 +58,8 @@ class GraphSPICE(nn.Module):
 
         # Cluster Graph Manager
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
+        print('--------------------1---------------------')
+        pprint(constructor_cfg)
         self.gs_manager.training = self.training
 
 
@@ -148,6 +148,8 @@ class GraphSPICELoss(nn.Module):
         self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
 
         constructor_cfg = self.loss_config['constructor_cfg']
+        print('--------------------1---------------------')
+        pprint(constructor_cfg)
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
         self.gs_manager.training = ~self.eval_mode
         # print("LOSS FN = ", self.loss_fn)
