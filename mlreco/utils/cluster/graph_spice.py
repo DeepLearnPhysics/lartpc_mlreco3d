@@ -188,6 +188,7 @@ class ClusterGraphConstructor:
         # print(labels)
 
         graph_id = 0
+        index = 0
 
         self._info = []
 
@@ -206,7 +207,7 @@ class ClusterGraphConstructor:
                 data = GraphData(x=features_class,
                                  pos=coords_class, 
                                  edge_index=edge_indices)
-                graph_id_key = dict(Index=0, 
+                graph_id_key = dict(Index=index, 
                                     BatchID=int(bidx), 
                                     SemanticID=int(c), 
                                     GraphID=graph_id)
@@ -218,6 +219,7 @@ class ClusterGraphConstructor:
                     truth = self.get_edge_truth(edge_indices, frag_labels)
                     data.edge_truth = truth
                 data_list.append(data)
+            index += 1
 
         self._info = pd.DataFrame(self._info)
         self.data_list = data_list
@@ -322,9 +324,9 @@ class ClusterGraphConstructor:
         edge_logits = subgraph.edge_attr.detach().cpu().numpy()
         edge_probs = expit(edge_logits)
         pos_edges = edges[edge_probs > self.ths]
-
-        edges = [(e[0], e[1], w) for e, w in zip(pos_edges, edge_probs)]
-        G.add_weighted_edges_from(edges)
+        pos_probs = edge_probs[edge_probs > self.ths]
+        pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
+        G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
         for i, comp in enumerate(nx.connected_components(G)):
             if len(comp) < min_points:
@@ -368,7 +370,8 @@ class ClusterGraphConstructor:
     
     def evaluate_nodes(self, cluster_label : np.ndarray, 
                              metrics : List[ Callable ], 
-                             skip=[]):
+                             skip=[],
+                             column_names=None):
         '''
         Evaluate accuracy metrics for node predictions using a list of
         scoring functions. 
@@ -416,6 +419,11 @@ class ClusterGraphConstructor:
         self._node_truth = node_truth
 
         add_columns = { f.__name__ : [] for f in metrics}
+        if column_names is None:
+            column_name_map = { f.__name__ : f.__name__ for f in metrics}
+        else:
+            column_name_map = { f.__name__ : name for f,name \
+                                in zip(metrics, column_names)}
 
         for entry in entry_list:
             batch_id, semantic_id = self.get_batch_and_class(entry)
@@ -453,6 +461,7 @@ class ClusterGraphConstructor:
                 add_columns[f.__name__].append(score)
         
         self._info = self._info.assign(**add_columns)
+        self._info.rename(columns=column_name_map, inplace=True)
         return self.info
 
 

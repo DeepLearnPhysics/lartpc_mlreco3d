@@ -178,6 +178,8 @@ class GraphSPICELoss(nn.Module):
         if not self.eval_mode:
             result['edge_truth'] = [graph.edge_truth]
 
+        print(result.keys())
+
         res = self.loss_fn(result, slabel, clabel)
 
         # Evaluate Graph with respect to cluster_label
