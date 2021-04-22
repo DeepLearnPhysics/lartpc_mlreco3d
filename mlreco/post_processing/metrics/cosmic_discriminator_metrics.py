@@ -15,7 +15,7 @@ def extent(voxels):
 @post_processing('cosmic-discriminator-metrics', ['clust_data', 'particles'], ['interactions', 'inter_cosmic_pred'])
 def cosmic_discriminator_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                                 data_idx=None, clust_data=None, particles=None,
-                                interactions=None, inter_cosmic_pred=None):
+                                interactions=None, inter_cosmic_pred=None, **kwargs):
     N = module_cfg.get('spatial_size', 768)
     enable_physics_metrics = module_cfg.get('enable_physics_metrics', False)
     spatial_size = module_cfg.get('spatial_size', 768)

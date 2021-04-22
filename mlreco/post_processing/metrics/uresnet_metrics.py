@@ -3,7 +3,7 @@ import scipy
 import os
 from mlreco.utils import CSVData
 
-def uresnet_metrics(cfg, data_blob, res, logdir, iteration):
+def uresnet_metrics(cfg, module_cfg, data_blob, res, logdir, iteration):
     # UResNet prediction
     if not 'segmentation' in res: return
 
@@ -30,7 +30,7 @@ def uresnet_metrics(cfg, data_blob, res, logdir, iteration):
 
         predictions = np.argmax(segment_data[data_idx],axis=1)
         label = segment_label[data_idx][:, -1]
-        
+
         acc = (predictions == label).sum() / float(len(label))
         class_acc = []
         pix = []
@@ -42,7 +42,7 @@ def uresnet_metrics(cfg, data_blob, res, logdir, iteration):
         fout.record(('idx', 'acc') + tuple(['confusion_%d_%d' % (c1, c2) for c1 in range(num_classes) for c2 in range(num_classes)]) + tuple(['num_pix_%d_%d' % (c1, c2) for c1 in range(num_classes) for c2 in range(num_classes)]),
                     (tree_idx, acc) + tuple(class_acc) + tuple(pix))
         fout.write()
-        
+
 
         if not store_per_iteration: fout.close()
 

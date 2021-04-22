@@ -345,7 +345,7 @@ def parse_particle_coords(data):
     return particle_feats[:,:3], particle_feats[:,3:]
 
 
-def parse_particle_points(data):
+def parse_particle_points(data, include_point_tagging=False):
     """
     A function to retrieve particles ground truth points tensor, returns
     points coordinates, types and particle index.
@@ -369,12 +369,20 @@ def parse_particle_points(data):
     # For open data - to reproduce
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
+    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
+    if include_point_tagging:
+        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
+
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]
-        return part_info[:, :3], np.column_stack([part_info[:, -6],part_info[:, -1]])
+        return part_info[:, :3], np_values
     else:
         #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
-        return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 2), dtype=np.float32)
+        return np.empty(shape=(0, 3), dtype=np.int32), np_values
+
+
+def parse_particle_points_with_tagging(data):
+    return parse_particle_points(data, include_point_tagging=True)
 
 
 def parse_particle_graph(data):

@@ -27,7 +27,7 @@ def fit_predict(embeddings, seediness, margins, fitfunc,
     #if seediness_copy.shape[0] == 1:
     #    return np.argmax(seediness_copy)
     while count < int(seediness.shape[0]):
-        print("while", count,  int(seediness.shape[0]))
+        #print("while", count,  int(seediness.shape[0]))
         i = np.argsort(seediness_copy.squeeze())[-1]
         seedScore = seediness[i]
         if seedScore < s_threshold:

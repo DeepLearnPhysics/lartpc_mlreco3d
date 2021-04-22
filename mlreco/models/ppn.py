@@ -94,6 +94,7 @@ class PPN(torch.nn.Module):
         self._downsample_ghost = self._model_config.get('downsample_ghost', False)
         self._use_encoding = self._model_config.get('use_encoding', False)
         self._use_true_ghost_mask = self._model_config.get('use_true_ghost_mask', False)
+        self._classify_endpoints = self._model_config.get('classify_endpoints', False)
         self._ppn_num_conv = self._model_config.get('ppn_num_conv', 1)
         self._ppn1_size = self._model_config.get('ppn1_size', -1)
         self._ppn2_size = self._model_config.get('ppn2_size', -1)
@@ -139,6 +140,9 @@ class PPN(torch.nn.Module):
         self.ppn3_pixel_pred = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], self._dimension, 3, False)
         self.ppn3_scores = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], 2, 3, False)
         self.ppn3_type = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], num_classes, 3, False)
+        # Classify track endpoints into start/end points
+        if self._classify_endpoints:
+            self.ppn3_endpoint = scn.SubmanifoldConvolution(self._dimension, nPlanes[0], 2, 3, False)
 
         self.add_labels1 = AddLabels()
         self.add_labels2 = AddLabels()
@@ -211,6 +215,9 @@ class PPN(torch.nn.Module):
         ppn3_pixel_pred = self.ppn3_pixel_pred(z)
         ppn3_scores = self.ppn3_scores(z)
         ppn3_type = self.ppn3_type(z)
+        if self._classify_endpoints:
+            ppn3_endpoint = self.ppn3_endpoint(z)
+
         pixel_pred = ppn3_pixel_pred.features
         scores = ppn3_scores.features
         point_type = ppn3_type.features
@@ -230,13 +237,16 @@ class PPN(torch.nn.Module):
         if self._downsample_ghost:
             result['ghost_mask1'] = [ghost_mask1]
             result['ghost_mask2'] = [ghost_mask2]
+        if self._classify_endpoints:
+            result['classify_endpoints'] = [ppn3_endpoint.features]
+
         return result
 
 
 class PPNLoss(torch.nn.modules.loss._Loss):
     """
     Loss for PPN.
-    
+
     Configuration TO BE COMPLETED
     -------------
     downsample_ghost: bool, optional
@@ -265,6 +275,7 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         self.half_stride = int((self._num_strides-1)/2.0)
         self.half_stride2 = int(self._num_strides/2.0)
         self._downsample_ghost = self._cfg.get('downsample_ghost', False)
+        self._classify_endpoints = self._cfg.get('classify_endpoints', False)
         self._weight_ppn1 = self._cfg.get('weight_ppn1', 1.0)
         self._weight_distance = self._cfg.get('weight_distance', 1.0)
 
@@ -285,6 +296,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         self._ppn1_size = self._cfg.get('ppn1_size', -1)
         self._ppn2_size = self._cfg.get('ppn2_size', -1)
         self._spatial_size = self._cfg.get('spatial_size', 512)
+        self._track_label = self._cfg.get('track_label', 1)
+
         self.ppn1_stride, self.ppn2_stride = define_ppn12(self._ppn1_size, self._ppn2_size, self._spatial_size, self._num_strides)
 
     def distances(self, v1, v2):
@@ -304,13 +317,14 @@ class PPNLoss(torch.nn.modules.loss._Loss):
         batch_ids = [d[:, -2] for d in segment_label]
         total_loss = 0.
         total_acc = 0.
-        ppn_count = 0.
+        ppn_count, ppn_track_count = 0., 0.
         total_distance, total_class = 0., 0.
         total_loss_ppn1, total_loss_ppn2 = 0., 0.
         total_acc_ppn1, total_acc_ppn2 = 0., 0.
         total_fraction_positives_ppn1, total_fraction_negatives_ppn1 = 0., 0.
         total_fraction_positives_ppn2, total_fraction_negatives_ppn2 = 0., 0.
         total_acc_type, total_loss_type = 0., 0.
+        total_acc_classify_endpoints, total_loss_classify_endpoints = 0., 0.
         num_labels = 0.
         num_discarded_labels_ppn1, num_discarded_labels_ppn2 = 0., 0.
         total_num_positives_ppn1, total_num_positives_ppn2 = 0., 0.
@@ -333,8 +347,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                 event_ppn2_scores = result['ppn2'][i][ppn2_batch_index][:, -2:]  # (N2, 2)
 
                 # PPN stuff
-                event_label = event_particles[event_particles[:, -3] == b][:, :-3]  # (N_gt, 3)
-                event_types_label = event_particles[event_particles[:, -3] == b][:, -2]
+                event_label = event_particles[event_particles[:, -4] == b][:, :-4]  # (N_gt, 3)
+                event_types_label = event_particles[event_particles[:, -4] == b][:, -3]
                 if event_label.size(0) > 0:
                     # Mask: only consider pixels that were selected
                     event_mask = result['mask_ppn2'][i][batch_index]
@@ -537,6 +551,37 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         total_loss_type += loss_type
                         total_loss += loss_type.float()
 
+                    if self._classify_endpoints:
+                        tracks = event_types_label[torch.argmin(distances_positives, dim=0)] == self._track_label
+                        if tracks.sum().item() > 0:
+                            # Start and end points separately in case of overlap
+                            loss_point_class, acc_point_class, point_class_count = 0., 0., 0.
+                            for point_class in range(2):
+                                point_class_mask = event_particles[event_particles[:, -4] == b][:, -1] == point_class
+                                #true = event_particles[event_particles[:, -4] == b][torch.argmin(distances_positives, dim=0), -1]
+                                point_class_positives = (d_true[point_class_mask, :] < self._true_distance_ppn3).any(dim=0)
+                                point_class_index = d[point_class_mask, :][:, point_class_positives]
+
+                                if point_class_index.nelement():
+                                    point_class_index = torch.argmin(point_class_index, dim=0)
+
+                                    true = event_particles[event_particles[:, -4] == b][point_class_mask][point_class_index, -1]
+                                    #pred = result['classify_endpoints'][i][batch_index][event_mask][positives]
+                                    pred = result['classify_endpoints'][i][batch_index][event_mask][point_class_positives]
+                                    tracks = event_types_label[point_class_index] == self._track_label
+                                    if tracks.sum().item():
+                                        loss_point_class += torch.mean(self.cross_entropy(pred[tracks].double(), true[tracks].long()))
+                                        acc_point_class += (torch.argmax(pred[tracks], dim=-1) == true[tracks]).sum().item() / float(true[tracks].nelement())
+                                        point_class_count += 1
+
+                            if point_class_count:
+                                loss_classify_endpoints = loss_point_class / point_class_count
+                                acc_classify_endpoints = acc_point_class / point_class_count
+                            #total_loss += loss_classify_endpoints.float()
+                            total_loss_classify_endpoints += loss_classify_endpoints
+                            total_acc_classify_endpoints += acc_classify_endpoints
+                            ppn_track_count += 1
+
                     total_loss_ppn1 += loss_seg_ppn1
                     total_loss_ppn2 += loss_seg_ppn2
                     total_acc_ppn1 += acc_ppn1
@@ -562,6 +607,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
             'fraction_negatives_ppn2': total_fraction_negatives_ppn2,
             'acc_ppn_type': total_acc_type,
             'loss_type': total_loss_type,
+            'acc_ppn_classify_endpoints': total_acc_classify_endpoints,
+            'loss_classify_endpoints': total_loss_classify_endpoints,
             'num_labels': num_labels,
             'num_discarded_labels_ppn1': num_discarded_labels_ppn1,
             'num_discarded_labels_ppn2': num_discarded_labels_ppn2,
@@ -575,5 +622,10 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     ppn_results[key] = ppn_results[key].cuda()
         if ppn_count > 0:
             for key in ppn_results:
-                ppn_results[key] = ppn_results[key] / float(ppn_count)
+                if 'classify_endpoints' in key:
+                    ppn_results[key] = ppn_results[key] / float(ppn_track_count)
+                else:
+                    ppn_results[key] = ppn_results[key] / float(ppn_count)
+            ppn_results['ppn_loss'] += ppn_results['loss_classify_endpoints']
+
         return ppn_results
