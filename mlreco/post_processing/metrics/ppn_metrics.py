@@ -72,7 +72,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2)
 
         if ppn.shape[0] == 0:
-            continue
+            return [([], []), ([], [])]
 
         # Remove delta from predicted points
         #ppn = ppn[ppn[:, -1] != delta]

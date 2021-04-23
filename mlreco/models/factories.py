@@ -22,7 +22,6 @@ def model_dict():
     from . import vae
     from . import pointnet_gen
 
-    from . import ghost_chain_2
     from . import particle_types
     from . import full_cnn
     from . import full_chain
@@ -63,8 +62,6 @@ def model_dict():
         "hierarchy_gnn": (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         # Particle image classifier
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
-        # Deghosting models
-        "ghost_chain": (ghost_chain_2.GhostChain2, ghost_chain_2.GhostChain2Loss),
         # CNN chain with UResNet+PPN+SPICE with a single encoder
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         # Full reconstruction chain, including an option for deghosting
