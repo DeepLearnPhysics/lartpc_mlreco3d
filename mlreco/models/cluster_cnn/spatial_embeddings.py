@@ -119,6 +119,8 @@ class SpatialEmbeddings1(UResNet):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
+        print(self.outputEmbeddings)
+
 
     def seed_decoder(self, features_enc, deepest_layer):
         '''

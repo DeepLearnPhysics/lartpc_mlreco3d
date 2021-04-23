@@ -235,6 +235,7 @@ class GNN(torch.nn.Module):
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
+        # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
 
         # If extra features are provided separately, add them

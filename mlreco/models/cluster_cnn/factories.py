@@ -1,3 +1,6 @@
+from mlreco.models.cluster_cnn import losses
+
+
 def backbone_dict():
     """
     returns dictionary of clustering models
@@ -14,16 +17,41 @@ def backbone_dict():
     return models
 
 
+def gs_kernel_dict():
+    '''
+    Returns dictionary of kernel function models.
+    '''
+    from . import gs_kernels
+    kernels = {
+        'bilinear': gs_kernels.BilinearKernel,
+        'bilinear_mlp': gs_kernels.BilinearNNKernel
+    }
+    return kernels
+
+
+def gs_kernel_construct(cfg):
+    models = gs_kernel_dict()
+    name = cfg['name']
+    num_features = cfg['num_features']
+    args = cfg.get('args', {})
+    if not name in models:
+        raise Exception("Unknown kernel function name provided")
+    return models[name](num_features=num_features, **args)
+
+
 def cluster_model_dict():
     '''
     Returns dictionary of implemented clustering layers.
     '''
-    from . import embeddings
+    from . import spatial_embeddings
+    from . import graph_spice
+    from mlreco.mink.cluster.embeddings import SPICE as MinkSPICE
     models = {
-        "single": None,
-        "multi": embeddings.ClusterEmbeddings,
-        "multi_fpn": embeddings.ClusterEmbeddingsFPN,
-        "multi_stack": embeddings.StackedEmbeddings
+        "spice_cnn": spatial_embeddings.SpatialEmbeddings1,
+        "spice_cnn_me": MinkSPICE,
+        "spice_cnn_lite": spatial_embeddings.SpatialEmbeddingsLite,
+        "graph_spice_embedder": graph_spice.GraphSPICEEmbedder,
+        # "graphgnn_spice": graphgnn_spice.SparseOccuSegGNN
     }
     return models
 
@@ -33,6 +61,7 @@ def spice_loss_dict():
     Returns dictionary of various clustering losses with enhancements.
     '''
     from . import losses
+    # from .graphgnn_spice import SparseOccuSegGNNLoss
     loss = {
         # Hyperspace Clustering Losses
         'single': losses.single_layers.DiscriminativeLoss,
@@ -52,7 +81,9 @@ def spice_loss_dict():
         'se_lovasz_inter_bc': losses.spatial_embeddings.MaskLovaszInterBC,
         # SPICE Losses Vectorized
         'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
-        'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss
+        'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss,
+        'graph_spice_loss': losses.gs_embeddings.NodeEdgeHybridLoss,
+        # 'graphgnn_spice_loss': SparseOccuSegGNNLoss
     }
     return loss
 
@@ -64,11 +95,11 @@ def backbone_construct(name):
     return models[name]
 
 
-def cluster_model_construct(name):
+def cluster_model_construct(cfg, name):
     models = cluster_model_dict()
     if not name in models:
         raise Exception("Unknown clustering model name provided")
-    return models[name]
+    return models[name](cfg)
 
 
 def spice_loss_construct(name):

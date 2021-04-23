@@ -59,7 +59,9 @@ class ClusterCNN(SpatialEmbeddings1):
 
     def __init__(self, cfg):
         super(ClusterCNN, self).__init__(cfg)
-        #print(self)
+        print(self)
+        print('Total Number of Trainable Parameters = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
 
 class ClusterCNN2(SpatialEmbeddingsLite):

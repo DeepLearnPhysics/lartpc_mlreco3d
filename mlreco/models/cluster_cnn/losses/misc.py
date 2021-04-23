@@ -188,6 +188,41 @@ def bhattacharyya_coeff_matrix(v1, v2, eps=1e-6):
     return out
 
 
+def get_graphspice_logits(sp_emb, ft_emb, cov, groups,
+                          sp_centroids, ft_centroids, 
+                          eps=0.001,
+                          compute_accuracy=True):
+
+    device = sp_emb.device
+    cov_means = find_cluster_means(cov, groups)
+
+    # Compute spatial term
+    sp_emb_tmp = sp_emb[:, None, :]
+    sp_centroids_tmp = sp_centroids[None, :, :]
+    sp_cov = torch.clamp(cov_means[:, 0][None, :], min=eps)
+    sp_sqdists = ((sp_emb_tmp - sp_centroids_tmp)**2).sum(-1) / (sp_cov**2)
+
+    # Compute feature term
+    ft_emb_tmp = ft_emb[:, None, :]
+    ft_centroids_tmp = ft_centroids[None, :, :]
+    ft_cov = torch.clamp(cov_means[:, 0][None, :], min=eps)
+    ft_sqdists = ((ft_emb_tmp - ft_centroids_tmp)**2).sum(-1) / (ft_cov**2)
+
+    # Compute joint kernel score
+    pvec = torch.exp(-sp_sqdists - ft_sqdists)
+    # probs = (1-pvec).index_put((torch.arange(groups.shape[0]), groups),
+    #     torch.gather(pvec, 1, groups.view(-1, 1)).squeeze())
+    logits = logit_fn(pvec)
+
+    acc = None
+    eye = torch.eye(len(groups.unique()), dtype=torch.float32, device=device)
+    targets = eye[groups]
+    if compute_accuracy:
+        acc = iou_batch(logits > 0, targets.bool())
+
+    return logits, acc, targets
+
+
 class FocalLoss(nn.Module):
     '''
     Original Paper: https://arxiv.org/abs/1708.02002

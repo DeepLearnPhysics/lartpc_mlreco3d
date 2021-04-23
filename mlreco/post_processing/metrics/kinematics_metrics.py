@@ -2,7 +2,7 @@ import numpy as np
 
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics, edge_assignment_from_graph
-from mlreco.utils.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
+from mlreco.utils.cluster.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
 from mlreco.utils.metrics import *
 from mlreco.utils.gnn.network import get_fragment_edges
 from mlreco.utils.gnn.cluster import get_cluster_label_np, get_momenta_label_np
