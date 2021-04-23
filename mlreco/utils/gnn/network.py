@@ -30,6 +30,7 @@ def complete_graph(batches, dist=None, max_dist=-1):
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
+    print("batches = ", batches)
     # Create the incidence matrix
     ids = np.arange(len(batches))
     edges = [[i, j] for i in ids for j in ids if (batches[i] == batches[j] and j > i)]

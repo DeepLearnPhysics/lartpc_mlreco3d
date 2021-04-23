@@ -14,7 +14,10 @@ class ParticleImageClassifier(nn.Module):
         super(ParticleImageClassifier, self).__init__()
         self.encoder = ResidualEncoder(cfg)
         self.num_classes = cfg[name].get('num_classes', 5)
-        self.final_layer = nn.Linear(self.encoder.num_features, self.num_classes)
+        self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
+
+        print('Total Number of Trainable Parameters = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, input):
         point_cloud, = input

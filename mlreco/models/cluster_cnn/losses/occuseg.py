@@ -9,13 +9,30 @@ from .lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
 from .misc import *
 from collections import defaultdict
 
+class WeightedEdgeLoss(nn.Module):
+
+    def __init__(self, reduction='none'):
+        super(WeightedEdgeLoss, self).__init__()
+        self.reduction = reduction
+        self.loss_fn = F.binary_cross_entropy_with_logits
+
+    def forward(self, x, y):
+        device = x.device
+        weight = torch.ones(y.shape[0]).to(device)
+        with torch.no_grad():
+            num_pos = torch.sum(y).item()
+            num_edges = y.shape[0]
+            w = 1.0 / (1.0 - float(num_pos) / num_edges)
+            weight[~y.bool()] = w
+        loss = self.loss_fn(x, y, weight=weight, reduction=self.reduction)
+        return loss
 
 class OccuSegLoss(nn.Module):
     '''
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
-    def __init__(self, cfg, name='spice_loss'):
+    def __init__(self, cfg, name='graph_spice_loss'):
         super(OccuSegLoss, self).__init__()
         self.loss_config = cfg[name]
         self.batch_column = self.loss_config.get('batch_column', 3)

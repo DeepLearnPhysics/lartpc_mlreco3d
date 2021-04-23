@@ -24,6 +24,7 @@ class SPICELoss(nn.Module):
 
         self.mask_loss_fn = self.loss_config.get('mask_loss_fn', 'BCE')
         self.seed_loss_fn = self.loss_config.get('seed_loss_fn', 'L1')
+        self.batch_loc = self.loss_config.get('batch_loc', 3)
 
         if self.mask_loss_fn == 'BCE':
             self.mask_loss = nn.BCEWithLogitsLoss(reduction='none')
@@ -104,7 +105,6 @@ class SPICELoss(nn.Module):
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
-
         OUTPUT:
             loss_segs (list): list of computed loss values for each semantic class.
             loss[i] = computed DLoss for semantic class <i>.
@@ -149,7 +149,7 @@ class SPICELoss(nn.Module):
             #    coords = coords.cuda()
             slabels = slabels.int()
             clabels = group_label[i][:, -1]
-            batch_idx = segment_label[i][:, 3]
+            batch_idx = segment_label[i][:, self.batch_loc]
             embedding = out['embeddings'][i]
             seediness = out['seediness'][i]
             margins = out['margins'][i]
@@ -271,7 +271,6 @@ class SPICEInterLoss(SPICELoss):
             features (torch.Tensor): pixel embeddings
             slabels (torch.Tensor): semantic labels
             clabels (torch.Tensor): group/instance/cluster labels
-
         OUTPUT:
             loss_segs (list): list of computed loss values for each semantic class.
             loss[i] = computed DLoss for semantic class <i>.

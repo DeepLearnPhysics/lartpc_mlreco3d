@@ -1,2 +1,1 @@
-import mlreco.models.cluster_cnn.losses.multi_layers
-import mlreco.models.cluster_cnn.losses.spatial_embeddings_fast
+from . import multi_layers, lovasz, single_layers, spatial_embeddings, spatial_embeddings_fast, gs_embeddings

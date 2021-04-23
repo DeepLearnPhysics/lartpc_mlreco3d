@@ -147,7 +147,7 @@ def node_encoder_dict():
         "mix2"      : mixed.ClustMixNodeEncoder2,
         "mix_debug" : mixed.ClustMixNodeEncoder3,
         "gnn"       : gnn.ClustGNNNodeEncoder,
-        # "mink_cnn": MinkCNNNodeEncoder
+        "cnn_mink": cnn.ClustCNNMinkNodeEncoder
     }
 
     return encoders
@@ -171,7 +171,8 @@ def edge_encoder_dict():
         "mix"       : mixed.ClustMixEdgeEncoder,
         "mix2"      : mixed.ClustMixEdgeEncoder2,
         "mix_debug" : mixed.ClustMixEdgeEncoder3,
-        "gnn"       : gnn.ClustGNNEdgeEncoder
+        "gnn"       : gnn.ClustGNNEdgeEncoder,
+        "cnn_mink": cnn.ClustCNNMinkEdgeEncoder
     }
 
     return encoders

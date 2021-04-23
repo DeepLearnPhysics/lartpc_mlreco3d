@@ -118,8 +118,6 @@ class SparseOccuSeg(UResNet):
             "features": [output_features]
         }
 
-        # for key, val in res.items():
-        #     print((val[0] != val[0]).any())
 
         return res
 
