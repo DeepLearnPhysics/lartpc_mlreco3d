@@ -343,3 +343,53 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
             # nu_id[interaction_ids == x] = idx
 
     return nu_id
+
+def get_particle_id(particles_v, nu_ids):
+    '''
+    Function that gives one of five labels to particles of
+    particle species predictions. This function ensures:
+    - Particles that do not originate from an MPV are labeled -1
+    - Particles that are not a track or a shower, and their
+      daughters, are labeled -1 (Michel and Delta)
+    - Particles that are neutron daughters are labeled -1
+    - All shower daughters are labeled the same as their primary. This
+      makes sense as otherwise an electron primary gets overruled by
+      its many photon daughters (voxel-wise majority vote). This can
+      lead to problems as, if an electron daughter is not clustered with
+      the primary, it is labeled electron, which is counter-intuitive.
+
+    Inputs:
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    type_labels = {
+        22: 0,  # photon
+        11: 1,  # e-
+        -11: 1, # e+
+        13: 2,  # mu-
+        -13: 2, # mu+
+        211: 3, # pi+
+        -211: 3, # pi-
+        2212: 4, # protons
+    }
+
+    particle_ids = np.empty(len(nu_ids))
+    for i in range(len(particle_ids)):
+        group_id = particles_v[i].group_id()
+
+        t = int(particles_v[group_id].pdg_code())
+        process = particles_v[group_id].creation_process()
+        shape = int(particles_v[group_id].shape())
+
+        if nu_ids[i] < 1: t = -1
+        if shape > 1: t = -1
+        if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
+
+        if t in type_labels.keys():
+            particle_ids[i] = type_labels[t]
+        else:
+            particle_ids[i] = -1
+
+    return particle_ids

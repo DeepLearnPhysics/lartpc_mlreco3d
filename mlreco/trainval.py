@@ -328,19 +328,24 @@ class trainval(object):
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
         while len(module_keys) > 0:
             module, config = module_keys.pop()
-            # print(module, config)
-            if 'freeze_weights' in config:
+            if config.get('freeze_weights', False):
                 model_name = config.get('model_name', module)
-                model_path = config['model_path']
+                model_path = config.get('model_path', None)
 
                 count = 0
-                with open(model_path, 'rb') as f:
-                    checkpoint = torch.load(f, map_location='cpu')
-                    for name, param in self._model.named_parameters():
-                        other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
-                        if module in name and 'module.' + other_name in checkpoint['state_dict'].keys():
-                            param.requires_grad = False
-                            count += 1
+                # with open(model_path, 'rb') as f:
+                #     checkpoint = torch.load(f, map_location='cpu')
+                #     for name, param in self._model.named_parameters():
+                #         other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                #         if module in name and 'module.' + other_name in checkpoint['state_dict'].keys():
+                #             param.requires_grad = False
+                #             count += 1
+                for name, param in self._model.named_parameters():
+                    other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                    if module in name and other_name in self._model.state_dict().keys():
+                        param.requires_grad = False
+                        count += 1
+
                 print('Freezing %d weights for a sub-module' % count,module)
 
             # Keep the BFS going

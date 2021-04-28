@@ -52,7 +52,7 @@ class CascadeNet(SCNNetworkBase):
             reduceBlock = self._resnet_block
         elif self.reduce_feature == 'conv':
             reduceBlock = self._block
-        elif self.reduce_feature = 'nin':
+        elif self.reduce_feature == 'nin':
             reduceBlock = self._nin_block
         else:
             raise ValueError('Invalid option for StackNet feature reducing layers.')
@@ -95,14 +95,14 @@ class CascadeNet(SCNNetworkBase):
                 stack_feature.append(f)
             else:
                 stack_feature.append(layer)
-        
+
         out = self.concat(stack_feature)
         out = self.cluster_decoder(out)
         out = self.embedding(out)
 
         res = {
             'segmentation': cnet_output['segmentation'],
-            'cluster_features': cluster_feature
+            'cluster_features': cluster_feature,
             'final_layer': [out]
             }
 

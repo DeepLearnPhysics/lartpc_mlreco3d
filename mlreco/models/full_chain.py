@@ -20,13 +20,59 @@ from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_clust
 
 class FullChain(torch.nn.Module):
     """
-    Modular, End-to-end LArTPC Reconstruction Chain:
+    Modular, End-to-end LArTPC Reconstruction Chain
+
     - Deghosting for 3D tomographic reconstruction artifiact removal
     - UResNet for voxel-wise semantic segmentation
     - PPN for point proposal
     - DBSCAN/PILOT/SPICE for dense particle clustering
     - GrapPA(s) for particle aggregation and identification
     - CNN for interaction classification
+
+    Configuration goes under the ``modules`` section.
+    The full chain-related sections (as opposed to each
+    module-specific configuration) look like this:
+
+    ..  code-block:: yaml
+
+          modules:
+            chain:
+              enable_uresnet: True
+              enable_ppn: True
+              enable_cnn_clust: True
+              enable_gnn_shower: True
+              enable_gnn_track: True
+              enable_gnn_particle: False
+              enable_gnn_inter: True
+              enable_gnn_kinematics: False
+              enable_cosmic: False
+              enable_ghost: True
+              use_ppn_in_gnn: True
+              verbose: True
+
+
+            # full chain loss and weighting
+            full_chain_loss:
+              segmentation_weight: 1.
+              clustering_weight: 1.
+              ppn_weight: 1.
+              particle_gnn_weight: 1.
+              shower_gnn_weight: 1.
+              track_gnn_weight: 1.
+              inter_gnn_weight: 1.
+              kinematics_weight: 1.
+              kinematics_p_weight: 1.
+              kinematics_type_weight: 1.
+              flow_weight: 1.
+              cosmic_weight: 1.
+
+    The ``chain`` section enables or disables specific
+    stages of the full chain. When a module is disabled
+    through this section, it will not even be constructed.
+    The section ``full_chain_loss`` allows
+    to set different weights to the losses of different stages.
+    The configuration blocks for each enabled module should
+    also live under the `modules` section of the configuration.
     """
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
@@ -52,9 +98,11 @@ class FullChain(torch.nn.Module):
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self.spatial_embeddings = ClusterCNN(cfg['spice'])
-            self._s_thresholds  = cfg['spice']['fragment_clustering'].get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-            self._p_thresholds  = cfg['spice']['fragment_clustering'].get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-            self._spice_classes = cfg['spice']['fragment_clustering'].get('cluster_classes', [])
+            self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
+            self._s_thresholds  = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+            self._p_thresholds  = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+            self._spice_classes = self.frag_cfg.get('cluster_classes', [])
+            self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
@@ -91,6 +139,23 @@ class FullChain(torch.nn.Module):
     def extract_fragment(self, input, result):
         """
         Extracting clustering predictions from CNN clustering output
+
+        Parameters
+        ==========
+        input: list
+            Input data
+        result: dictionary
+            Where to access the Spice results.
+
+        Returns
+        =======
+        fragments: np.ndarray
+            Array of list of indices.
+            Each list of indices corresponds to one fragment.
+        frag_batch_ids: np.ndarray
+            Batch id for each fragment.
+        frag_seg: np.ndarray
+            Semantic segmentation for each fragment.
         """
         batch_labels = input[0][:,3]
         fragments, frag_batch_ids = [], []
@@ -98,6 +163,8 @@ class FullChain(torch.nn.Module):
         for batch_id in batch_labels.unique():
             for s in self._spice_classes:
                 mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s), as_tuple=True)[0]
+                if len(result['embeddings'][0][mask]) < self._spice_min_voxels:
+                    continue
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
                                           seediness = result['seediness'][0][mask],
                                           margins = result['margins'][0][mask],
@@ -125,8 +192,28 @@ class FullChain(torch.nn.Module):
     def get_extra_gnn_features(self, fragments, frag_seg, classes, input, result, use_ppn=False, use_supp=False):
         """
         Extracting extra features to feed into the GNN particle aggregators
+
         - PPN: Most likely PPN point for showers, end points for tracks (+ direction estimate)
         - Supplemental: Mean/RMS energy in the fragment + semantic class
+
+        Parameters
+        ==========
+        fragments: np.ndarray
+        frag_seg: np.ndarray
+        classes: list
+        input: list
+        result: dictionary
+        use_ppn: bool
+        use_supp: bool
+
+        Returns
+        =======
+        mask: np.ndarray
+            Boolean mask to select fragments belonging to one
+            of the requested classes.
+        kwargs: dictionary
+            Keys can include `points` (if `use_ppn` is `True`)
+            and `extra_feats` (if `use_supp` is True).
         """
         # Build a mask for the requested classes
         mask = np.zeros(len(frag_seg), dtype=np.bool)
@@ -144,7 +231,10 @@ class FullChain(torch.nn.Module):
                     dist_mat = torch.cdist(input[0][f,:3], input[0][f,:3])
                     idx = torch.argmax(dist_mat)
                     idxs = int(idx)//len(f), int(idx)%len(f)
-                    end_points = torch.cat([input[0][f[idxs[0]],:3], input[0][f[idxs[1]],:3]]).reshape(1,-1)
+                    scores = torch.nn.functional.softmax(points_tensor[f, 3:5], dim=1)[:, 1]
+                    correction0 = points_tensor[f][idxs[0], :3] + 0.5 if scores[idxs[0]] > 0.5 else 0.0
+                    correction1 = points_tensor[f][idxs[1], :3] + 0.5 if scores[idxs[1]] > 0.5 else 0.0
+                    end_points = torch.cat([input[0][f[idxs[0]],:3] + correction0, input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(torch.abs(points_tensor[f,:3]), dim=1).values < 1., as_tuple=True)[0]
@@ -174,7 +264,8 @@ class FullChain(torch.nn.Module):
         """
         Generic function to group in one place the common code to run a GNN model.
 
-        INPUTS
+        Parameters
+        ==========
         - grappa: GrapPA module to run
         - input: input data
         - result: dictionary
@@ -182,8 +273,9 @@ class FullChain(torch.nn.Module):
         - labels: dictionary of strings to label the final result
         - kwargs: extra arguments to pass to the gnn
 
-        OUTPUTS
-            None (modifies the result dict in place)
+        Returns
+        =======
+        None (modifies the result dict in place)
         """
 
         # Pass data through the GrapPA model
@@ -228,11 +320,16 @@ class FullChain(torch.nn.Module):
         '''
         Forward for full reconstruction chain.
 
-        INPUTS:
-            - input (N x 5 Tensor): Input data [x, y, z, batch_id, val]
-            - result (dict)
-        RETURNS:
-            - result (dict) (updated with new outputs)
+        Parameters
+        ==========
+        input: list of np.ndarray (N x 5 Tensor)
+            Input data [x, y, z, batch_id, val]
+        result: dict
+
+        Returns
+        =======
+        result: dict
+            updated with new outputs
         '''
         device = input[0].device
 
@@ -373,7 +470,7 @@ class FullChain(torch.nn.Module):
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, part_seg, self._inter_ids, input, result, use_ppn=self.use_ppn_in_gnn, use_supp=True)
-            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p'}
+            output_keys = {'clusts': 'inter_particles', 'edge_pred': 'inter_edge_pred', 'edge_index': 'inter_edge_index', 'group_pred': 'inter_group_pred', 'node_pred': 'inter_node_pred', 'node_pred_type': 'node_pred_type', 'node_pred_p': 'node_pred_p', 'node_pred_vtx': 'node_pred_vtx'}
             self.run_gnn(self.grappa_inter, input, result, particles, output_keys, kwargs)
 
         # ---
@@ -456,8 +553,9 @@ class FullChain(torch.nn.Module):
 
     def forward(self, input):
         """
-        Assumes single GPU/CPU.
-        input: can contain just the input energy depositions, or include true clusters
+        Parameters
+        ==========
+        input: list of np.ndarray
         """
         label_seg, label_clustering = None, None
         if len(input) == 3:
@@ -690,20 +788,28 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_pred':out['inter_edge_pred'],
                     'edge_index':out['inter_edge_index']
                 }
-            if 'node_pred_type' in out:
-                gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
-            if 'node_pred_p' in out:
-                gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
 
+            if 'inter_node_pred' in out: gnn_out.update({ 'node_pred': out['inter_node_pred'] })
+            if 'node_pred_type' in out:  gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
+            if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
+            if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
             res['inter_edge_loss'] = res_gnn_inter['loss']
             res['inter_edge_accuracy'] = res_gnn_inter['accuracy']
+            if 'node_loss' in out:
+                res['inter_node_loss'] = res_gnn_inter['node_loss']
+                res['inter_node_accuracy'] = res_gnn_inter['node_accuracy']
             if 'type_loss' in res_gnn_inter:
                 res['type_loss'] = res_gnn_inter['type_loss']
                 res['type_accuracy'] = res_gnn_inter['type_accuracy']
             if 'p_loss' in res_gnn_inter:
                 res['p_loss'] = res_gnn_inter['p_loss']
                 res['p_accuracy'] = res_gnn_inter['p_accuracy']
+            if 'vtx_position_loss' in res_gnn_inter:
+                res['vtx_position_loss'] = res_gnn_inter['vtx_position_loss']
+                res['vtx_score_loss'] = res_gnn_inter['vtx_score_loss']
+                res['vtx_position_acc'] = res_gnn_inter['vtx_position_acc']
+                res['vtx_score_acc'] = res_gnn_inter['vtx_score_acc']
 
             accuracy += res_gnn_inter['accuracy']
             loss += self.inter_gnn_weight*res_gnn_inter['loss']
@@ -726,13 +832,17 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             #res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
             res['kinematics_loss'] = res_kinematics['node_loss']
             res['kinematics_accuracy'] = res_kinematics['accuracy']
-            if 'type_loss' in res_gnn_inter:
-                res['type_loss'] = res_gnn_inter['type_loss']
-                res['type_accuracy'] = res_gnn_inter['type_accuracy']
-            if 'p_loss' in res_gnn_inter:
-                res['p_loss'] = res_gnn_inter['p_loss']
-                res['p_accuracy'] = res_gnn_inter['p_accuracy']
-            res['kinematics_n_clusts'] = res_kinematics['n_clusts']
+            if 'type_loss' in res_kinematics:
+                res['type_loss'] = res_kinematics['type_loss']
+                res['type_accuracy'] = res_kinematics['type_accuracy']
+            if 'p_loss' in res_kinematics:
+                res['p_loss'] = res_kinematics['p_loss']
+                res['p_accuracy'] = res_kinematics['p_accuracy']
+            if 'type_loss' in res_kinematics or 'p_loss' in res_kinematics:
+                res['kinematics_n_clusts_type'] = res_kinematics['n_clusts_type']
+                res['kinematics_n_clusts_momentum'] = res_kinematics['n_clusts_momentum']
+                res['kinematics_n_clusts_vtx'] = res_kinematics['n_clusts_vtx']
+                res['kinematics_n_clusts_vtx_positives'] = res_kinematics['n_clusts_vtx_positives']
 
             accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
@@ -748,7 +858,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         if self.enable_cosmic:
             gnn_out = {
                 'clusts':out['interactions'],
-                'node_pred':out['inter_cosmic_pred']
+                'node_pred':out['inter_cosmic_pred'],
             }
 
             res_cosmic = self.cosmic_loss(gnn_out, cluster_label)
@@ -784,13 +894,17 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Particle fragment clustering accuracy: {:.4f}'.format(res_gnn_part['edge_accuracy']))
                 print('Particle primary prediction accuracy: {:.4f}'.format(res_gnn_part['node_accuracy']))
             if self.enable_gnn_inter:
-                print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['accuracy']))
+                if 'node_accuracy' in res_gnn_inter: print('Particle ID accuracy: {:.4f}'.format(res_gnn_inter['node_accuracy']))
+                print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['edge_accuracy']))
             if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
             if 'node_pred_type' in out:
                 print('Type accuracy: {:.4f}'.format(res['type_accuracy']))
             if 'node_pred_p' in out:
                 print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
+            if 'node_pred_vtx' in out:
+                print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
+                print('Vertex score accuracy: {:.4f}'.format(res['vtx_score_acc']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
@@ -798,6 +912,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 def setup_chain_cfg(self, cfg):
     """
     Prepare both FullChain and FullChainLoss
+
     Make sure config is logically sound with some basic checks
     """
     chain_cfg = cfg['chain']
