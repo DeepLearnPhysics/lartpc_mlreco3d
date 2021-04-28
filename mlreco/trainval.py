@@ -377,6 +377,7 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
+        
         # Breadth first search of model_path
         #module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
