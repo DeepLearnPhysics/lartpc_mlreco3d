@@ -21,10 +21,10 @@ class WeightedEdgeLoss(nn.Module):
         device = x.device
         weight = torch.ones(y.shape[0]).to(device)
 
-        print('Edge Pred = ', x)
-        print('Edge Truth = ', y)
-        print(y.shape[0])
-        print(torch.sum((x > 0).bool() != y.bool()))
+        # print('Edge Pred = ', x)
+        # print('Edge Truth = ', y)
+        # print(y.shape[0])
+        # print(torch.sum((x > 0).bool() != y.bool()))
 
         mask = (x > 0).bool() != y.bool()
 
@@ -124,9 +124,9 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - groups (N)
             - ft_centroids (N_c X F)
         '''
-        intercluster_loss = inter_cluster_loss(ft_centroids, 
+        intercluster_loss = inter_cluster_loss(ft_centroids,
                                                margin=self.ft_interloss)
-        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups, 
+        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups,
                                                margin=self.ft_intraloss)
         reg_loss = torch.mean(torch.norm(ft_centroids, dim=1))
         out = {}
@@ -148,9 +148,9 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - ft_centroids (N_c X F)
         '''
         out = {}
-        intercluster_loss = inter_cluster_loss(sp_centroids, 
+        intercluster_loss = inter_cluster_loss(sp_centroids,
                                                margin=self.sp_interloss)
-        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups, 
+        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups,
                                                margin=self.sp_intraloss)
         out['intercluster_loss'] = float(intercluster_loss)
         out['intracluster_loss'] = float(intracluster_loss)
@@ -168,7 +168,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         cov_loss = self.kernel_lossfn(logits, targets)
         return cov_loss, acc
 
-    
+
     def occupancy_loss(self, occ, groups):
         '''
         INPUTS:
@@ -348,19 +348,19 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         # print(result)
         edge_score = result['edge_score'][0].squeeze()
 
-        print(res.keys())
+        # print(res.keys())
 
         if not self.is_eval:
             edge_truth = result['edge_truth'][0]
             edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
             edge_loss = edge_loss.mean()
-            print(edge_loss)
+            # print(edge_loss)
             with torch.no_grad():
                 true_negatives = float(torch.sum(( (edge_score < 0) & ~edge_truth.bool() ).int()))
                 precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
                 recall = true_negatives / (float(torch.sum( (edge_score < 0).int() )) + 1e-6)
                 f1 = precision * recall / (precision + recall + 1e-6)
-                print("Edge F1 Score = ", f1)
+                # print("Edge F1 Score = ", f1)
             res['edge_accuracy'] = f1
         else:
             edge_loss = 0
@@ -368,5 +368,3 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         res['loss'] += edge_loss
         res['edge_loss'] = float(edge_loss)
         return res
-
-
