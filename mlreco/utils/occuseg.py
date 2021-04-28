@@ -221,8 +221,8 @@ class ParametricGDC(nn.Module):
     '''
     Parametric Graph-SPICE clustering
 
-    Parametric GDC includes a bilinear layer to predict edge weights, 
-    given pairs of node features. 
+    Parametric GDC includes a bilinear layer to predict edge weights,
+    given pairs of node features.
     '''
     def __init__(self, cfg):
         super(ParametricGDC, self).__init__()
@@ -238,7 +238,7 @@ class ParametricGDC(nn.Module):
         elif mode == 'radius':
             self._init_graph = radius_graph
         else:
-            raise ValueError('''Mode {} is not supported for initial 
+            raise ValueError('''Mode {} is not supported for initial
                 graph construction!'''.format(mode))
 
         # Clustering Algorithm Parameters
@@ -249,7 +249,7 @@ class ParametricGDC(nn.Module):
         # Parametrized Model (Edge Attribute Constructor)
         self.bilinear = nn.Bilinear(self.hyp_dim, self.hyp_dim, 1)
 
-        # GraphBatch containing graphs per semantic class. 
+        # GraphBatch containing graphs per semantic class.
         self._graph_batch = GraphBatch()
 
     @property
@@ -278,7 +278,7 @@ class ParametricGDC(nn.Module):
             'BatchID == {} and SemanticID == {}'.format(batch_id, semantic_id))
         assert df.shape[0] < 2
         if df.shape[0] == 0:
-            raise ValueError('''Event ID: {} and Class Label: {} does not 
+            raise ValueError('''Event ID: {} and Class Label: {} does not
                 exist in current batch'''.format(batch_id, semantic_id))
             return None
         else:
@@ -286,8 +286,8 @@ class ParametricGDC(nn.Module):
             return self._graph_batch.get_example(entry_num)
 
 
-    def fit_predict_one(self, batch_id, semantic_id, 
-                        gen_numpy_graph=False, 
+    def fit_predict_one(self, batch_id, semantic_id,
+                        gen_numpy_graph=False,
                         min_points=0,
                         cluster_all=True,
                         remainder_alg='knn'):
@@ -320,25 +320,25 @@ class ParametricGDC(nn.Module):
 
     def fit_predict(self):
         '''
-        Iterate over all subgraphs and assign predicted labels. 
+        Iterate over all subgraphs and assign predicted labels.
         '''
         pass
 
 
     @staticmethod
-    def get_edge_truth(edge_indices : torch.Tensor, 
+    def get_edge_truth(edge_indices : torch.Tensor,
                        fragment_labels : torch.Tensor):
         '''
-        Given edge indices and ground truth fragment labels, 
-        get true labels for binary edge classification. 
+        Given edge indices and ground truth fragment labels,
+        get true labels for binary edge classification.
 
         INPUTS:
             - edge_indices : 2 x E
             - labels : (N, ) Fragment label tensor
 
         RETURNS:
-            - Edge labels : (N,) Tensor, where 0 indicate edges between 
-            different fragment voxels and 1 otherwise. 
+            - Edge labels : (N,) Tensor, where 0 indicate edges between
+            different fragment voxels and 1 otherwise.
         '''
         u = fragment_labels[edge_indices[0, :]]
         v = fragment_labels[edge_indices[1, :]]
@@ -355,19 +355,19 @@ class ParametricGDC(nn.Module):
         '''
         graph_data = GraphData(x=feats, edge_index=edge_index, pos=coords)
         return graph_data
-    
 
-    def initialize_graph(self, res : dict, 
+
+    def initialize_graph(self, res : dict,
                                labels: Union[torch.Tensor, None]):
         '''
         From GraphSPICE Embedder Output, initialize GraphBatch object
-        with edge truth labels. 
+        with edge truth labels.
 
         Inputs:
             - res (dict): result dictionary output of GraphSPICE Embedder
-            - labels ( N x F Tensor) : 
+            - labels ( N x F Tensor) :
 
-        Transforms point cloud embeddings to collection of graphs 
+        Transforms point cloud embeddings to collection of graphs
         (one per unique image id and segmentation class), and stores graph
         collection as attribute.
         '''
@@ -395,12 +395,12 @@ class ParametricGDC(nn.Module):
                 features_class = features_batch[class_mask]
 
                 edge_indices = self._init_graph(coords_class, **self.kwargs)
-                data = self.construct_graph(coords_class, 
-                                            edge_indices, 
+                data = self.construct_graph(coords_class,
+                                            edge_indices,
                                             features_class)
-                graph_id_key = dict(Index=0, 
-                                    BatchID=int(bidx), 
-                                    SemanticID=int(c), 
+                graph_id_key = dict(Index=0,
+                                    BatchID=int(bidx),
+                                    SemanticID=int(c),
                                     GraphID=graph_id)
                 graph_id += 1
                 self._entry_mapping.append(graph_id_key)
@@ -419,8 +419,8 @@ class ParametricGDC(nn.Module):
 
     def _set_edge_attributes(self):
         '''
-        Constructs edge attributes from node feature tensors, and saves 
-        edge attributes to current GraphBatch. 
+        Constructs edge attributes from node feature tensors, and saves
+        edge attributes to current GraphBatch.
         '''
         if self._graph_batch is None:
             raise ValueError('The graph data has not been initialized yet!')
@@ -440,7 +440,7 @@ class ParametricGDC(nn.Module):
                 self._graph_batch.__cumsum__['x']
 
 
-    def forward(self, res : dict, 
+    def forward(self, res : dict,
                       labels: Union[torch.Tensor, None]):
         '''
         Train time labels include cluster column (default: 5) and segmentation column (default: -1)

@@ -270,6 +270,9 @@ def train_loop(handlers):
         # Train step
         data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
+        # result_blob['total_num_points'] = [data_blob['input_data'][0].shape[0]]
+        # result_blob['total_nonghost_points'] = [(data_blob['segment_label'][0][:, -1] < 5).sum().item()]
+
         # Save snapshot
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)
@@ -277,8 +280,9 @@ def train_loop(handlers):
         # Store output if requested
         if 'post_processing' in cfg:
             for processor_name,processor_cfg in cfg['post_processing'].items():
+                processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
-                processor(cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
+                processor(cfg,processor_cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
@@ -336,8 +340,9 @@ def inference_loop(handlers):
             # Store output if requested
             if 'post_processing' in handlers.cfg:
                 for processor_name,processor_cfg in handlers.cfg['post_processing'].items():
+                    processor_name = processor_name.split('+')[0]
                     processor = getattr(post_processing,str(processor_name))
-                    processor(handlers.cfg,data_blob,result_blob,handlers.cfg['trainval']['log_dir'],handlers.iteration)
+                    processor(handlers.cfg,processor_cfg,data_blob,result_blob,handlers.cfg['trainval']['log_dir'],handlers.iteration)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

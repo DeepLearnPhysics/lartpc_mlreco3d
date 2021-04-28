@@ -106,7 +106,6 @@ def cluster_model_construct(cfg, name):
 
 def spice_loss_construct(name):
     loss_fns = spice_loss_dict()
-    print(name)
     if not name in loss_fns:
         raise Exception("Unknown clustering loss function name provided")
     return loss_fns[name]

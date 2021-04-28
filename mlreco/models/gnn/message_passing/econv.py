@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
-from torch_scatter import scatter_mean, scatter_std
-from torch_geometric.nn import MetaLayer, EdgeConv
 from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
 
 class EConvModel(nn.Module):
@@ -13,6 +11,8 @@ class EConvModel(nn.Module):
     '''
     def __init__(self, cfg):
         super(EConvModel, self).__init__()
+        from torch_geometric.nn import MetaLayer, EdgeConv
+        
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
@@ -208,6 +208,7 @@ class NodeLayer(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch):
+        from torch_scatter import scatter_mean
         row, col = edge_index
         out = torch.cat([x[row], edge_attr], dim=1)
         out = self.node_mlp_1(out)
@@ -268,6 +269,7 @@ class GlobalModel(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch):
+        from torch_scatter import scatter_mean
         # x: [N, F_x], where N is the number of nodes.
         # edge_index: [2, E] with max entry N - 1.
         # edge_attr: [E, F_e]
