@@ -25,12 +25,20 @@ class UResNetPPN(nn.Module):
             self.num_filters, self.num_classes)
 
     def forward(self, input):
+
         device = input[0].device
+        particles_label = None
+
+        if len(input) == 2:
+            particles_label = input[1]
+
         out = defaultdict(list)
-        for igpu, x in enumerate(input):
+        input_tensors = [input[0]]
+
+        for igpu, x in enumerate(input_tensors):
             input_data = x[:, :5]
             res = self.backbone(input_data)
-            res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
+            res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
             segmentation = self.segmentation(res['decoderTensors'][-1])
             out['segmentation'].append(segmentation.F)
             out['points'].append(res_ppn['points'])
@@ -38,8 +46,6 @@ class UResNetPPN(nn.Module):
             out['ppn_layers'].append(res_ppn['ppn_layers'])
             out['ppn_coords'].append(res_ppn['ppn_coords'])
             
-        for t in out['mask_ppn'][0]:
-            print(t.shape)
         return out
 
 
