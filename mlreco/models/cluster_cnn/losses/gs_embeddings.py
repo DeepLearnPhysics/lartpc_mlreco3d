@@ -12,7 +12,7 @@ from torch_scatter import scatter_mean
 
 class WeightedEdgeLoss(nn.Module):
 
-    def __init__(self, reduction='none'):
+    def __init__(self, reduction='mean'):
         super(WeightedEdgeLoss, self).__init__()
         self.reduction = reduction
         self.loss_fn = F.binary_cross_entropy_with_logits
@@ -21,23 +21,22 @@ class WeightedEdgeLoss(nn.Module):
         device = x.device
         weight = torch.ones(y.shape[0]).to(device)
 
-        print('Edge Pred = ', x)
-        print('Edge Truth = ', y)
-        print(y.shape[0])
-        print(torch.sum((x > 0).bool() != y.bool()))
+        # The crucial error are the false positives, as these will
+        # lead to overclustering. 
+        negatives_index = (y < 0.5)
+        negatives = float(torch.sum(negatives_index))
+        positives = float(torch.sum(y > 0.5))
+        w = positives / negatives
+        print(w)
 
-        mask = (x > 0).bool() != y.bool()
-
-        x_wrong = x[mask]
-        y_wrong = y[mask]
-        weight = weight[mask]
+        weight[negatives_index] = w
 
         # with torch.no_grad():
         #     num_pos = torch.sum(y).item()
         #     num_edges = y.shape[0]
         #     w = 1.0 / (1.0 - float(num_pos) / num_edges)
         #     weight[~y.bool()] = w
-        loss = self.loss_fn(x_wrong, y_wrong, weight=weight, reduction=self.reduction)
+        loss = self.loss_fn(x, y.float(), weight=weight, reduction=self.reduction)
         return loss
 
 
@@ -264,7 +263,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         accuracy['accuracy'] /= counts
         return loss, accuracy
 
-    def forward(self, out, segment_label, group_label):
+    def forward(self, out, segment_label, cluster_label):
 
         num_gpus = len(segment_label)
         loss = defaultdict(list)
@@ -276,7 +275,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             #if torch.cuda.is_available():
             #    coords = coords.cuda()
             slabels = slabels.long()
-            clabels = group_label[i][:, -1].long()
+            clabels = cluster_label[i][:, -1].long()
+            print(clabels)
             batch_idx = segment_label[i][:, self.batch_column]
             sp_embedding = out['spatial_embeddings'][i]
             ft_embedding = out['feature_embeddings'][i]
@@ -348,20 +348,32 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         # print(result)
         edge_score = result['edge_score'][0].squeeze()
 
-        print(res.keys())
-
         if not self.is_eval:
             edge_truth = result['edge_truth'][0]
             edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
             edge_loss = edge_loss.mean()
-            print(edge_loss)
-            with torch.no_grad():
-                true_negatives = float(torch.sum(( (edge_score < 0) & ~edge_truth.bool() ).int()))
-                precision = true_negatives / (float(torch.sum( (edge_truth == 0).int() )) + 1e-6)
-                recall = true_negatives / (float(torch.sum( (edge_score < 0).int() )) + 1e-6)
-                f1 = precision * recall / (precision + recall + 1e-6)
-                print("Edge F1 Score = ", f1)
-            res['edge_accuracy'] = f1
+
+            x = edge_score.squeeze()
+            y = edge_truth
+
+            false_positives_index = (x > 0) & (y < 0.5)
+
+            false_positives = float(torch.sum((x > 0).bool() & (y < 0.5)))
+            false_negatives = float(torch.sum((x < 0) & (y > 0.5)))
+            true_positives = float(torch.sum((x > 0) & (y > 0.5)))
+            true_negatives = float(torch.sum((x < 0) & (y < 0.5)))
+
+            tpr = true_positives / (true_positives + false_negatives)
+            tnr = true_negatives / (true_positives + false_positives)
+            fpr = 1 - tnr
+
+            balanced_accuracy = (tpr + tnr) / 2
+
+            print('TPR = ', tpr)
+            print('TNR = ', tnr)
+            print('Balanced Accuracy = ', balanced_accuracy)
+            print('False Positive Rate = ', fpr)
+            res['edge_accuracy'] = balanced_accuracy
         else:
             edge_loss = 0
 

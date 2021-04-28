@@ -171,6 +171,7 @@ class trainval(object):
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
         data_blob,res_combined = self.forward(data_iter)
+        print(data_blob['index'])
         # Run backward once for all the previous forward
         self.backward()
         self._watch.stop('train')

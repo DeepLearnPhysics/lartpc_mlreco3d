@@ -38,8 +38,8 @@ def cycle(data_io):
             yield x
 
 
-def train(cfg):
-    handlers = prepare(cfg)
+def train(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     train_loop(handlers)
 
 
