@@ -63,6 +63,7 @@ class SegmentationLoss(nn.Module):
         '''
         # TODO Add weighting
         segmentation = outputs['segmentation']
+
         assert len(segmentation) == len(label)
         # if weight is not None:
         #     assert len(data) == len(weight)

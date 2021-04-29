@@ -12,6 +12,64 @@ import torch.nn as nn
 #     def forward(self, x):
 #         raise NotImplementedError
 
+class DefaultKernel(nn.Module):
+
+    def __init__(self, num_features):
+        super(DefaultKernel, self).__init__()
+
+    def compute_edge_weight(self,
+                            sp_emb1: torch.Tensor,
+                            sp_emb2: torch.Tensor,
+                            ft_emb1: torch.Tensor,
+                            ft_emb2: torch.Tensor,
+                            cov1: torch.Tensor,
+                            cov2: torch.Tensor,
+                            occ1, occ2, eps=0.001):
+
+        device = sp_emb1.device
+
+        sp_cov_i = cov1[:, 0]
+        sp_cov_j = cov2[:, 0]
+        sp_i = ((sp_emb1 - sp_emb2)**2).sum(dim=1) / (sp_cov_i**2 + eps)
+        sp_j = ((sp_emb1 - sp_emb2)**2).sum(dim=1) / (sp_cov_j**2 + eps)
+
+        ft_cov_i = cov1[:, 1]
+        ft_cov_j = cov2[:, 1]
+        ft_i = ((ft_emb1 - ft_emb2)**2).sum(dim=1) / (ft_cov_i**2 + eps)
+        ft_j = ((ft_emb1 - ft_emb2)**2).sum(dim=1) / (ft_cov_j**2 + eps)
+
+        p_ij = torch.exp(-sp_i-ft_i)
+        p_ji = torch.exp(-sp_j-ft_j)
+
+        pvec = torch.clamp(p_ij + p_ji - p_ij * p_ji, min=0, max=1)
+
+        r1 = occ1
+        r2 = occ2
+        r = torch.max((r2 + eps) / (r1 + eps), (r1 + eps) / (r2 + eps))
+        pvec = pvec / r
+        return pvec
+
+    def forward(self, x1, x2):
+
+        w = self.compute_edge_weight(
+            x1[:, :3],
+            x2[:, :3],
+            x1[:, 3:3+16],
+            x2[:, 3:3+16],
+            x1[:, 19:21],
+            x2[:, 19:21],
+            x1[:, -1],
+            x2[:, -1])
+
+        print(w)
+
+        w = torch.clamp(w, min=0+1e-6, max=1-1e-6)
+
+        out = torch.logit(w)
+
+        return out
+
+
 class BilinearKernel(nn.Module):
 
     def __init__(self, num_features, bias=False):

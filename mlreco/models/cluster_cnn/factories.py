@@ -23,6 +23,7 @@ def gs_kernel_dict():
     '''
     from . import gs_kernels
     kernels = {
+        'default': gs_kernels.DefaultKernel,
         'bilinear': gs_kernels.BilinearKernel,
         'bilinear_mlp': gs_kernels.BilinearNNKernel
     }
@@ -82,7 +83,8 @@ def spice_loss_dict():
         # SPICE Losses Vectorized
         'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
         'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss,
-        'graph_spice_loss': losses.gs_embeddings.NodeEdgeHybridLoss,
+        'graph_spice_edge_loss': losses.gs_embeddings.NodeEdgeHybridLoss,
+        'graph_spice_loss': losses.gs_embeddings.GraphSPICEEmbeddingLoss
         # 'graphgnn_spice_loss': SparseOccuSegGNNLoss
     }
     return loss

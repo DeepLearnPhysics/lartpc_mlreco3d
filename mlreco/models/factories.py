@@ -52,6 +52,8 @@ def model_dict():
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
+        # GraphSPICE2
+        "graph_spice_2": (graph_spice.GraphSPICE2, graph_spice.GraphSPICE2Loss),
         # GraphSPICEGNN
         "graph_spice_gnn": (graph_spice.GraphSPICEGNN, graph_spice.GraphSPICELoss),
         # GraphSPICE Old Version, will be removed

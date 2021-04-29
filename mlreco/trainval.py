@@ -171,6 +171,7 @@ class trainval(object):
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
         data_blob,res_combined = self.forward(data_iter)
+        print(data_blob['index'])
         # Run backward once for all the previous forward
         self.backward()
         self._watch.stop('train')
@@ -381,6 +382,7 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
+        
         # Breadth first search of model_path
         #module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))

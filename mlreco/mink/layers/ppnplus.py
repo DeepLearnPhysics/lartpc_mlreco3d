@@ -11,6 +11,7 @@ from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.models.ppn import define_ppn12
 
 from collections import Counter
+from torch_cluster import nearest
 
 class Attention(nn.Module):
     def __init__(self):
@@ -29,14 +30,32 @@ class ExpandAs(nn.Module):
     def __init__(self):
         super(ExpandAs, self).__init__()
 
-    def forward(self, x, shape):
+    def forward(self, x, shape, labels=None):
+        '''
+            x: feature tensor of input sparse tensor (N x F)
+            labels: N x 0 tensor of labels
+
+        '''
         device = x.F.device
-        features = x.F.expand(*shape)
+        features = x.F
+        features[labels] = 1.0
+        features = features.expand(*shape)
+        # if labels is not None:
+        #     features_expand = features.expand(*shape).clone()
+        #     features_expand[labels] = 1.0
+        # else:
+        #     features_expand = features.expand(*shape)
         output = ME.SparseTensor(
             features=features,
             coordinate_map_key=x.coordinate_map_key,
             coordinate_manager=x.coordinate_manager)
         return output
+
+
+def pairwise_distances(v1, v2):
+    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
 class PPN(MENetworkBase):
@@ -108,12 +127,17 @@ class PPN(MENetworkBase):
                                        activation=self.activation_name,
                                        activation_args=self.activation_args)
 
-        self.ppn_pixel_pred = ME.MinkowskiLinear(self.nPlanes[0], self.D)
-        self.ppn_type = ME.MinkowskiLinear(self.nPlanes[0], self.num_classes)
-        self.ppn_final_score = ME.MinkowskiLinear(self.nPlanes[0], 1)
+        self.ppn_pixel_pred = ME.MinkowskiConvolution(
+            self.nPlanes[0], self.D, kernel_size=3, stride=1, dimension=self.D)
+        self.ppn_type = ME.MinkowskiConvolution(
+            self.nPlanes[0], self.num_classes, kernel_size=3, stride=1, dimension=self.D)
+        self.ppn_final_score = ME.MinkowskiConvolution(
+            self.nPlanes[0], 1, kernel_size=3, stride=1, dimension=self.D)
+
+        self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
 
 
-    def forward(self, final, encoderTensors):
+    def forward(self, final, encoderTensors, particles=None):
         '''
         Vanilla UResNet Decoder
         INPUTS:
@@ -122,11 +146,42 @@ class PPN(MENetworkBase):
             - decoderTensors (list of SparseTensor):
             list of feature tensors in decoding path at each spatial resolution.
         '''
+
         ppn_layers, ppn_coords = [], []
         tmp = []
         mask_ppn = []
         x = final
+
+        device = final.device
+
+        # We need to make labels on-the-fly to include true points in the
+        # propagated masks during training
+
+        positive_labels = [] # list of label tensors, each per layer
+
+        num_layers = len(encoderTensors[1:])
+
+        if particles is not None:
+            with torch.no_grad():
+
+                for layer, layer_tensor in enumerate(encoderTensors[1:]):
+                    batch_indices = layer_tensor.C[:, 0]
+                    layer_labels = torch.zeros(
+                        batch_indices.shape, 
+                        device=device, dtype=torch.bool)
+                    for b in batch_indices.unique():
+                        batch_mask = batch_indices == b
+                        coords_batch = layer_tensor.C[:, 1:4][batch_mask]
+                        points_label = particles[particles[:, 0] == b][:, 1:4]
+                        d = pairwise_distances(points_label, coords_batch)
+                        d_positives = (
+                            d < self.resolution * 2**layer).any(dim=0).to(
+                                dtype=torch.bool)
+                        layer_labels[batch_mask] = d_positives
+                    positive_labels.append(layer_labels)
+
         for i, layer in enumerate(self.decoding_conv):
+
             eTensor = encoderTensors[-i-2]
             x = layer(x)
             x = ME.cat(eTensor, x)
@@ -135,9 +190,18 @@ class PPN(MENetworkBase):
             tmp.append(scores.F)
             ppn_coords.append(scores.C)
             scores = self.sigmoid(scores)
+            layer_label = positive_labels[::-1][1:][i]
+
+            if particles is not None:
+                s_expanded = self.expand_as(scores, 
+                                            x.F.shape, 
+                                            labels=layer_label)
+            else:
+                s_expanded = self.expand_as(scores, x.F.shape)
+
             mask_ppn.append((scores.F > self.ppn_score_threshold))
-            s_expanded = self.expand_as(scores, x.F.shape)
-            x = x * s_expanded
+            x = x * s_expanded.detach()
+
         device = x.F.device
         for p in tmp:
             a = p.to(dtype=torch.float32, device=device)
@@ -222,9 +286,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     if layer == len(ppn_layers)-1:
 
                         # Get Final Layers
-                        pixel_pred = coords_layer[batch_particle_index][:, 1:4].float().cuda()
+                        anchors = coords_layer[batch_particle_index][:, 1:4].float().cuda() + 0.5
                         pixel_score = points[batch_particle_index][:, -1]
                         pixel_logits = points[batch_particle_index][:, 3:8]
+                        pixel_pred = points[batch_particle_index][:, :3] + anchors
 
                         d = self.pairwise_distances(points_label, pixel_pred)
                         positives = (d < self.resolution).any(dim=0)
@@ -237,9 +302,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         mask_loss_final = self.lossfn(pixel_score, positives.float(), weight=weight_ppn, reduction='mean')
 
                         # Type Segmentation Loss
-                        pixel_pred += points[batch_particle_index][:, :3]
-                        d = self.pairwise_distances(points_label, pixel_pred + 0.5)
-                        positives = (d < self.resolution).any(dim=0)
+                        # d = self.pairwise_distances(points_label, pixel_pred)
+                        # positives = (d < self.resolution).any(dim=0)
                         distance_positives = d[:, positives]
                         event_types_label = particles[particles[:, 0] == b][:, -2]
                         counter = Counter({0:0, 1:0, 2:0, 3:0})
