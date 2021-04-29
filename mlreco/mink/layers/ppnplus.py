@@ -137,7 +137,7 @@ class PPN(MENetworkBase):
         self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
 
 
-    def forward(self, final, encoderTensors, particles=None):
+    def forward(self, final, encoderTensors):
         '''
         Vanilla UResNet Decoder
         INPUTS:
@@ -161,24 +161,24 @@ class PPN(MENetworkBase):
 
         num_layers = len(encoderTensors[1:])
 
-        if particles is not None:
-            with torch.no_grad():
+        # if particles is not None:
+        #     with torch.no_grad():
 
-                for layer, layer_tensor in enumerate(encoderTensors[1:]):
-                    batch_indices = layer_tensor.C[:, 0]
-                    layer_labels = torch.zeros(
-                        batch_indices.shape, 
-                        device=device, dtype=torch.bool)
-                    for b in batch_indices.unique():
-                        batch_mask = batch_indices == b
-                        coords_batch = layer_tensor.C[:, 1:4][batch_mask]
-                        points_label = particles[particles[:, 0] == b][:, 1:4]
-                        d = pairwise_distances(points_label, coords_batch)
-                        d_positives = (
-                            d < self.resolution * 2**layer).any(dim=0).to(
-                                dtype=torch.bool)
-                        layer_labels[batch_mask] = d_positives
-                    positive_labels.append(layer_labels)
+        #         for layer, layer_tensor in enumerate(encoderTensors[1:]):
+        #             batch_indices = layer_tensor.C[:, 0]
+        #             layer_labels = torch.zeros(
+        #                 batch_indices.shape, 
+        #                 device=device, dtype=torch.bool)
+        #             for b in batch_indices.unique():
+        #                 batch_mask = batch_indices == b
+        #                 coords_batch = layer_tensor.C[:, 1:4][batch_mask]
+        #                 points_label = particles[particles[:, 0] == b][:, 1:4]
+        #                 d = pairwise_distances(points_label, coords_batch)
+        #                 d_positives = (
+        #                     d < self.resolution * 2**layer).any(dim=0).to(
+        #                         dtype=torch.bool)
+        #                 layer_labels[batch_mask] = d_positives
+        #             positive_labels.append(layer_labels)
 
         for i, layer in enumerate(self.decoding_conv):
 
@@ -190,17 +190,19 @@ class PPN(MENetworkBase):
             tmp.append(scores.F)
             ppn_coords.append(scores.C)
             scores = self.sigmoid(scores)
-            if self.training:
-                layer_label = positive_labels[::-1][1:][i]
 
-                if particles is not None:
-                    s_expanded = self.expand_as(scores, 
-                                                x.F.shape, 
-                                                labels=layer_label)
-                else:
-                    s_expanded = self.expand_as(scores, x.F.shape)
-            else:
-                s_expanded = self.expand_as(scores, x.F.shape)
+            s_expanded = self.expand_as(scores, x.F.shape)
+            # if self.training:
+            #     layer_label = positive_labels[::-1][1:][i]
+
+            #     if particles is not None:
+            #         s_expanded = self.expand_as(scores, 
+            #                                     x.F.shape, 
+            #                                     labels=layer_label)
+            #     else:
+            #         s_expanded = self.expand_as(scores, x.F.shape)
+            # else:
+            #     s_expanded = self.expand_as(scores, x.F.shape)
 
             mask_ppn.append((scores.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
@@ -273,7 +275,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                 for b in batch_ids[igpu].int().unique():
                     batch_index_layer = coords_layer[:, 0].int() == b
                     batch_particle_index = batch_ids[igpu].int() == b
-                    points_label = particles[particles[:, 0] == b][:, 1:4]
+                    points_label = particles[particles[:, 0].int() == b][:, 1:4]
                     scores_event = ppn_score_layer[batch_index_layer].squeeze()
                     points_event = coords_layer[batch_index_layer]
                     d = self.pairwise_distances(points_label, points_event[:, 1:4].float().cuda())
@@ -319,6 +321,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)
                         reg_loss = d2.mean()
+                        res['reg_loss'] = float(reg_loss)
+                        res['type_loss'] = float(type_loss)
+                        res['mask_loss'] = float(mask_loss_final)
                         total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches
                 loss_layer /= num_batches
                 loss_gpu += loss_layer
