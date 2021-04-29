@@ -25,12 +25,7 @@ class UResNetPPN(nn.Module):
             self.num_filters, self.num_classes)
 
     def forward(self, input):
-
         device = input[0].device
-        particles_label = None
-
-        if len(input) == 2:
-            particles_label = input[1]
 
         out = defaultdict(list)
         input_tensors = [input[0]]
@@ -38,10 +33,11 @@ class UResNetPPN(nn.Module):
         for igpu, x in enumerate(input_tensors):
             input_data = x[:, :5]
             res = self.backbone(input_data)
-            if self.training:
-                res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
-            else:
-                res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
+            res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
+            # if self.training:
+            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
+            # else:
+            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
             segmentation = self.segmentation(res['decoderTensors'][-1])
             out['segmentation'].append(segmentation.F)
             out['points'].append(res_ppn['points'])
@@ -69,6 +65,9 @@ class UResNetPPNLoss(nn.Module):
 
         res = {
             'loss': res_segmentation['loss'] + res_ppn['loss'],
-            'accuracy': (res_segmentation['accuracy'] + res_ppn['accuracy']) / 2.0
+            'accuracy': (res_segmentation['accuracy'] + res_ppn['accuracy']) / 2.0,
+            'reg_loss': res_ppn['reg_loss'],
+            'type_loss': res_ppn['type_loss']
         }
+        print(res)
         return res
