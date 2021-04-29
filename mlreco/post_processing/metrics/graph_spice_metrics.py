@@ -25,6 +25,8 @@ def num_pred_clusters(pred, truth):
 
 def graph_spice_metrics(cfg, data_blob, res, logdir, iteration):
 
+    print(cfg)
+
     append = True if iteration else False
 
     labels = data_blob['cluster_label'][0]
@@ -67,9 +69,11 @@ def graph_spice_metrics(cfg, data_blob, res, logdir, iteration):
     
     fout.close()
 
-def graph_spice_metrics_loop_threshold(cfg, data_blob, res, logdir, iteration):
+def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     append = True if iteration else False
+
+    print(processor_cfg)
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
@@ -92,7 +96,7 @@ def graph_spice_metrics_loop_threshold(cfg, data_blob, res, logdir, iteration):
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
-    edge_ths_range = np.linspace(0.5, 0.95, 20)
+    edge_ths_range = np.linspace(0.1, 0.9, 20)
 
     for edge_ths in edge_ths_range:
 
@@ -103,7 +107,7 @@ def graph_spice_metrics_loop_threshold(cfg, data_blob, res, logdir, iteration):
         gs_manager = ClusterGraphConstructor(constructor_cfg, 
                                             graph_batch=graph, 
                                             graph_info=graph_info)
-        gs_manager.fit_predict(gen_numpy_graph=True)
+        gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
         funcs = [ARI, SBD, purity, efficiency, num_true_clusters, 
                  num_pred_clusters, edge_threshold]
         column_names = ['ARI', 'SBD', 'Purity', 'Efficiency', 'num_true_clusters',
