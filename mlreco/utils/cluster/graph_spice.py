@@ -296,7 +296,8 @@ class ClusterGraphConstructor:
                         gen_numpy_graph=False,
                         min_points=0,
                         cluster_all=True,
-                        remainder_alg='knn') -> Tuple[np.ndarray, nx.Graph, GraphData]:
+                        remainder_alg='knn',
+                        invert=False) -> Tuple[np.ndarray, nx.Graph]:
         '''
         Generate predicted fragment cluster labels for single subgraph.
 
@@ -323,8 +324,12 @@ class ClusterGraphConstructor:
         edges = subgraph.edge_index.T.cpu().numpy()
         edge_logits = subgraph.edge_attr.detach().cpu().numpy()
         edge_probs = expit(edge_logits)
-        pos_edges = edges[edge_probs > self.ths]
-        pos_probs = edge_probs[edge_probs > self.ths]
+        if invert:
+            pos_edges = edges[edge_probs < self.ths]
+            pos_probs = edge_probs[edge_probs < self.ths]
+        else:
+            pos_edges = edges[edge_probs >= self.ths]
+            pos_probs = edge_probs[edge_probs >= self.ths]
         pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
         G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
