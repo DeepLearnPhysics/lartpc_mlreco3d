@@ -38,7 +38,10 @@ class UResNetPPN(nn.Module):
         for igpu, x in enumerate(input_tensors):
             input_data = x[:, :5]
             res = self.backbone(input_data)
-            res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
+            if self.training:
+                res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
+            else:
+                res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
             segmentation = self.segmentation(res['decoderTensors'][-1])
             out['segmentation'].append(segmentation.F)
             out['points'].append(res_ppn['points'])
