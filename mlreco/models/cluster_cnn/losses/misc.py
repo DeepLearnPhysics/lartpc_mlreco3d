@@ -27,6 +27,47 @@ def iou_batch(pred: torch.BoolTensor, labels: torch.BoolTensor, eps=0.0):
 
     return iou.mean()
 
+class BinaryLogDiceLoss(torch.nn.Module):
+    
+    def __init__(self, gamma=1):
+        super(BinaryLogDiceLoss, self).__init__()
+        
+    def forward(self, logits, targets, eps=1e-6):
+        p = torch.sigmoid(logits)
+        p = (logits < 0).float()
+        num = 2.0 * p[targets].sum()
+        denom = p.sum() + targets.sum()
+        dice = torch.clamp((num + eps) / (denom + eps), min=eps, max=1-eps)
+        return -torch.log(dice)
+
+
+class BinaryCELogDiceLoss(torch.nn.Module):
+
+    def __init__(self, gamma=0.3, w_ce=0.2, w_dice=0.8):
+        super(BinaryCELogDiceLoss, self).__init__()
+        self.ce = F.binary_cross_entropy_with_logits
+        self.gamma = gamma
+        self.w_ce = w_ce
+        self.w_dice = w_dice
+        
+    def forward(self, logits, targets, weight=None, eps=0.001):
+
+        bceloss = self.ce(logits, targets, weight=weight, reduction='none')
+        bce = bceloss.mean()
+        # if weight is not None:
+        #     bce = (weight * torch.pow(bceloss, self.gamma)).mean()
+        # else:
+        #     bce = torch.pow(bceloss, self.gamma).mean()
+
+        p = torch.sigmoid(logits)
+        num = 2.0 * p[targets > 0.5].sum()
+        denom = (p**2).sum() + (targets**2).sum()
+        dice = torch.clamp((num + eps) / (denom + eps), min=eps, max=1-eps)
+        dice_loss = -torch.log(dice)
+        print("CE = {}, Dice = {}".format(bce, dice_loss))
+        return self.w_ce * bce + self.w_dice * dice_loss
+
+
 
 class LovaszHingeLoss(torch.nn.modules.loss._Loss):
 

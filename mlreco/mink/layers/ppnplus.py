@@ -190,12 +190,15 @@ class PPN(MENetworkBase):
             tmp.append(scores.F)
             ppn_coords.append(scores.C)
             scores = self.sigmoid(scores)
-            layer_label = positive_labels[::-1][1:][i]
+            if self.training:
+                layer_label = positive_labels[::-1][1:][i]
 
-            if particles is not None:
-                s_expanded = self.expand_as(scores, 
-                                            x.F.shape, 
-                                            labels=layer_label)
+                if particles is not None:
+                    s_expanded = self.expand_as(scores, 
+                                                x.F.shape, 
+                                                labels=layer_label)
+                else:
+                    s_expanded = self.expand_as(scores, x.F.shape)
             else:
                 s_expanded = self.expand_as(scores, x.F.shape)
 

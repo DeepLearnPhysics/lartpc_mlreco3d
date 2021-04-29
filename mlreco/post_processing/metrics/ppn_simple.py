@@ -14,9 +14,9 @@ def pairwise_distances(v1, v2):
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
-def ppn_simple(cfg, data_blob, result, logdir, iteration):
+def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
     # UResNet prediction
-
+    print(processor_cfg)
     # Get the relevant data products
     index = data_blob['index']
     seg_label = data_blob['segment_label'][0]

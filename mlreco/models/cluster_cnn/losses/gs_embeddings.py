@@ -12,31 +12,39 @@ from torch_scatter import scatter_mean
 
 class WeightedEdgeLoss(nn.Module):
 
-    def __init__(self, reduction='mean'):
+    def __init__(self, loss_type='BCE', reduction='mean', invert=False):
         super(WeightedEdgeLoss, self).__init__()
         self.reduction = reduction
-        self.loss_fn = F.binary_cross_entropy_with_logits
+        if loss_type == 'BCE':
+            self.loss_fn = F.binary_cross_entropy_with_logits
+        elif loss_type == 'LogDice':
+            self.loss_fn = BinaryCELogDiceLoss()
+        else:
+            self.loss_fn = F.binary_cross_entropy_with_logits
 
-    def forward(self, x, y):
-        device = x.device
+        self.invert = invert
+
+    def forward(self, logits, targets):
+        if self.invert:
+            y = (targets < 0.5).float()
+        device = logits.device
         weight = torch.ones(y.shape[0]).to(device)
 
         # The crucial error are the false positives, as these will
         # lead to overclustering.
-        negatives_index = (y < 0.5)
+        negatives_index = (targets < 0.5)
         negatives = float(torch.sum(negatives_index))
-        positives = float(torch.sum(y > 0.5))
+        positives = float(torch.sum(targets > 0.5))
         w = positives / negatives
-        # print(w)
 
-        weight[negatives_index] = w
+        weight[negatives_index] = 1.0
 
         # with torch.no_grad():
         #     num_pos = torch.sum(y).item()
         #     num_edges = y.shape[0]
         #     w = 1.0 / (1.0 - float(num_pos) / num_edges)
         #     weight[~y.bool()] = w
-        loss = self.loss_fn(x, y.float(), weight=weight, reduction=self.reduction)
+        loss = self.loss_fn(logits, y.float(), weight=weight)
         return loss
 
 
@@ -276,7 +284,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             #    coords = coords.cuda()
             slabels = slabels.long()
             clabels = cluster_label[i][:, -1].long()
-            print(clabels)
+            # print(clabels)
             batch_idx = segment_label[i][:, self.batch_column]
             sp_embedding = out['spatial_embeddings'][i]
             ft_embedding = out['feature_embeddings'][i]
@@ -336,8 +344,11 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         super(NodeEdgeHybridLoss, self).__init__()
         # print("CFG + ", cfg)
         self.loss_config = cfg[name]
+        print("ASDASDASDASD", self.loss_config)
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
-        self.edge_loss = WeightedEdgeLoss()
+        self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
+        self.invert = self.edge_loss_cfg.get('invert', False)
+        self.edge_loss = WeightedEdgeLoss(**self.edge_loss_cfg)
         self.is_eval = cfg['eval']
 
     def forward(self, result, segment_label, cluster_label):
@@ -356,12 +367,17 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
             x = edge_score.squeeze()
             y = edge_truth
 
-            false_positives_index = (x > 0) & (y < 0.5)
+            if self.invert:
+                pred = x < 0
+            else:
+                pred = x >= 0
 
-            false_positives = float(torch.sum((x > 0).bool() & (y < 0.5)))
-            false_negatives = float(torch.sum((x < 0) & (y > 0.5)))
-            true_positives = float(torch.sum((x > 0) & (y > 0.5)))
-            true_negatives = float(torch.sum((x < 0) & (y < 0.5)))
+            false_positives_index = pred & (y < 0.5)
+
+            false_positives = float(torch.sum(pred & (y < 0.5)))
+            false_negatives = float(torch.sum(~pred & (y > 0.5)))
+            true_positives = float(torch.sum(pred & (y > 0.5)))
+            true_negatives = float(torch.sum(~pred & (y < 0.5)))
 
             tpr = true_positives / (true_positives + false_negatives)
             tnr = true_negatives / (true_positives + false_positives)
