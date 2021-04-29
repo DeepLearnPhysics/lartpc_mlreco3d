@@ -93,9 +93,6 @@ class GraphSPICE(nn.Module):
         res['coordinates'] = [coordinates]
         res['batch_indices'] = [batch_indices]
 
-        # print(res.keys())
-        # print(res['features'])
-
         if self.use_raw_features:
             res['hypergraph_features'] = res['features']
 
@@ -203,6 +200,8 @@ class GraphSPICELoss(nn.Module):
         # pprint(constructor_cfg)
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
         self.gs_manager.training = ~self.eval_mode
+
+        self.invert = self.loss_config.get('invert', False)
         # print("LOSS FN = ", self.loss_fn)
 
     def filter_class(self, segment_label, cluster_label):
@@ -229,11 +228,17 @@ class GraphSPICELoss(nn.Module):
         if not self.eval_mode:
             result['edge_truth'] = [graph.edge_truth]
 
-        edge_diff = (result['edge_score'][0] > 0.0) != \
-                    (result['edge_truth'][0] > 0.5)
+        if self.invert:
+            pred_labels = result['edge_score'][0] < 0.0
+        else:
+            pred_labels = result['edge_score'][0] >= 0.0
+        edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
 
         # print("Number of Wrong Edges = {} / {}".format(
         #     torch.sum(edge_diff).item(), edge_diff.shape[0]))
+
+        print("Number of True Dropped Edges = {} / {}".format(
+            torch.sum(result['edge_truth'][0] < 0.5).item(), edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
         # print(res.keys())
