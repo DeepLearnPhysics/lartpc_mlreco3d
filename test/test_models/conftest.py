@@ -23,7 +23,12 @@ def config_simple(request):
         if isinstance(module, str):
             model_config['modules'][module] = {}
         else:
-            model_config['modules'][module[0]] = module[1]
+            if isinstance(module[1], list):
+                model_config['modules'][module[0]] = {}
+                for el in module[1]:
+                    model_config['modules'][module[0]][el] = {}
+            else:
+                model_config['modules'][module[0]] = module[1]
     # else:
     #     model_config = {
     #         'name': model_name,
@@ -63,7 +68,12 @@ def config_full(request, tmp_path, data):
         if isinstance(module, str):
             model_config['modules'][module] = {}
         else:
-            model_config['modules'][module[0]] = module[1]
+            if isinstance(module[1], list):
+                model_config['modules'][module[0]] = {}
+                for el in module[1]:
+                    model_config['modules'][module[0]][el] = {}
+            else:
+                model_config['modules'][module[0]] = module[1]
     # else:
     #     model_config = {
     #         'name': model_name,

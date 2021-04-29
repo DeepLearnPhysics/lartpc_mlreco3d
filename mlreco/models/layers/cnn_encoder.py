@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import torch.nn as nn
-from torch_geometric.nn import MetaLayer, NNConv
 import sparseconvnet as scn
 
 from mlreco.models.layers.uresnet import UResNetEncoder
@@ -113,7 +112,7 @@ class ResidualEncoder(UResNetEncoder):
     def __init__(self, cfg, name='res_encoder'):
         super(ResidualEncoder, self).__init__(cfg,'uresnet_encoder')
         self.model_config = cfg[name]
-        self.num_features = self.model_config.get('num_features', 32)
+        self.latent_size = self.model_config.get('latent_size', 64)
 
         self.input_layer = scn.Sequential().add(
            scn.InputLayer(self.dimension, self.spatial_size, mode=3)).add(
@@ -124,26 +123,27 @@ class ResidualEncoder(UResNetEncoder):
         self.pool_mode = self.model_config.get('pool_mode', 'max')
 
         self.final_tensor_shape = self.spatial_size // (2**(self.num_strides-1))
-        print("Final Tensor Shape = ", self.final_tensor_shape)
+        #print("Final Tensor Shape = ", self.final_tensor_shape)
 
         if self.pool_mode == 'max':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = nn.MaxPool3d(self.final_tensor_shape)
-        elif self.pool_mode == 'flatten':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = Flatten()
+            self.pool = scn.MaxPooling(self.dimension, self.final_tensor_shape, self.final_tensor_shape)
         elif self.pool_mode == 'avg':
-            self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
-            self.pool = nn.AvgPool3d(self.final_tensor_shape)
+            # self.output = scn.SparseToDense(self.dimension, self.nPlanes[-1])
+            # self.pool = nn.AvgPool3d(self.final_tensor_shape)
+            self.output = scn.Sequential()
+            self.pool = scn.Sequential().add(
+                scn.AveragePooling(self.dimension, self.final_tensor_shape, self.final_tensor_shape))#.add(
+                #scn.OutputLayer(self.dimension))
         else:
-            self.output = scn.Sequential().add(
+            self.output = scn.Sequential().add(\
                 scn.Convolution(
-                    self.dimension, self.nPlanes[-1], self.nPlanes[-1], 
-                    self.final_tensor_shape, 1, 
+                    self.dimension, self.nPlanes[-1], self.nPlanes[-1],
+                    self.final_tensor_shape, 1,
                     self.allow_bias)).add(
                 scn.SparseToDense(self.dimension, self.nPlanes[-1]))
             self.pool = nn.MaxPool3d(1)
-        self.linear = nn.Linear(self.nPlanes[-1], self.num_features)
+
+        self.linear = nn.Linear(self.nPlanes[-1], self.latent_size)
 
 
     def forward(self, point_cloud):
@@ -175,7 +175,8 @@ class ResidualEncoder(UResNetEncoder):
             x = self.encoding_block[i](x)
             features_enc.append(x)
             x = self.encoding_conv[i](x)
-        out = self.output(x)
-        out = self.pool(out).view(batch_size, -1)
+        out = self.pool(x).features
+        # print(out)
+        out = out.view(batch_size, -1)
         out = self.linear(out)
         return out

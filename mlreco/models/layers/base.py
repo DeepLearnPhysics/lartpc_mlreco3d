@@ -5,7 +5,7 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 
-class NetworkBase(nn.Module):
+class SCNNetworkBase(nn.Module):
     '''
     Base Class for UResNet-type architectures.
 
@@ -24,7 +24,7 @@ class NetworkBase(nn.Module):
     '''
 
     def __init__(self, cfg, name='network_base'):
-        super(NetworkBase, self).__init__()
+        super(SCNNetworkBase, self).__init__()
         self.model_config = cfg[name]
         # Cross-network module configurations
         self.dimension = self.model_config.get('data_dim', 3)
@@ -64,7 +64,7 @@ class NetworkBase(nn.Module):
             - module (scn Module): network module to attach ResNet block.
             - a (int): number of input feature dimension
             - b (int): number of output feature dimension
-            - norm_layer (scn Module constructor): normlization layer to use. 
+            - norm_layer (scn Module constructor): normlization layer to use.
 
         RETURNS:
             None (operation is in-place)

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
+import torch
 
 def CollateSparse(batch):
     """
@@ -50,37 +51,68 @@ def CollateSparse(batch):
             ]
         else:
             result[key] = [sample[key] for sample in batch]
-            
+
     return result
 
-#def CollateSparse(batch):
-#    concat = np.concatenate
-#    result = []
-#    for i in range(len(batch[0])):
-#        if isinstance(batch[0][i], tuple) and isinstance(batch[0][i][0], np.ndarray) and len(batch[0][i][0].shape)==2:
-#            # handle SCN input batch
-#            voxels = concat( [ concat( [sample[i][0],
-#                                        np.full(shape=[len(sample[i][0]),1], fill_value=batch_id, dtype=np.int32)],
-#                                      axis=1 ) for batch_id, sample in enumerate(batch) ],
-#                            axis = 0)
-#            data = concat([sample[i][1] for sample in batch], axis=0)
-#            result.append( concat([voxels, data], axis=1) )
-#
-#        elif isinstance(batch[0][i],np.ndarray) and len(batch[0][i].shape)==1:
-#            result.append( concat( [ concat( [np.expand_dims(sample[i],1),
-#                                              np.full(shape=[len(sample[i]),1],fill_value=batch_id,dtype=np.float32)],
-#                                             axis=1 ) for batch_id,sample in enumerate(batch) ],
-#                                   axis=0)
-#                           )
-#        elif isinstance(batch[0][i],np.ndarray) and len(batch[0][i].shape)==2:
-#            result.append( concat( [ concat( [sample[i],
-#                                              np.full(shape=[len(sample[i]),1],fill_value=batch_id,dtype=np.float32)],
-#                                             axis=1 ) for batch_id,sample in enumerate(batch) ],
-#                                   axis=0)
-#                           )
-#        else:
-#            result.append([sample[i] for sample in batch])
-#    return resut#
+
+def CollateMinkowski(batch):
+    '''
+    INPUTS:
+        - batch: tuple of dictionary?
+    '''
+    import MinkowskiEngine as ME
+    result = {}
+    concat = np.concatenate
+    for key in batch[0].keys():
+        if key == 'particles_label':
+
+            coords = [sample[key][0] for sample in batch]
+            features = [sample[key][1] for sample in batch]
+
+            batch_index = np.full(shape=(coords[0].shape[0], 1), fill_value=0, dtype=np.float32)
+
+            coords_minibatch = []
+            feats_minibatch = []
+
+            for bidx, sample in enumerate(batch):
+                batch_index = np.full(shape=(coords[bidx].shape[0], 1), 
+                                      fill_value=bidx, dtype=np.float32)
+                batched_coords = concat([batch_index, coords[bidx], features[bidx]], axis=1)
+
+                coords_minibatch.append(batched_coords)
+            
+            coords = torch.Tensor(concat(coords_minibatch, axis=0))
+
+            result[key] = coords
+        else:
+            if isinstance(batch[0][key], tuple) and isinstance(batch[0][key][0], np.ndarray) and len(batch[0][key][0].shape)==2:
+                coords = [sample[key][0] for sample in batch]
+                features = [sample[key][1] for sample in batch]
+                coords, features = ME.utils.sparse_collate(coords, features)
+                result[key] = torch.cat([coords.float(), features.float()], dim=1)
+            elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==1:
+                result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
+                                                np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
+                                                axis=1 ) for batch_id,sample in enumerate(batch) ],
+                                    axis=0)
+            elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==2:
+                result[key] =  concat( [ concat( [sample[key],
+                                                np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
+                                                axis=1 ) for batch_id,sample in enumerate(batch) ],
+                                    axis=0)
+            elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+                result[key] = [
+                    concat([
+                        concat( [ concat( [sample[key][depth][0],
+                                                    np.full(shape=[len(sample[key][depth][0]),1], fill_value=batch_id, dtype=np.int32)],
+                                                axis=1 ) for batch_id, sample in enumerate(batch) ],
+                                        axis = 0),
+                        concat([sample[key][depth][1] for sample in batch], axis=0)
+                    ], axis=1) for depth in range(len(batch[0][key]))
+                ]
+            else:
+                result[key] = [sample[key] for sample in batch]
+    return result
 
 
 
@@ -89,9 +121,3 @@ def CollateDense(batch):
     for key in batch[0].keys():
         result[key] = np.array([sample[key] for sample in batch])
     return result
-
-#def CollateDense(batch):
-#    result  = []
-#    for i in range(len(batch[0])):
-#        result.append(np.array([sample[i] for sample in batch]))
-#    return result

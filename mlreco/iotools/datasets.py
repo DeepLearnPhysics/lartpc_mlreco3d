@@ -14,7 +14,7 @@ class LArCVDataset(Dataset):
            can be configured with arbitrary number of parser functions where each function can take arbitrary number of
            LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
     """
-    def __init__(self, data_schema, data_keys, limit_num_files=0, limit_num_samples=0, event_list=None):
+    def __init__(self, data_schema, data_keys, limit_num_files=0, limit_num_samples=0, event_list=None, skip_event_list=None):
         """
         Args: data_dirs ..... a list of data directories to find files (up to 10 files read from each dir)
               data_schema ... a dictionary of string <=> list of strings. The key is a unique name of a data chunk in a batch.
@@ -24,6 +24,7 @@ class LArCVDataset(Dataset):
               limit_num_files ... an integer limiting number of files to be taken per data directory
               limit_num_samples ... an integer limiting number of samples to be taken per data
               event_list ... a list of integers to specify which event (ttree index) to process
+              skip_event_list ... a list of integers to specify which events (ttree index) to skip
         """
 
         # Create file list
@@ -87,6 +88,10 @@ class LArCVDataset(Dataset):
             self._event_list=event_list[np.where(event_list < self._entries)]
             self._entries = len(self._event_list)
 
+        if skip_event_list is not None:
+            self._event_list = self._event_list[~np.isin(self._event_list, skip_event_list)]
+            self._entries = len(self._event_list)
+
         # Set total sample size
         if limit_num_samples > 0 and self._entries > limit_num_samples:
             self._entries = limit_num_samples
@@ -109,23 +114,30 @@ class LArCVDataset(Dataset):
         return data
 
     @staticmethod
+    def get_event_list(cfg, key):
+        event_list = None
+        if key in cfg:
+            if os.path.isfile(cfg[key]):
+                event_list = [int(val) for val in open(cfg[key],'r').read().replace(',',' ').split() if val.digit()]
+            else:
+                try:
+                    import ast
+                    event_list = ast.literal_eval(cfg[key])
+                except SyntaxError:
+                    print('iotool.dataset.%s has invalid representation:' % key,event_list)
+                    raise ValueError
+        return event_list
+
+    @staticmethod
     def create(cfg):
         data_schema = cfg['schema']
         data_keys   = cfg['data_keys']
         lnf         = 0 if not 'limit_num_files' in cfg else int(cfg['limit_num_files'])
         lns         = 0 if not 'limit_num_samples' in cfg else int(cfg['limit_num_samples'])
-        event_list  = None
-        if 'event_list' in cfg:
-            if os.path.isfile(cfg['event_list']):
-                event_list = [int(val) for val in open(cfg['event_list'],'r').read().replace(',',' ').split() if val.digit()]
-            else:
-                try:
-                    import ast
-                    event_list = ast.literal_eval(cfg['event_list'])
-                except SyntaxError:
-                    print('iotool.dataset.event_list has invalid representation:',event_list)
-                    raise ValueError
-        return LArCVDataset(data_schema=data_schema, data_keys=data_keys, limit_num_files=lnf, event_list=event_list)
+        event_list  = LArCVDataset.get_event_list(cfg, 'event_list')
+        skip_event_list = LArCVDataset.get_event_list(cfg, 'skip_event_list')
+
+        return LArCVDataset(data_schema=data_schema, data_keys=data_keys, limit_num_files=lnf, event_list=event_list, skip_event_list=skip_event_list)
 
     def data_keys(self):
         return self._data_keys

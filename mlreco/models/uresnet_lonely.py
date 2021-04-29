@@ -15,6 +15,24 @@ class UResNet(torch.nn.Module):
 
     Can also be used in a chain, for example stacking PPN layers on top.
 
+    A typical configuration goes under `uresnet_lonely` in `modules` section:
+
+    ..  code-block:: yaml
+
+        uresnet_ppn:
+          uresnet_lonely:
+            freeze: False
+            num_strides: 6
+            filters: 16
+            num_classes: 5
+            data_dim: 3
+            spatial_size: 768
+            ghost: True
+            features: 2
+            weight_loss: True
+            model_path: 'your_snapshot.ckpt'
+            model_name: 'uresnet_lonely'
+
     Configuration
     -------------
     num_strides : int
@@ -45,10 +63,12 @@ class UResNet(torch.nn.Module):
     -------
     list
         In order:
+
         - segmentation scores (N, num_classes)
         - feature maps of encoding path
         - feature maps of decoding path
         - if `ghost`, segmentation scores for deghosting (N, 2)
+
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (float,), (3, 1)]
@@ -76,7 +96,7 @@ class UResNet(torch.nn.Module):
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
         self.last = None
-        leakiness = 0
+        leakiness = self._model_config.get('leakiness', 0.33)
 
         def block(m, a, b):  # ResNet style blocks
             m.add(scn.ConcatTable()
@@ -93,7 +113,6 @@ class UResNet(torch.nn.Module):
            scn.SubmanifoldConvolution(self._dimension, nInputFeatures, m, 3, False)) # Kernel size 3, no bias
         self.concat = scn.JoinTable()
         # Encoding
-        self.bn = scn.BatchNormLeakyReLU(nPlanes[0], leakiness=leakiness)
         self.encoding_block = scn.Sequential()
         self.encoding_conv = scn.Sequential()
         module = scn.Sequential()
@@ -131,6 +150,10 @@ class UResNet(torch.nn.Module):
         self.linear = torch.nn.Linear(m, num_classes)
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
+
+        print('Total Number of Trainable Parameters = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+
 
     def forward(self, input):
         """
@@ -192,6 +215,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
     the number of classes, not counting the ghost point class.
+    
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (int,), (3, 1)]
@@ -301,13 +325,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                     # Loss for semantic segmentation
                     if self._weight_loss:
                         class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
-                        w = torch.Tensor([1.0 / c if c.item() > 0 else 0. for c in class_count]).double()
-                        #w = torch.Tensor([2.0, 2.0, 5.0, 10.0, 2.0]).double()
-                        #w = 1.0 - w / w.sum()
+                        sum_class_count = len(event_label)
+                        w = torch.Tensor([sum_class_count / c if c.item() > 0 else 0. for c in class_count]).float()
                         if torch.cuda.is_available():
                             w = w.cuda()
                         #print(class_count, w, class_count[0].item() > 0)
-                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w.float())
+                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w)
                     else:
                         loss_seg = self.cross_entropy(event_segmentation, event_label)
                         if weights is not None:

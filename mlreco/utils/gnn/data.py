@@ -12,11 +12,10 @@ def cluster_vtx_features(data, clusts, delta=0.0, whether_adjust_direction=False
     Args:
         data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)        : Orientation matrix regularization
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
-    return get_cluster_features(data, clusts, delta, whether_adjust_direction)
+    return get_cluster_features(data, clusts, whether_adjust_direction)
 
 
 def cluster_vtx_features_extended(data_values, data_sem_types, clusts):
@@ -50,21 +49,30 @@ def cluster_edge_dir(data, c1, c2):
     Returns:
         np.ndarray: (10) Array of edge direction (orientation, distance)
     """
-    from scipy.spatial.distance import cdist
+    # Get the voxels in the clusters connected by the edge
     x1 = get_cluster_voxels(data, c1)
     x2 = get_cluster_voxels(data, c2)
+
+    # Find the closest set point in each cluster
+    from scipy.spatial.distance import cdist
     d12 = cdist(x1, x2)
     imin = np.argmin(d12)
     i1, i2 = np.unravel_index(imin, d12.shape)
     v1 = x1[i1,:] # closest point in c1
     v2 = x2[i2,:] # closest point in c2
-    disp = v1 - v2 # displacement
-    lend = np.linalg.norm(disp) # length of displacement
+
+    # Displacement
+    disp = v1 - v2
+
+    # Distance
+    lend = np.linalg.norm(disp)
     if lend > 0:
         disp = disp / lend
+
+    # Outer product
     B = np.outer(disp, disp).flatten()
 
-    return np.concatenate([B, [lend]])
+    return np.concatenate([B, lend.reshape(1)])
 
 
 def cluster_edge_dirs(data, clusts, edge_index):
@@ -94,20 +102,30 @@ def cluster_edge_feature(data, c1, c2):
     Returns:
         np.ndarray: (19) Array of edge features (point1, point2, displacement, distance, orientation)
     """
-    from scipy.spatial.distance import cdist
+    # Get the voxels in the clusters connected by the edge
     x1 = get_cluster_voxels(data, c1)
     x2 = get_cluster_voxels(data, c2)
+
+    # Find the closest set point in each cluster
+    from scipy.spatial.distance import cdist
     d12 = cdist(x1, x2)
     imin = np.argmin(d12)
     i1, i2 = np.unravel_index(imin, d12.shape)
     v1 = x1[i1,:] # closest point in c1
     v2 = x2[i2,:] # closest point in c2
-    disp = v1 - v2 # displacement
-    lend = np.linalg.norm(disp) # length of displacement
+
+    # Displacement
+    disp = v1 - v2
+
+    # Distance
+    lend = np.linalg.norm(disp)
     if lend > 0:
         disp = disp / lend
+
+    # Outer product
     B = np.outer(disp, disp).flatten()
-    return np.concatenate([v1, v2, disp, [lend], B])
+
+    return np.concatenate([v1, v2, disp, lend.reshape(1), B])
 
 
 def cluster_edge_features(data, clusts, edge_index):
@@ -152,14 +170,23 @@ def edge_feature(data, i, j):
     Returns:
         np.ndarray: (19) Array of edge features (displacement, orientation)
     """
+
+    # Get the voxel coordinates
     xi = data[i,:3]
     xj = data[j,:3]
+
+    # Displacement
     disp = xj - xi
+
+    # Distance
     lend = np.linalg.norm(disp)
     if lend > 0:
         disp = disp / lend
+
+    # Outer product
     B = np.outer(disp, disp).flatten()
-    return np.concatenate([xi, xj, disp, [lend], B])
+
+    return np.concatenate([xi, xj, disp, lend.reshape(1), B])
 
 
 def edge_features(data, edge_index):
@@ -257,4 +284,4 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
         particles[batch_selection,3] = int(i)
 
-    return data, particles
+    return data, particles, merging_batch_id_list

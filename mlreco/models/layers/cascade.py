@@ -3,13 +3,13 @@ import torch.nn as nn
 import numpy as np
 import sparseconvnet as scn
 
-from mlreco.models.layers.base import NetworkBase
+from mlreco.models.layers.base import SCNNetworkBase
 from mlreco.models.layers.uresnet import UResNet
 from mlreco.models.layers.fpn import FPN
 from mlreco.models.clustercnn.clusternet import ClusterUNet
 
 
-class CascadeNet(NetworkBase):
+class CascadeNet(SCNNetworkBase):
     '''
     Simple CascadeNet architecture with interchangable backbone
     architectures.
@@ -52,7 +52,7 @@ class CascadeNet(NetworkBase):
             reduceBlock = self._resnet_block
         elif self.reduce_feature == 'conv':
             reduceBlock = self._block
-        elif self.reduce_feature = 'nin':
+        elif self.reduce_feature == 'nin':
             reduceBlock = self._nin_block
         else:
             raise ValueError('Invalid option for StackNet feature reducing layers.')
@@ -95,14 +95,14 @@ class CascadeNet(NetworkBase):
                 stack_feature.append(f)
             else:
                 stack_feature.append(layer)
-        
+
         out = self.concat(stack_feature)
         out = self.cluster_decoder(out)
         out = self.embedding(out)
 
         res = {
             'segmentation': cnet_output['segmentation'],
-            'cluster_features': cluster_feature
+            'cluster_features': cluster_feature,
             'final_layer': [out]
             }
 

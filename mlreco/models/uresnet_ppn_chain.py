@@ -70,6 +70,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
 
         # Don't forget to sum all losses
         result['uresnet_loss'] = uresnet_res['loss'].float()
+        result['uresnet_acc']  = uresnet_res['accuracy']
         result['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
+        result['accuracy'] = (result['uresnet_acc'] + result['ppn_acc'])/2
 
         return result

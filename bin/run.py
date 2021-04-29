@@ -3,6 +3,7 @@ import os
 import sys
 import yaml
 from os import environ
+import argparse
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
@@ -10,12 +11,12 @@ sys.path.insert(0, current_directory)
 from mlreco.main_funcs import process_config, train, inference
 
 
-def main():
-    cfg_file = sys.argv[1]
+def main(config):
+    cfg_file = config
     if not os.path.isfile(cfg_file):
-        cfg_file = os.path.join(current_directory, 'config', sys.argv[1])
+        cfg_file = os.path.join(current_directory, 'config', config)
     if not os.path.isfile(cfg_file):
-        print(sys.argv[1], 'not found...')
+        print(config, 'not found...')
         sys.exit(1)
 
     cfg = yaml.load(open(cfg_file, 'r'), Loader=yaml.Loader)
@@ -31,6 +32,14 @@ def main():
 
 if __name__ == '__main__':
     import torch
-    # with torch.autograd.detect_anomaly():
-    #     main()
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config')
+    parser.add_argument("--detect_anomaly",
+                        help="Turns on autograd.detect_anomaly for debugging",
+                        action='store_true')
+    args = parser.parse_args()
+    if args.detect_anomaly:
+        with torch.autograd.detect_anomaly():
+            main(args.config)
+    else:
+        main(args.config)

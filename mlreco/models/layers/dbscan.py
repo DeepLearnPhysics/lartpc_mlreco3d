@@ -11,7 +11,8 @@ class DBSCANFragmenter(torch.nn.Module):
     DBSCAN Layer that uses sklearn's DBSCAN implementation
     to fragment each of the particle classes into dense instances.
     - Runs pure DBSCAN for showers, Michel and Delta
-    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity
+    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity.
+      Alternatively, uses a graph-based method to cluster tracks based on PPN vertices
 
     Args:
         data ([torch.tensor]): (N,5) [x, y, z, batchid, sem_type]
@@ -21,12 +22,13 @@ class DBSCANFragmenter(torch.nn.Module):
     """
     def __init__(self, cfg, name='dbscan_frag'):
         super(DBSCANFragmenter, self).__init__()
-        self.cfg = cfg['dbscan_frag']
+        self.cfg = cfg[name]
         self.dim = self.cfg.get('dim', 3)
         self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
         self.min_samples = self.cfg.get('min_samples', 1)
         self.min_size = self.cfg.get('min_size', [10,3,3,3])
         self.num_classes = self.cfg.get('num_classes', 4)
+        self.cluster_classes = self.cfg.get('cluster_classes', range(self.num_classes))
         self.track_label = self.cfg.get('track_label', 1)
         self.michel_label = self.cfg.get('michel_label', 2)
         self.delta_label = self.cfg.get('delta_label', 3)
@@ -44,17 +46,18 @@ class DBSCANFragmenter(torch.nn.Module):
         # Output one list of fragments
         clusts = []
 
-        # Get the track points from the PPN output
+        # If tracks are clustered, get the track points from the PPN output
         data = data.detach().cpu().numpy()
-        numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
-                        'points':      [output['points'][0].detach().cpu().numpy()],
-                        'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
-        points =  uresnet_ppn_type_point_selector(data, numpy_output,
-                                                  score_threshold = self.ppn_score_threshold,
-                                                  type_threshold = self.ppn_type_threshold,
-                                                  type_score_threshold = self.ppn_type_score_threshold)
-        point_labels = points[:,-1]
-        track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
+        if self.track_label in self.cluster_classes:
+            numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
+                            'points':      [output['points'][0].detach().cpu().numpy()],
+                            'mask_ppn2':   [output['mask_ppn2'][0].detach().cpu().numpy()]}
+            points =  uresnet_ppn_type_point_selector(data, numpy_output,
+                                                      score_threshold = self.ppn_score_threshold,
+                                                      type_threshold = self.ppn_type_threshold,
+                                                      type_score_threshold = self.ppn_type_score_threshold)
+            point_labels = points[:,-1]
+            track_points = points[(point_labels == self.track_label) | (point_labels == self.michel_label),:self.dim+1]
 
         # Break down the input data to its components
         bids = np.unique(data[:,self.dim])
@@ -64,7 +67,7 @@ class DBSCANFragmenter(torch.nn.Module):
         # Loop over batch and semantic classes
         for bid in bids:
             batch_mask = data[:,self.dim] == bid
-            for s in range(self.num_classes):
+            for s in self.cluster_classes:
                 # Run DBSCAN
                 mask = batch_mask & (segmentation == s)
                 if s == self.track_label:
@@ -90,7 +93,8 @@ class DBSCANFragmenter(torch.nn.Module):
                 cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if (i > -1 and np.sum(labels == i) >= self.min_size[s])]
                 clusts.extend(cls_idx)
 
-        return np.array(clusts, dtype=object)
+        same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
+        return np.array(clusts, dtype=object if not same_length else np.int64)
 
 
 class DBScanClusts(torch.nn.Module):

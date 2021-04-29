@@ -18,7 +18,7 @@ class DiscriminativeLoss(torch.nn.Module):
 
     def __init__(self, cfg, reduction='sum'):
         super(DiscriminativeLoss, self).__init__()
-        self.loss_config = cfg['clustering_loss']
+        self.loss_config = cfg['spice_loss']
         self.num_classes = self.loss_config.get('num_classes', 5)
         self.depth = self.loss_config.get('stride', 5)
 

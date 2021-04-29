@@ -284,37 +284,112 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
     return interaction_ids
 
 
-def get_nu_id(cluster_event, particle_v, interaction_ids):
+def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
     '''
-    A function to sort out nu ids (0 for cosmic, 1 to n_nu for nu).
+    A function to sorts interactions into nu or not nu (0 for cosmic, 1 for nu).
     CAVEAT: Dirty way to sort out nu_ids
             Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
     Inputs:
         - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
         - particle_v vector: larcv::EventParticle.as_vector()
         - interaction_id: a numpy array with shape (n, 1) where 1 is interaction id
+        - (optional) particle_mpv: vector of particles from mpv generator, used to work around
+        the lack of proper interaction id for the time being.
     Outputs:
         - nu_id: a numpy array with the shape (n,1)
     '''
     # initiate the nu_id
-    nu_id = np.ones(len(particle_v))*(-1)
-    # find the first cluster that has nonzero size
-    sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
-    nonzero = np.where(sizes > 0)[0]
-    first_clust_id = nonzero[0]
-    # the corresponding interaction id
-    nu_interaction_id = interaction_ids[first_clust_id]
-    # Get clust indexes for interaction_id = nu_interaction_id
-    inds = np.where(interaction_ids==nu_interaction_id)[0]
-    # Check whether there're at least two clusts coming from 'primary' process
-    num_primary = 0
-    for i, part in enumerate(particle_v):
-        if i not in inds:
-            continue
-        create_prc = part.creation_process()
-        if create_prc=='primary':
-            num_primary += 1
-    # if there is nu interaction
-    if num_primary>1:
-        nu_id[inds]=1
+    nu_id = np.zeros(len(particle_v))
+
+    if particle_mpv is None:
+        # find the first cluster that has nonzero size
+        sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
+        nonzero = np.where(sizes > 0)[0]
+        first_clust_id = nonzero[0]
+        # the corresponding interaction id
+        nu_interaction_id = interaction_ids[first_clust_id]
+        # Get clust indexes for interaction_id = nu_interaction_id
+        inds = np.where(interaction_ids == nu_interaction_id)[0]
+        # Check whether there're at least two clusts coming from 'primary' process
+        num_primary = 0
+        for i, part in enumerate(particle_v):
+            if i not in inds:
+                continue
+            create_prc = part.creation_process()
+            parent_pdg = part.parent_pdg_code()
+            if create_prc == 'primary' or parent_pdg == 111:
+                num_primary += 1
+        # if there is nu interaction
+        if num_primary > 1:
+            nu_id[inds] = 1
+    else:
+        # Find mpv particles
+        is_mpv = np.zeros((len(particle_v),))
+        mpv_ids = [p.id() for p in particle_mpv]
+        for idx, part in enumerate(particle_v):
+            # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
+            if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
+                is_mpv[idx] = 1.
+        is_mpv = is_mpv.astype(bool)
+        nu_interaction_ids = np.unique(interaction_ids[is_mpv])
+        for idx, x in enumerate(nu_interaction_ids):
+            # # Check whether there're at least two clusts coming from 'primary' process
+            # num_primary = 0
+            # for part in particle_v[interaction_ids == x]:
+            #     if part.creation_process() == 'primary':
+            #         num_primary += 1
+            # if num_primary > 1:
+            nu_id[interaction_ids == x] = 1 # Only tells whether neutrino or not
+            # nu_id[interaction_ids == x] = idx
+
     return nu_id
+
+def get_particle_id(particles_v, nu_ids):
+    '''
+    Function that gives one of five labels to particles of
+    particle species predictions. This function ensures:
+    - Particles that do not originate from an MPV are labeled -1
+    - Particles that are not a track or a shower, and their
+      daughters, are labeled -1 (Michel and Delta)
+    - Particles that are neutron daughters are labeled -1
+    - All shower daughters are labeled the same as their primary. This
+      makes sense as otherwise an electron primary gets overruled by
+      its many photon daughters (voxel-wise majority vote). This can
+      lead to problems as, if an electron daughter is not clustered with
+      the primary, it is labeled electron, which is counter-intuitive.
+
+    Inputs:
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    type_labels = {
+        22: 0,  # photon
+        11: 1,  # e-
+        -11: 1, # e+
+        13: 2,  # mu-
+        -13: 2, # mu+
+        211: 3, # pi+
+        -211: 3, # pi-
+        2212: 4, # protons
+    }
+
+    particle_ids = np.empty(len(nu_ids))
+    for i in range(len(particle_ids)):
+        group_id = particles_v[i].group_id()
+
+        t = int(particles_v[group_id].pdg_code())
+        process = particles_v[group_id].creation_process()
+        shape = int(particles_v[group_id].shape())
+
+        if nu_ids[i] < 1: t = -1
+        if shape > 1: t = -1
+        if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
+
+        if t in type_labels.keys():
+            particle_ids[i] = type_labels[t]
+        else:
+            particle_ids[i] = -1
+
+    return particle_ids

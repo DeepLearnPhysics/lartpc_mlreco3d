@@ -30,6 +30,7 @@ class trainval(object):
         self._minibatch_size = self._iotool_config.get('minibatch_size')
         self._input_keys  = self._model_config.get('network_input', [])
         self._output_keys = self._model_config.get('keep_output',[])
+        self._ignore_keys = self._model_config.get('ignore_keys', [])
         self._loss_keys   = self._model_config.get('loss_input', [])
         self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
@@ -170,6 +171,7 @@ class trainval(object):
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
         data_blob,res_combined = self.forward(data_iter)
+        # print(data_blob['index'])
         # Run backward once for all the previous forward
         self.backward()
         self._watch.stop('train')
@@ -211,7 +213,7 @@ class trainval(object):
             unwrapper = self._trainval_config.get('unwrapper',None)
             if unwrapper is not None:
                 try:
-                    unwrapper = getattr(utils,unwrapper)
+                    unwrapper = getattr(utils.unwrap,unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % output_cfg['unwrapper'])
@@ -247,6 +249,7 @@ class trainval(object):
         """
         loss_keys   = self._loss_keys
         output_keys = self._output_keys
+        ignore_keys = self._ignore_keys
         with torch.set_grad_enabled(self._train):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
@@ -286,6 +289,7 @@ class trainval(object):
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
 
             for key in result.keys():
+                if key in ignore_keys: continue
                 if len(output_keys) and not key in output_keys: continue
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
@@ -319,6 +323,36 @@ class trainval(object):
                 for param in module.parameters():
                     param.requires_grad = False
 
+        # Breadth-first search for freeze_weight parameter in config
+        # (very similar to weight loading below)
+        module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
+        while len(module_keys) > 0:
+            module, config = module_keys.pop()
+            if config.get('freeze_weights', False):
+                model_name = config.get('model_name', module)
+                model_path = config.get('model_path', None)
+
+                count = 0
+                # with open(model_path, 'rb') as f:
+                #     checkpoint = torch.load(f, map_location='cpu')
+                #     for name, param in self._model.named_parameters():
+                #         other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                #         if module in name and 'module.' + other_name in checkpoint['state_dict'].keys():
+                #             param.requires_grad = False
+                #             count += 1
+                for name, param in self._model.named_parameters():
+                    other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                    if module in name and other_name in self._model.state_dict().keys():
+                        param.requires_grad = False
+                        count += 1
+
+                print('Freezing %d weights for a sub-module' % count,module)
+
+            # Keep the BFS going
+            for key in config:
+                if isinstance(config[key], dict):
+                    module_keys.append((key, config[key]))
+
         self._net = DataParallel(self._model,device_ids=self._gpus)
 
         if self._train:
@@ -348,9 +382,17 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
-        for module in module_config:
-            if 'model_path' in module_config[module] and module_config[module]['model_path'] != '':
-                model_paths.append((module, module_config[module]['model_path'], module_config[module].get('model_name', module)))
+        
+        # Breadth first search of model_path
+        #module_keys = list(module_config.items())
+        module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
+        while len(module_keys) > 0:
+            module, config = module_keys.pop()
+            if 'model_path' in config and config['model_path'] != '':
+                model_paths.append((module, config['model_path'], config.get('model_name', module)))
+            for key in config:
+                if isinstance(config[key], dict):
+                    module_keys.append((key, config[key]))
 
         if model_paths: #self._model_path and self._model_path != '':
             for module, model_path, model_name in model_paths:
@@ -376,11 +418,18 @@ class trainval(object):
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
                             # Additionally, only select weights related to current module
                             if module in name:
+                                # if module == 'grappa_inter' :
+                                #     print(name, other_name, other_name in checkpoint['state_dict'].keys())
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
                                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
                                 else:
                                     missing_keys.append((name, other_name))
+                        # if module == 'grappa_inter':
+                        #     print("missing keys", missing_keys)
+                        #     for key in checkpoint['state_dict'].keys():
+                        #         if 'node_encoder'  in key or 'edge_encoder' in key:
+                        #             print(key)
                         if missing_keys:
                             print(checkpoint['state_dict'].keys())
                             for m in missing_keys:
