@@ -10,6 +10,7 @@ from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
 from pprint import pprint
 
+
 class GraphSPICEEmbedder(UResNet):
 
     MODULES = ['network_base', 'uresnet', 'graph_spice_embedder']
@@ -129,7 +130,7 @@ class GraphSPICEEmbedder(UResNet):
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
             "segmentation": [segmentation],
-            # "features": [output_features],
+            "features": [output_features],
             "hypergraph_features": [hypergraph_features]
         }
 

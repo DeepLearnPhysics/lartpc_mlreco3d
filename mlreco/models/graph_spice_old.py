@@ -26,15 +26,18 @@ class GraphSPICE(nn.Module):
         '''
 
         '''
-        point_cloud, segment_label = input
+        point_cloud, cluster_label = input
 
-        mask = ~np.isin(segment_label[:, -1].detach().cpu().numpy(), self.skip_classes)
-        x = [point_cloud[mask], segment_label[mask]]
+        mask = ~np.isin(cluster_label[:, -1].detach().cpu().numpy(), self.skip_classes)
+        x = [point_cloud[mask]]
+
+        labels = cluster_label[mask]
+
         res = self.model(x)
         coordinates = point_cloud[:, :3]
         batch_indices = point_cloud[:, 3].int()
-        res['coordinates'] = [coordinates]
-        res['batch_indices'] = [batch_indices]
+        res['coordinates'] = [coordinates[mask]]
+        res['batch_indices'] = [batch_indices[mask]]
         graph_data = self.constructor(res, labels)
         res['edge_score'] = [graph_data.edge_attr]
         res['edge_index'] = [graph_data.edge_index]

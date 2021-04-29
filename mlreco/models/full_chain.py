@@ -360,7 +360,7 @@ class FullChain(torch.nn.Module):
                 graph_spice_label = torch.cat((label_clustering[0][:, :-1], semantic_labels.reshape(-1,1)), dim=1)
                 spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], graph_spice_label))
                 result.update(spatial_embeddings_output)
-                # print(result.keys())
+                # print(spatial_embeddings_output.keys())
                 self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], spatial_embeddings_output['graph_info'][0])
                 self.gs_manager.fit_predict(gen_numpy_graph=True)
                 #print(self.gs_manager._node_pred)
@@ -781,6 +781,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'feature_embeddings': out['feature_embeddings'],
                     'covariance': out['covariance'],
                     'hypergraph_features': out['hypergraph_features'],
+                    'features': out['features'],
                     'occupancy': out['occupancy'],
                     'coordinates': out['coordinates'],
                     'batch_indices': out['batch_indices'],
@@ -802,12 +803,13 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # print(gs_seg_label.size())
                 # print(gs_seg_label[gs_seg_label[:, -1] ==1].size())
                 res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], cluster_label)
+                #print(res_graph_spice.keys())
                 accuracy += res_graph_spice['accuracy']
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
                 res['graph_spice_loss'] = res_graph_spice['loss']
                 res['graph_spice_accuracy'] = res_graph_spice['accuracy']
-                res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
-                res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
+                #res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
+                #res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
                 res['graph_spice_occ_loss'] = res_graph_spice['occ_loss']
                 res['graph_spice_cov_loss'] = res_graph_spice['cov_loss']
                 res['graph_spice_sp_intra'] = res_graph_spice['sp_intra']
