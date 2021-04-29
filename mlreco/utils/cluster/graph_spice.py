@@ -458,7 +458,6 @@ class ClusterGraphConstructor:
             # assert False
             # print(self.node_pred.get_example(entry).pos)
             pred = self.node_pred.get_example(entry).x
-            print(pred)
             # print(pred.unique())
             # print(labels.unique())
             for f in metrics:
