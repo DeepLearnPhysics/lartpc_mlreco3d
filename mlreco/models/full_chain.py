@@ -356,7 +356,7 @@ class FullChain(torch.nn.Module):
         if self.enable_cnn_clust:
             if self._enable_graph_spice:
                 if label_clustering is None:
-                    raise("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
+                    raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
                 graph_spice_label = torch.cat((label_clustering[0][:, :-1], semantic_labels.reshape(-1,1)), dim=1)
                 spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], graph_spice_label))
                 result.update(spatial_embeddings_output)
