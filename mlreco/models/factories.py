@@ -22,6 +22,8 @@ def model_dict():
     from . import full_cnn
     from . import full_chain
 
+    from . import uresnet_adversarial
+
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
         # Using SCN built-in UResNet
@@ -60,6 +62,8 @@ def model_dict():
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         # Full reconstruction chain, including an option for deghosting
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
+        # Adversarial loss UResNet training
+        "uresnet_lonely": (uresnet_adversarial.UResNetAdversarial, uresnet_adversarial.AdversarialLoss),
     }
     return models
 

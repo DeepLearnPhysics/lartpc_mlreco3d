@@ -2,11 +2,40 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
+from .uresnet_lonely import SegmentationLoss
 
-
-class UResNet(torch.nn.Module):
+class GradientReversalFunction(torch.autograd.Function):
     """
-    UResNet
+    Gradient Reversal Layer from:
+    Unsupervised Domain Adaptation by Backpropagation (Ganin & Lempitsky, 2015)
+    Forward pass is the identity function. In the backward pass,
+    the upstream gradients are multiplied by -lambda (i.e. gradient is reversed)
+    """
+
+    @staticmethod
+    def forward(ctx, x, lambda_):
+        ctx.lambda_ = lambda_
+        return x.clone()
+
+    @staticmethod
+    def backward(ctx, grads):
+        lambda_ = ctx.lambda_
+        lambda_ = grads.new_tensor(lambda_)
+        dx = -lambda_ * grads
+        return dx, None
+
+
+class GradientReversal(torch.nn.Module):
+    def __init__(self, lambda_=1):
+        super(GradientReversal, self).__init__()
+        self.lambda_ = lambda_
+
+    def forward(self, x):
+        return GradientReversalFunction.apply(x, self.lambda_)
+
+class UResNetAdversarial(torch.nn.Module):
+    """
+    UResNetAdversarial
 
     For semantic segmentation, using sparse convolutions from SCN, but not the
     ready-made UNet from SCN library. The option `ghost` allows to train at the
@@ -54,10 +83,10 @@ class UResNet(torch.nn.Module):
         ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
-    MODULES = ['uresnet_lonely']
+    MODULES = ['uresnet_adversarial']
 
     def __init__(self, cfg, name="uresnet_lonely"):
-        super(UResNet, self).__init__()
+        super(UResNetAdversarial, self).__init__()
         import sparseconvnet as scn
         self._model_config = cfg[name]
 
@@ -72,6 +101,7 @@ class UResNet(torch.nn.Module):
         nInputFeatures = self._model_config.get('features', 1)
         spatial_size = self._model_config.get('spatial_size', 512)
         num_classes = self._model_config.get('num_classes', 5)
+        self.lam = cfg['discriminator'].get('lambda', 1.)
 
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
@@ -132,6 +162,10 @@ class UResNet(torch.nn.Module):
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
 
+        self.grad_reverse = GradientReversal(self.lam)
+
+        self.linear_disc = torch.nn.Linear(m, 2)
+
     def forward(self, input):
         """
         point_cloud is a list of length minibatch size (assumes mbs = 1)
@@ -166,8 +200,12 @@ class UResNet(torch.nn.Module):
         if self._ghost:
             x_ghost = self.linear_ghost(x)
 
+        x = self.grad_reverse(x)
+        x_disc = self.linear_disc(x)
+
         res = {
             'segmentation': [x_seg],
+            'discrimination': [x_disc],
             'ppn_feature_enc' : [feature_ppn],
             'ppn_feature_dec' : [feature_ppn2]
         }
@@ -178,7 +216,7 @@ class UResNet(torch.nn.Module):
         return res
 
 
-class SegmentationLoss(torch.nn.modules.loss._Loss):
+class AdversarialLoss(torch.nn.modules.loss._Loss):
     """
     Loss definition for UResNet.
 
@@ -197,23 +235,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
-    def __init__(self, cfg, reduction='sum'):
-        super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['uresnet_lonely']
-        self._ghost = self._cfg.get('ghost', False)
-        self._ghost_label = self._cfg.get('ghost_label', -1)
-        self._num_classes = self._cfg.get('num_classes', 5)
-        self._alpha = self._cfg.get('alpha', 1.0)
-        self._beta = self._cfg.get('beta', 1.0)
-        self._weight_loss = self._cfg.get('weight_loss', False)
-        self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
+    def __init__(self, cfg, reduction='mean'):
+        super(AdversarialLoss, self).__init__()
+        self.uresnet_loss = SegmentationLoss(cfg)
+        self.discriminator_loss = torch.nn.CrossEntropyLoss(reduction=reduction)
 
-    def distances(self, v1, v2):
-        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
-
-    def forward(self, result, label, weights=None):
+    def forward(self, result, label, data_label):
         """
         result[0], label and weight are lists of size #gpus = batch_size.
         segmentation has as many elements as UResNet returns.
@@ -225,133 +252,22 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         If ghost = True, then num_classes should not count the ghost class.
         If ghost_label > -1, then we perform only ghost segmentation.
         """
-        assert len(result['segmentation']) == len(label)
-        batch_ids = [d[:, -2] for d in label]
-        uresnet_loss, uresnet_acc = 0., 0.
-        uresnet_acc_class = [0.] * self._num_classes
-        count_class = [0.] * self._num_classes
-        mask_loss, mask_acc = 0., 0.
-        ghost2ghost, nonghost2nonghost = 0., 0.
-        count = 0
-        for i in range(len(label)):
-            for b in batch_ids[i].unique():
-                batch_index = batch_ids[i] == b
+        # Apply the UResNet classification loss only on simulation voxels
+        results = self.uresnet_loss(result, label, data_label)
+        results['seg_loss'] = float(results['loss'])
+        results['seg_accuracy'] = float(results['accuracy'])
 
-                event_segmentation = result['segmentation'][i][batch_index]  # (N, num_classes)
-                event_label = label[i][batch_index][:, -1][:, None]  # (N, 1)
-                event_label = torch.squeeze(event_label, dim=-1).long()
-                if self._ghost_label > -1:
-                    event_label = (event_label == self._ghost_label).long()
+        # Apply the discriminator loss
+        disc_loss = self.discriminator_loss(result['discrimination'][0], data_label[0][:,-1].long())
+        disc_acc  = float(torch.sum(torch.argmax(result['discrimination'][0],dim=1) == data_label[0][:,-1].long()))/len(data_label[0])
+        results['disc_loss'] = float(disc_loss)
+        results['disc_accuracy'] = disc_acc
 
-                elif self._ghost:
-                    # check and warn about invalid labels
-                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
-                    if (unique_label > self._num_classes).long().sum():
-                        print('Invalid semantic label found (will be ignored)')
-                        print('Semantic label values:',unique_label)
-                        print('Label counts:',unique_count)
-                    event_ghost = result['ghost'][i][batch_index]  # (N, 2)
-                    # 0 = not a ghost point, 1 = ghost point
-                    mask_label = (event_label == self._num_classes).long()
-                    # loss_mask = self.cross_entropy(event_ghost, mask_label)
-                    num_ghost_points = (mask_label == 1).sum().float()
-                    num_nonghost_points = (mask_label == 0).sum().float()
-                    fraction = num_ghost_points / (num_ghost_points + num_nonghost_points)
-                    weight = torch.stack([fraction, 1. - fraction]).float()
-                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
-                    mask_loss += loss_mask
-                    # mask_loss += torch.mean(loss_mask)
+        results['loss'] += disc_loss
+        results['accuracy'] += disc_acc
+        results['accuracy'] /= 2.
 
-                    # Accuracy of ghost mask: fraction of correcly predicted
-                    # points, whether ghost or nonghost
-                    with torch.no_grad():
-                        predicted_mask = torch.argmax(event_ghost, dim=-1)
+        print('Segmentation accuracy:', results['seg_accuracy'])
+        print('Disctriminator accuracy:', results['disc_accuracy'])
 
-                        # Accuracy ghost2ghost = fraction of correcly predicted
-                        # ghost points as ghost points
-                        if float(num_ghost_points.item()) > 0:
-                            ghost2ghost += (predicted_mask[event_label == 5] == 1).sum().item() / float(num_ghost_points.item())
-
-                        # Accuracy noghost2noghost = fraction of correctly predicted
-                        # non ghost points as non ghost points
-                        if float(num_nonghost_points.item()) > 0:
-                            nonghost2nonghost += (predicted_mask[event_label < 5] == 0).sum().item() / float(num_nonghost_points.item())
-
-                        # Global ghost predictions accuracy
-                        acc_mask = predicted_mask.eq_(mask_label).sum().item() / float(predicted_mask.nelement())
-                        mask_acc += acc_mask
-
-                    # Now mask to compute the rest of UResNet loss
-                    mask = event_label < self._num_classes
-                    event_segmentation = event_segmentation[mask]
-                    event_label = event_label[mask]
-                else:
-                    # check and warn about invalid labels
-                    unique_label,unique_count = torch.unique(event_label,return_counts=True)
-                    if (unique_label >= self._num_classes).long().sum():
-                        print('Invalid semantic label found (will be ignored)')
-                        print('Semantic label values:',unique_label)
-                        print('Label counts:',unique_count)
-                    # Now mask to compute the rest of UResNet loss
-                    mask = event_label < self._num_classes
-                    event_segmentation = event_segmentation[mask]
-                    event_label = event_label[mask]
-
-                if event_label.shape[0] > 0:  # FIXME how to handle empty mask?
-                    # Loss for semantic segmentation
-                    if self._weight_loss:
-                        class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
-                        sum_class_count = len(event_label)
-                        w = torch.Tensor([sum_class_count / c if c.item() > 0 else 0. for c in class_count]).float()
-                        if torch.cuda.is_available():
-                            w = w.cuda()
-                        #print(class_count, w, class_count[0].item() > 0)
-                        loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w)
-                    else:
-                        loss_seg = self.cross_entropy(event_segmentation, event_label)
-                        if weights is not None:
-                            loss_seg *= weights[i][batch_index][:, -1].float()
-                    uresnet_loss += torch.mean(loss_seg)
-
-                    # Accuracy for semantic segmentation
-                    with torch.no_grad():
-                        predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                        if weights is None:
-                            acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
-                        else:
-                            weight_mask = weights[i][batch_index][:,-1] > 0.
-                            acc = predicted_labels[weight_mask].eq_(event_label[weight_mask]).sum().item()/float(torch.sum(weight_mask))
-                        uresnet_acc += acc
-
-                        # Class accuracy
-                        for c in range(self._num_classes):
-                            class_mask = event_label == c
-                            class_count = class_mask.sum().item()
-                            if class_count > 0:
-                                uresnet_acc_class[c] += predicted_labels[class_mask].sum().item() / float(class_count)
-                                count_class[c] += 1
-
-                count += 1
-
-        if self._ghost:
-            results = {
-                'accuracy': uresnet_acc/count,
-                'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count,
-                'mask_acc': mask_acc / count,
-                'mask_loss': self._beta * mask_loss / count,
-                'uresnet_loss': self._alpha * uresnet_loss / count,
-                'uresnet_acc': uresnet_acc / count,
-                'ghost2ghost': ghost2ghost / count,
-                'nonghost2nonghost': nonghost2nonghost / count
-            }
-        else:
-            results = {
-                'accuracy': uresnet_acc/count,
-                'loss': uresnet_loss/count
-            }
-        for c in range(self._num_classes):
-            if count_class[c] > 0:
-                results['accuracy_class_%d' % c] = uresnet_acc_class[c]/count_class[c]
-            else:
-                results['accuracy_class_%d' % c] = -1.
         return results
