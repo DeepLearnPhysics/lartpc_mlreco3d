@@ -22,21 +22,23 @@ class DBSCANFragmenter(torch.nn.Module):
     """
     def __init__(self, cfg, name='dbscan_frag'):
         super(DBSCANFragmenter, self).__init__()
-        self.cfg = cfg[name]
-        self.dim = self.cfg.get('dim', 3)
-        self.eps = self.cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
-        self.min_samples = self.cfg.get('min_samples', 1)
-        self.min_size = self.cfg.get('min_size', [10,3,3,3])
-        self.num_classes = self.cfg.get('num_classes', 4)
-        self.cluster_classes = self.cfg.get('cluster_classes', range(self.num_classes))
-        self.track_label = self.cfg.get('track_label', 1)
-        self.michel_label = self.cfg.get('michel_label', 2)
-        self.delta_label = self.cfg.get('delta_label', 3)
-        self.track_clustering_method = self.cfg.get('track_clustering_method', 'masked_dbscan')
-        self.ppn_score_threshold = self.cfg.get('ppn_score_threshold', 0.5)
-        self.ppn_type_threshold = self.cfg.get('ppn_type_threshold', 1.999)
-        self.ppn_type_score_threshold = self.cfg.get('ppn_type_score_threshold', 0.5)
-        self.ppn_mask_radius = self.cfg.get('ppn_mask_radius', 5)
+
+        model_cfg = cfg[name]
+
+        self.dim = model_cfg.get('dim', 3)
+        self.eps = model_cfg.get('eps', [1.999, 1.999, 1.999, 1.999])
+        self.min_samples = model_cfg.get('min_samples', 1)
+        self.min_size = model_cfg.get('min_size', [10,3,3,3])
+        self.num_classes = model_cfg.get('num_classes', 4)
+        self.cluster_classes = model_cfg.get('cluster_classes', range(self.num_classes))
+        self.track_label = model_cfg.get('track_label', 1)
+        self.michel_label = model_cfg.get('michel_label', 2)
+        self.delta_label = model_cfg.get('delta_label', 3)
+        self.track_clustering_method = model_cfg.get('track_clustering_method', 'masked_dbscan')
+        self.ppn_score_threshold = model_cfg.get('ppn_score_threshold', 0.5)
+        self.ppn_type_threshold = model_cfg.get('ppn_type_threshold', 1.999)
+        self.ppn_type_score_threshold = model_cfg.get('ppn_type_score_threshold', 0.5)
+        self.ppn_mask_radius = model_cfg.get('ppn_mask_radius', 5)
 
     def forward(self, data, output):
 
