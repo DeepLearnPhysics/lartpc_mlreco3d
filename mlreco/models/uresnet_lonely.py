@@ -311,16 +311,15 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         loss_seg = self.cross_entropy(event_segmentation, event_label)
                         if weights is not None:
                             loss_seg *= weights[i][batch_index][:, -1].float()
-                    uresnet_loss += torch.mean(loss_seg)
+                    if weights is not None:
+                        uresnet_loss += torch.sum(loss_seg)/torch.sum(weights[i][batch_index][:,-1].float())
+                    else:
+                        uresnet_loss += torch.mean(loss_seg)
 
                     # Accuracy for semantic segmentation
                     with torch.no_grad():
                         predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                        if weights is None:
-                            acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
-                        else:
-                            weight_mask = weights[i][batch_index][:,-1] > 0.
-                            acc = predicted_labels[weight_mask].eq_(event_label[weight_mask]).sum().item()/float(torch.sum(weight_mask))
+                        acc = predicted_labels.eq_(event_label).sum().item() / float(predicted_labels.nelement())
                         uresnet_acc += acc
 
                         # Class accuracy

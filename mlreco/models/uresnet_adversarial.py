@@ -253,7 +253,9 @@ class AdversarialLoss(torch.nn.modules.loss._Loss):
         If ghost_label > -1, then we perform only ghost segmentation.
         """
         # Apply the UResNet classification loss only on simulation voxels
-        results = self.uresnet_loss(result, label, data_label)
+        sim_masks = [data_label[i][:,-1] > 0. for i in range(len(label))]
+        results = self.uresnet_loss({'segmentation': [result['segmentation'][i][sim_masks[i]] for i in range(len(label))]},
+                                    [label[i][sim_masks[i]] for i in range(len(label))])
         results['seg_loss'] = float(results['loss'])
         results['seg_accuracy'] = float(results['accuracy'])
 
