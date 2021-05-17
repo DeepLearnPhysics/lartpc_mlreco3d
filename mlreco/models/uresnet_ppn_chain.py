@@ -60,8 +60,8 @@ class ChainLoss(torch.nn.modules.loss._Loss):
         self.uresnet_loss = SegmentationLoss(cfg)
         self.ppn_loss = PPNLoss(cfg)
 
-    def forward(self, result, label, particles):
-        uresnet_res = self.uresnet_loss(result, label)
+    def forward(self, result, label, particles, weights=None):
+        uresnet_res = self.uresnet_loss(result, label, weights)
         ppn_res = self.ppn_loss(result, label, particles)
 
         result = {}
