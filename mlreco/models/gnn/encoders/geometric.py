@@ -1,6 +1,7 @@
 # Geometric feature extractor for Cluster GNN
 import torch
 import numpy as np
+from torch_scatter import scatter_min
 from mlreco.utils.gnn.data import cluster_vtx_features, cluster_vtx_features_extended
 from mlreco.utils.gnn.cluster import cluster_start_point
 
@@ -189,3 +190,71 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
             feats = torch.cat([feats,feats_flip])
 
         return feats
+
+
+class ClustGeoEdgeEncoderVectorized(torch.nn.Module):
+    """
+    Produces geometric cluster edge features much faster if:
+    - It is run on **GPU**
+    - The graph is complete or close to complete
+
+    This does not help if the number of edges is small or if ran on CPU.
+    """
+    def __init__(self, model_config):
+        super(ClustGeoEdgeEncoderVectorized, self).__init__()
+
+    def forward(self, data, clusts, edge_index):
+
+        # Get the voxel set (torch geometric expects float features so might as well cast here)
+        voxels = data[:,:3].float()
+
+        # Loop over the different batches
+        feats, edge_ids = [], []
+        batch_ids = torch.cat([data[c[0],3].reshape(-1) for c in clusts])
+        for b in batch_ids.unique():
+
+            # Get the ids of the voxels that belong to the list of clusters and their cluster ids
+            batch_mask = torch.nonzero(batch_ids == b, as_tuple=True)[0]
+            voxel_ids  = torch.cat([torch.tensor(clusts[c], dtype=torch.long, device=voxels.device) for c in batch_mask])
+            clust_ids  = torch.cat([i*torch.ones(len(clusts[c]), dtype=torch.long, device=voxels.device) for i, c in enumerate(batch_mask)])
+
+            # Get the edge index of all the pair of voxels in the batch
+            batch_voxels   = voxels[voxel_ids]
+            batch_edge_ids = (len(batch_mask)*clust_ids.reshape(-1,1)+clust_ids).flatten()
+
+            # Get the distance matrix
+            dist_mat = torch.cdist(batch_voxels, batch_voxels).flatten()
+
+            # Get the ids of the voxel pairs which minimize the distance
+            lend, idxs = scatter_min(dist_mat, batch_edge_ids)
+
+            # Get the points that correspond to the first voxels
+            v1 = batch_voxels[idxs//len(batch_voxels)]
+
+            # Get the points that correspond to the second voxels
+            v2 = batch_voxels[idxs%len(batch_voxels)]
+
+            # Get the displacement
+            disp = v1 - v2
+
+            # Reshape the distance vector to a column vector
+            lend = lend.reshape(-1,1)
+
+            # Normalize the displacement
+            disp = disp/(lend + (lend == 0))
+
+            # Compute the outer product of the displacement
+            n = len(disp)
+            B = torch.matmul(disp.reshape(n,-1,1), disp.reshape(n,1,-1)).reshape(n,-1)
+
+            feats.append(torch.cat([v1, v2, disp, lend, B], dim=1))
+            edge_ids.append((len(clusts)*batch_mask.reshape(-1,1)+batch_mask).flatten())
+
+        # Narrow down the edge features to the request list
+        edge_ids = torch.cat(edge_ids)
+        edge_map = torch.empty(len(clusts)*len(clusts), dtype=torch.long, device=voxels.device)
+        edge_map[edge_ids] = torch.arange(len(edge_ids))
+        req_edge_ids = len(clusts)*edge_index[0]+edge_index[1]
+
+        # Return
+        return torch.cat(feats)[edge_map[req_edge_ids]]
