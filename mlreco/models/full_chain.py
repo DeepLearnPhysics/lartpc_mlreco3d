@@ -357,39 +357,29 @@ class FullChain(torch.nn.Module):
             if self._enable_graph_spice:
                 if label_clustering is None:
                     raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
-                graph_spice_label = torch.cat((label_clustering[0][:, :-1], semantic_labels.reshape(-1,1)), dim=1)
-                spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], graph_spice_label))
-                result.update(spatial_embeddings_output)
-                # print(spatial_embeddings_output.keys())
-                self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], spatial_embeddings_output['graph_info'][0])
-                self.gs_manager.fit_predict(gen_numpy_graph=True)
-                #print(self.gs_manager._node_pred)
-                cluster_predictions = self.gs_manager._node_pred.x
-                # print(cluster_predictions)
-                #cluster_batch_ids = self.gs_manager._node_pred.batch
-                #print(self.gs_manager._node_pred.pos[:10], self.gs_manager._node_pred.batch[:10], input[0][semantic_labels == 1][:10, :4])
-                #print(spatial_embeddings_output)
-                #print(self.gs_manager._graph_batch.x[:, -1])
-                #print((semantic_labels[..., None].cpu() == torch.Tensor(self._graph_spice_skip_classes)).size())
+
                 filtered_semantic = ~(semantic_labels[..., None].cpu() == torch.Tensor(self._graph_spice_skip_classes)).any(-1)
-                #print(semantic_labels[filtered_semantic].size())
-                #print(input[0][filtered_semantic][:10, :4])
-                filtered_input = torch.cat([input[0][filtered_semantic][:, :4], semantic_labels[filtered_semantic][:, None], cluster_predictions.to(device)[:, None]], dim=1)
-                fragments_spice = form_clusters(filtered_input, column=-1)
-                fragments_batch_ids_spice = get_cluster_batch(filtered_input, fragments_spice)
-                fragments_seg_spice = get_cluster_label(filtered_input, fragments_spice, column=4)
-                #print(fragments_spice)
-                # Current indices in fragments_spice refer to input[0][filtered_semantic]
-                # but we want them to refer to input[0]
-                #print(np.arange(len(input[0])))
-                #print(np.arange(len(input[0]))[filtered_semantic])
-                fragments_spice = [np.arange(len(input[0]))[filtered_semantic][clust.cpu().numpy()] for clust in fragments_spice]
+                # If there are voxels to process in the given semantic classes
+                if torch.count_nonzero(filtered_semantic) > 0:
+                    graph_spice_label = torch.cat((label_clustering[0][:, :-1], semantic_labels.reshape(-1,1)), dim=1)
+                    spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], graph_spice_label))
+                    result.update(spatial_embeddings_output)
+                    self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], spatial_embeddings_output['graph_info'][0])
+                    self.gs_manager.fit_predict(gen_numpy_graph=True)
+                    cluster_predictions = self.gs_manager._node_pred.x
 
-                #print(fragments_spice[:10], fragments_batch_ids_spice[:10], fragments_seg_spice[:10])
+                    filtered_input = torch.cat([input[0][filtered_semantic][:, :4], semantic_labels[filtered_semantic][:, None], cluster_predictions.to(device)[:, None]], dim=1)
+                    fragments_spice = form_clusters(filtered_input, column=-1)
+                    fragments_batch_ids_spice = get_cluster_batch(filtered_input, fragments_spice)
+                    fragments_seg_spice = get_cluster_label(filtered_input, fragments_spice, column=4)
+                    # Current indices in fragments_spice refer to input[0][filtered_semantic]
+                    # but we want them to refer to input[0]
+                    fragments_spice = [np.arange(len(input[0]))[filtered_semantic][clust.cpu().numpy()] for clust in fragments_spice]
 
-                fragments.extend(fragments_spice)
-                frag_batch_ids.extend(fragments_batch_ids_spice)
-                frag_seg.extend(fragments_seg_spice)
+                    fragments.extend(fragments_spice)
+                    frag_batch_ids.extend(fragments_batch_ids_spice)
+                    frag_seg.extend(fragments_seg_spice)
+
             else:
                 # Get fragment predictions from the CNN clustering algorithm
                 spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
