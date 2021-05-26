@@ -382,7 +382,7 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
-        
+
         # Breadth first search of model_path
         #module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -431,7 +431,7 @@ class trainval(object):
                         #         if 'node_encoder'  in key or 'edge_encoder' in key:
                         #             print(key)
                         if missing_keys:
-                            print(checkpoint['state_dict'].keys())
+                            #print(checkpoint['state_dict'].keys())
                             for m in missing_keys:
                                 print("WARNING Missing key %s (%s)" % m)
 
