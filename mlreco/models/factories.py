@@ -19,6 +19,7 @@ def model_dict():
     from . import mink_uresnet_ppn_chain
     from . import mink_singlep
     from . import mink_spice
+    from . import mink_bayes_uresnet
     from . import vae
     from . import pointnet_gen
 
@@ -52,10 +53,10 @@ def model_dict():
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
-        # GraphSPICE2
-        "graph_spice_2": (graph_spice.GraphSPICE2, graph_spice.GraphSPICE2Loss),
-        # GraphSPICEGNN
-        "graph_spice_gnn": (graph_spice.GraphSPICEGNN, graph_spice.GraphSPICELoss),
+
+        "graph_spice_2": (graph_spice.GraphSPICEPP, graph_spice.GraphSPICEPPLoss),
+        # # GraphSPICE2
+        # "graph_spice_2": (graph_spice.GraphSPICE2, graph_spice.GraphSPICE2Loss),
         # GraphSPICE Old Version, will be removed
         "graph_spice_old": (graph_spice_old.GraphSPICE, graph_spice_old.GraphSPICELoss),
         # Flashmatching using encoder and gnn
@@ -68,6 +69,10 @@ def model_dict():
         "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         # Full reconstruction chain, including an option for deghosting
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
+        # Bayesian Classifier
+        "bayes_singlep": (mink_singlep.BayesianParticleClassifier, mink_singlep.ParticleTypeLoss),
+        # Bayesian UResNet
+        "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_uresnet.SegmentationLoss),
     }
     return models
 

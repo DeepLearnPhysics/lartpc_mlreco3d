@@ -13,6 +13,8 @@ from mlreco.models.ppn import define_ppn12
 from collections import Counter
 from torch_cluster import nearest
 
+from mlreco.models.cluster_cnn.losses.misc import BinaryCELogDiceLoss
+
 class Attention(nn.Module):
     def __init__(self):
         super(Attention, self).__init__()
@@ -235,7 +237,13 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, name='ppn_loss'):
         super(PPNLonelyLoss, self).__init__()
         self.loss_config = cfg[name]
-        self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
+        self.mask_loss_name = self.loss_config.get('mask_loss_name', 'BCE')
+        if self.mask_loss_name == "BCE":
+            self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
+        elif self.mask_loss_name == "LogDice":
+            self.lossfn = BinaryCELogDiceLoss()
+        else:
+            NotImplementedError
         self.resolution = self.loss_config.get('ppn_resolution', 5.0)
         self.regloss = torch.nn.MSELoss()
         self.segloss = torch.nn.functional.cross_entropy

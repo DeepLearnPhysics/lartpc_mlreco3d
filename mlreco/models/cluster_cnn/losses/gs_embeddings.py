@@ -19,6 +19,8 @@ class WeightedEdgeLoss(nn.Module):
             self.loss_fn = F.binary_cross_entropy_with_logits
         elif loss_type == 'LogDice':
             self.loss_fn = BinaryCELogDiceLoss()
+        elif loss_type == 'MinCut':
+            self.loss_fn = MincutLoss()
         else:
             self.loss_fn = F.binary_cross_entropy_with_logits
 
@@ -344,7 +346,6 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         super(NodeEdgeHybridLoss, self).__init__()
         # print("CFG + ", cfg)
         self.loss_config = cfg[name]
-        print("ASDASDASDASD", self.loss_config)
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
         self.invert = self.edge_loss_cfg.get('invert', False)

@@ -25,6 +25,7 @@ def main(config):
         cfg['trainval']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
 
     process_config(cfg)
+
     if cfg['trainval']['train']:
         train(cfg)
     else:

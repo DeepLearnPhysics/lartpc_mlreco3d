@@ -176,6 +176,57 @@ class ConvolutionBlock(ME.MinkowskiNetwork):
         return out
 
 
+class DropoutBlock(ME.MinkowskiNetwork):
+
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 stride=1,
+                 dilation=1,
+                 dimension=3,
+                 p=0.5,
+                 activation='relu',
+                 activation_args={},
+                 normalization='batch_norm',
+                 normalization_args={},
+                 has_bias=False,
+                 debug=False):
+        super(DropoutBlock, self).__init__(dimension)
+        assert dimension > 0
+        self.act_fn1 = activations_construct(activation, **activation_args)
+        self.act_fn2 = activations_construct(activation, **activation_args)
+
+        self.conv1 = ME.MinkowskiConvolution(
+            in_features, out_features, kernel_size=3,
+            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+        self.dropout1 = ME.MinkowskiDropout(p=p)
+        self.norm1 = normalizations_construct(
+            normalization, out_features, **normalization_args)
+        self.conv2 = ME.MinkowskiConvolution(
+            out_features, out_features, kernel_size=3,
+            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+        self.dropout2 = ME.MinkowskiDropout(p=p)
+        self.norm2 = normalizations_construct(
+            normalization, out_features, **normalization_args)
+
+        self.debug = debug
+
+    def forward(self, x):
+
+        out = self.conv1(x)
+        if self.debug:
+            out = self.dropout1(x)
+        else:
+            out = self.dropout1(out)
+        out = self.norm1(out)
+        out = self.act_fn1(out)
+        out = self.conv2(out)
+        out = self.dropout2(out)
+        out = self.norm2(out)
+        out = self.act_fn2(out)
+        return out
+
+
 class ResNetBlock(ME.MinkowskiNetwork):
     '''
     ResNet Block with Leaky ReLU nonlinearities.

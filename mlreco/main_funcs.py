@@ -43,8 +43,8 @@ def train(cfg, event_list=None):
     train_loop(handlers)
 
 
-def inference(cfg):
-    handlers = prepare(cfg)
+def inference(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     inference_loop(handlers)
 
 

@@ -9,3 +9,5 @@ from .ppn_metrics import ppn_metrics
 from .ppn_simple import ppn_simple
 from .uresnet_metrics import uresnet_metrics
 from .vertex_metrics import vertex_metrics
+from .single_particle import single_particle
+from .singlep_mcdropout import singlep_mcdropout

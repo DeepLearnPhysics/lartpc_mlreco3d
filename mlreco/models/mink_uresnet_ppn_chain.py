@@ -69,5 +69,4 @@ class UResNetPPNLoss(nn.Module):
             'reg_loss': res_ppn['reg_loss'],
             'type_loss': res_ppn['type_loss']
         }
-        print(res)
         return res
