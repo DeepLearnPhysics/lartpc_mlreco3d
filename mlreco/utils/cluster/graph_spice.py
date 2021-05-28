@@ -334,16 +334,13 @@ class ClusterGraphConstructor:
         G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
         for i, comp in enumerate(nx.connected_components(G)):
+            # print(i)
             if len(comp) < min_points:
                 continue
             x = np.asarray(list(comp))
             pred[x] = i
 
-        if gen_numpy_graph:
-            G.x = subgraph.x.cpu().numpy()
-            G.edge_index = subgraph.edge_index.cpu().numpy()
-            G.edge_attr = subgraph.edge_attr.cpu().numpy()
-            G.pos = subgraph.pos.cpu().numpy()
+        G.pos = subgraph.pos.cpu().numpy()
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels

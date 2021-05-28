@@ -25,7 +25,8 @@ def gs_kernel_dict():
     kernels = {
         'default': gs_kernels.DefaultKernel,
         'bilinear': gs_kernels.BilinearKernel,
-        'bilinear_mlp': gs_kernels.BilinearNNKernel
+        'bilinear_mlp': gs_kernels.BilinearNNKernel,
+        'mixed': gs_kernels.MixedKernel
     }
     return kernels
 
@@ -52,6 +53,7 @@ def cluster_model_dict():
         "spice_cnn_me": MinkSPICE,
         "spice_cnn_lite": spatial_embeddings.SpatialEmbeddingsLite,
         "graph_spice_embedder": graph_spice.GraphSPICEEmbedder,
+        "graph_spice_geo_embedder": graph_spice.GraphSPICEGeoEmbedder
         # "graphgnn_spice": graphgnn_spice.SparseOccuSegGNN
     }
     return models

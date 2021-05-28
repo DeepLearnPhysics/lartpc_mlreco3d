@@ -23,9 +23,7 @@ def num_pred_clusters(pred, truth):
     return len(np.unique(pred))
 
 
-def graph_spice_metrics(cfg, data_blob, res, logdir, iteration):
-
-    print(cfg)
+def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     append = True if iteration else False
 
@@ -50,12 +48,10 @@ def graph_spice_metrics(cfg, data_blob, res, logdir, iteration):
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
-    # pprint(constructor_cfg)
-
     gs_manager = ClusterGraphConstructor(constructor_cfg, 
                                          graph_batch=graph, 
                                          graph_info=graph_info)
-    gs_manager.fit_predict(gen_numpy_graph=True)
+    gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
     funcs = [ARI, SBD, purity, efficiency, num_true_clusters, num_pred_clusters]
     df = gs_manager.evaluate_nodes(labels, funcs)
 
@@ -69,11 +65,10 @@ def graph_spice_metrics(cfg, data_blob, res, logdir, iteration):
     
     fout.close()
 
+
 def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     append = True if iteration else False
-
-    print(processor_cfg)
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
@@ -96,7 +91,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
-    edge_ths_range = np.linspace(0.1, 0.9, 20)
+    edge_ths_range = np.linspace(0.01, 0.1, 20)
 
     for edge_ths in edge_ths_range:
 
@@ -114,9 +109,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
                         'num_pred_clusters', 'edge_threshold']
         df = gs_manager.evaluate_nodes(labels, funcs, column_names=column_names)
 
-        print(df)
-
-        fout = CSVData(os.path.join(logdir, 'graph-spice-metrics.csv'), append=append)
+        fout = CSVData(os.path.join(logdir, 'graph-spice-metrics-loop.csv'), append=append)
 
         for row in df.iterrows():
             columns = tuple(row[1].keys().values)

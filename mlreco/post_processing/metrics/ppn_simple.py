@@ -100,7 +100,8 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
         # print(d_true_to_closest_pred, d_true_to_closest_pred.shape)
         # print(d_pred_to_closest_true, d_pred_to_closest_true.shape)
         # print(pred_to_closest_true_coords)
-
+        true_seg_voxels = seg_label[batch_mask].numpy()
+        true_mip_voxels = true_seg_voxels[slabels == 1]
         # Loop over true ppn points
 
         for i, true_point in enumerate(points_label):
@@ -121,10 +122,11 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
                 d_same_type_closest = d_same_type.min(axis=1)[0]
             else:
                 d_same_type_closest = -1
-            points_label_track = points_label[points_label[:, 4] == 1]
-            if points_label_track.shape[0] > 0:
-                d_mip = pairwise_distances(torch.Tensor(pred_point).view(1, -1), points_label_track[:, 1:4]).numpy()
+            # points_label_track = points_label[points_label[:, 4] == 1]
+            if true_mip_voxels.shape[0] > 0:
+                d_mip = pairwise_distances(torch.Tensor(pred_point).view(1, -1), torch.Tensor(true_mip_voxels[:, 1:4])).numpy()
                 d_closest_mip = d_mip.min(axis=1)[0]
+
             else:
                 d_closest_mip = -1
             fout_pred.record(('Index', 'Class', 'Score', 'min_distance', 'd_pred_to_same_type', 'd_true_mip', 'x', 'y', 'z', 'closest_x', 'closest_y', 'closest_z'), \
