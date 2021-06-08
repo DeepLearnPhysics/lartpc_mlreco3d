@@ -33,7 +33,7 @@ class WeightedEdgeLoss(nn.Module):
         weight = torch.ones(y.shape[0]).to(device)
 
         # The crucial error are the false positives, as these will
-        # lead to overclustering. 
+        # lead to overclustering.
         negatives_index = (targets < 0.5)
         negatives = float(torch.sum(negatives_index))
         positives = float(torch.sum(targets > 0.5))
@@ -133,9 +133,9 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - groups (N)
             - ft_centroids (N_c X F)
         '''
-        intercluster_loss = inter_cluster_loss(ft_centroids, 
+        intercluster_loss = inter_cluster_loss(ft_centroids,
                                                margin=self.ft_interloss)
-        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups, 
+        intracluster_loss = intra_cluster_loss(ft_emb, ft_centroids, groups,
                                                margin=self.ft_intraloss)
         reg_loss = torch.mean(torch.norm(ft_centroids, dim=1))
         out = {}
@@ -157,9 +157,9 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             - ft_centroids (N_c X F)
         '''
         out = {}
-        intercluster_loss = inter_cluster_loss(sp_centroids, 
+        intercluster_loss = inter_cluster_loss(sp_centroids,
                                                margin=self.sp_interloss)
-        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups, 
+        intracluster_loss = intra_cluster_loss(sp_emb, sp_centroids, groups,
                                                margin=self.sp_intraloss)
         out['intercluster_loss'] = float(intercluster_loss)
         out['intracluster_loss'] = float(intracluster_loss)
@@ -177,7 +177,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         cov_loss = self.kernel_lossfn(logits, targets)
         return cov_loss, acc
 
-    
+
     def occupancy_loss(self, occ, groups):
         '''
         INPUTS:
@@ -286,7 +286,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             #    coords = coords.cuda()
             slabels = slabels.long()
             clabels = cluster_label[i][:, -1].long()
-            print(clabels)
+            # print(clabels)
             batch_idx = segment_label[i][:, self.batch_column]
             sp_embedding = out['spatial_embeddings'][i]
             ft_embedding = out['feature_embeddings'][i]
@@ -386,10 +386,10 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
 
             balanced_accuracy = (tpr + tnr) / 2
 
-            print('TPR = ', tpr)
-            print('TNR = ', tnr)
-            print('Balanced Accuracy = ', balanced_accuracy)
-            print('False Positive Rate = ', fpr)
+            # print('TPR = ', tpr)
+            # print('TNR = ', tnr)
+            # print('Balanced Accuracy = ', balanced_accuracy)
+            # print('False Positive Rate = ', fpr)
             res['edge_accuracy'] = balanced_accuracy
         else:
             edge_loss = 0
@@ -397,5 +397,3 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         res['loss'] += edge_loss
         res['edge_loss'] = float(edge_loss)
         return res
-
-

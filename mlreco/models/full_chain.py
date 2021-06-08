@@ -8,6 +8,7 @@ import numpy as np
 from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.ppn import PPN, PPNLoss
 from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
+from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.models.grappa import GNN, GNNLoss
 
 from mlreco.models.layers.dbscan import DBSCANFragmenter
@@ -15,6 +16,7 @@ from mlreco.models.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
+from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, cluster_direction
 
@@ -97,12 +99,19 @@ class FullChain(torch.nn.Module):
         # Initialize the CNN dense clustering module
         self.cluster_classes = []
         if self.enable_cnn_clust:
-            self.spatial_embeddings = ClusterCNN(cfg['spice'])
-            self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
-            self._s_thresholds  = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-            self._p_thresholds  = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-            self._spice_classes = self.frag_cfg.get('cluster_classes', [])
-            self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
+            self._enable_graph_spice = 'graph_spice' in cfg
+            if self._enable_graph_spice:
+                self.spatial_embeddings = GraphSPICE(cfg)
+                self.gs_manager = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
+                self.gs_manager.training = True # FIXME
+                self._graph_spice_skip_classes = cfg['graph_spice']['skip_classes']
+            else:
+                self.spatial_embeddings = ClusterCNN(cfg['spice'])
+                self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
+                self._s_thresholds  = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+                self._p_thresholds  = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+                self._spice_classes = self.frag_cfg.get('cluster_classes', [])
+                self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
@@ -345,15 +354,42 @@ class FullChain(torch.nn.Module):
         fragments, frag_batch_ids, frag_seg = [], [], []
 
         if self.enable_cnn_clust:
-            # Get fragment predictions from the CNN clustering algorithm
-            spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
-            result.update(spatial_embeddings_output)
+            if self._enable_graph_spice:
+                if label_clustering is None:
+                    raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
 
-            # Extract fragment predictions to input into the GNN
-            fragments_cnn, frag_batch_ids_cnn, frag_seg_cnn = self.extract_fragment(input, result)
-            fragments.extend(fragments_cnn)
-            frag_batch_ids.extend(frag_batch_ids_cnn)
-            frag_seg.extend(frag_seg_cnn)
+                filtered_semantic = ~(semantic_labels[..., None].cpu() == torch.Tensor(self._graph_spice_skip_classes)).any(-1)
+                # If there are voxels to process in the given semantic classes
+                if torch.count_nonzero(filtered_semantic) > 0:
+                    graph_spice_label = torch.cat((label_clustering[0][:, :-1], semantic_labels.reshape(-1,1)), dim=1)
+                    spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], graph_spice_label))
+                    result.update(spatial_embeddings_output)
+                    self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], spatial_embeddings_output['graph_info'][0])
+                    self.gs_manager.fit_predict(gen_numpy_graph=True)
+                    cluster_predictions = self.gs_manager._node_pred.x
+
+                    filtered_input = torch.cat([input[0][filtered_semantic][:, :4], semantic_labels[filtered_semantic][:, None], cluster_predictions.to(device)[:, None]], dim=1)
+                    fragments_spice = form_clusters(filtered_input, column=-1)
+                    fragments_batch_ids_spice = get_cluster_batch(filtered_input, fragments_spice)
+                    fragments_seg_spice = get_cluster_label(filtered_input, fragments_spice, column=4)
+                    # Current indices in fragments_spice refer to input[0][filtered_semantic]
+                    # but we want them to refer to input[0]
+                    fragments_spice = [np.arange(len(input[0]))[filtered_semantic][clust.cpu().numpy()] for clust in fragments_spice]
+
+                    fragments.extend(fragments_spice)
+                    frag_batch_ids.extend(fragments_batch_ids_spice)
+                    frag_seg.extend(fragments_seg_spice)
+
+            else:
+                # Get fragment predictions from the CNN clustering algorithm
+                spatial_embeddings_output = self.spatial_embeddings([input[0][:,:5]])
+                result.update(spatial_embeddings_output)
+
+                # Extract fragment predictions to input into the GNN
+                fragments_cnn, frag_batch_ids_cnn, frag_seg_cnn = self.extract_fragment(input, result)
+                fragments.extend(fragments_cnn)
+                frag_batch_ids.extend(frag_batch_ids_cnn)
+                frag_seg.extend(frag_seg_cnn)
 
         if self.enable_dbscan:
             # Get the fragment predictions from the DBSCAN fragmenter
@@ -553,6 +589,13 @@ class FullChain(torch.nn.Module):
 
     def forward(self, input):
         """
+        Input can be either of the following:
+        - input data only
+        - input data, label clustering in this order
+        - input data, label segmentation, label clustering in this order
+        (when deghosting is enabled, label segmentation is needed to
+        adapt label clustering properly)
+
         Parameters
         ==========
         input: list of np.ndarray
@@ -562,6 +605,10 @@ class FullChain(torch.nn.Module):
             input, label_seg, label_clustering = input
             input = [input]
             label_seg = [label_seg]
+            label_clustering = [label_clustering]
+        if len(input) == 2:
+            input, label_clustering = input
+            input = [input]
             label_clustering = [label_clustering]
 
         # Pass the input data through UResNet+PPN (semantic segmentation + point prediction)
@@ -641,7 +688,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         if self.enable_ppn:
             self.ppn_loss                = PPNLoss(cfg['uresnet_ppn'])
         if self.enable_cnn_clust:
-            self.spatial_embeddings_loss = ClusteringLoss(cfg)
+            self._enable_graph_spice = 'graph_spice' in cfg
+            if not self._enable_graph_spice:
+                self.spatial_embeddings_loss = ClusteringLoss(cfg)
+            else:
+                self.spatial_embeddings_loss = GraphSPICELoss(cfg)
+                self._graph_spice_skip_classes = cfg['spice_loss']['skip_classes']
         if self.enable_gnn_shower:
             self.shower_gnn_loss         = GNNLoss(cfg, 'grappa_shower_loss')
         if self.enable_gnn_track:
@@ -704,26 +756,73 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
             #result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][deghost][:, -1], cluster_label)
             segment_label = seg_label[0][deghost][:, -1]
+            seg_label = seg_label[0][deghost]
         else:
             #result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][:, -1], cluster_label)
             segment_label = seg_label[0][:, -1]
+            seg_label = seg_label[0]
 
         if self.enable_cnn_clust:
-            # Apply the CNN dense clustering loss to HE voxels only
-            he_mask = segment_label < 4
-            # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
-            #clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
-            clust_label = [cluster_label[0][he_mask].clone()]
-            cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
-            #cluster_label[0] = cluster_label[0][he_mask]
-            # FIXME does this suppose that clust_label has same ordering as embeddings?
-            res_cnn_clust = self.spatial_embeddings_loss(cnn_clust_output, clust_label)
-            res.update(res_cnn_clust)
-            res['cnn_clust_accuracy'] = res_cnn_clust['accuracy']
-            res['cnn_clust_loss'] = res_cnn_clust['loss']
+            if self._enable_graph_spice:
+                graph_spice_out = {
+                    'graph': out['graph'],
+                    'graph_info': out['graph_info'],
+                    'spatial_embeddings': out['spatial_embeddings'],
+                    'feature_embeddings': out['feature_embeddings'],
+                    'covariance': out['covariance'],
+                    'hypergraph_features': out['hypergraph_features'],
+                    'features': out['features'],
+                    'occupancy': out['occupancy'],
+                    'coordinates': out['coordinates'],
+                    'batch_indices': out['batch_indices'],
+                    'segmentation': [out['segmentation'][0][deghost]] if self.enable_ghost else [out['segmentation'][0]]
+                }
+                select_classes = ~(torch.argmax(graph_spice_out['segmentation'][0], dim=1)[:, None].cpu() == torch.tensor(self._graph_spice_skip_classes)).any(-1)
+                graph_spice_out['segmentation'] = [graph_spice_out['segmentation'][0][select_classes]]
+                # print(graph_spice_out['segmentation'][0].size())
+                # print('segment_label', segment_label.size(), out['segmentation'][0][deghost].size())
+                # print(out['spatial_embeddings'][0].size())
+                # print(out['segmentation'][0][deghost][torch.argmax(out['segmentation'][0][deghost], dim=1) == 1].size())
+                # print(out['batch_indices'][0].size())
+                # FIXME seg_label or segmentation predictions?
+                # print(torch.argmax(out['segmentation'][0], dim=1)[:, None].size())
+                # FIXME deghost not always true
+                gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(out['segmentation'][0][deghost], dim=1)[:, None]], dim=1)
+                # if self.enable_ghost:
+                #     gs_seg_label = gs_seg_label[deghost]
+                # print(gs_seg_label.size())
+                # print(gs_seg_label[gs_seg_label[:, -1] ==1].size())
+                res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], cluster_label)
+                #print(res_graph_spice.keys())
+                accuracy += res_graph_spice['accuracy']
+                loss += self.cnn_clust_weight * res_graph_spice['loss']
+                res['graph_spice_loss'] = res_graph_spice['loss']
+                res['graph_spice_accuracy'] = res_graph_spice['accuracy']
+                #res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
+                #res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
+                res['graph_spice_occ_loss'] = res_graph_spice['occ_loss']
+                res['graph_spice_cov_loss'] = res_graph_spice['cov_loss']
+                res['graph_spice_sp_intra'] = res_graph_spice['sp_intra']
+                res['graph_spice_sp_inter'] = res_graph_spice['sp_inter']
+                res['graph_spice_ft_intra'] = res_graph_spice['ft_intra']
+                res['graph_spice_ft_inter'] = res_graph_spice['ft_inter']
+                res['graph_spice_ft_reg'] = res_graph_spice['ft_reg']
+            else:
+                # Apply the CNN dense clustering loss to HE voxels only
+                he_mask = segment_label < 4
+                # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
+                #clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
+                clust_label = [cluster_label[0][he_mask].clone()]
+                cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
+                #cluster_label[0] = cluster_label[0][he_mask]
+                # FIXME does this suppose that clust_label has same ordering as embeddings?
+                res_cnn_clust = self.spatial_embeddings_loss(cnn_clust_output, clust_label)
+                res.update(res_cnn_clust)
+                res['cnn_clust_accuracy'] = res_cnn_clust['accuracy']
+                res['cnn_clust_loss'] = res_cnn_clust['loss']
 
-            accuracy += res_cnn_clust['accuracy']
-            loss += self.cnn_clust_weight*res_cnn_clust['loss']
+                accuracy += res_cnn_clust['accuracy']
+                loss += self.cnn_clust_weight*res_cnn_clust['loss']
 
         if self.enable_gnn_shower:
             # Apply the GNN shower clustering loss
@@ -884,7 +983,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if self.enable_ppn:
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
             if self.enable_cnn_clust:
-                print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
+                if not self._enable_graph_spice:
+                    print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
+                else:
+                    print('Clustering Accuracy: {:.4f}'.format(res_graph_spice['accuracy']))
             if self.enable_gnn_shower:
                 print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_shower['edge_accuracy']))
                 print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_shower['node_accuracy']))
@@ -943,7 +1045,11 @@ def setup_chain_cfg(self, cfg):
     assert self.enable_ppn or (not self.use_ppn_in_gnn) # If PPN is used in GNN, need PPN
     assert self.enable_dbscan or self.enable_cnn_clust # Need at least one of two dense clusterer
     if self.enable_cnn_clust and self.enable_dbscan: # Check that SPICE and DBSCAN are not redundant
-        assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
+        if 'spice' in cfg:
+            assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
+        else:
+            assert 'graph_spice' in cfg
+            assert set(cfg['dbscan_frag']['cluster_classes']).issubset(set(cfg['graph_spice']['skip_classes']))
     if self.enable_gnn_particle: # If particle fragment GNN is used, make sure it is not redundant
         if self.enable_gnn_shower: assert cfg['grappa_shower']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
         if self.enable_gnn_track: assert cfg['grappa_track']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']

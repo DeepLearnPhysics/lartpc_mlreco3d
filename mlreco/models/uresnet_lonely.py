@@ -151,8 +151,8 @@ class UResNet(torch.nn.Module):
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
 
-        print('Total Number of Trainable Parameters = {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        # print('Total Number of Trainable Parameters = {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
 
     def forward(self, input):
@@ -215,7 +215,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     - If `ghost=False`, we compute a N+1-classes cross-entropy loss, where N is
     the number of classes, not counting the ghost point class.
-    
+
     """
     INPUT_SCHEMA = [
         ["parse_sparse3d_scn", (int,), (3, 1)]

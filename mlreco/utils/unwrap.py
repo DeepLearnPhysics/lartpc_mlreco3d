@@ -216,11 +216,10 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
     # b-2) Handle the list of list of ndarrays
 
     # ensure outputs[key] length is same for all key in target_list_keys
-    for target in target_list_keys:
-        print(target,len(outputs[target]))
+    # for target in target_list_keys:
+    #     print(target,len(outputs[target]))
 
     num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
-    print("num_elements = ", num_elements)
     assert len(num_elements)<1 or len(num_elements) == 1
     num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])
     # construct unwrap mapping

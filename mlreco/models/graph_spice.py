@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from .cluster_cnn.losses.gs_embeddings import *
-from .cluster_cnn import (cluster_model_construct, 
+from .cluster_cnn import (cluster_model_construct,
                           spice_loss_construct,
                           gs_kernel_construct)
 
@@ -32,16 +32,16 @@ class GraphSPICE(nn.Module):
         that takes two node attribute vectors to give a edge proability score).
 
     Prediction is done in two steps:
-        1) A neighbor graph (ex. KNN, Radius) is constructed to compute 
-        edge probabilities between neighboring edges. 
-        2) Edges with low probability scores are dropped. 
-        3) The voxels are clustered by counting connected components. 
+        1) A neighbor graph (ex. KNN, Radius) is constructed to compute
+        edge probabilities between neighboring edges.
+        2) Edges with low probability scores are dropped.
+        3) The voxels are clustered by counting connected components.
 
     Parameters:
         - skip_classes: semantic labels for which to skip voxel clustering
         (ex. Michel, Delta, and Low Es rarely require neural network clustering)
 
-        - dimension: dimension of input dataset. 
+        - dimension: dimension of input dataset.
     '''
 
     def __init__(self, cfg, name='graph_spice'):
@@ -49,7 +49,7 @@ class GraphSPICE(nn.Module):
         self.model_config = cfg[name]
         self.skip_classes = self.model_config.get('skip_classes', [2, 3, 4])
         self.dimension = self.model_config.get('dimension', 3)
-        self.embedder_name = self.model_config.get('embedder', 'graph_spice')
+        self.embedder_name = self.model_config.get('embedder', 'graph_spice_embedder')
         self.embedder = cluster_model_construct(
             self.model_config['embedder_cfg'], self.embedder_name)
         self.node_dim = self.model_config.get('node_dim', 16)
@@ -58,7 +58,7 @@ class GraphSPICE(nn.Module):
         self.kernel_fn = gs_kernel_construct(self.kernel_cfg)
 
         constructor_cfg = self.model_config['constructor_cfg']
-        
+
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
         # Cluster Graph Manager
@@ -68,7 +68,7 @@ class GraphSPICE(nn.Module):
 
     def filter_class(self, input):
         '''
-        Filter classes according to segmentation label. 
+        Filter classes according to segmentation label.
         '''
         point_cloud, label = input
         mask = ~np.isin(label[:, -1].detach().cpu().numpy(), self.skip_classes)
@@ -78,7 +78,7 @@ class GraphSPICE(nn.Module):
 
     def forward(self, input):
         '''
-        
+
         '''
         point_cloud, labels = self.filter_class(input)
         res = self.embedder([point_cloud])
@@ -92,8 +92,8 @@ class GraphSPICE(nn.Module):
         if self.use_raw_features:
             res['hypergraph_features'] = res['features']
 
-        graph = self.gs_manager(res, 
-                                self.kernel_fn, 
+        graph = self.gs_manager(res,
+                                self.kernel_fn,
                                 labels)
         res['graph'] = [graph]
         res['graph_info'] = [self.gs_manager.info]
@@ -205,7 +205,7 @@ class GraphSPICELoss(nn.Module):
 
     def filter_class(self, segment_label, cluster_label):
         '''
-        Filter classes according to segmentation label. 
+        Filter classes according to segmentation label.
         '''
         mask = ~np.isin(segment_label[0][:, -1].cpu().numpy(), self.skip_classes)
         slabel = [segment_label[0][mask]]
@@ -218,7 +218,7 @@ class GraphSPICELoss(nn.Module):
 
         '''
         slabel, clabel = self.filter_class(segment_label, cluster_label)
-
+        # print(slabel[0].size())
         graph = result['graph'][0]
         graph_info = result['graph_info'][0]
         self.gs_manager.replace_state(graph, graph_info)
@@ -244,7 +244,6 @@ class GraphSPICELoss(nn.Module):
                 edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
-
         return res
 
 

@@ -136,8 +136,8 @@ class ClustMixNodeEncoder3(torch.nn.Module):
             node_feats = 16
 
         self.bn1 = torch.nn.BatchNorm1d(node_feats)
-        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.num_features)
-        self.num_features = node_feats + self.cnn_encoder.encoder.num_features
+        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.latent_size)
+        self.num_features = node_feats + self.cnn_encoder.encoder.latent_size
         self.linear = torch.nn.Linear(self.num_features, self.num_features)
         self.elu = torch.nn.functional.elu
 
@@ -173,8 +173,8 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
 
         node_feats = 19
         self.bn1 = torch.nn.BatchNorm1d(node_feats)
-        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.num_features)
-        self.num_features = node_feats + self.cnn_encoder.encoder.num_features
+        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.latent_size)
+        self.num_features = node_feats + self.cnn_encoder.encoder.latent_size
         self.linear = torch.nn.Linear(self.num_features, self.num_features)
         self.elu = torch.nn.functional.elu
 
