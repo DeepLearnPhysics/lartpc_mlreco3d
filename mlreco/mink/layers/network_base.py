@@ -12,7 +12,6 @@ class MENetworkBase(nn.Module):
     def __init__(self, cfg, name='network_base'):
         super(MENetworkBase, self).__init__()
         model_cfg = cfg[name]
-        print(model_cfg)
         # Dimension of dataset
         self.D = model_cfg.get('D', 3)
         # Number of input data features
@@ -28,14 +27,12 @@ class MENetworkBase(nn.Module):
         self.activation_name = self.activation_cfg.get('name', 'lrelu')
         self.activation_args = self.activation_cfg.get(
             'args', {})
-        print('Using activation: {}'.format(self.activation_name))
 
         # Define normalization function
         print(model_cfg)
         self.norm_cfg = model_cfg.get('norm_layer', {})
         self.norm = self.norm_cfg.get('name', 'batch_norm')
         self.norm_args = self.norm_cfg.get('args', {})
-        print('Using normalization layer mode: {}'.format(self.norm))
 
 
     def forward(self, input):

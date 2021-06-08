@@ -73,6 +73,8 @@ def model_dict():
         "bayes_singlep": (mink_singlep.BayesianParticleClassifier, mink_singlep.ParticleTypeLoss),
         # Bayesian UResNet
         "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_uresnet.SegmentationLoss),
+        # Evidential Classifier
+        'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss)
     }
     return models
 

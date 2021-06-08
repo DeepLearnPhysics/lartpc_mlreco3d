@@ -37,6 +37,8 @@ class BayesianDecoder(MENetworkBase):
         self.dropout_layer_index = self.model_config.get(
             'dropout_layers', set([i for i in range(self.depth // 2, self.depth)]))
 
+        self.debug = self.model_config.get('debug', False)
+
         print("Dropout Layers = ", self.dropout_layer_index)
         print("Planes = ", len(self.nPlanes))
 
@@ -69,7 +71,8 @@ class BayesianDecoder(MENetworkBase):
                                           activation_args=self.activation_args,
                                           normalization=self.norm,
                                           normalization_args=self.norm_args,
-                                          has_bias=self.allow_bias))
+                                          has_bias=self.allow_bias,
+                                          debug=self.debug))
                 else:
                     m.append(ResNetBlock(self.nPlanes[i] * (2 if j == 0 else 1),
                                          self.nPlanes[i],
