@@ -68,7 +68,7 @@ def get_edge_weight(sp_emb: torch.Tensor,
 
 class StrayAssigner(ABC):
     '''
-    Abstract Class for orphan assigning functors. 
+    Abstract Class for orphan assigning functors.
     '''
     def __init__(self, X, Y, metric_fn : Callable = None):
         self.clustered = X
@@ -82,14 +82,14 @@ class StrayAssigner(ABC):
 
 class NearestNeighborsAssigner(StrayAssigner):
     '''
-    Assigns orphans to the k-nearest cluster using simple kNN Classifier. 
+    Assigns orphans to the k-nearest cluster using simple kNN Classifier.
     '''
     def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
         super(NearestNeighborsAssigner, self).__init__()
         self.k = kwargs.get('k', 10)
         self._neigh = KNeighborsClassifier(n_neighbors=10)
         self._neigh.fit(X)
-    
+
     def assign_orphans(self, X, get_proba=False):
         pred = self._neigh.predict(X)
         self._pred = pred
@@ -103,10 +103,10 @@ class ClusterGraphConstructor:
     '''
     Parametric Graph-SPICE clustering
 
-    Parametric GDC includes a bilinear layer to predict edge weights, 
-    given pairs of node features. 
+    Parametric GDC includes a bilinear layer to predict edge weights,
+    given pairs of node features.
     '''
-    def __init__(self, constructor_cfg : dict, 
+    def __init__(self, constructor_cfg : dict,
                        graph_batch : GraphBatch = None,
                        graph_info : pd.DataFrame = None):
 
@@ -114,7 +114,7 @@ class ClusterGraphConstructor:
         self.seg_col = constructor_cfg.get('seg_col', -1)
         self.cluster_col = constructor_cfg.get('cluster_col', 5)
         self.batch_col = constructor_cfg.get('batch_col', 3)
-        self.training = False # Default mode is evaluation. 
+        self.training = False # Default mode is evaluation.
 
         # Initial Neighbor Graph Construction Mode
         mode = constructor_cfg.get('mode', 'knn')
@@ -123,15 +123,15 @@ class ClusterGraphConstructor:
         elif mode == 'radius':
             self._init_graph = radius_graph
         else:
-            raise ValueError('''Mode {} is not supported for initial 
+            raise ValueError('''Mode {} is not supported for initial
                 graph construction!'''.format(mode))
 
         # Clustering Algorithm Parameters
         self.ths = constructor_cfg.get('edge_cut_threshold', 0.0) # Prob values 0-1
-        print("Edge Threshold Probability Score = ", self.ths)
+        # print("Edge Threshold Probability Score = ", self.ths)
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
 
-        # GraphBatch containing graphs per semantic class. 
+        # GraphBatch containing graphs per semantic class.
         if graph_batch is None:
             self._graph_batch = GraphBatch()
         else:
@@ -147,36 +147,36 @@ class ClusterGraphConstructor:
 
 
     @staticmethod
-    def get_edge_truth(edge_indices : torch.Tensor, 
+    def get_edge_truth(edge_indices : torch.Tensor,
                        fragment_labels : torch.Tensor):
         '''
-        Given edge indices and ground truth fragment labels, 
-        get true labels for binary edge classification. 
+        Given edge indices and ground truth fragment labels,
+        get true labels for binary edge classification.
 
         INPUTS:
             - edge_indices : 2 x E
             - labels : (N, ) Fragment label tensor
 
         RETURNS:
-            - Edge labels : (N,) Tensor, where 0 indicate edges between 
-            different fragment voxels and 1 otherwise. 
+            - Edge labels : (N,) Tensor, where 0 indicate edges between
+            different fragment voxels and 1 otherwise.
         '''
         u = fragment_labels[edge_indices[0, :]]
         v = fragment_labels[edge_indices[1, :]]
         return (u == v).long()
 
 
-    def initialize_graph(self, res : dict, 
+    def initialize_graph(self, res : dict,
                                labels: torch.Tensor):
         '''
         From GraphSPICE Embedder Output, initialize GraphBatch object
-        with edge truth labels. 
+        with edge truth labels.
 
         Inputs:
             - res (dict): result dictionary output of GraphSPICE Embedder
-            - labels ( N x F Tensor) : 
+            - labels ( N x F Tensor) :
 
-        Transforms point cloud embeddings to collection of graphs 
+        Transforms point cloud embeddings to collection of graphs
         (one per unique image id and segmentation class), and stores graph
         collection as attribute.
         '''
@@ -205,11 +205,11 @@ class ClusterGraphConstructor:
 
                 edge_indices = self._init_graph(coords_class, **self.kwargs)
                 data = GraphData(x=features_class,
-                                 pos=coords_class, 
+                                 pos=coords_class,
                                  edge_index=edge_indices)
-                graph_id_key = dict(Index=index, 
-                                    BatchID=int(bidx), 
-                                    SemanticID=int(c), 
+                graph_id_key = dict(Index=index,
+                                    BatchID=int(bidx),
+                                    SemanticID=int(c),
                                     GraphID=graph_id)
                 graph_id += 1
                 self._info.append(graph_id_key)
@@ -239,8 +239,8 @@ class ClusterGraphConstructor:
 
     def _set_edge_attributes(self, kernel_fn : Callable):
         '''
-        Constructs edge attributes from node feature tensors, and saves 
-        edge attributes to current GraphBatch. 
+        Constructs edge attributes from node feature tensors, and saves
+        edge attributes to current GraphBatch.
         '''
         if self._graph_batch is None:
             raise ValueError('The graph data has not been initialized yet!')
@@ -269,7 +269,7 @@ class ClusterGraphConstructor:
             'BatchID == {} and SemanticID == {}'.format(batch_id, semantic_id))
         assert df.shape[0] < 2
         if df.shape[0] == 0:
-            raise ValueError('''Event ID: {} and Class Label: {} does not 
+            raise ValueError('''Event ID: {} and Class Label: {} does not
                 exist in current batch'''.format(batch_id, semantic_id))
             return None
         else:
@@ -292,8 +292,8 @@ class ClusterGraphConstructor:
         return self._graph_batch.get_example(entry_num)
 
 
-    def fit_predict_one(self, entry, 
-                        gen_numpy_graph=False, 
+    def fit_predict_one(self, entry,
+                        gen_numpy_graph=False,
                         min_points=0,
                         cluster_all=True,
                         remainder_alg='knn',
@@ -305,10 +305,10 @@ class ClusterGraphConstructor:
             - entry number
             - gen_numpy_graph: whether to generate and output a networkx
             graph object with numpy converted graph attributes.
-            - min_points: minimum voxel count required to assign 
+            - min_points: minimum voxel count required to assign
             unique cluster label during first pass.
             - cluster_all: if False, function will leave orphans as is
-            with label -1. 
+            with label -1.
             - remainder_alg: algorithm used to handle orphans
 
         Returns:
@@ -350,7 +350,7 @@ class ClusterGraphConstructor:
 
     def fit_predict(self, skip=[], **kwargs):
         '''
-        Iterate over all subgraphs and assign predicted labels. 
+        Iterate over all subgraphs and assign predicted labels.
         '''
         skip = set(skip)
         num_graphs = self._graph_batch.num_graphs
@@ -362,30 +362,30 @@ class ClusterGraphConstructor:
         for entry in entry_list:
             pred, G, subgraph = self.fit_predict_one(entry, **kwargs)
             batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
-            pred_data_list.append(GraphData(x=torch.Tensor(pred), 
+            pred_data_list.append(GraphData(x=torch.Tensor(pred),
                                             pos=torch.Tensor(G.pos)))
             # node_pred[batch_index] = pred
         self._node_pred = GraphBatch.from_data_list(pred_data_list)
-        # self._graph_batch.add_node_features(node_pred, 'node_pred', 
+        # self._graph_batch.add_node_features(node_pred, 'node_pred',
         #                                     dtype=torch.long)
 
-    
-    def evaluate_nodes(self, cluster_label : np.ndarray, 
-                             metrics : List[ Callable ], 
+
+    def evaluate_nodes(self, cluster_label : np.ndarray,
+                             metrics : List[ Callable ],
                              skip=[],
                              column_names=None):
         '''
         Evaluate accuracy metrics for node predictions using a list of
-        scoring functions. 
+        scoring functions.
 
         INPUTS:
-            - cluster_label : N x 6 Tensor, with pos, batch id, 
-            fragment_label, and segmentation label. 
+            - cluster_label : N x 6 Tensor, with pos, batch id,
+            fragment_label, and segmentation label.
             - metrics : List of accuracy metric evaluation functions.
-            - skip: list of graph ids to skip evaluation. 
+            - skip: list of graph ids to skip evaluation.
 
         Constructs a GraphBatch object containing true labels and stores it
-        as an attribute to self. 
+        as an attribute to self.
         '''
         assert hasattr(self, '_node_pred')
         skip = set(skip)
@@ -461,7 +461,7 @@ class ClusterGraphConstructor:
                 score = f(pred, labels)
                 # print(score)
                 add_columns[f.__name__].append(score)
-        
+
         self._info = self._info.assign(**add_columns)
         self._info.rename(columns=column_name_map, inplace=True)
         return self.info
@@ -486,16 +486,16 @@ class ClusterGraphConstructor:
 
         By querying on BatchID and SemanticID, for example, one obtains
         the graph id value (entry) used to access a single subgraph in
-        self._graph_batch. 
+        self._graph_batch.
         '''
         return self._info
 
 
-    def __call__(self, res : dict, 
+    def __call__(self, res : dict,
                        kernel_fn : Callable,
                        labels: torch.Tensor):
         '''
-        Train time labels include cluster column (default: 5) 
+        Train time labels include cluster column (default: 5)
         and segmentation column (default: -1)
         Test time labels only include segment column (default: -1)
         '''

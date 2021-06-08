@@ -386,7 +386,7 @@ class trainval(object):
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
-        
+
         # Breadth first search of model_path
         # module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -422,7 +422,7 @@ class trainval(object):
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
                             # Additionally, only select weights related to current module
                             if module in name:
-                                # if module == 'grappa_inter' :
+                                # if module == 'spatial_embeddings' :
                                 #     print(name, other_name, other_name in checkpoint['state_dict'].keys())
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
@@ -435,7 +435,7 @@ class trainval(object):
                         #         if 'node_encoder'  in key or 'edge_encoder' in key:
                         #             print(key)
                         if missing_keys:
-                            print(checkpoint['state_dict'].keys())
+                            #print(checkpoint['state_dict'].keys())
                             for m in missing_keys:
                                 print("WARNING Missing key %s (%s)" % m)
 

@@ -669,8 +669,13 @@ def parse_cluster3d_full(data):
                                fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
             clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,pdg,sem_type]))
-    np_voxels   = np.concatenate(clusters_voxels, axis=0)
-    np_features = np.concatenate(clusters_features, axis=0)
+
+    if len(clusters_voxels):
+        np_voxels   = np.concatenate(clusters_voxels, axis=0)
+        np_features = np.concatenate(clusters_features, axis=0)
+    else:
+        np_voxels   = np.empty(shape=(0, 3), dtype=np.float32)
+        np_features = np.empty(shape=(0, 7), dtype=np.float32)
 
     return np_voxels, np_features
 
@@ -872,8 +877,8 @@ def parse_cluster3d_kinematics_clean(data):
     parse_cluster3d_full
     parse_cluster3d_kinematics
     """
-    grp_voxels, grp_data = parse_cluster3d_kinematics(data)
-    _, cluster_data = parse_cluster3d_full(data)
+    grp_voxels, grp_data = parse_cluster3d_kinematics(data[:-1])
+    _, cluster_data = parse_cluster3d_full(data[:-1])
     img_voxels, img_data = parse_sparse3d_scn([data[-1]])
 
     grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)

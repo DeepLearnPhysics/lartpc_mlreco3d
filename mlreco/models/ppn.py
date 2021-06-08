@@ -552,35 +552,36 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                         total_loss += loss_type.float()
 
                     if self._classify_endpoints:
-                        tracks = event_types_label[torch.argmin(distances_positives, dim=0)] == self._track_label
-                        if tracks.sum().item() > 0:
-                            # Start and end points separately in case of overlap
-                            loss_point_class, acc_point_class, point_class_count = 0., 0., 0.
-                            for point_class in range(2):
-                                point_class_mask = event_particles[event_particles[:, -4] == b][:, -1] == point_class
-                                #true = event_particles[event_particles[:, -4] == b][torch.argmin(distances_positives, dim=0), -1]
-                                point_class_positives = (d_true[point_class_mask, :] < self._true_distance_ppn3).any(dim=0)
-                                point_class_index = d[point_class_mask, :][:, point_class_positives]
+                        if distances_positives.size(0) > 0 and distances_positives.size(1) > 0:
+                            tracks = event_types_label[torch.argmin(distances_positives, dim=0)] == self._track_label
+                            if tracks.sum().item() > 0:
+                                # Start and end points separately in case of overlap
+                                loss_point_class, acc_point_class, point_class_count = 0., 0., 0.
+                                for point_class in range(2):
+                                    point_class_mask = event_particles[event_particles[:, -4] == b][:, -1] == point_class
+                                    #true = event_particles[event_particles[:, -4] == b][torch.argmin(distances_positives, dim=0), -1]
+                                    point_class_positives = (d_true[point_class_mask, :] < self._true_distance_ppn3).any(dim=0)
+                                    point_class_index = d[point_class_mask, :][:, point_class_positives]
 
-                                if point_class_index.nelement():
-                                    point_class_index = torch.argmin(point_class_index, dim=0)
+                                    if point_class_index.nelement():
+                                        point_class_index = torch.argmin(point_class_index, dim=0)
 
-                                    true = event_particles[event_particles[:, -4] == b][point_class_mask][point_class_index, -1]
-                                    #pred = result['classify_endpoints'][i][batch_index][event_mask][positives]
-                                    pred = result['classify_endpoints'][i][batch_index][event_mask][point_class_positives]
-                                    tracks = event_types_label[point_class_index] == self._track_label
-                                    if tracks.sum().item():
-                                        loss_point_class += torch.mean(self.cross_entropy(pred[tracks].double(), true[tracks].long()))
-                                        acc_point_class += (torch.argmax(pred[tracks], dim=-1) == true[tracks]).sum().item() / float(true[tracks].nelement())
-                                        point_class_count += 1
+                                        true = event_particles[event_particles[:, -4] == b][point_class_mask][point_class_index, -1]
+                                        #pred = result['classify_endpoints'][i][batch_index][event_mask][positives]
+                                        pred = result['classify_endpoints'][i][batch_index][event_mask][point_class_positives]
+                                        tracks = event_types_label[point_class_index] == self._track_label
+                                        if tracks.sum().item():
+                                            loss_point_class += torch.mean(self.cross_entropy(pred[tracks].double(), true[tracks].long()))
+                                            acc_point_class += (torch.argmax(pred[tracks], dim=-1) == true[tracks]).sum().item() / float(true[tracks].nelement())
+                                            point_class_count += 1
 
-                            if point_class_count:
-                                loss_classify_endpoints = loss_point_class / point_class_count
-                                acc_classify_endpoints = acc_point_class / point_class_count
-                            #total_loss += loss_classify_endpoints.float()
-                            total_loss_classify_endpoints += loss_classify_endpoints
-                            total_acc_classify_endpoints += acc_classify_endpoints
-                            ppn_track_count += 1
+                                if point_class_count:
+                                    loss_classify_endpoints = loss_point_class / point_class_count
+                                    acc_classify_endpoints = acc_point_class / point_class_count
+                                    #total_loss += loss_classify_endpoints.float()
+                                    total_loss_classify_endpoints += loss_classify_endpoints
+                                    total_acc_classify_endpoints += acc_classify_endpoints
+                                    ppn_track_count += 1
 
                     total_loss_ppn1 += loss_seg_ppn1
                     total_loss_ppn2 += loss_seg_ppn2
