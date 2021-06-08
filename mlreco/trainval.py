@@ -59,6 +59,10 @@ class trainval(object):
                 # default
                 self._optim_args['lr'] = 0.001
 
+        # Handle time-dependent loss, such as KL Divergence annealing 
+        self._time_dependent = self._optim_args.get('time_dependent', False)
+
+
         # learning rate scheduler
         schedule_cfg = self._trainval_config.get('lr_scheduler')
         if schedule_cfg is not None:
@@ -384,7 +388,7 @@ class trainval(object):
             model_paths.append(('', self._trainval_config['model_path'], ''))
         
         # Breadth first search of model_path
-        #module_keys = list(module_config.items())
+        # module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
         while len(module_keys) > 0:
             module, config = module_keys.pop()

@@ -52,7 +52,7 @@ def singlep_mcdropout(cfg, processor_cfg, data_blob, result, logdir, iteration):
     fout.close()
 
 
-def singlep_mcdropout(cfg, processor_cfg, data_blob, result, logdir, iteration):
+def singlep_mcdropout_loop(cfg, processor_cfg, data_blob, result, logdir, iteration):
 
     labels = data_blob['label'][0][:, 0]
     index = data_blob['index']
