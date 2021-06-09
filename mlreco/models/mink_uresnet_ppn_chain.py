@@ -10,13 +10,16 @@ from mlreco.mink.layers.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.mink_uresnet import SegmentationLoss
 from mlreco.mink.layers.uresnet import UResNet
 from collections import defaultdict
+from mlreco.models.mink_uresnet import UResNet_Chain
 
 
 class UResNetPPN(nn.Module):
 
-    def __init__(self, cfg, name='uresnet_chain'):
+    MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
+
+    def __init__(self, cfg, name='mink_uresnet_ppn_chain'):
         super(UResNetPPN, self).__init__()
-        self.backbone = UResNet(cfg)
+        self.backbone = UResNet_Chain(cfg)
         self.ppn = PPN(cfg)
         self.model_config = cfg[name]
         self.num_classes = self.model_config.get('num_classes', 5)
@@ -40,10 +43,7 @@ class UResNetPPN(nn.Module):
             #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
             segmentation = self.segmentation(res['decoderTensors'][-1])
             out['segmentation'].append(segmentation.F)
-            out['points'].append(res_ppn['points'])
-            out['mask_ppn'].append(res_ppn['mask_ppn'])
-            out['ppn_layers'].append(res_ppn['ppn_layers'])
-            out['ppn_coords'].append(res_ppn['ppn_coords'])
+            out.update(res_ppn)
             
         return out
 

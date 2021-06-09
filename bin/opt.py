@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from mlreco.hyperopt.search import search
+from mlreco.main_funcs import process_config
 import os
 import sys
 import yaml
@@ -8,8 +10,6 @@ import argparse
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
-from mlreco.main_funcs import process_config
-from mlreco.hyperopt.search import search
 
 
 def main(config):
@@ -28,6 +28,7 @@ def main(config):
     process_config(cfg)
 
     search(cfg)
+
 
 if __name__ == '__main__':
     import torch

@@ -163,25 +163,6 @@ class PPN(MENetworkBase):
 
         num_layers = len(encoderTensors[1:])
 
-        # if particles is not None:
-        #     with torch.no_grad():
-
-        #         for layer, layer_tensor in enumerate(encoderTensors[1:]):
-        #             batch_indices = layer_tensor.C[:, 0]
-        #             layer_labels = torch.zeros(
-        #                 batch_indices.shape, 
-        #                 device=device, dtype=torch.bool)
-        #             for b in batch_indices.unique():
-        #                 batch_mask = batch_indices == b
-        #                 coords_batch = layer_tensor.C[:, 1:4][batch_mask]
-        #                 points_label = particles[particles[:, 0] == b][:, 1:4]
-        #                 d = pairwise_distances(points_label, coords_batch)
-        #                 d_positives = (
-        #                     d < self.resolution * 2**layer).any(dim=0).to(
-        #                         dtype=torch.bool)
-        #                 layer_labels[batch_mask] = d_positives
-        #             positive_labels.append(layer_labels)
-
         for i, layer in enumerate(self.decoding_conv):
 
             eTensor = encoderTensors[-i-2]
@@ -194,17 +175,6 @@ class PPN(MENetworkBase):
             scores = self.sigmoid(scores)
 
             s_expanded = self.expand_as(scores, x.F.shape)
-            # if self.training:
-            #     layer_label = positive_labels[::-1][1:][i]
-
-            #     if particles is not None:
-            #         s_expanded = self.expand_as(scores, 
-            #                                     x.F.shape, 
-            #                                     labels=layer_label)
-            #     else:
-            #         s_expanded = self.expand_as(scores, x.F.shape)
-            # else:
-            #     s_expanded = self.expand_as(scores, x.F.shape)
 
             mask_ppn.append((scores.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
@@ -223,10 +193,10 @@ class PPN(MENetworkBase):
         points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
 
         res = {
-            'points': points,
-            'mask_ppn': mask_ppn,
-            'ppn_layers': ppn_layers,
-            'ppn_coords': ppn_coords
+            'points': [points],
+            'mask_ppn': [mask_ppn],
+            'ppn_layers': [ppn_layers],
+            'ppn_coords': [ppn_coords]
         }
 
         return res
@@ -339,6 +309,6 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             total_loss += loss_gpu
 
         total_acc /= num_batches
-        res['loss'] = total_loss
-        res['accuracy'] = float(total_acc)
+        res['ppn_loss'] = total_loss
+        res['ppn_acc'] = float(total_acc)
         return res
