@@ -15,7 +15,7 @@ def digamma_evd_loss(alpha, y):
         - loss (FloatTensor): N x 1 non-reduced loss for each example. 
     '''
     S = alpha.sum(dim=1, keepdim=True)
-    loss = torch.sum((torch.digamma(S) - torch.digamma(alpha) * y), dim=1)
+    loss = torch.sum((torch.digamma(S) - torch.digamma(alpha)) * y, dim=1)
     return loss
 
 
@@ -82,30 +82,50 @@ def evd_kl_divergence(alpha, beta=None):
     return loss
 
 
+def evd_loss_dict():
+    loss_fn = {
+        'digamma': digamma_evd_loss,
+        'sumsq': sumsq_evd_loss,
+        'nll': nll_evd_loss
+    }
+    return loss_fn
+
+
+def evd_loss_construct(name):
+    losses = evd_loss_dict()
+    if name not in losses:
+        raise Exception("Unknown evd loss algorithm name provided: %s" % name)
+    return losses[name]
+
+
 class EVDLoss(nn.Module):
     '''
     Base class for loss used in the paper:
     Sensoy et. al., Evidential Deep Learning to Quantify 
     Classification Uncertainty
     '''
-    def __init__(self, reduction='none', T=10):
+    def __init__(self, evd_loss_name, reduction='none', T=50000):
         super(EVDLoss, self).__init__()
         self.T = T  # Total epoch counts for which to anneal kld component. 
-        
-    @property
-    def prediction_loss(self, alpha, y):
-        raise NotImplementedError
-
-    @property
-    def kl_divergence_loss(self, alpha, y):
-        raise NotImplementedError
+        self.evd_loss = evd_loss_construct(evd_loss_name)
+        self.kld_loss = evd_kl_divergence
+        self.reduction = reduction
 
     def forward(self, alpha, y, t=0):
 
-        annealing = min(1.0, t / float(self.T))
+        annealing = min(1.0, float(t) / self.T)
+        # print("annealing = ", annealing)
 
-        loss = self.prediction_loss(alpha, y) + \
-               annealing * self.kl_divergence_loss(alpha, y)
+        evd_loss = self.evd_loss(alpha, y)
+        alpha_tilde = y + (1 - y) * alpha
+        kld_loss = self.kld_loss(alpha_tilde)
+
+        evd_loss = evd_loss.mean()
+        kld_loss = kld_loss.mean()
+
+        # print("EVD Loss = {}, KLD Loss = {}, Annealed KLD Loss = {}".format(evd_loss, kld_loss, annealing * kld_loss))
+
+        loss = evd_loss + annealing * kld_loss
         if self.reduction == 'none':
             return loss
         elif self.reduction == 'mean':
