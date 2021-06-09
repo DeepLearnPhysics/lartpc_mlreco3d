@@ -8,11 +8,9 @@ def model_dict():
 
     from . import clustercnn_se
     from . import graph_spice
-    from . import graph_spice_old
 
     from . import grappa
     from . import flashmatching_model
-    from . import hierarchy
     from . import particle_types
 
     from . import mink_uresnet
@@ -20,27 +18,18 @@ def model_dict():
     from . import mink_singlep
     from . import mink_spice
     from . import mink_bayes_uresnet
-    from . import vae
-    from . import pointnet_gen
+    from . import mink_graph_spice
 
-    from . import particle_types
-    from . import full_cnn
     from . import full_chain
+    from . import full_chain_temp
+    from . import mink_full_chain
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
+        # -------------------SparseConvNet Backend----------------------
         # Using SCN built-in UResNet
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
-        # URESNET MINKOWSKINET
-        "mink_uresnet": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
-        'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss),
-        "mink_singlep": (mink_singlep.ParticleImageClassifier, mink_singlep.ParticleTypeLoss),
-        "mink_vae": (vae.VAE, vae.ReconstructionLoss),
-        "mink_vae_2": (vae.VAE2, vae.ReconstructionLoss),
-        "mink_vae_3": (vae.VAE3, vae.ReconstructionLoss),
-        "mink_spice": (mink_spice.MinkSPICE, mink_spice.SPICELoss),
-        "pointnet_gen": (pointnet_gen.VAE, pointnet_gen.ReconstructionLoss),
         # Chain UResNet and PPN
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Spatial Embeddings
@@ -53,22 +42,30 @@ def model_dict():
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
-
+        # Graph SPICE II
         "graph_spice_2": (graph_spice.GraphSPICEPP, graph_spice.GraphSPICEPPLoss),
-        # # GraphSPICE2
-        # "graph_spice_2": (graph_spice.GraphSPICE2, graph_spice.GraphSPICE2Loss),
-        # GraphSPICE Old Version, will be removed
-        "graph_spice_old": (graph_spice_old.GraphSPICE, graph_spice_old.GraphSPICELoss),
         # Flashmatching using encoder and gnn
         "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
-        # Particle flow reconstruction with GrapPA (TODO: should be merged with GrapPA)
-        "hierarchy_gnn": (hierarchy.ParticleFlowModel, hierarchy.ChainLoss),
         # Particle image classifier
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
-        # CNN chain with UResNet+PPN+SPICE with a single encoder
-        "full_cnn": (full_cnn.FullChain, full_cnn.FullChainLoss),
         # Full reconstruction chain, including an option for deghosting
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
+        # Full Chain without refactoring
+        "full_chain_old": (full_chain_temp.FullChain, full_chain_temp.FullChainLoss),
+
+        # --------------------MinkowskiEngine Backend----------------------
+        # Full Chain MinkowskiEngine
+        "mink_full_chain": (mink_full_chain.MinkFullChain, mink_full_chain.MinkFullChainLoss),
+        # UresNet
+        "mink_uresnet": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        # UResNet + PPN
+        'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss),
+        # Single Particle Classifier
+        "mink_singlep": (mink_singlep.ParticleImageClassifier, mink_singlep.ParticleTypeLoss),
+        # SPICE
+        "mink_spice": (mink_spice.MinkSPICE, mink_spice.SPICELoss),
+        # Graph SPICE
+        "mink_graph_spice": (mink_graph_spice.MinkGraphSPICE, graph_spice.GraphSPICELoss),
         # Bayesian Classifier
         "bayes_singlep": (mink_singlep.BayesianParticleClassifier, mink_singlep.ParticleTypeLoss),
         # Bayesian UResNet

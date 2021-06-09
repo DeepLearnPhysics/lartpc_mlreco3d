@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 
 import MinkowskiEngine as ME
-import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.uresnet import UResNet, ACASUNet, ASPPUNet
 from collections import defaultdict
@@ -13,19 +12,33 @@ from mlreco.mink.layers.factories import activations_construct
 
 class UResNet_Chain(nn.Module):
 
-    def __init__(self, cfg, name='uresnet_chain'):
+
+    INPUT_SCHEMA = [
+        ["parse_sparse3d_scn", (float,), (3, 1)]
+    ]
+
+    MODULES = ['mink_uresnet']
+
+    def __init__(self, cfg, name='mink_uresnet'):
         super(UResNet_Chain, self).__init__()
-        self.model_cfg = cfg[name]
-        aspp_mode = self.model_cfg.get('aspp_mode', None)
-        self.D = self.model_cfg.get('data_dim', 3)
-        if aspp_mode == 'acas':
-            self.net = ACASUNet(cfg, name='uresnet')
-        elif aspp_mode == 'aspp':
-            self.net = ASPPUNet(cfg, name='uresnet')
+        self.model_config = cfg[name]
+        mode = self.model_config.get('aspp_mode', None)
+        self.D = self.model_config.get('data_dim', 3)
+        self.F = self.model_config.get('num_filters', 16)
+        self.num_classes = self.model_config.get('num_classes', 5)\
+            
+        # Parameters for Deghosting
+        self.ghost = self.model_config.get('ghost', False)
+        self.ghost_label = self.model_config.get('ghost_label', -1)
+
+
+        if mode == 'acas':
+            self.net = ACASUNet(cfg, name='mink_uresnet')
+        elif mode == 'aspp':
+            self.net = ASPPUNet(cfg, name='mink_uresnet')
         else:
-            self.net = UResNet(cfg, name='uresnet')
-        self.F = self.model_cfg.get('num_filters', 16)
-        self.num_classes = self.model_cfg.get('num_classes', 5)
+            self.net = UResNet(cfg, name='mink_uresnet')
+
         self.output = [
             ME.MinkowskiBatchNorm(self.F, 
                 eps=self.net.norm_args.get('eps', 0.00001), 
@@ -34,17 +47,20 @@ class UResNet_Chain(nn.Module):
             ME.MinkowskiLinear(self.F, self.num_classes)]
         self.output = nn.Sequential(*self.output)
 
-        print('Total Number of Trainable Parameters = {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        if self.ghost:
+            self.linear_ghost = ME.MinkowskiLinear(self.F, 2)
 
 
     def forward(self, input):
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             res = self.net(x)
-            seg = res['decoderTensors'][-1]
-            seg = self.output(seg)
+            feats = res['decoderTensors'][-1]
+            seg = self.output(feats)
             out['segmentation'].append(seg.F)
+            if self.ghost:
+                ghost = self.linear_ghost(feats)
+                out['ghost'].append(ghost.F)
         return out
 
 
