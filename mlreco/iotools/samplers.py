@@ -50,4 +50,17 @@ class SequentialBatchSampler(AbstractBatchSampler):
         return SequentialBatchSampler(len(ds), cfg['minibatch_size'])
 
 
-        
+class BootstrapBatchSampler(AbstractBatchSampler):
+    '''
+    Sampler used for bootstrap sampling of the entire dataset.
+
+    This is particularly useful for training an ensemble of networks (bagging)
+    '''
+    def __iter__(self):
+        starts = np.arange(0, self._data_size - self._minibatch_size, self._minibatch_size)
+        bootstrap_indices = np.random.choice(np.arange(self._data_size), self._data_size)
+        return iter(np.concatenate([bootstrap_indices[np.arange(start, start+self._minibatch_size)] for start in starts]))
+    
+    @staticmethod
+    def create(ds, cfg):
+        return BootstrapBatchSampler(len(ds), cfg['minibatch_size'])
