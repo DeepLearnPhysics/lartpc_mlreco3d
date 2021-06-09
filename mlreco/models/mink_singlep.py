@@ -13,7 +13,7 @@ from collections import defaultdict
 from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import BayesianEncoder
-from mlreco.bayes.factories import evd_loss_construct
+from mlreco.bayes.evidential import EVDLoss
 
 class ParticleImageClassifier(nn.Module):
 
@@ -60,7 +60,7 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
         point_cloud, = input
         out = self.encoder(point_cloud)
         evidence = self.final_layer(out)
-        print("Evidence = ", evidence)
+        # print("Evidence = ", evidence)
         concentration = evidence + 1.0
         S = torch.sum(concentration, dim=1, keepdim=True)
         uncertainty = self.num_classes / (S + self.eps)
@@ -188,12 +188,12 @@ class EvidentialLearningLoss(nn.Module):
         self.loss_config = cfg[name]
         self.evd_loss_name = self.loss_config.get('evd_loss_name', 'sumsq')
         self.num_classes = self.loss_config.get('num_classes', 5)
-        self.loss_fn = evd_loss_construct(self.evd_loss_name)
+        self.num_total_iter = self.loss_config.get('num_total_iter', 50000)
+        self.loss_fn = EVDLoss(self.evd_loss_name, 'mean', T=self.num_total_iter)
 
-    def forward(self, out, type_labels):
+    def forward(self, out, type_labels, iteration=0):
 
         alpha = out['concentration'][0]
-        print(alpha)
         probs = out['expected_probability'][0]
         device = alpha.device
 
@@ -201,9 +201,8 @@ class EvidentialLearningLoss(nn.Module):
 
         labels_onehot = torch.eye(self.num_classes, device=device)[labels]
 
-        loss_batch = self.loss_fn(alpha, labels_onehot)
+        loss_batch = self.loss_fn(alpha, labels_onehot, t=iteration)
         loss = loss_batch.mean()
-        print(loss)
         pred = torch.argmax(probs, dim=1)
 
         accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
@@ -218,4 +217,5 @@ class EvidentialLearningLoss(nn.Module):
             mask = labels == c
             acc_types['accuracy_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
+
         return res

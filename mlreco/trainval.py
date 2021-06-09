@@ -60,8 +60,7 @@ class trainval(object):
                 self._optim_args['lr'] = 0.001
 
         # Handle time-dependent loss, such as KL Divergence annealing 
-        self._time_dependent = self._optim_args.get('time_dependent', False)
-
+        self._time_dependent = self._trainval_config.get('time_dependent_loss', False)
 
         # learning rate scheduler
         schedule_cfg = self._trainval_config.get('lr_scheduler')
@@ -165,7 +164,7 @@ class trainval(object):
         return train_blob, loss_blob
 
 
-    def train_step(self, data_iter):
+    def train_step(self, data_iter, iteration=None):
         """
         data_blob is the output of the function get_data_minibatched.
         It is a dictionary where data_blob[key] = list of length
@@ -174,7 +173,7 @@ class trainval(object):
 
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
-        data_blob,res_combined = self.forward(data_iter)
+        data_blob,res_combined = self.forward(data_iter, iteration=iteration)
         # print(data_blob['index'])
         # Run backward once for all the previous forward
         self.backward()
@@ -183,7 +182,7 @@ class trainval(object):
         return data_blob,res_combined
 
 
-    def forward(self, data_iter):
+    def forward(self, data_iter, iteration=None):
         """
         Run forward for
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
@@ -201,7 +200,7 @@ class trainval(object):
             self._watch.stop('io')
             self.tspent_sum['io'] += self._watch.time('io')
 
-            res = self._forward(input_train, input_loss)
+            res = self._forward(input_train, input_loss, iteration=iteration)
 
             # Here, contruct the unwrapped input and output
             # First, handle the case of a simple list concat
@@ -242,7 +241,7 @@ class trainval(object):
         return data_combined, res_combined
 
 
-    def _forward(self, train_blob, loss_blob):
+    def _forward(self, train_blob, loss_blob, iteration=None):
         """
         data/label/weight are lists of size minibatch size.
         For sparse uresnet:
@@ -278,7 +277,10 @@ class trainval(object):
 
             # Compute the loss
             if len(self._loss_keys):
-                loss_acc = self._criterion(result, *tuple(loss_blob))
+                if self._time_dependent:
+                    loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
+                else:
+                    loss_acc = self._criterion(result, *tuple(loss_blob))
 
                 if self._train:
                     self._loss.append(loss_acc['loss'])

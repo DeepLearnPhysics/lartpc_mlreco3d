@@ -268,7 +268,11 @@ def train_loop(handlers):
                         ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
 
         # Train step
-        data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
+        if handlers.trainer._time_dependent:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter, 
+                                                                 iteration=handlers.iteration)
+        else:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
         # result_blob['total_num_points'] = [data_blob['input_data'][0].shape[0]]
         # result_blob['total_nonghost_points'] = [(data_blob['segment_label'][0][:, -1] < 5).sum().item()]
