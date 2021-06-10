@@ -1005,8 +1005,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_p' in out:
                 print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
             if 'node_pred_vtx' in out:
-                print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
-                print('Vertex score accuracy: {:.4f}'.format(res['vtx_score_acc']))
+                #print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
+                print('Primary score accuracy: {:.4f}'.format(res['vtx_score_acc']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
