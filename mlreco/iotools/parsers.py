@@ -252,8 +252,9 @@ def parse_particle_coords(data):
     Function that returns particle coordinates (start and end) and start time.
     This is used for particle clustering into interactions
     :param data:
-    :return: numpy.ndarray (N,7) -> [first_step_x, first_step_y, first_step_z,
-                                        last_step_x, last_step_y, last_step_z, first_step_t]
+    :return: numpy.ndarray (N,8) -> [first_step_x, first_step_y, first_step_z,
+                                     last_step_x, last_step_y, last_step_z,
+                                     first_step_t, shape_id]
     '''
     # Scale particle coordinates to image size
     particles = parse_particle_asis(data)
@@ -264,7 +265,7 @@ def parse_particle_coords(data):
         start_point = last_point = [p.first_step().x(), p.first_step().y(), p.first_step().z()]
         if p.shape() == 1: # End point only meaningful and thought out for tracks
             last_point  = [p.last_step().x(), p.last_step().y(), p.last_step().z()]
-        particle_feats.append(np.concatenate((start_point, last_point, [p.first_step().t()])))
+        particle_feats.append(np.concatenate((start_point, last_point, [p.first_step().t(), p.shape()])))
 
     particle_feats = np.vstack(particle_feats)
     return particle_feats[:,:3], particle_feats[:,3:]
@@ -976,3 +977,18 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
+
+
+def parse_run_info(data):
+    """
+    Parse run info (run, subrun, event number)
+    Parameters
+    ----------
+    data: (1, ) array_like
+        data to get run info from
+    Returns
+    -------
+    output: tuple
+         (run, subrun, event)
+    """
+    return data[0].run(), data[0].subrun(), data[0].event()

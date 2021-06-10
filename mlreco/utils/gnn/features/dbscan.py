@@ -1,7 +1,6 @@
 from sklearn.neighbors import KNeighborsClassifier
 from mlreco.utils.gnn.features.utils import *
 import numpy as np
-from mlreco.utils.gnn.cluster import get_cluster_centers, get_cluster_voxels
 from sklearn.cluster import DBSCAN
 
 # node features: [# voxels in cluster, cluster center, cluster "orientation", unit vector of cluster direction]*len(eps_values)
@@ -13,7 +12,7 @@ def dbscan_features(data, em_filter, edges):
     orientation = False
     if orientation:
         num_node_features += 9
-    
+
     positions = data['segment_label'][em_filter][:, :3]
     nf = []
     ef = []
@@ -29,16 +28,16 @@ def dbscan_features(data, em_filter, edges):
             center = np.mean(x_uncentered, axis=0)
             # center data
             x = x_uncentered - center
-            
+
             # get orientation matrix
             A = x.T.dot(x)
             # get eigenvectors - convention with eigh is that eigenvalues are ascending
             w, v = np.linalg.eigh(A)
             dirwt = 0.0 if w[2] == 0 else 1.0 - w[1] / w[2] # weight for direction
-            
+
             # get direction - look at direction of spread orthogonal to v[:,2]
             v0 = v[:,2]
-            # projection of x along v0 
+            # projection of x along v0
             x0 = x.dot(v0)
             # projection orthogonal to v0
             xp0 = x - np.outer(x0, v0)
@@ -46,11 +45,11 @@ def dbscan_features(data, em_filter, edges):
             # spread coefficient
             sc = np.dot(x0, np0)
             if sc < 0:
-                # reverse 
+                # reverse
                 v0 = -v0
             # weight direction
             v0 = dirwt*v0
-            
+
             if orientation:
                 w = w + delta # regularization
                 w = w / w[2] # normalize top eigenvalue to be 1
@@ -62,7 +61,7 @@ def dbscan_features(data, em_filter, edges):
             node_features[np.where(node_labels == clusters[i])] = cluster_feature
         node_features[np.where(node_labels == -1)] = np.array([0]*num_node_features)
         nf.append(node_features)
-        
+
         # create edge features
         unlabeled = np.where(node_labels == -1)
         labeled = np.where(node_labels != -1)
@@ -80,7 +79,7 @@ def dbscan_features(data, em_filter, edges):
         else:
             edge_labels = node_labels_to_edge_labels(edges, node_labels).astype(np.float64)
         ef.append(np.reshape(edge_labels, (-1, 1)))
-        
+
     nf = np.concatenate(tuple(nf), axis=1)
     ef = np.concatenate(tuple(ef), axis=1)
-    return nf, ef 
+    return nf, ef

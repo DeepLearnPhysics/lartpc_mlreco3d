@@ -4,7 +4,7 @@ import numpy as np
 from mlreco.utils import CSVData
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-from mlreco.utils.gnn.cluster import get_cluster_label_np
+from mlreco.utils.gnn.cluster import get_cluster_label
 from scipy.special import softmax
 
 
@@ -42,7 +42,7 @@ def cosmic_discriminator_metrics(cfg, data_blob, res, logdir, iteration):
         # Initialize log if one per event
         if store_per_event:
             fout = CSVData(os.path.join(logdir, 'cosmic-discriminator-metrics-event-%07d.csv' % tree_idx))
-        nu_label = get_cluster_label_np(clust_data[data_idx], res['interactions'][data_idx], column=8)
+        nu_label = get_cluster_label(clust_data[data_idx], res['interactions'][data_idx], column=8)
         nu_label = (nu_label > -1).astype(int)
 
         n_interactions = nu_label.shape[0]
@@ -56,7 +56,7 @@ def cosmic_discriminator_metrics(cfg, data_blob, res, logdir, iteration):
         n_pred_cosmic = (nu_pred == 0).sum()
 
         if enable_physics_metrics:
-            true_interaction_idx = get_cluster_label_np(clust_data[data_idx], res['interactions'][data_idx], column=7)
+            true_interaction_idx = get_cluster_label(clust_data[data_idx], res['interactions'][data_idx], column=7)
             for i, j in enumerate(true_interaction_idx):
                 true_interaction = clust_data[data_idx][clust_data[data_idx][:, 7] == j]
                 pred_interaction = clust_data[data_idx][res['interactions'][data_idx][i]]

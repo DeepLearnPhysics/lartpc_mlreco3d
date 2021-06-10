@@ -9,13 +9,13 @@ def find_shower_cone(dbscan, em_primaries, energy_data, types, length_factor=14.
     dbscan: data parsed from "dbscan_label": ["parse_dbscan", "sparse3d_fivetypes"]
     em_primaries: data parsed from "em_primaries" : ["parse_em_primaries", "sparse3d_data", "particle_mcst"]
     energy_data: data parsed from "input_data": ["parse_sparse3d_scn", "sparse3d_data"]
-    
+
     returns a list of length len(em_primaries) containing np arrays, each of which contains the indices corresponding to the voxels in the cone of the corresponding EM primary
     """
     clusts = form_clusters(dbscan)
     selected_voxels = []
     true_voxels = []
-    
+
     if len(clusts) == 0:
         # assignn everything to first primary
         selected_voxels.append(np.arange(len(dbscan)))
@@ -25,7 +25,7 @@ def find_shower_cone(dbscan, em_primaries, energy_data, types, length_factor=14.
     for i in range(len(assigned_primaries)):
         if assigned_primaries[i] != -1:
             c = clusts[assigned_primaries[i]]
-            
+
             p = em_primaries[i]
             em_point = p[:3]
 
@@ -44,7 +44,7 @@ def find_shower_cone(dbscan, em_primaries, energy_data, types, length_factor=14.
             axis_distances = np.linalg.norm(np.cross(primary_points-primary_center, primary_points-em_point), axis=1)/primary_length
             axis_projections = np.dot(primary_points - em_point, direction)
             primary_slope = np.percentile(axis_distances/axis_projections, slope_percentile)
-            
+
             # define a cone around the primary axis
             cone_length = length_factor * primary_length
             cone_slope = slope_factor * primary_slope
@@ -68,7 +68,7 @@ def find_shower_cone(dbscan, em_primaries, energy_data, types, length_factor=14.
             selected_voxels.append(classified_indices)
         else:
             selected_voxels.append(np.array([]))
-    
+
     return selected_voxels
 
 # node features: [# voxels in cluster]
@@ -84,14 +84,14 @@ def cone_features(data, em_filter, edges):
     for l in range(len(cone_assignments)):
         if len(cone_assignments[l]) > 0:
             node_labels[cone_assignments[l]] = l
-    
+
     # TODO test two approaches for unlabeled nodes: randomization and knn
     unlabeled = np.where(node_labels == -1)
     labeled = np.where(node_labels != -1)
-    
+
     # randomize labels so no edges are drawn between unlabeled nodes
 #     node_labels[unlabeled] = -1 * np.random.uniform(size=len(unlabeled[0]))
-    
+
     # classify unlabeled points with nearest neighbors to cone classifications
     if len(labeled[0]) == 0:
         node_labels = np.ones(len(dbscan))
