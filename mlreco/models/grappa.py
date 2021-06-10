@@ -1,12 +1,12 @@
-# GNN that attempts to put clusters together into groups
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import random
 import torch
 import numpy as np
 
-from .layers.dbscan import DBScanClusts2 as DBSCAN
+from .layers.dbscan import DBSCANFragmenter
 from .layers.momentum import MomentumNet
 from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
@@ -35,7 +35,6 @@ class GNN(torch.nn.Module):
             add_start_dir     : <add predicted start direction to the node features (default False)>
             start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
             start_dir_opt     : <optimize start direction by minimizing relative transverse spread of neighborhood (slow, default: False)>
-            start_dir_cpu     : <optimize the start direction on CPU (default: False)>
             network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
             edge_max_dist     : <maximal edge Euclidean length (default -1)>
             edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
@@ -82,14 +81,17 @@ class GNN(torch.nn.Module):
         self.add_start_dir = base_config.get('add_start_dir', False)
         self.start_dir_max_dist = base_config.get('start_dir_max_dist', -1)
         self.start_dir_opt = base_config.get('start_dir_opt', False)
-        self.start_dir_cpu = base_config.get('start_dir_cpu', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
+
+        # Interpret node type as list of classes to cluster, -1 means all classes
+        if isinstance(self.node_type, int): self.node_type = [self.node_type]
 
         # Choose what type of network to use
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
         self.edge_dist_numpy = base_config.get('edge_dist_numpy',False)
+        self.edge_knn_k = base_config.get('edge_knn_k', 5)
 
         # If requested, merge images together within the batch
         self.merge_batch = base_config.get('merge_batch', False)
@@ -98,19 +100,19 @@ class GNN(torch.nn.Module):
 
         # If requested, use DBSCAN to form clusters from semantics
         if 'dbscan' in cfg[name]:
-            self.dbscan = DBSCAN(cfg[name])
+            cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > 0 else [0,1,2,3]
+            cfg[name]['dbscan']['min_size']        = self.node_min_size
+            self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan')
 
         # If requested, initialize two MLPs for kinematics predictions
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
         if self.kinematics_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
-            self.kinematics_type = base_config.get('kinematics_type', True)
-            self.kinematics_momentum = base_config.get('kinematics_momentum', True)
-            type_config = cfg[name].get('type_net', {})
-            momentum_config = cfg[name].get('momentum_net', {})
-            if self.kinematics_type:
+            if base_config.get('kinematics_type', True):
+                type_config = cfg[name].get('type_net', {})
                 self.type_net = MomentumNet(node_output_feats, num_output=5, num_hidden=type_config.get('num_hidden', 128))
-            if self.kinematics_momentum:
+            if base_config.get('kinematics_momentum', True):
+                momentum_config = cfg[name].get('momentum_net', {})
                 self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
@@ -152,27 +154,14 @@ class GNN(torch.nn.Module):
         result = {}
 
         # Form list of list of voxel indices, one list per cluster in the requested class
-        if clusts is not None:
-            mask = np.array([len(c) >= self.node_min_size for c in clusts], dtype=np.bool)
-            clusts = [c for c in clusts if len(c) >= self.node_min_size]
-            if groups is not None: groups = groups[mask]
-            if points is not None: points = points[mask]
-            if extra_feats is not None: extra_feats = extra_feats[mask]
-        elif hasattr(self, 'dbscan'):
-            clusts = self.dbscan(cluster_data, onehot=False)
-            clusts = clusts[self.node_type] if self.node_type > -1 else np.concatenate(clusts).tolist()
-        else:
-            if self.node_type > -1:
-                mask   = torch.nonzero(cluster_data[:,-1] == self.node_type, as_tuple=True)[0]
-                clusts = form_clusters(cluster_data[mask], self.node_min_size, self.source_col)
-                clusts = [mask[c].cpu().numpy() for c in clusts]
+        if clusts is None:
+            if hasattr(self, 'dbscan'):
+                clusts = self.dbscan(cluster_data, points=particles.detach().cpu().numpy() if len(data) > 1 else None)
             else:
-                clusts = form_clusters(cluster_data, self.node_min_size, self.source_col)
-                clusts = [c.cpu().numpy() for c in clusts]
+                clusts = form_clusters(cluster_data.detach().cpu().numpy(), self.node_min_size, self.source_col, cluster_classes=self.node_type)
 
         # If requested, shuffle the order in which the clusters are listed (used for debugging)
         if self.shuffle_clusters:
-            import random
             random.shuffle(clusts)
 
         # If requested, merge images together within the batch
@@ -197,7 +186,7 @@ class GNN(torch.nn.Module):
         # If necessary, compute the cluster distance matrix
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,:3], clusts, batch_ids, self.edge_dist_metric, self.edge_dist_numpy)
+            dist_mat = inter_cluster_distance(cluster_data[:,:3], clusts, batch_ids, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
@@ -205,14 +194,16 @@ class GNN(torch.nn.Module):
         elif self.network == 'complete':
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
-            edge_index = delaunay_graph(cluster_data.cpu().numpy(), clusts, dist_mat, self.edge_max_dist)
+            import numba as nb
+            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'knn':
-            edge_index = knn_graph(batch_ids, dist_mat, k=5, undirected=True)
+            edge_index = knn_graph(batch_ids, self.edge_knn_k, dist_mat)
         elif self.network == 'bipartite':
-            primary_ids = [i for i, c in enumerate(clusts) if (cluster_data[c,self.source_col] == cluster_data[c,self.target_col]).any()]
-            edge_index = bipartite_graph(batch_ids, primary_ids, dist_mat, self.edge_max_dist)
+            clust_ids = get_cluster_label(cluster_data, clusts, self.source_col)
+            group_ids = get_cluster_label(cluster_data, clusts, self.target_col)
+            edge_index = bipartite_graph(batch_ids, clust_ids==group_ids, dist_mat, self.edge_max_dist)
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
@@ -241,18 +232,14 @@ class GNN(torch.nn.Module):
         if self.add_start_point or points is not None:
             if points is None:
                 points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6)
-                for i, c in enumerate(clusts):
-                    dist_mat = torch.cdist(points[i].reshape(-1,3), cluster_data[c,:3])
-                    points[i] = cluster_data[c][torch.argmin(dist_mat,dim=1),:3].reshape(-1)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
-                dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt, self.start_dir_cpu)
+                dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
                 x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
-        device = cluster_data.device
-        index = torch.tensor(edge_index, device=device, dtype=torch.long)
-        xbatch = torch.tensor(batch_ids, device=device)
+        index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)
+        xbatch = torch.tensor(batch_ids, device=cluster_data.device)
 
         # Pass through the model, update result
         out = self.gnn_model(x, index, e, xbatch)

@@ -55,24 +55,24 @@ def adjacency(positions, edges, eps_regularization=0.0001):
 #     directions = direction_metric(edges, positions, dists)
 #     weights = directions*dists
 #     print('directions', directions)
-    
+
     # this is only upper triangular
     A_upper_half = coo_matrix((weights, (edges[:, 0], edges[:, 1])), shape=(n, n), dtype=weights.dtype).tocsc()
     A_lower_half = coo_matrix((weights, (edges[:, 1], edges[:, 0])), shape=(n, n), dtype=weights.dtype).tocsc()
     A = A_upper_half + A_lower_half
-    
+
     A = A + eps_regularization*(np.ones((n, n)) - np.identity(n))
-    
+
     D_vec = np.abs(np.array(A.sum(axis=1)).flatten())
     D_norm_vec = 1/np.sqrt(D_vec)
     D = diags(D_vec)
     D_norm = diags(D_norm_vec)
-    
+
     A_norm = D_norm * A * D_norm
     print('A normalized')
-    
+
     return A_norm
-    
+
 def to_spectral_space(positions, edges, n_vecs=8):
     A = adjacency(positions, edges)
     _, vecs = eigsh(A, k=n_vecs, which='LA')

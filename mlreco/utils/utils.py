@@ -6,15 +6,6 @@ import torch
 import sparseconvnet as scn
 import time
 
-# inter-cluster distance calculation: define dumb matrix (vectorized) dist calculation + jit it
-# FIXME in torch 1.3 or 1.4, cdist should be fixed (02-02-2020 the container using v1.1 has slow cdist)
-@torch.jit.script
-def local_cdist(set0, set1):
-    norm0 = set0.pow(2).sum(dim=-1, keepdim=True)
-    norm1 = set1.pow(2).sum(dim=-1, keepdim=True)
-    res = torch.addmm(norm1.transpose(-2, -1), set0, set1.transpose(-2, -1), alpha=-2).add_(norm0)
-    res = res.clamp_min_(1e-20).sqrt()
-    return res
 
 def to_numpy(s):
     if isinstance(s, np.ndarray):
