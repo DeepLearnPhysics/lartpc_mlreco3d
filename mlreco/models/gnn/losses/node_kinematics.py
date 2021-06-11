@@ -239,7 +239,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 if compute_momentum:
                     p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
 
-                if compute_vtx:
+                if compute_vtx and node_pred_vtx[good_index].shape[0]:
                     # print(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()])
                     vtx_position_acc += float(torch.sum(1. - torch.abs(node_pred_vtx[good_index & positives.bool(), :3]-node_assn_vtx[good_index & positives.bool()])/(torch.abs(node_assn_vtx[good_index & positives.bool()]) + torch.abs(node_pred_vtx[good_index & positives.bool(), :3]))))/3.
                     vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[good_index, 3:], dim=1) == positives[good_index]))
