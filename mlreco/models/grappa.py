@@ -130,6 +130,7 @@ class GNN(torch.nn.Module):
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
 
+
     def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None):
         """
         Prepares particle clusters and feed them to the GNN model.
@@ -260,6 +261,7 @@ class GNN(torch.nn.Module):
         xbatch = torch.tensor(batch_ids, device=device)
 
         # Pass through the model, update result
+        print(x.shape, index, e.shape, xbatch)
         out = self.gnn_model(x, index, e, xbatch)
         result['node_pred'] = [[out['node_pred'][0][b] for b in cbids]]
         result['edge_pred'] = [[out['edge_pred'][0][b] for b in ebids]]
