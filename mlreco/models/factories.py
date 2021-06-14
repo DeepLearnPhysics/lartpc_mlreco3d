@@ -20,7 +20,7 @@ def model_dict():
     from . import mink_bayes_uresnet
     from . import mink_graph_spice
 
-    from . import full_chain
+    from . import full_chain, full_chain_2
     from . import full_chain_temp
     from . import mink_full_chain
     # Make some models available (not all of them, e.g. PPN is not standalone)
@@ -52,6 +52,8 @@ def model_dict():
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
         # Full Chain without refactoring
         "full_chain_old": (full_chain_temp.FullChain, full_chain_temp.FullChainLoss),
+        # Temporary Full Chain
+        "full_chain_2": (full_chain_2.FullChain, full_chain_2.FullChainLoss),
 
         # --------------------MinkowskiEngine Backend----------------------
         # Full Chain MinkowskiEngine

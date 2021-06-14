@@ -91,9 +91,11 @@ class FragmentManager(nn.Module):
                                                        frag_batch_ids, 
                                                        frag_seg)
 
+        
+
         out = {
-            'frags'         : [frags],
-            'fragments'     : [fragments],
+            'frags'         : [fragments],
+            'fragments'     : [frags],
             'fragments_seg' : [frags_seg],
             'frag_batch_ids': [frag_batch_ids],
             'vids'          : [vids]
@@ -130,8 +132,10 @@ class DBSCANFragmentManager(FragmentManager):
 
         semantic_data = torch.cat([input[:, :4], 
                                    semantic_labels.reshape(-1, 1)], dim=1)
+
         fragments_dbscan = self.dbscan_fragmenter(semantic_data, 
                                                   cnn_result)
+
         frag_batch_ids = get_cluster_batch(input[:, :5], fragments_dbscan,
                                            batch_index=self._batch_column)
         frag_seg = np.empty(len(fragments_dbscan), dtype=np.int32)
