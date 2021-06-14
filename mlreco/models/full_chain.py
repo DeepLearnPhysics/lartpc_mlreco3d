@@ -17,6 +17,7 @@ from mlreco.models.layers.cnn_encoder import ResidualEncoder
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
+from mlreco.utils.cluster.fragmenter import *
 
 from mlreco.utils.gnn.evaluation import (node_assignment_score, 
                                          primary_assignment)
@@ -111,17 +112,20 @@ class FullChain(torch.nn.Module):
                 self.gs_manager = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
                 self.gs_manager.training = True # FIXME
                 self._graph_spice_skip_classes = cfg['graph_spice']['skip_classes']
+                self.fragment_manager = GraphSPICEFragmentManager(cfg['fragment_manager'])
             else:
                 self.spatial_embeddings = ClusterCNN(cfg['spice'])
-                self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
-                self._s_thresholds  = self.frag_cfg.get('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-                self._p_thresholds  = self.frag_cfg.get('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-                self._spice_classes = self.frag_cfg.get('cluster_classes', [])
-                self._spice_min_voxels = self.frag_cfg.get('min_voxels', 2)
+                self.frag_cfg = cfg['spice'].get('fragment_manager', {})
+                self._s_thresholds  = self.frag_cfg.setdefault('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+                self._p_thresholds  = self.frag_cfg.setdefault('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+                self._spice_classes = self.frag_cfg.setdefault('cluster_classes', [])
+                self._spice_min_voxels = self.frag_cfg.setdefault('min_voxels', 2)
+                self.fragment_manager = SPICEFragmentManager(self.frag_cfg)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
-            self.dbscan_frag = DBSCANFragmenter(cfg)
+            # self.dbscan_frag = DBSCANFragmenter(cfg)
+            self.fragment_manager = DBSCANFragmentManager(cfg['fragment_manager'])
 
         # Initialize the particle aggregator modules
         if self.enable_gnn_shower:
@@ -152,62 +156,7 @@ class FullChain(torch.nn.Module):
                 'use_input_data', True)
             self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get(
                 'use_true_interactions', False)
-
-
-    def extract_fragment(self, input, result):
-        """
-        Extracting clustering predictions from CNN clustering output
-
-        Parameters
-        ==========
-        input: list
-            Input data
-        result: dictionary
-            Where to access the Spice results.
-
-        Returns
-        =======
-        fragments: np.ndarray
-            Array of list of indices.
-            Each list of indices corresponds to one fragment.
-        frag_batch_ids: np.ndarray
-            Batch id for each fragment.
-        frag_seg: np.ndarray
-            Semantic segmentation for each fragment.
-        """
-        batch_labels = input[0][:,3]
-        fragments, frag_batch_ids = [], []
-        semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
-        for batch_id in batch_labels.unique():
-            for s in self._spice_classes:
-                mask = torch.nonzero((batch_labels == batch_id) & \
-                       (semantic_labels == s), as_tuple=True)[0]
-                if len(result['embeddings'][0][mask]) < self._spice_min_voxels:
-                    continue
-                pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
-                                          seediness = result['seediness'][0][mask],
-                                          margins = result['margins'][0][mask],
-                                          fitfunc = gaussian_kernel_cuda,
-                                          s_threshold = self._s_thresholds[s],
-                                          p_threshold = self._p_thresholds[s])
-                for c in pred_labels.unique():
-                    if c < 0:
-                        continue
-                    fragments.append(mask[pred_labels == c])
-                    frag_batch_ids.append(int(batch_id))
-
-        same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
-        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], 
-                             dtype=object if not same_length else np.int64)
-        frag_batch_ids = np.array(frag_batch_ids)
-        frag_seg = np.empty(len(fragments), dtype=np.int32)
-        for i, f in enumerate(fragments):
-            vals, cnts = semantic_labels[f].unique(return_counts=True)
-            assert len(vals) == 1
-            frag_seg[i] = vals[torch.argmax(cnts)].item()
-
-        return fragments, frag_batch_ids, frag_seg
-
+                
 
     def get_extra_gnn_features(self, fragments, frag_seg, classes, input, result, 
                                use_ppn=False, use_supp=False):
@@ -436,10 +385,8 @@ class FullChain(torch.nn.Module):
         # - frag_batch_ids (list of batch ids for each fragment)
         # - frag_seg (list of integers, semantic label for each fragment)
         # ---
-
+        cluster_result = {}
         semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten().double()
-        semantic_data = torch.cat((input[0][:,:4], semantic_labels.reshape(-1,1)), dim=1)
-        fragments, frag_batch_ids, frag_seg = [], [], []
 
         if self.enable_cnn_clust:
             if self._enable_graph_spice:
@@ -456,6 +403,7 @@ class FullChain(torch.nn.Module):
                     spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], 
                                                                          graph_spice_label))
                     cnn_result.update(spatial_embeddings_output)
+
                     self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], 
                                                   spatial_embeddings_output['graph_info'][0])
 
@@ -465,17 +413,8 @@ class FullChain(torch.nn.Module):
                                                 semantic_labels[filtered_semantic][:, None], 
                                                 cluster_predictions.to(device)[:, None]], dim=1)
 
-                    fragments_spice = form_clusters(filtered_input, column=-1)
-                    fragments_batch_ids_spice = get_cluster_batch(filtered_input, fragments_spice)
-                    fragments_seg_spice = get_cluster_label(filtered_input, fragments_spice, column=4)
-                    # Current indices in fragments_spice refer to input[0][filtered_semantic]
-                    # but we want them to refer to input[0]
-                    fragments_spice = [np.arange(len(input[0]))[filtered_semantic][clust.cpu().numpy()] \
-                                       for clust in fragments_spice]
-
-                    fragments.extend(fragments_spice)
-                    frag_batch_ids.extend(fragments_batch_ids_spice)
-                    frag_seg.extend(fragments_seg_spice)
+                    if self.enable_gnn:
+                        cluster_result = self.fragment_manager(filtered_input)
 
             else:
                 # Get fragment predictions from the CNN clustering algorithm
@@ -483,51 +422,23 @@ class FullChain(torch.nn.Module):
                 cnn_result.update(spatial_embeddings_output)
 
                 # Extract fragment predictions to input into the GNN
-                fragments_cnn, frag_batch_ids_cnn, frag_seg_cnn = self.extract_fragment(input, cnn_result)
-                fragments.extend(fragments_cnn)
-                frag_batch_ids.extend(frag_batch_ids_cnn)
-                frag_seg.extend(frag_seg_cnn)
+                if self.enable_gnn:
+                    cluster_result = self.fragment_manager(input[0], 
+                                                               cnn_result)
 
-        if self.enable_dbscan:
+        if self.enable_dbscan and self.enable_gnn:
             # Get the fragment predictions from the DBSCAN fragmenter
-            fragments_dbscan = self.dbscan_frag(semantic_data, cnn_result)
-            frag_batch_ids_dbscan = get_cluster_batch(input[0], fragments_dbscan)
-            frag_seg_dbscan = np.empty(len(fragments_dbscan), dtype=np.int32)
-            for i, f in enumerate(fragments_dbscan):
-                vals, cnts = semantic_labels[f].unique(return_counts=True)
-                assert len(vals) == 1
-                frag_seg_dbscan[i] = vals[torch.argmax(cnts)].item()
-            fragments.extend(fragments_dbscan)
-            frag_batch_ids.extend(frag_batch_ids_dbscan)
-            frag_seg.extend(frag_seg_dbscan)
+            cluster_result = self.fragment_manager(input[0], cnn_result)
 
         # Make np.array
-        same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
-        fragments = np.array(fragments, dtype=object if not same_length else np.int64)
-        frag_batch_ids = np.array(frag_batch_ids)
-        frag_seg = np.array(frag_seg)
-
-        # Store in result the intermediate fragments
-        _, counts = torch.unique(input[0][:,3], return_counts=True)
-        vids = np.concatenate([np.arange(n.item()) for n in counts])
-        bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
-        same_length = [np.all([len(c) == len(fragments[b][0]) for c in fragments[b]] ) for b in bcids]
-
-        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], 
-                          dtype=np.object if not same_length[idx] else np.int64) \
-                              for idx, b in enumerate(bcids)]
-
-        frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
+        cnn_result.update(cluster_result)
 
         cnn_result.update({
-            'frags': [fragments],   # TODO: name change frags -> fragments and
-            'fragments': [frags],   # fragments -> frags (dict key should be consistent with variable name)
-            'fragments_seg': [frags_seg],
-            'frag_batch_ids': [frag_batch_ids],
             'label_clustering': [label_clustering],
             'semantic_labels': [semantic_labels],
-            'vids': [vids]
         })
+
+        print(cnn_result.keys())
 
         
         return cnn_result
@@ -540,6 +451,7 @@ class FullChain(torch.nn.Module):
         device = input[0].device
         _, counts = torch.unique(input[0][:, 3], return_counts=True)
         fragments = result['frags'][0]
+        print(fragments)
         frag_seg = result['fragments_seg'][0]
         frag_batch_ids = result.pop('frag_batch_ids')[0]
         label_clustering = result.pop('label_clustering')[0]
@@ -1193,6 +1105,8 @@ def setup_chain_cfg(self, cfg):
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
         self.enable_gnn = True
+
+    print("ENABLE GNN: ", self.enable_gnn)
 
     if not self.enable_gnn:
         self.enable_gnn_shower     = False
