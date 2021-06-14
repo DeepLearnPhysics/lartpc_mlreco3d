@@ -97,6 +97,79 @@ class DBSCANFragmenter(torch.nn.Module):
         return np.array(clusts, dtype=object if not same_length else np.int64)
 
 
+class MinkDBSCANFragmenter(DBSCANFragmenter):
+
+    BATCH_COLUMN = 0
+    COORDINATE_COLUMN_RANGE = (1,4)
+
+    def __init__(self, cfg, name='dbscan_frag'):
+        super(MinkDBSCANFragmenter, self).__init__(cfg)
+    
+    def forward(self, data, output):
+        
+        from mlreco.utils.ppn import mink_ppn_selector
+        from scipy.spatial.distance import cdist
+
+        BATCH_COLUMN = MinkDBSCANFragmenter.BATCH_COLUMN
+        c1, c2 = MinkDBSCANFragmenter.COORDINATE_COLUMN_RANGE
+
+        clusts = []
+
+        # If tracks are clustered, get the track points from the PPN output
+        data = data.detach().cpu().numpy()
+        if self.track_label in self.cluster_classes:
+            
+            numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
+                            'points':      [output['points'][0].detach().cpu().numpy()],
+                            'mask_ppn':    [output['mask_ppn'][0].detach().cpu().numpy()],
+                            'ppn_score':   [output['ppn_score'][0].detach().cpu().numpy()]}
+
+            points =  mink_ppn_selector(data, numpy_output,
+                                        score_threshold = self.ppn_score_threshold,
+                                        type_threshold = self.ppn_type_threshold,
+                                        type_score_threshold = self.ppn_type_score_threshold)
+            point_labels = points[:,-1]
+            track_points = points[(point_labels == self.track_label) | \
+                                  (point_labels == self.michel_label),:self.dim+1]
+
+        # Break down the input data to its components
+        bids = np.unique(data[:, BATCH_COLUMN].astype(int))
+        segmentation = data[:,-1]
+        data = data[:,:-1]
+
+        # Loop over batch and semantic classes
+        for bid in bids:
+            batch_mask = data[:, BATCH_COLUMN].astype(int) == bid
+            for s in self.cluster_classes:
+                # Run DBSCAN
+                mask = batch_mask & (segmentation == s)
+                if s == self.track_label:
+                    mask = batch_mask & ((segmentation == s) | (segmentation == self.delta_label))
+                selection = np.where(mask)[0]
+                if not len(selection):
+                    continue
+
+                voxels = data[selection, c1:c2]
+                if s == self.track_label:
+                    labels = track_clustering(voxels = voxels,
+                                              points = track_points[track_points[:,BATCH_COLUMN] == bid, c1:c2],
+                                              method = self.track_clustering_method,
+                                              eps = self.eps[s],
+                                              min_samples = self.min_samples,
+                                              mask_radius = self.ppn_mask_radius)
+                else:
+                    labels = sklearn.cluster.DBSCAN(eps=self.eps[s], min_samples=self.min_samples).fit(voxels).labels_
+
+                # Build clusters for this class
+                if s == self.track_label:
+                    labels[segmentation[selection] == self.delta_label] = -1
+                cls_idx = [selection[np.where(labels == i)[0]] for i in np.unique(labels) if (i > -1 and np.sum(labels == i) >= self.min_size[s])]
+                clusts.extend(cls_idx)
+
+        same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
+        return np.array(clusts, dtype=object if not same_length else np.int64)
+
+
 class DBScanClusts(torch.nn.Module):
     """
     DBSCAN Layer that uses sklearn's DBSCAN implementation

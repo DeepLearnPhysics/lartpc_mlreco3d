@@ -1,3 +1,4 @@
+from mlreco.models.layers.dbscan import MinkDBSCANFragmenter
 import torch 
 import torch.nn as nn
 import MinkowskiEngine as ME
@@ -5,7 +6,8 @@ import numpy as np
 
 from mlreco.models.full_chain import FullChain, FullChainLoss
 from mlreco.mink.layers.ppnplus import PPN, PPNLonelyLoss
-from mlreco.models.mink_uresnet import UResNet_Chain, SegmentationLoss
+from mlreco.models.mink_uresnet import UResNet_Chain
+from mlreco.models.uresnet_lonely import SegmentationLoss
 from mlreco.models.mink_graph_spice import MinkGraphSPICE
 from mlreco.models.graph_spice import GraphSPICELoss
 
@@ -39,12 +41,13 @@ class MinkFullChain(FullChain):
 
         # Initialize the UResNet+PPN modules
         if self.enable_uresnet:
-            self.uresnet_lonely = UResNet_Chain(cfg['mink_uresnet'])
-            self.input_features = cfg['mink_uresnet_ppn']['mink_uresnet'].get(
+            self.uresnet_lonely = UResNet_Chain(cfg['uresnet_ppn'], 
+                                                name='uresnet_lonely')
+            self.input_features = cfg['uresnet_ppn']['uresnet_lonely'].get(
                 'features', 1)
 
         if self.enable_ppn:
-            self.ppn            = PPN(cfg['mink_uresnet_ppn'])
+            self.ppn            = PPN(cfg['uresnet_ppn'])
 
         # Initialize the CNN dense clustering module
         self.cluster_classes = []
@@ -56,6 +59,12 @@ class MinkFullChain(FullChain):
             self.gs_manager.training = True # FIXME
             self._graph_spice_skip_classes = cfg['graph_spice']['skip_classes']
             self.frag_cfg = cfg['spice'].get('fragment_clustering', {})
+
+        if self.enable_dbscan:
+            self.dbscan_frag = MinkDBSCANFragmenter(cfg)
+
+        print(self)
+        assert False
 
 
     def full_chain_cnn(self, input):
@@ -94,8 +103,12 @@ class MinkFullChain(FullChain):
             ppn_input.update(result)
             if 'ghost' in ppn_input:
                 ppn_input['ghost'] = ppn_input['ghost'][0]
-            ppn_output = self.ppn(ppn_input['finalTensor'], 
-                                  ppn_input['encoderTensors'])
+                ppn_output = self.ppn(ppn_input['finalTensor'][0], 
+                                      ppn_input['encoderTensors'][0],
+                                      ppn_input['ghost'])
+            else:
+                ppn_output = self.ppn(ppn_input['finalTensor'][0], 
+                                      ppn_input['encoderTensors'][0])
             result.update(ppn_output)
 
         # The rest of the chain only needs 1 input feature
@@ -121,20 +134,20 @@ class MinkFullChain(FullChain):
 
             if self.enable_ppn:
 
-                points = result['points'][0].clone()
+                points          = result['points'][0].clone()
                 ppn_coords_last = result['ppn_coords'][0][-1].clone()
                 ppn_layers_last = result['ppn_layers'][0][-1].clone()
-                mask_ppn_last = result['mask_ppn'][0][-1].clone()
+                mask_ppn_last   = result['mask_ppn'][0][-1].clone()
 
             deghost_result = {}
             deghost_result.update(result)
-            # deghost_result.pop('ghost') Reason?
+            deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             if self.enable_ppn:
-                deghost_result['points'] = [result['points'][0][deghost]]
-                deghost_result['mask_ppn'][0][-1] = [result['mask_ppn'][0][-1][deghost]]
-                deghost_result['ppn_coords'][0][-1] = [result['ppn_coords'][0][-1][deghost]]
-                deghost_result['ppn_layers'][0][-1] = [result['ppn_layers'][0][-1][deghost]]
+                deghost_result['points']            = [result['points'][0][deghost]]
+                deghost_result['mask_ppn'][0][-1]   = result['mask_ppn'][0][-1][deghost]
+                deghost_result['ppn_coords'][0][-1] = result['ppn_coords'][0][-1][deghost]
+                deghost_result['ppn_layers'][0][-1] = result['ppn_layers'][0][-1][deghost]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
             cnn_result['segmentation'][0] = segmentation
@@ -149,8 +162,10 @@ class MinkFullChain(FullChain):
         # - frag_seg (list of integers, semantic label for each fragment)
         # ---
 
-        semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten().double()
-        semantic_data = torch.cat((input[0][:,:4], semantic_labels.reshape(-1,1)), dim=1)
+        semantic_labels = torch.argmax(
+            cnn_result['segmentation'][0], dim=1).flatten().double()
+        semantic_data = torch.cat((input[0][:,:4], 
+                                   semantic_labels.reshape(-1,1)), dim=1)
         fragments, frag_batch_ids, frag_seg = [], [], []
 
         if self.enable_cnn_clust:
@@ -203,7 +218,7 @@ class MinkFullChain(FullChain):
         if self.enable_dbscan:
             # Get the fragment predictions from the DBSCAN fragmenter
             fragments_dbscan = self.dbscan_frag(semantic_data, cnn_result)
-            frag_batch_ids_dbscan = get_cluster_batch(input[0], fragments_dbscan)
+            frag_batch_ids_dbscan = get_cluster_batch(input[0], fragments_dbscan, batch_index=0)
             frag_seg_dbscan = np.empty(len(fragments_dbscan), dtype=np.int32)
             for i, f in enumerate(fragments_dbscan):
                 vals, cnts = semantic_labels[f].unique(return_counts=True)
@@ -232,14 +247,14 @@ class MinkFullChain(FullChain):
         frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
 
         cnn_result.update({
-            'fragments': [frags],
+            'frags': [fragments],   # TODO: name change frags -> fragments and
+            'fragments': [frags],   # fragments -> frags (dict key should be consistent with variable name)
             'fragments_seg': [frags_seg],
             'frag_batch_ids': [frag_batch_ids],
             'label_clustering': [label_clustering],
             'semantic_labels': [semantic_labels],
             'vids': [vids]
         })
-
         
         return cnn_result
 
@@ -247,13 +262,13 @@ class MinkFullChain(FullChain):
 class MinkFullChainLoss(FullChainLoss):
 
     def __init__(self, cfg):
-        super(MinkFullChainLoss, self).__init__()
+        super(MinkFullChainLoss, self).__init__(cfg)
 
         # Initialize loss components
         if self.enable_uresnet:
             self.uresnet_loss            = SegmentationLoss(cfg['uresnet_ppn'])
         if self.enable_ppn:
-            self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'])
+            self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'], name='ppn')
         if self.enable_cnn_clust:
             assert self._enable_graph_spice
             self.spatial_embeddings_loss = GraphSPICELoss(cfg)

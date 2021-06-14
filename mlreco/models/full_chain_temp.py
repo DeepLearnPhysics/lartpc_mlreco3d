@@ -17,8 +17,14 @@ from mlreco.models.layers.cnn_encoder import ResidualEncoder
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
-from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, cluster_direction
+
+from mlreco.utils.gnn.evaluation import (node_assignment_score, 
+                                         primary_assignment)
+                                         
+from mlreco.utils.gnn.cluster import (form_clusters, 
+                                      get_cluster_batch, 
+                                      get_cluster_label, 
+                                      cluster_direction)
 
 class FullChain(torch.nn.Module):
     """
@@ -129,24 +135,29 @@ class FullChain(torch.nn.Module):
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics')
-            self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
+            self._kinematics_use_true_particles = cfg['grappa_kinematics'].get(
+                'use_true_particles', False)
 
         # Initialize the interaction classifier module
         if self.enable_cosmic:
             self.cosmic_discriminator = ResidualEncoder(cfg['cosmic_discriminator'])
-            self._cosmic_use_input_data = cfg['cosmic_discriminator'].get('use_input_data', True)
-            self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get('use_true_interactions', False)
+            self._cosmic_use_input_data = cfg['cosmic_discriminator'].get(
+                'use_input_data', True)
+            self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get(
+                'use_true_interactions', False)
 
 
     def extract_fragment(self, input, result):
         """
         Extracting clustering predictions from CNN clustering output
+
         Parameters
         ==========
         input: list
             Input data
         result: dictionary
             Where to access the Spice results.
+
         Returns
         =======
         fragments: np.ndarray
@@ -162,7 +173,8 @@ class FullChain(torch.nn.Module):
         semantic_labels = torch.argmax(result['segmentation'][0].detach(), dim=1).flatten()
         for batch_id in batch_labels.unique():
             for s in self._spice_classes:
-                mask = torch.nonzero((batch_labels == batch_id) & (semantic_labels == s), as_tuple=True)[0]
+                mask = torch.nonzero((batch_labels == batch_id) & \
+                       (semantic_labels == s), as_tuple=True)[0]
                 if len(result['embeddings'][0][mask]) < self._spice_min_voxels:
                     continue
                 pred_labels = fit_predict(embeddings = result['embeddings'][0][mask],
@@ -178,7 +190,8 @@ class FullChain(torch.nn.Module):
                     frag_batch_ids.append(int(batch_id))
 
         same_length = np.all([len(f) == len(fragments[0]) for f in fragments] )
-        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], dtype=object if not same_length else np.int64)
+        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)], 
+                             dtype=object if not same_length else np.int64)
         frag_batch_ids = np.array(frag_batch_ids)
         frag_seg = np.empty(len(fragments), dtype=np.int32)
         for i, f in enumerate(fragments):
@@ -189,11 +202,14 @@ class FullChain(torch.nn.Module):
         return fragments, frag_batch_ids, frag_seg
 
 
-    def get_extra_gnn_features(self, fragments, frag_seg, classes, input, result, use_ppn=False, use_supp=False):
+    def get_extra_gnn_features(self, fragments, frag_seg, classes, input, result, 
+                               use_ppn=False, use_supp=False):
         """
         Extracting extra features to feed into the GNN particle aggregators
+
         - PPN: Most likely PPN point for showers, end points for tracks (+ direction estimate)
         - Supplemental: Mean/RMS energy in the fragment + semantic class
+
         Parameters
         ==========
         fragments: np.ndarray
@@ -203,6 +219,7 @@ class FullChain(torch.nn.Module):
         result: dictionary
         use_ppn: bool
         use_supp: bool
+
         Returns
         =======
         mask: np.ndarray
@@ -229,9 +246,12 @@ class FullChain(torch.nn.Module):
                     idx = torch.argmax(dist_mat)
                     idxs = int(idx)//len(f), int(idx)%len(f)
                     scores = torch.nn.functional.softmax(points_tensor[f, 3:5], dim=1)[:, 1]
-                    correction0 = points_tensor[f][idxs[0], :3] + 0.5 if scores[idxs[0]] > 0.5 else 0.0
-                    correction1 = points_tensor[f][idxs[1], :3] + 0.5 if scores[idxs[1]] > 0.5 else 0.0
-                    end_points = torch.cat([input[0][f[idxs[0]],:3] + correction0, input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
+                    correction0 = points_tensor[f][idxs[0], :3] + \
+                                  0.5 if scores[idxs[0]] > 0.5 else 0.0
+                    correction1 = points_tensor[f][idxs[1], :3] + \
+                                  0.5 if scores[idxs[1]] > 0.5 else 0.0
+                    end_points = torch.cat([input[0][f[idxs[0]],:3] + correction0, 
+                                            input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(torch.abs(points_tensor[f,:3]), dim=1).values < 1., as_tuple=True)[0]
@@ -250,7 +270,8 @@ class FullChain(torch.nn.Module):
                 if torch.isnan(values[1]): # Handle size-1 particles
                     values[1] = input[0][f,4] - input[0][f,4]
                 sem_type = torch.tensor([frag_seg[mask][i]], dtype=torch.float, device=input[0].device)
-                supp_feats = torch.cat((supp_feats, torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
+                supp_feats = torch.cat((supp_feats, 
+                                        torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
 
             kwargs['extra_feats'] = supp_feats
 
@@ -260,6 +281,7 @@ class FullChain(torch.nn.Module):
     def run_gnn(self, grappa, input, result, clusts, labels, kwargs={}):
         """
         Generic function to group in one place the common code to run a GNN model.
+
         Parameters
         ==========
         - grappa: GrapPA module to run
@@ -268,6 +290,7 @@ class FullChain(torch.nn.Module):
         - clusts: list of list of indices (indexing input data)
         - labels: dictionary of strings to label the final result
         - kwargs: extra arguments to pass to the gnn
+
         Returns
         =======
         None (modifies the result dict in place)
@@ -286,24 +309,32 @@ class FullChain(torch.nn.Module):
             group_ids = []
             for b in range(len(gnn_output['clusts'][0])):
                 if len(gnn_output['clusts'][0][b]) < 2:
-                    group_ids.append(np.zeros(len(gnn_output['clusts'][0][b]), dtype = np.int64))
+                    group_ids.append(np.zeros(len(gnn_output['clusts'][0][b]), dtype=np.int64))
                 else:
-                    group_ids.append(node_assignment_score(gnn_output['edge_index'][0][b], gnn_output['edge_pred'][0][b].detach().cpu().numpy(), len(gnn_output['clusts'][0][b])))
+                    group_ids.append(node_assignment_score(
+                        gnn_output['edge_index'][0][b], 
+                        gnn_output['edge_pred'][0][b].detach().cpu().numpy(), 
+                        len(gnn_output['clusts'][0][b])))
 
             result.update({labels['group_pred']: [group_ids]})
 
 
-    def select_particle_in_group(self, result, counts, b, particles, part_primary_ids, node_pred, group_pred, fragments):
+    def select_particle_in_group(self, result, counts, b, particles, 
+                                 part_primary_ids, node_pred, group_pred, fragments):
         """
         Merge fragments into particle instances, retain primary fragment id of each group
         """
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
         primary_labels = None
         if node_pred in result:
-            primary_labels = primary_assignment(result[node_pred][0][b].detach().cpu().numpy(), result[group_pred][0][b])
+            primary_labels = primary_assignment(
+                result[node_pred][0][b].detach().cpu().numpy(), 
+                result[group_pred][0][b])
+
         for g in np.unique(result[group_pred][0][b]):
             group_mask = np.where(result[group_pred][0][b] == g)[0]
-            particles.append(voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
+            particles.append(
+                voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
             if node_pred in result:
                 primary_id = group_mask[primary_labels[group_mask]][0]
                 part_primary_ids.append(primary_id)

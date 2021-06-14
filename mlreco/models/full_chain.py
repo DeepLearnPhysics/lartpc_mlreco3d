@@ -401,7 +401,9 @@ class FullChain(torch.nn.Module):
             deghost = result['ghost'][0].argmax(dim=1) == 0
             new_input = [input[0][deghost]]
             if label_seg is not None and label_clustering is not None:
-                label_clustering = adapt_labels(result, label_seg, label_clustering)
+                label_clustering = adapt_labels(result, 
+                                                label_seg, 
+                                                label_clustering)
 
             segmentation = result['segmentation'][0].clone()
             ppn_feature_dec = [x.features.clone() for x in result['ppn_feature_dec'][0]]
@@ -518,7 +520,8 @@ class FullChain(torch.nn.Module):
         frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
 
         cnn_result.update({
-            'fragments': [frags],
+            'frags': [fragments],   # TODO: name change frags -> fragments and
+            'fragments': [frags],   # fragments -> frags (dict key should be consistent with variable name)
             'fragments_seg': [frags_seg],
             'frag_batch_ids': [frag_batch_ids],
             'label_clustering': [label_clustering],
@@ -536,7 +539,7 @@ class FullChain(torch.nn.Module):
         # ---
         device = input[0].device
         _, counts = torch.unique(input[0][:, 3], return_counts=True)
-        fragments = result['fragments'][0]
+        fragments = result['frags'][0]
         frag_seg = result['fragments_seg'][0]
         frag_batch_ids = result.pop('frag_batch_ids')[0]
         label_clustering = result.pop('label_clustering')[0]
@@ -891,7 +894,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['ppn_acc']
             loss += self.ppn_weight*res_ppn['ppn_loss']
 
-        if self.enable_ghost and (self.enable_cnn_clust or self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_kinematics or self.enable_cosmic):
+        if self.enable_ghost and (self.enable_cnn_clust or \
+                                  self.enable_gnn_track or \
+                                  self.enable_gnn_shower or \
+                                  self.enable_gnn_inter or \
+                                  self.enable_gnn_kinematics or \
+                                  self.enable_cosmic):
             # Adapt to ghost points
             if cluster_label is not None:
                 cluster_label = adapt_labels(out, seg_label, cluster_label)
@@ -1170,12 +1178,29 @@ def setup_chain_cfg(self, cfg):
     self.enable_ppn            = chain_cfg.get('enable_ppn', True)
     self.enable_dbscan         = chain_cfg.get('enable_dbscan', True)
     self.enable_cnn_clust      = chain_cfg.get('enable_cnn_clust', False)
+
+    self.enable_gnn            = chain_cfg.get('enable_gnn', False)
     self.enable_gnn_shower     = chain_cfg.get('enable_gnn_shower', False)
     self.enable_gnn_track      = chain_cfg.get('enable_gnn_track', False)
     self.enable_gnn_particle   = chain_cfg.get('enable_gnn_particle', False)
     self.enable_gnn_inter      = chain_cfg.get('enable_gnn_inter', False)
     self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
+
+    if (self.enable_gnn_shower or \
+        self.enable_gnn_track or \
+        self.enable_gnn_particle or \
+        self.enable_gnn_inter or \
+        self.enable_gnn_kinematics or self.enable_cosmic):
+        self.enable_gnn = True
+
+    if not self.enable_gnn:
+        self.enable_gnn_shower     = False
+        self.enable_gnn_track      = False
+        self.enable_gnn_particle   = False
+        self.enable_gnn_inter      = False
+        self.enable_gnn_kinematics = False
+        self.enable_cosmic         = False
 
     # Whether to use PPN information (GNN shower clustering step only)
     self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
