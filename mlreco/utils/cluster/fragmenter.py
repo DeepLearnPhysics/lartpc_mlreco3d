@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from lartpc_mlreco3d.mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label
 
 import torch
 import torch.nn as nn
@@ -51,7 +51,7 @@ class FragmentManager(nn.Module):
 
         frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
 
-        return frags, frags_seg
+        return frags, frags_seg, vids
 
 
     @abstractmethod
@@ -86,16 +86,17 @@ class FragmentManager(nn.Module):
 
         fragments, frag_batch_ids, frag_seg = self.make_np_array(*fragment_data)
 
-        frags, frags_seg = self.unwrap_fragments(input[:, self._batch_column], 
-                                                 fragments, 
-                                                 frag_batch_ids, 
-                                                 frag_seg)
+        frags, frags_seg, vids = self.unwrap_fragments(input[:, self._batch_column], 
+                                                       fragments, 
+                                                       frag_batch_ids, 
+                                                       frag_seg)
 
         out = {
             'frags'         : [frags],
             'fragments'     : [fragments],
             'fragments_seg' : [frags_seg],
-            'frag_batch_ids': [frag_batch_ids]
+            'frag_batch_ids': [frag_batch_ids],
+            'vids'          : [vids]
         }
 
         return out
@@ -129,7 +130,6 @@ class DBSCANFragmentManager(FragmentManager):
 
         semantic_data = torch.cat([input[:, :4], 
                                    semantic_labels.reshape(-1, 1)], dim=1)
-        fragments, frags = [], []
         fragments_dbscan = self.dbscan_fragmenter(semantic_data, 
                                                   cnn_result)
         frag_batch_ids = get_cluster_batch(input[:, :5], fragments_dbscan,
@@ -139,9 +139,8 @@ class DBSCANFragmentManager(FragmentManager):
             vals, counts = semantic_labels[f].unique(return_counts=True)
             assert len(vals) == 1
             frag_seg[i] = vals[torch.argmax(counts)].item()
-        fragments.extend(fragments_dbscan)
 
-        return fragments, frag_batch_ids, frag_seg
+        return fragments_dbscan, frag_batch_ids, frag_seg
 
 
 class SPICEFragmentManager(FragmentManager):
@@ -206,18 +205,15 @@ class SPICEFragmentManager(FragmentManager):
         return fragments, frag_batch_ids, frag_seg
 
 
-class GraphSPICEFragmenter(FragmentManager):
+class GraphSPICEFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for GraphSPICE Clustering
     '''
     def __init__(self, frag_cfg : dict):
-        super(GraphSPICEFragmenter, self).__init__(frag_cfg)
+        super(GraphSPICEFragmentManager, self).__init__(frag_cfg)
         
 
-    def extract_fragments(self, input, 
-                          cnn_result, 
-                          semantic_labels, 
-                          gs_manager):
+    def extract_fragments(self, filtered_input):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -236,22 +232,9 @@ class GraphSPICEFragmenter(FragmentManager):
             - frag_seg
 
         '''
-        device = input.device
-        # If there are voxels to process in the given semantic classes
-        gs_manager.replace_state(cnn_result['graph'][0], 
-                                      cnn_result['graph_info'][0])
-
-        gs_manager.fit_predict(gen_numpy_graph=True)
-        cluster_predictions = gs_manager._node_pred.x
-        filtered_input = torch.cat([input[0][:, :4], 
-                                    semantic_labels[:, None], 
-                                    cluster_predictions.to(device)[:, None]], dim=1)
-
         fragments = form_clusters(filtered_input, column=-1)
         fragments_batch_ids = get_cluster_batch(filtered_input, fragments)
         fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
-        # Current indices in fragments_spice refer to input[0][filtered_semantic]
-        # but we want them to refer to input[0]
         fragments = [np.arange(input.shape[0])[clust.cpu().numpy()] \
                      for clust in fragments]
 
