@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import MinkowskiFunctional as MF
 
 from collections import defaultdict
-from mlreco.mink.layers.factories import (activations_dict, 
-                                          activations_construct, 
+from mlreco.mink.layers.factories import (activations_dict,
+                                          activations_construct,
                                           normalizations_construct)
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import BayesianEncoder
@@ -26,8 +26,8 @@ class BayesianUResNet(MENetworkBase):
 
         self.mode = self.model_config.get('mode', 'standard')
 
-        self.classifier = ME.MinkowskiLinear(self.encoder.num_filters, self.num_classes)
-
+        self.classifier = ME.MinkowskiLinear(self.encoder.num_filters,
+                                             self.num_classes)
 
     def mc_forward(self, input, num_samples=None):
 
@@ -47,7 +47,7 @@ class BayesianUResNet(MENetworkBase):
             device = x.device
 
             x_sparse = ME.SparseTensor(coordinates=x[:, :4],
-                                features=x[:, -1].view(-1, 1))
+                                       features=x[:, -1].view(-1, 1))
 
             pvec = torch.zeros((num_voxels, self.num_classes)).to(device)
             logits = torch.zeros((num_voxels, self.num_classes)).to(device)
@@ -68,8 +68,6 @@ class BayesianUResNet(MENetworkBase):
             res['segmentation'].append(logits)
 
         return res
-        
-
 
     def standard_forward(self, input):
 
@@ -79,12 +77,12 @@ class BayesianUResNet(MENetworkBase):
                                 features=x[:, -1].view(-1, 1))
             res_encoder = self.encoder.encoder(x)
             print([t.F.shape for t in res_encoder['encoderTensors']])
-            decoderTensors = self.decoder(res_encoder['finalTensor'], res_encoder['encoderTensors'])
+            decoderTensors = self.decoder(res_encoder['finalTensor'],
+                                          res_encoder['encoderTensors'])
             feats = decoderTensors[-1]
             logits = self.classifier(feats)
             out['segmentation'].append(logits.F)
         return out
-
 
     def forward(self, input):
 

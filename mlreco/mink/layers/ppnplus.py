@@ -5,13 +5,13 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
-from mlreco.mink.layers.factories import activations_dict, activations_construct
+from mlreco.mink.layers.blocks import ResNetBlock, SPP, ASPP
+from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.models.ppn import define_ppn12
+from mlreco.models.layers.extract_feature_map import MinkGhostMask
 
 from collections import Counter
-from torch_cluster import nearest
 
 from mlreco.models.cluster_cnn.losses.misc import BinaryCELogDiceLoss
 
@@ -83,11 +83,11 @@ class PPN(MENetworkBase):
         self.model_cfg = cfg[name]
         # UResNet Configurations
         self.reps = self.model_cfg.get('reps', 2)
-        self.depth = self.model_cfg.get('depth', 5)
+        self.depth = self.model_cfg.get('num_strides', 5)
         self.num_classes = self.model_cfg.get('num_classes', 5)
         self.num_filters = self.model_cfg.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
-        self.ppn_score_threshold = self.model_cfg.get('ppn_score_threshold', 0.5)
+        self.ppn_score_threshold = self.model_cfg.get('score_threshold', 0.5)
         self.input_kernel = self.model_cfg.get('input_kernel', 3)
 
         # Initialize Decoder
@@ -129,17 +129,33 @@ class PPN(MENetworkBase):
                                        activation=self.activation_name,
                                        activation_args=self.activation_args)
 
-        self.ppn_pixel_pred = ME.MinkowskiConvolution(
-            self.nPlanes[0], self.D, kernel_size=3, stride=1, dimension=self.D)
-        self.ppn_type = ME.MinkowskiConvolution(
-            self.nPlanes[0], self.num_classes, kernel_size=3, stride=1, dimension=self.D)
-        self.ppn_final_score = ME.MinkowskiConvolution(
-            self.nPlanes[0], 1, kernel_size=3, stride=1, dimension=self.D)
+        self.ppn_pixel_pred = ME.MinkowskiConvolution(self.nPlanes[0], 
+                                                      self.D, 
+                                                      kernel_size=3, 
+                                                      stride=1, 
+                                                      dimension=self.D)
+        self.ppn_type = ME.MinkowskiConvolution(self.nPlanes[0], 
+                                                self.num_classes, 
+                                                kernel_size=3, 
+                                                stride=1, 
+                                                dimension=self.D)
+        self.ppn_final_score = ME.MinkowskiConvolution(self.nPlanes[0], 
+                                                       1, 
+                                                       kernel_size=3, 
+                                                       stride=1, 
+                                                       dimension=self.D)
 
         self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
 
+        # Ghost point removal options
 
-    def forward(self, final, encoderTensors):
+        self.ghost_mask = MinkGhostMask(self.D)
+        self.use_true_ghost_mask = self.model_cfg.get(
+            'use_true_ghost_mask', False)
+        self.downsample_ghost = self.model_cfg.get('downsample_ghost', False)
+
+
+    def forward(self, final, encoderTensors, ghost=None):
         '''
         Vanilla UResNet Decoder
         INPUTS:
@@ -152,16 +168,22 @@ class PPN(MENetworkBase):
         ppn_layers, ppn_coords = [], []
         tmp = []
         mask_ppn = []
-        x = final
-
         device = final.device
 
         # We need to make labels on-the-fly to include true points in the
         # propagated masks during training
 
-        positive_labels = [] # list of label tensors, each per layer
+        if self.downsample_ghost:
+            with torch.no_grad():
+                if self.use_true_ghost_mask:
+                    # TODO: Not sure what's going on here
+                    ghost_mask = input['segment_label'] < self.num_classes
+                else:
+                    ghost_mask = 1.0 - torch.argmax(ghost, dim=1)
 
-        num_layers = len(encoderTensors[1:])
+            x, _ = self.ghost_mask(ghost_mask, final.C, final, factor=0.0)
+        else:
+            x = final
 
         for i, layer in enumerate(self.decoding_conv):
 
@@ -237,6 +259,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         count = 0
         device = segment_label[0].device
 
+        # print(outputs['ppn_layers'], outputs['ppn_coords'], outputs['points'])
+
         loss, accuracy = 0, []
         res = {}
         # Semantic Segmentation Loss
@@ -251,20 +275,35 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                 coords_layer = ppn_coords[layer]
                 loss_layer = 0.0
                 for b in batch_ids[igpu].int().unique():
+                    print(coords_layer, b)
                     batch_index_layer = coords_layer[:, 0].int() == b
                     batch_particle_index = batch_ids[igpu].int() == b
                     points_label = particles[particles[:, 0].int() == b][:, 1:4]
                     scores_event = ppn_score_layer[batch_index_layer].squeeze()
                     points_event = coords_layer[batch_index_layer]
-                    d = self.pairwise_distances(points_label, points_event[:, 1:4].float().cuda())
-                    d_positives = (d < self.resolution * 2**(len(ppn_layers) - layer)).any(dim=0)
+
+                    d = self.pairwise_distances(
+                        points_label, 
+                        points_event[:, 1:4].float().cuda())
+
+                    d_positives = (d < self.resolution * \
+                                   2**(len(ppn_layers) - layer)).any(dim=0)
+
                     num_positives = d_positives.sum()
                     num_negatives = d_positives.nelement() - num_positives
-                    w = num_positives.float() / (num_positives + num_negatives).float()
+
+                    w = num_positives.float() / \
+                        (num_positives + num_negatives).float()
+
                     weight_ppn = torch.zeros(d_positives.shape[0]).to(device)
                     weight_ppn[d_positives] = 1 - w
                     weight_ppn[~d_positives] = w
-                    loss_batch = self.lossfn(scores_event, d_positives.float(), weight=weight_ppn, reduction='mean')
+
+                    loss_batch = self.lossfn(scores_event, 
+                                             d_positives.float(), 
+                                             weight=weight_ppn, 
+                                             reduction='mean')
+
                     loss_layer += loss_batch
                     if layer == len(ppn_layers)-1:
 
@@ -282,7 +321,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         total_acc += acc
 
                         # Mask Loss
-                        mask_loss_final = self.lossfn(pixel_score, positives.float(), weight=weight_ppn, reduction='mean')
+                        mask_loss_final = self.lossfn(pixel_score, 
+                                                      positives.float(), 
+                                                      weight=weight_ppn, 
+                                                      reduction='mean')
 
                         # Type Segmentation Loss
                         # d = self.pairwise_distances(points_label, pixel_pred)
@@ -291,10 +333,18 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         event_types_label = particles[particles[:, 0] == b][:, -2]
                         counter = Counter({0:0, 1:0, 2:0, 3:0})
                         counter.update(list(event_types_label.int().cpu().numpy()))
-                        w = torch.Tensor([counter[0], counter[1], counter[2], counter[3], 0]).float()
+
+                        w = torch.Tensor([counter[0], 
+                                          counter[1], 
+                                          counter[2], 
+                                          counter[3], 0]).float()
+                                          
                         w = float(sum(counter.values())) / (w + 1.0)
                         positive_labels = event_types_label[torch.argmin(distance_positives, dim=0)]
-                        type_loss = self.segloss(pixel_logits[positives], positive_labels.long(), weight=w.to(device))
+
+                        type_loss = self.segloss(pixel_logits[positives], 
+                                                 positive_labels.long(), 
+                                                 weight=w.to(device))
 
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)

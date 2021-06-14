@@ -33,11 +33,11 @@ class UResNet_Chain(nn.Module):
 
 
         if mode == 'acas':
-            self.net = ACASUNet(cfg, name='mink_uresnet')
+            self.net = ACASUNet(cfg, name=name)
         elif mode == 'aspp':
-            self.net = ASPPUNet(cfg, name='mink_uresnet')
+            self.net = ASPPUNet(cfg, name=name)
         else:
-            self.net = UResNet(cfg, name='mink_uresnet')
+            self.net = UResNet(cfg, name=name)
 
         self.output = [
             ME.MinkowskiBatchNorm(self.F, 
@@ -58,6 +58,8 @@ class UResNet_Chain(nn.Module):
             feats = res['decoderTensors'][-1]
             seg = self.output(feats)
             out['segmentation'].append(seg.F)
+            out['finalTensor'].append(res['finalTensor'])
+            out['encoderTensors'].append(res['encoderTensors'])
             if self.ghost:
                 ghost = self.linear_ghost(feats)
                 out['ghost'].append(ghost.F)

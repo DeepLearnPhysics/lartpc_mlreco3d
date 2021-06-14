@@ -149,6 +149,7 @@ class PPN(torch.nn.Module):
 
         self.ghost_mask = GhostMask(self._dimension)
 
+
     def forward(self, input):
         """
         spatial size of feature_map1 (PPN1) = spatial_size / 2**self.ppn1_stride
@@ -174,6 +175,7 @@ class PPN(torch.nn.Module):
         if self._downsample_ghost:
             with torch.no_grad():
                 if self._use_true_ghost_mask:
+                    # ???
                     ghost_mask = input['segment_label'] < self._num_classes
                 else:
                     ghost_mask = 1.0 - torch.argmax(input['ghost'], dim=1)
