@@ -371,17 +371,24 @@ def parse_particle_points(data, include_point_tagging=False):
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
     np_values: np.ndarray
-        a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
-        and the particle data index in this order.
+        a numpy array with the shape (N, 2) where 2 represents the class of 
+        the ground truth point and the particle data index in this order.
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())
     # For open data - to reproduce
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
-    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
+    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) \
+        if part_info.shape[0] > 0 \
+        else np.empty(shape=(0, 2), dtype=np.float32)
+
     if include_point_tagging:
-        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
+        np_values = np.column_stack([part_info[:, 3], 
+                                     part_info[:, 8], 
+                                     part_info[:, 9]]) \
+            if part_info.shape[0] > 0 \
+            else np.empty(shape=(0, 3), dtype=np.float32)
 
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]

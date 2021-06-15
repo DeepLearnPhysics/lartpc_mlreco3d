@@ -8,7 +8,6 @@ import MinkowskiFunctional as MF
 from mlreco.mink.layers.blocks import ResNetBlock, SPP, ASPP
 from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.models.ppn import define_ppn12
 from mlreco.models.layers.extract_feature_map import MinkGhostMask
 
 from collections import Counter
@@ -26,6 +25,80 @@ class Attention(nn.Module):
         output = ME.SparseTensor(
             coordinates=coords, features=features)
         return output
+
+
+class AttentionMask(torch.nn.Module):
+    '''
+    Returns a masked tensor of x according to mask, where the number of
+    coordinates between x and mask differ
+    '''
+    def __init__(self, score_threshold=0.5):
+        super(AttentionMask, self).__init__()
+        self.prune = ME.MinkowskiPruning()
+        self.score_threshold=score_threshold
+    
+    def forward(self, x, mask):
+
+        assert x.tensor_stride == mask.tensor_stride
+
+        device = x.F.device
+        # Create a mask sparse tensor in x-coordinates
+        x0 = ME.SparseTensor(
+            coordinates=x.C,
+            features=torch.zeros(x.F.shape[0], mask.F.shape[1]).to(device),
+            coordinate_manager=x.coordinate_manager,
+            tensor_stride=x.tensor_stride)
+
+        mask_in_xcoords = x0 + mask
+
+        x_expanded = ME.SparseTensor(
+            coordinates=mask_in_xcoords.C,
+            features=torch.zeros(mask_in_xcoords.F.shape[0], 
+                                 x.F.shape[1]).to(device),
+            coordinate_manager=x.coordinate_manager,
+            tensor_stride=x.tensor_stride)
+
+        x_expanded = x_expanded + x
+
+        target = mask_in_xcoords.F.int().bool().squeeze()
+        x_pruned = self.prune(x_expanded, target)
+        return x_pruned
+
+
+class MergeConcat(torch.nn.Module):
+
+    def __init__(self):
+        super(MergeConcat, self).__init__()
+    
+    def forward(self, input, other):
+
+        assert input.tensor_stride == other.tensor_stride
+        device = input.F.device
+
+        # Create a placeholder tensor with input.C coordinates
+        x0 = ME.SparseTensor(
+            coordinates=input.C,
+            features=torch.zeros(input.F.shape[0], other.F.shape[1]).to(device),
+            coordinate_manager=input.coordinate_manager,
+            tensor_stride=input.tensor_stride)
+
+        # Set placeholder values with other.F features by performing
+        # sparse tensor addition.
+        x1 = x0 + other
+
+        # Same procedure, but with other
+        x_expanded = ME.SparseTensor(
+            coordinates=x1.C,
+            features=torch.zeros(x1.F.shape[0], 
+                                 input.F.shape[1]).to(device),
+            coordinate_manager=input.coordinate_manager,
+            tensor_stride=input.tensor_stride)
+
+        x2 = x_expanded + input
+
+        # Now input and other share the same coordinates and shape
+        concated = ME.cat(x1, x2)
+        return concated
 
 
 class ExpandAs(nn.Module):
@@ -148,14 +221,19 @@ class PPN(MENetworkBase):
         self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
 
         # Ghost point removal options
+        self.ghost = self.model_cfg.get('ghost', False)
 
-        self.ghost_mask = MinkGhostMask(self.D)
-        self.use_true_ghost_mask = self.model_cfg.get(
-            'use_true_ghost_mask', False)
-        self.downsample_ghost = self.model_cfg.get('downsample_ghost', False)
+        self.masker = AttentionMask()
+        self.merge_concat = MergeConcat()
+
+        if self.ghost:
+            self.ghost_mask = MinkGhostMask(self.D)
+            self.use_true_ghost_mask = self.model_cfg.get(
+                'use_true_ghost_mask', False)
+            self.downsample_ghost = self.model_cfg.get('downsample_ghost', True)
 
 
-    def forward(self, final, encoderTensors, ghost=None):
+    def forward(self, final, decoderTensors, ghost=None, ghost_labels=None):
         '''
         Vanilla UResNet Decoder
         INPUTS:
@@ -173,23 +251,48 @@ class PPN(MENetworkBase):
         # We need to make labels on-the-fly to include true points in the
         # propagated masks during training
 
-        if self.downsample_ghost:
+        decoder_feature_maps = []
+
+        if self.ghost:
+            # Downsample stride 1 ghost mask to all intermediate decoder layers
             with torch.no_grad():
                 if self.use_true_ghost_mask:
+                    assert ghost_labels is not None
                     # TODO: Not sure what's going on here
-                    ghost_mask = input['segment_label'] < self.num_classes
+                    ghost_mask_tensor = input['segment_label'] < self.num_classes
+                    ghost_coords = input['segment_label']
                 else:
-                    ghost_mask = 1.0 - torch.argmax(ghost, dim=1)
+                    ghost_mask_tensor = 1.0 - torch.argmax(ghost.F, 
+                                                           dim=1, keepdim=True)
+                    ghost_coords = ghost.C
+                    ghost_coords_man = final.coordinate_manager
+                    ghost_tensor_stride = ghost.tensor_stride
+                ghost_mask = ME.SparseTensor(
+                    features=ghost_mask_tensor,
+                    coordinates=ghost_coords,
+                    coordinate_manager=ghost_coords_man,
+                    tensor_stride=ghost_tensor_stride)
 
-            x, _ = self.ghost_mask(ghost_mask, final.C, final, factor=0.0)
+            for t in decoderTensors[::-1]:
+                scaled_ghost_mask = self.ghost_mask(ghost_mask, t)
+                nonghost_tensor = self.masker(t, scaled_ghost_mask)
+                decoder_feature_maps.append(nonghost_tensor)
+
+            decoder_feature_maps = decoder_feature_maps[::-1]
+
         else:
-            x = final
+            decoder_feature_maps = decoderTensors
+        
+        x = final
 
         for i, layer in enumerate(self.decoding_conv):
 
-            eTensor = encoderTensors[-i-2]
+            decTensor = decoder_feature_maps[i]
             x = layer(x)
-            x = ME.cat(eTensor, x)
+            if self.ghost:
+                x = self.merge_concat(decTensor, x)
+            else:
+                x = ME.cat(decTensor, x)
             x = self.decoding_block[i](x)
             scores = self.ppn_pred[i](x)
             tmp.append(scores.F)
@@ -201,7 +304,12 @@ class PPN(MENetworkBase):
             mask_ppn.append((scores.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
 
+        # Note that we skipped ghost masking for the final sparse tensor,
+        # namely the tensor with the same resolution as the input to uresnet.
+        # This is done at the full chain cnn stage, for consistency with SCN
+
         device = x.F.device
+        ppn_output_coordinates = x.C
         for p in tmp:
             a = p.to(dtype=torch.float32, device=device)
             ppn_layers.append(a)
@@ -218,17 +326,19 @@ class PPN(MENetworkBase):
             'points': [points],
             'mask_ppn': [mask_ppn],
             'ppn_layers': [ppn_layers],
-            'ppn_coords': [ppn_coords]
+            'ppn_coords': [ppn_coords],
+            'ppn_output_coordinates': [ppn_output_coordinates],
         }
 
         return res
 
-
+from pprint import pprint
 class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='ppn_loss'):
         super(PPNLonelyLoss, self).__init__()
         self.loss_config = cfg[name]
+        pprint(self.loss_config)
         self.mask_loss_name = self.loss_config.get('mask_loss_name', 'BCE')
         if self.mask_loss_name == "BCE":
             self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
@@ -239,6 +349,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.resolution = self.loss_config.get('ppn_resolution', 5.0)
         self.regloss = torch.nn.MSELoss()
         self.segloss = torch.nn.functional.cross_entropy
+        self.particles_label_seg_col = self.loss_config.get(
+            'particles_label_seg_col', -2)
 
     def pairwise_distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
@@ -246,36 +358,37 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
-    def forward(self, outputs, segment_label, particles_label):
+    def forward(self, result, segment_label, particles_label):
         '''
         '''
         # TODO Add weighting
         assert len(particles_label) == len(segment_label)
-        batch_ids = [d[:, 0] for d in segment_label]
+
+        ppn_output_coordinates = result['ppn_output_coordinates']
+        print("PPN Output Coordinates = ", ppn_output_coordinates[0].shape)
+        # assert False
+        print(result['ppn_coords'][0][-1])
+        batch_ids = [result['ppn_coords'][0][-1][:, 0]]
         num_batches = len(batch_ids[0].unique())
-        highE = [t[t[:, -1].long() != 4] for t in segment_label]
         total_loss = 0
         total_acc = 0
-        count = 0
         device = segment_label[0].device
 
-        # print(outputs['ppn_layers'], outputs['ppn_coords'], outputs['points'])
-
-        loss, accuracy = 0, []
         res = {}
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
             particles = particles_label[igpu]
-            ppn_layers = outputs['ppn_layers'][igpu]
-            ppn_coords = outputs['ppn_coords'][igpu]
-            points = outputs['points'][igpu]
+            ppn_layers = result['ppn_layers'][igpu]
+            ppn_coords = result['ppn_coords'][igpu]
+            points = result['points'][igpu]
             loss_gpu, acc_gpu = 0.0, 0.0
             for layer in range(len(ppn_layers)):
+                print("Layer = ", layer)
                 ppn_score_layer = ppn_layers[layer]
                 coords_layer = ppn_coords[layer]
                 loss_layer = 0.0
                 for b in batch_ids[igpu].int().unique():
-                    print(coords_layer, b)
+
                     batch_index_layer = coords_layer[:, 0].int() == b
                     batch_particle_index = batch_ids[igpu].int() == b
                     points_label = particles[particles[:, 0].int() == b][:, 1:4]
@@ -330,7 +443,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         # d = self.pairwise_distances(points_label, pixel_pred)
                         # positives = (d < self.resolution).any(dim=0)
                         distance_positives = d[:, positives]
-                        event_types_label = particles[particles[:, 0] == b][:, -2]
+                        event_types_label = particles[particles[:, 0] == b]\
+                                                     [:, self.particles_label_seg_col]
                         counter = Counter({0:0, 1:0, 2:0, 3:0})
                         counter.update(list(event_types_label.int().cpu().numpy()))
 

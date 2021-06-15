@@ -59,7 +59,7 @@ def model_dict():
         # Full Chain MinkowskiEngine
         "mink_full_chain": (mink_full_chain.MinkFullChain, mink_full_chain.MinkFullChainLoss),
         # UresNet
-        "mink_uresnet": (mink_uresnet.UResNet_Chain, mink_uresnet.SegmentationLoss),
+        "mink_uresnet": (mink_uresnet.UResNet_Chain, uresnet_lonely.SegmentationLoss),
         # UResNet + PPN
         'mink_uresnet_ppn_chain': (mink_uresnet_ppn_chain.UResNetPPN, mink_uresnet_ppn_chain.UResNetPPNLoss),
         # Single Particle Classifier

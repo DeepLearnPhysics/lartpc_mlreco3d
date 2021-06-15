@@ -11,11 +11,9 @@ from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.models.grappa import GNN, GNNLoss
 
-from mlreco.models.layers.dbscan import DBSCANFragmenter
 from mlreco.models.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels
-from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 from mlreco.utils.cluster.fragmenter import *
 
@@ -108,41 +106,41 @@ class FullChain(torch.nn.Module):
         if self.enable_cnn_clust:
             self._enable_graph_spice = 'graph_spice' in cfg
             if self._enable_graph_spice:
-                self.spatial_embeddings = GraphSPICE(cfg)
-                self.gs_manager = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
-                self.gs_manager.training = True # FIXME
-                self._graph_spice_skip_classes = cfg['graph_spice']['skip_classes']
-                self.fragment_manager = GraphSPICEFragmentManager(cfg['fragment_manager'])
+                self.spatial_embeddings   = GraphSPICE(cfg)
+                self.gs_manager           = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
+                self.gs_manager.training  = True # FIXME
+                self._gspice_skip_classes = cfg['graph_spice']['skip_classes']
+                self.fragment_manager     = GraphSPICEFragmentManager(cfg['fragment_manager'])
             else:
                 self.spatial_embeddings = ClusterCNN(cfg['spice'])
-                self.frag_cfg = cfg['spice'].get('fragment_manager', {})
-                self._s_thresholds  = self.frag_cfg.setdefault('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-                self._p_thresholds  = self.frag_cfg.setdefault('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-                self._spice_classes = self.frag_cfg.setdefault('cluster_classes', [])
-                self._spice_min_voxels = self.frag_cfg.setdefault('min_voxels', 2)
-                self.fragment_manager = SPICEFragmentManager(self.frag_cfg)
+                self.frag_cfg           = cfg['spice'].get('fragment_manager', {})
+                self._s_thresholds      = self.frag_cfg.setdefault('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+                self._p_thresholds      = self.frag_cfg.setdefault('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+                self._spice_classes     = self.frag_cfg.setdefault('cluster_classes', [])
+                self._spice_min_voxels  = self.frag_cfg.setdefault('min_voxels', 2)
+                self.fragment_manager   = SPICEFragmentManager(self.frag_cfg)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
-            # self.dbscan_frag = DBSCANFragmenter(cfg)
-            self.fragment_manager = DBSCANFragmentManager(cfg['fragment_manager'])
+            self.frag_cfg = cfg['fragment_manager']
+            self.fragment_manager = DBSCANFragmentManager(self.frag_cfg)
 
         # Initialize the particle aggregator modules
         if self.enable_gnn_shower:
-            self.grappa_shower = GNN(cfg, name='grappa_shower')
-            self._shower_id = cfg['grappa_shower']['base'].get('node_type', 0)
+            self.grappa_shower     = GNN(cfg, name='grappa_shower')
+            self._shower_id        = cfg['grappa_shower']['base'].get('node_type', 0)
 
         if self.enable_gnn_track:
-            self.grappa_track = GNN(cfg, name='grappa_track')
-            self._track_id = cfg['grappa_track']['base'].get('node_type', 1)
+            self.grappa_track      = GNN(cfg, name='grappa_track')
+            self._track_id         = cfg['grappa_track']['base'].get('node_type', 1)
 
         if self.enable_gnn_particle:
-            self.grappa_particle = GNN(cfg, name='grappa_particle')
-            self._particle_ids = cfg['grappa_particle']['base'].get('node_type', [0,1])
+            self.grappa_particle   = GNN(cfg, name='grappa_particle')
+            self._particle_ids     = cfg['grappa_particle']['base'].get('node_type', [0,1])
 
         if self.enable_gnn_inter:
-            self.grappa_inter = GNN(cfg, name='grappa_inter')
-            self._inter_ids = cfg['grappa_inter']['base'].get('node_type', [0,1,2,3])
+            self.grappa_inter      = GNN(cfg, name='grappa_inter')
+            self._inter_ids        = cfg['grappa_inter']['base'].get('node_type', [0,1,2,3])
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics')
@@ -163,7 +161,8 @@ class FullChain(torch.nn.Module):
         """
         Extracting extra features to feed into the GNN particle aggregators
 
-        - PPN: Most likely PPN point for showers, end points for tracks (+ direction estimate)
+        - PPN: Most likely PPN point for showers, 
+               end points for tracks (+ direction estimate)
         - Supplemental: Mean/RMS energy in the fragment + semantic class
 
         Parameters
@@ -195,7 +194,8 @@ class FullChain(torch.nn.Module):
         kwargs = {}
         if use_ppn:
             points_tensor = result['points'][0].detach().double()
-            ppn_points = torch.empty((0,6), device=input[0].device, dtype=torch.double)
+            ppn_points = torch.empty((0,6), device=input[0].device, 
+                                            dtype=torch.double)
             for i, f in enumerate(fragments[mask]):
                 if frag_seg[mask][i] == 1:
                     dist_mat = torch.cdist(input[0][f,:3], input[0][f,:3])
@@ -210,24 +210,33 @@ class FullChain(torch.nn.Module):
                                             input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
-                    dmask  = torch.nonzero(torch.max(torch.abs(points_tensor[f,:3]), dim=1).values < 1., as_tuple=True)[0]
+                    dmask  = torch.nonzero(torch.max(
+                        torch.abs(points_tensor[f,:3]), dim=1).values < 1., 
+                        as_tuple=True)[0]
                     scores = torch.softmax(points_tensor[f,3:5], dim=1)
-                    argmax = dmask[torch.argmax(scores[dmask,-1])] if len(dmask) else torch.argmax(scores[:,-1])
-                    start  = input[0][f][argmax,:3] + points_tensor[f][argmax,:3] + 0.5
-                    ppn_points = torch.cat((ppn_points, torch.cat([start, start]).reshape(1,-1)), dim=0)
+                    argmax = dmask[torch.argmax(scores[dmask,-1])] \
+                             if len(dmask) else torch.argmax(scores[:,-1])
+                    start  = input[0][f][argmax,:3] + \
+                             points_tensor[f][argmax,:3] + 0.5
+                    ppn_points = torch.cat((ppn_points, 
+                        torch.cat([start, start]).reshape(1,-1)), dim=0)
 
             kwargs['points'] = ppn_points
 
         # If requested, add energy and semantic related features
         if use_supp:
-            supp_feats = torch.empty((0,3), device=input[0].device, dtype=torch.float)
+            supp_feats = torch.empty((0,3), device=input[0].device, 
+                                            dtype=torch.float)
             for i, f in enumerate(fragments[mask]):
-                values = torch.cat((input[0][f,4].mean().reshape(1), input[0][f,4].std().reshape(1))).float()
+                values = torch.cat((input[0][f,4].mean().reshape(1), 
+                                    input[0][f,4].std().reshape(1))).float()
                 if torch.isnan(values[1]): # Handle size-1 particles
                     values[1] = input[0][f,4] - input[0][f,4]
-                sem_type = torch.tensor([frag_seg[mask][i]], dtype=torch.float, device=input[0].device)
+                sem_type = torch.tensor([frag_seg[mask][i]], 
+                                        dtype=torch.float, 
+                                        device=input[0].device)
                 supp_feats = torch.cat((supp_feats, 
-                                        torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
+                    torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
 
             kwargs['extra_feats'] = supp_feats
 
@@ -265,7 +274,8 @@ class FullChain(torch.nn.Module):
             group_ids = []
             for b in range(len(gnn_output['clusts'][0])):
                 if len(gnn_output['clusts'][0][b]) < 2:
-                    group_ids.append(np.zeros(len(gnn_output['clusts'][0][b]), dtype=np.int64))
+                    group_ids.append(np.zeros(len(gnn_output['clusts'][0][b]), 
+                                     dtype=np.int64))
                 else:
                     group_ids.append(node_assignment_score(
                         gnn_output['edge_index'][0][b], 
@@ -276,9 +286,13 @@ class FullChain(torch.nn.Module):
 
 
     def select_particle_in_group(self, result, counts, b, particles, 
-                                 part_primary_ids, node_pred, group_pred, fragments):
+                                 part_primary_ids, 
+                                 node_pred, 
+                                 group_pred, 
+                                 fragments):
         """
-        Merge fragments into particle instances, retain primary fragment id of each group
+        Merge fragments into particle instances, retain 
+        primary fragment id of each group
         """
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
         primary_labels = None
@@ -357,7 +371,8 @@ class FullChain(torch.nn.Module):
             segmentation = result['segmentation'][0].clone()
             ppn_feature_dec = [x.features.clone() for x in result['ppn_feature_dec'][0]]
             if self.enable_ppn:
-                points, mask_ppn2 = result['points'][0].clone(), result['mask_ppn2'][0].clone()
+                points, mask_ppn2 = result['points'][0].clone(), \
+                                    result['mask_ppn2'][0].clone()
 
             deghost_result = {}
             deghost_result.update(result)
@@ -386,7 +401,8 @@ class FullChain(torch.nn.Module):
         # - frag_seg (list of integers, semantic label for each fragment)
         # ---
         cluster_result = {}
-        semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten().double()
+        semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+                                       dim=1).flatten().double()
 
         if self.enable_cnn_clust:
             if self._enable_graph_spice:
@@ -394,7 +410,7 @@ class FullChain(torch.nn.Module):
                     raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
 
                 filtered_semantic = ~(semantic_labels[..., None].cpu() == \
-                                      torch.Tensor(self._graph_spice_skip_classes)).any(-1)
+                                      torch.Tensor(self._gspice_skip_classes)).any(-1)
 
                 # If there are voxels to process in the given semantic classes
                 if torch.count_nonzero(filtered_semantic) > 0:
@@ -413,7 +429,7 @@ class FullChain(torch.nn.Module):
                                                 semantic_labels[filtered_semantic][:, None], 
                                                 cluster_predictions.to(device)[:, None]], dim=1)
 
-                    if self.enable_gnn:
+                    if self.process_fragments:
                         cluster_result = self.fragment_manager(filtered_input)
 
             else:
@@ -422,11 +438,11 @@ class FullChain(torch.nn.Module):
                 cnn_result.update(spatial_embeddings_output)
 
                 # Extract fragment predictions to input into the GNN
-                if self.enable_gnn:
+                if self.process_fragments:
                     cluster_result = self.fragment_manager(input[0], 
-                                                               cnn_result)
+                                                           cnn_result)
 
-        if self.enable_dbscan and self.enable_gnn:
+        if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
             cluster_result = self.fragment_manager(input[0], cnn_result)
 
@@ -438,7 +454,6 @@ class FullChain(torch.nn.Module):
             'semantic_labels': [semantic_labels],
         })
 
-        
         return cnn_result
 
 
@@ -471,7 +486,12 @@ class FullChain(torch.nn.Module):
                            'edge_index': 'shower_edge_index', 
                            'group_pred': 'shower_group_pred'}
 
-            self.run_gnn(self.grappa_shower, input, result, fragments[em_mask], output_keys, kwargs)
+            self.run_gnn(self.grappa_shower, 
+                         input, 
+                         result, 
+                         fragments[em_mask], 
+                         output_keys, 
+                         kwargs)
 
         if self.enable_gnn_track:
             # Run track GrapPA: merges tracks fragments into track instances
@@ -489,7 +509,12 @@ class FullChain(torch.nn.Module):
                            'edge_index': 'track_edge_index', 
                            'group_pred': 'track_group_pred'}
 
-            self.run_gnn(self.grappa_track, input, result, fragments[track_mask], output_keys, kwargs)
+            self.run_gnn(self.grappa_track, 
+                         input, 
+                         result, 
+                         fragments[track_mask], 
+                         output_keys, 
+                         kwargs)
 
         if self.enable_gnn_particle:
             # Run particle GrapPA: merges particle fragments or labels in _partile_ids together into particle instances
@@ -509,7 +534,12 @@ class FullChain(torch.nn.Module):
                            'edge_index': 'particle_edge_index', 
                            'group_pred': 'particle_group_pred'}
 
-            self.run_gnn(self.grappa_particle, input, result, fragments[mask], output_keys, kwargs)
+            self.run_gnn(self.grappa_particle, 
+                         input, 
+                         result, 
+                         fragments[mask], 
+                         output_keys, 
+                         kwargs)
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         particles, part_primary_ids = [], []
@@ -518,29 +548,32 @@ class FullChain(torch.nn.Module):
             # Append one particle per particle group
             if self.enable_gnn_particle:
 
-                self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 
-                                             'particle_node_pred', 
-                                             'particle_group_pred', 
-                                             'particle_fragments')
+                self.select_particle_in_group(result, counts, b, particles, 
+                                              part_primary_ids, 
+                                              'particle_node_pred', 
+                                              'particle_group_pred', 
+                                              'particle_fragments')
 
                 for c in self._particle_ids:
                     mask &= (frag_seg != c)
             # Append one particle per shower group
             if self.enable_gnn_shower:
 
-                self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 
-                                             'shower_node_pred', 
-                                             'shower_group_pred', 
-                                             'shower_fragments')
+                self.select_particle_in_group(result, counts, b, particles, 
+                                              part_primary_ids, 
+                                              'shower_node_pred', 
+                                              'shower_group_pred', 
+                                              'shower_fragments')
 
                 mask &= (frag_seg != self._shower_id)
             # Append one particle per track group
             if self.enable_gnn_track:
 
-                self.select_particle_in_group(result, counts, b, particles, part_primary_ids, 
-                                             'track_node_pred', 
-                                             'track_group_pred', 
-                                             'track_fragments')
+                self.select_particle_in_group(result, counts, b, particles, 
+                                              part_primary_ids, 
+                                              'track_node_pred', 
+                                              'track_group_pred', 
+                                              'track_fragments')
                                              
                 mask &= (frag_seg != self._track_id)
 
@@ -549,7 +582,8 @@ class FullChain(torch.nn.Module):
             part_primary_ids.extend(-np.ones(np.sum(mask)))
 
         same_length = np.all([len(p) == len(particles[0]) for p in particles])
-        particles = np.array(particles, dtype=object if not same_length else np.int64)
+        particles = np.array(particles, 
+                             dtype=object if not same_length else np.int64)
         part_batch_ids = get_cluster_batch(input[0], particles)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
         part_seg = np.empty(len(particles), dtype=np.int32)
@@ -560,11 +594,13 @@ class FullChain(torch.nn.Module):
 
         # Store in result the intermediate fragments
         bcids = [np.where(part_batch_ids == b)[0] for b in range(len(counts))]
-        same_length = [np.all([len(c) == len(particles[b][0]) for c in particles[b]] ) for b in bcids]
+        same_length = [np.all([len(c) == len(particles[b][0]) \
+                       for c in particles[b]] ) for b in bcids]
 
         parts = [np.array([vids[c].astype(np.int64) for c in particles[b]], 
-                          dtype=np.object if not same_length[idx] else np.int64) \
-                              for idx, b in enumerate(bcids)]
+                          dtype=np.object \
+                          if not same_length[idx] \
+                          else np.int64) for idx, b in enumerate(bcids)]
 
         parts_seg = [part_seg[b] for idx, b in enumerate(bcids)]
 
@@ -586,12 +622,15 @@ class FullChain(torch.nn.Module):
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
 
-                    p = voxel_inds[result['fragments'][0][part_batch_ids[i]][part_primary_ids[i]]]
+                    p = voxel_inds[result['fragments'][0]\
+                                  [part_batch_ids[i]][part_primary_ids[i]]]
                 extra_feats_particles.append(p)
-            same_length = np.all([len(p) == len(extra_feats_particles[0]) for p in extra_feats_particles])
+            same_length = np.all([len(p) == len(extra_feats_particles[0]) \
+                                 for p in extra_feats_particles])
 
             extra_feats_particles = np.array(extra_feats_particles, 
-                                             dtype=object if not same_length else np.int64)
+                                             dtype=object \
+                                             if not same_length else np.int64)
 
             # Run interaction GrapPA: merges particle instances into interactions
             _, kwargs = self.get_extra_gnn_features(extra_feats_particles, 
@@ -611,7 +650,12 @@ class FullChain(torch.nn.Module):
                            'node_pred_p': 'node_pred_p', 
                            'node_pred_vtx': 'node_pred_vtx'}
 
-            self.run_gnn(self.grappa_inter, input, result, particles, output_keys, kwargs)
+            self.run_gnn(self.grappa_inter, 
+                         input, 
+                         result, 
+                         particles, 
+                         output_keys, 
+                         kwargs)
 
         # ---
         # 4. GNN for particle flow & kinematics
@@ -720,7 +764,8 @@ class FullChain(torch.nn.Module):
         input: list of np.ndarray
         """
         result = self.full_chain_cnn(input)
-        result = self.full_chain_gnn(result, input)
+        if self.process_fragments:
+            result = self.full_chain_gnn(result, input)
 
         return result
 
@@ -751,7 +796,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 self.spatial_embeddings_loss = ClusteringLoss(cfg)
             else:
                 self.spatial_embeddings_loss = GraphSPICELoss(cfg)
-                self._graph_spice_skip_classes = cfg['spice_loss']['skip_classes']
+                self._gspice_skip_classes = cfg['spice_loss']['skip_classes']
         if self.enable_gnn_shower:
             self.shower_gnn_loss         = GNNLoss(cfg, 'grappa_shower_loss')
         if self.enable_gnn_track:
@@ -840,7 +885,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'batch_indices': out['batch_indices'],
                     'segmentation': [out['segmentation'][0][deghost]] if self.enable_ghost else [out['segmentation'][0]]
                 }
-                select_classes = ~(torch.argmax(graph_spice_out['segmentation'][0], dim=1)[:, None].cpu() == torch.tensor(self._graph_spice_skip_classes)).any(-1)
+                select_classes = ~(torch.argmax(graph_spice_out['segmentation'][0], dim=1)[:, None].cpu() == torch.tensor(self._gspice_skip_classes)).any(-1)
                 graph_spice_out['segmentation'] = [graph_spice_out['segmentation'][0][select_classes]]
                 # print(graph_spice_out['segmentation'][0].size())
                 # print('segment_label', segment_label.size(), out['segmentation'][0][deghost].size())
@@ -1088,7 +1133,7 @@ def setup_chain_cfg(self, cfg):
     self.enable_dbscan         = chain_cfg.get('enable_dbscan', True)
     self.enable_cnn_clust      = chain_cfg.get('enable_cnn_clust', False)
 
-    self.enable_gnn            = chain_cfg.get('enable_gnn', False)
+    self.process_fragments     = chain_cfg.get('process_fragments', False)
     self.enable_gnn_shower     = chain_cfg.get('enable_gnn_shower', False)
     self.enable_gnn_track      = chain_cfg.get('enable_gnn_track', False)
     self.enable_gnn_particle   = chain_cfg.get('enable_gnn_particle', False)
@@ -1101,11 +1146,19 @@ def setup_chain_cfg(self, cfg):
         self.enable_gnn_particle or \
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
-        self.enable_gnn = True
+        self.process_fragments = True
 
-    print("ENABLE GNN: ", self.enable_gnn)
+    if self.process_fragments:
+        msg = """
+        Fragment processing is turned ON. When training CNN models from
+         scratch, we recommend turning fragment processing OFF as without
+         reliable segmentation and/or cnn clustering outputs this could take
+         prohibitively large training iterations.
+        """
+        print(msg)
 
-    if not self.enable_gnn:
+    # If fragment processing is turned off, no inputs to GNN
+    if not self.process_fragments:
         self.enable_gnn_shower     = False
         self.enable_gnn_track      = False
         self.enable_gnn_particle   = False
@@ -1123,16 +1176,29 @@ def setup_chain_cfg(self, cfg):
             assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
 
     # Enforce basic logical order
-    assert self.enable_uresnet # Need semantics for everything
-    assert self.enable_ppn or (not self.use_ppn_in_gnn) # If PPN is used in GNN, need PPN
-    assert self.enable_dbscan or self.enable_cnn_clust # Need at least one of two dense clusterer
-    if self.enable_cnn_clust and self.enable_dbscan: # Check that SPICE and DBSCAN are not redundant
+    # 1. Need semantics for everything
+    assert self.enable_uresnet
+    # 2. If PPN is used in GNN, need PPN
+    assert self.enable_ppn or (not self.use_ppn_in_gnn)
+    # 3. Need at least one of two dense clusterer
+    assert self.enable_dbscan or self.enable_cnn_clust
+    # 4. Check that SPICE and DBSCAN are not redundant
+    if self.enable_cnn_clust and self.enable_dbscan:
         if 'spice' in cfg:
-            assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
+            assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == \
+                        np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
         else:
             assert 'graph_spice' in cfg
-            assert set(cfg['dbscan_frag']['cluster_classes']).issubset(set(cfg['graph_spice']['skip_classes']))
+            assert set(cfg['dbscan_frag']['cluster_classes']).issubset(
+                set(cfg['graph_spice']['skip_classes']))
+
     if self.enable_gnn_particle: # If particle fragment GNN is used, make sure it is not redundant
-        if self.enable_gnn_shower: assert cfg['grappa_shower']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
-        if self.enable_gnn_track: assert cfg['grappa_track']['base']['node_type'] not in cfg['grappa_particle']['base']['node_type']
+        if self.enable_gnn_shower: 
+            assert cfg['grappa_shower']['base']['node_type'] \
+                not in cfg['grappa_particle']['base']['node_type']
+
+        if self.enable_gnn_track:
+            assert cfg['grappa_track']['base']['node_type'] \
+                not in cfg['grappa_particle']['base']['node_type']
+                
     if self.enable_cosmic: assert self.enable_gnn_inter # Cosmic classification needs interaction clustering

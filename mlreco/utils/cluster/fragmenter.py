@@ -6,7 +6,7 @@ import torch.nn as nn
 import numpy as np
 
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.models.layers.dbscan import DBSCANFragmenter
+from mlreco.models.layers.dbscan import DBSCANFragmenter, MinkDBSCANFragmenter
 
 
 class FragmentManager(nn.Module):
@@ -108,10 +108,15 @@ class DBSCANFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for DBSCAN Clustering
     '''
-    def __init__(self, frag_cfg: dict):
+    def __init__(self, frag_cfg: dict, mode='scn'):
         super(DBSCANFragmentManager, self).__init__(frag_cfg)
         dbscan_frag = {'dbscan_frag': frag_cfg}
-        self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
+        if mode == 'mink':
+            self.dbscan_fragmenter = MinkDBSCANFragmenter(dbscan_frag)
+        elif mode == 'scn':
+            self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
+        else:
+            raise Exception('Invalid sparse CNN backend name {}'.format(mode))
 
 
     def extract_fragments(self, input, cnn_result, semantic_labels):

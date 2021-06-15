@@ -33,7 +33,7 @@ class UResNet(MENetworkBase):
         model_cfg = cfg[name]
         # UResNet Configurations
         self.reps = model_cfg.get('reps', 2)
-        self.depth = model_cfg.get('depth', 5)
+        self.depth = model_cfg.get('num_strides', 5)
         self.num_filters = model_cfg.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
         # self.kernel_size = cfg.get('kernel_size', 3)

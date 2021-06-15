@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import torch
+from pprint import pprint
 
 def CollateSparse(batch):
     """
@@ -58,7 +59,7 @@ def CollateSparse(batch):
 def CollateMinkowski(batch):
     '''
     INPUTS:
-        - batch: tuple of dictionary?
+        - batch: list of dict
     '''
     import MinkowskiEngine as ME
     result = {}
@@ -69,7 +70,9 @@ def CollateMinkowski(batch):
             coords = [sample[key][0] for sample in batch]
             features = [sample[key][1] for sample in batch]
 
-            batch_index = np.full(shape=(coords[0].shape[0], 1), fill_value=0, dtype=np.float32)
+            batch_index = np.full(shape=(coords[0].shape[0], 1), 
+                                  fill_value=0, 
+                                  dtype=np.float32)
 
             coords_minibatch = []
             feats_minibatch = []
@@ -77,7 +80,9 @@ def CollateMinkowski(batch):
             for bidx, sample in enumerate(batch):
                 batch_index = np.full(shape=(coords[bidx].shape[0], 1), 
                                       fill_value=bidx, dtype=np.float32)
-                batched_coords = concat([batch_index, coords[bidx], features[bidx]], axis=1)
+                batched_coords = concat([batch_index, 
+                                         coords[bidx], 
+                                         features[bidx]], axis=1)
 
                 coords_minibatch.append(batched_coords)
             
@@ -85,22 +90,34 @@ def CollateMinkowski(batch):
 
             result[key] = coords
         else:
-            if isinstance(batch[0][key], tuple) and isinstance(batch[0][key][0], np.ndarray) and len(batch[0][key][0].shape)==2:
+            if isinstance(batch[0][key], tuple) and \
+               isinstance(batch[0][key][0], np.ndarray) and \
+               len(batch[0][key][0].shape) == 2:
                 coords = [sample[key][0] for sample in batch]
                 features = [sample[key][1] for sample in batch]
                 coords, features = ME.utils.sparse_collate(coords, features)
-                result[key] = torch.cat([coords.double(), features.double()], dim=1)
-            elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==1:
+                result[key] = torch.cat([coords.double(), 
+                                         features.double()], dim=1)
+
+            elif isinstance(batch[0][key],np.ndarray) and \
+                 len(batch[0][key].shape) == 1:
+
                 result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
-                                                np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
-                                                axis=1 ) for batch_id,sample in enumerate(batch) ],
-                                    axis=0)
+                                                 np.full(shape=[len(sample[key]),1],
+                                                 fill_value=batch_id,
+                                                 dtype=np.float32)],
+                                                 axis=1 ) \
+                    for batch_id,sample in enumerate(batch) ], axis=0)
+
             elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==2:
+
                 result[key] =  concat( [ concat( [sample[key],
                                                 np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
+
             elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+
                 result[key] = [
                     concat([
                         concat( [ concat( [sample[key][depth][0],
