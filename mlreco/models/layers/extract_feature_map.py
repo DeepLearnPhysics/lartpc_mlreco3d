@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import sparseconvnet as scn
+import MinkowskiEngine as ME
 import numpy as np
 
 
@@ -122,51 +123,46 @@ class GhostMask(torch.nn.Module):
         output.features = feature_map.features * new_ghost_mask
         return output, new_ghost_mask
 
+
+def torch_lexsort(a, dim=0):
+    assert a.ndim == 2  # Not sure what is numpy behaviour with > 2 dim
+    # To be consistent with numpy, we flip the keys (sort by last row first)
+    _, inv = torch.unique(a.flip(0), dim=dim, sorted=True, return_inverse=True)
+    return torch.argsort(inv)
+
 class MinkGhostMask(torch.nn.Module):
     '''
     Ghost mask downsampler for MinkowskiEngine Backend
     '''
     def __init__(self, data_dim):
+        from mlreco.mink.layers.ppnplus import ExpandAs
         super(MinkGhostMask, self).__init__()
         self._data_dim = data_dim
+        self.downsample = ME.MinkowskiMaxPooling(2, 2, dimension=3)
+        self.eval()
 
 
-    def forward(self, ghost_mask, coords, feature_map, factor=0.0):
+    def forward(self, ghost_mask, premask_tensor):
         """
-        ghost_mask = 1 for points to be kept (nonghost)
-        ghost_mask = 0 for ghost points
+        Downsamples the ghost mask and prunes premask_tensor with current
+        ghost mask to obtain nonghost tensor and new ghost mask.
 
-        output has same shape/locations as feature_map
+        Inputs:
+            - ghost_mask (ME.SparseTensor): current resolution ghost mask 
+            - premask_tensor (ME.SparseTensor): current resolution feature map
+            to be pruned
+
+        Returns:
+            - downsampled_mask (ME.SparseTensor): 2x2 downsampled ghost mask
+            - downsampled_tensor (ME.SparseTensor): 2x2 downsampled feature map 
         """
-        print(feature_map)
-        assert False
-        # output = scn.SparseConvNetTensor()
-        # output.metadata = feature_map.metadata
-        # output.spatial_size = feature_map.spatial_size
-        # First downsample the ghost mask
-        # scale_coords, unique_indices = np.unique(np.concatenate([np.floor(coords[:, :-1]/2**factor), coords[:, -1:]], axis=1), axis=0, return_index=True)
-        # perm2 = np.lexsort((scale_coords[:, 0], scale_coords[:, 1], scale_coords[:, 2], scale_coords[:, 3]))
-        # scale_ghost_mask = ghost_mask[unique_indices][perm2]
+        # assert ghost_mask.shape[0] == premask_tensor.shape[0]
+        with torch.no_grad():
+            factor = premask_tensor.tensor_stride[0]
 
-        # Append to each coordinate its value in ghost mask
-        coords = np.concatenate([coords, ghost_mask[:, None].cpu().numpy()], axis=1)
-        # Downsample the spatial coordinates, preserving batch id and ghost mask value
-        scale_coords, unique_indices = np.unique(np.concatenate([np.floor(coords[:, :self._data_dim]/2**factor), coords[:, self._data_dim:]], axis=1), axis=0, return_index=True)
-        # Re-order: put nonghost points first
-        keep = np.concatenate([np.where(scale_coords[:, -1] == 1)[0], np.where(scale_coords[:, -1] == 0)[0]], axis=0)
-        # Eliminate duplicates. This will keep the first occurrence of each position.
-        # Hence if it contains at least one nonghost point, it is kept.
-        scale_coords2, unique_indices2 = np.unique(scale_coords[keep][:, :self._data_dim+1], axis=0, return_index=True)
-        # Now do lexsort to match with ppn1_coords below.
-        perm2 = np.lexsort((scale_coords2[:, 0], scale_coords2[:, 1], scale_coords2[:, 2], scale_coords2[:, 3]))
-        # Combine everything for a new ghost mask.
-        scale_ghost_mask = ghost_mask[unique_indices][keep][unique_indices2][perm2]
+            gm = ghost_mask
 
-        # Now order the feature map and multiply with ghost mask
-        ppn1_coords = feature_map.get_spatial_locations()
-        perm = np.lexsort((ppn1_coords[:, 0], ppn1_coords[:, 1], ppn1_coords[:, 2], ppn1_coords[:, 3]))
-        # Reverse permutation
-        inv_perm = np.argsort(perm)
-        new_ghost_mask = scale_ghost_mask[:, None][inv_perm].float()
-        output.features = feature_map.features * new_ghost_mask
-        return output, new_ghost_mask
+            for i in range(np.log2(factor).astype(int)):
+                gm = self.downsample(gm)
+
+            return gm

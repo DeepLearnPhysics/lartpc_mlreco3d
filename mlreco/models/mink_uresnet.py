@@ -17,9 +17,9 @@ class UResNet_Chain(nn.Module):
         ["parse_sparse3d_scn", (float,), (3, 1)]
     ]
 
-    MODULES = ['mink_uresnet']
+    MODULES = ['uresnet_lonely']
 
-    def __init__(self, cfg, name='mink_uresnet'):
+    def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
         self.model_config = cfg[name]
         mode = self.model_config.get('aspp_mode', None)
@@ -60,6 +60,7 @@ class UResNet_Chain(nn.Module):
             out['segmentation'].append(seg.F)
             out['finalTensor'].append(res['finalTensor'])
             out['encoderTensors'].append(res['encoderTensors'])
+            out['decoderTensors'].append(res['decoderTensors'])
             if self.ghost:
                 ghost = self.linear_ghost(feats)
                 out['ghost'].append(ghost.F)

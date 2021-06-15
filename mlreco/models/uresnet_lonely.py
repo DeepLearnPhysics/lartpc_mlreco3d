@@ -231,6 +231,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._beta = self._cfg.get('beta', 1.0)
         self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
+        self._batch_col = self._cfg.get('batch_col', -2)
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
@@ -250,7 +251,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         If ghost_label > -1, then we perform only ghost segmentation.
         """
         assert len(result['segmentation']) == len(label)
-        batch_ids = [d[:, -2] for d in label]
+        batch_ids = [d[:, self._batch_col] for d in label]
         uresnet_loss, uresnet_acc = 0., 0.
         uresnet_acc_class = [0.] * self._num_classes
         count_class = [0.] * self._num_classes
@@ -274,6 +275,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)
                         print('Label counts:',unique_count)
+                    print(result['ghost'][i])
+                    print(batch_index)
                     event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()

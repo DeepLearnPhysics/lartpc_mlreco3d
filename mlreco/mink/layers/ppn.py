@@ -95,14 +95,16 @@ class AttentionMask(torch.nn.Module):
         # print(mask_in_xcoords.F.shape)
         x_expanded = ME.SparseTensor(
             coordinates=mask_in_xcoords.C,
-            features=torch.zeros(mask_in_xcoords.F.shape[0], x.F.shape[1]).to(device),
+            features=torch.zeros(mask_in_xcoords.F.shape[0], 
+                                 x.F.shape[1]).to(device),
             coords_manager=x.coords_man,
             force_creation=True,
             tensor_stride=x.tensor_stride
         )
         x_expanded = x_expanded + x
         # print(x_expanded.F.shape)
-        target = (mask_in_xcoords.F > self.score_threshold).squeeze() & (x_expanded.F > 0).any(dim=1)
+        target = (mask_in_xcoords.F > self.score_threshold).squeeze() & \
+                 (x_expanded.F > 0).any(dim=1)
         # print((mask_in_xcoords.F > self.score_threshold).squeeze())
         # print((x_expanded.F > 0).any(dim=1))
         # print(target)
@@ -125,18 +127,18 @@ class PPN(nn.Module):
 
         print("PPN Config = ", self.model_config)
 
-        self._dimension = self.model_config.get('data_dim', 3)
-        self._num_strides = self.model_config.get('num_strides', 5)
-        m = self.model_config.get('filters', 16)  # Unet number of features
-        self._num_classes = self.model_config.get('num_classes', 5)
-        self._downsample_ghost = self.model_config.get('downsample_ghost', False)
-        self._use_encoding = self.model_config.get('use_encoding', False)
+        self._dimension           = self.model_config.get('data_dim'           , 3    )
+        self._num_strides         = self.model_config.get('num_strides'        , 5    )
+        self.m                    = self.model_config.get('filters'            , 16   ) # Unet number of features
+        self._num_classes         = self.model_config.get('num_classes'        , 5    )
+        self._downsample_ghost    = self.model_config.get('downsample_ghost'   , False)
+        self._use_encoding        = self.model_config.get('use_encoding'       , False)
         self._use_true_ghost_mask = self.model_config.get('use_true_ghost_mask', False)
-        self._ppn_num_conv = self.model_config.get('ppn_num_conv', 1)
-        self._ppn1_size = self.model_config.get('ppn1_size', -1)
-        self._ppn2_size = self.model_config.get('ppn2_size', -1)
-        self._spatial_size = self.model_config.get('spatial_size', 512)
-        self._ppn_threshold = self.model_config.get('score_threshold', 0.8)
+        self._ppn_num_conv        = self.model_config.get('ppn_num_conv'       , 1    )
+        self._ppn1_size           = self.model_config.get('ppn1_size'          , -1   )
+        self._ppn2_size           = self.model_config.get('ppn2_size'          , -1   )
+        self._spatial_size        = self.model_config.get('spatial_size'       , 512  )
+        self._ppn_threshold       = self.model_config.get('score_threshold'    , 0.8  )
         self.ppn1_stride, self.ppn2_stride = define_ppn12(
             self._ppn1_size, self._ppn2_size,
             self._spatial_size, self._num_strides)
@@ -145,11 +147,11 @@ class PPN(nn.Module):
 
         kernel_size = 2  # Use input_spatial_size method for other values?
         # UNet number of features per level
-        nPlanes = [i*m for i in range(1, self._num_strides+1)]
+        nPlanes = [i*self.m for i in range(1, self._num_strides+1)]
         if self.deepest > 0:
             nPlanes[-1] = self.deepest
         # UNet number of features per level (multiplicative)
-        # nPlanes = [(2**i) * m for i in range(1, num_strides+1)]
+        # nPlanes = [(2**i) * self.m for i in range(1, num_strides+1)]
         # downsample = [filter size, filter stride]
         downsample = [kernel_size, 2]
 

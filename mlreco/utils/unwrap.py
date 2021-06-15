@@ -60,16 +60,35 @@ def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
     return unwrap_scn(data_blob, outputs, 0, avoid_keys)
 
 
-def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
+
+def unwrap_mink(data_blob, outputs, batch_id_col, avoid_keys):
     """
-    Break down the data_blob and outputs dictionary into events for sparseconvnet formatted tensors.
+    Break down the data_blob and outputs dictionary into events 
+    for MinkowskiEngine formatted tensors.
+    
+    Function behavior is same as that of unwrap_scn.
+    """  
+    pass
+
+
+def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
+    """
+    Break down the data_blob and outputs dictionary into events 
+    for sparseconvnet formatted tensors.
+
     Need to account for: multi-gpu, minibatching, multiple outputs, batches.
     INPUTS:
-        data_blob: a dictionary of array of array of minibatch data [key][num_minibatch][num_device]
-        outputs: results dictionary, output of trainval.forward, [key][num_minibatch*num_device]
-        data_dim: 2 for 2D, 3 for 3D,,, and indicate the location of "batch id"
+        data_blob: a dictionary of array of array of 
+            minibatch data [key][num_minibatch][num_device]
+        outputs: results dictionary, output of trainval.forward, 
+            [key][num_minibatch*num_device]
+        batch_id_col: 2 for 2D, 3 for 3D,,, and indicate 
+            the location of "batch id". For MinkowskiEngine, batch indices
+            are always located at the 0th column of the N x C coordinate 
+            array 
     OUTPUT:
-        two un-wrapped arrays of dictionaries where array length = num_minibatch*num_device*minibatch_size
+        two un-wrapped arrays of dictionaries where 
+            array length = num_minibatch*num_device*minibatch_size
     ASSUMES:
         the shape of data_blob and outputs as explained above
     """
@@ -87,6 +106,8 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
         if not key in result_data: result_data[key]=[]
         if isinstance(data[0],np.ndarray) and len(data[0].shape) == 2:
             target_array_keys.append(key)
+        elif isinstance(data[0],torch.Tensor) and len(data[0].shape) == 2:
+            target_array_keys.append(key)
         elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape) == 2:
             target_list_keys.append(key)
         elif isinstance(data[0],list):
@@ -97,13 +118,15 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
             print('data:',data)
             raise TypeError
     # a-1) Handle the list of ndarrays
+
     for target in target_array_keys:
         data = data_blob[target]
         for d in data:
+            print(target, d, d.shape)
             # check if batch map is available, and create if not
             if not d.shape[0] in unwrap_map:
                 batch_map = {}
-                batch_id_loc = data_dim if d.shape[1] > data_dim else -1
+                batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
@@ -113,25 +136,6 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
             for where in batch_map.values():
                 result_data[target].append(d[where])
 
-    # a-2) Handle the list of list of ndarrays
-    #for target in target_list_keys:
-    #    data = data_blob[target]
-    #    num_elements = len(data[0])
-    #    for list_idx in range(num_elements):
-    #        combined_list = []
-    #        for d in data:
-    #            target_data = d[list_idx]
-    #
-    #            if not target_data.shape[0] in unwrap_map:
-    #                batch_map = {}
-    #                batch_idx = np.unique(target_data[:,data_dim])
-    #                for b in batch_idx:
-    #                    batch_map[b] = target_data[:,data_dim] == b
-    #                unwrap_map[target_data.shape[0]]=batch_map
-    #
-    #            batch_map = unwrap_map[target_data.shape[0]]
-    #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
-    #        result_data[target].append(combined_list)
 
     # a-2) Handle the list of list of ndarrays
     for target in target_list_keys:
@@ -139,7 +143,7 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
         for dlist in data:
             # construct a list of batch ids
             batch_ids = []
-            batch_id_loc = data_dim if d.shape[1] > data_dim else -1
+            batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
             for d in dlist:
                 batch_ids.extend([n for n in np.unique(d[:,batch_id_loc]) if not n in batch_ids])
             batch_ids.sort()
@@ -174,16 +178,18 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
     #print(target_array_keys)
+    print(unwrap_map)
     for target in target_array_keys:
         data = outputs[target]
         for d in data:
             # check if batch map is available, and create if not
             if not d.shape[0] in unwrap_map:
                 batch_map = {}
-                batch_id_loc = data_dim if d.shape[1] > data_dim else -1
+                batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
                 # ensure these are integer values
-                # print(batch_idx)
+                print(d)
+                print(batch_idx)
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
@@ -233,7 +239,7 @@ def unwrap_scn(data_blob, outputs, data_dim, avoid_keys):
             for d in dlist:
                 # print(d)
                 if not d.shape[0] in element_map:
-                    batch_id_loc = data_dim if d.shape[1] > data_dim else -1
+                    batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                     batch_idx = np.unique(d[:,batch_id_loc])
                     batch_ctrs.append(int(np.max(batch_idx)+1))
                     assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))

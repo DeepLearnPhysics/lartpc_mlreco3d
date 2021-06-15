@@ -496,6 +496,7 @@ def grow_cluster(epsilon, minPoints, all_points, labels, point_id, neighbors, cl
 
 
 def distances(v1, v2):
+    print(v1.shape, v2.shape)
     v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
