@@ -102,6 +102,9 @@ def CollateMinkowski(batch):
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
 
+                print(key, batch[0][key])
+                assert False
+
                 result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
                                                  np.full(shape=[len(sample[key]),1],
                                                  fill_value=batch_id,
@@ -111,12 +114,18 @@ def CollateMinkowski(batch):
 
             elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==2:
 
+                print(key, batch[0][key])
+                assert False
+
                 result[key] =  concat( [ concat( [sample[key],
                                                 np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
 
             elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+
+                print(key, batch[0][key])
+                assert False
 
                 result[key] = [
                     concat([
@@ -128,6 +137,8 @@ def CollateMinkowski(batch):
                     ], axis=1) for depth in range(len(batch[0][key]))
                 ]
             else:
+                print(key, batch[0][key])
+                assert False
                 result[key] = [sample[key] for sample in batch]
     return result
 

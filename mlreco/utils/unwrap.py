@@ -108,7 +108,9 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
             target_array_keys.append(key)
         elif isinstance(data[0],torch.Tensor) and len(data[0].shape) == 2:
             target_array_keys.append(key)
-        elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape) == 2:
+        elif isinstance(data[0],list) and \
+             isinstance(data[0][0],np.ndarray) and \
+             len(data[0][0].shape) == 2:
             target_list_keys.append(key)
         elif isinstance(data[0],list):
             for d in data: result_data[key].extend(d)
@@ -122,7 +124,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     for target in target_array_keys:
         data = data_blob[target]
         for d in data:
-            print(target, d, d.shape)
+            # print(target, d, d.shape)
             # check if batch map is available, and create if not
             if not d.shape[0] in unwrap_map:
                 batch_map = {}
@@ -135,7 +137,6 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
             batch_map = unwrap_map[d.shape[0]]
             for where in batch_map.values():
                 result_data[target].append(d[where])
-
 
     # a-2) Handle the list of list of ndarrays
     for target in target_list_keys:
