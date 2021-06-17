@@ -96,7 +96,7 @@ class MinkFullChain(FullChain):
                 ppn_input['ghost'] = ppn_input['ghost'][0]
                 ppn_output = self.ppn(ppn_input['finalTensor'][0], 
                                       ppn_input['decoderTensors'][0],
-                                      ppn_input['ghost'])
+                                      ppn_input['ghost_sptensor'][0])
             else:
                 ppn_output = self.ppn(ppn_input['finalTensor'][0], 
                                       ppn_input['decoderTensors'][0])
@@ -111,7 +111,7 @@ class MinkFullChain(FullChain):
         ghost_feature_maps = []
 
         for ghost_tensor in result['ghost']:
-            ghost_feature_maps.append(ghost_tensor.F)
+            ghost_feature_maps.append(ghost_tensor)
         result['ghost'] = ghost_feature_maps
 
         if self.enable_ghost:

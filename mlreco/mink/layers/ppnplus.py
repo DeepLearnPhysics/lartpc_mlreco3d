@@ -263,7 +263,8 @@ class PPN(MENetworkBase):
                     ghost_coords = input['segment_label']
                 else:
                     ghost_mask_tensor = 1.0 - torch.argmax(ghost.F, 
-                                                           dim=1, keepdim=True)
+                                                           dim=1, 
+                                                           keepdim=True)
                     ghost_coords = ghost.C
                     ghost_coords_man = final.coordinate_manager
                     ghost_tensor_stride = ghost.tensor_stride

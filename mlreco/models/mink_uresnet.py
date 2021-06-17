@@ -64,6 +64,7 @@ class UResNet_Chain(nn.Module):
             if self.ghost:
                 ghost = self.linear_ghost(feats)
                 out['ghost'].append(ghost.F)
+                out['ghost_sptensor'].append(ghost)
         return out
 
 
