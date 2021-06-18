@@ -636,8 +636,6 @@ class FullChain(torch.nn.Module):
                 mask &= (frag_seg != self._track_id)
 
             # Append one particle per fragment that is not already accounted for
-            print(fragments, mask)
-            assert False
             particles.extend(fragments[mask])
             part_primary_ids.extend(-np.ones(np.sum(mask)))
 

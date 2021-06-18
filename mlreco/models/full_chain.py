@@ -1186,10 +1186,10 @@ def setup_chain_cfg(self, cfg):
     if self.enable_cnn_clust and self.enable_dbscan:
         if 'spice' in cfg:
             assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == \
-                        np.array(np.array(cfg['dbscan_frag']['cluster_classes'])).reshape(-1)).any()
+                        np.array(np.array(cfg['fragment_manager']['cluster_classes'])).reshape(-1)).any()
         else:
             assert 'graph_spice' in cfg
-            assert set(cfg['dbscan_frag']['cluster_classes']).issubset(
+            assert set(cfg['fragment_manager']['cluster_classes']).issubset(
                 set(cfg['graph_spice']['skip_classes']))
 
     if self.enable_gnn_particle: # If particle fragment GNN is used, make sure it is not redundant

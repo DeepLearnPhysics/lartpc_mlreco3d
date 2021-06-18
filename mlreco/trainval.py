@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from mlreco.utils import unwrap
 import warnings
 import torch
 import time
@@ -221,7 +222,6 @@ class trainval(object):
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % output_cfg['unwrapper'])
                     raise ImportError
-
                 input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:
                 if 'index' in input_data:
