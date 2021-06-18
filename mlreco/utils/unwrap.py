@@ -63,31 +63,31 @@ def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
 
 def unwrap_mink(data_blob, outputs, batch_id_col, avoid_keys):
     """
-    Break down the data_blob and outputs dictionary into events 
+    Break down the data_blob and outputs dictionary into events
     for MinkowskiEngine formatted tensors.
-    
+
     Function behavior is same as that of unwrap_scn.
-    """  
+    """
     pass
 
 
 def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     """
-    Break down the data_blob and outputs dictionary into events 
+    Break down the data_blob and outputs dictionary into events
     for sparseconvnet formatted tensors.
 
     Need to account for: multi-gpu, minibatching, multiple outputs, batches.
     INPUTS:
-        data_blob: a dictionary of array of array of 
+        data_blob: a dictionary of array of array of
             minibatch data [key][num_minibatch][num_device]
-        outputs: results dictionary, output of trainval.forward, 
+        outputs: results dictionary, output of trainval.forward,
             [key][num_minibatch*num_device]
-        batch_id_col: 2 for 2D, 3 for 3D,,, and indicate 
+        batch_id_col: 2 for 2D, 3 for 3D,,, and indicate
             the location of "batch id". For MinkowskiEngine, batch indices
-            are always located at the 0th column of the N x C coordinate 
-            array 
+            are always located at the 0th column of the N x C coordinate
+            array
     OUTPUT:
-        two un-wrapped arrays of dictionaries where 
+        two un-wrapped arrays of dictionaries where
             array length = num_minibatch*num_device*minibatch_size
     ASSUMES:
         the shape of data_blob and outputs as explained above
@@ -122,7 +122,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     for target in target_array_keys:
         data = data_blob[target]
         for d in data:
-            print(target, d, d.shape)
+            # print(target, d, d.shape)
             # check if batch map is available, and create if not
             if not d.shape[0] in unwrap_map:
                 batch_map = {}
@@ -178,7 +178,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
     #print(target_array_keys)
-    print(unwrap_map)
+    # print(unwrap_map)
     for target in target_array_keys:
         data = outputs[target]
         for d in data:
@@ -188,8 +188,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
                 # ensure these are integer values
-                print(d)
-                print(batch_idx)
+                # print(d)
+                # print(batch_idx)
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b

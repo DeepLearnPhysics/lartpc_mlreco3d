@@ -12,7 +12,7 @@ class MetaLayerModel(nn.Module):
     def __init__(self, cfg):
         super(MetaLayerModel, self).__init__()
         from torch_geometric.nn import MetaLayer
-        
+
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
@@ -56,7 +56,7 @@ class MetaLayerModel(nn.Module):
         self.node_predictor = nn.Linear(node_output, self.node_classes)
         self.edge_predictor = nn.Linear(edge_output, self.edge_classes)
 
-    def forward(self, node_features, edge_indices, edge_features, xbatch):z
+    def forward(self, node_features, edge_indices, edge_features, xbatch):
         x = node_features.view(-1, self.node_input)
         e = edge_features.view(-1, self.edge_input)
 

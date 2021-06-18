@@ -322,6 +322,47 @@ def parse_particle_asis(data):
             getattr(p,f)(x,y,z,pos.t())
     return particles
 
+def parse_neutrino_asis(data):
+    """
+    A function to copy construct & return an array of larcv::Particle
+
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventParticle and
+        larcv::EventClusterVoxel3D, to translate coordinates
+
+    Returns
+    -------
+    list
+        a python list of larcv::Particle object
+    """
+    neutrinos = data[0]
+    neutrinos = [larcv.Neutrino(p) for p in data[0].as_vector()]
+
+    clusters  = data[1]
+    #assert data[0].as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
+
+    meta = clusters.meta()
+
+
+    #funcs = ["first_step","last_step","position","end_position","ancestor_position"]
+    funcs = ["position"]
+    for p in neutrinos:
+        for f in funcs:
+            pos = getattr(p,f)()
+            x = (pos.x() - meta.min_x()) / meta.size_voxel_x()
+            y = (pos.y() - meta.min_y()) / meta.size_voxel_y()
+            z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
+            # x = (pos.x() - meta.origin().x) / meta.size_voxel_x()
+            # y = (pos.y() - meta.origin().y) / meta.size_voxel_y()
+            # z = (pos.z() - meta.origin().z) / meta.size_voxel_z()
+            # x = pos.x() * meta.size_voxel_x() + meta.origin().x
+            # y = pos.y() * meta.size_voxel_y() + meta.origin().y
+            # z = pos.z() * meta.size_voxel_z() + meta.origin().z
+            getattr(p,f)(x,y,z,pos.t())
+    return neutrinos
+
 def parse_particle_coords(data):
     '''
     Function that returns particle coordinates (start and end) and start time.
@@ -371,24 +412,17 @@ def parse_particle_points(data, include_point_tagging=False):
         a numpy array with the shape (N,3) where 3 represents (x,y,z)
         coordinate
     np_values: np.ndarray
-        a numpy array with the shape (N, 2) where 2 represents the class of 
-        the ground truth point and the particle data index in this order.
+        a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
+        and the particle data index in this order.
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())
     # For open data - to reproduce
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
     # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
-    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) \
-        if part_info.shape[0] > 0 \
-        else np.empty(shape=(0, 2), dtype=np.float32)
-
+    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
     if include_point_tagging:
-        np_values = np.column_stack([part_info[:, 3], 
-                                     part_info[:, 8], 
-                                     part_info[:, 9]]) \
-            if part_info.shape[0] > 0 \
-            else np.empty(shape=(0, 3), dtype=np.float32)
+        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
 
     if part_info.shape[0] > 0:
         #return part_info[:, :3], part_info[:, 3][:, None]
