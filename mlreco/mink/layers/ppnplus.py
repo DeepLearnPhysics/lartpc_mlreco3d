@@ -339,7 +339,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, name='ppn_loss'):
         super(PPNLonelyLoss, self).__init__()
         self.loss_config = cfg[name]
-        pprint(self.loss_config)
+        # pprint(self.loss_config)
         self.mask_loss_name = self.loss_config.get('mask_loss_name', 'BCE')
         if self.mask_loss_name == "BCE":
             self.lossfn = torch.nn.functional.binary_cross_entropy_with_logits
@@ -366,9 +366,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         assert len(particles_label) == len(segment_label)
 
         ppn_output_coordinates = result['ppn_output_coordinates']
-        print("PPN Output Coordinates = ", ppn_output_coordinates[0].shape)
+        # print("PPN Output Coordinates = ", ppn_output_coordinates[0].shape)
         # assert False
-        print(result['ppn_coords'][0][-1])
+        # print(result['ppn_coords'][0][-1])
         batch_ids = [result['ppn_coords'][0][-1][:, 0]]
         num_batches = len(batch_ids[0].unique())
         total_loss = 0
@@ -384,7 +384,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             points = result['points'][igpu]
             loss_gpu, acc_gpu = 0.0, 0.0
             for layer in range(len(ppn_layers)):
-                print("Layer = ", layer)
+                # print("Layer = ", layer)
                 ppn_score_layer = ppn_layers[layer]
                 coords_layer = ppn_coords[layer]
                 loss_layer = 0.0

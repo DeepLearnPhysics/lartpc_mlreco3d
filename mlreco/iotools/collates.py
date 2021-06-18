@@ -93,6 +93,7 @@ def CollateMinkowski(batch):
             if isinstance(batch[0][key], tuple) and \
                isinstance(batch[0][key][0], np.ndarray) and \
                len(batch[0][key][0].shape) == 2:
+               # For pairs (coordinate tensor, feature tensor)
                 coords = [sample[key][0] for sample in batch]
                 features = [sample[key][1] for sample in batch]
                 coords, features = ME.utils.sparse_collate(coords, features)
@@ -101,8 +102,12 @@ def CollateMinkowski(batch):
 
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
+                 # 
 
-                print(key, batch[0][key])
+                print('------------------[1] sample-------------------')
+                print(batch[0])
+                print('------------------key-------------------')
+                print(key)
                 assert False
 
                 result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
@@ -113,32 +118,30 @@ def CollateMinkowski(batch):
                     for batch_id,sample in enumerate(batch) ], axis=0)
 
             elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==2:
+                # for tensors that does not come with a coordinate tensor
+                # ex. particle_graph
 
-                print(key, batch[0][key])
-                assert False
-
-                result[key] =  concat( [ concat( [sample[key],
-                                                np.full(shape=[len(sample[key]),1],fill_value=batch_id,dtype=np.float32)],
+                result[key] =  concat( [ concat( [np.full(shape=[len(sample[key]),1],
+                                                          fill_value=batch_id,
+                                                          dtype=np.float32), 
+                                                  sample[key]],
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
 
             elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
 
-                print(key, batch[0][key])
-                assert False
-
                 result[key] = [
                     concat([
-                        concat( [ concat( [sample[key][depth][0],
-                                                    np.full(shape=[len(sample[key][depth][0]),1], fill_value=batch_id, dtype=np.int32)],
-                                                axis=1 ) for batch_id, sample in enumerate(batch) ],
+                        concat( [ concat( [np.full(shape=[len(sample[key][depth][0]),1], 
+                                                   fill_value=batch_id, 
+                                                   dtype=np.int32),
+                                           sample[key][depth][0]], axis=1 ) for batch_id, sample in enumerate(batch) ],
                                         axis = 0),
                         concat([sample[key][depth][1] for sample in batch], axis=0)
                     ], axis=1) for depth in range(len(batch[0][key]))
                 ]
             else:
-                print(key, batch[0][key])
-                assert False
+
                 result[key] = [sample[key] for sample in batch]
     return result
 

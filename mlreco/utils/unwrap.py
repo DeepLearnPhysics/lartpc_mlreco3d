@@ -60,17 +60,6 @@ def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
     return unwrap_scn(data_blob, outputs, 0, avoid_keys)
 
 
-
-def unwrap_mink(data_blob, outputs, batch_id_col, avoid_keys):
-    """
-    Break down the data_blob and outputs dictionary into events 
-    for MinkowskiEngine formatted tensors.
-    
-    Function behavior is same as that of unwrap_scn.
-    """  
-    pass
-
-
 def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     """
     Break down the data_blob and outputs dictionary into events 
@@ -124,7 +113,6 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     for target in target_array_keys:
         data = data_blob[target]
         for d in data:
-            # print(target, d, d.shape)
             # check if batch map is available, and create if not
             if not d.shape[0] in unwrap_map:
                 batch_map = {}
@@ -179,7 +167,6 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
     #print(target_array_keys)
-    print(unwrap_map)
     for target in target_array_keys:
         data = outputs[target]
         for d in data:
@@ -189,8 +176,12 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
                 # ensure these are integer values
-                print(d)
-                print(batch_idx)
+                if target == 'points':
+                    print(target)
+                    print(d)
+                    print("--------------Batch IDX----------------")
+                    print(batch_idx)
+                    assert False
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
