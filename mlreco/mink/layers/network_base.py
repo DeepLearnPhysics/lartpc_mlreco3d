@@ -29,7 +29,7 @@ class MENetworkBase(nn.Module):
             'args', {})
 
         # Define normalization function
-        print(model_cfg)
+        # print(model_cfg)
         self.norm_cfg = model_cfg.get('norm_layer', {})
         self.norm = self.norm_cfg.get('name', 'batch_norm')
         self.norm_args = self.norm_cfg.get('args', {})

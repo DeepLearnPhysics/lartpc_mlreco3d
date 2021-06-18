@@ -275,8 +275,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)
                         print('Label counts:',unique_count)
-                    print(result['ghost'][i])
-                    print(batch_index)
+                    #print(result['ghost'][i])
+                    #print(batch_index)
                     event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()

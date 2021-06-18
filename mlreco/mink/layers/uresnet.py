@@ -108,7 +108,7 @@ class UResNet(MENetworkBase):
             self.decoding_block.append(m)
         self.decoding_block = nn.Sequential(*self.decoding_block)
         self.decoding_conv = nn.Sequential(*self.decoding_conv)
-        
+
 
     def encoder(self, x):
         '''
@@ -206,8 +206,8 @@ class UResNetEncoder(MENetworkBase):
         self.input_kernel = model_cfg.get('input_kernel', 3)
 
         # Initialize Input Layer
-        print(self.num_input)
-        print(self.input_kernel)
+        # print(self.num_input)
+        # print(self.input_kernel)
         self.input_layer = ME.MinkowskiConvolution(
             in_channels=self.num_input,
             out_channels=self.num_filters,
