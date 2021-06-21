@@ -23,6 +23,7 @@ def model_dict():
     from . import full_chain, full_chain_2
     from . import full_chain_temp
     from . import mink_full_chain
+    from . import uresnet_adversarial
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
         # -------------------SparseConvNet Backend----------------------
@@ -73,7 +74,9 @@ def model_dict():
         # Bayesian UResNet
         "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_uresnet.SegmentationLoss),
         # Evidential Classifier
-        'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss)
+        'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss),
+        # Adversarial loss UResNet training
+        "uresnet_adversarial": (uresnet_adversarial.UResNetAdversarial, uresnet_adversarial.AdversarialLoss),
     }
     return models
 

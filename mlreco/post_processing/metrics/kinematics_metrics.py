@@ -5,7 +5,7 @@ from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_a
 from mlreco.utils.cluster.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
 from mlreco.utils.metrics import *
 from mlreco.utils.gnn.network import get_fragment_edges
-from mlreco.utils.gnn.cluster import get_cluster_label_np, get_momenta_label_np
+from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
 
 
 def extent(voxels):
@@ -54,11 +54,11 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     edge_pred = flow_edge_pred[data_idx].argmax(axis=1) # shape (E,)
     edge_index = kinematics_edge_index[data_idx] # shape (E, 2)
 
-    node_true_type = get_cluster_label_np(kinematics[data_idx], pred_particles, column=7) # pdg label
-    node_true_p = get_momenta_label_np(kinematics[data_idx], pred_particles, column=8).reshape((-1,)) # momentum label
-    node_true_cluster_id = get_cluster_label_np(kinematics[data_idx], pred_particles, column=6) # cluster id
+    node_true_type = get_cluster_label(kinematics[data_idx], pred_particles, column=7) # pdg label
+    node_true_p = get_momenta_label(kinematics[data_idx], pred_particles, column=8).reshape((-1,)) # momentum label
+    node_true_cluster_id = get_cluster_label(kinematics[data_idx], pred_particles, column=6) # cluster id
 
-    clust_ids = get_cluster_label_np(clust_data[data_idx], pred_particles, 5) # or 6 ?
+    clust_ids = get_cluster_label(clust_data[data_idx], pred_particles, 5) # or 6 ?
     subgraph = particle_graph[particle_graph_idx][:, :2]
     true_edge_index = get_fragment_edges(subgraph, clust_ids)
     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index) # shape (E,), values 0 or 1
