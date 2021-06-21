@@ -1,206 +1,70 @@
 # Defines inputs to the GNN networks
 import numpy as np
 import torch
-from mlreco.utils.gnn.cluster import get_cluster_voxels, get_cluster_features, get_cluster_features_extended, get_cluster_dirs
-from .voxels import get_voxel_features
 
-def cluster_vtx_features(data, clusts, delta=0.0, whether_adjust_direction=False):
+from .cluster import get_cluster_features, get_cluster_features_extended
+from .network import get_cluster_edge_features, get_voxel_edge_features
+from .voxels  import get_voxel_features
+
+def cluster_features(data, clusts, extra=False):
     """
-    Function that returns the an array of 16 features for
+    Function that returns an array of 16/19 geometric features for
     each of the clusters in the provided list.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        extra (bool)         : Whether or not to include extended features
     Returns:
-        np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
+        np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
     """
-    return get_cluster_features(data, clusts, whether_adjust_direction)
-
-
-def cluster_vtx_features_extended(data_values, data_sem_types, clusts):
-    return get_cluster_features_extended(data_values, data_sem_types, clusts)
-
-
-def cluster_vtx_dirs(data, cs, delta=0.0):
-    """
-    Function that returns the direction of the listed clusters,
-    expressed as its normalized covariance matrix.
-
-    Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)          : Orientation matrix regularization
-    Returns:
-        np.ndarray: (C,9) tensor of cluster directions
-    """
-    return get_cluster_dirs(data, clusts, delta)
-
-
-def cluster_edge_dir(data, c1, c2):
-    """
-    Function that returns the edge direction between for a
-    given pair of connected clusters.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        c1 (np.ndarray)  : (M1) Array of voxel IDs associated with the first cluster
-        c2 (np.ndarray)  : (M2) Array of voxel IDs associated with the second cluster
-    Returns:
-        np.ndarray: (10) Array of edge direction (orientation, distance)
-    """
-    # Get the voxels in the clusters connected by the edge
-    x1 = get_cluster_voxels(data, c1)
-    x2 = get_cluster_voxels(data, c2)
-
-    # Find the closest set point in each cluster
-    from scipy.spatial.distance import cdist
-    d12 = cdist(x1, x2)
-    imin = np.argmin(d12)
-    i1, i2 = np.unravel_index(imin, d12.shape)
-    v1 = x1[i1,:] # closest point in c1
-    v2 = x2[i2,:] # closest point in c2
-
-    # Displacement
-    disp = v1 - v2
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([B, lend.reshape(1)])
-
-
-def cluster_edge_dirs(data, clusts, edge_index):
-    """
-    Function that returns a tensor of edge directions for each of the
-    edges in the graph.
-
-    Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (2,E) Incidence matrix
-    Returns:
-        np.ndarray: (E,10) Tensor of edge directions (orientation, distance)
-    """
-    return np.vstack([cluster_edge_dir(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
-
-
-def cluster_edge_feature(data, c1, c2):
-    """
-    Function that returns the edge features for a
-    given pair of connected clusters.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        c1 (np.ndarray)  : (M1) Array of voxel IDs associated with the first cluster
-        c2 (np.ndarray)  : (M2) Array of voxel IDs associated with the second cluster
-    Returns:
-        np.ndarray: (19) Array of edge features (point1, point2, displacement, distance, orientation)
-    """
-    # Get the voxels in the clusters connected by the edge
-    x1 = get_cluster_voxels(data, c1)
-    x2 = get_cluster_voxels(data, c2)
-
-    # Find the closest set point in each cluster
-    from scipy.spatial.distance import cdist
-    d12 = cdist(x1, x2)
-    imin = np.argmin(d12)
-    i1, i2 = np.unravel_index(imin, d12.shape)
-    v1 = x1[i1,:] # closest point in c1
-    v2 = x2[i2,:] # closest point in c2
-
-    # Displacement
-    disp = v1 - v2
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([v1, v2, disp, lend.reshape(1), B])
+    if extra:
+        return torch.cat([get_cluster_features(data.float(), clusts),
+                          get_cluster_features_extended(data.float(), clusts)], dim=1)
+    return get_cluster_features(data.float(), clusts)
 
 
 def cluster_edge_features(data, clusts, edge_index):
     """
-    Function that returns a tensor of edge features for each of the
+    Function that returns a tensor of 19 geometric edge features for each of the
     edges connecting clusters in the graph.
 
     Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
     Returns:
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
-    return np.vstack([cluster_edge_feature(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
+    return get_cluster_edge_features(data.float(), clusts, edge_index)
 
 
-def vtx_features(data, max_dist=5.0, delta=0.0):
+def voxel_features(data, max_dist=5.0):
     """
     Function that returns the an array of 16 features for
-    each of the clusters in the provided list.
+    each of the voxels in the provided tensor.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        max_dist (float)     : Defines "local", max distance to look at
-        delta (float)        : Orientation matrix regularization
+        data (torch.Tensor)  : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        max_dist (float)     : Defines "local", i.e. max distance to look at
     Returns:
         np.ndarray: (N,16) tensor of voxel features (coords, local orientation, local direction, local count)
     """
-    return get_voxel_features(data, max_dist, delta)
+    return get_voxel_features(data.float(), max_dist)
 
 
-def edge_feature(data, i, j):
-    """
-    Function that returns the edge features for a
-    given pair of connected voxels.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        i (int)            : Index of the first voxel
-        j (int)            : Index of the second voxel
-    Returns:
-        np.ndarray: (19) Array of edge features (displacement, orientation)
-    """
-
-    # Get the voxel coordinates
-    xi = data[i,:3]
-    xj = data[j,:3]
-
-    # Displacement
-    disp = xj - xi
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([xi, xj, disp, lend.reshape(1), B])
-
-
-def edge_features(data, edge_index):
+def voxel_edge_features(data, edge_index):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting voxels in the graph.
 
     Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         edge_index (np.ndarray): (2,E) Incidence matrix
     Returns:
         np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
-    return np.vstack([edge_feature(data, e[0], e[1]) for e in edge_index.T])
+    return get_voxel_edge_features(data.float(), edge_index)
 
 
 def form_merging_batches(batch_ids, mean_merge_size):

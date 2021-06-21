@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-from mlreco.utils.gnn.cluster import get_cluster_label, relabel_groups
-from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
+from mlreco.utils.gnn.cluster import get_cluster_label
+from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask, relabel_groups
 
 class NodePrimaryLoss(torch.nn.Module):
     """
@@ -51,11 +51,11 @@ class NodePrimaryLoss(torch.nn.Module):
 
         Args:
             out (dict):
-                'node_pred' (torch.tensor): (C,2) Two-channel node predictions
-                'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
+                'node_pred' (torch.tensor) : (C,2) Two-channel node predictions
+                'clusts' ([np.ndarray])    : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 ('edge_pred' (torch.tensor): (C,2) Two-channel edge predictions, optional)
                 ('edge_index' (np.ndarray) : (E,2) Incidence matrix, optional)
-            clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+            clusters ([torch.tensor])      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         Returns:
             double: loss, accuracy, cluster count
         """
@@ -93,17 +93,13 @@ class NodePrimaryLoss(torch.nn.Module):
 
                 # If requested, remove groups that do not contain exactly one primary from the loss
                 if self.high_purity:
-                    purity_mask = np.zeros(len(clusts), dtype=bool)
-                    for g in np.unique(group_ids):
-                        group_mask = group_ids == g
-                        if np.sum(group_mask) > 1 and g in clust_ids[group_mask]:
-                            purity_mask[group_mask] = np.ones(np.sum(group_mask))
+                    purity_mask = node_purity_mask(clust_ids, group_ids)
+                    if not purity_mask.any():
+                        continue
                     clusts    = clusts[purity_mask]
                     clust_ids = clust_ids[purity_mask]
                     group_ids = group_ids[purity_mask]
                     node_pred = node_pred[np.where(purity_mask)[0]]
-                    if not len(clusts):
-                        continue
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
                 node_assn = torch.tensor(clust_ids == group_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
