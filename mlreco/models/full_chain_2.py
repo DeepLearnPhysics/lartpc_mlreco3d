@@ -399,7 +399,7 @@ class FullChain(torch.nn.Module):
         if self.enable_ghost:
             # Update input based on deghosting results
             deghost = result['ghost'][0].argmax(dim=1) == 0
-            new_input = [input[0][deghost]]
+            input = [input[0][deghost]]
             if label_seg is not None and label_clustering is not None:
                 label_clustering = adapt_labels(result,
                                                 label_seg,
@@ -420,12 +420,6 @@ class FullChain(torch.nn.Module):
                 deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
-
-            cnn_result['segmentation'][0] = segmentation
-            cnn_result['ppn_feature_dec'][0] = ppn_feature_dec
-            if self.enable_ppn:
-                cnn_result['points'][0] = points
-                cnn_result['mask_ppn2'][0] = mask_ppn2
 
         else:
             cnn_result.update(result)
@@ -521,6 +515,7 @@ class FullChain(torch.nn.Module):
 
         cnn_result.update({
             'frags': [fragments],   # TODO: name change frags -> fragments and
+            'frag_seg': [frag_seg],
             'fragments': [frags],   # fragments -> frags (dict key should be consistent with variable name)
             'fragments_seg': [frags_seg],
             'frag_batch_ids': [frag_batch_ids],
@@ -529,8 +524,16 @@ class FullChain(torch.nn.Module):
             'vids': [vids]
         })
 
+        def return_to_original(result):
+            if self.enable_ghost:
+                result['segmentation'][0] = segmentation
+                result['ppn_feature_dec'][0] = ppn_feature_dec
+                if self.enable_ppn:
+                    result['points'][0] = points
+                    result['mask_ppn2'][0] = mask_ppn2
+            return result
 
-        return cnn_result
+        return cnn_result, input, return_to_original
 
 
     def full_chain_gnn(self, result, input):
@@ -540,7 +543,7 @@ class FullChain(torch.nn.Module):
         device = input[0].device
         _, counts = torch.unique(input[0][:, 3], return_counts=True)
         fragments = result['frags'][0]
-        frag_seg = result['fragments_seg'][0]
+        frag_seg = result['frag_seg'][0]
         frag_batch_ids = result.pop('frag_batch_ids')[0]
         label_clustering = result.pop('label_clustering')[0]
         semantic_labels = result.pop('semantic_labels')[0]
@@ -773,6 +776,7 @@ class FullChain(torch.nn.Module):
             for i, interaction in enumerate(interactions):
                 inter_data = torch.cat([inter_data, inter_input_data[interaction]], dim=0)
                 inter_data[-len(interaction):, 3] = i * torch.ones(len(interaction)).to(device)
+
             inter_cosmic_pred = self.cosmic_discriminator(inter_data)
 
             # Reorganize into batches before storing in result dictionary
@@ -812,9 +816,9 @@ class FullChain(torch.nn.Module):
         ==========
         input: list of np.ndarray
         """
-        result = self.full_chain_cnn(input)
+        result, input, return_to_original = self.full_chain_cnn(input)
         result = self.full_chain_gnn(result, input)
-
+        result = return_to_original(result)
         return result
 
 
@@ -911,6 +915,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             deghost = out['ghost'][0].argmax(dim=1) == 0
             #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
             #result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][deghost][:, -1], cluster_label)
+            print('before deghost', seg_label[0].shape)
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]
         else:
@@ -969,6 +974,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
                 #clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
                 clust_label = [cluster_label[0][he_mask].clone()]
+                print(out['embeddings'][0].shape, he_mask.shape)
                 cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
                 #cluster_label[0] = cluster_label[0][he_mask]
                 # FIXME does this suppose that clust_label has same ordering as embeddings?
