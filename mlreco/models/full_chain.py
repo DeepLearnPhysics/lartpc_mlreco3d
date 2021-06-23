@@ -16,9 +16,14 @@ from mlreco.models.layers.cnn_encoder import ResidualEncoder
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 from mlreco.utils.cluster.fragmenter import *
-from mlreco.utils.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, cluster_direction
+
+from mlreco.utils.gnn.evaluation import (node_assignment_score, 
+                                         primary_assignment)
+
+from mlreco.utils.gnn.cluster import (form_clusters, 
+                                      get_cluster_batch, 
+                                      get_cluster_label, 
+                                      cluster_direction)
 
 class FullChain(torch.nn.Module):
     """
@@ -357,7 +362,7 @@ class FullChain(torch.nn.Module):
         if self.enable_ghost:
             # Update input based on deghosting results
             deghost = result['ghost'][0].argmax(dim=1) == 0
-            new_input = [input[0][deghost]]
+            input = [input[0][deghost]]
             if label_seg is not None and label_clustering is not None:
                 label_clustering = adapt_labels(result,
                                                 label_seg,
@@ -379,12 +384,6 @@ class FullChain(torch.nn.Module):
                 deghost_result['mask_ppn2'][0] = result['mask_ppn2'][0][deghost]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
-
-            cnn_result['segmentation'][0] = segmentation
-            cnn_result['ppn_feature_dec'][0] = ppn_feature_dec
-            if self.enable_ppn:
-                cnn_result['points'][0] = points
-                cnn_result['mask_ppn2'][0] = mask_ppn2
 
         else:
             cnn_result.update(result)
@@ -449,7 +448,16 @@ class FullChain(torch.nn.Module):
             'semantic_labels': [semantic_labels],
         })
 
-        return cnn_result
+        def return_to_original(result):
+            if self.enable_ghost:
+                result['segmentation'][0] = segmentation
+                result['ppn_feature_dec'][0] = ppn_feature_dec
+                if self.enable_ppn:
+                    result['points'][0] = points
+                    result['mask_ppn2'][0] = mask_ppn2
+            return result
+
+        return cnn_result, input, return_to_original
 
 
     def full_chain_gnn(self, result, input):
@@ -459,7 +467,7 @@ class FullChain(torch.nn.Module):
         device = input[0].device
         _, counts = torch.unique(input[0][:, 3], return_counts=True)
         fragments = result['frags'][0]
-        frag_seg = result['fragments_seg'][0]
+        frag_seg = result['frag_seg'][0]
         frag_batch_ids = result.pop('frag_batch_ids')[0]
         label_clustering = result.pop('label_clustering')[0]
         semantic_labels = result.pop('semantic_labels')[0]
@@ -758,9 +766,11 @@ class FullChain(torch.nn.Module):
         ==========
         input: list of np.ndarray
         """
-        result = self.full_chain_cnn(input)
+        result, input, revert_func = self.full_chain_cnn(input)
         if self.process_fragments:
             result = self.full_chain_gnn(result, input)
+
+        result = revert_func(result)
 
         return result
 
