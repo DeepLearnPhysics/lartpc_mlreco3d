@@ -36,11 +36,11 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
     frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]
     
     out = {
-        'frags'         : [fragments],
-        'frag_seg'      : [frag_seg],
+        'frags'         : [fragments_np],
+        'frag_seg'      : [frag_seg_np],
         'fragments'     : [frags],
         'fragments_seg' : [frags_seg],
-        'frag_batch_ids': [frag_batch_ids],
+        'frag_batch_ids': [frag_batch_ids_np],
         'vids'          : [vids]
     }
 
@@ -92,7 +92,7 @@ class DBSCANFragmentManager(FragmentManager):
             raise Exception('Invalid sparse CNN backend name {}'.format(mode))
 
 
-    def forward(self, input, cnn_result, semantic_labels):
+    def forward(self, input, cnn_result, semantic_labels=None):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -107,6 +107,10 @@ class DBSCANFragmentManager(FragmentManager):
             - frag_seg
 
         '''
+        if self._use_segmentation_prediction:
+            assert semantic_labels is None
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+                                           dim=1).flatten().double()
 
         semantic_data = torch.cat([input[:, :4], 
                                    semantic_labels.reshape(-1, 1)], dim=1)
@@ -136,7 +140,7 @@ class SPICEFragmentManager(FragmentManager):
         self._spice_classes    = frag_cfg.get('cluster_classes', []                  )
         self._spice_min_voxels = frag_cfg.get('min_voxels'     , 2                   )
 
-    def forward(self, input, cnn_result, semantic_labels):
+    def forward(self, input, cnn_result, semantic_labels=None):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -152,6 +156,11 @@ class SPICEFragmentManager(FragmentManager):
             - frag_seg
 
         '''
+        if self._use_segmentation_prediction:
+            assert semantic_labels is None
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+                                           dim=1).flatten().double()
+
         batch_labels = input[:, self._batch_column]
         fragments, frag_batch_ids = [], []
         for batch_id in batch_labels.unique():
