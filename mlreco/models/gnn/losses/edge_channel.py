@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.network import get_fragment_edges
-from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph
+from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, edge_purity_mask
 
 class EdgeChannelLoss(torch.nn.Module):
     """
@@ -60,7 +60,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids
                 'edge_index' (np.ndarray) : (E,2) Incidence matrix
             clusters ([torch.tensor])     : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-            (graph ([torch.tensor])        : (N,3) True edges, optional)
+            (graph ([torch.tensor])       : (N,3) True edges, optional)
         Returns:
             double: loss, accuracy, edge count
         """
@@ -91,16 +91,11 @@ class EdgeChannelLoss(torch.nn.Module):
                 # If high purity is requested, remove edges in groups without a primary
                 if self.high_purity:
                     clust_ids   = get_cluster_label(labels, clusts, self.source_col)
-                    purity_mask = np.ones(len(edge_index), dtype=bool)
-                    for g in np.unique(group_ids):
-                        group_mask = np.where(group_ids == g)[0]
-                        if g not in clust_ids[group_mask]:
-                            edge_mask = [(e[0] in group_mask) & (e[1] in group_mask) for e in edge_index]
-                            purity_mask[edge_mask] = np.zeros(np.sum(edge_mask))
-                    edge_index = edge_index[purity_mask]
-                    edge_pred = edge_pred[np.where(purity_mask)[0]]
-                    if not len(edge_index):
+                    purity_mask = edge_purity_mask(edge_index, clust_ids, group_ids)
+                    if not purity_mask.any():
                         continue
+                    edge_index  = edge_index[purity_mask]
+                    edge_pred   = edge_pred[np.where(purity_mask)[0]]
 
                 # Use group information or particle tree to determine the true edge assigment
                 if self.target == 'group':

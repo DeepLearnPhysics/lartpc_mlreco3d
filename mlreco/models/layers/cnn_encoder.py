@@ -160,7 +160,7 @@ class ResidualEncoder(UResNetEncoder):
         coords = point_cloud[:, 0:self.dimension+1].float()
         features = point_cloud[:, self.dimension+1:].float()
         features = features[:, -1].view(-1, 1)
-        batch_size = coords[:, 3].unique().shape[0]
+        batch_size = coords[:, 3].int().unique().shape[0]
         # Concat normalized image coordinates
         if self.coordConv:
             normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \

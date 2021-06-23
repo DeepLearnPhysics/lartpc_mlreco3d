@@ -1,8 +1,9 @@
 # Geometric feature extractor for Cluster GNN
 import torch
+from torch_cluster import radius_graph, knn_graph
+
 from mlreco.models.gnn.message_passing.nnconv_2 import NNConvModel
-from mlreco.utils.gnn.data import vtx_features, edge_features, cluster_vtx_features
-from mlreco.utils.gnn.network import complete_graph, kdtree_graph
+from mlreco.utils.gnn.data import voxel_features, voxel_edge_features, cluster_features
 
 class ClustGNNNodeEncoder(torch.nn.Module):
     """
@@ -33,17 +34,17 @@ class ClustGNNNodeEncoder(torch.nn.Module):
         for i, c in enumerate(clusts):
             gnn_data = torch.cat((gnn_data, data[c,:4].float()))
             gnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
-            x  = torch.cat((x, torch.tensor(vtx_features(data[c].detach().cpu().numpy(), max_dist=self.max_dist), device=device, dtype=torch.float)))
-            u  = torch.cat((u, torch.tensor(cluster_vtx_features(data.detach().cpu().numpy(), [c]), device=device, dtype=torch.float)))
+            x  = torch.cat((x, torch.tensor(voxel_features(data[c].detach().cpu().numpy(), max_dist=self.max_dist), device=device, dtype=torch.float)))
+            u  = torch.cat((u, torch.tensor(cluster_features(data.detach().cpu().numpy(), [c]), device=device, dtype=torch.float)))
             xb = torch.cat((xb, torch.full([len(c)], i, dtype=torch.long)))
 
         # Build a network that connects neighbour nodes together (touching nodes)
-        #edge_index = complete_graph(gnn_data[:,3], max_dist=1.99999)
-        edge_index = kdtree_graph(gnn_data, 3)
+        #edge_index = radius_graph(x, r=1.99999, batch=xb, loop=False)
+        edge_index = knn_graph(x, k=3, batch=xb, loop=False)
 
         # Get edge features
-        e = torch.tensor(edge_features(gnn_data, edge_index), device=device)
-        index = torch.tensor(edge_index, device=device, dtype=torch.long)
+        e = torch.tensor(voxel_edge_features(gnn_data, edge_index), device=device)
+        #index = torch.tensor(edge_index, device=device, dtype=torch.long)
 
         output = self.encoder(x, index, e, u, xb)
 

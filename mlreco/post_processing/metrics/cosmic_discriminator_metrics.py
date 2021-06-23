@@ -4,7 +4,7 @@ from scipy.special import softmax
 
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
-from mlreco.utils.gnn.cluster import get_cluster_label_np
+from mlreco.utils.gnn.cluster import get_cluster_label
 
 
 def extent(voxels):
@@ -20,7 +20,7 @@ def cosmic_discriminator_metrics(cfg, module_cfg, data_blob, res, logdir, iterat
     enable_physics_metrics = module_cfg.get('enable_physics_metrics', False)
     spatial_size = module_cfg.get('spatial_size', 768)
 
-    nu_label = get_cluster_label_np(clust_data[data_idx], interactions[data_idx], column=8)
+    nu_label = get_cluster_label(clust_data[data_idx], interactions[data_idx], column=8)
     nu_label = (nu_label > -1).astype(int)
 
     n_interactions = nu_label.shape[0]
@@ -34,7 +34,7 @@ def cosmic_discriminator_metrics(cfg, module_cfg, data_blob, res, logdir, iterat
     n_pred_cosmic = (nu_pred == 0).sum()
 
     if enable_physics_metrics:
-        true_interaction_idx = get_cluster_label_np(clust_data[data_idx], interactions[data_idx], column=7)
+        true_interaction_idx = get_cluster_label(clust_data[data_idx], interactions[data_idx], column=7)
         for i, j in enumerate(true_interaction_idx):
             true_interaction = clust_data[data_idx][clust_data[data_idx][:, 7] == j]
             pred_interaction = clust_data[data_idx][interactions[data_idx][i]]
