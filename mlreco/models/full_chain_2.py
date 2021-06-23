@@ -915,7 +915,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             deghost = out['ghost'][0].argmax(dim=1) == 0
             #print("cluster_label", torch.unique(cluster_label[0][:, 7]), torch.unique(cluster_label[0][:, 6]), torch.unique(cluster_label[0][:, 5]))
             #result = self.full_chain_loss(out, res_seg, res_ppn, seg_label[0][deghost][:, -1], cluster_label)
-            print('before deghost', seg_label[0].shape)
+            #print('before deghost', seg_label[0].shape)
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]
         else:
@@ -974,7 +974,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
                 #clust_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,5].view(-1,1),cluster_label[0][he_mask,4].view(-1,1)), dim=1)]
                 clust_label = [cluster_label[0][he_mask].clone()]
-                print(out['embeddings'][0].shape, he_mask.shape)
+                #print(out['embeddings'][0].shape, he_mask.shape)
                 cnn_clust_output = {'embeddings':[out['embeddings'][0][he_mask]], 'seediness':[out['seediness'][0][he_mask]], 'margins':[out['margins'][0][he_mask]]}
                 #cluster_label[0] = cluster_label[0][he_mask]
                 # FIXME does this suppose that clust_label has same ordering as embeddings?
