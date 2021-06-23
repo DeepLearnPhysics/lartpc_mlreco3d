@@ -118,9 +118,9 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
 
     def __init__(self, cfg, name='dbscan_frag'):
         super(MinkDBSCANFragmenter, self).__init__(cfg)
-    
+
     def forward(self, data, output):
-        
+
         from mlreco.utils.ppn import mink_ppn_selector
         from scipy.spatial.distance import cdist
 
@@ -132,7 +132,7 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
         # If tracks are clustered, get the track points from the PPN output
         data = data.detach().cpu().numpy()
         if self.track_label in self.cluster_classes:
-            
+
             numpy_output = {'segmentation':[output['segmentation'][0].detach().cpu().numpy()],
                             'points':      [output['points'][0].detach().cpu().numpy()],
                             'mask_ppn':    [output['mask_ppn'][0].detach().cpu().numpy()],
@@ -510,7 +510,7 @@ def grow_cluster(epsilon, minPoints, all_points, labels, point_id, neighbors, cl
 
 
 def distances(v1, v2):
-    print(v1.shape, v2.shape)
+    #print(v1.shape, v2.shape)
     v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
