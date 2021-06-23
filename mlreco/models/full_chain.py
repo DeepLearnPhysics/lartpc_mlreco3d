@@ -84,7 +84,7 @@ class FullChain(torch.nn.Module):
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
                'full_chain_loss', 'spice', 'spice_loss',
-               'fragment_clustering',  'chain', 'dbscan_frag',
+               'fragment_clustering',  'chain', 'dbscan',
                ('uresnet_ppn', ['uresnet_lonely', 'ppn'])]
 
     def __init__(self, cfg):
@@ -106,24 +106,24 @@ class FullChain(torch.nn.Module):
         if self.enable_cnn_clust:
             self._enable_graph_spice = 'graph_spice' in cfg
             if self._enable_graph_spice:
-                self.spatial_embeddings   = GraphSPICE(cfg)
-                self.gs_manager           = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
-                self.gs_manager.training  = True # FIXME
-                self._gspice_skip_classes = cfg['graph_spice']['skip_classes']
-                self.fragment_manager     = GraphSPICEFragmentManager(cfg['fragment_manager'])
+                self.spatial_embeddings       = GraphSPICE(cfg)
+                self.gs_manager               = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
+                self.gs_manager.training      = True # FIXME
+                self._gspice_skip_classes     = cfg['graph_spice']['skip_classes']
+                self._gspice_fragment_manager = GraphSPICEFragmentManager(cfg['fragment_manager'])
             else:
-                self.spatial_embeddings = ClusterCNN(cfg['spice'])
-                self.frag_cfg           = cfg['spice'].get('fragment_manager', {})
-                self._s_thresholds      = self.frag_cfg.setdefault('s_thresholds', [0.0, 0.0, 0.0, 0.0])
-                self._p_thresholds      = self.frag_cfg.setdefault('p_thresholds', [0.5, 0.5, 0.5, 0.5])
-                self._spice_classes     = self.frag_cfg.setdefault('cluster_classes', [])
-                self._spice_min_voxels  = self.frag_cfg.setdefault('min_voxels', 2)
-                self.fragment_manager   = SPICEFragmentManager(self.frag_cfg)
+                self.spatial_embeddings     = ClusterCNN(cfg['spice'])
+                self.frag_cfg               = cfg['spice'].get('spice_fragment_manager', {})
+                self._s_thresholds          = self.frag_cfg.setdefault('s_thresholds', [0.0, 0.0, 0.0, 0.0])
+                self._p_thresholds          = self.frag_cfg.setdefault('p_thresholds', [0.5, 0.5, 0.5, 0.5])
+                self._spice_classes         = self.frag_cfg.setdefault('cluster_classes', [])
+                self._spice_min_voxels      = self.frag_cfg.setdefault('min_voxels', 2)
+                self.spice_fragment_manager = SPICEFragmentManager(self.frag_cfg)
 
         # Initialize the DBSCAN fragmenter module
         if self.enable_dbscan:
-            self.frag_cfg = cfg['fragment_manager']
-            self.fragment_manager = DBSCANFragmentManager(self.frag_cfg)
+            self.frag_cfg = cfg['dbscan']['dbscan_fragment_manager']
+            self.dbscan_fragment_manager = DBSCANFragmentManager(self.frag_cfg)
 
         # Initialize the particle aggregator modules
         if self.enable_gnn_shower:
@@ -424,7 +424,7 @@ class FullChain(torch.nn.Module):
                                                 cluster_predictions.to(device)[:, None]], dim=1)
 
                     if self.process_fragments:
-                        cluster_result = self.fragment_manager(filtered_input)
+                        cluster_result = self.gspice_fragment_manager(filtered_input)
 
             else:
                 # Get fragment predictions from the CNN clustering algorithm
@@ -433,12 +433,12 @@ class FullChain(torch.nn.Module):
 
                 # Extract fragment predictions to input into the GNN
                 if self.process_fragments:
-                    cluster_result = self.fragment_manager(input[0],
+                    cluster_result = self.spice_fragment_manager(input[0],
                                                            cnn_result)
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
-            cluster_result = self.fragment_manager(input[0], cnn_result)
+            cluster_result = self.dbscan_fragment_manager(input[0], cnn_result)
 
         # Make np.array
         cnn_result.update(cluster_result)
@@ -1190,8 +1190,8 @@ def setup_chain_cfg(self, cfg):
     # 4. Check that SPICE and DBSCAN are not redundant
     if self.enable_cnn_clust and self.enable_dbscan:
         if 'spice' in cfg:
-            assert not (np.array(cfg['spice']['fragment_clustering']['cluster_classes']) == \
-                        np.array(np.array(cfg['fragment_manager']['cluster_classes'])).reshape(-1)).any()
+            assert not (np.array(cfg['spice']['spice_fragment_manager']['cluster_classes']) == \
+                        np.array(np.array(cfg['dbscan']['dbscan_fragment_manager']['cluster_classes'])).reshape(-1)).any()
         else:
             assert 'graph_spice' in cfg
             assert set(cfg['fragment_manager']['cluster_classes']).issubset(
