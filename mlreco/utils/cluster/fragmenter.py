@@ -95,6 +95,7 @@ class FragmentManager(nn.Module):
 
         out = {
             'frags'         : [fragments],
+            'frag_seg'      : [frag_seg],
             'fragments'     : [frags],
             'fragments_seg' : [frags_seg],
             'frag_batch_ids': [frag_batch_ids],

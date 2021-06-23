@@ -97,8 +97,8 @@ def CollateMinkowski(batch):
                 coords = [sample[key][0] for sample in batch]
                 features = [sample[key][1] for sample in batch]
                 coords, features = ME.utils.sparse_collate(coords, features)
-                result[key] = torch.cat([coords.double(), 
-                                         features.double()], dim=1)
+                result[key] = torch.cat([coords.float(), 
+                                         features.float()], dim=1)
 
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
