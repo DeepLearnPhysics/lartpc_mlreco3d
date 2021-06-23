@@ -5,7 +5,7 @@ from sklearn.cluster import DBSCAN
 from mlreco.post_processing import post_processing
 from mlreco.utils.metrics import *
 from mlreco.utils.gnn.network import get_fragment_edges
-from mlreco.utils.gnn.cluster import get_cluster_label_np, get_momenta_label_np
+from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
 from mlreco.utils.ppn import uresnet_ppn_point_selector, uresnet_ppn_type_point_selector
 
 #def find_vtx_candidates(res, data_idx, inter_group_pred, inter_particles):
@@ -30,9 +30,9 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     original_node_pred_vtx = node_pred_vtx
     clusts = clusts[data_idx]
 
-    node_x_vtx = get_cluster_label_np(kinematics[data_idx], clusts, column=vtx_col)
-    node_y_vtx = get_cluster_label_np(kinematics[data_idx], clusts, column=vtx_col+1)
-    node_z_vtx = get_cluster_label_np(kinematics[data_idx], clusts, column=vtx_col+2)
+    node_x_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col)
+    node_y_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col+1)
+    node_z_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col+2)
 
     node_assn_vtx = np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1)
     node_assn_vtx = node_assn_vtx/spatial_size
@@ -74,7 +74,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         if len(clusts[inter_mask][primary_particles]) == 0:
             continue
 
-        is_nu = get_cluster_label_np(clust_data[data_idx], clusts[inter_mask][primary_particles], column=nu_col)
+        is_nu = get_cluster_label(clust_data[data_idx], clusts[inter_mask][primary_particles], column=nu_col)
         #print(is_nu, len(clusts[inter_mask][primary_particles]))
         is_nu = is_nu[is_nu > -1]
         is_nu = np.argmax(np.bincount(is_nu.astype(int))) if len(is_nu) else -1
@@ -150,7 +150,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         if len(ppn_candidates):
             ppn_candidates = np.concatenate(ppn_candidates, axis=0)
             #print("ppn_candidates", ppn_candidates[:, :4])
-            
+
             # Refine with dbscan to eliminate ppn candidates that are
             # far away (e.g. middle of a track)
             # ppn_candidates_group = DBSCAN(eps=7, min_samples=1).fit(ppn_candidates[:, :3]).labels_

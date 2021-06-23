@@ -18,7 +18,7 @@ def generate_graph(data, feature_types=['basic', 'cone', 'spectral', 'dbscan']):
     em_filter = np.where(data['segment_label'] == 2)[0]
     positions = data['segment_label'][em_filter][:, :3]
     edges = create_edge_indices(positions)
-    
+
     all_nf = []
     all_ef = []
     for ft in feature_types:
@@ -32,10 +32,10 @@ def generate_graph(data, feature_types=['basic', 'cone', 'spectral', 'dbscan']):
             nf, ef = dbscan_features(data, em_filter, edges)
         all_nf.append(nf)
         all_ef.append(ef)
-    
+
     all_nf = np.concatenate(tuple(all_nf), axis=1)
     all_ef = np.concatenate(tuple(all_ef), axis=1)
-    
+
     return positions, edges, all_nf, all_ef
 
 # returns positions, edges, node features, edge features (assumes batch size == 1)

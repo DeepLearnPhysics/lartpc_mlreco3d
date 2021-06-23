@@ -4,8 +4,8 @@ from __future__ import division
 from __future__ import print_function
 import torch
 import numpy as np
-from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters, get_cluster_voxels
-from mlreco.utils.gnn.data import cluster_vtx_features, cluster_edge_features
+from mlreco.utils.gnn.cluster import get_cluster_batch, get_cluster_label, form_clusters
+from mlreco.utils.gnn.data import cluster_edge_features
 from mlreco.utils.gnn.evaluation import edge_assignment
 from . import flashmatching_gnn
 
@@ -28,7 +28,7 @@ def get_traj_features(data, clusts, delta=0.0):
     feats = []
     for c in clusts:
         # get center of cluster
-        x = get_cluster_voxels(data, c)
+        x = data[c,:3]
         #Change x coordinate into relative x coordinate
         x_coord_mean = np.mean(x[:,0])
         x[:,0] = x[:,0] - x_coord_mean

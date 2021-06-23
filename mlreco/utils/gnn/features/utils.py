@@ -36,11 +36,11 @@ def node_labels_to_cluster_sizes(node_labels):
     for i in range(len(unique)):
         sizes[np.where(node_labels == unique[i])] = counts[i]
     return sizes
-    
+
 def create_edge_indices(positions):
     n = len(positions)
     nodes = np.arange(n)
-    
+
     simplices = Delaunay(positions).simplices
     simplices.sort()
     edges = set()
