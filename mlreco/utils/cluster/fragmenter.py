@@ -9,6 +9,44 @@ from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.models.layers.dbscan import DBSCANFragmenter, MinkDBSCANFragmenter
 
 
+def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
+    """
+    INPUTS:
+        - fragments
+        - frag_batch_ids
+        - frag_seg
+        - batch_column
+    """
+    same_length = np.all([len(f) == len(fragments[0]) for f in fragments])
+    fragments_np = np.array(fragments, 
+                            dtype=object if not same_length else np.int64)
+    frag_batch_ids_np = np.array(frag_batch_ids)
+    frag_seg_np = np.array(frag_seg)
+
+    _, counts = torch.unique(batch_column, return_counts=True)
+    vids = np.concatenate([np.arange(n.item()) for n in counts])
+    bcids = [np.where(frag_batch_ids_np == b)[0] for b in range(len(counts))]
+    same_length = [np.all([len(c) == len(fragments_np[b][0]) \
+                    for c in fragments_np[b]] ) for b in bcids]
+
+    frags = [np.array([vids[c].astype(np.int64) for c in fragments_np[b]], 
+                        dtype=np.object if not same_length[idx] else np.int64) \
+                        for idx, b in enumerate(bcids)]
+
+    frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]
+    
+    out = {
+        'frags'         : [fragments],
+        'frag_seg'      : [frag_seg],
+        'fragments'     : [frags],
+        'fragments_seg' : [frags_seg],
+        'frag_batch_ids': [frag_batch_ids],
+        'vids'          : [vids]
+    }
+
+    return out
+
+
 class FragmentManager(nn.Module):
     """
     Base class for fragmenters
@@ -22,43 +60,8 @@ class FragmentManager(nn.Module):
         self._semantic_column             = frag_cfg.get('semantic_column', -1)
         self._use_segmentation_prediction = frag_cfg.get('use_segmentation_prediction', True)
 
-    @staticmethod
-    def make_np_array(fragments, frag_batch_ids, frag_seg):
-        """
-        TODO: Add Docstring
-        """
-        same_length = np.all([len(f) == len(fragments[0]) for f in fragments])
-        fragments_np = np.array(fragments, 
-                             dtype=object if not same_length else np.int64)
-        frag_batch_ids_np = np.array(frag_batch_ids)
-        frag_seg_np = np.array(frag_seg)
-        return fragments_np, frag_batch_ids_np, frag_seg_np
-
-    @staticmethod
-    def unwrap_fragments(batch_column, fragments, frag_batch_ids, frag_seg):
-        """
-        TODO: Add Docstring
-        """
-        _, counts = torch.unique(batch_column, return_counts=True)
-        vids = np.concatenate([np.arange(n.item()) for n in counts])
-        bcids = [np.where(frag_batch_ids == b)[0] for b in range(len(counts))]
-        same_length = [np.all([len(c) == len(fragments[b][0]) \
-                       for c in fragments[b]] ) for b in bcids]
-
-        frags = [np.array([vids[c].astype(np.int64) for c in fragments[b]], 
-                          dtype=np.object if not same_length[idx] else np.int64) \
-                          for idx, b in enumerate(bcids)]
-
-        frags_seg = [frag_seg[b] for idx, b in enumerate(bcids)]
-
-        return frags, frags_seg, vids
-
 
     @abstractmethod
-    def extract_fragments(self, input, cnn_result):
-        raise NotImplementedError
-
-
     def forward(self, input, cnn_result, semantic_labels=None):
         """
         Inputs:
@@ -69,40 +72,9 @@ class FragmentManager(nn.Module):
                 - mask_ppn2
 
         Returns:
-            - frag:
-            - fragments:
-            - frag_batch_ids:
-            - frag_seg:
+            - fragment_data
         """
-
-        if self._use_segmentation_prediction:
-            assert semantic_labels is None
-            semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
-                                           dim=1).flatten().double()
-
-        fragment_data = self.extract_fragments(input, 
-                                               cnn_result, 
-                                               semantic_labels=semantic_labels)
-
-        fragments, frag_batch_ids, frag_seg = self.make_np_array(*fragment_data)
-
-        frags, frags_seg, vids = self.unwrap_fragments(input[:, self._batch_column], 
-                                                       fragments, 
-                                                       frag_batch_ids, 
-                                                       frag_seg)
-
-        
-
-        out = {
-            'frags'         : [fragments],
-            'frag_seg'      : [frag_seg],
-            'fragments'     : [frags],
-            'fragments_seg' : [frags_seg],
-            'frag_batch_ids': [frag_batch_ids],
-            'vids'          : [vids]
-        }
-
-        return out
+        raise NotImplementedError
 
 
 class DBSCANFragmentManager(FragmentManager):
@@ -120,7 +92,7 @@ class DBSCANFragmentManager(FragmentManager):
             raise Exception('Invalid sparse CNN backend name {}'.format(mode))
 
 
-    def extract_fragments(self, input, cnn_result, semantic_labels):
+    def forward(self, input, cnn_result, semantic_labels):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -139,18 +111,18 @@ class DBSCANFragmentManager(FragmentManager):
         semantic_data = torch.cat([input[:, :4], 
                                    semantic_labels.reshape(-1, 1)], dim=1)
 
-        fragments_dbscan = self.dbscan_fragmenter(semantic_data, 
+        fragments = self.dbscan_fragmenter(semantic_data, 
                                                   cnn_result)
 
-        frag_batch_ids = get_cluster_batch(input[:, :5], fragments_dbscan,
+        frag_batch_ids = get_cluster_batch(input[:, :5], fragments,
                                            batch_index=self._batch_column)
-        frag_seg = np.empty(len(fragments_dbscan), dtype=np.int32)
-        for i, f in enumerate(fragments_dbscan):
+        frag_seg = np.empty(len(fragments), dtype=np.int32)
+        for i, f in enumerate(fragments):
             vals, counts = semantic_labels[f].unique(return_counts=True)
             assert len(vals) == 1
             frag_seg[i] = vals[torch.argmax(counts)].item()
 
-        return fragments_dbscan, frag_batch_ids, frag_seg
+        return fragments, frag_batch_ids, frag_seg
 
 
 class SPICEFragmentManager(FragmentManager):
@@ -164,7 +136,7 @@ class SPICEFragmentManager(FragmentManager):
         self._spice_classes    = frag_cfg.get('cluster_classes', []                  )
         self._spice_min_voxels = frag_cfg.get('min_voxels'     , 2                   )
 
-    def extract_fragments(self, input, cnn_result, semantic_labels):
+    def forward(self, input, cnn_result, semantic_labels):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -223,7 +195,7 @@ class GraphSPICEFragmentManager(FragmentManager):
         super(GraphSPICEFragmentManager, self).__init__(frag_cfg)
         
 
-    def extract_fragments(self, filtered_input):
+    def forward(self, filtered_input):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -243,11 +215,11 @@ class GraphSPICEFragmentManager(FragmentManager):
 
         '''
         fragments = form_clusters(filtered_input, column=-1)
-        fragments_batch_ids = get_cluster_batch(filtered_input, fragments)
+        frag_batch_ids = get_cluster_batch(filtered_input, fragments)
         fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
         fragments = [np.arange(input.shape[0])[clust.cpu().numpy()] \
                      for clust in fragments]
 
-        return fragments, fragments_batch_ids, fragments_seg
+        return fragments, frag_batch_ids, fragments_seg
 
         

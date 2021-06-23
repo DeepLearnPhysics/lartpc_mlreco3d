@@ -394,7 +394,11 @@ class FullChain(torch.nn.Module):
         # - frag_batch_ids (list of batch ids for each fragment)
         # - frag_seg (list of integers, semantic label for each fragment)
         # ---
-        cluster_result = {}
+        cluster_result = {
+            'fragments': [],
+            'frag_batch_ids': [],
+            'frag_seg': []
+        }
         semantic_labels = torch.argmax(cnn_result['segmentation'][0],
                                        dim=1).flatten().double()
 
@@ -424,7 +428,11 @@ class FullChain(torch.nn.Module):
                                                 cluster_predictions.to(device)[:, None]], dim=1)
 
                     if self.process_fragments:
-                        cluster_result = self.gspice_fragment_manager(filtered_input)
+                        fragment_data = self.gspice_fragment_manager(filtered_input)
+                        cluster_result['fragments'].extend(fragment_data[0])
+                        cluster_result['frag_batch_ids'].extend(fragment_data[1])
+                        cluster_result['frag_seg'].extend(fragment_data[2])
+                        
 
             else:
                 # Get fragment predictions from the CNN clustering algorithm
@@ -433,15 +441,26 @@ class FullChain(torch.nn.Module):
 
                 # Extract fragment predictions to input into the GNN
                 if self.process_fragments:
-                    cluster_result = self.spice_fragment_manager(input[0],
-                                                           cnn_result)
+                    fragment_data = self.spice_fragment_manager(input[0],
+                                                                cnn_result)
+                    cluster_result['fragments'].extend(fragment_data[0])
+                    cluster_result['frag_batch_ids'].extend(fragment_data[1])
+                    cluster_result['frag_seg'].extend(fragment_data[2])
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
-            cluster_result = self.dbscan_fragment_manager(input[0], cnn_result)
+            fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
+            cluster_result['fragments'].extend(fragment_data[0])
+            cluster_result['frag_batch_ids'].extend(fragment_data[1])
+            cluster_result['frag_seg'].extend(fragment_data[2])
 
-        # Make np.array
-        cnn_result.update(cluster_result)
+        # Format Fragments
+        fragments_result = format_fragments(cluster_result['fragments'],
+                                            cluster_result['frag_batch_ids'],
+                                            cluster_result['frag_seg'],
+                                            input[0][:, self.batch_column_id])
+
+        cnn_result.update(fragments_result)
 
         cnn_result.update({
             'label_clustering': [label_clustering],
@@ -1132,6 +1151,7 @@ def setup_chain_cfg(self, cfg):
     """
     chain_cfg = cfg['chain']
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
+    self.batch_column_id       = chain_cfg.get('batch_column_id', 3)
     self.verbose               = chain_cfg.get('verbose', False)
     self.enable_uresnet        = chain_cfg.get('enable_uresnet', True)
     self.enable_ppn            = chain_cfg.get('enable_ppn', True)
