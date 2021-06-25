@@ -6,7 +6,8 @@ from typing import List
 
 from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
 
-@numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
+# @numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
+@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=3, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs

@@ -32,13 +32,13 @@ class UResNet(MENetworkBase):
         super(UResNet, self).__init__(cfg)
         model_cfg = cfg[name]
         # UResNet Configurations
-        self.reps = model_cfg.get('reps', 2)
-        self.depth = model_cfg.get('num_strides', 5)
-        self.num_filters = model_cfg.get('num_filters', 16)
-        self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
-        # self.kernel_size = cfg.get('kernel_size', 3)
-        # self.downsample = cfg.get(downsample, 2)
-        self.input_kernel = model_cfg.get('input_kernel', 3)
+        self.reps           = model_cfg.get('reps', 2)
+        self.depth          = model_cfg.get('num_strides', 5)
+        self.num_filters    = model_cfg.get('filters', 16)
+        self.nPlanes        = [i * self.num_filters for i in range(1, self.depth+1)]
+    # self.kernel_size    = cfg.get('kernel_size', 3)
+    # self.downsample     = cfg.get(downsample, 2)
+        self.input_kernel   = model_cfg.get('input_kernel_size', 3)
 
         # Initialize Input Layer
         self.input_layer = ME.MinkowskiConvolution(
@@ -82,7 +82,8 @@ class UResNet(MENetworkBase):
         self.decoding_conv = []
         for i in range(self.depth-2, -1, -1):
             m = []
-            m.append(normalizations_construct(self.norm, self.nPlanes[i+1], **self.norm_args))
+            m.append(normalizations_construct(self.norm, 
+                self.nPlanes[i+1], **self.norm_args))
             m.append(activations_construct(
                 self.activation_name, **self.activation_args))
             m.append(ME.MinkowskiConvolutionTranspose(

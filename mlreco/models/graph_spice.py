@@ -188,7 +188,7 @@ class GraphSPICEPP(nn.Module):
 
 class GraphSPICELoss(nn.Module):
 
-    def __init__(self, cfg, name='spice_loss'):
+    def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICELoss, self).__init__()
         self.loss_config = cfg[name]
         self.loss_name = self.loss_config['name']

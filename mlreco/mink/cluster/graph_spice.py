@@ -18,7 +18,7 @@ class GraphSPICEEmbedder(UResNet):
     MODULES = ['network_base', 'uresnet', 'graph_spice_embedder']
 
     def __init__(self, cfg, name='graph_spice_embedder'):
-
+        super(GraphSPICEEmbedder, self).__init__(cfg)
         self.model_config = cfg[name]
         self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
         self.spatial_embedding_dim = self.model_config.get('spatial_embedding_dim', 3)
@@ -50,10 +50,6 @@ class GraphSPICEEmbedder(UResNet):
 
         self.outputFeatureEmbeddings = nn.Linear(self.num_filters,
                                            self.feature_embedding_dim)
-
-        self.outputSegmentation = nn.Linear(self.num_filters,
-                                            self.num_classses)
-
 
         self.outputCovariance = nn.Linear(self.num_filters, 2)
 
@@ -91,11 +87,11 @@ class GraphSPICEEmbedder(UResNet):
         x = ME.SparseTensor(features, coordinates=coords)
 
         encoder_res = self.encoder(x)
-        features_enc = encoder_res['features_enc']
-        deepest_layer = encoder_res['deepest_layer']
-        features_cluster = self.decoder(deepest_layer, features_enc)
+        encoderTensors = encoder_res['encoderTensors']
+        finalTensor = encoder_res['finalTensor']
+        decoderTensors = self.decoder(finalTensor, encoderTensors)
 
-        output_features = features_cluster.F
+        output_features = decoderTensors[-1].F
 
         # Spatial Embeddings
         out = self.outputSpatialEmbeddings(output_features)
@@ -113,9 +109,6 @@ class GraphSPICEEmbedder(UResNet):
         out = self.outputOccupancy(output_features)
         occupancy = self.occ_func(out)
 
-        # Segmentation
-        segmentation = self.outputSegmentation(output_features)
-
         hypergraph_features = torch.cat([
             spatial_embeddings,
             feature_embeddings,
@@ -127,10 +120,11 @@ class GraphSPICEEmbedder(UResNet):
             "covariance": [covariance],
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
-            "segmentation": [segmentation],
             "features": [output_features],
             "hypergraph_features": [hypergraph_features]
         }
+
+        return res
 
     def forward(self, input):
         '''
