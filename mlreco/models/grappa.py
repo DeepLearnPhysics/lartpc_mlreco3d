@@ -12,7 +12,7 @@ from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_const
 
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
 
 class GNN(torch.nn.Module):
     """
@@ -83,6 +83,8 @@ class GNN(torch.nn.Module):
         self.start_dir_max_dist = base_config.get('start_dir_max_dist', -1)
         self.start_dir_opt = base_config.get('start_dir_opt', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
+
+        self.batch_index = base_config.get('batch_index', 3)
 
         # Interpret node type as list of classes to cluster, -1 means all classes
         if isinstance(self.node_type, int): self.node_type = [self.node_type]
@@ -178,7 +180,7 @@ class GNN(torch.nn.Module):
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
 
-        batch_ids = get_cluster_batch(cluster_data, clusts)
+        batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         cvids = np.concatenate([np.arange(n.item()) for n in bcounts])
         cbids = [np.where(batch_ids == b.item())[0] for b in batches]
         same_length = np.all([len(c) == len(clusts[0]) for c in clusts])

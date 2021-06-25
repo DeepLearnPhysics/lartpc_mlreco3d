@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from mlreco.mink.gan.layers import MiniBatchStdDev
 from mlreco.utils import unwrap
 import warnings
 import torch
@@ -117,6 +118,7 @@ class trainval(object):
             for key in minibatch:
                 if not key in data_blob: data_blob[key]=[]
                 data_blob[key].append(minibatch[key])
+
         return data_blob
 
 
@@ -198,6 +200,7 @@ class trainval(object):
             self._watch.start('io')
             input_data = self.get_data_minibatched(data_iter)
             input_train, input_loss = self.make_input_forward(input_data)
+
             self._watch.stop('io')
             self.tspent_sum['io'] += self._watch.time('io')
 
@@ -220,7 +223,7 @@ class trainval(object):
                     unwrapper = getattr(utils.unwrap,unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
-                    print(msg % output_cfg['unwrapper'])
+                    print(msg % self._trainval_config['unwrapper'])
                     raise ImportError
                 input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:

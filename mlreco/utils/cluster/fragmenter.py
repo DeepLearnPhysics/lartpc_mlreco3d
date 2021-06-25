@@ -116,7 +116,7 @@ class DBSCANFragmentManager(FragmentManager):
                                    semantic_labels.reshape(-1, 1)], dim=1)
 
         fragments = self.dbscan_fragmenter(semantic_data, 
-                                                  cnn_result)
+                                           cnn_result)
 
         frag_batch_ids = get_cluster_batch(input[:, :5], fragments,
                                            batch_index=self._batch_column)
@@ -224,9 +224,10 @@ class GraphSPICEFragmentManager(FragmentManager):
 
         '''
         fragments = form_clusters(filtered_input, column=-1)
-        frag_batch_ids = get_cluster_batch(filtered_input, fragments)
+        fragments = [f.int().detach().cpu().numpy() for f in fragments]
+        frag_batch_ids = get_cluster_batch(filtered_input.detach().cpu().numpy(), fragments)
         fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
-        fragments = [np.arange(input.shape[0])[clust.cpu().numpy()] \
+        fragments = [np.arange(filtered_input.shape[0])[clust] \
                      for clust in fragments]
 
         return fragments, frag_batch_ids, fragments_seg

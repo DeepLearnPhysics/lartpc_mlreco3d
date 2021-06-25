@@ -103,13 +103,6 @@ def CollateMinkowski(batch):
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
                  # 
-
-                print('------------------[1] sample-------------------')
-                print(batch[0])
-                print('------------------key-------------------')
-                print(key)
-                assert False
-
                 result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
                                                  np.full(shape=[len(sample[key]),1],
                                                  fill_value=batch_id,
@@ -129,7 +122,7 @@ def CollateMinkowski(batch):
                                     axis=0)
 
             elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
-
+                # For multi-scale labels (probably deprecated)
                 result[key] = [
                     concat([
                         concat( [ concat( [np.full(shape=[len(sample[key][depth][0]),1], 

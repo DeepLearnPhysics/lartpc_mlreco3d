@@ -91,7 +91,7 @@ class UResNet(torch.nn.Module):
         m = self._model_config.get('filters', 16)  # Unet number of features
         nInputFeatures = self._model_config.get('features', 1)
         spatial_size = self._model_config.get('spatial_size', 512)
-        num_classes = self._model_config.get('num_classes', 5)
+        self._num_classes = self._model_config.get('num_classes', 5)
 
         nPlanes = [i*m for i in range(1, num_strides+1)]  # UNet number of features per level
         downsample = [kernel_size, 2]  # [filter size, filter stride]
@@ -147,7 +147,7 @@ class UResNet(torch.nn.Module):
            scn.BatchNormReLU(m)).add(
            scn.OutputLayer(self._dimension))
 
-        self.linear = torch.nn.Linear(m, num_classes)
+        self.linear = torch.nn.Linear(m, self._num_classes)
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
 

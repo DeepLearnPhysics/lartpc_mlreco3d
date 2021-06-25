@@ -4,16 +4,12 @@ import torch.nn.functional as F
 import numpy as np
 
 from .cluster_cnn.losses.gs_embeddings import *
-from .cluster_cnn import spice_loss_construct, gs_kernel_construct
+from .cluster_cnn import gs_kernel_construct
 
 from mlreco.mink.cluster.graph_spice import GraphSPICEEmbedder
 
 from pprint import pprint
-from mlreco.utils.cluster.graph_spice import (
-    ClusterGraphConstructor, get_edge_weight)
-from mlreco.utils.metrics import ARI
-
-from torch_geometric.nn import radius
+from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 
 
 class MinkGraphSPICE(nn.Module):
@@ -85,6 +81,7 @@ class MinkGraphSPICE(nn.Module):
         res['batch_indices'] = [batch_indices]
 
         if self.use_raw_features:
+            print(res['features'][0].shape)
             res['hypergraph_features'] = res['features']
 
         graph = self.gs_manager(res,

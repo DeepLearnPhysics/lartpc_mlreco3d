@@ -127,12 +127,6 @@ class ExpandAs(nn.Module):
         return output
 
 
-def pairwise_distances(v1, v2):
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
-
-
 class PPN(MENetworkBase):
     '''
     MinkowskiEngine PPN
@@ -213,7 +207,7 @@ class PPN(MENetworkBase):
                                                 stride=1, 
                                                 dimension=self.D)
         self.ppn_final_score = ME.MinkowskiConvolution(self.nPlanes[0], 
-                                                       1, 
+                                                       2, 
                                                        kernel_size=3, 
                                                        stride=1, 
                                                        dimension=self.D)
@@ -333,7 +327,7 @@ class PPN(MENetworkBase):
 
         return res
 
-from pprint import pprint
+
 class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='ppn_loss'):
@@ -353,7 +347,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.particles_label_seg_col = self.loss_config.get(
             'particles_label_seg_col', -2)
 
-    def pairwise_distances(self, v1, v2):
+    @staticmethod
+    def pairwise_distances(v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
