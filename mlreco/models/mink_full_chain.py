@@ -262,7 +262,6 @@ class MinkFullChain(FullChain):
         semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
                                        dim=1).flatten()
 
-        assert False
 
         if self.enable_cnn_clust:
             if label_clustering is None:
@@ -335,6 +334,8 @@ class MinkFullChainLoss(FullChainLoss):
         if self.enable_ppn:
             self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'], name='ppn')
         if self.enable_cnn_clust:
+            # As ME is an updated model, ME backend full chain will not support old SPICE
+            # for CNN Clustering. 
             assert self._enable_graph_spice
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
             self._graph_spice_skip_classes = cfg['graph_spice_loss']['skip_classes']
