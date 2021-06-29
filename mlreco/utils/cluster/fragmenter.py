@@ -41,7 +41,8 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
         'fragments'     : [frags],
         'fragments_seg' : [frags_seg],
         'frag_batch_ids': [frag_batch_ids_np],
-        'vids'          : [vids]
+        'vids'          : [vids],
+        'counts'        : [counts]
     }
 
     return out

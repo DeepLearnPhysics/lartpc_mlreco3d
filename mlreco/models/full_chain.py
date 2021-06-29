@@ -296,6 +296,7 @@ class FullChain(torch.nn.Module):
         Merge fragments into particle instances, retain
         primary fragment id of each group
         """
+
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
         primary_labels = None
         if node_pred in result:
@@ -494,69 +495,63 @@ class FullChain(torch.nn.Module):
         return cnn_result, input, return_to_original
 
 
-    def full_chain_gnn(self, result, input):
-        # ---
-        # 2. GNN particle instance formation
-        # ---
-        device = input[0].device
+    def get_all_fragments(self, result, input):
+        """
+        Given geometric or CNN clustering results and (optional) true
+        fragment labels, return true or predicted fragments
+        """
 
-        _, counts = torch.unique(input[0][:, self.batch_column_id], return_counts=True)
-        fragments = result['frags'][0]
-        frag_seg = result['frag_seg'][0]
-        frag_batch_ids = result.pop('frag_batch_ids')[0]
-        label_clustering = result.pop('label_clustering')[0]
-        semantic_labels = result.pop('semantic_labels')[0]
+        if self.use_true_fragments:
+            assert 'label_clustring' in result
+            label_clustering = result['label_clustering'][0]
+            fragments = form_clusters(label_clustering[0].int().cpu().numpy(), 
+                                      column=5, 
+                                      batch_index=self.batch_column_id)
 
-        true_semantic_labels, true_fragments, true_particles = None, None, None
+            fragments = np.array(fragments, dtype=object)
+            frag_seg = get_cluster_label(label_clustering[0].int(),
+                                         fragments,
+                                         column=-1)
+            semantic_labels = label_clustering[0].int()[:, -1]
+        else:
+            fragments = result['frags'][0]
+            frag_seg = result['frag_seg'][0]
+            frag_batch_ids = result['frag_batch_ids'][0]
+            semantic_labels = result['semantic_labels'][0]
 
-        vids = result.pop('vids')[0]
+        frag_dict = {
+            'frags': fragments,
+            'frag_seg': frag_seg,
+            'frag_batch_ids': frag_batch_ids,
+            'semantic_labels': semantic_labels
+        }
 
-        # Override fragments and particles if using true fragment/group labels
+        # Since <vids> and <counts> depend on the batch column of the input
+        # tensor, they are shared between the two settings.
+        frag_dict['vids'] = result['vids'][0]
+        frag_dict['counts'] = result['counts'][0]
 
-        if (self._shower_use_true_particles or \
-            self._track_use_true_particles):
+        return frag_dict
 
-            true_fragments = form_clusters(label_clustering[0].int().cpu().numpy(), 
-                                                column=5, 
-                                                batch_index=self.batch_column_id)
 
-            # true_fragments = [part.cpu().numpy() for part in true_fragments]
-            true_fragments = np.array(true_fragments, dtype=object)
-            true_frag_seg = get_cluster_label(label_clustering[0].int(),
-                                                    true_fragments,
-                                                    column=-1)
-            true_semantic_labels = label_clustering[0].int()[:, -1]
+    def run_fragment_gnns(self, result, input):
+        """
+        Run all fragment-level GNN models.
 
-        if (self._inter_use_true_particles or \
-            self._kinematics_use_true_particles):
+            1. Shower GNN
+            2. Track GNN
+            3. Particle GNN (optional?)
+        """
 
-            true_particles = form_clusters(label_clustering[0].int().cpu().numpy(), 
-                                                    column=6, 
-                                                    batch_index=self.batch_column_id)
-
-            # true_particles = [part.cpu().numpy().astype(int) for part in true_particles]
-            true_particles = np.array(true_particles, dtype=object)
-            true_particles_seg = get_cluster_label(label_clustering[0], 
-                                                   true_particles, 
-                                                   column=-1)
-            true_particles = true_particles[true_particles_seg<4]
-            
+        frag_dict = self.get_all_fragments(result, input)
+        fragments = frag_dict['frags']
+        frag_seg = frag_dict['frag_seg']
 
         if self.enable_gnn_shower:
 
-            if self._shower_use_true_particles:
-                if label_clustering is None:
-                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
-                fragments_shower_input = true_fragments
-                frag_seg_shower_input = true_frag_seg
-
-            else:
-                fragments_shower_input = fragments
-                frag_seg_shower_input = frag_seg
-
             # Run shower GrapPA: merges shower fragments into shower instances
-            em_mask, kwargs = self.get_extra_gnn_features(fragments_shower_input,
-                                                          frag_seg_shower_input,
+            em_mask, kwargs = self.get_extra_gnn_features(fragments,
+                                                          frag_seg,
                                                           [self._shower_id],
                                                           input,
                                                           result,
@@ -572,25 +567,15 @@ class FullChain(torch.nn.Module):
             self.run_gnn(self.grappa_shower,
                          input,
                          result,
-                         fragments_shower_input[em_mask],
+                         fragments[em_mask],
                          output_keys,
                          kwargs)
 
         if self.enable_gnn_track:
 
-            if self._shower_use_true_particles:
-                if label_clustering is None:
-                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
-                fragments_track_input = true_fragments
-                frag_seg_track_input = true_frag_seg
-
-            else:
-                fragments_track_input = fragments
-                frag_seg_track_input = frag_seg
-
             # Run track GrapPA: merges tracks fragments into track instances
-            track_mask, kwargs = self.get_extra_gnn_features(fragments_track_input,
-                                                             frag_seg_track_input,
+            track_mask, kwargs = self.get_extra_gnn_features(fragments,
+                                                             frag_seg,
                                                              [self._track_id],
                                                              input,
                                                              result,
@@ -606,7 +591,7 @@ class FullChain(torch.nn.Module):
             self.run_gnn(self.grappa_track,
                          input,
                          result,
-                         fragments_track_input[track_mask],
+                         fragments[track_mask],
                          output_keys,
                          kwargs)
 
@@ -636,18 +621,33 @@ class FullChain(torch.nn.Module):
                          output_keys,
                          kwargs)
 
+        return frag_dict
+
+
+    def get_all_particles(self, frag_result, result, input):
+
+        fragments = frag_result['frags']
+        frag_seg = frag_result['frag_seg']
+        frag_batch_ids = frag_result['frag_batch_ids']
+        semantic_labels = frag_result['semantic_labels']
+
+        vids = frag_result['vids']
+        counts = frag_result['counts']
+
         # Merge fragments into particle instances, retain primary fragment id of showers
         particles, part_primary_ids = [], []
         for b in range(len(counts)):
             mask = (frag_batch_ids == b)
             # Append one particle per particle group
+            # To use true group predictions, change use_group_pred to True
+            # in each grappa config. 
             if self.enable_gnn_particle:
 
                 self.select_particle_in_group(result, counts, b, particles,
-                                              part_primary_ids,
-                                              'particle_node_pred',
-                                              'particle_group_pred',
-                                              'particle_fragments')
+                                            part_primary_ids,
+                                            'particle_node_pred',
+                                            'particle_group_pred',
+                                            'particle_fragments')
 
                 for c in self._particle_ids:
                     mask &= (frag_seg != c)
@@ -655,20 +655,20 @@ class FullChain(torch.nn.Module):
             if self.enable_gnn_shower:
 
                 self.select_particle_in_group(result, counts, b, particles,
-                                              part_primary_ids,
-                                              'shower_node_pred',
-                                              'shower_group_pred',
-                                              'shower_fragments')
+                                            part_primary_ids,
+                                            'shower_node_pred',
+                                            'shower_group_pred',
+                                            'shower_fragments')
 
                 mask &= (frag_seg != self._shower_id)
             # Append one particle per track group
             if self.enable_gnn_track:
 
                 self.select_particle_in_group(result, counts, b, particles,
-                                              part_primary_ids,
-                                              'track_node_pred',
-                                              'track_group_pred',
-                                              'track_fragments')
+                                            part_primary_ids,
+                                            'track_node_pred',
+                                            'track_group_pred',
+                                            'track_fragments')
 
                 mask &= (frag_seg != self._track_id)
 
@@ -678,8 +678,10 @@ class FullChain(torch.nn.Module):
 
         same_length = np.all([len(p) == len(particles[0]) for p in particles])
         particles = np.array(particles,
-                             dtype=object if not same_length else np.int64)
-        part_batch_ids = get_cluster_batch(input[0], particles, batch_index=self.batch_column_id)
+                                dtype=object if not same_length else np.int64)
+        part_batch_ids = get_cluster_batch(input[0], 
+                                            particles, 
+                                            batch_index=self.batch_column_id)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
         part_seg = np.empty(len(particles), dtype=np.int32)
         for i, p in enumerate(particles):
@@ -690,12 +692,12 @@ class FullChain(torch.nn.Module):
         # Store in result the intermediate fragments
         bcids = [np.where(part_batch_ids == b)[0] for b in range(len(counts))]
         same_length = [np.all([len(c) == len(particles[b][0]) \
-                       for c in particles[b]] ) for b in bcids]
+                    for c in particles[b]] ) for b in bcids]
 
         parts = [np.array([vids[c].astype(np.int64) for c in particles[b]],
-                          dtype=np.object \
-                          if not same_length[idx] \
-                          else np.int64) for idx, b in enumerate(bcids)]
+                        dtype=np.object \
+                        if not same_length[idx] \
+                        else np.int64) for idx, b in enumerate(bcids)]
 
         parts_seg = [part_seg[b] for idx, b in enumerate(bcids)]
 
@@ -704,23 +706,35 @@ class FullChain(torch.nn.Module):
             'particles_seg': [parts_seg]
         })
 
-        # ---
-        # 3. GNN interaction clustering
-        # ---
+        part_result = {
+            'particles': particles,
+            'part_seg': part_seg,
+            'part_batch_ids': part_batch_ids,
+            'part_primary_ids': part_primary_ids,
+            'counts': counts
+        }
+        
+        return part_result
+
+
+    def run_particle_gnns(self, result, input, frag_result):
+
+        part_result = self.get_all_particles(frag_result, result, input)
+
+        particles = part_result['particles']
+        part_seg = part_result['part_seg']
+        part_batch_ids = part_result['part_batch_ids']
+        part_primary_ids = part_result['part_primary_ids']
+        counts = part_result['counts']
+
+        label_clustering =  result['label_clustering'][0]
+        device = label_clustering[0].device
 
         if self.enable_gnn_inter:
 
-            if self._inter_use_true_particles:
-                if label_clustering is None:
-                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
-                # Also exclude lowE
-                inter_particles = true_particles
-            else:
-                inter_particles = particles
-
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
-            for i, p in enumerate(inter_particles):
+            for i, p in enumerate(particles):
                 if part_seg[i] == 0:
 
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
@@ -766,14 +780,6 @@ class FullChain(torch.nn.Module):
         # ---
 
         if self.enable_gnn_kinematics:
-            #print(len(particles))
-            if self._kinematics_use_true_particles:
-                if label_clustering is None:
-                    raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
-                # Also exclude lowE
-                kinematics_particles = true_particles
-            else:
-                kinematics_particles = particles
 
             output_keys = {'clusts': 'kinematics_particles',
                            'edge_index': 'kinematics_edge_index',
@@ -784,7 +790,7 @@ class FullChain(torch.nn.Module):
             self.run_gnn(self.grappa_kinematics, 
                          input, 
                          result, 
-                         kinematics_particles, 
+                         particles, 
                          output_keys)
 
         # ---
@@ -848,6 +854,12 @@ class FullChain(torch.nn.Module):
                 'interactions': [interactions_np],
                 'inter_cosmic_pred': [inter_cosmic_pred_np]
                 })
+
+
+    def full_chain_gnn(self, result, input):
+
+        frag_dict = self.run_fragment_gnns(result, input)
+        self.run_particle_gnns(result, input, frag_dict)
 
         return result
 
@@ -1248,6 +1260,8 @@ def setup_chain_cfg(self, cfg):
 
     self.batch_column_id       = chain_cfg.get('batch_column_id', 3)
     self.process_fragments     = chain_cfg.get('process_fragments', False)
+    self.use_true_fragments    = chain_cfg.get('use_true_fragments', False)
+    self.use_true_particles    = chain_cfg.get('use_true_particles', False)
 
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
     self.cheat_ghost           = chain_cfg.get('cheat_ghost', False)
