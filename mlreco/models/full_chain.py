@@ -25,6 +25,9 @@ from mlreco.utils.gnn.cluster import (form_clusters,
                                       get_cluster_label, 
                                       cluster_direction)
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 class FullChain(torch.nn.Module):
     """
     Modular, End-to-end LArTPC Reconstruction Chain
@@ -265,6 +268,10 @@ class FullChain(torch.nn.Module):
 
         # Pass data through the GrapPA model
         gnn_output = grappa(input, clusts, **kwargs)
+        true_labels = None
+
+        if 'label_clustering' in result:
+            true_labels = result['label_clustering'][0][0]
 
         # Update the result dictionary if the corresponding label exists
         for l, tag in labels.items():
@@ -284,7 +291,10 @@ class FullChain(torch.nn.Module):
                         gnn_output['edge_pred'][0][b].detach().cpu().numpy(),
                         len(gnn_output['clusts'][0][b])))
 
+                    print(get_cluster_label(true_labels, gnn_output['clusts'][0][b], column=7))
+
             result.update({labels['group_pred']: [group_ids]})
+            print(group_ids)
 
 
     def select_particle_in_group(self, result, counts, b, particles,
@@ -502,7 +512,6 @@ class FullChain(torch.nn.Module):
         """
 
         if self.use_true_fragments:
-            assert 'label_clustring' in result
             label_clustering = result['label_clustering'][0]
             fragments = form_clusters(label_clustering[0].int().cpu().numpy(), 
                                       column=5, 
@@ -513,6 +522,9 @@ class FullChain(torch.nn.Module):
                                          fragments,
                                          column=-1)
             semantic_labels = label_clustering[0].int()[:, -1]
+            frag_batch_ids = get_cluster_batch(input[0][:, :5], 
+                                               fragments,
+                                               batch_index=self.batch_column_id)
         else:
             fragments = result['frags'][0]
             frag_seg = result['frag_seg'][0]
@@ -678,12 +690,13 @@ class FullChain(torch.nn.Module):
 
         same_length = np.all([len(p) == len(particles[0]) for p in particles])
         particles = np.array(particles,
-                                dtype=object if not same_length else np.int64)
+                             dtype=object if not same_length else np.int64)
         part_batch_ids = get_cluster_batch(input[0], 
-                                            particles, 
-                                            batch_index=self.batch_column_id)
+                                           particles, 
+                                           batch_index=self.batch_column_id)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
         part_seg = np.empty(len(particles), dtype=np.int32)
+
         for i, p in enumerate(particles):
             vals, cnts = semantic_labels[p].unique(return_counts=True)
             assert len(vals) == 1
@@ -1283,6 +1296,10 @@ def setup_chain_cfg(self, cfg):
         self.enable_gnn_particle or \
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
+        msg = """
+        Since one of the GNNs are turned on, process_fragments is turned ON.
+        """
+        print(msg)
         self.process_fragments = True
 
     if self.process_fragments:

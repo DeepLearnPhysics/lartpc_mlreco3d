@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 import torch
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 class UResNet(torch.nn.Module):
     """
@@ -150,9 +152,6 @@ class UResNet(torch.nn.Module):
         self.linear = torch.nn.Linear(m, self._num_classes)
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
-
-        # print('Total Number of Trainable Parameters = {}'.format(
-        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
 
     def forward(self, input):
