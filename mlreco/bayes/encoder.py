@@ -66,7 +66,7 @@ class BayesianEncoder(MENetworkBase):
                         activation_args=self.activation_args,
                         normalization=self.norm,
                         normalization_args=self.norm_args,
-                        has_bias=self.allow_bias,
+                        bias=self.allow_bias,
                         debug=self.debug))
                 else:
                     m.append(ResNetBlock(F, F,
@@ -75,7 +75,7 @@ class BayesianEncoder(MENetworkBase):
                         activation_args=self.activation_args,
                         normalization=self.norm,
                         normalization_args=self.norm_args,
-                        has_bias=self.allow_bias))
+                        bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_block.append(m)
             m = []

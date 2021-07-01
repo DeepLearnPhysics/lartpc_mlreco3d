@@ -84,9 +84,9 @@ def evd_kl_divergence(alpha, beta=None):
 
 def evd_loss_dict():
     loss_fn = {
-        'digamma': digamma_evd_loss,
-        'sumsq': sumsq_evd_loss,
-        'nll': nll_evd_loss
+        'evd_digamma': digamma_evd_loss,
+        'evd_sumsq': sumsq_evd_loss,
+        'evd_nll': nll_evd_loss
     }
     return loss_fn
 
