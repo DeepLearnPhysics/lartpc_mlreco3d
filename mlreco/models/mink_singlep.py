@@ -14,6 +14,7 @@ from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import BayesianEncoder
 from mlreco.bayes.evidential import EVDLoss
+from mlreco.xai.simple_cnn import VGG16
 
 class ParticleImageClassifier(nn.Module):
 
@@ -36,6 +37,25 @@ class ParticleImageClassifier(nn.Module):
             'logits': [out]
         }
         return res
+
+
+class SingleParticleVGG(nn.Module):
+
+    MODULES = ['vgg', 'network_base']
+
+    def __init__(self, cfg, name='vgg_classifier'):
+        super(SingleParticleVGG, self).__init__()
+        self.net = VGG16(cfg)
+
+    def forward(self, input):
+        point_cloud, = input
+        out = self.net(point_cloud)
+        # out = self.final_layer(out)
+        res = {
+            'logits': [out]
+        }
+        return res
+        
 
 
 class EvidentialParticleClassifier(ParticleImageClassifier):
