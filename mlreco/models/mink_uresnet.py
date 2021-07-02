@@ -27,7 +27,7 @@ class UResNet_Chain(nn.Module):
         self.D = self.model_config.get('data_dim', 3)
         self.F = self.model_config.get('num_filters', 16)
         self.num_classes = self.model_config.get('num_classes', 5)\
-            
+
         # Parameters for Deghosting
         self.ghost = self.model_config.get('ghost', False)
         self.ghost_label = self.model_config.get('ghost_label', -1)
@@ -41,8 +41,8 @@ class UResNet_Chain(nn.Module):
             self.net = UResNet(cfg, name=name)
 
         self.output = [
-            ME.MinkowskiBatchNorm(self.F, 
-                eps=self.net.norm_args.get('eps', 0.00001), 
+            ME.MinkowskiBatchNorm(self.F,
+                eps=self.net.norm_args.get('eps', 0.00001),
                 momentum=self.net.norm_args.get('momentum', 0.1)),
             activations_construct('lrelu', negative_slope=0.33),
             ME.MinkowskiLinear(self.F, self.num_classes)]
@@ -51,7 +51,9 @@ class UResNet_Chain(nn.Module):
         if self.ghost:
             self.linear_ghost = ME.MinkowskiLinear(self.F, 2)
 
-
+        print('Total Number of Trainable Parameters (mink_uresnet)= {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        print(self)
     def forward(self, input):
         out = defaultdict(list)
         for igpu, x in enumerate(input):

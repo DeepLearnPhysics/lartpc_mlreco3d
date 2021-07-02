@@ -112,6 +112,9 @@ class UResNet(MENetworkBase):
         self.decoding_block = nn.Sequential(*self.decoding_block)
         self.decoding_conv = nn.Sequential(*self.decoding_conv)
 
+        print('Total Number of Trainable Parameters (mink/layers/uresnet) = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+
 
     def encoder(self, x):
         '''

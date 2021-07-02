@@ -130,7 +130,7 @@ class UResNet(torch.nn.Module):
                     scn.Convolution(self._dimension, nPlanes[i], nPlanes[i+1],
                         downsample[0], downsample[1], False))
             self.encoding_conv.add(module2)
-        self.encoding = module
+        #self.encoding = module
 
         # Decoding
         self.decoding_conv, self.decoding_blocks = scn.Sequential(), scn.Sequential()
@@ -153,6 +153,9 @@ class UResNet(torch.nn.Module):
         if self._ghost:
             self.linear_ghost = torch.nn.Linear(m, 2)
 
+        print('Total Number of Trainable Parameters (uresnet_lonely) = {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        print(self)
 
     def forward(self, input):
         """
