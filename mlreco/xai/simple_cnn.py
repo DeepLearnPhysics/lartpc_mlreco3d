@@ -38,7 +38,22 @@ class VGG16(MENetworkBase):
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
+            ME.MinkowskiConvolution(16, 16, kernel_size=3, 
+                                    dimension=self.D, 
+                                    bias=self.allow_bias))
+
+        self.features.append(ME.MinkowskiSELU())
+
+        self.features.append(
             ME.MinkowskiConvolution(16, 32, kernel_size=3, 
+                                    dimension=self.D, 
+                                    bias=self.allow_bias))
+
+        self.features.append(ME.MinkowskiSELU())
+        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
+
+        self.features.append(
+            ME.MinkowskiConvolution(32, 32, kernel_size=3, 
                                     dimension=self.D, 
                                     bias=self.allow_bias))
 
@@ -68,10 +83,25 @@ class VGG16(MENetworkBase):
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
+            ME.MinkowskiConvolution(64, 64, kernel_size=3, 
+                                    dimension=self.D, 
+                                    bias=self.allow_bias))
+
+        self.features.append(ME.MinkowskiSELU())
+
+        self.features.append(
             ME.MinkowskiConvolution(64, 128, kernel_size=3, 
                                     dimension=self.D, 
                                     bias=self.allow_bias))
 
+        self.features.append(ME.MinkowskiSELU())
+        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
+
+        self.features.append(
+            ME.MinkowskiConvolution(128, 128, kernel_size=3, 
+                                    dimension=self.D, 
+                                    bias=self.allow_bias))
+        
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
@@ -81,12 +111,12 @@ class VGG16(MENetworkBase):
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-
+        
         self.features.append(
             ME.MinkowskiConvolution(128, 256, kernel_size=3, 
                                     dimension=self.D, 
                                     bias=self.allow_bias))
-
+        
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
@@ -111,7 +141,7 @@ class VGG16(MENetworkBase):
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-        
+
         self.features.append(
             ME.MinkowskiConvolution(512, 512, kernel_size=3, 
                                     dimension=self.D, 
@@ -126,39 +156,9 @@ class VGG16(MENetworkBase):
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-
-        self.features.append(
-            ME.MinkowskiConvolution(512, 512, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-        
-        self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
             ME.MinkowskiConvolution(512, 1024, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-
-        self.features.append(ME.MinkowskiSELU())
-        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-
-        self.features.append(
-            ME.MinkowskiConvolution(1024, 1024, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-        
-        self.features.append(ME.MinkowskiSELU())
-
-        self.features.append(
-            ME.MinkowskiConvolution(1024, 1024, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-
-        self.features.append(ME.MinkowskiSELU())
-        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-
-        self.features.append(
-            ME.MinkowskiConvolution(1024, 1024, kernel_size=3, 
                                     dimension=self.D, 
                                     bias=self.allow_bias))
         
@@ -180,7 +180,6 @@ class VGG16(MENetworkBase):
             [
                 nn.Linear(1024, 512),
                 nn.SELU(),
-                nn.AlphaDropout(0.5),
                 nn.Linear(512, 5)
             ]
         )

@@ -164,7 +164,7 @@ class LovaszHingeLoss(torch.nn.modules.loss._Loss):
 class LovaszSoftmaxWithLogitsLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, reduction='none'):
-        super(LovaszHingeLoss, self).__init__(reduction=reduction)
+        super(LovaszSoftmaxWithLogitsLoss, self).__init__(reduction=reduction)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, logits, targets):
