@@ -4,8 +4,8 @@ from mlreco.models.layers.dbscan import distances
 from scipy.spatial.distance import cdist
 
 
-def adapt_labels(result, label_seg, label_clustering, 
-                 num_classes=5, 
+def adapt_labels(result, label_seg, label_clustering,
+                 num_classes=5,
                  batch_column=3,
                  coords_column_range=(0, 3),
                  true_mask=None):
@@ -22,8 +22,9 @@ def adapt_labels(result, label_seg, label_clustering,
     if true_mask is not None:
         assert true_mask.shape[0] == label_seg[0].shape[0]
 
+    c3 = max(c2, batch_column+1)
     for i in range(len(label_seg)):
-        coords = label_seg[i][:, :4]
+        coords = label_seg[i][:, :c3]
         label_c = []
         for batch_id in coords[:, batch_column].int().unique():
             batch_mask = coords[:, batch_column] == batch_id
@@ -31,7 +32,7 @@ def adapt_labels(result, label_seg, label_clustering,
             batch_clustering = label_clustering[i][label_clustering[i][:, batch_column] == batch_id]
 
             # Prepare new labels
-            new_label_clustering = -1. * torch.ones((batch_coords.size(0), 
+            new_label_clustering = -1. * torch.ones((batch_coords.size(0),
                                                      batch_clustering.size(1)))
             if torch.cuda.is_available():
                 new_label_clustering = new_label_clustering.cuda()
@@ -41,10 +42,11 @@ def adapt_labels(result, label_seg, label_clustering,
                 # Select voxels predicted as nonghost, but true ghosts
                 mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
                 # Assign them to closest cluster
-                d = distances(batch_coords[mask, c1:c2], 
+                #print(batch_coords.shape, batch_clustering.shape)
+                d = distances(batch_coords[mask, c1:c2],
                             batch_clustering[:, c1:c2]).argmin(dim=1)
-                additional_label_clustering = torch.cat([batch_coords[mask], 
-                                                        batch_clustering[d, 4:]], dim=1).float()
+                additional_label_clustering = torch.cat([batch_coords[mask],
+                                                        batch_clustering[d, c3:]], dim=1).float()
                 new_label_clustering[mask] = additional_label_clustering
             else:
                 nonghost_mask = true_mask[batch_mask]

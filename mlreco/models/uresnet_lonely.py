@@ -155,7 +155,7 @@ class UResNet(torch.nn.Module):
 
         print('Total Number of Trainable Parameters (uresnet_lonely) = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        print(self)
+        #print(self)
 
     def forward(self, input):
         """
@@ -233,7 +233,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._beta = self._cfg.get('beta', 1.0)
         self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
-        self._batch_col = self._cfg.get('batch_col', -2)
+        self._batch_col = self._cfg.get('batch_col', 3)
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
@@ -254,6 +254,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         """
         assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, self._batch_col] for d in label]
+        # print("batch ids", batch_ids)
         uresnet_loss, uresnet_acc = 0., 0.
         uresnet_acc_class = [0.] * self._num_classes
         count_class = [0.] * self._num_classes

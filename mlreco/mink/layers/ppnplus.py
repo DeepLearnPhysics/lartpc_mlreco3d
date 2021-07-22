@@ -36,7 +36,7 @@ class AttentionMask(torch.nn.Module):
         super(AttentionMask, self).__init__()
         self.prune = ME.MinkowskiPruning()
         self.score_threshold=score_threshold
-    
+
     def forward(self, x, mask):
 
         assert x.tensor_stride == mask.tensor_stride
@@ -53,7 +53,7 @@ class AttentionMask(torch.nn.Module):
 
         x_expanded = ME.SparseTensor(
             coordinates=mask_in_xcoords.C,
-            features=torch.zeros(mask_in_xcoords.F.shape[0], 
+            features=torch.zeros(mask_in_xcoords.F.shape[0],
                                  x.F.shape[1]).to(device),
             coordinate_manager=x.coordinate_manager,
             tensor_stride=x.tensor_stride)
@@ -69,7 +69,7 @@ class MergeConcat(torch.nn.Module):
 
     def __init__(self):
         super(MergeConcat, self).__init__()
-    
+
     def forward(self, input, other):
 
         assert input.tensor_stride == other.tensor_stride
@@ -89,7 +89,7 @@ class MergeConcat(torch.nn.Module):
         # Same procedure, but with other
         x_expanded = ME.SparseTensor(
             coordinates=x1.C,
-            features=torch.zeros(x1.F.shape[0], 
+            features=torch.zeros(x1.F.shape[0],
                                  input.F.shape[1]).to(device),
             coordinate_manager=input.coordinate_manager,
             tensor_stride=input.tensor_stride)
@@ -196,20 +196,20 @@ class PPN(MENetworkBase):
                                        activation=self.activation_name,
                                        activation_args=self.activation_args)
 
-        self.ppn_pixel_pred = ME.MinkowskiConvolution(self.nPlanes[0], 
-                                                      self.D, 
-                                                      kernel_size=3, 
-                                                      stride=1, 
+        self.ppn_pixel_pred = ME.MinkowskiConvolution(self.nPlanes[0],
+                                                      self.D,
+                                                      kernel_size=3,
+                                                      stride=1,
                                                       dimension=self.D)
-        self.ppn_type = ME.MinkowskiConvolution(self.nPlanes[0], 
-                                                self.num_classes, 
-                                                kernel_size=3, 
-                                                stride=1, 
+        self.ppn_type = ME.MinkowskiConvolution(self.nPlanes[0],
+                                                self.num_classes,
+                                                kernel_size=3,
+                                                stride=1,
                                                 dimension=self.D)
-        self.ppn_final_score = ME.MinkowskiConvolution(self.nPlanes[0], 
-                                                       2, 
-                                                       kernel_size=3, 
-                                                       stride=1, 
+        self.ppn_final_score = ME.MinkowskiConvolution(self.nPlanes[0],
+                                                       2,
+                                                       kernel_size=3,
+                                                       stride=1,
                                                        dimension=self.D)
 
         self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
@@ -226,6 +226,8 @@ class PPN(MENetworkBase):
                 'use_true_ghost_mask', False)
             self.downsample_ghost = self.model_cfg.get('downsample_ghost', True)
 
+        print('Total Number of Trainable Parameters (mink_ppnplus)= {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, final, decoderTensors, ghost=None, ghost_labels=None):
         '''
@@ -256,8 +258,8 @@ class PPN(MENetworkBase):
                     ghost_mask_tensor = input['segment_label'] < self.num_classes
                     ghost_coords = input['segment_label']
                 else:
-                    ghost_mask_tensor = 1.0 - torch.argmax(ghost.F, 
-                                                           dim=1, 
+                    ghost_mask_tensor = 1.0 - torch.argmax(ghost.F,
+                                                           dim=1,
                                                            keepdim=True)
                     ghost_coords = ghost.C
                     ghost_coords_man = final.coordinate_manager
@@ -277,7 +279,7 @@ class PPN(MENetworkBase):
 
         else:
             decoder_feature_maps = decoderTensors
-        
+
         x = final
 
         for i, layer in enumerate(self.decoding_conv):
@@ -392,7 +394,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     points_event = coords_layer[batch_index_layer]
 
                     d = self.pairwise_distances(
-                        points_label, 
+                        points_label,
                         points_event[:, 1:4].float().cuda())
 
                     d_positives = (d < self.resolution * \
@@ -408,9 +410,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     weight_ppn[d_positives] = 1 - w
                     weight_ppn[~d_positives] = w
 
-                    loss_batch = self.lossfn(scores_event, 
-                                             d_positives.float(), 
-                                             weight=weight_ppn, 
+                    loss_batch = self.lossfn(scores_event,
+                                             d_positives.float(),
+                                             weight=weight_ppn,
                                              reduction='mean')
 
                     loss_layer += loss_batch
@@ -430,9 +432,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         total_acc += acc
 
                         # Mask Loss
-                        mask_loss_final = self.lossfn(pixel_score, 
-                                                      positives.float(), 
-                                                      weight=weight_ppn, 
+                        mask_loss_final = self.lossfn(pixel_score,
+                                                      positives.float(),
+                                                      weight=weight_ppn,
                                                       reduction='mean')
 
                         # Type Segmentation Loss
@@ -444,16 +446,16 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         counter = Counter({0:0, 1:0, 2:0, 3:0})
                         counter.update(list(event_types_label.int().cpu().numpy()))
 
-                        w = torch.Tensor([counter[0], 
-                                          counter[1], 
-                                          counter[2], 
+                        w = torch.Tensor([counter[0],
+                                          counter[1],
+                                          counter[2],
                                           counter[3], 0]).float()
-                                          
+
                         w = float(sum(counter.values())) / (w + 1.0)
                         positive_labels = event_types_label[torch.argmin(distance_positives, dim=0)]
 
-                        type_loss = self.segloss(pixel_logits[positives], 
-                                                 positive_labels.long(), 
+                        type_loss = self.segloss(pixel_logits[positives],
+                                                 positive_labels.long(),
                                                  weight=w.to(device))
 
                         # Distance Loss

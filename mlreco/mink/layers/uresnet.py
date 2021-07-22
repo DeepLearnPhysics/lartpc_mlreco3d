@@ -47,7 +47,7 @@ class UResNet(MENetworkBase):
             kernel_size=self.input_kernel, stride=1, dimension=self.D,
             bias=self.allow_bias)
 
-        print(self.input_layer, self.allow_bias)
+        #print(self.input_layer, self.allow_bias)
 
         # Initialize Encoder
         self.encoding_conv = []
@@ -84,7 +84,7 @@ class UResNet(MENetworkBase):
         self.decoding_conv = []
         for i in range(self.depth-2, -1, -1):
             m = []
-            m.append(normalizations_construct(self.norm, 
+            m.append(normalizations_construct(self.norm,
                 self.nPlanes[i+1], **self.norm_args))
             m.append(activations_construct(
                 self.activation_name, **self.activation_args))
