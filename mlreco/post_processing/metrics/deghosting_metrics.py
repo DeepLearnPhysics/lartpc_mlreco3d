@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
-
+import torch
 from mlreco.post_processing import post_processing
 
 
@@ -65,6 +65,10 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         ghost_predictions = np.argmax(res['ghost'][data_idx], axis=1)
         ghost_softmax = scipy.special.softmax(res['ghost'][data_idx], axis=1)
         mask = ghost_predictions == 0
+
+        if isinstance(label, torch.Tensor):
+            label = label.numpy()
+
         # 0 = non ghost, 1 = ghost
         # Fraction of true points predicted correctly
         ghost_acc = ((ghost_predictions == 1) == (label == 5)).sum() / float(label.shape[0])

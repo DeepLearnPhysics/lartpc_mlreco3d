@@ -1,4 +1,4 @@
-import torch 
+import torch
 import MinkowskiEngine as ME
 import numpy as np
 
@@ -32,7 +32,7 @@ class MinkFullChain(FullChain):
 
         # Initialize the UResNet+PPN modules
         if self.enable_uresnet:
-            self.uresnet_lonely = UResNet_Chain(cfg['uresnet_ppn'], 
+            self.uresnet_lonely = UResNet_Chain(cfg['uresnet_ppn'],
                                                 name='uresnet_lonely')
             self.input_features = cfg['uresnet_ppn']['uresnet_lonely'].get('features', 1)
 
@@ -41,7 +41,7 @@ class MinkFullChain(FullChain):
 
         # Initialize the CNN dense clustering module
         # We will only use GraphSPICE for CNN based clustering, as it is
-        # superior to SPICE. 
+        # superior to SPICE.
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
@@ -52,17 +52,19 @@ class MinkFullChain(FullChain):
             self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg['graph_spice']['gspice_fragment_manager'])
 
         if self.enable_dbscan:
-            self.dbscan_fragment_manager = DBSCANFragmentManager(self.frag_cfg, 
+            self.dbscan_fragment_manager = DBSCANFragmentManager(self.frag_cfg,
                                                                  mode='mink')
 
+        print('Total Number of Trainable Parameters (mink_full_chain)= {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
-    def get_extra_gnn_features(self, 
-                               fragments, 
-                               frag_seg, 
-                               classes, 
-                               input, 
+    def get_extra_gnn_features(self,
+                               fragments,
+                               frag_seg,
+                               classes,
+                               input,
                                result,
-                               use_ppn=False, 
+                               use_ppn=False,
                                use_supp=False):
         """
         Extracting extra features to feed into the GNN particle aggregators
@@ -96,7 +98,7 @@ class MinkFullChain(FullChain):
             mask |= (frag_seg == c)
         mask = np.where(mask)[0]
 
-        print("INPUT = ", input)
+        #print("INPUT = ", input)
 
         # If requested, extract PPN-related features
         kwargs = {}
@@ -164,7 +166,7 @@ class MinkFullChain(FullChain):
         Returns
         =======
         result: dict
-            dictionary of all network outputs from cnns. 
+            dictionary of all network outputs from cnns.
         '''
         device = input[0].device
 
@@ -187,18 +189,18 @@ class MinkFullChain(FullChain):
             ppn_input.update(result)
             if 'ghost' in ppn_input:
                 ppn_input['ghost'] = ppn_input['ghost'][0]
-                ppn_output = self.ppn(ppn_input['finalTensor'][0], 
+                ppn_output = self.ppn(ppn_input['finalTensor'][0],
                                       ppn_input['decoderTensors'][0],
                                       ppn_input['ghost_sptensor'][0])
             else:
-                ppn_output = self.ppn(ppn_input['finalTensor'][0], 
+                ppn_output = self.ppn(ppn_input['finalTensor'][0],
                                       ppn_input['decoderTensors'][0])
             result.update(ppn_output)
 
         # The rest of the chain only needs 1 input feature
         if self.input_features > 1:
             input[0] = input[0][:, :-self.input_features+1]
-        
+
         cnn_result = {}
 
         ghost_feature_maps = []
@@ -219,11 +221,11 @@ class MinkFullChain(FullChain):
             input = [input[0][deghost]]
             if label_seg is not None and label_clustering is not None:
 
-                print(label_seg[0].shape, label_clustering[0].shape)  
+                #print(label_seg[0].shape, label_clustering[0].shape)
 
                 # ME uses 0 for batch column, so need to compensate
-                label_clustering = adapt_labels(result, 
-                                                label_seg, 
+                label_clustering = adapt_labels(result,
+                                                label_seg,
                                                 label_clustering,
                                                 batch_column=0,
                                                 coords_column_range=(1,4))
@@ -259,7 +261,7 @@ class MinkFullChain(FullChain):
             'frag_batch_ids': [],
             'frag_seg': []
         }
-        semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+        semantic_labels = torch.argmax(cnn_result['segmentation'][0],
                                        dim=1).flatten()
 
 
@@ -273,20 +275,20 @@ class MinkFullChain(FullChain):
             # If there are voxels to process in the given semantic classes
             if torch.count_nonzero(filtered_semantic) > 0:
 
-                graph_spice_label = torch.cat((label_clustering[0][:, :-1], 
+                graph_spice_label = torch.cat((label_clustering[0][:, :-1],
                                                semantic_labels.reshape(-1,1)), dim=1)
-                
-                spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5], 
+
+                spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5],
                                                                      graph_spice_label))
                 cnn_result.update(spatial_embeddings_output)
 
-                self.gs_manager.replace_state(spatial_embeddings_output['graph'][0], 
+                self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
                                               spatial_embeddings_output['graph_info'][0])
 
                 self.gs_manager.fit_predict(gen_numpy_graph=True)
                 cluster_predictions = self.gs_manager._node_pred.x
-                filtered_input = torch.cat([input[0][filtered_semantic][:, :4], 
-                                            semantic_labels[filtered_semantic][:, None], 
+                filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
+                                            semantic_labels[filtered_semantic][:, None],
                                             cluster_predictions.to(device)[:, None]], dim=1)
 
                 if self.process_fragments:
@@ -310,16 +312,17 @@ class MinkFullChain(FullChain):
 
         cnn_result.update(fragments_result)
 
-        cnn_result.update({
-            'label_clustering': [label_clustering],
-            'semantic_labels' : [semantic_labels],
-        })
+        if self.enable_cnn_clust and label_clustering is not None:
+            cnn_result.update({
+                'label_clustering': [label_clustering],
+                'semantic_labels' : [semantic_labels],
+            })
 
         def return_to_original(result):
             if self.enable_ghost:
                 result['segmentation'][0] = segmentation
             return result
-        
+
         return cnn_result, input, return_to_original
 
 
@@ -335,7 +338,7 @@ class MinkFullChainLoss(FullChainLoss):
             self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'], name='ppn')
         if self.enable_cnn_clust:
             # As ME is an updated model, ME backend full chain will not support old SPICE
-            # for CNN Clustering. 
+            # for CNN Clustering.
             assert self._enable_graph_spice
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
             self._graph_spice_skip_classes = cfg['graph_spice_loss']['skip_classes']

@@ -149,6 +149,8 @@ class PPN(torch.nn.Module):
 
         self.ghost_mask = GhostMask(self._dimension)
 
+        print('Total Number of Trainable Parameters (ppn)= {}'.format(
+                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, input):
         """

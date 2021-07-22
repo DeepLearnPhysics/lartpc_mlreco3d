@@ -44,7 +44,7 @@ def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     spatial_size = module_cfg.get('spatial_size', 768)
     enable_physics_metrics = module_cfg.get('enable_physics_metrics', False)
 
-    spice_min_voxels = cfg['model']['modules']['spice']['fragment_clustering'].get('min_voxels', 2)
+    spice_min_voxels = cfg['model']['modules']['spice']['spice_fragment_manager'].get('min_voxels', 2)
 
     coords = seg_label[data_idx][:, :3]
 

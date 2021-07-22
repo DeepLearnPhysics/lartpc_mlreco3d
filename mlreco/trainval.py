@@ -61,7 +61,7 @@ class trainval(object):
                 # default
                 self._optim_args['lr'] = 0.001
 
-        # Handle time-dependent loss, such as KL Divergence annealing 
+        # Handle time-dependent loss, such as KL Divergence annealing
         self._time_dependent = self._trainval_config.get('time_dependent_loss', False)
 
         # learning rate scheduler

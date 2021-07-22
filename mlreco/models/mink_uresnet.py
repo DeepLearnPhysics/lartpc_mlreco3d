@@ -53,7 +53,7 @@ class UResNet_Chain(nn.Module):
 
         print('Total Number of Trainable Parameters (mink_uresnet)= {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        print(self)
+        #print(self)
     def forward(self, input):
         out = defaultdict(list)
         for igpu, x in enumerate(input):
