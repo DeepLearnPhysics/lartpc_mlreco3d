@@ -9,12 +9,13 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder
-from collections import defaultdict
+from collections import defaultdict, Counter, OrderedDict
 from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import BayesianEncoder
 from mlreco.bayes.evidential import EVDLoss
 from mlreco.xai.simple_cnn import VGG16
+from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
 
 class ParticleImageClassifier(nn.Module):
 
@@ -54,6 +55,124 @@ class SingleParticleVGG(nn.Module):
         res = {
             'logits': [out]
         }
+        return res
+
+class DUQParticleClassifier(ParticleImageClassifier):
+    """
+    Uncertainty Estimation Using a Single Deep Deterministic Neural Network
+    https://arxiv.org/pdf/2003.02037.pdf
+    Joost van Amersfoort, Lewis Smith, Yee Whye Teh, Yarin Gal.
+
+    Pytorch Implementation for SparseConvNets with MinkowskiEngine backend.
+    """
+
+    MODULES = ['network_base', 'particle_image_classifier', 'mink_encoder']
+
+    def __init__(self, cfg, name='duq_particle_classifier'):
+        super(DUQParticleClassifier, self).__init__(cfg, name=name)
+
+        self.batch_size = cfg[name].get('batch_size', 512)
+
+        if cfg[name].get('grad_w', 0.0) > 0:
+            self.grad_penalty = True
+        else:
+            self.grad_penalty = False
+
+        self.final_layer = None
+        self.embedding_dim = cfg[name].get('embedding_dim', 256)
+        self.embedding_layer = nn.Sequential(
+            nn.BatchNorm1d(self.encoder.latent_size),
+            nn.ReLU(),
+            nn.Linear(self.encoder.latent_size, self.embedding_dim)
+        )
+        self.centroid_size = cfg[name].get('centroid_size', 256)
+
+        self.num_classes = cfg[name].get('num_classes', 5)
+        self.weight_matrices = nn.ModuleList()
+
+        for i in range(self.num_classes):
+            self.weight_matrices.append(nn.Linear(self.embedding_dim, self.centroid_size))
+
+        self.sigma_layer = nn.Sequential(
+            nn.Linear(self.centroid_size, 1),
+            nn.Softplus())
+        
+        self.momentum = cfg[name].get('momentum', 0.99)
+        self.n_classes = None
+        self.m = None
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.centroids_init()
+
+
+    def centroids_init(self):
+
+        self.centroids = torch.normal(
+            mean=torch.zeros((self.centroid_size, 5)), 
+            std=torch.ones((self.centroid_size, 5))).to(self.device) * 0.01
+        
+        self.centroids.requires_grad = True
+
+
+    def kernel(self, em, sigma):
+
+        numer = (1.0 / float(self.centroid_size)) * \
+                 torch.sum(torch.pow(em - self.centroids.view(1, -1, self.num_classes), 2), dim=1)
+        denom = 2.0 * torch.pow(sigma, 2)
+        return torch.exp(-numer / (denom + 1e-6))
+
+
+    def _forward(self, input):
+        point_cloud, = input
+        out = self.encoder(point_cloud)
+        features = self.embedding_layer(out)
+        embeddings = []
+        for layer in self.weight_matrices:
+            rbf_feature = layer(features)
+            embeddings.append(
+                rbf_feature.view(rbf_feature.shape[0], rbf_feature.shape[1], 1))
+        embeddings = torch.cat(embeddings, dim=2)
+        length_scale = self.sigma_layer(features)
+        res = {
+            'embeddings': [embeddings],
+            'length_scale': [length_scale]
+        }
+        return res
+
+    def update_state(self, embeddings, scores):
+        with torch.no_grad():
+            pred = torch.argmax(scores, dim=1).int()
+            counts = torch.bincount(pred, minlength=self.num_classes)
+            # Update class counts
+            if self.n_classes is None:
+                self.n_classes = counts
+            else:
+                self.n_classes = self.momentum * self.n_classes + (1 - self.momentum) * counts
+            # Update m_ct
+            if self.m is None:
+                self.m = torch.sum(embeddings, dim=0)
+            else:
+                self.m = self.m * self.momentum + (1 - self.momentum) * torch.sum(embeddings, dim=0)
+            
+            self.centroids = self.m.view(-1, self.num_classes) / self.n_classes.view(1, -1)
+
+    def train_forward(self, input, label):
+        if self.grad_penalty:
+            input[0].requires_grad_(True)
+        res = self._forward(input)
+        res['inputs'] = [input]
+        embeddings = res['embeddings'][0]
+        length_scale = res['length_scale'][0]
+        scores = self.kernel(embeddings, length_scale)
+        self.update_state(embeddings, scores)
+        res['probas'] = [scores]
+        return res
+
+    def inference_forward(self, input):
+        assert self.centroids is not None
+
+    def forward(self, input, label=None):
+        res = self.train_forward(input, label)
         return res
         
 
@@ -185,6 +304,62 @@ class ParticleTypeLoss(nn.Module):
         labels = type_labels[0][:, 0].to(dtype=torch.long)
         loss = self.xentropy(logits, labels)
         pred = torch.argmax(logits, dim=1)
+
+        accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
+
+        res = {
+            'loss': loss,
+            'accuracy': accuracy
+        }
+
+        acc_types = {}
+        for c in labels.unique():
+            mask = labels == c
+            acc_types['accuracy_{}'.format(int(c))] = \
+                float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
+        return res
+
+
+class MultiLabelCrossEntropy(nn.Module):
+
+    def __init__(self, cfg, name='duq_particle_classifier'):
+        super(MultiLabelCrossEntropy, self).__init__()
+        self.xentropy = nn.BCELoss(reduction='none')
+        self.num_classes = 5
+        self.grad_w = cfg[name].get('grad_w', 0.0)
+
+    def calculate_io_gradient(self, x, scores):
+        gradients = torch.autograd.grad(
+            outputs=scores,
+            inputs=x,
+            grad_outputs=torch.ones_like(scores),
+            create_graph=True)[0]
+        gradients = gradients.flatten(start_dim=1)
+        return gradients
+
+
+    def gradient_penalty(self, x, scores):
+
+        gradients = self.calculate_io_gradient(x, scores)
+        grad_norm = gradients.norm(2, dim=1)
+        grad_loss = ((grad_norm - 1)**2).mean()
+        return grad_loss
+
+    def forward(self, out, type_labels):
+        # print(type_labels)
+        probas = out['probas'][0]
+        device = probas.device
+        labels_one_hot = torch.eye(self.num_classes)[type_labels[0][:, 0].long()].to(device=device)
+        loss = self.xentropy(probas, labels_one_hot)
+        K_c_sum = loss.sum(dim=1)
+        loss = K_c_sum.mean()
+        pred = torch.argmax(probas, dim=1)
+        labels = type_labels[0][:, 0].long()
+
+        # Comptue gradient penalty
+        grad_penalty = self.gradient_penalty(out['inputs'][0], K_c_sum)
+
+        loss += grad_penalty * self.grad_w
 
         accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
 

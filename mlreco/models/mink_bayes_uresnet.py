@@ -75,6 +75,31 @@ class BayesianUResNet(MENetworkBase):
 
         return res
 
+    def evidential_forward(self, input):
+
+        out = defaultdict(list)
+        for igpu, x in enumerate(input):
+            x = ME.SparseTensor(coordinates=x[:, :4],
+                                features=x[:, -1].view(-1, 1))
+            res_encoder = self.encoder.encoder(x)
+            print([t.F.shape for t in res_encoder['encoderTensors']])
+            decoderTensors = self.decoder(res_encoder['finalTensor'],
+                                          res_encoder['encoderTensors'])
+            feats = decoderTensors[-1]
+            # For evidential models, logits correspond to collected evidence.
+            logits = self.classifier(feats)
+            ev = logits.F
+            concentration = ev + 1.0
+            S = torch.sum(concentration, dim=1, keepdim=True)
+            uncertainty = self.num_classes / (S + 0.000001)
+            out['segmentation'].append(ev)
+            out['evidence'].append(ev)
+            out['uncertainty'].append(uncertainty)
+            out['concentration'].append(concentration)
+            out['expected_probability'].append(concentration / S)
+        return out
+
+
     def standard_forward(self, input):
 
         out = defaultdict(list)
@@ -95,6 +120,8 @@ class BayesianUResNet(MENetworkBase):
 
         if self.mode == 'mc_dropout':
             return self.mc_forward(input)
+        elif self.mode == 'evidential':
+            return self.evidential_forward(input)
         else:
             return self.standard_forward(input)
 
