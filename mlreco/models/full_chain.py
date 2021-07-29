@@ -291,10 +291,7 @@ class FullChain(torch.nn.Module):
                         gnn_output['edge_pred'][0][b].detach().cpu().numpy(),
                         len(gnn_output['clusts'][0][b])))
 
-                    print(get_cluster_label(true_labels, gnn_output['clusts'][0][b], column=7))
-
             result.update({labels['group_pred']: [group_ids]})
-            print(group_ids)
 
 
     def select_particle_in_group(self, result, counts, b, particles,
@@ -385,8 +382,6 @@ class FullChain(torch.nn.Module):
 
             result['ghost_label'] = [deghost]
             input = [input[0][deghost]]
-
-            print(label_seg[0].shape, label_clustering[0].shape)
 
             if label_seg is not None and label_clustering is not None:
                 label_clustering = adapt_labels(result,
@@ -956,7 +951,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.kinematics_type_weight = self.loss_config.get('kinematics_type_weight', 0.0)
         self.cosmic_weight          = self.loss_config.get('cosmic_weight', 0.0)
 
-    def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None, particle_graph=None):
+    def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None, 
+                particle_graph=None, iteration=None):
         res = {}
         accuracy, loss = 0., 0.
 
@@ -986,9 +982,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                                   self.enable_cosmic):
 
             deghost = out['ghost_label'][0]
-
-            print(seg_label[0].shape, cluster_label[0].shape)
-            print(seg_label[0].shape, kinematics_label[0].shape)
 
             if self.cheat_ghost:
                 true_mask = deghost
@@ -1143,7 +1136,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
             
-            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
+            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
             
             res['inter_edge_loss'] = res_gnn_inter['loss']
             res['inter_edge_accuracy'] = res_gnn_inter['accuracy']

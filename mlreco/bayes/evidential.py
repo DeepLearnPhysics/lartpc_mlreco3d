@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -104,26 +105,36 @@ class EVDLoss(nn.Module):
     Sensoy et. al., Evidential Deep Learning to Quantify 
     Classification Uncertainty
     '''
-    def __init__(self, evd_loss_name, reduction='none', T=50000):
+    def __init__(self, evd_loss_name, reduction='none', T=50000, 
+                 one_hot=True, mode='concentration'):
         super(EVDLoss, self).__init__()
         self.T = T  # Total epoch counts for which to anneal kld component. 
         self.evd_loss = evd_loss_construct(evd_loss_name)
+        print("EVD LOSS NAME = ", evd_loss_name)
         self.kld_loss = evd_kl_divergence
         self.reduction = reduction
+        self.one_hot = one_hot
+        self.num_classes = 5
+        self.mode = mode
 
-    def forward(self, alpha, y, t=0):
+    def forward(self, alpha, labels, t=0):
+
+        device = alpha.device
+        if not self.one_hot:
+            eye = torch.eye(self.num_classes).to(device=device)
+            y = eye[labels]
+        else:
+            y = labels
+
+        if self.mode != 'concentration':
+            evidence = alpha
+            alpha = evidence + 1.0
 
         annealing = min(1.0, float(t) / self.T)
-        # print("annealing = ", annealing)
 
         evd_loss = self.evd_loss(alpha, y)
         alpha_tilde = y + (1 - y) * alpha
         kld_loss = self.kld_loss(alpha_tilde)
-
-        evd_loss = evd_loss.mean()
-        kld_loss = kld_loss.mean()
-
-        # print("EVD Loss = {}, KLD Loss = {}, Annealed KLD Loss = {}".format(evd_loss, kld_loss, annealing * kld_loss))
 
         loss = evd_loss + annealing * kld_loss
         if self.reduction == 'none':
@@ -134,3 +145,78 @@ class EVDLoss(nn.Module):
             return loss.sum()
         else:
             raise Exception("Unknown reduction method %s provided" % self.reduction)
+
+
+def nll_regression_loss(logits, targets, eps=1e-6):
+    '''
+    Negative log loss for Dirichlet prior evidential learning.
+
+    INPUTS:
+        - alpha (FloatTensor): N x C concentration parameters, 
+        where C is the number of class labels.
+        - y (FloatTensor): N x 1 regression targets
+
+    RETURNS:
+        - loss (FloatTensor): N x 1 non-reduced loss for each example. 
+    '''
+    logits = logits.view(-1, 4)
+    gamma, nu, alpha, beta = logits[:, 0], logits[:, 1], logits[:, 2], logits[:, 3]
+    omega = 2.0 * beta * (1.0 + nu)
+    nll = 0.5 * torch.log(np.pi / nu)  \
+        - alpha * torch.log(omega)  \
+        + (alpha+0.5) * torch.log(nu * (targets - gamma)**2 + omega)  \
+        + torch.lgamma(alpha)  \
+        - torch.lgamma(alpha+0.5)
+    return nll
+
+def kld_regression_loss(logits, targets, eps=1e-6):
+    logits = logits.view(-1, 4)
+    gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
+    loss = torch.abs(targets - gamma + eps) * (2.0 * nu + alpha)
+    return loss
+
+def kl_nig(logits, targets, eps=0.01):
+
+    logits = logits.view(-1, 4)
+    gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
+
+    error = torch.abs(targets - gamma + 1e-6)
+
+    kl = 0.5 * (1.0 + eps) / nu \
+        - 0.5 - torch.lgamma(alpha / (1.0 + eps)) \
+        + (alpha - (1.0 + eps)) * torch.digamma(alpha)
+
+    loss = kl * error
+    return loss
+
+class EDLRegressionLoss(nn.Module):
+
+    def __init__(self, reduction='none', w=0.0, kl_mode='evd',
+                 one_hot='True', mode='concentration', eps=1e-6, T=50000):
+        super(EDLRegressionLoss, self).__init__()
+        self.reduction = reduction
+        self.one_hot = one_hot
+        self.mode = mode
+        self.eps = eps
+        self.nll_loss = nll_regression_loss
+        self.kl_mode = kl_mode
+        if self.kl_mode == 'evd':
+            self.kld_loss = kld_regression_loss
+        elif self.kl_mode == 'kl':
+            self.kld_loss = kl_nig
+        else:
+            raise ValueError('Unrecognized KL Divergence Error Loss')
+        self.w = w
+        self.T = T
+
+    def forward(self, logits, targets, iteration=None):
+
+        if iteration is not None:
+            annealing = min(1.0, float(iteration) / self.T)
+        else:
+            annealing = self.w
+
+        nll_loss = self.nll_loss(logits, targets, eps=self.eps)
+        kld_loss = self.kld_loss(logits, targets, eps=self.eps)
+
+        return nll_loss + annealing * kld_loss, nll_loss

@@ -174,7 +174,7 @@ class SparseResidualEncoder(MENetworkBase):
                     activation_args=self.activation_args,
                     normalization=self.norm,
                     normalization_args=self.norm_args,
-                    has_bias=self.allow_bias))
+                    bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.encoding_block.append(m)
             m = []
