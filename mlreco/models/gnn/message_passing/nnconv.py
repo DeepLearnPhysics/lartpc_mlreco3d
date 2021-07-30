@@ -75,7 +75,11 @@ class NNConvModel(nn.Module):
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
 
-        print(node_features.shape, edge_features.shape)
+        if node_features.shape[1] != self.node_input:
+            raise ValueError("Node feature dimension must be {} instead of {}".format(node_features.shape[1], self.node_input))
+
+        if edge_features.shape[1] != self.edge_input:
+            raise ValueError("Edge feature dimension must be {} instead of {}".format(edge_features.shape[1], self.edge_input))
 
         x = node_features.view(-1, self.node_input)
         e = edge_features.view(-1, self.edge_input)

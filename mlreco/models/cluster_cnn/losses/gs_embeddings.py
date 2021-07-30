@@ -29,6 +29,8 @@ class WeightedEdgeLoss(nn.Module):
     def forward(self, logits, targets):
         if self.invert:
             y = (targets < 0.5).float()
+        else:
+            y = targets
         device = logits.device
         weight = torch.ones(y.shape[0]).to(device)
 
@@ -348,6 +350,10 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.loss_config = cfg[name]
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
+
+        self.emb_loss_weight = self.loss_config.get('embedding_loss_weight', 1.0)
+        self.edge_loss_weight = self.loss_config.get('edge_loss_weight', 1.0)
+
         self.invert = self.edge_loss_cfg.get('invert', False)
         self.edge_loss = WeightedEdgeLoss(**self.edge_loss_cfg)
         self.is_eval = cfg['eval']
@@ -356,7 +362,10 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
 
         group_label = [cluster_label[0][:, [0, 1, 2, 3, 5]]]
 
+        embedding_loss, edge_loss = 0, 0
+
         res = self.loss_fn(result, segment_label, group_label)
+        embedding_loss = res['loss']
         # print(result)
         edge_score = result['edge_score'][0].squeeze()
 
@@ -373,8 +382,6 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
             else:
                 pred = x >= 0
 
-            false_positives_index = pred & (y < 0.5)
-
             false_positives = float(torch.sum(pred & (y < 0.5)))
             false_negatives = float(torch.sum(~pred & (y > 0.5)))
             true_positives = float(torch.sum(pred & (y > 0.5)))
@@ -382,18 +389,14 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
 
             tpr = true_positives / (true_positives + false_negatives)
             tnr = true_negatives / (true_positives + false_positives)
-            fpr = 1 - tnr
 
             balanced_accuracy = (tpr + tnr) / 2
 
-            # print('TPR = ', tpr)
-            # print('TNR = ', tnr)
-            # print('Balanced Accuracy = ', balanced_accuracy)
-            # print('False Positive Rate = ', fpr)
             res['edge_accuracy'] = balanced_accuracy
         else:
             edge_loss = 0
 
-        res['loss'] += edge_loss
+        res['loss'] = self.emb_loss_weight * embedding_loss + \
+                      self.edge_loss_weight * edge_loss
         res['edge_loss'] = float(edge_loss)
         return res
