@@ -372,14 +372,17 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
                     type_loss += float(loss)
             else:
                 loss = self.type_lossfn(node_pred_type, node_assn_type)
-                total_loss += loss
-                type_loss += float(loss)
+                total_loss += torch.clamp(loss, min=0)
+                type_loss += float(torch.clamp(loss, min=0))
 
             # Increment the number of nodes
             n_clusts_type += len(node_mask)
         
         with torch.no_grad():
             type_acc = float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
+
+        # print("TYPE: {}, {}, {}, {}".format(
+        #     float(total_loss), float(type_loss), float(n_clusts_type), float(type_acc)))
 
         return total_loss, type_loss, n_clusts_type, type_acc
 
@@ -395,7 +398,9 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
             loss, nll_loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
             nll_loss = torch.clamp(nll_loss, min=0).detach().cpu().numpy()
             p_acc = np.exp(-nll_loss)
-            loss, nll_loss, p_acc = loss.sum(), float(nll_loss.sum()), np.sum(p_acc)
+            loss, nll_loss, p_acc = loss.nansum(), float(np.nansum(nll_loss)), np.sum(p_acc)
+            # print("Momentum: {}, {}, {}, {}".format(
+            #     float(loss), float(nll_loss), float(n_clusts_momentum), float(p_acc)))
             return loss, float(nll_loss), n_clusts_momentum, p_acc
         else:
             loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
@@ -450,13 +455,15 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
             vtx_score_acc = float(torch.sum(
                 torch.argmax(node_pred_vtx[good_index, 3:], dim=1) == positives[good_index]))
         
-        return (loss, 
+        out =  (loss, 
                 vtx_position_loss, 
                 vtx_score_loss, 
                 n_clusts_vtx, 
                 n_clusts_vtx_positives,
                 vtx_position_acc,
                 vtx_score_acc)
+        
+        return out
 
 
     def forward(self, out, types, iteration):
@@ -601,10 +608,5 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
                 'vtx_position_loss': 0. if not n_clusts_vtx_positives else vtx_position_loss/n_clusts_vtx_positives,
                 'vtx_position_acc': 0. if not n_clusts_vtx_positives else vtx_position_acc/n_clusts_vtx_positives,
             })
-
-        print("Type Loss = {:.4f}".format(result['type_loss']))
-        print("Type Accuracy = {:.4f}".format(result['type_accuracy']))
-        print("Momentum Loss = {:.4f}".format(result['p_loss']))
-        print("Momentum Accuracy = {:.4f}".format(result['p_accuracy']))
 
         return result

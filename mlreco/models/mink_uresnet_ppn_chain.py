@@ -8,20 +8,19 @@ import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.mink_uresnet import SegmentationLoss
-from mlreco.mink.layers.uresnet import UResNet
 from collections import defaultdict
 from mlreco.models.mink_uresnet import UResNet_Chain
 
-
+from pprint import pprint
 class UResNetPPN(nn.Module):
 
     MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
 
     def __init__(self, cfg, name='mink_uresnet_ppn_chain'):
         super(UResNetPPN, self).__init__()
-        self.backbone = UResNet_Chain(cfg)
-        self.ppn = PPN(cfg)
         self.model_config = cfg[name]
+        self.backbone = UResNet_Chain(self.model_config)
+        self.ppn = PPN(self.model_config)
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_filters = self.model_config.get('num_filters', 16)
         self.segmentation = ME.MinkowskiLinear(
@@ -35,7 +34,7 @@ class UResNetPPN(nn.Module):
 
         for igpu, x in enumerate(input_tensors):
             input_data = x[:, :5]
-            res = self.backbone(input_data)
+            res = self.backbone([input_data])
             res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
             # if self.training:
             #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
@@ -50,10 +49,11 @@ class UResNetPPN(nn.Module):
 
 class UResNetPPNLoss(nn.Module):
 
-    def __init__(self, cfg, name='mink_uresnet_ppn_loss'):
+    def __init__(self, cfg, name='mink_uresnet_ppn_chain'):
         super(UResNetPPNLoss, self).__init__()
-        self.ppn_loss = PPNLonelyLoss(cfg)
-        self.segmentation_loss = SegmentationLoss(cfg)
+        self.model_config = cfg[name]
+        self.ppn_loss = PPNLonelyLoss(self.model_config)
+        self.segmentation_loss = SegmentationLoss(self.model_config)
 
     def forward(self, outputs, segment_label, particles_label, weight=None):
 

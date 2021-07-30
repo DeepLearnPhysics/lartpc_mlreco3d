@@ -115,13 +115,27 @@ class GNN(torch.nn.Module):
             self.kinematics_momentum = base_config.get('kinematics_momentum', True)
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
-                self.type_net = MomentumNet(node_output_feats, num_output=5, num_hidden=type_config.get('num_hidden', 128))
+                type_net_mode = type_config.get('mode', 'edl')
+                if type_net_mode == 'standard':
+                    self.type_net = MomentumNet(node_output_feats, 
+                                                num_output=5, 
+                                                num_hidden=type_config.get('num_hidden', 128),
+                                                evidential=False)
+                elif type_net_mode == 'edl':
+                    self.type_net = MomentumNet(node_output_feats, 
+                                                num_output=5, 
+                                                num_hidden=type_config.get('num_hidden', 128),
+                                                evidential=True)
+                else:
+                    raise ValueError('Unrecognized Particle ID Type Net Mode: ', type_net_mode)
             if self.kinematics_momentum:
                 momentum_config = cfg[name].get('momentum_net', {})
+                softplus_and_shift = momentum_config.get('eps', 0.0)
                 if momentum_config.get('mode', 'standard') == 'edl':
                     self.momentum_net = EvidentialMomentumNet(node_output_feats, 
                                                               num_output=4, 
-                                                              num_hidden=momentum_config.get('num_hidden', 128))
+                                                              num_hidden=momentum_config.get('num_hidden', 128),
+                                                              eps=softplus_and_shift)
                 else:
                     self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
@@ -324,7 +338,7 @@ class GNNLoss(torch.nn.modules.loss._Loss):
             if iteration is not None:
                 node_loss = self.node_loss(result, node_label, iteration=iteration)
             else:
-                node_loss = self.node_loss(result, node_label, iteration=iteration)
+                node_loss = self.node_loss(result, node_label)
             loss.update(node_loss)
             loss['node_loss'] = node_loss['loss']
             loss['node_accuracy'] = node_loss['accuracy']

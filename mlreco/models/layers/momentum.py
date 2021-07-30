@@ -11,7 +11,7 @@ class MomentumNet(nn.Module):
         node_y = torch.randn(16, 5)
         edge_feature_x2y = net(node_x, node_y) # (16, 5)
     '''
-    def __init__(self, num_input, num_output=1, num_hidden=128):
+    def __init__(self, num_input, num_output=1, num_hidden=128, evidential=False):
         super(MomentumNet, self).__init__()
         self.linear1 = nn.Linear(num_input, num_hidden)
         self.norm1 = nn.BatchNorm1d(num_input)
@@ -20,7 +20,10 @@ class MomentumNet(nn.Module):
         self.linear3 = nn.Linear(num_hidden, num_output)
 
         self.elu = nn.LeakyReLU(negative_slope=0.33)
-        self.softplus = nn.Softplus()
+        if evidential:
+            self.evidence = nn.Softplus()
+        else:
+            self.evidence = nn.Identity()
 
     def forward(self, x):
         if x.shape[0] > 1:
@@ -32,13 +35,13 @@ class MomentumNet(nn.Module):
         x = self.linear2(x)
         x = self.elu(x)
         x = self.linear3(x)
-        out = self.softplus(x)
+        out = self.evidence(x)
         return out
 
 
 class EvidentialMomentumNet(nn.Module):
 
-    def __init__(self, num_input, num_output=4, num_hidden=128):
+    def __init__(self, num_input, num_output=4, num_hidden=128, eps=0.0):
         super(EvidentialMomentumNet, self).__init__()
         self.linear1 = nn.Linear(num_input, num_hidden)
         self.norm1 = nn.BatchNorm1d(num_input)
@@ -49,6 +52,7 @@ class EvidentialMomentumNet(nn.Module):
         self.elu = nn.LeakyReLU(negative_slope=0.33)
 
         self.softplus = nn.Softplus()
+        self.eps = eps
 
     def forward(self, x):
         if x.shape[0] > 1:
@@ -65,4 +69,6 @@ class EvidentialMomentumNet(nn.Module):
         gamma = x[:, 3].view(-1, 1)
         out = torch.cat([gamma, vab[:, 0].view(-1, 1), 
                          alpha, vab[:, 2].view(-1, 1)], dim=1)
-        return out
+
+        evidence = out + self.eps
+        return evidence

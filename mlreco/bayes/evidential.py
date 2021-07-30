@@ -162,17 +162,23 @@ def nll_regression_loss(logits, targets, eps=1e-6):
     logits = logits.view(-1, 4)
     gamma, nu, alpha, beta = logits[:, 0], logits[:, 1], logits[:, 2], logits[:, 3]
     omega = 2.0 * beta * (1.0 + nu)
-    nll = 0.5 * torch.log(np.pi / nu)  \
+    nll = 0.5 * (np.log(np.pi) - torch.log(nu + 1e-5))  \
         - alpha * torch.log(omega)  \
         + (alpha+0.5) * torch.log(nu * (targets - gamma)**2 + omega)  \
         + torch.lgamma(alpha)  \
         - torch.lgamma(alpha+0.5)
-    return nll
+    return torch.clamp(nll, min=0)
 
 def kld_regression_loss(logits, targets, eps=1e-6):
     logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
     loss = torch.abs(targets - gamma + eps) * (2.0 * nu + alpha)
+    return loss
+
+def kld_evd_l2_loss(logits, targets, eps=1e-6):
+    logits = logits.view(-1, 4)
+    gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
+    loss = torch.pow(targets - gamma + eps, 2) * (2.0 * nu + alpha)
     return loss
 
 def kl_nig(logits, targets, eps=0.01):
@@ -182,7 +188,7 @@ def kl_nig(logits, targets, eps=0.01):
 
     error = torch.abs(targets - gamma + 1e-6)
 
-    kl = 0.5 * (1.0 + eps) / nu \
+    kl = 0.5 * (1.0 + eps + 0.001) / (nu+0.001) \
         - 0.5 - torch.lgamma(alpha / (1.0 + eps)) \
         + (alpha - (1.0 + eps)) * torch.digamma(alpha)
 
@@ -204,6 +210,8 @@ class EDLRegressionLoss(nn.Module):
             self.kld_loss = kld_regression_loss
         elif self.kl_mode == 'kl':
             self.kld_loss = kl_nig
+        elif self.kl_mode == 'evd_l2':
+            self.kld_loss = kld_evd_l2_loss
         else:
             raise ValueError('Unrecognized KL Divergence Error Loss')
         self.w = w
