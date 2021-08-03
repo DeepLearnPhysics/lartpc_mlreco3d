@@ -146,7 +146,8 @@ def node_encoder_dict():
         "mix"       : mixed.ClustMixNodeEncoder,
         "mix2"      : mixed.ClustMixNodeEncoder2,
         "mix_debug" : mixed.ClustMixNodeEncoder3,
-        "gnn"       : gnn.ClustGNNNodeEncoder,
+        # Need adaptation of ClustGNNNodeEncoder to ME (batch col 0, coords 1:4)
+        #"gnn"       : gnn.ClustGNNNodeEncoder,
         "cnn_mink": cnn.ClustCNNMinkNodeEncoder
     }
 

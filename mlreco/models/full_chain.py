@@ -22,8 +22,7 @@ from mlreco.utils.gnn.evaluation import (node_assignment_score,
 
 from mlreco.utils.gnn.cluster import (form_clusters,
                                       get_cluster_batch,
-                                      get_cluster_label,
-                                      cluster_direction)
+                                      get_cluster_label)
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -847,7 +846,7 @@ class FullChain(torch.nn.Module):
             inter_data = torch.empty((0, inter_input_data.size(1)), dtype=torch.float, device=device)
             for i, interaction in enumerate(interactions):
                 inter_data = torch.cat([inter_data, inter_input_data[interaction]], dim=0)
-                inter_data[-len(interaction):, 3] = i * torch.ones(len(interaction)).to(device)
+                inter_data[-len(interaction):, self.batch_column_id] = i * torch.ones(len(interaction)).to(device)
             inter_cosmic_pred = self.cosmic_discriminator(inter_data)
 
             # Reorganize into batches before storing in result dictionary
