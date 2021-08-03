@@ -189,7 +189,7 @@ class DropoutBlock(ME.MinkowskiNetwork):
                  activation_args={},
                  normalization='batch_norm',
                  normalization_args={},
-                 has_bias=False,
+                 bias=False,
                  debug=False):
         super(DropoutBlock, self).__init__(dimension)
         assert dimension > 0
@@ -198,13 +198,13 @@ class DropoutBlock(ME.MinkowskiNetwork):
 
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, bias=bias)
         self.dropout1 = ME.MinkowskiDropout(p=p)
         self.norm1 = normalizations_construct(
             normalization, out_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=has_bias)
+            stride=1, dilation=dilation, dimension=dimension, bias=bias)
         self.dropout2 = ME.MinkowskiDropout(p=p)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
@@ -264,10 +264,6 @@ class ResNetBlock(ME.MinkowskiNetwork):
             stride=1, dilation=dilation, dimension=dimension, bias=bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
-
-        print('Total Number of Trainable Parameters {} = {}'.format(
-                debug_name,
-                sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, x):
 

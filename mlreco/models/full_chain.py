@@ -294,10 +294,7 @@ class FullChain(torch.nn.Module):
                         gnn_output['edge_pred'][0][b].detach().cpu().numpy(),
                         len(gnn_output['clusts'][0][b])))
 
-                    #print(get_cluster_label(true_labels, gnn_output['clusts'][0][b], column=7))
-
             result.update({labels['group_pred']: [group_ids]})
-            #print(group_ids)
 
 
     def select_particle_in_group(self, result, counts, b, particles,
@@ -388,7 +385,6 @@ class FullChain(torch.nn.Module):
 
             result['ghost_label'] = [deghost]
             input = [input[0][deghost]]
-
             #print(label_seg[0].shape, label_clustering[0].shape)
 
             if self.enable_cnn_clust and label_seg is not None and label_clustering is not None:
@@ -457,7 +453,7 @@ class FullChain(torch.nn.Module):
                                                 cluster_predictions.to(device)[:, None]], dim=1)
 
                     if self.process_fragments:
-                        fragment_data = self.gspice_fragment_manager(filtered_input)
+                        fragment_data = self.gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                         cluster_result['fragments'].extend(fragment_data[0])
                         cluster_result['frag_batch_ids'].extend(fragment_data[1])
                         cluster_result['frag_seg'].extend(fragment_data[2])
@@ -647,6 +643,9 @@ class FullChain(torch.nn.Module):
         frag_batch_ids = frag_result['frag_batch_ids']
         semantic_labels = frag_result['semantic_labels']
 
+        # for i, c in enumerate(fragments):
+        #     print('format' , torch.unique(input[0][c, self.batch_column_id], return_counts=True))
+
         vids = frag_result['vids']
         counts = frag_result['counts']
 
@@ -703,7 +702,7 @@ class FullChain(torch.nn.Module):
 
         for i, p in enumerate(particles):
             vals, cnts = semantic_labels[p].unique(return_counts=True)
-            assert len(vals) == 1
+            #assert len(vals) == 1
             part_seg[i] = vals[torch.argmax(cnts)].item()
 
         # Store in result the intermediate fragments
@@ -748,7 +747,6 @@ class FullChain(torch.nn.Module):
         device = label_clustering[0].device
 
         if self.enable_gnn_inter:
-
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
@@ -768,7 +766,7 @@ class FullChain(torch.nn.Module):
                                              if not same_length else np.int64)
 
             # Run interaction GrapPA: merges particle instances into interactions
-            _, kwargs = self.get_extra_gnn_features(extra_feats_particles,
+            inter_mask, kwargs = self.get_extra_gnn_features(extra_feats_particles,
                                                     part_seg,
                                                     self._inter_ids,
                                                     input,
@@ -788,7 +786,7 @@ class FullChain(torch.nn.Module):
             self.run_gnn(self.grappa_inter,
                          input,
                          result,
-                         particles,
+                         particles[inter_mask],
                          output_keys,
                          kwargs)
 
@@ -797,7 +795,8 @@ class FullChain(torch.nn.Module):
         # ---
 
         if self.enable_gnn_kinematics:
-
+            if not self.enable_gnn_inter:
+                raise Exception("Need interaction clustering before kinematic GNN.")
             output_keys = {'clusts': 'kinematics_particles',
                            'edge_index': 'kinematics_edge_index',
                            'node_pred_p': 'node_pred_p',
@@ -807,7 +806,7 @@ class FullChain(torch.nn.Module):
             self.run_gnn(self.grappa_kinematics,
                          input,
                          result,
-                         particles,
+                         particles[inter_mask],
                          output_keys)
 
         # ---
@@ -818,7 +817,7 @@ class FullChain(torch.nn.Module):
             if not self.enable_gnn_inter and not self._cosmic_use_true_interactions:
                 raise Exception("Need interaction clustering before cosmic discrimination.")
 
-            _, counts = torch.unique(input[0][:,3], return_counts=True)
+            _, counts = torch.unique(input[0][:, self.batch_column_id], return_counts=True)
             interactions, inter_primary_ids = [], []
             # Note to self: inter_primary_ids is not used as of now
 
@@ -856,7 +855,7 @@ class FullChain(torch.nn.Module):
             interactions = np.array(interactions, dtype=object if not same_length else np.int64)
             inter_batch_ids = np.array(inter_batch_ids)
 
-            _, counts = torch.unique(input[0][:,3], return_counts=True)
+            _, counts = torch.unique(input[0][:, self.batch_column_id], return_counts=True)
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
@@ -960,7 +959,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         self.kinematics_type_weight = self.loss_config.get('kinematics_type_weight', 0.0)
         self.cosmic_weight          = self.loss_config.get('cosmic_weight', 0.0)
 
-    def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None, particle_graph=None):
+    def forward(self, out, seg_label, ppn_label=None, cluster_label=None, kinematics_label=None,
+                particle_graph=None, iteration=None):
         res = {}
         accuracy, loss = 0., 0.
 
@@ -991,9 +991,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                                   self.enable_cosmic):
 
             deghost = out['ghost_label'][0]
-
-            #print(seg_label[0].shape, cluster_label[0].shape)
-            #print(seg_label[0].shape, kinematics_label[0].shape)
 
             if self.cheat_ghost:
                 true_mask = deghost
@@ -1042,7 +1039,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # FIXME seg_label or segmentation predictions?
                 # print(torch.argmax(out['segmentation'][0], dim=1)[:, None].size())
                 # FIXME deghost not always true
-                gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(out['segmentation'][0][deghost], dim=1)[:, None]], dim=1)
+                segmentation_pred = out['segmentation'][0]
+                if self.enable_ghost:
+                    segmentation_pred = segmentation_pred[deghost]
+                gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(segmentation_pred, dim=1)[:, None]], dim=1)
                 # if self.enable_ghost:
                 #     gs_seg_label = gs_seg_label[deghost]
                 # print(gs_seg_label.size())
@@ -1138,7 +1138,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             gnn_out = {}
             if 'inter_edge_pred' in out:
                 gnn_out = {
-                    'clusts':out['particles'],
+                    'clusts':out['inter_particles'],
                     'edge_pred':out['inter_edge_pred'],
                     'edge_index':out['inter_edge_index']
                 }
@@ -1148,7 +1148,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
 
-            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label)
+            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
 
             res['inter_edge_loss'] = res_gnn_inter['loss']
             res['inter_edge_accuracy'] = res_gnn_inter['accuracy']

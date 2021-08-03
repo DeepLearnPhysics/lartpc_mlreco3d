@@ -67,11 +67,15 @@ def model_dict():
         # Bayesian Classifier
         "bayes_singlep": (mink_singlep.BayesianParticleClassifier, mink_singlep.ParticleTypeLoss),
         # Bayesian UResNet
-        "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_uresnet.SegmentationLoss),
+        "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_bayes_uresnet.SegmentationLoss),
         # Evidential Classifier
         'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss),
+        # Deep Single Pass Uncertainty Quantification
+        'duq_singlep': (mink_singlep.DUQParticleClassifier, mink_singlep.MultiLabelCrossEntropy),
         # Adversarial loss UResNet training
         "uresnet_adversarial": (uresnet_adversarial.UResNetAdversarial, uresnet_adversarial.AdversarialLoss),
+        # Single Particle VGG
+        "single_particle_vgg": (mink_singlep.SingleParticleVGG, mink_singlep.ParticleTypeLoss)
     }
     return models
 

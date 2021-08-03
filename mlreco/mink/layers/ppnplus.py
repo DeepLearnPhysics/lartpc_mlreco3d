@@ -332,7 +332,7 @@ class PPN(MENetworkBase):
 
 class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
-    def __init__(self, cfg, name='ppn_loss'):
+    def __init__(self, cfg, name='ppn'):
         super(PPNLonelyLoss, self).__init__()
         self.loss_config = cfg[name]
         # pprint(self.loss_config)

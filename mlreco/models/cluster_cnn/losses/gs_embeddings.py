@@ -29,8 +29,10 @@ class WeightedEdgeLoss(nn.Module):
     def forward(self, logits, targets):
         if self.invert:
             y = (targets < 0.5).float()
+        else:
+            y = (targets > 0.5).float()
         device = logits.device
-        weight = torch.ones(y.shape[0]).to(device)
+        weight = torch.ones(targets.shape[0]).to(device)
 
         # The crucial error are the false positives, as these will
         # lead to overclustering.
@@ -189,10 +191,14 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         occ_truth = torch.log(bincounts)
         occ_loss = torch.abs(torch.gather(
             occ - occ_truth[None, :], 1, groups.view(-1, 1)))
-        occ_loss = scatter_mean(occ_loss.squeeze(), groups)
-        # occ_loss = occ_loss[occ_loss > 0]
+        if len(occ_loss.squeeze().size()) and len(groups.size()):
+            occ_loss = scatter_mean(occ_loss.squeeze(), groups)
+            # occ_loss = occ_loss[occ_loss > 0]
 
-        return occ_loss.mean()
+            return occ_loss.mean()
+        else:
+            #print(occ_loss.squeeze().size(), groups.size())
+            return 0.0
 
 
     def combine_multiclass(self, sp_embeddings, ft_embeddings, covariance,

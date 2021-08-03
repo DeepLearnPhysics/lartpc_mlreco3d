@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from mlreco.mink.gan.layers import MiniBatchStdDev
 from mlreco.utils import unwrap
 import warnings
 import torch
@@ -86,6 +85,12 @@ class trainval(object):
         # note that scheduler is stepped every iteration, not every epoch
         if self._scheduler is not None:
             self._scheduler.step()
+
+        # If the model has a buffer that needs to be updated, do it after
+        # trainable parameter updates. 
+        if hasattr(self._net.module, 'update_buffers'):
+            print("Updating Buffer...")
+            self._net.module.update_buffers()
 
     def save_state(self, iteration):
         self._watch.start('save')

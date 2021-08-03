@@ -3,9 +3,6 @@ from __future__ import division
 from __future__ import print_function
 import torch
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 class UResNet(torch.nn.Module):
     """
     UResNet

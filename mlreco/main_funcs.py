@@ -269,7 +269,7 @@ def train_loop(handlers):
 
         # Train step
         if handlers.trainer._time_dependent:
-            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter, 
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter,
                                                                  iteration=handlers.iteration)
         else:
             data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
