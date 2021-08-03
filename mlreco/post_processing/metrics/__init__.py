@@ -12,3 +12,6 @@ from .vertex_metrics import vertex_metrics
 from .single_particle import single_particle
 from .singlep_mcdropout import singlep_mcdropout
 from .bayes_segnet_mcdropout import bayes_segnet_mcdropout
+from .evidential_metrics import evidential_metrics
+from .evidential_segnet import evidential_segnet_metrics
+from .evidential_gnn import evidential_gnn_metrics

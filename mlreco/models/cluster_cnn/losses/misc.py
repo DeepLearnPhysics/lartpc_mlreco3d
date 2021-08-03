@@ -32,7 +32,7 @@ def iou_batch(pred: torch.BoolTensor, labels: torch.BoolTensor, eps=0.0):
 
 
 class VectorEstimationLoss(nn.Module):
-    
+
     def __init__(self, cfg, name='vector_estimation_loss'):
         super(VectorEstimationLoss, self).__init__()
         self.loss_config = cfg[name]
@@ -41,15 +41,15 @@ class VectorEstimationLoss(nn.Module):
         self.D = 3
         self.cos = nn.CosineSimilarity(dim=1)
         self.eps = self.loss_config.get('eps', 1e-6)
-        
-        
+
+
     def compute_loss_single_graph(self, vec_pred, pos):
         '''
         INPUTS:
-            - x (N x 4) : sin/cos predictions for phi and theta. 
+            - x (N x 4) : sin/cos predictions for phi and theta.
             - pos (N x 3 Tensor): spatial coordinates (batch, semantic_id)
         '''
-        
+
         with torch.no_grad():
             anchors = fps(pos, ratio=self.fps_ratio)
             anchors_pos = pos[anchors]
@@ -57,11 +57,11 @@ class VectorEstimationLoss(nn.Module):
             nbhds = pos[index[1, :]].view(-1, self.k, self.D)
             U, S, V = torch.pca_lowrank(nbhds)
             vecs = V[:, :, 0]
-        
+
         abs_cos = torch.abs(self.cos(vec_pred[index[0, :]], vecs[index[0, :]]))
-        
+
         vec_loss = -torch.log(abs_cos + self.eps).mean()
-        
+
         return {
             'vec_loss': vec_loss,
             'abs_cos': abs_cos,
@@ -82,16 +82,16 @@ class VectorEstimationLoss(nn.Module):
             )
             loss.append(res['vec_loss'])
             # result['abs_cos'].append(res['abs_cos'])
-        
+
         loss = sum(loss) / len(loss)
         return loss
-        
+
 
 class BinaryLogDiceLoss(torch.nn.Module):
-    
+
     def __init__(self, gamma=1):
         super(BinaryLogDiceLoss, self).__init__()
-        
+
     def forward(self, logits, targets, eps=1e-6):
         p = torch.sigmoid(logits)
         p = (logits < 0).float()
@@ -109,7 +109,7 @@ class BinaryCELogDiceLoss(torch.nn.Module):
         self.gamma = gamma
         self.w_ce = w_ce
         self.w_dice = w_dice
-        
+
     def forward(self, logits, targets, weight=None, eps=0.001, reduction='none'):
 
         bceloss = self.ce(logits, targets, weight=weight, reduction=reduction)
@@ -133,7 +133,7 @@ class MincutLoss(BinaryCELogDiceLoss):
     def __init__(self, mincut_weight=1.0, **kwargs):
         super(MincutLoss, self).__init__(**kwargs)
         self.w_mc = mincut_weight
-        
+
     def forward(self, logits, targets, weight=None, eps=0.001, reduction='none'):
 
         bceloss = self.ce(logits, targets, weight=weight, reduction=reduction)
@@ -164,7 +164,7 @@ class LovaszHingeLoss(torch.nn.modules.loss._Loss):
 class LovaszSoftmaxWithLogitsLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, reduction='none'):
-        super(LovaszHingeLoss, self).__init__(reduction=reduction)
+        super(LovaszSoftmaxWithLogitsLoss, self).__init__(reduction=reduction)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, logits, targets):
@@ -202,8 +202,13 @@ def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
     mu = cluster_means[None, :, :]
     l = torch.clamp(torch.norm(x - mu, dim=-1) - margin, min=0)**2
     l = torch.gather(l, 1, labels.view(-1, 1)).squeeze()
-    intra_loss = torch.mean(scatter_mean(l, labels))
-    return intra_loss
+
+    if len(l.size()) and len(labels.size()):
+        intra_loss = torch.mean(scatter_mean(l, labels))
+        return intra_loss
+    else:
+        #print(l.size(), labels.size())
+        return 0.0
 
 
 def inter_cluster_loss(cluster_means, margin=0.2):
@@ -312,7 +317,7 @@ def bhattacharyya_coeff_matrix(v1, v2, eps=1e-6):
 
 
 def get_graphspice_logits(sp_emb, ft_emb, cov, groups,
-                          sp_centroids, ft_centroids, 
+                          sp_centroids, ft_centroids,
                           eps=0.001,
                           compute_accuracy=True):
 

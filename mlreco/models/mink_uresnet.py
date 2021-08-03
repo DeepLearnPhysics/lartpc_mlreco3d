@@ -8,9 +8,6 @@ from mlreco.mink.layers.uresnet import UResNet, ACASUNet, ASPPUNet
 from collections import defaultdict
 from mlreco.mink.layers.factories import activations_construct
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 class UResNet_Chain(nn.Module):
 
 

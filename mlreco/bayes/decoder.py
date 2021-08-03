@@ -71,7 +71,7 @@ class BayesianDecoder(MENetworkBase):
                                           activation_args=self.activation_args,
                                           normalization=self.norm,
                                           normalization_args=self.norm_args,
-                                          has_bias=self.allow_bias,
+                                          bias=self.allow_bias,
                                           debug=self.debug))
                 else:
                     m.append(ResNetBlock(self.nPlanes[i] * (2 if j == 0 else 1),
@@ -81,7 +81,7 @@ class BayesianDecoder(MENetworkBase):
                                          activation_args=self.activation_args,
                                          normalization=self.norm,
                                          normalization_args=self.norm_args,
-                                         has_bias=self.allow_bias))
+                                         bias=self.allow_bias))
             m = nn.Sequential(*m)
             self.decoding_block.append(m)
         self.decoding_block = nn.Sequential(*self.decoding_block)

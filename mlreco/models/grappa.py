@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 from .layers.dbscan import DBSCANFragmenter
-from .layers.momentum import MomentumNet
+from .layers.momentum import EvidentialMomentumNet, MomentumNet
 from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch
@@ -115,10 +115,29 @@ class GNN(torch.nn.Module):
             self.kinematics_momentum = base_config.get('kinematics_momentum', True)
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
-                self.type_net = MomentumNet(node_output_feats, num_output=5, num_hidden=type_config.get('num_hidden', 128))
+                type_net_mode = type_config.get('mode', 'edl')
+                if type_net_mode == 'standard':
+                    self.type_net = MomentumNet(node_output_feats,
+                                                num_output=5,
+                                                num_hidden=type_config.get('num_hidden', 128),
+                                                evidential=False)
+                elif type_net_mode == 'edl':
+                    self.type_net = MomentumNet(node_output_feats,
+                                                num_output=5,
+                                                num_hidden=type_config.get('num_hidden', 128),
+                                                evidential=True)
+                else:
+                    raise ValueError('Unrecognized Particle ID Type Net Mode: ', type_net_mode)
             if self.kinematics_momentum:
                 momentum_config = cfg[name].get('momentum_net', {})
-                self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
+                softplus_and_shift = momentum_config.get('eps', 0.0)
+                if momentum_config.get('mode', 'standard') == 'edl':
+                    self.momentum_net = EvidentialMomentumNet(node_output_feats,
+                                                              num_output=4,
+                                                              num_hidden=momentum_config.get('num_hidden', 128),
+                                                              eps=softplus_and_shift)
+                else:
+                    self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
         if self.vertex_mlp:
@@ -259,7 +278,14 @@ class GNN(torch.nn.Module):
                 result['node_pred_type'] = [[node_pred_type[b] for b in cbids]]
             if self.kinematics_momentum:
                 node_pred_p = self.momentum_net(out['node_features'][0])
-                result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
+                if isinstance(self.momentum_net, EvidentialMomentumNet):
+                    result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
+                    aleatoric = node_pred_p[:, 3] / (node_pred_p[:, 2] - 1.0 + 1e-6)
+                    epistemic = node_pred_p[:, 3] / (node_pred_p[:, 1] * (node_pred_p[:, 2] - 1.0 + 1e-6))
+                    result['node_pred_p_aleatoric'] = [[aleatoric[b] for b in cbids]]
+                    result['node_pred_p_epistemic'] = [[epistemic[b] for b in cbids]]
+                else:
+                    result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
 
         if self.vertex_mlp:
             node_pred_vtx = self.vertex_net(out['node_features'][0])
@@ -299,14 +325,18 @@ class GNNLoss(torch.nn.modules.loss._Loss):
             self.apply_edge_loss = True
             self.edge_loss = edge_loss_construct(cfg[name])
 
-    def forward(self, result, clust_label, graph=None, node_label=None):
+
+    def forward(self, result, clust_label, graph=None, node_label=None, iteration=None):
 
         # Apply edge and node losses, if instantiated
         loss = {}
         if self.apply_node_loss:
             if node_label is None:
                 node_label = clust_label
-            node_loss = self.node_loss(result, node_label)
+            if iteration is not None:
+                node_loss = self.node_loss(result, node_label, iteration=iteration)
+            else:
+                node_loss = self.node_loss(result, node_label)
             loss.update(node_loss)
             loss['node_loss'] = node_loss['loss']
             loss['node_accuracy'] = node_loss['accuracy']

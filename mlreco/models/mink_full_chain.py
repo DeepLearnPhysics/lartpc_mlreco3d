@@ -108,7 +108,7 @@ class MinkFullChain(FullChain):
                                             dtype=torch.double)
             for i, f in enumerate(fragments[mask]):
                 if frag_seg[mask][i] == 1:
-                    dist_mat = torch.cdist(input[0][f,:3], input[0][f,:3])
+                    dist_mat = torch.cdist(input[0][f,1:4], input[0][f,1:4])
                     idx = torch.argmax(dist_mat)
                     idxs = int(idx)//len(f), int(idx)%len(f)
                     scores = torch.sigmoid(points_tensor[f, -1])
@@ -116,8 +116,8 @@ class MinkFullChain(FullChain):
                                   0.5 if scores[idxs[0]] > 0.5 else 0.0
                     correction1 = points_tensor[f][idxs[1], :3] + \
                                   0.5 if scores[idxs[1]] > 0.5 else 0.0
-                    end_points = torch.cat([input[0][f[idxs[0]],:3] + correction0,
-                                            input[0][f[idxs[1]],:3] + correction1]).reshape(1,-1)
+                    end_points = torch.cat([input[0][f[idxs[0]],1:4] + correction0,
+                                            input[0][f[idxs[1]],1:4] + correction1]).reshape(1,-1)
                     ppn_points = torch.cat((ppn_points, end_points), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(
@@ -218,7 +218,10 @@ class MinkFullChain(FullChain):
             #     print(deghost, deghost.shape)
             # else:
             deghost = result['ghost'][0].argmax(dim=1) == 0
+
+            result['ghost_label'] = [deghost]
             input = [input[0][deghost]]
+
             if label_seg is not None and label_clustering is not None:
 
                 #print(label_seg[0].shape, label_clustering[0].shape)
@@ -239,6 +242,8 @@ class MinkFullChain(FullChain):
             if self.enable_ppn:
                 deghost_result['points']            = [result['points'][0][deghost]]
                 deghost_result['mask_ppn'][0][-1]   = result['mask_ppn'][0][-1][deghost]
+                #print(len(result['ppn_score']))
+                #deghost_result['ppn_score'][0][-1]   = result['ppn_score'][0][-1][deghost]
                 deghost_result['ppn_coords'][0][-1] = result['ppn_coords'][0][-1][deghost]
                 deghost_result['ppn_layers'][0][-1] = result['ppn_layers'][0][-1][deghost]
             cnn_result.update(deghost_result)
@@ -292,7 +297,7 @@ class MinkFullChain(FullChain):
                                             cluster_predictions.to(device)[:, None]], dim=1)
 
                 if self.process_fragments:
-                    fragment_data = self.gspice_fragment_manager(filtered_input)
+                    fragment_data = self.gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragments'].extend(fragment_data[0])
                     cluster_result['frag_batch_ids'].extend(fragment_data[1])
                     cluster_result['frag_seg'].extend(fragment_data[2])
@@ -305,6 +310,8 @@ class MinkFullChain(FullChain):
             cluster_result['frag_seg'].extend(fragment_data[2])
 
         # Format Fragments
+        # for i, c in enumerate(cluster_result['fragments']):
+        #     print('format' , torch.unique(input[0][c, self.batch_column_id], return_counts=True))
         fragments_result = format_fragments(cluster_result['fragments'],
                                             cluster_result['frag_batch_ids'],
                                             cluster_result['frag_seg'],

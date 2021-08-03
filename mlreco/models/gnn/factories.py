@@ -190,9 +190,10 @@ def node_loss_dict():
     from .losses import node_kinematics, node_primary, node_type
 
     losses = {
-        "kinematics"    : node_kinematics.NodeKinematicsLoss,
-        "primary"       : node_primary.NodePrimaryLoss,
-        "type"          : node_type.NodeTypeLoss
+        "kinematics"     : node_kinematics.NodeKinematicsLoss,
+        "kinematics_edl" : node_kinematics.NodeEvidentialKinematicsLoss,
+        "primary"        : node_primary.NodePrimaryLoss,
+        "type"           : node_type.NodeTypeLoss
     }
 
     return losses

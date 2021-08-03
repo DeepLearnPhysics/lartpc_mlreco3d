@@ -272,7 +272,7 @@ def group_points(ppn_pts, batch, label):
     return np.array(ppn_pts_new), np.array(batch_new), np.array(label_new)
 
 
-def mink_ppn_selector(data, result, 
+def mink_ppn_selector(data, result,
         score_threshold=0.5,
         type_score_threshold=0.5,
         type_threshold=1.999,
@@ -353,7 +353,8 @@ def mink_ppn_selector(data, result,
 
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
-                                    type_threshold=1.999, entry=0, score_pool='max', enforce_type=True, **kwargs):
+                                    type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
+                                    points=None, batch_col=3, mask_ppn=None, **kwargs):
     """
     Postprocessing of PPN points.
     Parameters
@@ -368,9 +369,15 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     [x,y,z,bid,label] of ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = out['points'][entry]#.cpu().detach().numpy()
-    classify_endpoints = out['classify_endpoints'][entry]
-    mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
+    if points is None:
+        points = out['points'][entry]#.cpu().detach().numpy()
+    enable_classify_endpoints = 'classify_endpoints' in out
+    if enable_classify_endpoints:
+        classify_endpoints = out['classify_endpoints'][entry]
+
+    # Difference in naming between SCN/ME
+    if mask_ppn is None:
+        mask_ppn = out[mask_ppn2][entry]#.cpu().detach().numpy()
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -380,7 +387,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         points = points[mask_ghost]
-        classify_endpoints = classify_endpoints[mask_ghost]
+        if enable_classify_endpoints:
+            classify_endpoints = classify_endpoints[mask_ghost]
         mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         scores = scores[mask_ghost]
@@ -395,7 +403,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     all_batch  = []
     all_softmax = []
     all_endpoints = []
-    batch_ids  = event_data[:, 3]
+    batch_ids  = event_data[:, batch_col]
     for b in np.unique(batch_ids):
         final_points = []
         final_scores = []
@@ -407,7 +415,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         num_classes = 5
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
-        ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index][mask], axis=1)
+        if enable_classify_endpoints:
+            ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index][mask], axis=1)
         if enforce_type:
             for c in range(num_classes):
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
@@ -419,19 +428,22 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                     final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
-                    final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
+                    if enable_classify_endpoints:
+                        final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
         else:
             final_points = [points[batch_index][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, :3]]
             final_scores = [scores[batch_index][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]
-            final_endpoints = [ppn_classify_endpoints]
+            if enable_classify_endpoints:
+                final_endpoints = [ppn_classify_endpoints]
         if len(final_points)>0:
             final_points = np.concatenate(final_points, axis=0)
             final_scores = np.concatenate(final_scores, axis=0)
             final_types  = np.concatenate(final_types,  axis=0)
             final_softmax = np.concatenate(final_softmax, axis=0)
-            final_endpoints = np.concatenate(final_endpoints, axis=0)
+            if enable_classify_endpoints:
+                final_endpoints = np.concatenate(final_endpoints, axis=0)
             if final_points.shape[0] > 0:
                 clusts = dbscan_points(final_points, epsilon=1.99,  minpts=1)
                 for c in clusts:
@@ -441,10 +453,13 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                     all_scores.append(pool_op(final_scores[c], axis=0))
                     all_types.append (pool_op(final_types[c],  axis=0))
                     all_softmax.append(pool_op(final_softmax[c], axis=0))
-                    all_endpoints.append(pool_op(final_endpoints[c], axis=0))
+                    if enable_classify_endpoints:
+                        all_endpoints.append(pool_op(final_endpoints[c], axis=0))
                     all_batch.append(b)
-
-    return np.column_stack((all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types, all_endpoints))
+    result = (all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types,)
+    if enable_classify_endpoints:
+        result = result + (all_endpoints,)
+    return np.column_stack( result )
 
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,

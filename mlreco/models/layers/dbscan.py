@@ -79,14 +79,14 @@ class DBSCANFragmenter(torch.nn.Module):
                 if self.break_tracks and s == self.track_label:
                     assert track_points is not None
                     labels = track_clustering(voxels      = voxels,
-                                              points      = track_points[track_points[:, self.BATCH_COL] == bid, 
+                                              points      = track_points[track_points[:, self.BATCH_COL] == bid,
                                                                          self.COORD_COLS[0]:self.COORD_COLS[1]],
                                               method      = self.track_clustering_method,
                                               eps         = self.eps[k],
                                               min_samples = self.min_samples[k],
                                               mask_radius = self.ppn_mask_radius)
                 else:
-                    labels = sklearn.cluster.DBSCAN(eps=self.eps[k], 
+                    labels = sklearn.cluster.DBSCAN(eps=self.eps[k],
                                                     min_samples=self.min_samples[k]).fit(voxels).labels_
 
                 # Build clusters for this class
@@ -98,7 +98,9 @@ class DBSCANFragmenter(torch.nn.Module):
                 clusts.extend(cls_idx)
 
         same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
-        return np.array(clusts, dtype=object if not same_length else np.int64)
+        clusts = np.array(clusts, dtype=object if not same_length else np.int64)
+
+        return clusts
 
 
     def forward(self, data, output=None, points=None):
@@ -152,7 +154,7 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
         data = data.detach().cpu().numpy()
         track_points = None
         if self.track_label in self.cluster_classes:
-
+            # FIXME ppn_score not in output?
             numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
                             'points'      : [output['points'][0].detach().cpu().numpy()],
                             'mask_ppn'    : [output['mask_ppn'][0].detach().cpu().numpy()],
