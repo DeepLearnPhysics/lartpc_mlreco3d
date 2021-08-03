@@ -85,6 +85,7 @@ class GNN(torch.nn.Module):
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
 
         self.batch_index = base_config.get('batch_index', 3)
+        self.coords_index = tuple(base_config.get('coords_index', [0, 3]))
 
         # Interpret node type as list of classes to cluster, -1 means all classes
         if isinstance(self.node_type, int): self.node_type = [self.node_type]
@@ -195,7 +196,7 @@ class GNN(torch.nn.Module):
             result['batch_counts'] = [batch_counts]
 
         # Update result with a list of clusters for each batch id
-        batches, bcounts = torch.unique(cluster_data[:,3], return_counts=True)
+        batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
 
@@ -210,7 +211,7 @@ class GNN(torch.nn.Module):
         # If necessary, compute the cluster distance matrix
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,:3], clusts, batch_ids, self.edge_dist_metric)
+            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]], clusts, batch_ids, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
@@ -256,10 +257,10 @@ class GNN(torch.nn.Module):
         # Add start point and/or start direction to node features if requested
         if self.add_start_point or points is not None:
             if points is None:
-                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6)
+                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
-                dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
+                dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
                 x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device

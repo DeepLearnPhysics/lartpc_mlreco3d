@@ -184,6 +184,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_pred_p = out['node_pred_p'][i][j]
                     if not node_pred_p.shape[0]:
                         continue
+
                     node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
                     loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
                     total_loss += loss
