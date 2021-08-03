@@ -354,7 +354,8 @@ def mink_ppn_selector(data, result,
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                                    points=None, batch_col=3, mask_ppn=None, **kwargs):
+                                    points=None, batch_col=3, mask_ppn=None, coords_col=(0,3),
+                                    type_col=(5,10), score_col=(3,5),**kwargs):
     """
     Postprocessing of PPN points.
     Parameters
@@ -381,7 +382,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
-    scores = scipy.special.softmax(points[:, 3:5], axis=1)
+    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
 
     if 'ghost' in out:
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
@@ -413,8 +414,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         batch_index = batch_ids == b
         mask = ((~(mask_ppn[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1), axis=1)
-        ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, 5:], axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
+        ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)
         if enable_classify_endpoints:
             ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index][mask], axis=1)
         if enforce_type:
@@ -422,16 +423,16 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
-                    d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, :3] + 0.5, event_data[batch_index][mask][uresnet_points][:, :3])
+                    d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
                     ppn_mask = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, :3])
+                    final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
                     final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
                     if enable_classify_endpoints:
                         final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
         else:
-            final_points = [points[batch_index][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, :3]]
+            final_points = [points[batch_index][mask][:, coords_col[0]:coords_col[1]] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
             final_scores = [scores[batch_index][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]
