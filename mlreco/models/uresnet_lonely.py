@@ -220,7 +220,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
-    def __init__(self, cfg, reduction='sum', batch_col=batch_col):
+    def __init__(self, cfg, reduction='sum', batch_col=3):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['uresnet_lonely']
         self._ghost = self._cfg.get('ghost', False)

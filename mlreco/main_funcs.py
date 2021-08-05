@@ -6,8 +6,6 @@ import numpy as np
 import torch
 import pprint
 
-from torch.utils.tensorboard import SummaryWriter
-
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
@@ -178,6 +176,7 @@ def log_tensorboard(handlers, tstamp_iteration, tsum, res, cfg, epoch, first_id)
     """
     Logger using the torch.utils.tensorboard interface.
     """
+    from torch.utils.tensorboard import SummaryWriter
     writer_path = os.path.join(cfg['trainval']['log_dir'], 'summary.log')
     writer = SummaryWriter(writer_path)
     # writer.add_graph(handlers.trainer._net.module)
@@ -217,7 +216,7 @@ def log_tensorboard(handlers, tstamp_iteration, tsum, res, cfg, epoch, first_id)
     loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
     writer.add_scalar('accuracy', acc)
     writer.add_scalar('loss', loss)
-    
+
 
 
 def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,

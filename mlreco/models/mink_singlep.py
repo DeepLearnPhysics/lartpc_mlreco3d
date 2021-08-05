@@ -13,7 +13,7 @@ from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.bayes.encoder import BayesianEncoder
+from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.evidential import EVDLoss
 from mlreco.xai.simple_cnn import VGG16
 from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
@@ -95,8 +95,8 @@ class DUQParticleClassifier(ParticleImageClassifier):
 
     def bilinear(self, z):
         embeddings = self.m / self.N.unsqueeze(0)
-        
-        diff = z - embeddings.unsqueeze(0)            
+
+        diff = z - embeddings.unsqueeze(0)
         y_pred = (- diff**2).mean(1).div(2 * self.sigma**2).exp()
 
         return y_pred
@@ -119,7 +119,7 @@ class DUQParticleClassifier(ParticleImageClassifier):
 
         self.z = z
         self.y_pred = y_pred
-        
+
         return res
 
     def update_buffers(self):
@@ -129,7 +129,7 @@ class DUQParticleClassifier(ParticleImageClassifier):
             # compute sum of embeddings on class by class basis
             features_sum = torch.einsum('ijk,ik->jk', self.z, self.y_pred)
             self.m = self.gamma * self.m + (1 - self.gamma) * features_sum
-        
+
 
 
 class EvidentialParticleClassifier(ParticleImageClassifier):
@@ -149,7 +149,7 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
         else:
             raise Exception("Unknown output activation name %s provided" % self.final_layer_name)
         self.eps = cfg[name].get('eps', 0.0)
-        
+
     def forward(self, input):
         point_cloud, = input
         out = self.encoder(point_cloud)
@@ -205,7 +205,7 @@ class BayesianParticleClassifier(MENetworkBase):
             pvec = torch.zeros((num_batch, self.num_classes)).to(device)
             logits = torch.zeros((num_batch, self.num_classes)).to(device)
             discrete = torch.zeros((num_batch, self.num_classes)).to(device)
-            
+
             eye = torch.eye(self.num_classes).int().to(device)
 
             for i in range(num_samples):
@@ -239,7 +239,7 @@ class BayesianParticleClassifier(MENetworkBase):
         }
         return res
 
-        
+
     def forward(self, input):
         if (not self.training) and (self.mode == 'mc_dropout'):
             return self.mc_forward(input)
@@ -301,13 +301,13 @@ class MultiLabelCrossEntropy(nn.Module):
             )[0]
 
         gradients = gradients.flatten(start_dim=1)
-        
+
         # L2 norm
         grad_norm = gradients.norm(2, dim=1)
 
         # Two sided penalty
         gradient_penalty = ((grad_norm - 1) ** 2).mean()
-        
+
         # One sided penalty - down
     #     gradient_penalty = F.relu(grad_norm - 1).mean()
 
