@@ -32,7 +32,7 @@ class ClustCNNNodeEncoder2(nn.Module):
     Uses a CNN to produce node features for cluster GNN
 
     """
-    def __init__(self, model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustCNNNodeEncoder2, self).__init__()
 
         self.encoder = ResidualEncoder(model_config)
@@ -53,7 +53,7 @@ class ClustCNNMinkNodeEncoder(nn.Module):
     '''
     CNN Node Encoder using MinkowskiEngine Backend
     '''
-    def __init__(self, model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustCNNMinkNodeEncoder, self).__init__()
 
         # Initialize the CNN
@@ -112,7 +112,7 @@ class ClustCNNEdgeEncoder2(nn.Module):
     Uses a CNN to produce node features for cluster GNN
 
     """
-    def __init__(self, model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustCNNEdgeEncoder2, self).__init__()
         # Initialize the CNN
         self.encoder = ResidualEncoder(model_config)
@@ -149,7 +149,7 @@ class ClustCNNMinkEdgeEncoder(nn.Module):
     Uses a CNN to produce node features for cluster GNN
 
     """
-    def __init__(self, model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustCNNMinkEdgeEncoder, self).__init__()
         # Initialize the CNN
         self.encoder = SparseResidualEncoder(model_config)

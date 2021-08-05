@@ -86,8 +86,10 @@ class DBSCANFragmentManager(FragmentManager):
         super(DBSCANFragmentManager, self).__init__(frag_cfg)
         dbscan_frag = {'dbscan_frag': frag_cfg}
         if mode == 'mink':
+            self._batch_column = 0
             self.dbscan_fragmenter = MinkDBSCANFragmenter(dbscan_frag)
         elif mode == 'scn':
+            self._batch_column = 3
             self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
         else:
             raise Exception('Invalid sparse CNN backend name {}'.format(mode))

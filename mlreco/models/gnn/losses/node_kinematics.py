@@ -62,11 +62,13 @@ class NodeKinematicsLoss(torch.nn.Module):
             reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
             balance_classes : <balance loss per class: True or False (default False)>
     """
-    def __init__(self, loss_config):
+    def __init__(self, loss_config, batch_col=3, coords_col=(0, 3)):
         super(NodeKinematicsLoss, self).__init__()
 
         # Set the target for the loss
-        self.batch_col = loss_config.get('batch_col', 3)
+        self.batch_col = batch_col
+        self.coords_col = coords_col
+
         self.type_col = loss_config.get('target_col', 7)
         self.momentum_col = loss_config.get('target_col', 8)
         self.vtx_col = loss_config.get('vtx_col', 9)
@@ -139,7 +141,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 continue
 
             # Get the list of batch ids, loop over individual batches
-            batches = types[i][:,self.batch_col]
+            batches = types[i][:, self.batch_col]
             nbatches = len(batches.unique())
             for j in range(nbatches):
 
