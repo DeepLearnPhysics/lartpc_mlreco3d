@@ -221,6 +221,7 @@ class PPN(MENetworkBase):
         self.merge_concat = MergeConcat()
 
         if self.ghost:
+            print("Ghost Masking is enabled for MinkPPN.")
             self.ghost_mask = MinkGhostMask(self.D)
             self.use_true_ghost_mask = self.model_cfg.get(
                 'use_true_ghost_mask', False)
@@ -255,8 +256,8 @@ class PPN(MENetworkBase):
                 if self.use_true_ghost_mask:
                     assert ghost_labels is not None
                     # TODO: Not sure what's going on here
-                    ghost_mask_tensor = input['segment_label'] < self.num_classes
-                    ghost_coords = input['segment_label']
+                    ghost_mask_tensor = ghost_labels[:, -1] < self.num_classes
+                    ghost_coords = ghost_labels[:, :4]
                 else:
                     ghost_mask_tensor = 1.0 - torch.argmax(ghost.F,
                                                            dim=1,
@@ -453,7 +454,6 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                         w = float(sum(counter.values())) / (w + 1.0)
                         positive_labels = event_types_label[torch.argmin(distance_positives, dim=0)]
-
                         type_loss = self.segloss(pixel_logits[positives],
                                                  positive_labels.long(),
                                                  weight=w.to(device))

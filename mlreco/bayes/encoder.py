@@ -10,16 +10,27 @@ from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.mink.layers.blocks import DropoutBlock, ResNetBlock, Identity
 
 
-class BayesianEncoder(MENetworkBase):
+class MCDropoutEncoder(MENetworkBase):
+    """
+    Convolutional decoder with dropout layers.
 
-    def __init__(self, cfg, name='bayesian_encoder'):
-        super(BayesianEncoder, self).__init__(cfg)
+    The architecture is exactly the same as the ME ResidualEncoders, 
+    except for the additional DropoutBlocks
+
+    Attributes:
+
+        dropout_p: dropping probability value for dropout layers
+        dropout_layer_index: layer numbers to swap resnet blocks with 
+        dropout resnet blocks. 
+    """
+    def __init__(self, cfg, name='mcdropout_encoder'):
+        super(MCDropoutEncoder, self).__init__(cfg)
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
         self.num_filters = self.model_config.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
-        self.input_kernel = self.model_config.get('input_kernel', 7)
+        self.input_kernel = self.model_config.get('input_kernel', 3)
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)
@@ -35,8 +46,6 @@ class BayesianEncoder(MENetworkBase):
 
         print("Dropout Layers = ", self.dropout_layer_index)
         print("Planes = ", len(self.nPlanes))
-
-        self.debug = self.model_config.get('debug', False)
 
         # Initialize Input Layer
         if self.coordConv:
@@ -66,8 +75,7 @@ class BayesianEncoder(MENetworkBase):
                         activation_args=self.activation_args,
                         normalization=self.norm,
                         normalization_args=self.norm_args,
-                        bias=self.allow_bias,
-                        debug=self.debug))
+                        bias=self.allow_bias))
                 else:
                     m.append(ResNetBlock(F, F,
                         dimension=self.D,

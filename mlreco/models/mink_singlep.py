@@ -104,7 +104,8 @@ class DUQParticleClassifier(ParticleImageClassifier):
     def forward(self, input):
 
         point_cloud, = input
-        point_cloud.requires_grad_(True)
+        if self.training:
+            point_cloud.requires_grad_(True)
 
         z = self.embed(point_cloud)
         y_pred = self.bilinear(z)
@@ -112,7 +113,8 @@ class DUQParticleClassifier(ParticleImageClassifier):
         res = {
             'score': [y_pred],
             'embedding': [z],
-            'input': [point_cloud]
+            'input': [point_cloud],
+            'centroids' : [self.m.detach().cpu().numpy() / self.N.detach().cpu().numpy()]
         }
 
         self.z = z
@@ -280,6 +282,8 @@ class MultiLabelCrossEntropy(nn.Module):
         self.xentropy = nn.BCELoss(reduction='none')
         self.num_classes = 5
         self.grad_w = cfg[name].get('grad_w', 0.0)
+        self.grad_penalty = cfg[name].get('grad_penalty', True)
+
 
     @staticmethod
     def calc_gradient_penalty(x, y_pred):
@@ -319,7 +323,9 @@ class MultiLabelCrossEntropy(nn.Module):
         labels = type_labels[0][:, 0].long()
 
         # Comptue gradient penalty
-        loss2 = self.calc_gradient_penalty(out['input'][0], probas)
+        loss2 = 0
+        if self.grad_penalty:
+            loss2 = self.calc_gradient_penalty(out['input'][0], probas)
 
         loss = loss1.sum(dim=1).mean() + self.grad_w * loss2
 

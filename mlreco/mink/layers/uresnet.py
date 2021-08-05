@@ -1,12 +1,9 @@
-import numpy as np
-import torch
 import torch.nn as nn
-
 import MinkowskiEngine as ME
-import MinkowskiFunctional as MF
 
-from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
-from mlreco.mink.layers.factories import activations_dict, activations_construct, normalizations_construct
+from mlreco.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, ASPP
+from mlreco.mink.layers.factories import activations_construct
+from mlreco.mink.layers.factories import normalizations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 
 
@@ -36,8 +33,6 @@ class UResNet(MENetworkBase):
         self.depth          = model_cfg.get('num_strides', 5)
         self.num_filters    = model_cfg.get('filters', 16)
         self.nPlanes        = [i * self.num_filters for i in range(1, self.depth+1)]
-    # self.kernel_size    = cfg.get('kernel_size', 3)
-    # self.downsample     = cfg.get(downsample, 2)
         self.input_kernel   = model_cfg.get('input_kernel_size', 3)
 
         # Initialize Input Layer

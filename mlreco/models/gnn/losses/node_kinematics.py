@@ -113,6 +113,8 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.vtx_position_loss = torch.nn.L1Loss(reduction='none')
         self.vtx_score_loss = torch.nn.CrossEntropyLoss(reduction=self.reduction)
 
+        self.compute_momentum_switch = loss_config.get('compute_momentum', True)
+
     def forward(self, out, types):
         """
         Applies the requested loss on the node prediction.
@@ -132,6 +134,8 @@ class NodeKinematicsLoss(torch.nn.Module):
 
         compute_type = 'node_pred_type' in out
         compute_momentum = 'node_pred_p' in out
+        if not self.compute_momentum_switch:
+            compute_momentum = False
         compute_vtx = 'node_pred_vtx' in out
 
         for i in range(len(types)):
@@ -344,8 +348,6 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
         else:
             raise ValueError('Regression loss not recognized: ' + self.reg_loss)
 
-        self.compute_momentum_switch = loss_config.get('compute_momentum', True)
-
     def compute_type(self, node_pred_type, labels, clusts, iteration):
         '''
 
@@ -469,7 +471,7 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
         return out
 
 
-    def forward(self, out, types, iteration):
+    def forward(self, out, types, iteration=None):
         """
         Applies the requested loss on the node prediction.
 

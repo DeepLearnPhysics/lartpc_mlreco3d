@@ -220,7 +220,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
-    def __init__(self, cfg, reduction='sum'):
+    def __init__(self, cfg, reduction='sum', batch_col=batch_col):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg['uresnet_lonely']
         self._ghost = self._cfg.get('ghost', False)
@@ -230,7 +230,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._beta = self._cfg.get('beta', 1.0)
         self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
-        self._batch_col = self._cfg.get('batch_col', 3)
+        self._batch_col = batch_col
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()

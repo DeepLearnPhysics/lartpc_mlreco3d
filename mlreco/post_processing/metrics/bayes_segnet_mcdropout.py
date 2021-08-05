@@ -1,16 +1,17 @@
 import numpy as np
-import pandas as pd
-import sys, os, re
+import os
 
-from mlreco.post_processing import post_processing
 from mlreco.utils import CSVData
 
 from scipy.special import softmax as softmax_func
 from scipy.stats import entropy
 
-import torch
-
-def bayes_segnet_mcdropout(cfg, processor_cfg, data_blob, result, logdir, iteration):
+def bayes_segnet_mcdropout(cfg, 
+                           processor_cfg, 
+                           data_blob, 
+                           result, 
+                           logdir, 
+                           iteration):
 
     labels = data_blob['segment_label'][0].cpu().numpy()
     index = data_blob['index']
@@ -37,7 +38,8 @@ def bayes_segnet_mcdropout(cfg, processor_cfg, data_blob, result, logdir, iterat
 
         batch_mask = batch_index == batch_id
         input_batch = data_blob['input_data'][0][batch_mask]
-        label_batch = labels[labels[:, 0].astype(int) == batch_id][:, -1].astype(int)
+        label_mask = labels[:, 0].astype(int) == batch_id
+        label_batch = labels[label_mask][:, -1].astype(int)
         pred_batch = pred[batch_mask].squeeze()
         softmax_batch = softmax[batch_mask]
         
@@ -55,9 +57,14 @@ def bayes_segnet_mcdropout(cfg, processor_cfg, data_blob, result, logdir, iterat
 
         for i in range(input_batch_selected.shape[0]):
 
-            fout.record(('Index', 'Truth', 'Prediction', 'Entropy'),
-                        (int(event_id), int(label_batch_selected[i]), 
-                         int(pred_batch_selected[i]), entropy_batch_selected[i]))
+            fout.record(('Index', 
+                         'Truth', 
+                         'Prediction', 
+                         'Entropy'),
+                        (int(event_id), 
+                         int(label_batch_selected[i]), 
+                         int(pred_batch_selected[i]), 
+                         entropy_batch_selected[i]))
             fout.write()
 
     fout.close()
