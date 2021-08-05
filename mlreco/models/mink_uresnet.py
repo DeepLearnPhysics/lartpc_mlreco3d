@@ -20,6 +20,7 @@ class UResNet_Chain(nn.Module):
     def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
         self.model_config = cfg[name]
+        print("MODEL CONFIG = ", self.model_config)
         mode = self.model_config.get('aspp_mode', None)
         self.D = self.model_config.get('data_dim', 3)
         self.F = self.model_config.get('num_filters', 16)
@@ -31,11 +32,11 @@ class UResNet_Chain(nn.Module):
 
 
         if mode == 'acas':
-            self.net = ACASUNet(cfg, name=name)
+            self.net = ACASUNet(cfg)
         elif mode == 'aspp':
-            self.net = ASPPUNet(cfg, name=name)
+            self.net = ASPPUNet(cfg)
         else:
-            self.net = UResNet(cfg, name=name)
+            self.net = UResNet(cfg)
 
         self.output = [
             ME.MinkowskiBatchNorm(self.F,
@@ -46,6 +47,7 @@ class UResNet_Chain(nn.Module):
         self.output = nn.Sequential(*self.output)
 
         if self.ghost:
+            print("Ghost Masking is enabled for UResNet Segmentation")
             self.linear_ghost = ME.MinkowskiLinear(self.F, 2)
 
         print('Total Number of Trainable Parameters (mink_uresnet)= {}'.format(

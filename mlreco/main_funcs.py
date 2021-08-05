@@ -1,19 +1,16 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import os
-import time
-import datetime
-import glob
-import sys
+import os, time, datetime, glob, sys
 import numpy as np
 import torch
 import pprint
+
+from torch.utils.tensorboard import SummaryWriter
+
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.utils import utils
-#from mlreco import analysis
-#from mlreco.output_formatters import output
 import mlreco.post_processing as post_processing
 
 class Handlers:
@@ -177,6 +174,52 @@ def apply_event_filter(handlers,event_list=None):
     handlers.data_io_iter = iter(cycle(handlers.data_io))
 
 
+def log_tensorboard(handlers, tstamp_iteration, tsum, res, cfg, epoch, first_id):
+    """
+    Logger using the torch.utils.tensorboard interface.
+    """
+    writer_path = os.path.join(cfg['trainval']['log_dir'], 'summary.log')
+    writer = SummaryWriter(writer_path)
+    # writer.add_graph(handlers.trainer._net.module)
+
+    report_step  = cfg['trainval']['report_step'] and \
+                ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
+
+    res_dict = {}
+    for key in res:
+        # Average loss and acc over all the events in this batch
+        # Keys of format %s_count are special and used as counters
+        # e.g. for PPN when there are no particle labels in event
+        #if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
+        if len(res[key]) == 0:
+            continue
+        if isinstance(res[key][0], float) or isinstance(res[key][0], int):
+            if "count" not in key:
+                res_dict[key] = np.mean([np.array(t).mean() for t in res[key]])
+            else:
+                res_dict[key] = np.sum(np.sum([np.array(t).sum() for t in res[key]]))
+
+    mem = 0.
+    if torch.cuda.is_available():
+        mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
+
+    # Organize time info
+    t_iter  = handlers.watch.time('iteration')
+    t_io    = handlers.watch.time('io')
+    t_save  = handlers.watch.time('save')
+    t_net   = handlers.watch.time('train' if cfg['trainval']['train'] else 'forward')
+
+    writer.add_scalar('mem', mem)
+
+    writer.add_scalars('Run', res_dict)
+
+    acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
+    loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
+    writer.add_scalar('accuracy', acc)
+    writer.add_scalar('loss', loss)
+    
+
+
 def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         tsum, res, cfg, epoch, first_id):
     """
@@ -291,8 +334,15 @@ def train_loop(handlers):
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
 
-        log(handlers, tstamp_iteration,
-            tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        logger = cfg['trainval'].get('logger', 'default')
+        if logger == 'default':
+            log(handlers, tstamp_iteration,
+                tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        elif logger == 'tensorboard':
+            log_tensorboard(handlers, tstamp_iteration,
+                tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        else:
+            raise ValueError('Unrecognized logger type: {}!'.format(logger))
         # Log metrics/do analysis
         #if 'analysis' in cfg['model']:
         #    for ana_script in cfg['model']['analysis']:

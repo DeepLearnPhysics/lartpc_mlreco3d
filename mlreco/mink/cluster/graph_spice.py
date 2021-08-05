@@ -20,8 +20,10 @@ class GraphSPICEEmbedder(UResNet):
     def __init__(self, cfg, name='graph_spice_embedder'):
         super(GraphSPICEEmbedder, self).__init__(cfg)
         self.model_config = cfg[name]
-        self.feature_embedding_dim = self.model_config.get('feature_embedding_dim', 8)
-        self.spatial_embedding_dim = self.model_config.get('spatial_embedding_dim', 3)
+        self.feature_embedding_dim = self.model_config.get(
+            'feature_embedding_dim', 8)
+        self.spatial_embedding_dim = self.model_config.get(
+            'spatial_embedding_dim', 3)
         self.num_classses = self.model_config.get('num_classes', 5)
         self.coordConv = self.model_config.get('coordConv', True)
 
@@ -46,18 +48,17 @@ class GraphSPICEEmbedder(UResNet):
         # Define outputlayers
 
         self.outputSpatialEmbeddings = nn.Linear(self.num_filters,
-                                           self.spatial_embedding_dim)
+                                                 self.spatial_embedding_dim)
 
         self.outputFeatureEmbeddings = nn.Linear(self.num_filters,
-                                           self.feature_embedding_dim)
+                                                 self.feature_embedding_dim)
 
         self.outputCovariance = nn.Linear(self.num_filters, 2)
 
         self.outputOccupancy = nn.Linear(self.num_filters, 1)
 
-        self.hyper_dimension = self.spatial_embedding_dim + \
-                               self.feature_embedding_dim + \
-                               3
+        self.hyper_dimension = self.spatial_embedding_dim \
+                             + self.feature_embedding_dim + 3
 
         # Pytorch Activations
         self.tanh = nn.Tanh()
@@ -96,7 +97,6 @@ class GraphSPICEEmbedder(UResNet):
         # Spatial Embeddings
         out = self.outputSpatialEmbeddings(output_features)
         spatial_embeddings = self.tanh(out)
-        # spatial_embeddings += normalized_coords
 
         # Covariance
         out = self.outputCovariance(output_features)

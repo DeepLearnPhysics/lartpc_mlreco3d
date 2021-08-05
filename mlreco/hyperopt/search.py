@@ -1,21 +1,22 @@
-import yaml, datetime, time, json, os
-import sys, copy
-from abc import (ABC, abstractmethod, abstractstaticmethod)
-from typing import Callable, Dict, List
+import yaml
+import datetime 
+import time 
+import json 
+import os
+import sys
+import copy
+from abc import ABC
+from typing import List
 from collections import OrderedDict
-from pprint import pprint
 
 import numpy as np
 import torch
-import torch.nn as nn
 import pandas as pd
-from ax.service.managed_loop import optimize
 
-from mlreco.main_funcs import prepare, train_loop, cycle
+from mlreco.main_funcs import cycle
 from mlreco.utils import utils
 from mlreco.iotools.factories import loader_factory
-from mlreco.models.factories import construct
-from mlreco.main_funcs import process_config, train
+from mlreco.main_funcs import process_config
 from mlreco.trainval import trainval
 from mlreco.hyperopt.utils import construct_eval_func, UniformDistribution
 from .factories import *
@@ -224,9 +225,6 @@ class HyperparameterSearch(ABC):
 
             update_progress(prog, loss, acc)
 
-            # msg = 'Iter. %d (epoch %g) @ %s ... train time (%g [s]) mem. %g GB \n'
-            # msg = msg % (iteration, epoch, tstamp_iteration, tabs, mem)
-            # print(msg)
             iteration += 1
 
         with torch.no_grad():

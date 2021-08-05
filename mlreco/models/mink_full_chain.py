@@ -347,7 +347,7 @@ class MinkFullChainLoss(FullChainLoss):
 
         # Initialize loss components
         if self.enable_uresnet:
-            self.uresnet_loss            = SegmentationLoss(cfg['uresnet_ppn'])
+            self.uresnet_loss            = SegmentationLoss(cfg['uresnet_ppn'], batch_col=self.batch_col)
         if self.enable_ppn:
             self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'], name='ppn')
         if self.enable_cnn_clust:

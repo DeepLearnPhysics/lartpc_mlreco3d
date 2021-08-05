@@ -68,8 +68,11 @@ class SparseEncoder(MENetworkBase):
         self.encoding_block = nn.Sequential(*self.encoding_block)
 
         self.global_pool = ME.MinkowskiConvolution(
-            in_channels=self.nPlanes[-1], out_channels=self.nPlanes[-1],
-            kernel_size=final_tensor_shape, stride=final_tensor_shape, dimension=self.D)
+            in_channels=self.nPlanes[-1], 
+            out_channels=self.nPlanes[-1],
+            kernel_size=final_tensor_shape, 
+            stride=final_tensor_shape, 
+            dimension=self.D)
 
         self.max_pool = ME.MinkowskiGlobalPooling()
 

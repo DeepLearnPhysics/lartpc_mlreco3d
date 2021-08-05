@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch_geometric.nn import fps, knn
-from collections import defaultdict
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
 
