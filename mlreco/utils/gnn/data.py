@@ -6,7 +6,7 @@ from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
 
-def cluster_features(data, clusts, extra=False):
+def cluster_features(data, clusts, extra=False, **kwargs):
     """
     Function that returns an array of 16/19 geometric features for
     each of the clusters in the provided list.
@@ -19,12 +19,12 @@ def cluster_features(data, clusts, extra=False):
         np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
     """
     if extra:
-        return torch.cat([get_cluster_features(data.float(), clusts),
-                          get_cluster_features_extended(data.float(), clusts)], dim=1)
-    return get_cluster_features(data.float(), clusts)
+        return torch.cat([get_cluster_features(data.float(), clusts, **kwargs),
+                          get_cluster_features_extended(data.float(), clusts, **kwargs)], dim=1)
+    return get_cluster_features(data.float(), clusts, **kwargs)
 
 
-def cluster_edge_features(data, clusts, edge_index):
+def cluster_edge_features(data, clusts, edge_index, **kwargs):
     """
     Function that returns a tensor of 19 geometric edge features for each of the
     edges connecting clusters in the graph.
@@ -36,7 +36,7 @@ def cluster_edge_features(data, clusts, edge_index):
     Returns:
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
-    return get_cluster_edge_features(data.float(), clusts, edge_index)
+    return get_cluster_edge_features(data.float(), clusts, edge_index, **kwargs)
 
 
 def voxel_features(data, max_dist=5.0):

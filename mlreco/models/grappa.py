@@ -67,7 +67,7 @@ class GNN(torch.nn.Module):
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
 
-    def __init__(self, cfg, name='grappa'):
+    def __init__(self, cfg, name='grappa', batch_col=3, coords_col=(0, 3)):
         super(GNN, self).__init__()
 
         # Get the chain input parameters
@@ -84,8 +84,8 @@ class GNN(torch.nn.Module):
         self.start_dir_opt = base_config.get('start_dir_opt', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
 
-        self.batch_index = base_config.get('batch_index', 3)
-        self.coords_index = tuple(base_config.get('coords_index', [0, 3]))
+        self.batch_index = batch_col
+        self.coords_index = coords_col
 
         # Interpret node type as list of classes to cluster, -1 means all classes
         if isinstance(self.node_type, int): self.node_type = [self.node_type]
@@ -106,7 +106,9 @@ class GNN(torch.nn.Module):
         if 'dbscan' in cfg[name]:
             cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > 0 else [0,1,2,3]
             cfg[name]['dbscan']['min_size']        = self.node_min_size
-            self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan')
+            self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan',
+                                            batch_col=self.batch_index,
+                                            coords_col=self.coords_index)
 
         # If requested, initialize two MLPs for kinematics predictions
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
@@ -147,8 +149,8 @@ class GNN(torch.nn.Module):
             self.vertex_net = MomentumNet(node_output_feats, num_output=5, num_hidden=vertex_config.get('num_hidden', 128))
 
         # Initialize encoders
-        self.node_encoder = node_encoder_construct(cfg[name])
-        self.edge_encoder = edge_encoder_construct(cfg[name])
+        self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
+        self.edge_encoder = edge_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
 
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
@@ -220,7 +222,8 @@ class GNN(torch.nn.Module):
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
             import numba as nb
-            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist,
+                                        batch_col=self.batch_index, coords_col=self.coords_index)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'knn':
@@ -314,17 +317,20 @@ class GNNLoss(torch.nn.modules.loss._Loss):
                 name: <name of the edge loss>
                 <dictionary of arguments to pass to the loss>
     """
-    def __init__(self, cfg, name='grappa_loss'):
+    def __init__(self, cfg, name='grappa_loss', batch_col=3, coords_col=(0, 3)):
         super(GNNLoss, self).__init__()
+
+        self.batch_index = batch_col
+        self.coords_index = coords_col
 
         # Initialize the node and edge losses, if requested
         self.apply_node_loss, self.apply_edge_loss = False, False
         if 'node_loss' in cfg[name]:
             self.apply_node_loss = True
-            self.node_loss = node_loss_construct(cfg[name])
+            self.node_loss = node_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
         if 'edge_loss' in cfg[name]:
             self.apply_edge_loss = True
-            self.edge_loss = edge_loss_construct(cfg[name])
+            self.edge_loss = edge_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
 
 
     def forward(self, result, clust_label, graph=None, node_label=None, iteration=None):

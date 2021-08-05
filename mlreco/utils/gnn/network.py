@@ -78,7 +78,9 @@ def delaunay_graph(data: nb.float64[:,:],
                    clusts: nb.types.List(nb.int64[:]),
                    batch_ids: nb.int64[:],
                    dist_mat: nb.float64[:,:] = None,
-                   max_dist: nb.float64 = -1.) -> nb.int64[:,:]:
+                   max_dist: nb.float64 = -1.,
+                   batch_col: nb.int64 = 3,
+                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.int64[:,:]:
     """
     Function that returns an incidence matrix that connects nodes
     that share an edge in their corresponding Euclidean Delaunay graph.
@@ -102,7 +104,7 @@ def delaunay_graph(data: nb.float64[:,:],
             mask[limits[i]:limits[i+1]]   = clusts[clust_ids[i]]
             labels[limits[i]:limits[i+1]] = i*np.ones(len(clusts[clust_ids[i]]), dtype=np.int64)
         with nb.objmode(tri = 'int32[:,:]'): # Suboptimal. Ideally want to reimplement in Numba, but tall order...
-            tri = Delaunay(data[mask,:3], qhull_options='QJ').simplices # Joggled input guarantees simplical faces
+            tri = Delaunay(data[mask, coords_col[0]:coords_col[1]], qhull_options='QJ').simplices # Joggled input guarantees simplical faces
         adj_mat = np.zeros((len(clust_ids),len(clust_ids)), dtype=np.bool_)
         for s in tri:
             for i in s:
@@ -251,7 +253,7 @@ def bipartite_graph(batch_ids: nb.int64[:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_edge_features(data, clusts, edge_index):
+def get_cluster_edge_features(data, clusts, edge_index, batch_col=3, coords_col=(0, 3)):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting clusters in the graph.
@@ -269,13 +271,15 @@ def get_cluster_edge_features(data, clusts, edge_index):
 @nb.njit(parallel=True)
 def _get_cluster_edge_features(data: nb.float32[:,:],
                                clusts: nb.types.List(nb.int64[:]),
-                               edge_index: nb.int64[:,:]) -> nb.float32[:,:]:
+                               edge_index: nb.int64[:,:],
+                               batch_col: nb.int64 = 3,
+                               coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
 
     feats = np.empty((len(edge_index), 19), dtype=data.dtype)
     for k in nb.prange(len(edge_index)):
         # Get the voxels in the clusters connected by the edge
-        x1 = data[clusts[edge_index[k,0]],:3]
-        x2 = data[clusts[edge_index[k,1]],:3]
+        x1 = data[clusts[edge_index[k,0]], coords_col[0]:coords_col[1]]
+        x2 = data[clusts[edge_index[k,1]], coords_col[0]:coords_col[1]]
 
         # Find the closest set point in each cluster
         d12 = cdist_nb(x1, x2)
@@ -302,16 +306,18 @@ def _get_cluster_edge_features(data: nb.float32[:,:],
 @nb.njit
 def _get_cluster_edge_features_vec(data: nb.float32[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
-                                   edge_index: nb.int64[:,:]) -> nb.float32[:,:]:
+                                   edge_index: nb.int64[:,:],
+                                   batch_col: nb.int64 = 3,
+                                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
 
     # Get the closest points of approach IDs for each edge
     lend, idxs1, idxs2 = _get_edge_distances(data[:,:3], clusts, edge_index)
 
     # Get the points that correspond to the first voxels
-    v1 = data[idxs1,:3]
+    v1 = data[idxs1, coords_col[0]:coords_col[1]]
 
     # Get the points that correspond to the second voxels
-    v2 = data[idxs2,:3]
+    v2 = data[idxs2, coords_col[0]:coords_col[1]]
 
     # Get the displacement
     disp = v1 - v2
@@ -332,7 +338,7 @@ def _get_cluster_edge_features_vec(data: nb.float32[:,:],
 
 
 @numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
-def get_voxel_edge_features(data, edge_index):
+def get_voxel_edge_features(data, edge_index, batch_col=3, coords_col=(0, 3)):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting voxels in the graph.
@@ -343,16 +349,18 @@ def get_voxel_edge_features(data, edge_index):
     Returns:
         np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
-    return _get_voxel_edge_features(data, edge_index)
+    return _get_voxel_edge_features(data, edge_index, batch_col=batch_col, coords_col=coords_col)
 
 @nb.njit(parallel=True)
 def _get_voxel_edge_features(data: nb.float32[:,:],
-                         edge_index: nb.int64[:,:]) -> nb.float32[:,:]:
+                         edge_index: nb.int64[:,:],
+                         batch_col: nb.int64 = 3,
+                         coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
     feats = np.empty((len(edge_index), 19), dtype=data.dtype)
     for k in nb.prange(len(edge_index)):
         # Get the voxel coordinates
-        xi = data[edge_index[k,0],:3]
-        xj = data[edge_index[k,1],:3]
+        xi = data[edge_index[k,0], coords_col[0]:coords_col[1]]
+        xj = data[edge_index[k,1], coords_col[0]:coords_col[1]]
 
         # Displacement
         disp = xj - xi

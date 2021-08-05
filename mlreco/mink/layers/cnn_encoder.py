@@ -18,7 +18,7 @@ class SparseEncoder(MENetworkBase):
     def __init__(self, cfg, name='sparse_encoder'):
         super(SparseEncoder, self).__init__(cfg)
         self.model_config = cfg[name]
-        print(name, self.model_config)
+        #print(name, self.model_config)
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
         self.num_filters = self.model_config.get('num_filters', 16)
@@ -27,7 +27,7 @@ class SparseEncoder(MENetworkBase):
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)
-        print("Final Tensor Shape = ", final_tensor_shape)
+        #print("Final Tensor Shape = ", final_tensor_shape)
 
         # Initialize Input Layer
         if self.coordConv:
@@ -134,21 +134,21 @@ class SparseResidualEncoder(MENetworkBase):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
-    def __init__(self, cfg, name='mink_encoder'):
-        print("RESENCODER = ", cfg)
+    def __init__(self, cfg, name='res_encoder'):
+        #print("RESENCODER = ", cfg)
         super(SparseResidualEncoder, self).__init__(cfg)
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
         self.num_filters = self.model_config.get('num_filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
-        self.input_kernel = self.model_config.get('input_kernel', 7)
+        self.input_kernel = self.model_config.get('input_kernel', 3)
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)
-        print("Final Tensor Shape = ", final_tensor_shape)
+        #print("Final Tensor Shape = ", final_tensor_shape)
 
-        self.pool_mode = self.model_config.get('pool_mode', 'global_average')
+        self.pool_mode = self.model_config.get('pool_mode', 'avg')
 
         # Initialize Input Layer
         if self.coordConv:
@@ -192,7 +192,7 @@ class SparseResidualEncoder(MENetworkBase):
         self.encoding_conv = nn.Sequential(*self.encoding_conv)
         self.encoding_block = nn.Sequential(*self.encoding_block)
 
-        if self.pool_mode == 'global_average':
+        if self.pool_mode == 'avg':
             self.pool = ME.MinkowskiGlobalPooling()
         elif self.pool_mode == 'conv':
             self.pool = nn.Sequential(
@@ -244,8 +244,14 @@ class SparseResidualEncoder(MENetworkBase):
     def forward(self, input_tensor):
 
         # print(input_tensor)
+        features = input_tensor[:, -1].view(-1, 1)
+        if self.coordConv:
+            normalized_coords = (input_tensor[:, 1:4] - float(self.spatial_size) / 2) \
+                    / (float(self.spatial_size) / 2)
+            features = torch.cat([normalized_coords, features], dim=1)
+
         x = ME.SparseTensor(coordinates=input_tensor[:, :4],
-                            features=input_tensor[:, -1].view(-1, 1))
+                            features=features)
         # Encoder
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
@@ -274,7 +280,7 @@ class SparseResidualEncoder2(MENetworkBase):
         self.coordConv = self.model_config.get('coordConv', False)
         print("Final Tensor Shape = ", final_tensor_shape)
 
-        self.pool_mode = self.model_config.get('pool_mode', 'global_average')
+        self.pool_mode = self.model_config.get('pool_mode', 'avg')
 
         # Initialize Input Layer
         if self.coordConv:
@@ -318,7 +324,7 @@ class SparseResidualEncoder2(MENetworkBase):
         self.encoding_conv = nn.Sequential(*self.encoding_conv)
         self.encoding_block = nn.Sequential(*self.encoding_block)
 
-        if self.pool_mode == 'global_average':
+        if self.pool_mode == 'avg':
             self.pool = ME.MinkowskiGlobalPooling()
         elif self.pool_mode == 'conv':
             self.pool = ME.MinkowskiConvolution(
@@ -444,8 +450,8 @@ class SparseResEncoderNoPooling(MENetworkBase):
             normalizations_construct(self.norm, self.nPlanes[-1], **self.norm_args),
             activations_construct(
                 self.activation_name, **self.activation_args),
-            ME.MinkowskiConvolution(self.nPlanes[-1], self.latent_size, 
-                kernel_size=3, stride=1, 
+            ME.MinkowskiConvolution(self.nPlanes[-1], self.latent_size,
+                kernel_size=3, stride=1,
                 dimension=self.D, bias=self.allow_bias)
         )
 

@@ -26,11 +26,13 @@ class EdgeChannelLoss(torch.nn.Module):
             target          : <type of target adjacency matrix: 'group', 'forest', 'particle_forest' (default 'group')>
             high_purity     : <only penalize loss on groups with a primary (default False)>
     """
-    def __init__(self, loss_config):
+    def __init__(self, loss_config, batch_col=3, coords_col=(0, 3)):
         super(EdgeChannelLoss, self).__init__()
 
         # Set the source and target for the loss
-        self.batch_col = loss_config.get('batch_col', 3)
+        self.batch_col = batch_col
+        self.coords_col = coords_col
+
         self.source_col = loss_config.get('source_col', 5)
         self.target_col = loss_config.get('target_col', 6)
 
@@ -73,7 +75,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 continue
 
             # Get the list of batch ids, loop over individual batches
-            batches = clusters[i][:,self.batch_col]
+            batches = clusters[i][:, self.batch_col]
             nbatches = len(batches.unique())
             for j in range(nbatches):
 

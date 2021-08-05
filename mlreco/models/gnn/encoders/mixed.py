@@ -3,6 +3,8 @@ import torch
 from .geometric import *
 from .cnn import *
 from pprint import pprint
+from ..factories import node_encoder_construct, edge_encoder_construct
+
 
 class ClustMixNodeEncoder(torch.nn.Module):
     """
@@ -116,7 +118,7 @@ class ClustMixNodeEncoder3(torch.nn.Module):
     """
     Produces node features using both geometric and cnn encoder based feature extraction
     """
-    def __init__(self,model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustMixNodeEncoder3, self).__init__()
         # print("ClustMixNodeEncoder3 = ", model_config)
         self.normalize = model_config.get('normalize', True)
@@ -126,9 +128,9 @@ class ClustMixNodeEncoder3(torch.nn.Module):
         if 'cnn_encoder' not in model_config:
             raise ValueError("Require cnn_encoder config!")
 
-        self.geo_encoder = ClustGeoNodeEncoder(model_config['geo_encoder'])
+        self.geo_encoder = node_encoder_construct(model_config, model_name='geo_encoder', **kwargs)
         # pprint(model_config['cnn_encoder'])
-        self.cnn_encoder = ClustCNNNodeEncoder2(model_config['cnn_encoder'])
+        self.cnn_encoder = node_encoder_construct(model_config, model_name='cnn_encoder', **kwargs)
 
         if self.geo_encoder.more_feats:
             node_feats = 19
@@ -158,7 +160,7 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
     """
     Produces edge features using both geometric and cnn encoder based feature extraction
     """
-    def __init__(self,model_config):
+    def __init__(self, model_config, **kwargs):
         super(ClustMixEdgeEncoder3, self).__init__()
         # print(model_config)
         self.normalize = model_config.get('normalize', True)
@@ -168,8 +170,8 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
         if 'cnn_encoder' not in model_config:
             raise ValueError("Require cnn_encoder config!")
 
-        self.geo_encoder = ClustGeoEdgeEncoder(model_config['geo_encoder'])
-        self.cnn_encoder = ClustCNNEdgeEncoder2(model_config['cnn_encoder'])
+        self.geo_encoder = edge_encoder_construct(model_config, model_name='geo_encoder', **kwargs)
+        self.cnn_encoder = edge_encoder_construct(model_config, model_name='cnn_encoder', **kwargs)
 
         node_feats = 19
         self.bn1 = torch.nn.BatchNorm1d(node_feats)
@@ -186,5 +188,4 @@ class ClustMixEdgeEncoder3(torch.nn.Module):
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
-        # print(out.shape)
         return out

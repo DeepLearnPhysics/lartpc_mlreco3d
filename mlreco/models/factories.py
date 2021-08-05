@@ -10,7 +10,6 @@ def model_dict():
     from . import graph_spice
 
     from . import grappa
-    from . import flashmatching_model
     from . import particle_types
 
     from . import mink_uresnet
@@ -44,8 +43,6 @@ def model_dict():
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
         # Graph SPICE II
         "graph_spice_2": (graph_spice.GraphSPICEPP, graph_spice.GraphSPICEPPLoss),
-        # Flashmatching using encoder and gnn
-        "flashmatching": (flashmatching_model.FlashMatchingModel, torch.nn.CrossEntropyLoss(reduction='mean')),
         # Particle image classifier
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
         # Full reconstruction chain, including an option for deghosting
@@ -53,7 +50,7 @@ def model_dict():
 
         # --------------------MinkowskiEngine Backend----------------------
         # Full Chain MinkowskiEngine
-        "mink_full_chain": (mink_full_chain.MinkFullChain, mink_full_chain.MinkFullChainLoss),
+        #"mink_full_chain": (mink_full_chain.MinkFullChain, mink_full_chain.MinkFullChainLoss),
         # UresNet
         "mink_uresnet": (mink_uresnet.UResNet_Chain, uresnet_lonely.SegmentationLoss),
         # UResNet + PPN

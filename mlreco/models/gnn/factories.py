@@ -1,4 +1,4 @@
-def gnn_model_construct(cfg, model_name='gnn_model'):
+def gnn_model_construct(cfg, model_name='gnn_model', **kwargs):
     """
     Instanties the appropriate GNN message passing model from
     the provided configuration.
@@ -16,10 +16,10 @@ def gnn_model_construct(cfg, model_name='gnn_model'):
     if not name in models:
         raise Exception("Unknown GNN message passing model name provided:", name)
 
-    return models[name](model_cfg)
+    return models[name](model_cfg, **kwargs)
 
 
-def node_encoder_construct(cfg, model_name='node_encoder'):
+def node_encoder_construct(cfg, model_name='node_encoder', **kwargs):
     """
     Instanties the appropriate node encoder from
     the provided configuration.
@@ -37,10 +37,10 @@ def node_encoder_construct(cfg, model_name='node_encoder'):
     if not name in encoders:
         raise Exception("Unknown node encoder name provided:", name)
 
-    return encoders[name](encoder_cfg)
+    return encoders[name](encoder_cfg, **kwargs)
 
 
-def edge_encoder_construct(cfg, model_name='edge_encoder'):
+def edge_encoder_construct(cfg, model_name='edge_encoder', **kwargs):
     """
     Instanties the appropriate edge encoder from
     the provided configuration.
@@ -58,10 +58,10 @@ def edge_encoder_construct(cfg, model_name='edge_encoder'):
     if not name in encoders:
         raise Exception("Unknown edge encoder name provided:", name)
 
-    return encoders[name](encoder_cfg)
+    return encoders[name](encoder_cfg, **kwargs)
 
 
-def node_loss_construct(cfg, model_name='node_loss'):
+def node_loss_construct(cfg, model_name='node_loss', **kwargs):
     """
     Instanties the appropriate node loss from
     the provided configuration.
@@ -79,10 +79,10 @@ def node_loss_construct(cfg, model_name='node_loss'):
     if not name in losses:
         raise Exception("Unknown node loss name provided:", name)
 
-    return losses[name](loss_cfg)
+    return losses[name](loss_cfg, **kwargs)
 
 
-def edge_loss_construct(cfg, model_name='edge_loss'):
+def edge_loss_construct(cfg, model_name='edge_loss', **kwargs):
     """
     Instanties the appropriate edge loss from
     the provided configuration.
@@ -100,7 +100,7 @@ def edge_loss_construct(cfg, model_name='edge_loss'):
     if not name in losses:
         raise Exception("Unknown edge loss name provided:", name)
 
-    return losses[name](loss_cfg)
+    return losses[name](loss_cfg, **kwargs)
 
 
 def gnn_model_dict():
@@ -141,10 +141,10 @@ def node_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoNodeEncoder,
-        "cnn"       : cnn.ClustCNNNodeEncoder,
+        #"cnn"       : cnn.ClustCNNNodeEncoder,
         "cnn2"      : cnn.ClustCNNNodeEncoder2,
-        "mix"       : mixed.ClustMixNodeEncoder,
-        "mix2"      : mixed.ClustMixNodeEncoder2,
+        #"mix"       : mixed.ClustMixNodeEncoder,
+        #"mix2"      : mixed.ClustMixNodeEncoder2,
         "mix_debug" : mixed.ClustMixNodeEncoder3,
         # Need adaptation of ClustGNNNodeEncoder to ME (batch col 0, coords 1:4)
         #"gnn"       : gnn.ClustGNNNodeEncoder,
@@ -167,12 +167,12 @@ def edge_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoEdgeEncoder,
-        "cnn"       : cnn.ClustCNNEdgeEncoder,
+        #"cnn"       : cnn.ClustCNNEdgeEncoder,
         "cnn2"      : cnn.ClustCNNEdgeEncoder2,
-        "mix"       : mixed.ClustMixEdgeEncoder,
-        "mix2"      : mixed.ClustMixEdgeEncoder2,
+        #"mix"       : mixed.ClustMixEdgeEncoder,
+        #"mix2"      : mixed.ClustMixEdgeEncoder2,
         "mix_debug" : mixed.ClustMixEdgeEncoder3,
-        "gnn"       : gnn.ClustGNNEdgeEncoder,
+        #"gnn"       : gnn.ClustGNNEdgeEncoder,
         "cnn_mink": cnn.ClustCNNMinkEdgeEncoder
     }
 

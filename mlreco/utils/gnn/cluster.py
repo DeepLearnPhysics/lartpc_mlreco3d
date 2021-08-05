@@ -236,7 +236,9 @@ def _get_cluster_energies(data: nb.float64[:,:],
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
-                         clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                         clusts: nb.types.List(nb.int64[:]),
+                         batch_col: nb.int64 = 3,
+                         coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
     """
     Function that returns an array of 16 geometric features for
     each of the clusters in the provided list.
@@ -247,18 +249,20 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
-    return _get_cluster_features(data, clusts)
+    return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
 @nb.njit
 def _get_cluster_features(data: nb.float64[:,:],
-                          clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                          clusts: nb.types.List(nb.int64[:]),
+                          batch_col: nb.int64 = 3,
+                          coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 16), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
                                                   # and throws a warning. To avoid this, use a separate counter to acces clusts.
     for k in nb.prange(len(clusts)):
         # Get list of voxels in the cluster
         clust = clusts[ids[k]]
-        x = data[clust,:3]
+        x = data[clust, coords_col[0]:coords_col[1]]
 
         # Do not waste time with computations with size 1 clusters, default to zeros
         if len(clust) < 2:
@@ -305,7 +309,7 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_features_extended(data, clusts):
+def get_cluster_features_extended(data, clusts, batch_col=3, coords_col=(0, 3)):
     """
     Function that returns the an array of 3 additional features for
     each of the clusters in the provided list.
@@ -316,10 +320,12 @@ def get_cluster_features_extended(data, clusts):
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
-    return _get_cluster_features_extended(data, clusts)
+    return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
 def _get_cluster_features_extended(data: nb.float64[:,:],
-                                   clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                                   clusts: nb.types.List(nb.int64[:]),
+                                   batch_col: nb.int64 = 3,
+                                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 3), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):

@@ -30,11 +30,14 @@ def bc_distance(gauss1, gauss2, eps=1e-6, debug=False):
 
 class GNNGroupingLoss(nn.Module):
 
-    def __init__(self, cfg, name='gnn_grouping_loss'):
+    def __init__(self, cfg, name='gnn_grouping_loss', batch_col=3, coords_col=(0, 3)):
         super(GNNGroupingLoss, self).__init__()
         self.loss_config = cfg[name]
         self.kernel = bc_distance
         self.bceloss = StableBCELoss()
+
+        self.batch_col= batch_col
+        self.coords_col = coords_col
 
     def forward(self, nodes, node_batch_labels, node_group_labels):
 
