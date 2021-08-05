@@ -160,7 +160,7 @@ def nll_regression_loss(logits, targets, eps=1e-6):
         - loss (FloatTensor): N x 1 non-reduced loss for each example. 
     '''
     logits = logits.view(-1, 4)
-    gamma, nu, alpha, beta = logits[:, 0], logits[:, 1], logits[:, 2], logits[:, 3]
+    gamma, nu, alpha, beta = torch.split(logits, 4, dim=1)
     omega = 2.0 * beta * (1.0 + nu)
     nll = 0.5 * (np.log(np.pi) - torch.log(nu + 1e-5))  \
         - alpha * torch.log(omega)  \

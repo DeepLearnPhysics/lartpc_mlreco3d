@@ -1,55 +1,61 @@
-import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-import MinkowskiFunctional as MF
-
-from collections import defaultdict
-from mlreco.mink.layers.factories import activations_dict, activations_construct, normalizations_construct
+from mlreco.mink.layers.factories import activations_construct
+from mlreco.mink.layers.factories import normalizations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.mink.layers.blocks import DropoutBlock, ResNetBlock
 
+class MCDropoutDecoder(MENetworkBase):
+    """
+    Convolutional decoder with dropout layers.
 
-class BayesianDecoder(MENetworkBase):
+    The architecture is exactly the same as the ME ResidualEncoders, 
+    except for the additional DropoutBlocks
 
-    def __init__(self, cfg, name='bayesian_decoder'):
-        super(BayesianDecoder, self).__init__(cfg, name='network_base')
+    Attributes:
+
+        dropout_p: dropping probability value for dropout layers
+        dropout_layer_index: layer numbers to swap resnet blocks with 
+        dropout resnet blocks. 
+    """
+
+    def __init__(self, cfg, name='mcdropout_decoder'):
+        super(MCDropoutDecoder, self).__init__(cfg, name='network_base')
         self.model_config = cfg[name]
 
         print(self.model_config)
 
         # UResNet Configurations
         self.model_config = cfg[name]
-        self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
-        self.kernel_size = self.model_config.get('kernel_size', 2)
-        self.depth = self.model_config.get('depth', 5)
-        self.num_filters = self.model_config.get('num_filters', 16)
-        self.nPlanes = [i*self.num_filters for i in range(1, self.depth+1)]
-        self.downsample = [self.kernel_size, 2]  # [filter size, filter stride]
+        self.reps         = self.model_config.get('reps', 2)
+        self.kernel_size  = self.model_config.get('kernel_size', 2)
+        self.depth        = self.model_config.get('depth', 5)
+        self.num_filters  = self.model_config.get('num_filters', 16)
+        self.nPlanes      = [i * self.num_filters for i in range(1, self.depth+1)]
+        self.downsample   = [self.kernel_size, 2]
 
-        self.encoder_num_filters = self.model_config.get('encoder_num_filters', None)
-        if self.encoder_num_filters is None:
-            self.encoder_num_filters = self.num_filters
-        self.encoder_nPlanes = [i*self.encoder_num_filters for i in range(1, self.depth+1)]
+        self.enc_nfilters = self.model_config.get(
+            'encoder_num_filters', None)
+        if self.enc_nfilters is None:
+            self.enc_nfilters = self.num_filters
+        self.encoder_nPlanes = [i * self.enc_nfilters for i in range(1, self.depth + 1)]
         self.nPlanes[-1] = self.encoder_nPlanes[-1]
 
         self.dropout_p = self.model_config['dropout_p']
         self.dropout_layer_index = self.model_config.get(
             'dropout_layers', set([i for i in range(self.depth // 2, self.depth)]))
 
-        self.debug = self.model_config.get('debug', False)
-
-        print("Dropout Layers = ", self.dropout_layer_index)
-        print("Planes = ", len(self.nPlanes))
-
         # Initialize Decoder
         self.decoding_block = []
         self.decoding_conv = []
         for i in range(self.depth-2, -1, -1):
             m = []
-            m.append(normalizations_construct(self.norm, self.nPlanes[i+1], **self.norm_args))
-            m.append(activations_construct(
-                self.activation_name, **self.activation_args))
+            m.append(normalizations_construct(self.norm, 
+                                              self.nPlanes[i+1], 
+                                              **self.norm_args))
+            m.append(activations_construct(self.activation_name, 
+                                           **self.activation_args))
             m.append(ME.MinkowskiConvolutionTranspose(
                 in_channels=self.nPlanes[i+1],
                 out_channels=self.nPlanes[i],
@@ -71,8 +77,7 @@ class BayesianDecoder(MENetworkBase):
                                           activation_args=self.activation_args,
                                           normalization=self.norm,
                                           normalization_args=self.norm_args,
-                                          bias=self.allow_bias,
-                                          debug=self.debug))
+                                          bias=self.allow_bias))
                 else:
                     m.append(ResNetBlock(self.nPlanes[i] * (2 if j == 0 else 1),
                                          self.nPlanes[i],

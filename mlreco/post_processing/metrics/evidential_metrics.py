@@ -1,16 +1,15 @@
 import numpy as np
-import pandas as pd
-import sys, os, re
-
-from mlreco.post_processing import post_processing
+import os
 from mlreco.utils import CSVData
-
-from scipy.special import softmax as softmax_func
 from scipy.stats import entropy
 
-import torch
 
-def evidential_metrics(cfg, processor_cfg, data_blob, result, logdir, iteration):
+def evidential_metrics(cfg, 
+                       processor_cfg, 
+                       data_blob, 
+                       result, 
+                       logdir, 
+                       iteration):
 
     labels = data_blob['label'][0][:, 0]
     index = data_blob['index']
@@ -36,17 +35,14 @@ def evidential_metrics(cfg, processor_cfg, data_blob, result, logdir, iteration)
         ent = entropy(probs)
         unc = uncertainty[batch_id]
 
-        # print("event id = ", event_id)
-        # print("label_batch = ", label_batch)
-        # print("int(pred) = ", int(pred))
-        # print("probs[0] = ", probs[0])
-        # print("unc = ", unc)
-        # print("ent = ", ent)
-
-        fout.record(('Index', 'Truth', 'Prediction', 
-                    'p0', 'p1', 'p2', 'p3', 'p4', 'uncertainty', 'entropy'),
-                    (int(event_id), int(label_batch), int(pred),
-                     probs[0], probs[1], probs[2], probs[3], probs[4], unc, ent))
+        fout.record(('Index', 
+                     'Truth', 'Prediction', 
+                     'p0', 'p1', 'p2', 'p3', 'p4', 
+                     'uncertainty', 'entropy'),
+                    (int(event_id), 
+                     int(label_batch), int(pred),
+                     probs[0], probs[1], probs[2], probs[3], probs[4], 
+                     unc, ent))
         fout.write()
 
     fout.close()

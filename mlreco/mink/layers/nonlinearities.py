@@ -12,10 +12,6 @@ class MinkowskiLeakyReLU(MinkowskiNonlinearityBase):
 
 class MinkowskiELU(MinkowskiNonlinearityBase):
     MODULE = nn.ELU
-
-# class MinkowskiPReLU(MinkowskiModuleBase):
-#     MODULE = nn.PReLU
-
 class MinkowskiMish(nn.Module):
     '''
     Mish Nonlinearity: https://arxiv.org/pdf/1908.08681.pdf

@@ -1,9 +1,4 @@
 import numpy as np
-import torch
-import torch.nn as nn
-
-from abc import ABC, abstractmethod, abstractstaticmethod
-
 
 def eval_func_dict():
     funcs = {

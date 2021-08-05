@@ -45,7 +45,6 @@ class ClustCNNNodeEncoder2(nn.Module):
         for i, c in enumerate(clusts):
             cnn_data = torch.cat((cnn_data, data[c,:5].float()))
             cnn_data[-len(c):,3] = i*torch.ones(len(c)).to(device)
-        # print("NODE CNN Data = ", cnn_data)
         return self.encoder(cnn_data)
 
 
