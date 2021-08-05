@@ -273,8 +273,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             #
             # if occ_loss != occ_loss:
             #     print('occ_loss: {}'.format(occ_loss))
-
-        accuracy['accuracy'] /= counts
+        if counts > 0:
+            accuracy['accuracy'] /= counts
         return loss, accuracy
 
     def forward(self, out, segment_label, cluster_label):

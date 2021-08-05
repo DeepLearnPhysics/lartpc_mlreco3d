@@ -68,10 +68,10 @@ def spice_loss_dict():
     loss = {
         # Hyperspace Clustering Losses
         'single': losses.single_layers.DiscriminativeLoss,
-        'multi': losses.multi_layers.MultiScaleLoss,
-        'multi-weighted': losses.multi_layers.DistanceEstimationLoss3,
-        'multi-repel': losses.multi_layers.DistanceEstimationLoss2,
-        'multi-distance': losses.multi_layers.DistanceEstimationLoss,
+        #'multi': losses.multi_layers.MultiScaleLoss,
+        #'multi-weighted': losses.multi_layers.DistanceEstimationLoss3,
+        #'multi-repel': losses.multi_layers.DistanceEstimationLoss2,
+        #'multi-distance': losses.multi_layers.DistanceEstimationLoss,
         # SPICE Losses
         'se_bce': losses.spatial_embeddings.MaskBCELoss2,
         'se_bce_ellipse': losses.spatial_embeddings.MaskBCELossBivariate,

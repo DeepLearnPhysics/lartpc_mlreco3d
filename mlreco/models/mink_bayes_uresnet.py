@@ -9,7 +9,7 @@ from mlreco.mink.layers.factories import (activations_dict,
                                           activations_construct,
                                           normalizations_construct)
 from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.bayes.encoder import BayesianEncoder
+from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.decoder import MCDropoutDecoder
 from mlreco.bayes.factories import uq_classification_loss_construct
 

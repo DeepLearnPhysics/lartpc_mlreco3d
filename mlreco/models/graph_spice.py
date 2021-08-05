@@ -8,8 +8,6 @@ from .cluster_cnn import (cluster_model_construct,
                           spice_loss_construct,
                           gs_kernel_construct)
 
-from .cluster_cnn.pointnet2 import PointNet2
-
 from .gnn import gnn_model_construct
 
 from pprint import pprint
@@ -112,16 +110,16 @@ class GraphSPICEPP(nn.Module):
         that takes two node attribute vectors to give a edge proability score).
 
     Prediction is done in two steps:
-        1) A neighbor graph (ex. KNN, Radius) is constructed to compute 
-        edge probabilities between neighboring edges. 
-        2) Edges with low probability scores are dropped. 
-        3) The voxels are clustered by counting connected components. 
+        1) A neighbor graph (ex. KNN, Radius) is constructed to compute
+        edge probabilities between neighboring edges.
+        2) Edges with low probability scores are dropped.
+        3) The voxels are clustered by counting connected components.
 
     Parameters:
         - skip_classes: semantic labels for which to skip voxel clustering
         (ex. Michel, Delta, and Low Es rarely require neural network clustering)
 
-        - dimension: dimension of input dataset. 
+        - dimension: dimension of input dataset.
     '''
 
     def __init__(self, cfg, name='graph_spice'):
@@ -138,7 +136,7 @@ class GraphSPICEPP(nn.Module):
         self.kernel_fn = gs_kernel_construct(self.kernel_cfg)
 
         constructor_cfg = self.model_config['constructor_cfg']
-        
+
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
         # Cluster Graph Manager
@@ -148,7 +146,7 @@ class GraphSPICEPP(nn.Module):
 
     def filter_class(self, input):
         '''
-        Filter classes according to segmentation label. 
+        Filter classes according to segmentation label.
         '''
         point_cloud, label = input
         mask = ~np.isin(label[:, -1].detach().cpu().numpy(), self.skip_classes)
@@ -158,7 +156,7 @@ class GraphSPICEPP(nn.Module):
 
     def forward(self, input):
         '''
-        
+
         '''
         point_cloud, labels = self.filter_class(input)
         res = self.embedder([point_cloud])
@@ -178,13 +176,13 @@ class GraphSPICEPP(nn.Module):
             res['hypergraph_features'] = [hypergraph_features]
 
 
-        graph = self.gs_manager(res, 
-                                self.kernel_fn, 
+        graph = self.gs_manager(res,
+                                self.kernel_fn,
                                 labels)
         res['graph'] = [graph]
         res['graph_info'] = [self.gs_manager.info]
         return res
-        
+
 
 class GraphSPICELoss(nn.Module):
 
@@ -240,7 +238,7 @@ class GraphSPICELoss(nn.Module):
                 torch.sum(edge_diff).item(), edge_diff.shape[0]))
 
             print("Number of True Dropped Edges = {} / {}".format(
-                torch.sum(result['edge_truth'][0] < 0.5).item(), 
+                torch.sum(result['edge_truth'][0] < 0.5).item(),
                 edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
@@ -281,7 +279,7 @@ class GraphSPICEPPLoss(GraphSPICELoss):
                 torch.sum(edge_diff).item(), edge_diff.shape[0]))
 
             print("Number of True Dropped Edges = {} / {}".format(
-                torch.sum(result['edge_truth'][0] < 0.5).item(), 
+                torch.sum(result['edge_truth'][0] < 0.5).item(),
                 edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
