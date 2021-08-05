@@ -228,6 +228,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
         self._batch_col = self._cfg.get('batch_col', -2)
+        print("Using Batch Column: ", self._batch_col)
 
     def distances(self, v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()

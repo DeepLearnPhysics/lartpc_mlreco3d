@@ -54,7 +54,8 @@ def to_sparse(dense_tensor: torch.Tensor,
               coords_man = None):
     r"""Converts a (differentiable) dense tensor to a sparse tensor.
     Assume the input to have BxCxD1xD2x....xDN format.
-    If the shape of the tensor do not change, use `dense_coordinates` to cache the coordinates.
+    If the shape of the tensor do not change, 
+    use `dense_coordinates` to cache the coordinates.
     Please refer to tests/python/dense.py for usage
     Example::
        >>> dense_tensor = torch.rand(3, 4, 5, 6, 7, 8)  # BxCxD1xD2xD3xD4
@@ -71,7 +72,8 @@ def to_sparse(dense_tensor: torch.Tensor,
 
     coordinates[:, 1:] *= resolution
 
-    feat_tensor = dense_tensor.permute(0, *(2 + i for i in range(spatial_dim)), 1)
+    feat_tensor = dense_tensor.permute(
+        0, *(2 + i for i in range(spatial_dim)), 1)
     return ME.SparseTensor(
         features=feat_tensor.reshape(-1, dense_tensor.size(1)),
         coords=coordinates,
@@ -189,8 +191,7 @@ class DropoutBlock(ME.MinkowskiNetwork):
                  activation_args={},
                  normalization='batch_norm',
                  normalization_args={},
-                 bias=False,
-                 debug=False):
+                 bias=False):
         super(DropoutBlock, self).__init__(dimension)
         assert dimension > 0
         self.act_fn1 = activations_construct(activation, **activation_args)
@@ -209,15 +210,10 @@ class DropoutBlock(ME.MinkowskiNetwork):
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
-        self.debug = debug
-
     def forward(self, x):
 
         out = self.conv1(x)
-        if self.debug:
-            out = self.dropout1(x)
-        else:
-            out = self.dropout1(out)
+        out = self.dropout1(out)
         out = self.norm1(out)
         out = self.act_fn1(out)
         out = self.conv2(out)
@@ -243,25 +239,25 @@ class ResNetBlock(ME.MinkowskiNetwork):
                  activation_args={},
                  normalization='batch_norm',
                  normalization_args={},
-                 bias=False,
-                 debug_name='none'):
+                 bias=False):
         super(ResNetBlock, self).__init__(dimension)
         assert dimension > 0
         self.act_fn1 = activations_construct(activation, **activation_args)
         self.act_fn2 = activations_construct(activation, **activation_args)
 
         if in_features != out_features:
-            self.residual = ME.MinkowskiLinear(in_features, out_features, bias=bias)
+            self.residual = ME.MinkowskiLinear(in_features, out_features, 
+                                               bias=bias)
         else:
             self.residual = Identity()
         self.conv1 = ME.MinkowskiConvolution(
             in_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=bias)
+            stride=stride, dilation=dilation, dimension=dimension, bias=bias)
         self.norm1 = normalizations_construct(
             normalization, in_features, **normalization_args)
         self.conv2 = ME.MinkowskiConvolution(
             out_features, out_features, kernel_size=3,
-            stride=1, dilation=dilation, dimension=dimension, bias=bias)
+            stride=stride, dilation=dilation, dimension=dimension, bias=bias)
         self.norm2 = normalizations_construct(
             normalization, out_features, **normalization_args)
 
@@ -589,38 +585,6 @@ class ASPP(ME.MinkowskiNetwork):
         out = ME.cat(cat)
         return self.out(out)
 
-
-# class FeaturePyramidPooling(ME.MinkowskiNetwork):
-#     '''
-#     Feature Pyramid Pooling (FPP) Module (formerly Stacked UNet)
-
-#     FPP eats list of sparse tensors at each spatial resolution and unpools
-#     each sparse tensor to the highest spatial resolution. It then concatenates
-#     the unpooled features vertically to create a stack of features upsampled
-#     from every feature tensor in the decoding path. To obtain the final
-#     feature tensor, we reduce number of features in the stacked sparse tensor
-#     through a series of feature reducing network blocks.
-
-#     INPUTS:
-#         - in_channels: number of total stacked input channels
-#         - out_channels: desired number of output channels
-#         - block_mode: Choice of feature reduction blocks
-#         - depth: depth of feature reduction path
-#         -
-#     '''
-#     def __init__(self, in_channels, out_channels,
-#                  block_mode='resnext', depth=3):
-#         super(FeaturePyramidPooling, self).__init__(3)
-
-#     def forward(self, featureTensors):
-#         '''
-#         INPUTS:
-#             - featureTensors (list of SparseTensor):
-#             list of sparse tensors to be stacked and unpooled for FPP.
-#         '''
-#         out = None
-#         return out
-
 class MBConv(ME.MinkowskiNetwork):
 
     def __init__(self, in_features, out_features,
@@ -656,12 +620,12 @@ class MBConv(ME.MinkowskiNetwork):
                 normalizations_construct(
                     normalization, self.hidden_dim, **normalization_args),
                 activations_construct(activation, **activation_args),
-                ME.MinkowskiChannelwiseConvolution(
-                    self.hidden_dim, kernel_size=kernel_size, stride=stride, dilation=dilation,
-                    bias=has_bias, dimension=self.D),
-                # ME.MinkowskiConvolution(
-                #     self.hidden_dim, self.hidden_dim, kernel_size=kernel_size, stride=stride, dilation=dilation,
-                #     bias=has_bias, dimension=self.D),
+                ME.MinkowskiChannelwiseConvolution(self.hidden_dim, 
+                    kernel_size=kernel_size, 
+                    stride=stride, 
+                    dilation=dilation,
+                    bias=has_bias, 
+                    dimension=self.D),
                 normalizations_construct(
                     normalization, self.hidden_dim, **normalization_args),
                 activations_construct(activation, **activation_args),

@@ -10,7 +10,7 @@ from mlreco.mink.layers.factories import (activations_dict,
                                           normalizations_construct)
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import BayesianEncoder
-from mlreco.bayes.decoder import BayesianDecoder
+from mlreco.bayes.decoder import MCDropoutDecoder
 from mlreco.bayes.factories import uq_classification_loss_construct
 
 class BayesianUResNet(MENetworkBase):
@@ -22,7 +22,7 @@ class BayesianUResNet(MENetworkBase):
         self.num_samples = self.model_config.get('num_samples', 20)
 
         self.encoder = BayesianEncoder(cfg)
-        self.decoder = BayesianDecoder(cfg)
+        self.decoder = MCDropoutDecoder(cfg)
 
         self.mode = self.model_config.get('mode', 'standard')
 

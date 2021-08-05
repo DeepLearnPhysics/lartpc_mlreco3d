@@ -74,14 +74,13 @@ class MinkGraphSPICE(nn.Module):
         point_cloud, labels = self.filter_class(input)
         res = self.embedder([point_cloud])
 
-        coordinates = point_cloud[:, :3]
-        batch_indices = point_cloud[:, 3].int()
+        coordinates = point_cloud[:, 1:4]
+        batch_indices = point_cloud[:, 0].int()
 
         res['coordinates'] = [coordinates]
         res['batch_indices'] = [batch_indices]
 
         if self.use_raw_features:
-            print(res['features'][0].shape)
             res['hypergraph_features'] = res['features']
 
         graph = self.gs_manager(res,

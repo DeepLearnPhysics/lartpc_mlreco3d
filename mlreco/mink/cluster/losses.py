@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-import numpy as np
 
-from mlreco.models.cluster_cnn.losses.lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
+from mlreco.models.cluster_cnn.losses.lovasz import lovasz_hinge_flat
+from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
 from collections import defaultdict
 
 
@@ -25,7 +23,8 @@ class EmbeddingLoss(nn.Module):
         self.smoothing_weight = self.loss_config.get('smoothing_weight', 1.0)
         self.spatial_size = self.loss_config.get('spatial_size', 512)
 
-        self.embedding_loss_name = self.loss_config.get('embedding_loss_name', 'BCE')
+        self.embedding_loss_name = self.loss_config.get(
+            'embedding_loss_name', 'BCE')
 
         # BCELoss for Embedding Loss
         if self.embedding_loss_name == 'BCE':
@@ -33,8 +32,8 @@ class EmbeddingLoss(nn.Module):
         elif self.embedding_loss_name == 'lovasz':
             self.embedding_loss_fn = lovasz_hinge_flat
         else:
-            raise ValueError('Loss function name {} \
-                does not correspond to available options'.format(self.embedding_loss_name))
+            raise ValueError('Loss function name {} does not correspond \
+                to available options'.format(self.embedding_loss_name))
 
 
     def find_cluster_means(self, features, labels):
@@ -69,7 +68,8 @@ class EmbeddingLoss(nn.Module):
             # a semantic label.
             return 0.0
         else:
-            indices = torch.triu_indices(cluster_means.shape[0], cluster_means.shape[0], 1)
+            indices = torch.triu_indices(cluster_means.shape[0], 
+                                         cluster_means.shape[0], 1)
             dist = distances(cluster_means, cluster_means)
             return torch.pow(torch.clamp(2.0 * margin - dist[indices[0, :], \
                 indices[1, :]], min=0), 2).mean()
@@ -96,11 +96,13 @@ class EmbeddingLoss(nn.Module):
             mask[~index] = 0.0
             sigma = torch.mean(margins[index], dim=0)
             dists = torch.sum(torch.pow(embeddings - centroids[i], 2), dim=1)
-            p = torch.clamp(torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-8)), min=0, max=1)
+            p = torch.clamp(
+                torch.exp(-dists / (2 * torch.pow(sigma, 2) + 1e-8)), min=0, max=1)
             probs[index] = p[index]
             logits = logit(p, eps=1e-6)
             loss += self.embedding_loss_fn(logits, mask)
-            acc += float((mask.bool() & (p > 0.5)).sum()) / float((mask.bool() | (p > 0.5)).sum())
+            acc += float((mask.bool() & (p > 0.5)).sum()) \
+                 / float((mask.bool() | (p > 0.5)).sum())
             sigma_detach = sigma.detach()
             smoothing_loss += torch.sum(torch.pow(margins[index] - sigma_detach, 2))
 

@@ -1,7 +1,7 @@
 import numpy as np
-from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
-from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-from mlreco.utils.cluster.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
+from mlreco.utils.cluster.dense_cluster import (gaussian_kernel, 
+                                                fit_predict_np, 
+                                                find_cluster_means)
 from mlreco.utils.metrics import *
 from mlreco.post_processing import post_processing
 
@@ -11,11 +11,21 @@ def extent(voxels):
     return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
 
 
-@post_processing('cluster-cnn-metrics', ['seg_label', 'clust_data', 'particles'], ['segmentation', 'embeddings', 'margins', 'seediness'])
+@post_processing('cluster-cnn-metrics', 
+                 ['seg_label', 'clust_data', 'particles'], 
+                 ['segmentation', 'embeddings', 'margins', 'seediness'])
 def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        data_idx=None, seg_label=None, clust_data=None, particles=None,
-                        embeddings=None, margins=None, seediness=None, ghost_mask=None,
-                        true_ghost_mask=None, seg_label_noghost=None, clust_data_noghost=None,
+                        data_idx=None, 
+                        seg_label=None, 
+                        clust_data=None, 
+                        particles=None,
+                        embeddings=None, 
+                        margins=None, 
+                        seediness=None, 
+                        ghost_mask=None,
+                        true_ghost_mask=None, 
+                        seg_label_noghost=None, 
+                        clust_data_noghost=None,
                         seg_prediction=None, **kwargs):
     """
     Compute metrics for SPICE stage (CNN particle instance clustering).
