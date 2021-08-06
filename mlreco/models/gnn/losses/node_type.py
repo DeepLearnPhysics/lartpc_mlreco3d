@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_label
-from mlreco.experimental.bayes.evidential import EVDLoss
+from mlreco.models.experimental.bayes.evidential import EVDLoss
 
 class NodeTypeLoss(torch.nn.Module):
     """
