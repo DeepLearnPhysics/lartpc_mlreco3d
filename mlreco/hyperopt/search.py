@@ -19,6 +19,7 @@ from mlreco.iotools.factories import loader_factory
 from mlreco.main_funcs import process_config
 from mlreco.trainval import trainval
 from mlreco.hyperopt.utils import construct_eval_func, UniformDistribution
+from mlreco.utils import CSVData
 from .factories import *
 
 
@@ -321,6 +322,66 @@ class RandomSearch(HyperparameterSearch):
         self.log = df
         csv_path = os.path.join(self.log_dir, self.output_results)
         df.to_csv(csv_path)
+        output_optimal_json = os.path.join(self.log_dir, self.output_optimal_json)
+        with open(output_optimal_json, 'w') as outfile:
+            json.dump(self.optimal_params, outfile)
+        return self.optimal_params
+
+
+class LRFinder(HyperparameterSearch):
+
+    def __init__(self, cfg: dict, eval_func: str = 'default'):
+        super(LRFinder, self).__init__(cfg, eval_func)
+        self.num_trials = cfg['hyperparameter_search'].get('num_trials', 30)
+
+    def compute_accuracy(self, trainer) -> float:
+        '''
+        Compute accuracy score for a single datapoint (one trained model)
+        '''
+        loss_iter = []
+        self.eval_func(trainer._net)
+        iteration = 0
+        while iteration < self.val_num_iter:
+            data_blob, result_blob = trainer.forward(self.val_io_iter)
+            loss = result_blob['loss'][0]
+            loss_iter.append(loss)
+            iteration += 1
+        loss_iter = sum(loss_iter) / len(loss_iter)
+        return loss_iter
+
+
+    def optimize_and_save(self):
+
+        lb, ub = self.params_config['lr']['bounds']
+        if self.params_config['lr'].get('log_scale', False):
+            lr_range = np.linspace(lb, ub, self.num_trials)
+        else:
+            lr_range = np.geomspace(lb, ub, self.num_trials)
+
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+        fout = CSVData(os.path.join(self.log_dir, self.output_results), append=True)
+
+        for i, lr_val in enumerate(lr_range):
+            out_msg = "Running optimization trial {0}/{1}\n".format(
+                i, self.num_trials)
+            sys.stdout.write(out_msg)
+            sys.stdout.flush()
+            gridpt = {'lr': lr_val}
+            try:
+                loss = self.train_evaluate(gridpt)
+                gridpt.update({'loss' : loss})
+                fout.record(('lr', 'loss'),
+                            (lr_val, loss))
+                fout.write()
+                fout.flush()
+
+            except:
+                # Training diverges, crashes, or other unexpected behavior
+                print("LR Rate of {:.4f} diverges!".format(lr_val))
+                continue
+
+        fout.close()
         output_optimal_json = os.path.join(self.log_dir, self.output_optimal_json)
         with open(output_optimal_json, 'w') as outfile:
             json.dump(self.optimal_params, outfile)

@@ -10,10 +10,8 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder
-from collections import defaultdict, Counter, OrderedDict
-from mlreco.mink.layers.factories import activations_construct
 from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.bayes.encoder import BayesianEncoder
+from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.evidential import EVDLoss
 from mlreco.xai.simple_cnn import VGG16
 from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
@@ -169,14 +167,14 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
 
 class BayesianParticleClassifier(MENetworkBase):
 
-    MODULES = ['network_base', 'bayesian_encoder']
+    MODULES = ['network_base', 'mcdropout_encoder']
 
     def __init__(self, cfg, name='bayesian_particle_classifier'):
         super(BayesianParticleClassifier, self).__init__(cfg)
         self.model_config = cfg[name]
         self.num_classes = self.model_config.get('num_classes', 5)
         self.encoder_type = self.model_config.get('encoder_type', 'full_dropout')
-        self.encoder = BayesianEncoder(cfg)
+        self.encoder = MCDropoutEncoder(cfg)
         self.logit_layer = nn.Sequential(
             nn.ReLU(),
             nn.Linear(self.encoder.latent_size, self.num_classes))

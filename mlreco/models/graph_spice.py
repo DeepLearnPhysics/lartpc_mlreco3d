@@ -1,6 +1,4 @@
 import torch
-import torch_geometric
-import torch.nn.functional as F
 import numpy as np
 
 from .cluster_cnn.losses.gs_embeddings import *
@@ -8,17 +6,7 @@ from .cluster_cnn import (cluster_model_construct,
                           spice_loss_construct,
                           gs_kernel_construct)
 
-from .cluster_cnn.pointnet2 import PointNet2
-
-from .gnn import gnn_model_construct
-
-from pprint import pprint
-from mlreco.utils.cluster.graph_spice import (
-    ClusterGraphConstructor, get_edge_weight)
-from mlreco.utils.metrics import ARI
-
-from torch_geometric.nn import radius
-
+from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 
 class GraphSPICE(nn.Module):
     '''

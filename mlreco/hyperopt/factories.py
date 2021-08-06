@@ -1,9 +1,9 @@
 from . import search
 
-
 def hyperopt_algorithm_dict():
 	d = {
-		'random_search': search.RandomSearch
+		'random_search': search.RandomSearch,
+		'lr_search': search.LRFinder
 	}
 	return d
 
