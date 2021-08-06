@@ -5,28 +5,26 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.models.mink.layers.blocks import *
-from mlreco.models.mink.layers.factories import activations_dict, activations_construct
-from mlreco.models.mink.layers.nonlinearities import MinkowskiLeakyReLU
-from mlreco.models.mink.layers.network_base import MENetworkBase
+from mlreco.models.layers.blocks import *
+from mlreco.models.layers.factories import activations_dict, activations_construct
+from mlreco.models.layers.nonlinearities import MinkowskiLeakyReLU
+from mlreco.models.layers.network_base import MENetworkBase
 
 
-class UResNeXt(MENetworkBase):
+class SENet(MENetworkBase):
     '''
     UNet Type encoder-decoder network, with atrous convolutions and
     resnext-type blocks.
     '''
 
     def __init__(self, cfg, name='uresnext'):
-        super(UResNeXt, self).__init__(cfg)
+        super(SENet, self).__init__(cfg)
         self.model_cfg = cfg['modules'][name]
 
         # Configurations
         self.reps = self.model_cfg.get('reps', 2)
         self.depth = self.model_cfg.get('depth', 5)
         self.num_filters = self.model_cfg.get('num_filters', 32)
-        self.cardinality = self.model_cfg.get('cardinality', 8)
-        self.dilations = [1, 1, 1, 1, 2, 2, 4, 4]
         assert (self.num_filters % self.cardinality == 0)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth + 1)]
         # self.nPlanes = [(2**i) * self.num_filters for i in range(self.depth)]
@@ -47,7 +45,7 @@ class UResNeXt(MENetworkBase):
         for i, F in enumerate(self.nPlanes):
             m = []
             for _ in range(self.reps):
-                m.append(ResNeXtBlock(F, F, dimension=self.D,
+                m.append(SEResNetBlock(F, F, dimension=self.D,
                                       cardinality=self.cardinality,
                                       dilations=self.dilations,
                                       activation=self.activation_name,
@@ -84,7 +82,7 @@ class UResNeXt(MENetworkBase):
             self.decoding_conv.append(m)
             m = []
             for j in range(self.reps):
-                m.append(ResNeXtBlock(self.nPlanes[i] * (2 if j == 0 else 1),
+                m.append(SEResNetBlock(self.nPlanes[i] * (2 if j == 0 else 1),
                                       self.nPlanes[i],
                                       dimension=self.D,
                                       cardinality=self.cardinality,
@@ -147,7 +145,7 @@ class UResNeXt(MENetworkBase):
         return decoderTensors
 
     def forward(self, input):
-        coords = input[:, 0:self.D + 1].int()
+        coords = input[:, 0:self.D + 1].cpu().int()
         features = input[:, self.D + 1:].float()
 
         x = ME.SparseTensor(features, coordinates=coords)

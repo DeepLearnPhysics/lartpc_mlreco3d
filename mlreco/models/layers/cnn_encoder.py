@@ -6,9 +6,9 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from collections import defaultdict
-from mlreco.models.mink.layers.factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.mink.layers.network_base import MENetworkBase
-from mlreco.models.mink.layers.blocks import ResNetBlock, ConvolutionBlock
+from mlreco.models.layers.factories import activations_dict, activations_construct, normalizations_construct
+from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.blocks import ResNetBlock, ConvolutionBlock
 
 
 class SparseEncoder(MENetworkBase):

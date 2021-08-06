@@ -6,10 +6,10 @@ import time
 # MinkowskiEngine Backend
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
-from mlreco.models.mink.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
+from mlreco.models.layers.blocks import ResNetBlock, CascadeDilationBlock, SPP, ASPP
 from .factories import cnn_construct
-from mlreco.models.mink.layers.network_base import MENetworkBase
-from mlreco.models.mink.layers.ppn import PPN
+from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.ppn import PPN
 
 from pprint import pprint
 

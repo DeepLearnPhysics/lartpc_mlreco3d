@@ -7,7 +7,7 @@ class MinkGhostMask(torch.nn.Module):
     Ghost mask downsampler for MinkowskiEngine Backend
     '''
     def __init__(self, data_dim):
-        from mlreco.models.mink.layers.ppnplus import ExpandAs
+        from mlreco.models.layers.ppnplus import ExpandAs
         super(MinkGhostMask, self).__init__()
         self._data_dim = data_dim
         self.downsample = ME.MinkowskiMaxPooling(2, 2, dimension=3)
