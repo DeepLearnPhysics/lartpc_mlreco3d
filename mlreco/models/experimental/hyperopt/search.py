@@ -18,7 +18,7 @@ from mlreco.utils import utils
 from mlreco.iotools.factories import loader_factory
 from mlreco.main_funcs import process_config
 from mlreco.trainval import trainval
-from mlreco.experimental.hyperopt.utils import construct_eval_func, UniformDistribution
+from mlreco.models.experimental.hyperopt.utils import construct_eval_func, UniformDistribution
 from .factories import *
 
 
