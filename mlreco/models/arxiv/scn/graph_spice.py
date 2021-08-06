@@ -10,7 +10,7 @@ from mlreco.models.cluster_cnn import (cluster_model_construct,
 from mlreco.models.gnn import gnn_model_construct
 
 from pprint import pprint
-from mlreco.utils.cluster.graph_spice import (
+from mlreco.utils.cluster.cluster_graph_constructor import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI
 

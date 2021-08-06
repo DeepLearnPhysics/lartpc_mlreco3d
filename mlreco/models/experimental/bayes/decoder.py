@@ -1,8 +1,8 @@
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.factories import activations_construct
-from mlreco.models.layers.factories import normalizations_construct
+from mlreco.models.layers.activation_normalization_factories import activations_construct
+from mlreco.models.layers.activation_normalization_factories import normalizations_construct
 from mlreco.models.layers.network_base import MENetworkBase
 from mlreco.models.layers.blocks import DropoutBlock, ResNetBlock
 

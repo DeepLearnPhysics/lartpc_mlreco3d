@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.models.layers.blocks import MBResConv, MBConv, SEBlock, MBResConvSE
-from mlreco.models.layers.factories import activations_dict, activations_construct
+from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct
 from mlreco.models.layers.network_base import MENetworkBase
 
 class MobileNetV3(MENetworkBase):

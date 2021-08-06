@@ -4,10 +4,10 @@ import numpy as np
 from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 from mlreco.models.cluster_cnn import gs_kernel_construct, spice_loss_construct
 
-from mlreco.models.cluster_cnn.graph_spice import GraphSPICEEmbedder
+from mlreco.models.cluster_cnn.graph_spice_embedder import GraphSPICEEmbedder
 
 from pprint import pprint
-from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 
 
 class MinkGraphSPICE(nn.Module):

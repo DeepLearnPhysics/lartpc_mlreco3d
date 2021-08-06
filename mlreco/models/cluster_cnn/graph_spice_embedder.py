@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.uresnet import UResNet
+from mlreco.models.layers.uresnet_layers import UResNet
 # from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
 from pprint import pprint
