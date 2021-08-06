@@ -159,8 +159,7 @@ def nll_regression_loss(logits, targets, eps=1e-6):
     RETURNS:
         - loss (FloatTensor): N x 1 non-reduced loss for each example. 
     '''
-    logits = logits.view(-1, 4)
-    gamma, nu, alpha, beta = torch.split(logits, 4, dim=1)
+    gamma, nu, alpha, beta = logits[:, 0], logits[:, 1], logits[:, 2], logits[:, 3]
     omega = 2.0 * beta * (1.0 + nu)
     nll = 0.5 * (np.log(np.pi) - torch.log(nu + 1e-5))  \
         - alpha * torch.log(omega)  \
@@ -170,20 +169,16 @@ def nll_regression_loss(logits, targets, eps=1e-6):
     return torch.clamp(nll, min=0)
 
 def kld_regression_loss(logits, targets, eps=1e-6):
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
     loss = torch.abs(targets - gamma + eps) * (2.0 * nu + alpha)
     return loss
 
 def kld_evd_l2_loss(logits, targets, eps=1e-6):
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
     loss = torch.pow(targets - gamma + eps, 2) * (2.0 * nu + alpha)
     return loss
 
 def kl_nig(logits, targets, eps=0.01):
-
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
 
     error = torch.abs(targets - gamma + 1e-6)
@@ -218,6 +213,9 @@ class EDLRegressionLoss(nn.Module):
         self.T = T
 
     def forward(self, logits, targets, iteration=None):
+
+        logits = logits.view(-1, 4)
+        assert len(targets.shape) == 1
 
         if iteration is not None:
             annealing = min(1.0, float(iteration) / self.T)
