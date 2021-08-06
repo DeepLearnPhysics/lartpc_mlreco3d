@@ -9,12 +9,7 @@ from pprint import pprint
 from mlreco.utils.cluster.graph_spice import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
-from mlreco.models.scn.cluster_cnn.losses.spatial_embeddings import *
-
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
+from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
 
 def num_true_clusters(pred, truth):
     return len(np.unique(truth))
@@ -42,14 +37,14 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
     # Reassign index numbers
     index_mapping = { key : val for key, val in zip(
         range(0, len(graph_info.Index.unique())), data_index)}
-    
+
     graph_info['Index'] = graph_info['Index'].map(index_mapping)
     # print(graph_info)
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
-    gs_manager = ClusterGraphConstructor(constructor_cfg, 
-                                         graph_batch=graph, 
+    gs_manager = ClusterGraphConstructor(constructor_cfg,
+                                         graph_batch=graph,
                                          graph_info=graph_info)
     gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
     funcs = [ARI, SBD, purity, efficiency, num_true_clusters, num_pred_clusters]
@@ -62,7 +57,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
         values = tuple(row[1].values)
         fout.record(columns, values)
         fout.write()
-    
+
     fout.close()
 
 
@@ -85,7 +80,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
     # Reassign index numbers
     index_mapping = { key : val for key, val in zip(
         range(0, len(graph_info.Index.unique())), data_index)}
-    
+
     graph_info['Index'] = graph_info['Index'].map(index_mapping)
     # print(graph_info)
 
@@ -99,11 +94,11 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
 
         constructor_cfg['edge_cut_threshold'] = edge_ths
 
-        gs_manager = ClusterGraphConstructor(constructor_cfg, 
-                                            graph_batch=graph, 
+        gs_manager = ClusterGraphConstructor(constructor_cfg,
+                                            graph_batch=graph,
                                             graph_info=graph_info)
         gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
-        funcs = [ARI, SBD, purity, efficiency, num_true_clusters, 
+        funcs = [ARI, SBD, purity, efficiency, num_true_clusters,
                  num_pred_clusters, edge_threshold]
         column_names = ['ARI', 'SBD', 'Purity', 'Efficiency', 'num_true_clusters',
                         'num_pred_clusters', 'edge_threshold']
@@ -116,5 +111,5 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
             values = tuple(row[1].values)
             fout.record(columns, values)
             fout.write()
-    
+
     fout.close()

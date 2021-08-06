@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from mlreco.models.scn.layers.extract_feature_map import Selection, Multiply, AddLabels, GhostMask
+from mlreco.models.layers.dbscan import distances
 import numpy as np
 
 
@@ -304,11 +305,6 @@ class PPNLoss(torch.nn.modules.loss._Loss):
 
         self.ppn1_stride, self.ppn2_stride = define_ppn12(self._ppn1_size, self._ppn2_size, self._spatial_size, self._num_strides)
 
-    def distances(self, v1, v2):
-        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
-
     def forward(self, result, segment_label, particles):
         """
         result[0], segment_label and weight are lists of size #gpus = batch_size.
@@ -410,8 +406,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                             continue
 
                     # Segmentation loss (predict positives)
-                    d = self.distances(event_label, event_pixel_pred)
-                    d_true = self.distances(event_label, event_data)
+                    d = distances(event_label, event_pixel_pred)
+                    d_true = distances(event_label, event_data)
                     positives = (d_true < self._true_distance_ppn3).any(dim=0)  # FIXME can be empty
                     num_positives = positives.long().sum()
                     weight_ppn = torch.tensor([1-self._weight_ppn, self._weight_ppn]).double()
@@ -456,8 +452,8 @@ class PPNLoss(torch.nn.modules.loss._Loss):
                     # print(event_label.size())
                     event_label_ppn1 = torch.floor(event_label/float(2**self.ppn1_stride))
                     event_label_ppn2 = torch.floor(event_label/float(2**self.ppn2_stride))
-                    d_true_ppn1 = self.distances(event_label_ppn1, event_ppn1_data)
-                    d_true_ppn2 = self.distances(event_label_ppn2, event_ppn2_data)
+                    d_true_ppn1 = distances(event_label_ppn1, event_ppn1_data)
+                    d_true_ppn2 = distances(event_label_ppn2, event_ppn2_data)
                     positives_ppn1 = (d_true_ppn1 < self._true_distance_ppn1).any(dim=0)
                     positives_ppn2 = (d_true_ppn2 < self._true_distance_ppn2).any(dim=0)
 

@@ -5,7 +5,7 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 from mlreco.models.scn.layers.uresnet import UResNet
-from mlreco.models.scn.cluster_cnn.losses.occuseg import OccuSegLoss
+from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
 
 
 class SparseOccuSeg(UResNet):

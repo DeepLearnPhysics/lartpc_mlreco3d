@@ -1,14 +1,9 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import sparseconvnet as scn
-from collections import defaultdict
-
 import MinkowskiEngine as ME
 
-
 from mlreco.models.mink.layers.uresnet import UResNet
-# from mlreco.models.scn.cluster_cnn.losses.gs_embeddings import *
+# from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
 from pprint import pprint
 

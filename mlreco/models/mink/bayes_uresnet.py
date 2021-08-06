@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 import torch.nn.functional as F
-import MinkowskiFunctional as MF
 
 from collections import defaultdict
 from mlreco.models.mink.layers.factories import (activations_dict,

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from mlreco.models.scn.cluster_cnn.losses.gs_embeddings import *
+from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 from .graph_spice import GraphSPICEEmbedder, NodeEdgeHybridLoss
 from mlreco.models.gnn.factories import gnn_model_construct
 from mlreco.utils.cluster.graph_spice import *

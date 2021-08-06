@@ -1,13 +1,7 @@
-from os import stat
 import sys
-
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import MinkowskiEngine as ME
-import MinkowskiFunctional as MF
 
 from mlreco.models.mink.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
@@ -16,7 +10,7 @@ from mlreco.models.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.evidential import EVDLoss
 from mlreco.xai.simple_cnn import VGG16
-from mlreco.models.scn.cluster_cnn.losses.lovasz import StableBCELoss
+from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
 
 class ParticleImageClassifier(nn.Module):
 

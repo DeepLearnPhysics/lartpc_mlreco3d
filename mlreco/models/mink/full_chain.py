@@ -4,10 +4,8 @@ import numpy as np
 
 from mlreco.models.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.mink.layers.ppnplus import PPN, PPNLonelyLoss
-from mlreco.models.mink.uresnet import UResNet_Chain
-from mlreco.models.scn.uresnet_lonely import SegmentationLoss
-from mlreco.models.mink.graph_spice import MinkGraphSPICE
-from mlreco.models.scn.graph_spice import GraphSPICELoss
+from mlreco.models.mink.uresnet import UResNet_Chain, SegmentationLoss
+from mlreco.models.mink.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels

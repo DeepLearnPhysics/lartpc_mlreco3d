@@ -1,12 +1,8 @@
-import numpy as np
 import torch
 import torch.nn as nn
 
-import MinkowskiEngine as ME
-import MinkowskiFunctional as MF
-
 from mlreco.models.mink.cluster.embeddings import SPICE
-from mlreco.models.scn.cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
+from mlreco.models.cluster_cnn import spice_loss_construct
 
 class MinkSPICE(SPICE):
 

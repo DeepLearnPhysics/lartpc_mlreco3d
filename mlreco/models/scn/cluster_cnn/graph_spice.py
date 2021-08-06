@@ -3,7 +3,7 @@ import torch.nn as nn
 import sparseconvnet as scn
 
 from mlreco.models.scn.layers.uresnet import UResNet
-from mlreco.models.scn.cluster_cnn.losses.gs_embeddings import *
+from mlreco.models.cluster_cnn.losses.gs_embeddings import *
 
 from pprint import pprint
 

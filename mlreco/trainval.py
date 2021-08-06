@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 from mlreco.utils import unwrap
 import warnings
 import torch
@@ -12,7 +9,7 @@ from mlreco.utils.data_parallel import DataParallel
 import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
-from mlreco.utils.adabound import *
+from mlreco.utils.adabound import AdaBound, AdaBoundW
 
 class trainval(object):
     """
@@ -87,7 +84,7 @@ class trainval(object):
             self._scheduler.step()
 
         # If the model has a buffer that needs to be updated, do it after
-        # trainable parameter updates. 
+        # trainable parameter updates.
         if hasattr(self._net.module, 'update_buffers'):
             print("Updating Buffer...")
             self._net.module.update_buffers()
