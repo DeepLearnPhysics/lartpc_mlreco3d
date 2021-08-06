@@ -7,9 +7,9 @@ import MinkowskiFunctional as MF
 
 from mlreco.models.layers.blocks import *
 from mlreco.models.layers.nonlinearities import MinkowskiLeakyReLU
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 
-class FPN(MENetworkBase):
+class FPN(torch.nn.Module):
     '''
     Feature Pyramid Network (FPN)
 
@@ -30,7 +30,9 @@ class FPN(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='fpn'):
-        super(FPN, self).__init__(cfg)
+        super(FPN, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         model_cfg = cfg['modules'][name]
 
         # UResNet Configurations

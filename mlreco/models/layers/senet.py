@@ -8,17 +8,19 @@ import MinkowskiFunctional as MF
 from mlreco.models.layers.blocks import *
 from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct
 from mlreco.models.layers.nonlinearities import MinkowskiLeakyReLU
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 
 
-class SENet(MENetworkBase):
+class SENet(torch.nn.Module):
     '''
     UNet Type encoder-decoder network, with atrous convolutions and
     resnext-type blocks.
     '''
 
     def __init__(self, cfg, name='uresnext'):
-        super(SENet, self).__init__(cfg)
+        super(SENet, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         self.model_cfg = cfg['modules'][name]
 
         # Configurations

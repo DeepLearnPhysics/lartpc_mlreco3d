@@ -1,27 +1,30 @@
+import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
 from mlreco.models.layers.activation_normalization_factories import activations_construct
 from mlreco.models.layers.activation_normalization_factories import normalizations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.blocks import DropoutBlock, ResNetBlock
 
-class MCDropoutDecoder(MENetworkBase):
+class MCDropoutDecoder(torch.nn.Module):
     """
     Convolutional decoder with dropout layers.
 
-    The architecture is exactly the same as the ME ResidualEncoders, 
+    The architecture is exactly the same as the ME ResidualEncoders,
     except for the additional DropoutBlocks
 
     Attributes:
 
         dropout_p: dropping probability value for dropout layers
-        dropout_layer_index: layer numbers to swap resnet blocks with 
-        dropout resnet blocks. 
+        dropout_layer_index: layer numbers to swap resnet blocks with
+        dropout resnet blocks.
     """
 
     def __init__(self, cfg, name='mcdropout_decoder'):
-        super(MCDropoutDecoder, self).__init__(cfg, name='network_base')
+        super(MCDropoutDecoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
 
         print(self.model_config)
@@ -51,10 +54,10 @@ class MCDropoutDecoder(MENetworkBase):
         self.decoding_conv = []
         for i in range(self.depth-2, -1, -1):
             m = []
-            m.append(normalizations_construct(self.norm, 
-                                              self.nPlanes[i+1], 
+            m.append(normalizations_construct(self.norm,
+                                              self.nPlanes[i+1],
                                               **self.norm_args))
-            m.append(activations_construct(self.activation_name, 
+            m.append(activations_construct(self.activation_name,
                                            **self.activation_args))
             m.append(ME.MinkowskiConvolutionTranspose(
                 in_channels=self.nPlanes[i+1],

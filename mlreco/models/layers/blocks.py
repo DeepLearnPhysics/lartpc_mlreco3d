@@ -4,7 +4,7 @@ import numpy as np
 
 # For MinkowskiEngine
 import MinkowskiEngine as ME
-from .factories import *
+from .activation_normalization_factories import *
 from typing import Union
 
 # Custom Network Units/Blocks

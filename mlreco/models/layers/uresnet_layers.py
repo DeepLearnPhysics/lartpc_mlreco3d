@@ -1,13 +1,14 @@
+import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
 from mlreco.models.layers.blocks import ResNetBlock, CascadeDilationBlock, ASPP
 from mlreco.models.layers.activation_normalization_factories import activations_construct
 from mlreco.models.layers.activation_normalization_factories import normalizations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 
 
-class UResNet(MENetworkBase):
+class UResNet(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -26,7 +27,9 @@ class UResNet(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='uresnet'):
-        super(UResNet, self).__init__(cfg)
+        super(UResNet, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         model_cfg = cfg[name]
         # UResNet Configurations
         self.reps           = model_cfg.get('reps', 2)
@@ -176,7 +179,7 @@ class UResNet(MENetworkBase):
         return res
 
 
-class UResNetEncoder(MENetworkBase):
+class UResNetEncoder(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -195,7 +198,9 @@ class UResNetEncoder(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='uresnet_encoder'):
-        super(UResNetEncoder, self).__init__(cfg)
+        super(UResNetEncoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         model_cfg = cfg[name]
         # UResNet Configurations
         self.reps = model_cfg.get('reps', 2)
@@ -294,10 +299,12 @@ class UResNetEncoder(MENetworkBase):
         return res
 
 
-class UResNetDecoder(MENetworkBase):
+class UResNetDecoder(torch.nn.Module):
 
     def __init__(self, cfg, name='uresnet_decoder'):
-        super(UResNetDecoder, self).__init__(cfg, name='network_base')
+        super(UResNetDecoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
 
         # UResNet Configurations
@@ -365,61 +372,3 @@ class UResNetDecoder(MENetworkBase):
             x = self.decoding_block[i](x)
             decoderTensors.append(x)
         return decoderTensors
-
-
-# UNet Variants, including Atrous Convolutions and etc.
-
-class ACASUNet(UResNet):
-
-    def __init__(self, cfg, name='uresnet'):
-        super(ACASUNet, self).__init__(cfg)
-        self.cascade = CascadeDilationBlock(self.nPlanes[-1], self.nPlanes[-1])
-
-    def forward(self, input):
-        coords = input[:, 0:self.D+1].int()
-        features = input[:, self.D+1:].float()
-
-        x = ME.SparseTensor(features, coordinates=coords)
-        encoderOutput = self.encoder(x)
-        encoderTensors = encoderOutput['encoderTensors']
-        finalTensor = encoderOutput['finalTensor']
-
-        # Include Dilated Cascade
-        finalTensor = self.cascade(finalTensor)
-
-        decoderTensors = self.decoder(finalTensor, encoderTensors)
-
-        res = {
-            'encoderTensors': encoderTensors,
-            'decoderTensors': decoderTensors,
-            'finalTensor': finalTensor
-        }
-        return res
-
-
-class ASPPUNet(UResNet):
-
-    def __init__(self, cfg, name='uresnet'):
-        super(ASPPUNet, self).__init__(cfg)
-        self.aspp = ASPP(self.nPlanes[-1], self.nPlanes[-1])
-
-    def forward(self, input):
-        coords = input[:, 0:self.D+1].int()
-        features = input[:, self.D+1:].float()
-
-        x = ME.SparseTensor(features, coordinates=coords)
-        encoderOutput = self.encoder(x)
-        encoderTensors = encoderOutput['encoderTensors']
-        finalTensor = encoderOutput['finalTensor']
-
-        # Include Dilated Cascade
-        finalTensor = self.aspp(finalTensor)
-
-        decoderTensors = self.decoder(finalTensor, encoderTensors)
-
-        res = {
-            'encoderTensors': encoderTensors,
-            'decoderTensors': decoderTensors,
-            'finalTensor': finalTensor
-        }
-        return res
