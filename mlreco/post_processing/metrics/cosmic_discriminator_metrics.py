@@ -5,11 +5,7 @@ from scipy.special import softmax
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
 from mlreco.utils.gnn.cluster import get_cluster_label
-
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
+from mlreco.post_processing.common import extent
 
 
 @post_processing('cosmic-discriminator-metrics', ['clust_data', 'particles'], ['interactions', 'inter_cosmic_pred'])

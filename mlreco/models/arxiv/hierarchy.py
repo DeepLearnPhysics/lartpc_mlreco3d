@@ -21,7 +21,7 @@ from mlreco.models.gnn.normalizations import BatchNorm
 
 import torch.nn.functional as F
 
-from mlreco.models.scn.cluster_cnn.losses.lovasz import lovasz_softmax_flat
+from mlreco.models.cluster_cnn.losses.lovasz import lovasz_softmax_flat
 
 
 def get_edge_features(nodes, batch_idx, edge_net):

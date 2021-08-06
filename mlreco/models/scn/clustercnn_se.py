@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from .cluster_cnn.spatial_embeddings import SpatialEmbeddings
-from .cluster_cnn.losses.spatial_embeddings import *
-from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
+from mlreco.models.scn.cluster_cnn.spatial_embeddings import SpatialEmbeddings
+from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
+from mlreco.models.cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
 
 class ClusterCNN(SpatialEmbeddings):
     '''

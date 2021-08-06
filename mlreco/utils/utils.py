@@ -1,23 +1,28 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 import torch
-import sparseconvnet as scn
 import time
-import MinkowskiEngine as ME
 import torch_geometric
 import pandas as pd
 
 
 def to_numpy(s):
+    use_scn, use_mink = True, True
+    try:
+        import sparseconvnet as scn
+    except ImportError:
+        use_scn = False
+    try:
+        import MinkowskiEngine as ME
+    except ImportError:
+        use_mink = False
+
     if isinstance(s, np.ndarray):
         return s
     if isinstance(s, torch.Tensor):
         return s.cpu().detach().numpy()
-    elif isinstance(s, scn.SparseConvNetTensor):
+    elif use_scn and isinstance(s, scn.SparseConvNetTensor):
         return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
-    elif isinstance(s, ME.SparseTensor):
+    elif use_mink and isinstance(s, ME.SparseTensor):
         return torch.cat([s.C.float(), s.F], dim=1).detach().cpu().numpy()
     elif isinstance(s, torch_geometric.data.batch.Batch):
         return s

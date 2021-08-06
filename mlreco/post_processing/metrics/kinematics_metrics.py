@@ -6,11 +6,7 @@ from mlreco.utils.cluster.dense_cluster import gaussian_kernel, ellipsoidal_kern
 from mlreco.utils.metrics import *
 from mlreco.utils.gnn.network import get_fragment_edges
 from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
-
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
+from mlreco.post_processing.common import extent
 
 
 @post_processing('kinematics-metrics',

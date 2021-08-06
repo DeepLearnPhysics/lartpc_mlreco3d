@@ -7,7 +7,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.models.mink.layers.ppnplus import PPN, PPNLonelyLoss
-from mlreco.models.scn.uresnet_lonely import SegmentationLoss
+from mlreco.models.mink.uresnet import SegmentationLoss
 from collections import defaultdict
 from mlreco.models.mink.uresnet import UResNet_Chain
 
@@ -47,17 +47,17 @@ class UResNetPPN(nn.Module):
             out.update({'ghost': res['ghost']})
             if self.ghost:
                 if self.ppn.use_true_ghost_mask:
-                    res_ppn = self.ppn(res['finalTensor'][igpu], 
+                    res_ppn = self.ppn(res['finalTensor'][igpu],
                                     res['decoderTensors'][igpu],
                                     ghost=res['ghost_sptensor'][igpu],
                                     ghost_labels=labels)
                 else:
-                    res_ppn = self.ppn(res['finalTensor'][igpu], 
+                    res_ppn = self.ppn(res['finalTensor'][igpu],
                                     res['decoderTensors'][igpu],
                                     ghost=res['ghost_sptensor'][igpu])
 
             else:
-                res_ppn = self.ppn(res['finalTensor'][igpu], 
+                res_ppn = self.ppn(res['finalTensor'][igpu],
                                    res['decoderTensors'][igpu])
             # if self.training:
             #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
@@ -66,7 +66,7 @@ class UResNetPPN(nn.Module):
             segmentation = self.segmentation(res['decoderTensors'][igpu][-1])
             out['segmentation'].append(segmentation.F)
             out.update(res_ppn)
-            
+
         return out
 
 

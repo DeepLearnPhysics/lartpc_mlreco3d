@@ -12,7 +12,7 @@ from mlreco.models.mink.layers.extract_feature_map import MinkGhostMask
 
 from collections import Counter
 
-from mlreco.models.scn.cluster_cnn.losses.misc import BinaryCELogDiceLoss
+from mlreco.models.cluster_cnn.losses.misc import BinaryCELogDiceLoss
 
 class Attention(nn.Module):
     def __init__(self):

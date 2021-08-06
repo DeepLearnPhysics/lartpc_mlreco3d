@@ -1,6 +1,3 @@
-from mlreco.models.scn.cluster_cnn import losses
-
-
 def backbone_dict():
     """
     returns dictionary of clustering models
@@ -45,8 +42,8 @@ def cluster_model_dict():
     '''
     Returns dictionary of implemented clustering layers.
     '''
-    from . import spatial_embeddings
-    from . import graph_spice
+    from mlreco.models.scn.cluster_cnn import spatial_embeddings
+    from mlreco.models.scn.cluster_cnn import graph_spice
     from mlreco.models.mink.cluster.embeddings import SPICE as MinkSPICE
     models = {
         "spice_cnn": spatial_embeddings.SpatialEmbeddings,

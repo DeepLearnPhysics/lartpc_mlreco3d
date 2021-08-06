@@ -4,11 +4,7 @@ import numpy as np
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters
-
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
+from mlreco.post_processing.common import extent
 
 
 @post_processing('cluster-gnn-metrics', ['clust_data', 'particles'], ['edge_pred', 'clusts', 'node_pred', 'edge_index'])

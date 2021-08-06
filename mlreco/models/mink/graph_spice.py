@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from mlreco.models.scn.cluster_cnn.losses.gs_embeddings import *
-from mlreco.models.scn.cluster_cnn import gs_kernel_construct
+from mlreco.models.cluster_cnn.losses.gs_embeddings import *
+from mlreco.models.cluster_cnn import gs_kernel_construct, spice_loss_construct
 
 from mlreco.models.mink.cluster.graph_spice import GraphSPICEEmbedder
 
@@ -86,4 +86,65 @@ class MinkGraphSPICE(nn.Module):
                                 labels)
         res['graph'] = [graph]
         res['graph_info'] = [self.gs_manager.info]
+        return res
+
+
+class GraphSPICELoss(nn.Module):
+
+    def __init__(self, cfg, name='graph_spice_loss'):
+        super(GraphSPICELoss, self).__init__()
+        self.loss_config = cfg[name]
+        self.loss_name = self.loss_config['name']
+        self.skip_classes = self.loss_config.get('skip_classes', [2, 3, 4])
+        self.eval_mode = self.loss_config['eval']
+        self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
+
+        constructor_cfg = self.loss_config['constructor_cfg']
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
+        self.gs_manager.training = ~self.eval_mode
+
+        self.invert = self.loss_config.get('invert', False)
+        # print("LOSS FN = ", self.loss_fn)
+
+    def filter_class(self, segment_label, cluster_label):
+        '''
+        Filter classes according to segmentation label.
+        '''
+        mask = ~np.isin(segment_label[0][:, -1].cpu().numpy(), self.skip_classes)
+        slabel = [segment_label[0][mask]]
+        clabel = [cluster_label[0][mask]]
+        return slabel, clabel
+
+
+    def forward(self, result, segment_label, cluster_label):
+        '''
+
+        '''
+        slabel, clabel = self.filter_class(segment_label, cluster_label)
+        # print(slabel[0].size())
+        graph = result['graph'][0]
+        graph_info = result['graph_info'][0]
+        self.gs_manager.replace_state(graph, graph_info)
+        result['edge_score'] = [graph.edge_attr]
+        result['edge_index'] = [graph.edge_index]
+        if not self.eval_mode:
+            result['edge_truth'] = [graph.edge_truth]
+
+        if self.invert:
+            pred_labels = result['edge_score'][0] < 0.0
+        else:
+            pred_labels = result['edge_score'][0] >= 0.0
+
+        if not self.eval_mode:
+
+            edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
+
+            print("Number of Wrong Edges = {} / {}".format(
+                torch.sum(edge_diff).item(), edge_diff.shape[0]))
+
+            print("Number of True Dropped Edges = {} / {}".format(
+                torch.sum(result['edge_truth'][0] < 0.5).item(),
+                edge_diff.shape[0]))
+
+        res = self.loss_fn(result, slabel, clabel)
         return res
