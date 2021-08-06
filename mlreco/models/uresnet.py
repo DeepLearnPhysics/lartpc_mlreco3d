@@ -4,9 +4,9 @@ import torch.nn as nn
 
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.uresnet_layers import UResNet
+from mlreco.models.layers.common.uresnet_layers import UResNet
 from collections import defaultdict
-from mlreco.models.layers.activation_normalization_factories import activations_construct
+from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 
 class UResNet_Chain(nn.Module):
 

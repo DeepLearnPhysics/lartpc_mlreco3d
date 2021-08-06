@@ -1,7 +1,7 @@
-mlreco.models.gnn.losses.node\_type module
+mlreco.models.layers.gnn.losses.node\_type module
 ==========================================
 
-.. automodule:: mlreco.models.gnn.losses.node_type
+.. automodule:: mlreco.models.layers.gnn.losses.node_type
    :members:
    :undoc-members:
    :show-inheritance:

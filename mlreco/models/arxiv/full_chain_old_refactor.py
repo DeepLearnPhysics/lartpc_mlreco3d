@@ -13,7 +13,7 @@ from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.models.grappa import GNN, GNNLoss
 
-from mlreco.models.layers.dbscan import DBSCANFragmenter
+from mlreco.models.layers.common.dbscan import DBSCANFragmenter
 from mlreco.models.scn.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels

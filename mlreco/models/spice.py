@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from mlreco.models.cluster_cnn.embeddings import SPICE
-from mlreco.models.cluster_cnn import spice_loss_construct
+from mlreco.models.layers.cluster_cnn.embeddings import SPICE
+from mlreco.models.layers.cluster_cnn import spice_loss_construct
 
 class MinkSPICE(SPICE):
 

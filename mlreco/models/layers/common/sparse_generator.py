@@ -3,9 +3,9 @@ import torch.nn as nn
 
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.layers.configuration import setup_cnn_configuration
-from mlreco.models.layers.blocks import ResNetBlock, ConvolutionBlock
+from mlreco.models.layers.common.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.blocks import ResNetBlock, ConvolutionBlock
 from scipy.special import logit
 
 # from torch_geometric.nn import BatchNorm, LayerNorm, MessageNorm

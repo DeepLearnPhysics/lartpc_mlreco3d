@@ -5,7 +5,7 @@ import torch
 from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
 #from mlreco.models.scn.layers.ppn import PPN, PPNLoss
 from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 from mlreco.utils.deghosting import adapt_labels
 
 

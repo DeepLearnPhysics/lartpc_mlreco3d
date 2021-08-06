@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 from scipy.spatial.distance import cdist
 
 

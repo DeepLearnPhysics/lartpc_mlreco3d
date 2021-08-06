@@ -6,7 +6,7 @@ import numpy as np
 from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct
 from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.scn.layers.ppn import PPN, PPNLoss
-from mlreco.models.layers.dbscan import DBScanClusts2
+from mlreco.models.layers.common.dbscan import DBScanClusts2
 from mlreco.models.grappa import GNNLoss
 from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score

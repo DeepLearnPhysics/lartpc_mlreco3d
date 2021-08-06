@@ -3,14 +3,14 @@ import MinkowskiEngine as ME
 import numpy as np
 
 from mlreco.models.gnn_full_chain import FullChainGNN, FullChainLoss
-from mlreco.models.layers.ppnplus import PPN, PPNLonelyLoss
+from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.fragmenter import DBSCANFragmentManager, GraphSPICEFragmentManager, format_fragments
-from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
+from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 
 class FullChain(FullChainGNN):
     '''

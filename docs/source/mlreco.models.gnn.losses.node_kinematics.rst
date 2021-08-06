@@ -1,7 +1,7 @@
-mlreco.models.gnn.losses.node\_kinematics module
+mlreco.models.layers.gnn.losses.node\_kinematics module
 ================================================
 
-.. automodule:: mlreco.models.gnn.losses.node_kinematics
+.. automodule:: mlreco.models.layers.gnn.losses.node_kinematics
    :members:
    :undoc-members:
    :show-inheritance:
