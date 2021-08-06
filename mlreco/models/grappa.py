@@ -114,8 +114,8 @@ class GNN(torch.nn.Module):
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
         if self.kinematics_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
-            self.kinematics_type = base_config.get('kinematics_type', True)
-            self.kinematics_momentum = base_config.get('kinematics_momentum', True)
+            self.kinematics_type = base_config.get('kinematics_type', False)
+            self.kinematics_momentum = base_config.get('kinematics_momentum', False)
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
                 type_net_mode = type_config.get('mode', 'edl')

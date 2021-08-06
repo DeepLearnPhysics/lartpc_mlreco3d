@@ -56,9 +56,9 @@ class FragmentManager(nn.Module):
     Fragmenters take the input data tensor + outputs feature maps of CNNs
     in <result> to give fragment labels.
     """
-    def __init__(self, frag_cfg : dict):
+    def __init__(self, frag_cfg : dict, batch_col : int = 0):
         super(FragmentManager, self).__init__()
-        self._batch_column                = frag_cfg.get('batch_column', 3)
+        self._batch_column                = batch_col
         self._semantic_column             = frag_cfg.get('semantic_column', -1)
         self._use_segmentation_prediction = frag_cfg.get('use_segmentation_prediction', True)
 
@@ -83,8 +83,8 @@ class DBSCANFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for DBSCAN Clustering
     '''
-    def __init__(self, frag_cfg: dict, mode='scn'):
-        super(DBSCANFragmentManager, self).__init__(frag_cfg)
+    def __init__(self, frag_cfg: dict, mode='scn', **kwargs):
+        super(DBSCANFragmentManager, self).__init__(frag_cfg, **kwargs)
         dbscan_frag = {'dbscan_frag': frag_cfg}
         if mode == 'mink':
             self._batch_column = 0
@@ -137,8 +137,8 @@ class SPICEFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for SPICE Clustering
     '''
-    def __init__(self, frag_cfg : dict):
-        super(SPICEFragmentManager, self).__init__(frag_cfg)
+    def __init__(self, frag_cfg : dict, **kwargs):
+        super(SPICEFragmentManager, self).__init__(frag_cfg, **kwargs)
         self._s_thresholds     = frag_cfg.get('s_thresholds'   , [0.0, 0.0, 0.0, 0.0])
         self._p_thresholds     = frag_cfg.get('p_thresholds'   , [0.5, 0.5, 0.5, 0.5])
         self._spice_classes    = frag_cfg.get('cluster_classes', []                  )
@@ -204,8 +204,8 @@ class GraphSPICEFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for GraphSPICE Clustering
     '''
-    def __init__(self, frag_cfg : dict):
-        super(GraphSPICEFragmentManager, self).__init__(frag_cfg)
+    def __init__(self, frag_cfg : dict, **kwargs):
+        super(GraphSPICEFragmentManager, self).__init__(frag_cfg, **kwargs)
 
 
     def process(self, filtered_input, n, filtered_semantic, offset=0):

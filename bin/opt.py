@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from mlreco.hyperopt.search import search
+from mlreco.experimental.hyperopt.search import search
 from mlreco.main_funcs import process_config
 import os
 import sys

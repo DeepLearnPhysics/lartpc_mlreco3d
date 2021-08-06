@@ -108,12 +108,13 @@ class ClusterGraphConstructor:
     '''
     def __init__(self, constructor_cfg : dict,
                        graph_batch : GraphBatch = None,
-                       graph_info : pd.DataFrame = None):
+                       graph_info : pd.DataFrame = None,
+                       batch_col : int = 0):
 
         # Input Data/Label conventions
         self.seg_col = constructor_cfg.get('seg_col', -1)
         self.cluster_col = constructor_cfg.get('cluster_col', 5)
-        self.batch_col = constructor_cfg.get('batch_col', 3)
+        self.batch_col = batch_col
         self.training = False # Default mode is evaluation.
 
         # Initial Neighbor Graph Construction Mode

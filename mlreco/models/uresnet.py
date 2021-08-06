@@ -20,7 +20,7 @@ class UResNet_Chain(nn.Module):
     def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
         self.model_config = cfg[name]
-        print("MODEL CONFIG = ", self.model_config)
+        #print("MODEL CONFIG = ", self.model_config)
         mode = self.model_config.get('aspp_mode', None)
         self.D = self.model_config.get('data_dim', 3)
         self.F = self.model_config.get('num_filters', 16)
