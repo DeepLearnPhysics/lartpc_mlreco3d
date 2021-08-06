@@ -60,7 +60,7 @@ def _form_clusters(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
-def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=3):
+def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up the requested clusters.
@@ -80,7 +80,7 @@ def _reform_clusters(data: nb.float64[:,:],
                      clust_ids: nb.int64[:],
                      batch_ids: nb.int64[:],
                      column: nb.int64 = 5,
-                     batch_col: nb.int64 = 3) -> nb.types.List(nb.int64[:]):
+                     batch_col: nb.int64 = 0) -> nb.types.List(nb.int64[:]):
     clusts = []
     for i in range(len(batch_ids)):
         clusts.append(np.where((data[:,batch_col] == batch_ids[i]) & (data[:,column] == clust_ids[i]))[0])
@@ -165,7 +165,7 @@ def _get_momenta_label(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_centers(data, clusts, coords_index=(0, 3)):
+def get_cluster_centers(data, clusts, coords_index=(1, 4)):
     """
     Function that returns the coordinate of the centroid
     associated with the listed clusters.
@@ -237,8 +237,8 @@ def _get_cluster_energies(data: nb.float64[:,:],
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
                          clusts: nb.types.List(nb.int64[:]),
-                         batch_col: nb.int64 = 3,
-                         coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
+                         batch_col: nb.int64 = 0,
+                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     """
     Function that returns an array of 16 geometric features for
     each of the clusters in the provided list.
@@ -254,8 +254,8 @@ def get_cluster_features(data: nb.float64[:,:],
 @nb.njit
 def _get_cluster_features(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
-                          batch_col: nb.int64 = 3,
-                          coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
+                          batch_col: nb.int64 = 0,
+                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 16), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
                                                   # and throws a warning. To avoid this, use a separate counter to acces clusts.
@@ -309,7 +309,7 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_features_extended(data, clusts, batch_col=3, coords_col=(0, 3)):
+def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
     each of the clusters in the provided list.
@@ -324,8 +324,8 @@ def get_cluster_features_extended(data, clusts, batch_col=3, coords_col=(0, 3)):
 
 def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
-                                   batch_col: nb.int64 = 3,
-                                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float64[:,:]:
+                                   batch_col: nb.int64 = 0,
+                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 3), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
@@ -344,7 +344,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(0, 3)):
+def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1, 4)):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only

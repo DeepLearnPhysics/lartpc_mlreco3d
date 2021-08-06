@@ -26,7 +26,7 @@ def bc_distance(gauss1, gauss2, eps=1e-6, debug=False):
 
 class GNNGroupingLoss(nn.Module):
 
-    def __init__(self, cfg, name='gnn_grouping_loss', batch_col=3, coords_col=(0, 3)):
+    def __init__(self, cfg, name='gnn_grouping_loss', batch_col=0, coords_col=(1, 4)):
         super(GNNGroupingLoss, self).__init__()
         self.loss_config = cfg[name]
         self.kernel = bc_distance

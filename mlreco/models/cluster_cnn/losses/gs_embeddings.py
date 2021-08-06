@@ -90,7 +90,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICEEmbeddingLoss, self).__init__()
         self.loss_config = cfg[name]
-        self.batch_column = self.loss_config.get('batch_column', 3)
+        self.batch_column = self.loss_config.get('batch_column', 0)
 
         self.ft_interloss = self.loss_config.get('ft_interloss_margin', 1.5)
         self.sp_interloss = self.loss_config.get('sp_interloss_margin', 0.2)

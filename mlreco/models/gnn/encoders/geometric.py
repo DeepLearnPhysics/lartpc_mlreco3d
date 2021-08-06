@@ -9,7 +9,7 @@ class ClustGeoNodeEncoder(torch.nn.Module):
     """
     Produces geometric cluster node features.
     """
-    def __init__(self, model_config, batch_col=3, coords_col=(0,3)):
+    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
         super(ClustGeoNodeEncoder, self).__init__()
 
         # Initialize the encoder parameters
@@ -94,7 +94,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
     Produces geometric cluster edge features.
 
     """
-    def __init__(self, model_config, batch_col=3, coords_col=(0, 3)):
+    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters

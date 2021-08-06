@@ -18,7 +18,7 @@ class DBSCANFragmenter(torch.nn.Module):
         (torch.tensor): [(C_0^0, C_0^1, ..., C_0^N_0), ...] List of list of clusters (one per class)
     """
 
-    def __init__(self, cfg, name='dbscan_frag', batch_col=3, coords_col=(0, 3)):
+    def __init__(self, cfg, name='dbscan_frag', batch_col=0, coords_col=(1, 4)):
         super(DBSCANFragmenter, self).__init__()
 
         model_cfg = cfg[name]

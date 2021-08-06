@@ -6,8 +6,8 @@ from scipy.spatial.distance import cdist
 
 def adapt_labels(result, label_seg, label_clustering,
                  num_classes=5,
-                 batch_column=3,
-                 coords_column_range=(0, 3),
+                 batch_column=0,
+                 coords_column_range=(1, 4),
                  true_mask=None):
     """
     Returns new cluster labels that have the same size as the input w/ ghost points.
