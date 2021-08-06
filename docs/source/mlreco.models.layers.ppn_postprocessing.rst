@@ -1,7 +1,7 @@
-mlreco.models.layers.ppn\_postprocessing module
+mlreco.models.layers.common.ppn\_postprocessing module
 ===============================================
 
-.. automodule:: mlreco.models.layers.ppn_postprocessing
+.. automodule:: mlreco.models.layers.common.ppn_postprocessing
    :members:
    :undoc-members:
    :show-inheritance:

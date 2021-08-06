@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
-from mlreco.models.layers.configuration import setup_cnn_configuration
-from mlreco.models.layers.activation_normalization_factories import activations_construct, normalizations_construct
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.activation_normalization_factories import activations_construct, normalizations_construct
 import math
 
 from MinkowskiEngine.utils.init import _calculate_fan_in_and_fan_out, _calculate_correct_fan

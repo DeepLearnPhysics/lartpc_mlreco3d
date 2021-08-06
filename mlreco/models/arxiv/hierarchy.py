@@ -5,11 +5,11 @@ import sparseconvnet as scn
 from collections import defaultdict
 
 # from mlreco.models.cluster_node_gnn import NodeChannelLoss
-from mlreco.models.gnn.losses.edge_channel import EdgeChannelLoss
+from mlreco.models.layers.gnn.losses.edge_channel import EdgeChannelLoss
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.message_passing.nnconv import *
-from mlreco.models.gnn.encoders.cnn import *
+from mlreco.models.layers.gnn.message_passing.nnconv import *
+from mlreco.models.layers.gnn.encoders.cnn import *
 from mlreco.models.scn.layers.cnn_encoder import *
 from mlreco.utils.gnn.cluster import *
 from mlreco.utils.gnn.network import complete_graph
@@ -17,11 +17,11 @@ from mlreco.utils.gnn.network import complete_graph
 
 from collections import defaultdict, Counter
 
-from mlreco.models.gnn.normalizations import BatchNorm
+from mlreco.models.layers.gnn.normalizations import BatchNorm
 
 import torch.nn.functional as F
 
-from mlreco.models.cluster_cnn.losses.lovasz import lovasz_softmax_flat
+from mlreco.models.layers.cluster_cnn.losses.lovasz import lovasz_softmax_flat
 
 
 def get_edge_features(nodes, batch_idx, edge_net):

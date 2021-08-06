@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
-from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
+from mlreco.models.layers.gnn.normalizations import BatchNorm, InstanceNorm
 
 class NNConvModel(nn.Module):
     '''
@@ -40,8 +40,8 @@ class NNConvModel(nn.Module):
         for i in range(self.num_mp):
             self.edge_mlps.append(
                 Seq(
-                    BatchNorm1d(edge_output),
-                    Lin(edge_output, node_input),
+                    BatchNorm1d(edge_input),
+                    Lin(edge_input, node_input),
                     LeakyReLU(self.leakiness),
                     BatchNorm1d(node_input),
                     Lin(node_input, node_input),
@@ -50,14 +50,13 @@ class NNConvModel(nn.Module):
                     Lin(node_input, node_input*node_output)
                 )
             )
-            # print(i, self.edge_mlps[i])
             self.bn_node.append(BatchNorm(node_input))
             self.nnConvs.append(
                 NNConv(node_input, node_output, self.edge_mlps[i], aggr=self.aggr))
             # self.bn_node.append(BatchNorm(node_output))
             # print(node_input, node_output)
             self.edge_updates.append(
-                MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
+                MetaLayer(edge_model=EdgeLayer(node_output, edge_input, edge_output,
                                     leakiness=self.leakiness)#,
                           #node_model=NodeLayer(node_output, node_output, self.edge_input,
                                                 #leakiness=self.leakiness)
@@ -74,23 +73,16 @@ class NNConvModel(nn.Module):
         self.edge_predictor = nn.Linear(edge_output, self.edge_classes)
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
-
-        if node_features.shape[1] != self.node_input:
-            raise ValueError("Node feature dimension must be {} instead of {}".format(node_features.shape[1], self.node_input))
-
-        if edge_features.shape[1] != self.edge_input:
-            raise ValueError("Edge feature dimension must be {} instead of {}".format(edge_features.shape[1], self.edge_input))
-
         x = node_features.view(-1, self.node_input)
         e = edge_features.view(-1, self.edge_input)
 
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
-            # add u and batch arguments for not having error in some old version
-            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
             x = self.nnConvs[i](x, edge_indices, e)
             # x = self.bn_node(x)
             x = F.leaky_relu(x, negative_slope=self.leakiness)
+            # add u and batch arguments for not having error in some old version
+            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
@@ -101,6 +93,7 @@ class NNConvModel(nn.Module):
             'node_features': [x],
             'edge_features': [e]
             }
+
 
         return res
 

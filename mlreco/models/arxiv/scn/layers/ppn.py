@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from mlreco.models.scn.layers.extract_feature_map import Selection, Multiply, AddLabels, GhostMask
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 import numpy as np
 
 

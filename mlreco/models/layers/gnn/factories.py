@@ -137,7 +137,7 @@ def node_encoder_dict():
     """
 
     from .encoders import geometric, mixed
-    from mlreco.models.gnn.encoders.cnn import ClustCNNMinkNodeEncoder
+    from mlreco.models.layers.gnn.encoders.cnn import ClustCNNMinkNodeEncoder
     # from mlreco.models.scn.gnn.encoders.cnn import ClustCNNNodeEncoder
 
     encoders = {
@@ -160,7 +160,7 @@ def edge_encoder_dict():
     """
 
     from .encoders import geometric, mixed
-    from mlreco.models.gnn.encoders.cnn import ClustCNNMinkEdgeEncoder
+    from mlreco.models.layers.gnn.encoders.cnn import ClustCNNMinkEdgeEncoder
     # from mlreco.models.scn.gnn.encoders.cnn import ClustCNNEdgeEncoder
 
     encoders = {

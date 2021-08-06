@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import fps, knn
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 

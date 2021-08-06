@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
+from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 
 
 class ClustCNNMinkNodeEncoder(nn.Module):

@@ -4,10 +4,10 @@ import MinkowskiEngine as ME
 import torch.nn.functional as F
 
 from collections import defaultdict
-from mlreco.models.layers.activation_normalization_factories import (activations_dict,
+from mlreco.models.layers.common.activation_normalization_factories import (activations_dict,
                                           activations_construct,
                                           normalizations_construct)
-from mlreco.models.layers.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.factories import uq_classification_loss_construct

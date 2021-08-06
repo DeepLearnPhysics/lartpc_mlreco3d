@@ -9,7 +9,7 @@ from pprint import pprint
 from mlreco.utils.cluster.cluster_graph_constructor import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
-from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
+from mlreco.models.layers.cluster_cnn.losses.spatial_embeddings import *
 
 def num_true_clusters(pred, truth):
     return len(np.unique(truth))

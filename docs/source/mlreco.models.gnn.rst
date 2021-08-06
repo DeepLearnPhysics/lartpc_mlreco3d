@@ -1,4 +1,4 @@
-mlreco.models.gnn package
+mlreco.models.layers.gnn package
 =========================
 
 Subpackages
@@ -7,9 +7,9 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   mlreco.models.gnn.encoders
-   mlreco.models.gnn.losses
-   mlreco.models.gnn.message_passing
+   mlreco.models.layers.gnn.encoders
+   mlreco.models.layers.gnn.losses
+   mlreco.models.layers.gnn.message_passing
 
 Submodules
 ----------
@@ -17,14 +17,14 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   mlreco.models.gnn.cluster
-   mlreco.models.gnn.factories
-   mlreco.models.gnn.normalizations
+   mlreco.models.layers.gnn.cluster
+   mlreco.models.layers.gnn.factories
+   mlreco.models.layers.gnn.normalizations
 
 Module contents
 ---------------
 
-.. automodule:: mlreco.models.gnn
+.. automodule:: mlreco.models.layers.gnn
    :members:
    :undoc-members:
    :show-inheritance:
