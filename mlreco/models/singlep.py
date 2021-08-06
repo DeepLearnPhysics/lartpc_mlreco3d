@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mlreco.models.mink.layers.cnn_encoder import SparseResidualEncoder
+from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
-from mlreco.models.mink.layers.factories import activations_construct
-from mlreco.models.mink.layers.network_base import MENetworkBase
+from mlreco.models.layers.factories import activations_construct
+from mlreco.models.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.evidential import EVDLoss
 from mlreco.xai.simple_cnn import VGG16

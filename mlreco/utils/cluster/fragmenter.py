@@ -6,8 +6,8 @@ import torch.nn as nn
 import numpy as np
 
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.models.layers.dbscan import DBSCANFragmenter
-from mlreco.models.mink.layers.dbscan import MinkDBSCANFragmenter
+# from mlreco.models.layers.dbscan import DBSCANFragmenter
+from mlreco.models.layers.dbscan import MinkDBSCANFragmenter
 
 
 def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
@@ -89,9 +89,9 @@ class DBSCANFragmentManager(FragmentManager):
         if mode == 'mink':
             self._batch_column = 0
             self.dbscan_fragmenter = MinkDBSCANFragmenter(dbscan_frag)
-        elif mode == 'scn':
-            self._batch_column = 3
-            self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
+        # elif mode == 'scn':
+        #     self._batch_column = 3
+        #     self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
         else:
             raise Exception('Invalid sparse CNN backend name {}'.format(mode))
 

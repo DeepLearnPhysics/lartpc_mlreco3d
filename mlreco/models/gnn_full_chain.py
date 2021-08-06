@@ -945,7 +945,7 @@ def setup_chain_cfg(self, cfg):
     """
     chain_cfg = cfg['chain']
 
-    self.use_me                = chain_cfg.get('use_mink', False)
+    self.use_me                = chain_cfg.get('use_mink', True)
     self.batch_col = 0 if self.use_me else 3
     self.coords_col = (1, 4) if self.use_me else (0, 3)
 
@@ -1013,7 +1013,7 @@ def setup_chain_cfg(self, cfg):
     if self.enable_gnn_shower or self.enable_gnn_track:
         assert self.enable_ppn or (not self.use_ppn_in_gnn)
     # 3. Need at least one of two dense clusterer
-    assert self.enable_dbscan or self.enable_cnn_clust
+    # assert self.enable_dbscan or self.enable_cnn_clust
     # 4. Check that SPICE and DBSCAN are not redundant
     if self.enable_cnn_clust and self.enable_dbscan:
         if 'spice' in cfg:

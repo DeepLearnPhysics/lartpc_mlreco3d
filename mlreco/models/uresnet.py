@@ -4,9 +4,9 @@ import torch.nn as nn
 
 import MinkowskiEngine as ME
 
-from mlreco.models.mink.layers.uresnet import UResNet, ACASUNet, ASPPUNet
+from mlreco.models.layers.uresnet import UResNet, ACASUNet, ASPPUNet
 from collections import defaultdict
-from mlreco.models.mink.layers.factories import activations_construct
+from mlreco.models.layers.factories import activations_construct
 
 class UResNet_Chain(nn.Module):
 

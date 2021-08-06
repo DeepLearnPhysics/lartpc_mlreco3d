@@ -137,14 +137,14 @@ def node_encoder_dict():
     """
 
     from .encoders import geometric, mixed
-    from mlreco.models.mink.gnn.encoders.cnn import ClustCNNMinkNodeEncoder
-    from mlreco.models.scn.gnn.encoders.cnn import ClustCNNNodeEncoder
+    from mlreco.models.gnn.encoders.cnn import ClustCNNMinkNodeEncoder
+    # from mlreco.models.scn.gnn.encoders.cnn import ClustCNNNodeEncoder
 
     encoders = {
         "geo"       : geometric.ClustGeoNodeEncoder,
-        "cnn2"      : ClustCNNNodeEncoder,
+        # "cnn2"      : ClustCNNNodeEncoder,
         "mix_debug" : mixed.ClustMixNodeEncoder,
-        "cnn_mink": ClustCNNMinkNodeEncoder
+        "cnn": ClustCNNMinkNodeEncoder
     }
 
     return encoders
@@ -160,14 +160,14 @@ def edge_encoder_dict():
     """
 
     from .encoders import geometric, mixed
-    from mlreco.models.mink.gnn.encoders.cnn import ClustCNNMinkEdgeEncoder
-    from mlreco.models.scn.gnn.encoders.cnn import ClustCNNEdgeEncoder
+    from mlreco.models.gnn.encoders.cnn import ClustCNNMinkEdgeEncoder
+    # from mlreco.models.scn.gnn.encoders.cnn import ClustCNNEdgeEncoder
 
     encoders = {
         "geo"       : geometric.ClustGeoEdgeEncoder,
-        "cnn2"      : ClustCNNEdgeEncoder,
+        # "cnn2"      : ClustCNNEdgeEncoder,
         "mix_debug" : mixed.ClustMixEdgeEncoder,
-        "cnn_mink": ClustCNNMinkEdgeEncoder
+        "cnn": ClustCNNMinkEdgeEncoder
     }
 
     return encoders
