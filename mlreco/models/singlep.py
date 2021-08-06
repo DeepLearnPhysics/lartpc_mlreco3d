@@ -7,9 +7,9 @@ from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.models.layers.factories import activations_construct
 from mlreco.models.layers.network_base import MENetworkBase
-from mlreco.bayes.encoder import MCDropoutEncoder
-from mlreco.bayes.evidential import EVDLoss
-from mlreco.xai.simple_cnn import VGG16
+from mlreco.experimental.bayes.encoder import MCDropoutEncoder
+from mlreco.experimental.bayes.evidential import EVDLoss
+from mlreco.experimental.xai.simple_cnn import VGG16
 from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
 
 class ParticleImageClassifier(nn.Module):

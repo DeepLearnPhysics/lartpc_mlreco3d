@@ -51,7 +51,7 @@ class MinkGraphSPICE(nn.Module):
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
         # Cluster Graph Manager
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg, batch_col=0)
         self.gs_manager.training = self.training
 
 

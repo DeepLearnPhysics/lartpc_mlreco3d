@@ -43,10 +43,10 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.spatial_embeddings        = MinkGraphSPICE(cfg)
-            self.gs_manager                = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'])
+            self.gs_manager                = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'], batch_col=self.batch_col)
             #self.gs_manager.training       = True # FIXME
             self._gspice_skip_classes      = cfg['graph_spice']['skip_classes']
-            self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg['graph_spice']['gspice_fragment_manager'])
+            self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg['graph_spice']['gspice_fragment_manager'], batch_col=self.batch_col)
 
         if self.enable_dbscan:
             self.frag_cfg = cfg['dbscan']['dbscan_fragment_manager']

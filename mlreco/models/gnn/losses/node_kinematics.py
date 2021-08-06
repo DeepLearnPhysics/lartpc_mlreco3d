@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
-from mlreco.bayes.evidential import EDLRegressionLoss, EVDLoss
+from mlreco.experimental.bayes.evidential import EDLRegressionLoss, EVDLoss
 
 class LogRMSE(torch.nn.modules.loss._Loss):
 
