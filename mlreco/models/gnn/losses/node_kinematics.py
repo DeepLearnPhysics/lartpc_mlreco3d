@@ -62,7 +62,7 @@ class NodeKinematicsLoss(torch.nn.Module):
             reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
             balance_classes : <balance loss per class: True or False (default False)>
     """
-    def __init__(self, loss_config, batch_col=3, coords_col=(0, 3)):
+    def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodeKinematicsLoss, self).__init__()
 
         # Set the target for the loss

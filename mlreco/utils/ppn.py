@@ -351,7 +351,7 @@ def mink_ppn_selector(data, result,
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                                    points=None, batch_col=3, mask_ppn=None, coords_col=(0,3),
+                                    points=None, batch_col=0, mask_ppn=None, coords_col=(1, 4),
                                     type_col=(5,10), score_col=(3,5),**kwargs):
     """
     Postprocessing of PPN points.

@@ -67,7 +67,7 @@ class GNN(torch.nn.Module):
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
 
-    def __init__(self, cfg, name='grappa', batch_col=3, coords_col=(0, 3)):
+    def __init__(self, cfg, name='grappa', batch_col=0, coords_col=(1, 4)):
         super(GNN, self).__init__()
 
         # Get the chain input parameters
@@ -317,7 +317,7 @@ class GNNLoss(torch.nn.modules.loss._Loss):
                 name: <name of the edge loss>
                 <dictionary of arguments to pass to the loss>
     """
-    def __init__(self, cfg, name='grappa_loss', batch_col=3, coords_col=(0, 3)):
+    def __init__(self, cfg, name='grappa_loss', batch_col=0, coords_col=(1, 4)):
         super(GNNLoss, self).__init__()
 
         self.batch_index = batch_col

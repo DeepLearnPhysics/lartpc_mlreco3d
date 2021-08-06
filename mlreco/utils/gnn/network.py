@@ -79,8 +79,8 @@ def delaunay_graph(data: nb.float64[:,:],
                    batch_ids: nb.int64[:],
                    dist_mat: nb.float64[:,:] = None,
                    max_dist: nb.float64 = -1.,
-                   batch_col: nb.int64 = 3,
-                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.int64[:,:]:
+                   batch_col: nb.int64 = 0,
+                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.int64[:,:]:
     """
     Function that returns an incidence matrix that connects nodes
     that share an edge in their corresponding Euclidean Delaunay graph.
@@ -253,7 +253,7 @@ def bipartite_graph(batch_ids: nb.int64[:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_edge_features(data, clusts, edge_index, batch_col=3, coords_col=(0, 3)):
+def get_cluster_edge_features(data, clusts, edge_index, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting clusters in the graph.
@@ -272,8 +272,8 @@ def get_cluster_edge_features(data, clusts, edge_index, batch_col=3, coords_col=
 def _get_cluster_edge_features(data: nb.float32[:,:],
                                clusts: nb.types.List(nb.int64[:]),
                                edge_index: nb.int64[:,:],
-                               batch_col: nb.int64 = 3,
-                               coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
+                               batch_col: nb.int64 = 0,
+                               coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float32[:,:]:
 
     feats = np.empty((len(edge_index), 19), dtype=data.dtype)
     for k in nb.prange(len(edge_index)):
@@ -307,8 +307,8 @@ def _get_cluster_edge_features(data: nb.float32[:,:],
 def _get_cluster_edge_features_vec(data: nb.float32[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    edge_index: nb.int64[:,:],
-                                   batch_col: nb.int64 = 3,
-                                   coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
+                                   batch_col: nb.int64 = 0,
+                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float32[:,:]:
 
     # Get the closest points of approach IDs for each edge
     lend, idxs1, idxs2 = _get_edge_distances(data[:,:3], clusts, edge_index)
@@ -338,7 +338,7 @@ def _get_cluster_edge_features_vec(data: nb.float32[:,:],
 
 
 @numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
-def get_voxel_edge_features(data, edge_index, batch_col=3, coords_col=(0, 3)):
+def get_voxel_edge_features(data, edge_index, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting voxels in the graph.
@@ -354,8 +354,8 @@ def get_voxel_edge_features(data, edge_index, batch_col=3, coords_col=(0, 3)):
 @nb.njit(parallel=True)
 def _get_voxel_edge_features(data: nb.float32[:,:],
                          edge_index: nb.int64[:,:],
-                         batch_col: nb.int64 = 3,
-                         coords_col: nb.types.List(nb.int64[:]) = (0, 3)) -> nb.float32[:,:]:
+                         batch_col: nb.int64 = 0,
+                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float32[:,:]:
     feats = np.empty((len(edge_index), 19), dtype=data.dtype)
     for k in nb.prange(len(edge_index)):
         # Get the voxel coordinates
