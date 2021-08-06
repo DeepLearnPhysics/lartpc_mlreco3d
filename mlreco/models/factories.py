@@ -2,16 +2,14 @@ import torch
 
 def model_dict():
 
-    from .scn import uresnet
     from .scn import uresnet_lonely
     from .scn import uresnet_ppn_chain
     from .scn import uresnet_adversarial
-
     from .scn import clustercnn_se
     from .scn import graph_spice
-
-    from . import grappa
     from .scn import particle_types
+    
+    from . import grappa
 
     from .mink import uresnet as mink_uresnet
     from .mink import uresnet_ppn_chain as mink_uresnet_ppn_chain
@@ -28,8 +26,6 @@ def model_dict():
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
 
         # -------------------SparseConvNet Backend----------------------
-        # Using SCN built-in UResNet
-        "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
         # Using our custom UResNet
         "uresnet_lonely": (uresnet_lonely.UResNet, uresnet_lonely.SegmentationLoss),
         # Chain UResNet and PPN
