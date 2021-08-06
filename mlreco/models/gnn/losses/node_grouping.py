@@ -1,11 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import sparseconvnet as scn
 
-from mlreco.models.cluster_cnn.losses.lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
-from collections import defaultdict
+from mlreco.models.scn.cluster_cnn.losses.lovasz import mean, lovasz_hinge_flat, StableBCELoss, iou_binary
 
 
 def bc_distance(gauss1, gauss2, eps=1e-6, debug=False):

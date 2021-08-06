@@ -6,9 +6,9 @@ from mlreco.models.chain.full_cnn import *
 from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
-from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPN, PPNLoss
+from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
 
 from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss

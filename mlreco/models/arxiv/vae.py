@@ -5,9 +5,9 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.mink.layers.sparse_generator import SparseGenerator, SparseGenerator2, SparseGeneratorSimple
-from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder2, SparseResEncoderNoPooling
-from mlreco.mink.layers.blocks import SparseToDense, DenseResBlock, to_sparse
+from mlreco.models.mink.layers.sparse_generator import SparseGenerator, SparseGenerator2, SparseGeneratorSimple
+from mlreco.models.mink.layers.cnn_encoder import SparseResidualEncoder2, SparseResEncoderNoPooling
+from mlreco.models.mink.layers.blocks import SparseToDense, DenseResBlock, to_sparse
 from collections import defaultdict
 
 

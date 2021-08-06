@@ -4,7 +4,7 @@ Contains factories for CNN backbone Networks.
 
 def cnn_dict():
     import MinkowskiEngine as ME
-    from mlreco.mink import layers
+    from mlreco.models.mink import layers
     cnns = {
         'uresnet': layers.uresnet.UResNet,
         # 'fpn': layers.fpn.FPN,

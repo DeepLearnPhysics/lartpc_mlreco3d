@@ -4,8 +4,8 @@ from __future__ import print_function
 import torch
 import numpy as np
 from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPN, PPNLoss
 from mlreco.models.layers.dbscan import DBScanClusts2
 from mlreco.models.grappa import GNNLoss
 from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction

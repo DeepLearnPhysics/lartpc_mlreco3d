@@ -8,7 +8,7 @@ Subpackages
    :maxdepth: 4
 
    mlreco.models.chain
-   mlreco.models.cluster_cnn
+   mlreco.models.scn.cluster_cnn
    mlreco.models.gnn
    mlreco.models.layers
 

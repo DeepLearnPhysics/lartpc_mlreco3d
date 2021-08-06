@@ -2,28 +2,31 @@ import torch
 
 def model_dict():
 
-    from . import uresnet
-    from . import uresnet_lonely
-    from . import uresnet_ppn_chain
+    from .scn import uresnet
+    from .scn import uresnet_lonely
+    from .scn import uresnet_ppn_chain
+    from .scn import uresnet_adversarial
 
-    from . import clustercnn_se
-    from . import graph_spice
+    from .scn import clustercnn_se
+    from .scn import graph_spice
 
     from . import grappa
-    from . import particle_types
+    from .scn import particle_types
 
-    from . import mink_uresnet
-    from . import mink_uresnet_ppn_chain
-    from . import mink_singlep
-    from . import mink_spice
-    from . import mink_bayes_uresnet
-    from . import mink_graph_spice
+    from .mink import uresnet as mink_uresnet
+    from .mink import uresnet_ppn_chain as mink_uresnet_ppn_chain
+    from .mink import spice as mink_spice
+    from .mink import singlep as mink_singlep
+    from .mink import graph_spice as mink_graph_spice
+    from .mink import bayes_uresnet as mink_bayes_uresnet
 
     from . import full_chain
-    from . import mink_full_chain
-    from . import uresnet_adversarial
+
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
+        # Full reconstruction chain, including an option for deghosting
+        "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
+
         # -------------------SparseConvNet Backend----------------------
         # Using SCN built-in UResNet
         "uresnet": (uresnet.UResNet, uresnet.SegmentationLoss),
@@ -33,24 +36,16 @@ def model_dict():
         "uresnet_ppn_chain": (uresnet_ppn_chain.Chain, uresnet_ppn_chain.ChainLoss),
         # Spatial Embeddings
         "spatial_embeddings": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
-        # Spatial Embeddings Lite
-        "spatial_embeddings_lite": (clustercnn_se.ClusterCNN2, clustercnn_se.ClusteringLoss),
-        # Spatial Embeddings Lovasz free
-        "spatial_embeddings_free": (clustercnn_se.ClusterCNN, clustercnn_se.ClusteringLoss),
         # Graph neural network Particle Aggregation (GrapPA)
         "grappa": (grappa.GNN, grappa.GNNLoss),
         # GraphSPICE
         "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
-        # Graph SPICE II
-        "graph_spice_2": (graph_spice.GraphSPICEPP, graph_spice.GraphSPICEPPLoss),
         # Particle image classifier
         "particle_type": (particle_types.ParticleImageClassifier, particle_types.ParticleTypeLoss),
-        # Full reconstruction chain, including an option for deghosting
-        "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
+        # Adversarial loss UResNet training
+        "uresnet_adversarial": (uresnet_adversarial.UResNetAdversarial, uresnet_adversarial.AdversarialLoss),
 
         # --------------------MinkowskiEngine Backend----------------------
-        # Full Chain MinkowskiEngine
-        #"mink_full_chain": (mink_full_chain.MinkFullChain, mink_full_chain.MinkFullChainLoss),
         # UresNet
         "mink_uresnet": (mink_uresnet.UResNet_Chain, uresnet_lonely.SegmentationLoss),
         # UResNet + PPN
@@ -69,8 +64,6 @@ def model_dict():
         'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss),
         # Deep Single Pass Uncertainty Quantification
         'duq_singlep': (mink_singlep.DUQParticleClassifier, mink_singlep.MultiLabelCrossEntropy),
-        # Adversarial loss UResNet training
-        "uresnet_adversarial": (uresnet_adversarial.UResNetAdversarial, uresnet_adversarial.AdversarialLoss),
         # Single Particle VGG
         "single_particle_vgg": (mink_singlep.SingleParticleVGG, mink_singlep.ParticleTypeLoss)
     }

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from collections import defaultdict
-from mlreco.models.cluster_cnn.utils import distance_matrix, pairwise_distances
+from mlreco.models.scn.cluster_cnn.utils import distance_matrix, pairwise_distances
 from .single_layers import DiscriminativeLoss
 
 

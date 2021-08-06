@@ -136,19 +136,15 @@ def node_encoder_dict():
         dict: Dictionary of valid node encoders
     """
 
-    from .encoders import geometric, cnn, mixed, gnn
-    # from mlreco.mink.layers.cnn_encoder import MinkCNNNodeEncoder
+    from .encoders import geometric, mixed
+    from mlreco.models.mink.gnn.encoders.cnn import ClustCNNMinkNodeEncoder
+    from mlreco.models.scn.gnn.encoders.cnn import ClustCNNNodeEncoder
 
     encoders = {
         "geo"       : geometric.ClustGeoNodeEncoder,
-        #"cnn"       : cnn.ClustCNNNodeEncoder,
-        "cnn2"      : cnn.ClustCNNNodeEncoder2,
-        #"mix"       : mixed.ClustMixNodeEncoder,
-        #"mix2"      : mixed.ClustMixNodeEncoder2,
-        "mix_debug" : mixed.ClustMixNodeEncoder3,
-        # Need adaptation of ClustGNNNodeEncoder to ME (batch col 0, coords 1:4)
-        #"gnn"       : gnn.ClustGNNNodeEncoder,
-        "cnn_mink": cnn.ClustCNNMinkNodeEncoder
+        "cnn2"      : ClustCNNNodeEncoder,
+        "mix_debug" : mixed.ClustMixNodeEncoder,
+        "cnn_mink": ClustCNNMinkNodeEncoder
     }
 
     return encoders
@@ -163,17 +159,15 @@ def edge_encoder_dict():
         dict: Dictionary of valid edge encoders
     """
 
-    from .encoders import geometric, cnn, mixed, gnn
+    from .encoders import geometric, mixed
+    from mlreco.models.mink.gnn.encoders.cnn import ClustCNNMinkEdgeEncoder
+    from mlreco.models.scn.gnn.encoders.cnn import ClustCNNEdgeEncoder
 
     encoders = {
         "geo"       : geometric.ClustGeoEdgeEncoder,
-        #"cnn"       : cnn.ClustCNNEdgeEncoder,
-        "cnn2"      : cnn.ClustCNNEdgeEncoder2,
-        #"mix"       : mixed.ClustMixEdgeEncoder,
-        #"mix2"      : mixed.ClustMixEdgeEncoder2,
-        "mix_debug" : mixed.ClustMixEdgeEncoder3,
-        #"gnn"       : gnn.ClustGNNEdgeEncoder,
-        "cnn_mink": cnn.ClustCNNMinkEdgeEncoder
+        "cnn2"      : ClustCNNEdgeEncoder,
+        "mix_debug" : mixed.ClustMixEdgeEncoder,
+        "cnn_mink": ClustCNNMinkEdgeEncoder
     }
 
     return encoders

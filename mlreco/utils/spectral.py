@@ -70,12 +70,6 @@ def weighted_incidence_sparse(edges, weights):
     pass
 
 
-
-
-
-
-
-
 def laplacian_dense(edges):
     """
     form graph laplacian given a list of edges
@@ -94,7 +88,7 @@ def direction_adjacency_dense(edges, frames, dtype=np.double):
     Block sparse in same pattern as standard laplacian
     L[i,j] = deg(i) kron(id, id) if i == j
     L[i,j] = -kron(frame, frame) if i != j
-    
+
     ASSUME: edges are unique
     """
     # get degrees and number of nodes
@@ -105,7 +99,7 @@ def direction_adjacency_dense(edges, frames, dtype=np.double):
     # size of direction_laplacian
     k2 = k * k
     nD = n * k2
-    
+
     AD = np.zeros((nD, nD), dtype=dtype)
     # iterate over edges
     for k, e in enumerate(edges):
@@ -121,7 +115,7 @@ def direction_laplacian_dense(edges, frames, dtype=np.double):
     Block sparse in same pattern as standard laplacian
     L[i,j] = deg(i) kron(id, id) if i == j
     L[i,j] = -kron(frame, frame) if i != j
-    
+
     ASSUME: edges are unique
     """
     # get degrees and number of nodes
@@ -132,7 +126,7 @@ def direction_laplacian_dense(edges, frames, dtype=np.double):
     # size of direction_laplacian
     k2 = k * k
     nD = n * k2
-    
+
     LD = np.zeros(nD, nD, dtype=dtype)
     # set diagonal
     for i in range(n):
@@ -152,7 +146,7 @@ def direction_laplacian_dense2(edges, frames, dtype=np.double):
     Block sparse in same pattern as standard laplacian
     L[i,j] = deg(i) kron(id, id) if i == j
     L[i,j] = -kron(frame, frame) if i != j
-    
+
     ASSUME: edges are unique
     """
     AD = direction_adjacency_dense(edges, frames, dtype=dtype)
@@ -170,7 +164,7 @@ def direction_laplacian_dense3(edges, frames, dtype=np.double):
     Block sparse in same pattern as standard laplacian
     L[i,j] = deg(i) kron(id, id) if i == j
     L[i,j] = -kron(frame, frame) if i != j
-    
+
     ASSUME: edges are unique
     """
     AD = direction_adjacency_dense(edges, frames, dtype=dtype)

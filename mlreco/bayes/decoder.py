@@ -1,10 +1,10 @@
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-from mlreco.mink.layers.factories import activations_construct
-from mlreco.mink.layers.factories import normalizations_construct
-from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.mink.layers.blocks import DropoutBlock, ResNetBlock
+from mlreco.models.mink.layers.factories import activations_construct
+from mlreco.models.mink.layers.factories import normalizations_construct
+from mlreco.models.mink.layers.network_base import MENetworkBase
+from mlreco.models.mink.layers.blocks import DropoutBlock, ResNetBlock
 
 class MCDropoutDecoder(MENetworkBase):
     """

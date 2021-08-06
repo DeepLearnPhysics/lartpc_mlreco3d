@@ -1,7 +1,7 @@
-mlreco.models.layers.normalizations module
+mlreco.models.scn.layers.normalizations module
 ==========================================
 
-.. automodule:: mlreco.models.layers.normalizations
+.. automodule:: mlreco.models.scn.layers.normalizations
    :members:
    :undoc-members:
    :show-inheritance:
