@@ -7,7 +7,7 @@ import MinkowskiFunctional as MF
 
 from mlreco.models.layers.blocks import ResNetBlock, SPP, ASPP
 from mlreco.models.layers.activation_normalization_factories import activations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.extract_feature_map import MinkGhostMask
 
 from collections import Counter
@@ -127,7 +127,7 @@ class ExpandAs(nn.Module):
         return output
 
 
-class PPN(MENetworkBase):
+class PPN(torch.nn.Module):
     '''
     MinkowskiEngine PPN
 
@@ -146,7 +146,9 @@ class PPN(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='ppn'):
-        super(PPN, self).__init__(cfg)
+        super(PPN, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         self.model_cfg = cfg[name]
         # UResNet Configurations
         self.reps = self.model_cfg.get('reps', 2)

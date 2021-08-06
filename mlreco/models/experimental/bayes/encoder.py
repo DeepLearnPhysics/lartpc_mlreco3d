@@ -6,25 +6,27 @@ import MinkowskiFunctional as MF
 
 from collections import defaultdict
 from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.blocks import DropoutBlock, ResNetBlock, Identity
 
 
-class MCDropoutEncoder(MENetworkBase):
+class MCDropoutEncoder(torch.nn.Module):
     """
     Convolutional decoder with dropout layers.
 
-    The architecture is exactly the same as the ME ResidualEncoders, 
+    The architecture is exactly the same as the ME ResidualEncoders,
     except for the additional DropoutBlocks
 
     Attributes:
 
         dropout_p: dropping probability value for dropout layers
-        dropout_layer_index: layer numbers to swap resnet blocks with 
-        dropout resnet blocks. 
+        dropout_layer_index: layer numbers to swap resnet blocks with
+        dropout resnet blocks.
     """
     def __init__(self, cfg, name='mcdropout_encoder'):
-        super(MCDropoutEncoder, self).__init__(cfg)
+        super(MCDropoutEncoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)

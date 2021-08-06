@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.models.layers.activation_normalization_factories import activations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss
 from mlreco.models.experimental.xai.simple_cnn import VGG16
@@ -161,12 +161,14 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
         return res
 
 
-class BayesianParticleClassifier(MENetworkBase):
+class BayesianParticleClassifier(torch.nn.Module):
 
     MODULES = ['network_base', 'bayesian_encoder']
 
     def __init__(self, cfg, name='bayesian_particle_classifier'):
-        super(BayesianParticleClassifier, self).__init__(cfg)
+        super(BayesianParticleClassifier, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         self.model_config = cfg[name]
         self.num_classes = self.model_config.get('num_classes', 5)
         self.encoder_type = self.model_config.get('encoder_type', 'full_dropout')

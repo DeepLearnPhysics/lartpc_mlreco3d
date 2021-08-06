@@ -4,7 +4,7 @@ import torch.nn as nn
 
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.uresnet_layers import UResNet, ACASUNet, ASPPUNet
+from mlreco.models.layers.uresnet_layers import UResNet
 from collections import defaultdict
 from mlreco.models.layers.activation_normalization_factories import activations_construct
 
@@ -20,23 +20,15 @@ class UResNet_Chain(nn.Module):
     def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
         self.model_config = cfg[name]
-        #print("MODEL CONFIG = ", self.model_config)
-        mode = self.model_config.get('aspp_mode', None)
-        self.D = self.model_config.get('data_dim', 3)
-        self.F = self.model_config.get('num_filters', 16)
         self.num_classes = self.model_config.get('num_classes', 5)\
 
         # Parameters for Deghosting
         self.ghost = self.model_config.get('ghost', False)
         self.ghost_label = self.model_config.get('ghost_label', -1)
 
-
-        if mode == 'acas':
-            self.net = ACASUNet(cfg)
-        elif mode == 'aspp':
-            self.net = ASPPUNet(cfg)
-        else:
-            self.net = UResNet(cfg)
+        self.net = UResNet(cfg, name=name)
+        self.F = self.net.num_filters
+        self.D = self.net.D
 
         self.output = [
             ME.MinkowskiBatchNorm(self.F,

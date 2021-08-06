@@ -7,15 +7,17 @@ from collections import defaultdict
 from mlreco.models.layers.activation_normalization_factories import (activations_dict,
                                           activations_construct,
                                           normalizations_construct)
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.factories import uq_classification_loss_construct
 
-class BayesianUResNet(MENetworkBase):
+class BayesianUResNet(torch.nn.Module):
 
     def __init__(self, cfg, name='bayesian_uresnet'):
-        super(BayesianUResNet, self).__init__(cfg)
+        super(BayesianUResNet, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_samples = self.model_config.get('num_samples', 20)

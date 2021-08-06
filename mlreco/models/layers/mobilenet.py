@@ -7,9 +7,9 @@ import MinkowskiFunctional as MF
 
 from mlreco.models.layers.blocks import MBResConv, MBConv, SEBlock, MBResConvSE
 from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 
-class MobileNetV3(MENetworkBase):
+class MobileNetV3(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -28,7 +28,9 @@ class MobileNetV3(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='mobilenetv3'):
-        super(MobileNetV3, self).__init__(cfg)
+        super(MobileNetV3, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         model_cfg = cfg[name]
 
         # UResNet Configurations
@@ -167,7 +169,7 @@ class MobileNetV3(MENetworkBase):
         return res
 
 
-class MB3Encoder(MENetworkBase):
+class MB3Encoder(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -186,7 +188,9 @@ class MB3Encoder(MENetworkBase):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='mobilenetv3_encoder'):
-        super(MB3Encoder, self).__init__(cfg)
+        super(MB3Encoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         model_cfg = cfg['modules'][name]
 
         # UResNet Configurations

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.activation_normalization_factories import activations_construct, normalizations_construct
 import math
 
@@ -14,164 +14,165 @@ def selu_normal_(tensor, a=0, mode='fan_in'):
         return tensor.normal_(0, std)
 
 
-class VGG16(MENetworkBase):
-    
+class VGG16(torch.nn.Module):
+
     def __init__(self, cfg, name='simplenet'):
-        super(VGG16, self).__init__(cfg)
+        super(VGG16, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
 
         self.features = []
         self.classifier = []
 
         self.features.append(
-            ME.MinkowskiConvolution(1, 16, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(1, 16, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(16, 16, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(16, 16, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(16, 16, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(16, 16, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(16, 32, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(16, 32, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(32, 32, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(32, 32, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(32, 32, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(32, 32, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(32, 64, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(32, 64, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(64, 64, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(64, 64, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(64, 64, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(64, 64, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(64, 128, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(64, 128, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(128, 128, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-        
-        self.features.append(ME.MinkowskiSELU())
-
-        self.features.append(
-            ME.MinkowskiConvolution(128, 128, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(128, 128, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
-        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-        
-        self.features.append(
-            ME.MinkowskiConvolution(128, 256, kernel_size=3, 
-                                    dimension=self.D, 
-                                    bias=self.allow_bias))
-        
-        self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(256, 256, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(128, 128, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(256, 256, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(128, 256, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
-        
+
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(256, 512, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(256, 256, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(512, 512, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(256, 256, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
-        
+
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(512, 512, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(256, 512, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
 
         self.features.append(
-            ME.MinkowskiConvolution(512, 1024, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(512, 512, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
-        
+
         self.features.append(ME.MinkowskiSELU())
 
         self.features.append(
-            ME.MinkowskiConvolution(1024, 1024, kernel_size=3, 
-                                    dimension=self.D, 
+            ME.MinkowskiConvolution(512, 512, kernel_size=3,
+                                    dimension=self.D,
                                     bias=self.allow_bias))
 
         self.features.append(ME.MinkowskiSELU())
         self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
-        
+
+        self.features.append(
+            ME.MinkowskiConvolution(512, 1024, kernel_size=3,
+                                    dimension=self.D,
+                                    bias=self.allow_bias))
+
+        self.features.append(ME.MinkowskiSELU())
+
+        self.features.append(
+            ME.MinkowskiConvolution(1024, 1024, kernel_size=3,
+                                    dimension=self.D,
+                                    bias=self.allow_bias))
+
+        self.features.append(ME.MinkowskiSELU())
+        self.features.append(ME.MinkowskiMaxPooling(2, 2, dimension=self.D))
+
         self.pool = ME.MinkowskiGlobalMaxPooling()
 
         self.features = nn.Sequential(*self.features)
@@ -200,12 +201,12 @@ class VGG16(MENetworkBase):
                 nn.init.constant_(m.bn.weight, 1)
                 nn.init.constant_(m.bn.bias, 0)
 
-        
+
     def forward(self, input_tensor):
 
         x = ME.SparseTensor(coordinates=input_tensor[:, :4],
                     features=input_tensor[:, -1].view(-1, 1))
-        
+
         out = self.features(x)
         print(out.tensor_stride)
         flattened = self.pool(out)

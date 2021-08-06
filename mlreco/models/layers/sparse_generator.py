@@ -4,16 +4,18 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 
 from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.blocks import ResNetBlock, ConvolutionBlock
 from scipy.special import logit
 
 # from torch_geometric.nn import BatchNorm, LayerNorm, MessageNorm
 
-class SparseGenerator(MENetworkBase):
+class SparseGenerator(torch.nn.Module):
 
     def __init__(self, cfg, name='sparse_generator'):
-        super(SparseGenerator, self).__init__(cfg)
+        super(SparseGenerator, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
@@ -141,10 +143,12 @@ class SparseGenerator(MENetworkBase):
             'targets': targets}
 
 
-class SparseGeneratorSimple(MENetworkBase):
+class SparseGeneratorSimple(torch.nn.Module):
 
     def __init__(self, cfg, name='sparse_generator'):
-        super(SparseGeneratorSimple, self).__init__(cfg)
+        super(SparseGeneratorSimple, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+        
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)

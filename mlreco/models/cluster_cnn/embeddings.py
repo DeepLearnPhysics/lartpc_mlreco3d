@@ -6,14 +6,14 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.models.layers.activation_normalization_factories import activations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.blocks import ResNetBlock
 from mlreco.models.layers.uresnet_layers import UResNetEncoder, UResNetDecoder
 
 
 class Attention(nn.Module):
     """
-    Sparse Attention Module where the feature map is multiplied 
+    Sparse Attention Module where the feature map is multiplied
     by a soft masking score tensor (sigmoid activated)
     """
     def __init__(self):
@@ -31,7 +31,7 @@ class Attention(nn.Module):
 class ExpandAs(nn.Module):
     """
     Given a sparse tensor with one dimensional features, expand the
-    feature map to given shape and return a newly constructed 
+    feature map to given shape and return a newly constructed
     ME.SparseTensor.
 
         - x (ME.SparseTensor): with x.F.shape[1] == 1
@@ -50,10 +50,12 @@ class ExpandAs(nn.Module):
         return output
 
 
-class SPICE(MENetworkBase):
+class SPICE(torch.nn.Module):
 
     def __init__(self, cfg, name='spice'):
-        super(SPICE, self).__init__(cfg)
+        super(SPICE, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
         self.embedding_decoder = UResNetDecoder(cfg, name='embedding_decoder')
@@ -72,7 +74,7 @@ class SPICE(MENetworkBase):
 
         self.outputEmbeddings = nn.Sequential(
             ME.MinkowskiBatchNorm(self.num_filters, **self.norm_args),
-            ME.MinkowskiLinear(self.num_filters, self.D + self.sigmaDim, 
+            ME.MinkowskiLinear(self.num_filters, self.D + self.sigmaDim,
                                bias=False)
         )
 
@@ -122,9 +124,6 @@ class SPICE(MENetworkBase):
         res = {
             'embeddings': [embeddings_feats[:, :self.D]],
             'seediness': [self.sigmoid(seediness.F)],
-            'margins': [2 * self.sigmoid(embeddings_feats[:, self.D:])], 
+            'margins': [2 * self.sigmoid(embeddings_feats[:, self.D:])],
         }
         return res
-
-
-

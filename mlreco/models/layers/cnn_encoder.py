@@ -7,16 +7,18 @@ import MinkowskiFunctional as MF
 
 from collections import defaultdict
 from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.layers.network_base import MENetworkBase
+from mlreco.models.layers.configuration import setup_cnn_configuration
 from mlreco.models.layers.blocks import ResNetBlock, ConvolutionBlock
 
 
-class SparseEncoder(MENetworkBase):
+class SparseEncoder(torch.nn.Module):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
     def __init__(self, cfg, name='sparse_encoder'):
-        super(SparseEncoder, self).__init__(cfg)
+        super(SparseEncoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         #print(name, self.model_config)
         self.reps = self.model_config.get('reps', 2)
@@ -68,10 +70,10 @@ class SparseEncoder(MENetworkBase):
         self.encoding_block = nn.Sequential(*self.encoding_block)
 
         self.global_pool = ME.MinkowskiConvolution(
-            in_channels=self.nPlanes[-1], 
+            in_channels=self.nPlanes[-1],
             out_channels=self.nPlanes[-1],
-            kernel_size=final_tensor_shape, 
-            stride=final_tensor_shape, 
+            kernel_size=final_tensor_shape,
+            stride=final_tensor_shape,
             dimension=self.D)
 
         self.max_pool = ME.MinkowskiGlobalPooling()
@@ -133,13 +135,15 @@ class SparseEncoder(MENetworkBase):
         return latent.F
 
 
-class SparseResidualEncoder(MENetworkBase):
+class SparseResidualEncoder(torch.nn.Module):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
     def __init__(self, cfg, name='res_encoder'):
         #print("RESENCODER = ", cfg)
-        super(SparseResidualEncoder, self).__init__(cfg)
+        super(SparseResidualEncoder, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
@@ -266,12 +270,14 @@ class SparseResidualEncoder(MENetworkBase):
         return latent.F
 
 
-class SparseResidualEncoder2(MENetworkBase):
+class SparseResidualEncoder2(torch.nn.Module):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
     def __init__(self, cfg, name='sparse_encoder'):
-        super(SparseResidualEncoder2, self).__init__(cfg)
+        super(SparseResidualEncoder2, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
@@ -390,12 +396,14 @@ class SparseResidualEncoder2(MENetworkBase):
         return latent
 
 
-class SparseResEncoderNoPooling(MENetworkBase):
+class SparseResEncoderNoPooling(torch.nn.Module):
     '''
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
     def __init__(self, cfg, name='sparse_encoder'):
-        super(SparseResEncoderNoPooling, self).__init__(cfg)
+        super(SparseResEncoderNoPooling, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
+
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
