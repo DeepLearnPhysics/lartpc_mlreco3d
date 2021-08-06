@@ -18,7 +18,7 @@ from mlreco.models.scn.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)

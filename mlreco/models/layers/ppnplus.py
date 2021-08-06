@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.models.layers.blocks import ResNetBlock, SPP, ASPP
-from mlreco.models.layers.factories import activations_construct
+from mlreco.models.layers.activation_normalization_factories import activations_construct
 from mlreco.models.layers.network_base import MENetworkBase
 from mlreco.models.layers.extract_feature_map import MinkGhostMask
 

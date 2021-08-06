@@ -9,7 +9,7 @@ import time
 
 from .sparse_occuseg import SparseOccuSeg, SparseOccuSegLoss
 from mlreco.models.gnn.message_passing.nnconv import NNConvModel
-from mlreco.utils.cluster.graph_spice import *
+from mlreco.utils.cluster.cluster_graph_constructor import *
 from pprint import pprint
 
 class WeightedEdgeLoss(nn.Module):

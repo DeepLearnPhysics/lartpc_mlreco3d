@@ -7,7 +7,7 @@ from mlreco.models.layers.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
-from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.fragmenter import DBSCANFragmentManager, GraphSPICEFragmentManager, format_fragments
 from mlreco.models.layers.cnn_encoder import SparseResidualEncoder

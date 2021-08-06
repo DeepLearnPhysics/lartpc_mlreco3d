@@ -4,7 +4,7 @@ import MinkowskiEngine as ME
 import torch.nn.functional as F
 
 from collections import defaultdict
-from mlreco.models.layers.factories import (activations_dict,
+from mlreco.models.layers.activation_normalization_factories import (activations_dict,
                                           activations_construct,
                                           normalizations_construct)
 from mlreco.models.layers.network_base import MENetworkBase

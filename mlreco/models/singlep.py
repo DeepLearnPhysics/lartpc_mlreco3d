@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from mlreco.models.layers.cnn_encoder import SparseResidualEncoder
 from collections import defaultdict, Counter, OrderedDict
-from mlreco.models.layers.factories import activations_construct
+from mlreco.models.layers.activation_normalization_factories import activations_construct
 from mlreco.models.layers.network_base import MENetworkBase
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss

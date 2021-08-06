@@ -6,7 +6,7 @@ from mlreco.utils.metrics import *
 
 from pprint import pprint
 
-from mlreco.utils.cluster.graph_spice import (
+from mlreco.utils.cluster.cluster_graph_constructor import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
 from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
