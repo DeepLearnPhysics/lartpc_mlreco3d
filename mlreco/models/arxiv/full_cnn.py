@@ -5,8 +5,8 @@ from collections import defaultdict
 from mlreco.models.chain.full_cnn import *
 from .gnn import node_encoder_construct, edge_encoder_construct
 
-from mlreco.models.uresnet_lonely import SegmentationLoss
-from mlreco.models.ppn import PPNLoss
+from mlreco.models.scn.uresnet_lonely import SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPNLoss
 from .cluster_cnn import spice_loss_construct
 
 class FullChain(torch.nn.Module):

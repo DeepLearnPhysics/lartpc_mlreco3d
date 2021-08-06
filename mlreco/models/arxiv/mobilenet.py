@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import sparseconvnet as scn
 
-from mlreco.models.layers.base import SCNNetworkBase
+from mlreco.models.scn.layers.base import SCNNetworkBase
 
 class UResNet(SCNNetworkBase):
     '''

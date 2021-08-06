@@ -9,7 +9,7 @@ from pprint import pprint
 from mlreco.utils.cluster.graph_spice import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
-from mlreco.models.cluster_cnn.losses.spatial_embeddings import *
+from mlreco.models.scn.cluster_cnn.losses.spatial_embeddings import *
 
 
 def extent(voxels):

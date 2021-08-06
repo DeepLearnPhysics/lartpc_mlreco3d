@@ -5,7 +5,7 @@ import sparseconvnet as scn
 
 from .cluster_cnn.utils import add_normalized_coordinates
 from .cluster_cnn.losses.single_layers import DiscriminativeLoss
-from mlreco.models.uresnet import UResNet
+from mlreco.models.scn.uresnet import UResNet
 
 
 class ClusterCNN(UResNet):

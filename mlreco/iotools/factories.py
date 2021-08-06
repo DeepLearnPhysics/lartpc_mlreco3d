@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 from torch.utils.data import DataLoader
 
 
@@ -47,7 +44,7 @@ def loader_factory(cfg,event_list=None):
     if not int(params['batch_size']) % int(params['minibatch_size']) == 0:
         print('iotools.batch_size (',params['batch_size'],'must be divisble by iotools.minibatch_size',params['minibatch_size'])
         raise ValueError
-    
+
     import mlreco.iotools.collates
     import mlreco.iotools.samplers
 

@@ -4,7 +4,7 @@ import numpy as np
 import sparseconvnet as scn
 
 from .cluster_cnn import cluster_model_construct, backbone_construct, spice_loss_construct
-from mlreco.models.layers.base import SCNNetworkBase
+from mlreco.models.scn.layers.base import SCNNetworkBase
 
 ###########################################################
 #

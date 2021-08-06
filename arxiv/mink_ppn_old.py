@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-from mlreco.models.ppn import define_ppn12
+from mlreco.models.scn.layers.ppn import define_ppn12
 from pprint import pprint
 from collections import defaultdict
 

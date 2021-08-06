@@ -1,5 +1,5 @@
-from mlreco.models.mink_full_chain import MinkFullChain, MinkFullChainLoss
-from mlreco.models.scn_full_chain import SCNFullChain, SCNFullChainLoss
+from mlreco.models.mink.full_chain import MinkFullChain, MinkFullChainLoss
+from mlreco.models.scn.full_chain import SCNFullChain, SCNFullChainLoss
 
 def FullChain(cfg):
     if cfg['chain'].get('use_mink', False):

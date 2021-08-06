@@ -6,7 +6,8 @@ import torch.nn as nn
 import numpy as np
 
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.models.layers.dbscan import DBSCANFragmenter, MinkDBSCANFragmenter
+from mlreco.models.layers.dbscan import DBSCANFragmenter
+from mlreco.models.mink.layers.dbscan import MinkDBSCANFragmenter
 
 
 def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):

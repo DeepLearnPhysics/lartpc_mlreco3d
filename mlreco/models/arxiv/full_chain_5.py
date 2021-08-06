@@ -3,8 +3,8 @@ import numpy as np
 import itertools
 from collections import defaultdict
 
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPN, PPNLoss
 from mlreco.models.layers.dbscan import DBSCANFragmenter
 from .gnn import node_encoder_construct, edge_encoder_construct
 from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN

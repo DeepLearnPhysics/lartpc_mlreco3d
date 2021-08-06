@@ -1,5 +1,4 @@
 # Pool sparse tensor by clusters
-from __future__ import print_function
 import torch
 import torch.nn as nn
 import numpy as np
@@ -21,16 +20,16 @@ class ClusterPool(nn.Module):
             list of clusters
         output:
             pytorch tensor of size # clusters x # features
-            
+
     """
     def __init__(self, pooltype='max', p=2):
         super(ClusterPool, self).__init__()
         self.pooltype = pooltype
         self.p = p
-        
+
     def forward(self, features, cs):
         # TODO - handle batches in SCN tensors
-        
+
         pools = []
         for c in cs:
             # step 1 - find coordinates indices

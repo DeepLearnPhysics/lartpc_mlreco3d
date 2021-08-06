@@ -17,9 +17,6 @@ a ``larcv::EventSparseTensor3D`` coming from the ROOT TTree branch
 ``sparse3d_reco``, and another one coming from the branch
 ``sparse3d_reco_chi2``.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
