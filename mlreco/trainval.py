@@ -365,7 +365,7 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
-        self._net = DataParallel(self._model,device_ids=self._gpus if len(self._gpus) else None)
+        self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda() if len(self._gpus) else self._net.train()
