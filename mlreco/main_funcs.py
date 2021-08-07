@@ -1,7 +1,11 @@
 import os, time, datetime, glob, sys
 import numpy as np
 import pprint
-
+try:
+    import MinkowskiEngine as ME
+except ImportError:
+    pass
+    
 from mlreco.iotools.factories import loader_factory
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
