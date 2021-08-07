@@ -287,7 +287,8 @@ class trainval(object):
                     loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
                 else:
                     loss_acc = self._criterion(result, *tuple(loss_blob))
-
+                    #print('hello')
+                    #loss_acc['loss'].backward()
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
