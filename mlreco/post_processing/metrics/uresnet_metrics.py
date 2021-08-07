@@ -2,9 +2,10 @@ import numpy as np
 import scipy
 import os
 from mlreco.utils import CSVData
-import torch
+
 
 def uresnet_metrics(cfg, module_cfg, data_blob, res, logdir, iteration):
+    import torch
     # UResNet prediction
     if not 'segmentation' in res: return
 

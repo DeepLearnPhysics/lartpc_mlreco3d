@@ -1,4 +1,3 @@
-import torch
 import numpy as np
 from scipy.spatial.distance import cdist
 import scipy
@@ -9,13 +8,14 @@ from mlreco.utils.ppn import mink_ppn_selector
 
 
 def pairwise_distances(v1, v2):
+    import torch
     v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
 def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
-
+    import torch
     index      = data_blob['index']
     seg_label  = data_blob['segment_label'][0]
     clust_data = data_blob['cluster_label'][0]
@@ -65,7 +65,7 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
             'segmentation': segmentation_batch,
             'ppn_score': scipy.special.expit(pixel_score)
         }
-       
+
         pred_seg = np.argmax(segmentation_batch, axis=1).astype(int)
         acc_seg  = np.sum(pred_seg == slabels) \
                  / float(segmentation_batch.shape[0])
@@ -92,15 +92,15 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
 
             true_point_coord = true_point[1:4].cpu().numpy()
             true_point_type = true_point[4]
-            fout_gt.record(('Index', 'Class', 
-                            'min_distance', 
-                            'x', 
-                            'y', 
-                            'z'), 
-                            (tree_idx, int(true_point_type), 
-                             d_true_to_closest_pred[i], 
-                             true_point_coord[0], 
-                             true_point_coord[1], 
+            fout_gt.record(('Index', 'Class',
+                            'min_distance',
+                            'x',
+                            'y',
+                            'z'),
+                            (tree_idx, int(true_point_type),
+                             d_true_to_closest_pred[i],
+                             true_point_coord[0],
+                             true_point_coord[1],
                              true_point_coord[2]))
             fout_gt.write()
 
@@ -111,7 +111,7 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
             segmentation_voxels = clabels[:, 1:4][pred_seg == pred_point_type]
             if segmentation_voxels.shape[0] > 0:
                 d_same_type = pairwise_distances(
-                    torch.Tensor(pred_point).view(1, -1), 
+                    torch.Tensor(pred_point).view(1, -1),
                     torch.Tensor(segmentation_voxels)).numpy()
                 d_same_type_closest = d_same_type.min(axis=1)[0]
             else:
@@ -119,29 +119,29 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
             # points_label_track = points_label[points_label[:, 4] == 1]
             if true_mip_voxels.shape[0] > 0:
                 d_mip = pairwise_distances(
-                    torch.Tensor(pred_point).view(1, -1), 
+                    torch.Tensor(pred_point).view(1, -1),
                     torch.Tensor(true_mip_voxels[:, 1:4])).numpy()
                 d_closest_mip = d_mip.min(axis=1)[0]
 
             else:
                 d_closest_mip = -1
-            fout_pred.record(('Index', 'Class', 
-                              'Score', 
-                              'min_distance', 
-                              'd_pred_to_same_type', 
-                              'd_true_mip', 
-                              'x', 
-                              'y', 
-                              'z', 
-                              'closest_x', 'closest_y', 'closest_z'), 
-                              (tree_idx, int(pred_point_type), 
-                               float(pred_point_score), 
-                               float(d_pred_to_closest_true[i]), 
-                               float(d_same_type_closest), 
+            fout_pred.record(('Index', 'Class',
+                              'Score',
+                              'min_distance',
+                              'd_pred_to_same_type',
+                              'd_true_mip',
+                              'x',
+                              'y',
+                              'z',
+                              'closest_x', 'closest_y', 'closest_z'),
+                              (tree_idx, int(pred_point_type),
+                               float(pred_point_score),
+                               float(d_pred_to_closest_true[i]),
+                               float(d_same_type_closest),
                                float(d_closest_mip),
-                               ppn_voxels[i][0], 
-                               ppn_voxels[i][1], 
-                               ppn_voxels[i][2], 
+                               ppn_voxels[i][0],
+                               ppn_voxels[i][1],
+                               ppn_voxels[i][2],
                                closest_x, closest_y, closest_z))
             fout_pred.write()
 
