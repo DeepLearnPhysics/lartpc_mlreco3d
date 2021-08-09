@@ -162,6 +162,7 @@ class UResNet(torch.nn.Module):
         return decoderTensors
 
     def forward(self, input):
+        
         coords = input[:, 0:self.D+1].int()
         features = input[:, self.D+1:].float()
 

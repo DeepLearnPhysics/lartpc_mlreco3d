@@ -46,6 +46,7 @@ class UResNet_Chain(nn.Module):
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
         #print(self)
     def forward(self, input):
+        print("IOnput = ", input)
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             res = self.net(x)
@@ -154,6 +155,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         If ghost = True, then num_classes should not count the ghost class.
         If ghost_label > -1, then we perform only ghost segmentation.
         """
+
         assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, self._batch_col] for d in label]
         # print("batch ids", batch_ids)
