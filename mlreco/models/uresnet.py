@@ -46,7 +46,6 @@ class UResNet_Chain(nn.Module):
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
         #print(self)
     def forward(self, input):
-        print("IOnput = ", input)
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             res = self.net(x)
