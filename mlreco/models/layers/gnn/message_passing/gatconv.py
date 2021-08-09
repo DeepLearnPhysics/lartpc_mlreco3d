@@ -3,16 +3,16 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
-from mlreco.models.gnn.normalizations import BatchNorm, InstanceNorm
+from mlreco.models.layers.gnn.normalizations import BatchNorm, InstanceNorm
 
-class MetaLayerModel(nn.Module):
+class GATConvModel(nn.Module):
     '''
-    MetaLayer GNN Module for extracting node/edge/global features
+    GATConv GNN Module for extracting node/edge/global features
     '''
     def __init__(self, cfg):
-        super(MetaLayerModel, self).__init__()
-        from torch_geometric.nn import MetaLayer
-
+        super(GATConvModel, self).__init__()
+        from torch_geometric.nn import MetaLayer, GATConv
+        
         self.model_config = cfg
         self.node_input     = self.model_config.get('node_feats', 16)
         self.edge_input     = self.model_config.get('edge_feats', 19)
@@ -23,6 +23,7 @@ class MetaLayerModel(nn.Module):
         self.aggr           = self.model_config.get('aggr', 'add')
         self.leakiness      = self.model_config.get('leakiness', 0.1)
 
+        self.gatConvs = torch.nn.ModuleList()
         self.edge_updates = torch.nn.ModuleList()
 
         # perform batch normalization
@@ -37,13 +38,14 @@ class MetaLayerModel(nn.Module):
         edge_output = self.edge_output
         for i in range(self.num_mp):
             self.bn_node.append(BatchNorm(node_input))
+            self.gatConvs.append(GATConv(node_input, node_output))
             # self.bn_node.append(BatchNorm(node_output))
             # print(node_input, node_output)
             self.edge_updates.append(
                 MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
-                                    leakiness=self.leakiness),
-                          node_model=NodeLayer(node_input, node_output, edge_output,
-                                                leakiness=self.leakiness)
+                                    leakiness=self.leakiness)#,
+                          #node_model=NodeLayer(node_output, node_output, self.edge_input,
+                                                #leakiness=self.leakiness)
                           #global_model=GlobalModel(node_output, 1, 32)
                          )
             )
@@ -63,15 +65,17 @@ class MetaLayerModel(nn.Module):
         for i in range(self.num_mp):
             x = self.bn_node[i](x)
             # add u and batch arguments for not having error in some old version
-            x, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
+            _, e, _ = self.edge_updates[i](x, edge_indices, e, u=None, batch=xbatch)
+            x = self.gatConvs[i](x, edge_indices)
+            # x = self.bn_node(x)
+            x = F.leaky_relu(x, negative_slope=self.leakiness)
         # print(edge_indices.shape)
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
 
         res = {
             'node_pred': [x_pred],
-            'edge_pred': [e_pred],
-            'node_features': [x]
+            'edge_pred': [e_pred]
             }
 
         return res

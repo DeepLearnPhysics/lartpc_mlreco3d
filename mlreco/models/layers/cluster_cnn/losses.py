@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from mlreco.models.layers.dbscan import distances
-from mlreco.models.cluster_cnn.losses.lovasz import lovasz_hinge_flat
-from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
+from mlreco.models.layers.common.dbscan import distances
+from mlreco.models.layers.cluster_cnn.losses.lovasz import lovasz_hinge_flat
+from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 from collections import defaultdict
 
 

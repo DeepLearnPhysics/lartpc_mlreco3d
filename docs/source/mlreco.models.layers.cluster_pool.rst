@@ -1,7 +1,7 @@
-mlreco.models.layers.cluster\_pool module
+mlreco.models.layers.common.cluster\_pool module
 =========================================
 
-.. automodule:: mlreco.models.layers.cluster_pool
+.. automodule:: mlreco.models.layers.common.cluster_pool
    :members:
    :undoc-members:
    :show-inheritance:

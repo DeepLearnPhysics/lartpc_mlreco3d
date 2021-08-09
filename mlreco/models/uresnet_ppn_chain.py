@@ -6,7 +6,7 @@ import time
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.models.layers.ppnplus import PPN, PPNLonelyLoss
+from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import SegmentationLoss
 from collections import defaultdict
 from mlreco.models.uresnet import UResNet_Chain

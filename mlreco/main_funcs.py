@@ -1,12 +1,17 @@
 import os, time, datetime, glob, sys
 import numpy as np
-import torch
 import pprint
-
-from mlreco.trainval import trainval
+try:
+    import MinkowskiEngine as ME
+except ImportError:
+    pass
+    
 from mlreco.iotools.factories import loader_factory
-from mlreco.utils import utils
-import mlreco.post_processing as post_processing
+# Important: do not import here anything that might
+# trigger cuda initialization through PyTorch.
+# We need to set CUDA_VISIBLE_DEVICES first, which
+# happens in the process_config function before anything
+# else is allowed to happen.
 
 class Handlers:
     cfg          = None
@@ -92,6 +97,7 @@ def process_config(cfg, verbose=True):
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
+    from mlreco.utils import utils
     # Weight save directory
     if 'trainval' in cfg:
         if cfg['trainval']['weight_prefix']:
@@ -120,6 +126,9 @@ def prepare(cfg, event_list=None):
     OUTPUT
       - Handler instance attached with trainval/DataLoader instances (if in config)
     """
+    import torch
+    from mlreco.trainval import trainval
+
     handlers = Handlers()
     handlers.cfg = cfg
 
@@ -173,7 +182,10 @@ def log_tensorboard(handlers, tstamp_iteration, tsum, res, cfg, epoch, first_id)
     """
     Logger using the torch.utils.tensorboard interface.
     """
+    import torch
     from torch.utils.tensorboard import SummaryWriter
+    from mlreco.utils import utils
+
     writer_path = os.path.join(cfg['trainval']['log_dir'], 'summary.log')
     writer = SummaryWriter(writer_path)
     # writer.add_graph(handlers.trainer._net.module)
@@ -221,6 +233,9 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     """
     Log relevant information to CSV files and stdout.
     """
+    import torch
+    from mlreco.utils import utils
+
     report_step  = cfg['trainval']['report_step'] and \
                 ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
 
@@ -295,6 +310,8 @@ def train_loop(handlers):
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
+    import mlreco.post_processing as post_processing
+
     cfg=handlers.cfg
     tsum = 0.
     while handlers.iteration < cfg['trainval']['iterations']:
@@ -361,6 +378,8 @@ def inference_loop(handlers):
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
+    import mlreco.post_processing as post_processing
+
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}

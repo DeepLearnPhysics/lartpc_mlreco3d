@@ -5,10 +5,10 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.models.layers.activation_normalization_factories import activations_construct
-from mlreco.models.layers.configuration import setup_cnn_configuration
-from mlreco.models.layers.blocks import ResNetBlock
-from mlreco.models.layers.uresnet_layers import UResNetEncoder, UResNetDecoder
+from mlreco.models.layers.common.activation_normalization_factories import activations_construct
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.blocks import ResNetBlock
+from mlreco.models.layers.common.uresnet_layers import UResNetEncoder, UResNetDecoder
 
 
 class Attention(nn.Module):

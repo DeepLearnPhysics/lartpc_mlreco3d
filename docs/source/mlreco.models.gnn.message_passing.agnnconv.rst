@@ -1,7 +1,7 @@
-mlreco.models.gnn.message\_passing.agnnconv module
+mlreco.models.layers.gnn.message\_passing.agnnconv module
 ==================================================
 
-.. automodule:: mlreco.models.gnn.message_passing.agnnconv
+.. automodule:: mlreco.models.layers.gnn.message_passing.agnnconv
    :members:
    :undoc-members:
    :show-inheritance:

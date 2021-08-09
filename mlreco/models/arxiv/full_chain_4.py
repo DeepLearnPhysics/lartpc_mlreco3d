@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_meta import MetaLayerModel as GNN
+from mlreco.models.layers.gnn.modular_meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
@@ -13,7 +13,7 @@ from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
 from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from mlreco.models.layers.gnn.losses.grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph

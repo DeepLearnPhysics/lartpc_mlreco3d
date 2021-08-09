@@ -2,8 +2,7 @@ def backbone_dict():
     """
     returns dictionary of clustering models
     """
-    from mlreco.models.layers import uresnet
-    from mlreco.models.layers import fpn
+    from mlreco.models.layers.common import uresnet, fpn
 
     models = {
         # Encoder-Decoder Type Backbone Architecture.
@@ -44,7 +43,7 @@ def cluster_model_dict():
     '''
     # from mlreco.models.scn.cluster_cnn import spatial_embeddings
     # from mlreco.models.scn.cluster_cnn import graph_spice
-    from mlreco.models.cluster_cnn.embeddings import SPICE as MinkSPICE
+    from mlreco.models.layers.cluster_cnn.embeddings import SPICE as MinkSPICE
     models = {
         # "spice_cnn": spatial_embeddings.SpatialEmbeddings,
         "spice_cnn_me": MinkSPICE,

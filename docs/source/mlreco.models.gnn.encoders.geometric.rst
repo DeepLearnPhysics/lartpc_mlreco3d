@@ -1,7 +1,7 @@
-mlreco.models.gnn.encoders.geometric module
+mlreco.models.layers.gnn.encoders.geometric module
 ===========================================
 
-.. automodule:: mlreco.models.gnn.encoders.geometric
+.. automodule:: mlreco.models.layers.gnn.encoders.geometric
    :members:
    :undoc-members:
    :show-inheritance:

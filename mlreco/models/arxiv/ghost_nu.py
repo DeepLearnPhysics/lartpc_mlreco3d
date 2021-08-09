@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from mlreco.models.ghost_chain import GhostChain, GhostChainLoss
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 import numpy as np

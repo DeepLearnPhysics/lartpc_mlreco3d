@@ -6,9 +6,9 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from collections import defaultdict
-from mlreco.models.layers.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
-from mlreco.models.layers.configuration import setup_cnn_configuration
-from mlreco.models.layers.blocks import ResNetBlock, ConvolutionBlock
+from mlreco.models.layers.common.activation_normalization_factories import activations_dict, activations_construct, normalizations_construct
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.blocks import ResNetBlock, ConvolutionBlock
 
 
 class SparseEncoder(torch.nn.Module):

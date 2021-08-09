@@ -6,9 +6,9 @@ import random
 import torch
 import numpy as np
 
-from .layers.dbscan import DBSCANFragmenter
-from .layers.momentum import EvidentialMomentumNet, MomentumNet
-from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
+from mlreco.models.layers.common.dbscan import DBSCANFragmenter
+from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
+from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions

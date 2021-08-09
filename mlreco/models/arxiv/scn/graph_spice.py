@@ -2,12 +2,12 @@ import torch
 import torch_geometric
 import numpy as np
 
-from mlreco.models.cluster_cnn.losses.gs_embeddings import *
-from mlreco.models.cluster_cnn import (cluster_model_construct,
+from mlreco.models.layers.cluster_cnn.losses.gs_embeddings import *
+from mlreco.models.layers.cluster_cnn import (cluster_model_construct,
                           spice_loss_construct,
                           gs_kernel_construct)
 
-from mlreco.models.gnn import gnn_model_construct
+from mlreco.models.layers.gnn import gnn_model_construct
 
 from pprint import pprint
 from mlreco.utils.cluster.cluster_graph_constructor import (

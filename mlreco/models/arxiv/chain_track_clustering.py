@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.layers.dbscan import DBScan2
+from mlreco.models.layers.common.dbscan import DBScan2
 # from mlreco.models.scn.uresnet_ppn import PPNUResNet, SegmentationLoss
 from mlreco.models.scn.uresnet_ppn_type import PPNUResNet, SegmentationLoss
 

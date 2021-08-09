@@ -5,9 +5,9 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.models.layers.blocks import *
-from mlreco.models.layers.nonlinearities import MinkowskiLeakyReLU
-from mlreco.models.layers.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.blocks import *
+from mlreco.models.layers.common.nonlinearities import MinkowskiLeakyReLU
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
 
 class FPN(torch.nn.Module):
     '''

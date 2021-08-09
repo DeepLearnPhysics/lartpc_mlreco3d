@@ -8,7 +8,7 @@ from mlreco.models.scn.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.models.scn.layers.cnn_encoder import ResidualEncoder
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.cluster.fragmenter import DBSCANFragmentManager, GraphSPICEFragmentManager, SPICEFragmentManager, format_fragments
-from mlreco.models.gnn_full_chain import FullChainGNN, FullChainLoss
+from mlreco.models.layers.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.utils.deghosting import adapt_labels
 
 

@@ -5,8 +5,8 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.models.layers.sparse_generator import PointNetGenerator
-from mlreco.models.layers.cnn_encoder import SparseResidualEncoder2
+from mlreco.models.layers.common.sparse_generator import PointNetGenerator
+from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder2
 from collections import defaultdict
 
 from torch_cluster import knn

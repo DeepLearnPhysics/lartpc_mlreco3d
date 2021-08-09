@@ -1,7 +1,6 @@
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
-import torch
 from mlreco.post_processing import post_processing
 
 
@@ -39,6 +38,7 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     ------
     Writes to a CSV file `deghosting_metrics-*`
     """
+    import torch
     row_names, row_values = [], []
 
     deghosting_type = module_cfg.get('method', '5+2')

@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
 
-from mlreco.models.layers.activation_normalization_factories import activations_construct
-from mlreco.models.layers.activation_normalization_factories import normalizations_construct
-from mlreco.models.layers.configuration import setup_cnn_configuration
-from mlreco.models.layers.blocks import DropoutBlock, ResNetBlock
+from mlreco.models.layers.common.activation_normalization_factories import activations_construct
+from mlreco.models.layers.common.activation_normalization_factories import normalizations_construct
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.blocks import DropoutBlock, ResNetBlock
 
 class MCDropoutDecoder(torch.nn.Module):
     """

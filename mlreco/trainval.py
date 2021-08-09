@@ -288,7 +288,8 @@ class trainval(object):
                     loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
                 else:
                     loss_acc = self._criterion(result, *tuple(loss_blob))
-
+                    #print('hello')
+                    #loss_acc['loss'].backward()
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
@@ -366,14 +367,7 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
-        print(self._gpus)
-
-        if len(self._gpus) > 0:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        self._model.to(device=device)
-        self._net = DataParallel(self._model,device_ids=self._gpus if len(self._gpus) else None)
-        self._net.to(device=device)
+        self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
             self._net.train()
