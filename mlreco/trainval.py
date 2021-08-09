@@ -76,7 +76,6 @@ class trainval(object):
         total_loss /= len(self._loss)
         self._loss = []  # Reset loss accumulator
         self._optimizer.zero_grad()  # Reset gradients accumulation
-        print(total_loss)
         total_loss.backward()
         # torch.nn.utils.clip_grad_norm_(self._net.parameters(), 1.0)
         self._optimizer.step()
@@ -370,9 +369,9 @@ class trainval(object):
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
-            self._net.train()
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
         else:
-            self._net.eval()
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
         if self._optim == 'AdaBound':
             self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
