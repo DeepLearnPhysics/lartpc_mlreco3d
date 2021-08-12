@@ -52,6 +52,7 @@ class EvidentialMomentumNet(nn.Module):
         self.elu = nn.LeakyReLU(negative_slope=0.33)
 
         self.softplus = nn.Softplus()
+        self.sigmoid = nn.Sigmoid()
         self.eps = eps
 
     def forward(self, x):
@@ -64,11 +65,11 @@ class EvidentialMomentumNet(nn.Module):
         x = self.linear2(x)
         x = self.elu(x)
         x = self.linear3(x)
-        vab = self.softplus(x[:, :3])
-        alpha = (vab[:, 1] + 1.0).view(-1, 1)
-        gamma = x[:, 3].view(-1, 1)
+        vab = self.softplus(x[:, :3]) + self.eps
+        alpha = torch.clamp(vab[:, 1] + 1.0, min=1.0).view(-1, 1)
+        gamma = 2.0 * self.sigmoid(x[:, 3]).view(-1, 1)
         out = torch.cat([gamma, vab[:, 0].view(-1, 1), 
                          alpha, vab[:, 2].view(-1, 1)], dim=1)
 
-        evidence = out + self.eps
+        evidence = torch.clamp(out, min=self.eps)
         return evidence

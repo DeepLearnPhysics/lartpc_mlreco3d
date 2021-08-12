@@ -138,7 +138,6 @@ class SparseResidualEncoder(MENetworkBase):
     Minkowski Net Autoencoder for sparse tensor reconstruction.
     '''
     def __init__(self, cfg, name='mink_encoder'):
-        print("RESENCODER = ", cfg)
         super(SparseResidualEncoder, self).__init__(cfg)
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
@@ -149,7 +148,6 @@ class SparseResidualEncoder(MENetworkBase):
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)
-        print("Final Tensor Shape = ", final_tensor_shape)
 
         self.pool_mode = self.model_config.get('pool_mode', 'global_average')
 

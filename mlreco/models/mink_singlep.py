@@ -22,7 +22,13 @@ class ParticleImageClassifier(nn.Module):
 
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
-        self.encoder = SparseResidualEncoder(cfg)
+        self.encoder_type = cfg[name].get('encoder_type', 'standard')
+        if self.encoder_type == 'dropout':
+            self.encoder = MCDropoutEncoder(cfg)
+        elif self.encoder_type == 'standard':
+            self.encoder = SparseResidualEncoder(cfg)
+        else:
+            raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
         self.num_classes = cfg[name].get('num_classes', 5)
         self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
 
@@ -71,17 +77,18 @@ class DUQParticleClassifier(ParticleImageClassifier):
         super(DUQParticleClassifier, self).__init__(cfg, name=name)
         self.model_config = cfg[name]
         self.final_layer = None
-        self.gamma = self.model_config.get('gamma', 0.99)
+        self.gamma = self.model_config.get('gamma', 0.999)
         self.sigma = self.model_config.get('sigma', 0.3)
 
-        self.embedding_dim = self.model_config.get('embedding_dim', 10)
+        self.embedding_dim = self.model_config.get('embedding_dim', 64)
         self.latent_size = self.model_config.get('latent_size', 256)
 
-        self.w = nn.Parameter(
-            torch.normal(torch.zeros(self.embedding_dim, self.num_classes, self.latent_size), 1))
+        self.w = nn.Parameter(torch.zeros(self.embedding_dim, self.num_classes, self.latent_size))
+
+        nn.init.kaiming_normal_(self.w, nonlinearity='relu')
 
         self.register_buffer('N', torch.ones(self.num_classes) * 20)
-        self.register_buffer('m', torch.normal(torch.zeros(self.embedding_dim, self.num_classes), 1))
+        self.register_buffer('m', torch.normal(torch.zeros(self.embedding_dim, self.num_classes), 0.05))
 
         self.m = self.m * self.N.unsqueeze(0)
 
@@ -325,14 +332,19 @@ class MultiLabelCrossEntropy(nn.Module):
         if self.grad_penalty:
             loss2 = self.calc_gradient_penalty(out['input'][0], probas)
 
-        loss = loss1.sum(dim=1).mean() + self.grad_w * loss2
+        loss1 = loss1.sum(dim=1).mean()
+        loss = loss1 + self.grad_w * loss2
 
         accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
 
         res = {
             'loss': loss,
+            'loss_embedding': float(loss1),
+            'loss_grad_penalty': float(loss2),
             'accuracy': accuracy
         }
+
+        print(res)
 
         acc_types = {}
         for c in labels.unique():
