@@ -26,14 +26,10 @@ class Handlers:
     def keys(self):
         return list(self.__dict__.keys())
 
-
-# Use this function instead of itertools.cycle to avoid creating  a memory leak.
-# (itertools.cycle attempts to save all outputs in order to re-cycle through them)
 def cycle(data_io):
     while True:
         for x in data_io:
             yield x
-
 
 def train(cfg, event_list=None):
     handlers = prepare(cfg, event_list=event_list)
@@ -251,6 +247,8 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     t_io    = handlers.watch.time('io')
     t_save  = handlers.watch.time('save')
     t_net   = handlers.watch.time('train' if cfg['trainval']['train'] else 'forward')
+    t_forward_cpu = handlers.watch.time_cputime('forward_cpu')
+    t_backward_cpu = handlers.watch.time_cputime('backward_cpu')
 
     # Report (logger)
     if handlers.csv_logger:
@@ -261,6 +259,8 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
                                    (handlers.iteration, first_id, epoch, t_iter, tsum))
         handlers.csv_logger.record(('tio', 'tsumio'), (t_io,tsum_map['io']))
         handlers.csv_logger.record(('mem', ), (mem, ))
+        handlers.csv_logger.record(('tforwardcpu', ), (t_forward_cpu, ))
+        handlers.csv_logger.record(('tbackwardcpu', ), (t_backward_cpu, ))
 
         if cfg['trainval']['train']:
             handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),

@@ -23,6 +23,10 @@ def duq_metrics(cfg,
     uncertainty = np.linalg.norm(centroids.reshape(1, -1, 5) - embedding, axis=1)
     uncertainty = uncertainty[np.arange(pred.shape[0]), pred]
 
+    np.save(os.path.join(logdir, 'centroids'), centroids)
+
+    print(centroids)
+
     pred_entropy = entropy(probability, axis=1)
     latent = np.zeros((embedding.shape[0], 2, embedding.shape[2]))
 

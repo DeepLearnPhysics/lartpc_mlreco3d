@@ -1,15 +1,14 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from mlreco.utils import unwrap
+
 import warnings
 import torch
-import time
+
 import os
 import mlreco.utils as utils
 from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
-import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
 from mlreco.utils.adabound import *
@@ -178,14 +177,17 @@ class trainval(object):
         It is a dictionary where data_blob[key] = list of length
         BATCH_SIZE / (MINIBATCH_SIZE * len(GPUS))
         """
-
+        self._watch.start_cputime('train_step_cputime')
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
         data_blob,res_combined = self.forward(data_iter, iteration=iteration)
         # print(data_blob['index'])
         # Run backward once for all the previous forward
+        self._watch.start_cputime('backward_cpu')
         self.backward()
+        self._watch.stop_cputime('backward_cpu')
         self._watch.stop('train')
+        self._watch.stop_cputime('train_step_cputime')
         self.tspent_sum['train'] += self._watch.time('train')
         return data_blob,res_combined
 
@@ -274,6 +276,7 @@ class trainval(object):
             #    data.append([data_blob[key][i] for key in input_keys])
 
             self._watch.start('forward')
+            self._watch.start_cputime('forward_cpu')
 
             if not torch.cuda.is_available():
                 train_blob = train_blob[0]
@@ -295,6 +298,7 @@ class trainval(object):
                     self._loss.append(loss_acc['loss'])
 
             self._watch.stop('forward')
+            self._watch.stop_cputime('forward_cpu')
             self.tspent_sum['forward'] += self._watch.time('forward')
 
             # Record results
