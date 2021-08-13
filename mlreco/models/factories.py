@@ -68,6 +68,8 @@ def model_dict():
         "bayes_singlep": (mink_singlep.BayesianParticleClassifier, mink_singlep.ParticleTypeLoss),
         # Bayesian UResNet
         "bayesian_uresnet": (mink_bayes_uresnet.BayesianUResNet, mink_bayes_uresnet.SegmentationLoss),
+        # DUQ UResNet
+        "duq_uresnet": (mink_bayes_uresnet.DUQUResNet, mink_bayes_uresnet.DUQSegmentationLoss),
         # Evidential Classifier
         'evidential_singlep': (mink_singlep.EvidentialParticleClassifier, mink_singlep.EvidentialLearningLoss),
         # Deep Single Pass Uncertainty Quantification

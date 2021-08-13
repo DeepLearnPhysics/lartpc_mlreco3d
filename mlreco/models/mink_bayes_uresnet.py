@@ -1,3 +1,4 @@
+from mlreco.mink.layers.cnn_encoder import SparseResidualEncoder
 import torch
 import torch.nn as nn
 import MinkowskiEngine as ME
@@ -11,6 +12,7 @@ from mlreco.mink.layers.factories import (activations_dict,
 from mlreco.mink.layers.network_base import MENetworkBase
 from mlreco.bayes.encoder import MCDropoutEncoder
 from mlreco.bayes.decoder import MCDropoutDecoder
+from mlreco.mink.layers.uresnet import UResNet
 from mlreco.bayes.factories import uq_classification_loss_construct
 
 class BayesianUResNet(MENetworkBase):
@@ -126,6 +128,81 @@ class BayesianUResNet(MENetworkBase):
             return self.standard_forward(input)
 
 
+
+class DUQUResNet(MENetworkBase):
+
+    def __init__(self, cfg, name='duq_uresnet'):
+        super(DUQUResNet, self).__init__(cfg)
+        self.model_config = cfg[name]
+        self.num_classes = self.model_config.get('num_classes', 5)
+        self.num_samples = self.model_config.get('num_samples', 20)
+
+        self.net = UResNet(cfg)
+
+        self.gamma = self.model_config.get('gamma', 0.999)
+        self.sigma = self.model_config.get('sigma', 0.3)
+
+        self.embedding_dim = self.model_config.get('embedding_dim', 10)
+        self.latent_size = self.model_config.get('latent_size', 32)
+
+        self.w = nn.Parameter(torch.zeros(self.embedding_dim, self.num_classes, self.latent_size))
+
+        nn.init.kaiming_normal_(self.w, nonlinearity='relu')
+
+        self.register_buffer('N', torch.ones(self.num_classes) * 20)
+        self.register_buffer('m', torch.normal(torch.zeros(self.embedding_dim, self.num_classes), 0.05))
+
+        self.m = self.m * self.N.unsqueeze(0)
+
+    def embed(self, x):
+
+        res = self.net(x)
+        feats = res['decoderTensors'][-1]
+        print(feats.F)
+        out = torch.einsum('ij,mnj->imn', feats.F, self.w)
+        return out
+
+    def bilinear(self, z):
+        embeddings = self.m / self.N.unsqueeze(0)
+        
+        diff = z - embeddings.unsqueeze(0)            
+        y_pred = (- diff**2).mean(1).div(2 * self.sigma**2).exp()
+
+        return y_pred
+
+    def forward(self, input):
+
+        point_cloud, = input
+        if self.training:
+            point_cloud.requires_grad_(True)
+
+        z = self.embed(point_cloud)
+        y_pred = self.bilinear(z)
+
+        res = {
+            'score': [y_pred],
+            'embedding': [z],
+            'input': [point_cloud],
+            'centroids' : [self.m.detach().cpu().numpy() / self.N.detach().cpu().numpy()]
+        }
+
+        self.z = z
+        self.y_pred = y_pred
+
+        print(res['score'][0].shape)
+        print(res['embedding'][0].shape)
+
+        
+        return res
+
+    def update_buffers(self):
+        with torch.no_grad():
+            # normalizing value per class, assumes y is one_hot encoded
+            self.N = torch.max(self.gamma * self.N + (1 - self.gamma) * self.y_pred.sum(0), torch.ones_like(self.N))
+            # compute sum of embeddings on class by class basis
+            features_sum = torch.einsum('ijk,ik->jk', self.z, self.y_pred)
+            self.m = self.gamma * self.m + (1 - self.gamma) * features_sum
+
 class SegmentationLoss(nn.Module):
 
     def __init__(self, cfg, name='mcdropout_uresnet'):
@@ -187,3 +264,77 @@ class SegmentationLoss(nn.Module):
             'accuracy': total_acc/count,
             'loss': total_loss/count
         }
+
+
+class DUQSegmentationLoss(nn.Module):
+
+    def __init__(self, cfg, name='duq_uresnet'):
+        super(DUQSegmentationLoss, self).__init__()
+        self.xentropy = nn.BCELoss(reduction='none')
+        self.num_classes = 5
+        self.grad_w = cfg[name].get('grad_w', 0.0)
+        self.grad_penalty = cfg[name].get('grad_penalty', True)
+
+
+    @staticmethod
+    def calc_gradient_penalty(x, y_pred):
+        '''
+        Code From the DUQ main Github Repository:
+        https://github.com/y0ast/deterministic-uncertainty-quantification
+
+        Author: Joost van Amersfoort
+        '''
+        gradients = torch.autograd.grad(
+                outputs=y_pred,
+                inputs=x,
+                grad_outputs=torch.ones_like(y_pred),
+                create_graph=True,
+            )[0]
+
+        gradients = gradients.flatten(start_dim=1)
+        
+        # L2 norm
+        grad_norm = gradients.norm(2, dim=1)
+
+        # Two sided penalty
+        gradient_penalty = ((grad_norm - 1) ** 2).mean()
+        
+        # One sided penalty - down
+    #     gradient_penalty = F.relu(grad_norm - 1).mean()
+
+        return gradient_penalty
+
+    def forward(self, out, type_labels):
+        # print(type_labels)
+        probas = out['score'][0]
+        device = probas.device
+        labels = type_labels[0][:, -1].long()
+        labels_one_hot = torch.eye(self.num_classes)[labels].to(device=device)
+        loss1 = self.xentropy(probas, labels_one_hot)
+        pred = torch.argmax(probas, dim=1)
+
+        # Comptue gradient penalty
+        loss2 = 0
+        if self.grad_penalty:
+            loss2 = self.calc_gradient_penalty(out['input'][0], probas)
+
+        loss1 = loss1.sum(dim=1).mean()
+        loss = loss1 + self.grad_w * loss2
+
+        accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
+
+        res = {
+            'loss': loss,
+            'loss_embedding': float(loss1),
+            'loss_grad_penalty': float(loss2),
+            'accuracy': accuracy
+        }
+
+        print(res)
+
+        acc_types = {}
+        for c in labels.unique():
+            mask = labels == c
+            acc_types['accuracy_{}'.format(int(c))] = \
+                float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
+        return res
