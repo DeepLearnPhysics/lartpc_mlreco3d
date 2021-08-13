@@ -41,7 +41,8 @@ class MomentumNet(nn.Module):
 
 class EvidentialMomentumNet(nn.Module):
 
-    def __init__(self, num_input, num_output=4, num_hidden=128, eps=0.0):
+    def __init__(self, num_input, num_output=4, 
+                 num_hidden=128, eps=0.0, logspace=False):
         super(EvidentialMomentumNet, self).__init__()
         self.linear1 = nn.Linear(num_input, num_hidden)
         self.norm1 = nn.BatchNorm1d(num_input)
@@ -52,7 +53,12 @@ class EvidentialMomentumNet(nn.Module):
         self.elu = nn.LeakyReLU(negative_slope=0.33)
 
         self.softplus = nn.Softplus()
-        self.sigmoid = nn.Sigmoid()
+        print("logspace = ", logspace)
+        self.logspace = logspace
+        if logspace:
+            self.gamma = nn.Identity()
+        else:
+            self.gamma = nn.Sigmoid()
         self.eps = eps
 
     def forward(self, x):
@@ -67,9 +73,11 @@ class EvidentialMomentumNet(nn.Module):
         x = self.linear3(x)
         vab = self.softplus(x[:, :3]) + self.eps
         alpha = torch.clamp(vab[:, 1] + 1.0, min=1.0).view(-1, 1)
-        gamma = 2.0 * self.sigmoid(x[:, 3]).view(-1, 1)
+        gamma = 2.0 * self.gamma(x[:, 3]).view(-1, 1)
         out = torch.cat([gamma, vab[:, 0].view(-1, 1), 
                          alpha, vab[:, 2].view(-1, 1)], dim=1)
-
-        evidence = torch.clamp(out, min=self.eps)
+        if not self.logspace:
+            evidence = torch.clamp(out, min=self.eps)
+        else:
+            evidence = out 
         return evidence

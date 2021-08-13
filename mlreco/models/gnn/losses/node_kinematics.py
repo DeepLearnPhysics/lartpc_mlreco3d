@@ -333,7 +333,9 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
         elif self.reg_loss == 'edl':
             w = loss_config.get('kld_weight', 0.0)
             kl_mode = loss_config.get('kl_mode', 'evd')
-            self.reg_lossfn = EDLRegressionLoss(reduction=self.reduction, w=w, kl_mode=kl_mode)
+            logspace = loss_config.get('logspace', False)
+            print("logspace = ", logspace)
+            self.reg_lossfn = EDLRegressionLoss(reduction=self.reduction, w=w, kl_mode=kl_mode, logspace=logspace)
         elif self.reg_loss == 'l1':
             self.reg_lossfn = torch.nn.L1Loss(reduction=self.reduction)
         elif self.reg_loss == 'log_rmse':

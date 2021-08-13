@@ -193,7 +193,7 @@ def kl_nig(logits, targets, eps=0.01):
 class EDLRegressionLoss(nn.Module):
 
     def __init__(self, reduction='none', w=0.0, kl_mode='evd',
-                 one_hot='True', mode='concentration', eps=1e-6, T=50000):
+                 one_hot='True', mode='concentration', eps=1e-6, T=50000, logspace=False):
         super(EDLRegressionLoss, self).__init__()
         self.reduction = reduction
         self.one_hot = one_hot
@@ -211,10 +211,16 @@ class EDLRegressionLoss(nn.Module):
             raise ValueError('Unrecognized KL Divergence Error Loss')
         self.w = w
         self.T = T
+        self.logspace = logspace
 
     def forward(self, logits, targets, iteration=None):
 
         logits = logits.view(-1, 4)
+        if self.logspace:
+            p_true = torch.log(targets + 1e-6)
+        else:
+            p_true = targets
+
         assert len(targets.shape) == 1
 
         if iteration is not None:
@@ -222,7 +228,7 @@ class EDLRegressionLoss(nn.Module):
         else:
             annealing = self.w
 
-        nll_loss = self.nll_loss(logits, targets, eps=self.eps)
-        kld_loss = self.kld_loss(logits, targets, eps=self.eps)
+        nll_loss = self.nll_loss(logits, p_true, eps=self.eps)
+        kld_loss = self.kld_loss(logits, p_true, eps=self.eps)
 
         return nll_loss + annealing * kld_loss, nll_loss

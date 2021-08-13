@@ -131,11 +131,13 @@ class GNN(torch.nn.Module):
             if self.kinematics_momentum:
                 momentum_config = cfg[name].get('momentum_net', {})
                 softplus_and_shift = momentum_config.get('eps', 0.0)
+                logspace = momentum_config.get('logspace', False)
                 if momentum_config.get('mode', 'standard') == 'edl':
                     self.momentum_net = EvidentialMomentumNet(node_output_feats, 
                                                               num_output=4, 
                                                               num_hidden=momentum_config.get('num_hidden', 128),
-                                                              eps=softplus_and_shift)
+                                                              eps=softplus_and_shift,
+                                                              logspace=logspace)
                 else:
                     self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
