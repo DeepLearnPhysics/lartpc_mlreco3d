@@ -69,6 +69,8 @@ class trainval(object):
         else:
             self._lr_scheduler = None
 
+        self._loss = []
+
     def backward(self):
         total_loss = 0.0
         for loss in self._loss:
