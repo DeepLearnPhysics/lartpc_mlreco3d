@@ -38,6 +38,7 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
     min_overlap = module_cfg.get('min_overlap', 10)
     segment_threshold = module_cfg.get('segment_threshold', 3)
     dEdx_ratio = module_cfg.get('dEdx_ratio', 3.)
+    coords_col = module_cfg.get('coords_col', (1, 4))
 
     # Identify true stopping muons first
     # ==================================
@@ -56,7 +57,7 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
                 p.end_position().y(),
                 p.end_position().z()
             ])
-            voxels = clust_data[data_idx][clust_data[data_idx][:, 6] == part_id][:, :3]
+            voxels = clust_data[data_idx][clust_data[data_idx][:, 6] == part_id][:, coords_col[0]:coords_col[1]]
             d = cdist(voxels, [end_position])
             end_voxel = voxels[d.argmin(axis=0)]
             if (end_voxel > threshold).all() and (end_voxel < spatial_size - threshold).all():
@@ -75,7 +76,7 @@ def stopping_muons(cfg, module_cfg, data_blob, res, logdir, iteration,
     row_names_pred, row_values_pred = [], []
     true_stopping_muons_matching = np.zeros((len(true_stopping_muons),))
     for p in particles[data_idx][particles_seg[data_idx] == track_label]:
-        voxels = input_data[data_idx][p][:, :3]
+        voxels = input_data[data_idx][p][:, coords_col[0]:coords_col[1]]
         # It must be touching at most once the boundary
         # FIXME what if x position can be shifted?
         # touching = np.any((voxels < threshold) | (voxels > spatial_size - threshold), axis=1)
