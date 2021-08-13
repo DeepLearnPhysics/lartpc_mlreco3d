@@ -42,7 +42,7 @@ class FullChain(FullChainGNN):
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
-            self.spatial_embeddings        = MinkGraphSPICE(cfg)
+            self.graph_spice               = MinkGraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'], batch_col=self.batch_col)
             #self.gs_manager.training       = True # FIXME
             self._gspice_skip_classes      = cfg['graph_spice']['skip_classes']
@@ -288,7 +288,7 @@ class FullChain(FullChainGNN):
                 graph_spice_label = torch.cat((label_clustering[0][:, :-1],
                                                semantic_labels.reshape(-1,1)), dim=1)
 
-                spatial_embeddings_output = self.spatial_embeddings((input[0][:,:5],
+                spatial_embeddings_output = self.graph_spice((input[0][:,:5],
                                                                      graph_spice_label))
                 cnn_result.update(spatial_embeddings_output)
 
