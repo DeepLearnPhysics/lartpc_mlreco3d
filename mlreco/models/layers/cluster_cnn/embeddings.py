@@ -97,7 +97,7 @@ class SPICE(torch.nn.Module):
         point_cloud, = input
         device = point_cloud.device
 
-        coords = point_cloud[:, 0:self.D+1].to(device)
+        coords = point_cloud[:, 0:self.D+1].to(device).int()
         features = point_cloud[:, self.D+1:].float().view(-1, 1)
 
         normalized_coords = (coords[:, 1:self.D+1] - float(self.spatial_size) / 2) \
