@@ -25,6 +25,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     track_label = module_cfg.get('track_label', 1)
     shower_label = module_cfg.get('shower_label', 0)
     nu_col = module_cfg.get('nu_col', 8)
+    coords_col = module_cfg.get('coords_col', (1, 4))
 
     node_pred_vtx = node_pred_vtx[data_idx]
     original_node_pred_vtx = node_pred_vtx
@@ -137,7 +138,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                 #print(masking(input_data[data_idx])[np.hstack(c_candidates[:p_idx] + c_candidates[p_idx+1:])][:, :3].shape)
                 #print(p_idx, np.hstack(c_candidates[:p_idx] + c_candidates[p_idx+1:]))
 
-                d = cdist(points[:, :3], masking(input_data[data_idx])[np.hstack([c for idx, c in enumerate(c_candidates) if idx != p_idx])][:, :3])
+                d = cdist(points[:, :3], masking(input_data[data_idx])[np.hstack([c for idx, c in enumerate(c_candidates) if idx != p_idx])][:, coords_col[0]:coords_col[1]])
                 #print(p_idx, d.min(axis=1))
                 if d.min() < 7:
                     ppn_candidates2.append(points[np.where(d.min(axis=1) < 7)[0]])

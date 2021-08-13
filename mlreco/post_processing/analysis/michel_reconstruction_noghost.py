@@ -41,6 +41,7 @@ def michel_reconstruction_noghost(cfg, data_blob, res, logdir, iteration):
     - `michel_reconstruction2-*`
     """
     method_cfg = cfg['post_processing']['michel_reconstruction_noghost']
+    coords_col = method_cfg.get('coords_col', (1, 4))
 
     # Create output CSV
     store_per_iteration = True
@@ -113,13 +114,13 @@ def michel_reconstruction_noghost(cfg, data_blob, res, logdir, iteration):
         # MIP_coords = data[(label == 1).reshape((-1,)), ...][:, :3]
         # Michel_coords = data[(label == 4).reshape((-1,)), ...][:, :3]
         # Michel_particles = particles[particles[:, 4] == Michel_label]
-        MIP_coords = data[label == MIP_label][:, :3]
+        MIP_coords = data[label == MIP_label][:, coords_col[0]:coords_col[1]]
         #Michel_coords = data[label == Michel_label][:, :3]
-        Michel_coords = clusters[clusters[:, -1] == Michel_label][:, :3]
+        Michel_coords = clusters[clusters[:, -1] == Michel_label][:, coords_col[0]:coords_col[1]]
         if Michel_coords.shape[0] == 0:  # FIXME
             continue
-        MIP_coords_pred = data[(predictions == MIP_label).reshape((-1,)), ...][:, :3]
-        Michel_coords_pred = data[(predictions == Michel_label).reshape((-1,)), ...][:, :3]
+        MIP_coords_pred = data[(predictions == MIP_label).reshape((-1,)), ...][:, coords_col[0]:coords_col[1]]
+        Michel_coords_pred = data[(predictions == Michel_label).reshape((-1,)), ...][:, coords_col[0]:coords_col[1]]
 
         # 1. Find true particle information matching the true Michel cluster
         # Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
@@ -206,7 +207,7 @@ def michel_reconstruction_noghost(cfg, data_blob, res, logdir, iteration):
                         michel_pred_num_pix_true = 0
                         michel_pred_sum_pix_true = 0.
                         for v in data[(predictions==Michel_label).reshape((-1,)), ...][current_index]:
-                            count = int(np.any(np.all(v[:3] == Michel_coords[Michel_true_clusters == closest_true_id], axis=1)))
+                            count = int(np.any(np.all(v[coords_col[0]:coords_col[1]] == Michel_coords[Michel_true_clusters == closest_true_id], axis=1)))
                             michel_pred_num_pix_true += count
                             if count > 0:
                                 michel_pred_sum_pix_true += v[-1]

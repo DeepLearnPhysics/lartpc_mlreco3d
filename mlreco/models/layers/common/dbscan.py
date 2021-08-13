@@ -156,7 +156,7 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
 
     def forward(self, data, output):
 
-        from mlreco.utils.ppn import mink_ppn_selector
+        from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
         # If tracks are clustered, get the track points from the PPN output
         data = data.detach().cpu().numpy()
@@ -165,10 +165,10 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
             # FIXME ppn_score not in output?
             numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
                             'points'      : [output['points'][0].detach().cpu().numpy()],
-                            'mask_ppn'    : [output['mask_ppn'][0].detach().cpu().numpy()],
-                            'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
+                            'mask_ppn'    : [output['mask_ppn'][0].detach().cpu().numpy()]}
+                            #'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
 
-            points =  mink_ppn_selector(data, numpy_output,
+            points =  uresnet_ppn_type_point_selector(data, numpy_output,
                                         score_threshold      = self.ppn_score_threshold,
                                         type_threshold       = self.ppn_type_threshold,
                                         type_score_threshold = self.ppn_type_score_threshold)

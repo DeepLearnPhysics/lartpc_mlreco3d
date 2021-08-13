@@ -51,7 +51,8 @@ def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
 
     spice_min_voxels = cfg['model']['modules']['spice']['spice_fragment_manager'].get('min_voxels', 2)
 
-    coords = seg_label[data_idx][:, :3]
+    coords_col = module_cfg.get('coords_col', (1, 4))
+    coords = seg_label[data_idx][:, coords_col[0]:coords_col[1]]
 
     # Compute total momentum and energy per interaction
     total_momentum = {}
@@ -86,7 +87,7 @@ def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             #original_semantic_mask = data_blob['segment_label'][data_idx][:, -1] == c
             coords_class = coords[semantic_mask]
             clabels = clust_data[data_idx][semantic_mask][:, 6]
-            original_coords_class = original_clust_data[:, :3]
+            original_coords_class = original_clust_data[:, coords_col[0]:coords_col[1]]
             original_clabels = original_clust_data[:, 6]
 
             #_, true_centroids = find_cluster_means(coords_class, clabels)
