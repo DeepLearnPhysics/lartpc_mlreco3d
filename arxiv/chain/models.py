@@ -6,8 +6,8 @@ import time
 # MinkowskiEngine Backend
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
-from mlreco.mink.layers.network_base import MENetworkBase
-from mlreco.mink.layers.ppn import PPN
+from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.ppn import PPN
 
 from pprint import pprint
 

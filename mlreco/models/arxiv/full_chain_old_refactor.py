@@ -7,18 +7,18 @@ from __future__ import print_function
 import torch
 import numpy as np
 
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
-from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPN, PPNLoss
+from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.models.grappa import GNN, GNNLoss
 
-from mlreco.models.layers.dbscan import DBSCANFragmenter
-from mlreco.models.layers.cnn_encoder import ResidualEncoder
+from mlreco.models.layers.common.dbscan import DBSCANFragmenter
+from mlreco.models.scn.layers.cnn_encoder import ResidualEncoder
 
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.utils.cluster.graph_spice import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)

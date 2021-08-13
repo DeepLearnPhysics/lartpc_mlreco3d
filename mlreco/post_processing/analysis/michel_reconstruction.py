@@ -42,6 +42,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
     - `michel_reconstruction2-*`
     """
     method_cfg = cfg['post_processing']['michel_reconstruction']
+    coords_col = method_cfg.get('coords_col', (1, 4))
 
     # Create output CSV
     store_per_iteration = True
@@ -97,7 +98,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         # MIP_coords = data[(label == 1).reshape((-1,)), ...][:, :3]
         # Michel_coords = data[(label == 4).reshape((-1,)), ...][:, :3]
         # Michel_particles = particles[particles[:, 4] == Michel_label]
-        MIP_coords = data[label == MIP_label][:, :3]
+        MIP_coords = data[label == MIP_label][:, coords_col[0]:coords_col[1]]
         # Michel_coords = data[label == Michel_label][:, :3]
         Michel_all = clusters[clusters_semantics == Michel_label]
         if Michel_all.shape[0] == 0:  # FIXME
@@ -109,9 +110,9 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
             #Michel_coords = clusters[(clusters_semantics == Michel_label) | (clusters_semantics == shower_label) | (clusters_semantics == lowE_label)][:, :3]
             shower_lowE = clusters[(clusters_semantics == shower_label) | (clusters_semantics == lowE_label)]
             if shower_lowE.shape[0] > 0:
-                shower_lowE_clusters = DBSCAN(eps=one_pixel, min_samples=1).fit(shower_lowE[:, :3]).labels_
+                shower_lowE_clusters = DBSCAN(eps=one_pixel, min_samples=1).fit(shower_lowE[:, coords_col[0]:coords_col[1]]).labels_
 
-                d = cdist(Michel_all[:, :3], shower_lowE[:, :3])
+                d = cdist(Michel_all[:, coords_col[0]:coords_col[1]], shower_lowE[:, coords_col[0]:coords_col[1]])
                 select_shower = (d.min(axis=0) < method_cfg.get('threshold', 2.))
                 select_shower_clusters = np.unique(shower_lowE_clusters[(shower_lowE_clusters>-1) & select_shower])
                 fragments = []
@@ -131,9 +132,9 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
             # Michel_true_clusters = Michel_true_clusters[Michel_true_clusters>-1]
             # Michel_all = Michel_all[Michel_true_clusters>-1]
 
-        Michel_coords = Michel_all[:, :3]
-        MIP_coords_pred = data_pred[(predictions == MIP_label).reshape((-1,)), ...][:, :3]
-        Michel_coords_pred = data_pred[(predictions == Michel_label).reshape((-1,)), ...][:, :3]
+        Michel_coords = Michel_all[:, coords_col[0]:coords_col[1]]
+        MIP_coords_pred = data_pred[(predictions == MIP_label).reshape((-1,)), ...][:, coords_col[0]:coords_col[1]]
+        Michel_coords_pred = data_pred[(predictions == Michel_label).reshape((-1,)), ...][:, coords_col[0]:coords_col[1]]
 
         # 1. Find true particle information matching the true Michel cluster
         # Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
@@ -209,7 +210,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                         michel_pred_num_pix_true = 0
                         michel_pred_sum_pix_true = 0.
                         for v in data_pred[(predictions==Michel_label).reshape((-1,)), ...][current_index]:
-                            count = int(np.any(np.all(v[:3] == Michel_coords[Michel_true_clusters == closest_true_id], axis=1)))
+                            count = int(np.any(np.all(v[coords_col[0]:coords_col[1]] == Michel_coords[Michel_true_clusters == closest_true_id], axis=1)))
                             michel_pred_num_pix_true += count
                             if count > 0:
                                 michel_pred_sum_pix_true += v[-1]
@@ -225,7 +226,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                         michel_true_energy = particles[closest_true_id].energy_init()
                         michel_true_num_pix_cluster = 0
                         for v in Michel_coords[Michel_true_clusters == closest_true_id]:
-                            if (v == data[label == Michel_label, :3]).all(axis=1).any():
+                            if (v == data[label == Michel_label, coords_col[0]:coords_col[1]]).all(axis=1).any():
                                 michel_true_num_pix_cluster += 1
                         #print('michel true energy', particles[closest_true_id].energy_init(), particles[closest_true_id].pdg_code(), particles[closest_true_id].energy_deposit())
             # Record every predicted Michel cluster in CSV

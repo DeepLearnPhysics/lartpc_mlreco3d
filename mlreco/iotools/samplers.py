@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 from torch.utils.data import Sampler
 
@@ -60,7 +57,7 @@ class BootstrapBatchSampler(AbstractBatchSampler):
         starts = np.arange(0, self._data_size - self._minibatch_size, self._minibatch_size)
         bootstrap_indices = np.random.choice(np.arange(self._data_size), self._data_size)
         return iter(np.concatenate([bootstrap_indices[np.arange(start, start+self._minibatch_size)] for start in starts]))
-    
+
     @staticmethod
     def create(ds, cfg):
         return BootstrapBatchSampler(len(ds), cfg['minibatch_size'])

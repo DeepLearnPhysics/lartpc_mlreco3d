@@ -1,4 +1,4 @@
-mlreco.models.gnn.losses package
+mlreco.models.layers.gnn.losses package
 ================================
 
 Submodules
@@ -7,16 +7,16 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   mlreco.models.gnn.losses.edge_channel
-   mlreco.models.gnn.losses.node_grouping
-   mlreco.models.gnn.losses.node_kinematics
-   mlreco.models.gnn.losses.node_primary
-   mlreco.models.gnn.losses.node_type
+   mlreco.models.layers.gnn.losses.edge_channel
+   mlreco.models.layers.gnn.losses.node_grouping
+   mlreco.models.layers.gnn.losses.node_kinematics
+   mlreco.models.layers.gnn.losses.node_primary
+   mlreco.models.layers.gnn.losses.node_type
 
 Module contents
 ---------------
 
-.. automodule:: mlreco.models.gnn.losses
+.. automodule:: mlreco.models.layers.gnn.losses
    :members:
    :undoc-members:
    :show-inheritance:

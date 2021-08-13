@@ -30,7 +30,7 @@ def _form_clusters(data: nb.float64[:,:],
                    min_size: nb.int64 = -1,
                    column: nb.int64 = 5,
                    batch_index: nb.int64 = 3,
-                   cluster_classes: nb.types.List(nb.int64)=[-1],
+                   cluster_classes: nb.types.List(nb.int64) = nb.typed.List([-1]),
                    shape_index: nb.int64 = -1) -> nb.types.List(nb.int64[:]):
 
     # Create a mask which restricts the voxels to those with shape in cluster_classes
@@ -60,7 +60,7 @@ def _form_clusters(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
-def reform_clusters(data, clust_ids, batch_ids, column=5):
+def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up the requested clusters.
@@ -73,16 +73,17 @@ def reform_clusters(data, clust_ids, batch_ids, column=5):
     Returns:
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
-    return _reform_clusters(data, clust_ids, batch_ids, column)
+    return _reform_clusters(data, clust_ids, batch_ids, column, batch_col)
 
 @nb.njit
 def _reform_clusters(data: nb.float64[:,:],
                      clust_ids: nb.int64[:],
                      batch_ids: nb.int64[:],
-                     column: nb.int64 = 5) -> nb.types.List(nb.int64[:]):
+                     column: nb.int64 = 5,
+                     batch_col: nb.int64 = 0) -> nb.types.List(nb.int64[:]):
     clusts = []
     for i in range(len(batch_ids)):
-        clusts.append(np.where((data[:,3] == batch_ids[i]) & (data[:,column] == clust_ids[i]))[0])
+        clusts.append(np.where((data[:,batch_col] == batch_ids[i]) & (data[:,column] == clust_ids[i]))[0])
     return clusts
 
 
@@ -164,7 +165,7 @@ def _get_momenta_label(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_centers(data, clusts):
+def get_cluster_centers(data, clusts, coords_index=(1, 4)):
     """
     Function that returns the coordinate of the centroid
     associated with the listed clusters.
@@ -175,14 +176,15 @@ def get_cluster_centers(data, clusts):
     Returns:
         np.ndarray: (C,3) tensor of cluster centers
     """
-    return _get_cluster_centers(data, clusts)
+    return _get_cluster_centers(data, clusts, list(coords_index))
 
 @nb.njit
 def _get_cluster_centers(data: nb.float64[:,:],
-                         clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                         clusts: nb.types.List(nb.int64[:]),
+                         coords_index: nb.types.List(nb.int64[:]) = [0, 3]) -> nb.float64[:,:]:
     centers = np.empty((len(clusts),3), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        centers[i] = np.sum(data[c,:3], axis=0)/len(c)
+        centers[i] = np.sum(data[c, coords_index[0]:coords_index[1]], axis=0)/len(c)
     return centers
 
 
@@ -234,7 +236,9 @@ def _get_cluster_energies(data: nb.float64[:,:],
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
-                         clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                         clusts: nb.types.List(nb.int64[:]),
+                         batch_col: nb.int64 = 0,
+                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     """
     Function that returns an array of 16 geometric features for
     each of the clusters in the provided list.
@@ -245,18 +249,20 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
-    return _get_cluster_features(data, clusts)
+    return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
 @nb.njit
 def _get_cluster_features(data: nb.float64[:,:],
-                          clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                          clusts: nb.types.List(nb.int64[:]),
+                          batch_col: nb.int64 = 0,
+                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 16), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
                                                   # and throws a warning. To avoid this, use a separate counter to acces clusts.
     for k in nb.prange(len(clusts)):
         # Get list of voxels in the cluster
         clust = clusts[ids[k]]
-        x = data[clust,:3]
+        x = data[clust, coords_col[0]:coords_col[1]]
 
         # Do not waste time with computations with size 1 clusters, default to zeros
         if len(clust) < 2:
@@ -303,7 +309,7 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_features_extended(data, clusts):
+def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
     each of the clusters in the provided list.
@@ -314,10 +320,12 @@ def get_cluster_features_extended(data, clusts):
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
-    return _get_cluster_features_extended(data, clusts)
+    return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
 def _get_cluster_features_extended(data: nb.float64[:,:],
-                                   clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+                                   clusts: nb.types.List(nb.int64[:]),
+                                   batch_col: nb.int64 = 0,
+                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 3), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
@@ -336,7 +344,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise):
+def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1, 4)):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only
@@ -351,13 +359,14 @@ def get_cluster_points_label(data, particles, clusts, groupwise):
     Returns:
         np.ndarray: (N,3/6) particle wise start (and end points in RANDOMIZED ORDER)
     """
-    return _get_cluster_points_label(data, particles, clusts, groupwise)
+    return _get_cluster_points_label(data, particles, clusts, groupwise, list(coords_index))
 
 @nb.njit
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
-                              groupwise: nb.boolean = False) -> nb.float64[:,:]:
+                              groupwise: nb.boolean = False,
+                              coords_index: nb.types.List(nb.int64[:]) = [0, 3]) -> nb.float64[:,:]:
     # Get batch_ids and group_ids
     batch_ids = _get_cluster_batch(data, clusts)
     if not groupwise:
@@ -378,11 +387,11 @@ def _get_cluster_points_label(data: nb.float64[:,:],
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
-        dist_mat = cdist_nb(points[i].reshape(-1,3), data[c,:3])
+        dist_mat = cdist_nb(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
         argmins  = np.empty(len(dist_mat), dtype=np.int64)
         for j in range(len(dist_mat)):
             argmins[j] = np.argmin(dist_mat[j])
-        points[i] = data[c][argmins,:3].reshape(-1)
+        points[i] = data[c][argmins, coords_index[0]:coords_index[1]].reshape(-1)
 
     return points
 

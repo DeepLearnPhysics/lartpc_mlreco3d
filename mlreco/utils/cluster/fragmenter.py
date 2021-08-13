@@ -6,7 +6,8 @@ import torch.nn as nn
 import numpy as np
 
 from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
-from mlreco.models.layers.dbscan import DBSCANFragmenter, MinkDBSCANFragmenter
+# from mlreco.models.layers.common.dbscan import DBSCANFragmenter
+from mlreco.models.layers.common.dbscan import MinkDBSCANFragmenter
 
 
 def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
@@ -18,7 +19,7 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
         - batch_column
     """
     same_length = np.all([len(f) == len(fragments[0]) for f in fragments])
-    fragments_np = np.array(fragments, 
+    fragments_np = np.array(fragments,
                             dtype=object if not same_length else np.int64)
     frag_batch_ids_np = np.array(frag_batch_ids)
     frag_seg_np = np.array(frag_seg)
@@ -29,12 +30,12 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
     same_length = [np.all([len(c) == len(fragments_np[b][0]) \
                     for c in fragments_np[b]] ) for b in bcids]
 
-    frags = [np.array([vids[c].astype(np.int64) for c in fragments_np[b]], 
+    frags = [np.array([vids[c].astype(np.int64) for c in fragments_np[b]],
                         dtype=np.object if not same_length[idx] else np.int64) \
                         for idx, b in enumerate(bcids)]
 
     frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]
-    
+
     out = {
         'frags'         : [fragments_np],
         'frag_seg'      : [frag_seg_np],
@@ -53,11 +54,11 @@ class FragmentManager(nn.Module):
     Base class for fragmenters
 
     Fragmenters take the input data tensor + outputs feature maps of CNNs
-    in <result> to give fragment labels. 
+    in <result> to give fragment labels.
     """
-    def __init__(self, frag_cfg : dict):
+    def __init__(self, frag_cfg : dict, batch_col : int = 0):
         super(FragmentManager, self).__init__()
-        self._batch_column                = frag_cfg.get('batch_column', 3)
+        self._batch_column                = batch_col
         self._semantic_column             = frag_cfg.get('semantic_column', -1)
         self._use_segmentation_prediction = frag_cfg.get('use_segmentation_prediction', True)
 
@@ -82,13 +83,15 @@ class DBSCANFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for DBSCAN Clustering
     '''
-    def __init__(self, frag_cfg: dict, mode='scn'):
-        super(DBSCANFragmentManager, self).__init__(frag_cfg)
+    def __init__(self, frag_cfg: dict, mode='scn', **kwargs):
+        super(DBSCANFragmentManager, self).__init__(frag_cfg, **kwargs)
         dbscan_frag = {'dbscan_frag': frag_cfg}
         if mode == 'mink':
+            self._batch_column = 0
             self.dbscan_fragmenter = MinkDBSCANFragmenter(dbscan_frag)
-        elif mode == 'scn':
-            self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
+        # elif mode == 'scn':
+        #     self._batch_column = 3
+        #     self.dbscan_fragmenter = DBSCANFragmenter(dbscan_frag)
         else:
             raise Exception('Invalid sparse CNN backend name {}'.format(mode))
 
@@ -110,13 +113,13 @@ class DBSCANFragmentManager(FragmentManager):
         '''
         if self._use_segmentation_prediction:
             assert semantic_labels is None
-            semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0],
                                            dim=1).flatten().double()
 
-        semantic_data = torch.cat([input[:, :4], 
+        semantic_data = torch.cat([input[:, :4],
                                    semantic_labels.reshape(-1, 1)], dim=1)
 
-        fragments = self.dbscan_fragmenter(semantic_data, 
+        fragments = self.dbscan_fragmenter(semantic_data,
                                            cnn_result)
 
         frag_batch_ids = get_cluster_batch(input[:, :5], fragments,
@@ -134,8 +137,8 @@ class SPICEFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for SPICE Clustering
     '''
-    def __init__(self, frag_cfg : dict):
-        super(SPICEFragmentManager, self).__init__(frag_cfg)
+    def __init__(self, frag_cfg : dict, **kwargs):
+        super(SPICEFragmentManager, self).__init__(frag_cfg, **kwargs)
         self._s_thresholds     = frag_cfg.get('s_thresholds'   , [0.0, 0.0, 0.0, 0.0])
         self._p_thresholds     = frag_cfg.get('p_thresholds'   , [0.5, 0.5, 0.5, 0.5])
         self._spice_classes    = frag_cfg.get('cluster_classes', []                  )
@@ -159,7 +162,7 @@ class SPICEFragmentManager(FragmentManager):
         '''
         if self._use_segmentation_prediction:
             assert semantic_labels is None
-            semantic_labels = torch.argmax(cnn_result['segmentation'][0], 
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0],
                                            dim=1).flatten().double()
 
         batch_labels = input[:, self._batch_column]
@@ -201,11 +204,29 @@ class GraphSPICEFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for GraphSPICE Clustering
     '''
-    def __init__(self, frag_cfg : dict):
-        super(GraphSPICEFragmentManager, self).__init__(frag_cfg)
-        
+    def __init__(self, frag_cfg : dict, **kwargs):
+        super(GraphSPICEFragmentManager, self).__init__(frag_cfg, **kwargs)
 
-    def forward(self, filtered_input):
+
+    def process(self, filtered_input, n, filtered_semantic, offset=0):
+        fragments = form_clusters(filtered_input, column=-1)
+        fragments = [f.int().detach().cpu().numpy() for f in fragments]
+        # for i, f in enumerate(fragments):
+        #     print(torch.unique(filtered_input[f, self._batch_column], return_counts=True))
+
+        #print(torch.unique(filtered_input[:, self._batch_column]))
+        frag_batch_ids = get_cluster_batch(filtered_input.detach().cpu().numpy(), \
+                                        fragments, batch_index=self._batch_column)
+        fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
+        # fragments = [np.arange(filtered_input.shape[0])[clust] \
+        #              for clust in fragments]
+        # We want the indices to refer to the unfiltered, original input
+        #filtered_semantic = filtered_semantic.detach().cpu().numpy()
+        fragments = [np.arange(n)[filtered_semantic][clust]+offset \
+                     for clust in fragments]
+        return fragments, frag_batch_ids, fragments_seg
+
+    def forward(self, filtered_input, original_input, filtered_semantic):
         '''
         Inputs:
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
@@ -224,13 +245,15 @@ class GraphSPICEFragmentManager(FragmentManager):
             - frag_seg
 
         '''
-        fragments = form_clusters(filtered_input, column=-1)
-        fragments = [f.int().detach().cpu().numpy() for f in fragments]
-        frag_batch_ids = get_cluster_batch(filtered_input.detach().cpu().numpy(), fragments)
-        fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
-        fragments = [np.arange(filtered_input.shape[0])[clust] \
-                     for clust in fragments]
-
-        return fragments, frag_batch_ids, fragments_seg
-
-        
+        offset = 0
+        all_fragments, all_frag_batch_ids, all_fragments_seg = [], [], []
+        for b in filtered_input[:, self._batch_column].unique():
+            mask = filtered_input[:, self._batch_column] == b
+            original_mask = original_input[:, self._batch_column] == b
+            n = torch.count_nonzero(original_mask)
+            fragments, frag_batch_ids, fragments_seg = self.process(filtered_input[mask], n.item(), filtered_semantic[original_mask], offset=offset)
+            offset += n.item()
+            all_fragments.extend(fragments)
+            all_frag_batch_ids.extend(frag_batch_ids)
+            all_fragments_seg.extend(fragments_seg)
+        return all_fragments, all_frag_batch_ids, all_fragments_seg

@@ -1,7 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+from mlreco.utils import unwrap
 import warnings
 import torch
 
@@ -11,7 +8,7 @@ from mlreco.models import construct
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.utils.utils import to_numpy
 import re
-from mlreco.utils.adabound import *
+from mlreco.utils.adabound import AdaBound, AdaBoundW
 
 class trainval(object):
     """
@@ -59,7 +56,7 @@ class trainval(object):
                 # default
                 self._optim_args['lr'] = 0.001
 
-        # Handle time-dependent loss, such as KL Divergence annealing 
+        # Handle time-dependent loss, such as KL Divergence annealing
         self._time_dependent = self._trainval_config.get('time_dependent_loss', False)
 
         # learning rate scheduler
@@ -70,6 +67,8 @@ class trainval(object):
             # add mode: iteration or epoch
         else:
             self._lr_scheduler = None
+
+        self._loss = []
 
     def backward(self):
         total_loss = 0.0
@@ -86,7 +85,7 @@ class trainval(object):
             self._scheduler.step()
 
         # If the model has a buffer that needs to be updated, do it after
-        # trainable parameter updates. 
+        # trainable parameter updates.
         if hasattr(self._net.module, 'update_buffers'):
             print("Updating Buffer...")
             self._net.module.update_buffers()
@@ -293,7 +292,8 @@ class trainval(object):
                     loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
                 else:
                     loss_acc = self._criterion(result, *tuple(loss_blob))
-
+                    #print('hello')
+                    #loss_acc['loss'].backward()
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
@@ -372,7 +372,7 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
-        self._net = DataParallel(self._model,device_ids=self._gpus)
+        self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
             self._net.train().cuda() if len(self._gpus) else self._net.train()

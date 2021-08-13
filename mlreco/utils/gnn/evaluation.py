@@ -278,7 +278,7 @@ def node_assignment_score(edge_index: nb.int64[:,:],
     return edge_assignment_score(edge_index, edge_scores, n)[1]
 
 
-@nb.njit
+#@nb.njit
 def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
                            node_label: nb.int64[:]) -> nb.int64[:]:
     """
@@ -292,7 +292,7 @@ def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
         np.ndarray: (N) List of voxel labels
     """
     nvoxels = np.sum([len(c) for c in clusts])
-    vlabel = np.empty(nvoxels)
+    vlabel = np.empty(nvoxels, dtype=np.int64)
     stptr = 0
     for i, c in enumerate(clusts):
         endptr = stptr + len(c)

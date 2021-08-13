@@ -78,7 +78,7 @@ class DataParallel(torch.nn.parallel.DistributedDataParallel):
 
         else:
             results = []
-            num_outputs = len(outputs[0])        
+            num_outputs = len(outputs[0])
             for i in range(num_outputs):
                 results.append([])
                 for output in outputs:  # Iterate over GPUs

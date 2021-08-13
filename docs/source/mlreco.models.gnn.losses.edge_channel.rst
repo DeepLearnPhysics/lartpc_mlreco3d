@@ -1,7 +1,7 @@
-mlreco.models.gnn.losses.edge\_channel module
+mlreco.models.layers.gnn.losses.edge\_channel module
 =============================================
 
-.. automodule:: mlreco.models.gnn.losses.edge_channel
+.. automodule:: mlreco.models.layers.gnn.losses.edge_channel
    :members:
    :undoc-members:
    :show-inheritance:

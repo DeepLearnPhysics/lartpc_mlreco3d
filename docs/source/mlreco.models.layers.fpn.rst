@@ -1,7 +1,7 @@
-mlreco.models.layers.fpn module
+mlreco.models.scn.layers.fpn module
 ===============================
 
-.. automodule:: mlreco.models.layers.fpn
+.. automodule:: mlreco.models.scn.layers.fpn
    :members:
    :undoc-members:
    :show-inheritance:

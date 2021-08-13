@@ -3,7 +3,9 @@ import scipy
 import os
 from mlreco.utils import CSVData
 
+
 def uresnet_metrics(cfg, module_cfg, data_blob, res, logdir, iteration):
+    import torch
     # UResNet prediction
     if not 'segmentation' in res: return
 
@@ -30,6 +32,8 @@ def uresnet_metrics(cfg, module_cfg, data_blob, res, logdir, iteration):
 
         predictions = np.argmax(segment_data[data_idx],axis=1)
         label = segment_label[data_idx][:, -1]
+        if isinstance(label, torch.Tensor):
+            label = label.numpy()
 
         acc = (predictions == label).sum() / float(len(label))
         class_acc = []

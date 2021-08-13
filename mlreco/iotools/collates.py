@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 import torch
 from pprint import pprint
@@ -70,22 +67,22 @@ def CollateMinkowski(batch):
             coords = [sample[key][0] for sample in batch]
             features = [sample[key][1] for sample in batch]
 
-            batch_index = np.full(shape=(coords[0].shape[0], 1), 
-                                  fill_value=0, 
+            batch_index = np.full(shape=(coords[0].shape[0], 1),
+                                  fill_value=0,
                                   dtype=np.float32)
 
             coords_minibatch = []
             feats_minibatch = []
 
             for bidx, sample in enumerate(batch):
-                batch_index = np.full(shape=(coords[bidx].shape[0], 1), 
+                batch_index = np.full(shape=(coords[bidx].shape[0], 1),
                                       fill_value=bidx, dtype=np.float32)
-                batched_coords = concat([batch_index, 
-                                         coords[bidx], 
+                batched_coords = concat([batch_index,
+                                         coords[bidx],
                                          features[bidx]], axis=1)
 
                 coords_minibatch.append(batched_coords)
-            
+
             coords = torch.Tensor(concat(coords_minibatch, axis=0))
 
             result[key] = coords
@@ -97,12 +94,12 @@ def CollateMinkowski(batch):
                 coords = [sample[key][0] for sample in batch]
                 features = [sample[key][1] for sample in batch]
                 coords, features = ME.utils.sparse_collate(coords, features)
-                result[key] = torch.cat([coords.float(), 
+                result[key] = torch.cat([coords.float(),
                                          features.float()], dim=1)
 
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
-                 # 
+                 #
                 result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
                                                  np.full(shape=[len(sample[key]),1],
                                                  fill_value=batch_id,
@@ -116,7 +113,7 @@ def CollateMinkowski(batch):
 
                 result[key] =  concat( [ concat( [np.full(shape=[len(sample[key]),1],
                                                           fill_value=batch_id,
-                                                          dtype=np.float32), 
+                                                          dtype=np.float32),
                                                   sample[key]],
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
@@ -125,8 +122,8 @@ def CollateMinkowski(batch):
                 # For multi-scale labels (probably deprecated)
                 result[key] = [
                     concat([
-                        concat( [ concat( [np.full(shape=[len(sample[key][depth][0]),1], 
-                                                   fill_value=batch_id, 
+                        concat( [ concat( [np.full(shape=[len(sample[key][depth][0]),1],
+                                                   fill_value=batch_id,
                                                    dtype=np.int32),
                                            sample[key][depth][0]], axis=1 ) for batch_id, sample in enumerate(batch) ],
                                         axis = 0),

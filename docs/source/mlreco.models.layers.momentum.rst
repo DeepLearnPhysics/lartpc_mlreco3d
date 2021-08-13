@@ -1,7 +1,7 @@
-mlreco.models.layers.momentum module
+mlreco.models.layers.common.momentum module
 ====================================
 
-.. automodule:: mlreco.models.layers.momentum
+.. automodule:: mlreco.models.layers.common.momentum
    :members:
    :undoc-members:
    :show-inheritance:

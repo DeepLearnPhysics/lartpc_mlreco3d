@@ -3,18 +3,18 @@ import os
 from mlreco.utils import CSVData
 from scipy.stats import entropy
 
-import umap
 
-def duq_metrics(cfg, 
-                processor_cfg, 
-                data_blob, 
-                result, 
-                logdir, 
+def duq_metrics(cfg,
+                processor_cfg,
+                data_blob,
+                result,
+                logdir,
                 iteration):
-
+    import umap
+    
     labels = data_blob['label'][0][:, 0]
     index = data_blob['index']
-    
+
     score = result['score'][0]
     pred = np.argmax(score, axis=1)
     probability = (score + 1e-6) / np.sum(score + 1e-6, axis=1, keepdims=True)
@@ -45,7 +45,7 @@ def duq_metrics(cfg,
         os.path.join(logdir, 'duq-singlep-metrics.csv'), append=append)
 
     for batch_id, event_id in enumerate(index):
-        
+
         latent_batch = latent[batch_id]
         labels_batch = labels[batch_id]
 
@@ -53,7 +53,7 @@ def duq_metrics(cfg,
         unc = uncertainty[batch_id]
         ent = pred_entropy[batch_id]
 
-        fout.record(('Index', 'Truth', 'Prediction', 
+        fout.record(('Index', 'Truth', 'Prediction',
                     'p0', 'p1', 'p2', 'p3', 'p4', 'uncertainty', 'entropy',
                     'x', 'y'),
                     (int(event_id), int(labels_batch), int(pred[batch_id]),

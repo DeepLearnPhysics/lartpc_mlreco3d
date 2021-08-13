@@ -3,15 +3,15 @@ import numpy as np
 from collections import defaultdict
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.modular_nnconv import NNConvModel as GNN
+from mlreco.models.layers.gnn.modular_nnconv import NNConvModel as GNN
 from mlreco.utils.gnn.evaluation import node_assignment_score
 
-from mlreco.models.uresnet_lonely import SegmentationLoss
-from mlreco.models.ppn import PPNLoss
+from mlreco.models.scn.uresnet_lonely import SegmentationLoss
+from mlreco.models.scn.layers.ppn import PPNLoss
 from .cluster_cnn import spice_loss_construct
 from mlreco.models.cluster_full_gnn import ChainLoss as FullGNNLoss
 from mlreco.models.cluster_gnn import EdgeChannelLoss as EdgeGNNLoss
-from mlreco.models.gnn.losses.grouping import *
+from mlreco.models.layers.gnn.losses.grouping import *
 
 class FullChain(torch.nn.Module):
     """

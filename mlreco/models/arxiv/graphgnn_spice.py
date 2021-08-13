@@ -7,10 +7,10 @@ from collections import defaultdict
 
 import time
 
-from mlreco.models.cluster_cnn.losses.gs_embeddings import *
+from mlreco.models.layers.cluster_cnn.losses.gs_embeddings import *
 from .graph_spice import GraphSPICEEmbedder, NodeEdgeHybridLoss
-from mlreco.models.gnn.factories import gnn_model_construct
-from mlreco.utils.cluster.graph_spice import *
+from mlreco.models.layers.gnn.factories import gnn_model_construct
+from mlreco.utils.cluster.cluster_graph_constructor import *
 from pprint import pprint
 
 

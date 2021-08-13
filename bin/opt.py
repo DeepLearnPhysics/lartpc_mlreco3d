@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+from mlreco.models.experimental.hyperopt.search import search
+from mlreco.main_funcs import process_config
 import os
 import sys
 import yaml

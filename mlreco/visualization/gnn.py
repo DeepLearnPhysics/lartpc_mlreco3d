@@ -217,7 +217,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                  color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
                                  opacity = 0.3,
                                  text = node_labels[i],
-                                 hoverinfo = 'text', 
+                                 hoverinfo = 'text',
                                  **kwargs) for i, c in enumerate(clusters)]
 
         # Define the edges closest pixel to closest pixel
@@ -241,7 +241,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
         mask = np.where(cids != -1)[0]
         colors = [clust_labels[i] for i in cids[mask]]
         node_labels = [node_labels[i] for i in cids[mask]]
-        
+
         graph_data = [go.Scatter3d(x = voxels[mask][:,0],
                                    y = voxels[mask][:,1],
                                    z = voxels[mask][:,2],

@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from mlreco.utils import utils
 from sklearn.cluster import DBSCAN
 from sklearn.manifold import TSNE
 from sklearn import metrics
@@ -44,7 +43,7 @@ def instance_clustering(cfg, data_blob, res, logdir, iteration):
 
     tsne = TSNE(n_components = 2 if method_cfg is None else method_cfg.get('tsne_dim',2))
     compute_tsne = False if method_cfg is None else method_cfg.get('compute_tsne',False)
-    
+
     store_per_iteration = True
     if method_cfg is not None and method_cfg.get('store_method',None) is not None:
         assert(method_cfg['store_method'] in ['per-iteration','per-event'])
@@ -61,13 +60,13 @@ def instance_clustering(cfg, data_blob, res, logdir, iteration):
 
     # Loop over batch index
     for batch_index, event_data in enumerate(data_blob['input_data']):
-        
+
         event_index = data_blob['index'][batch_index]
-        
+
         if not store_per_iteration:
             fout_cluster=CSVData(os.path.join(logdir, 'instance-clustering-iter-%07d.csv' % event_index))
             fout_metrics=CSVData(os.path.join(logdir, 'instance-clustering-metrics-iter-%07d.csv' % event_index))
-            
+
         event_segmentation = res['segmentation'][batch_index]
         event_label = data_blob['segment_label'][batch_index]
         event_cluster_label = data_blob['cluster_label'][batch_index]
@@ -124,4 +123,3 @@ def instance_clustering(cfg, data_blob, res, logdir, iteration):
     if store_per_iteration:
         fout_cluster.close()
         fout_metrics.close()
-

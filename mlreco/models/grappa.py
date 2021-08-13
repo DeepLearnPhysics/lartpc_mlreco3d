@@ -6,9 +6,9 @@ import random
 import torch
 import numpy as np
 
-from .layers.dbscan import DBSCANFragmenter
-from .layers.momentum import EvidentialMomentumNet, MomentumNet
-from .gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
+from mlreco.models.layers.common.dbscan import DBSCANFragmenter
+from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
+from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
@@ -67,7 +67,7 @@ class GNN(torch.nn.Module):
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
 
-    def __init__(self, cfg, name='grappa'):
+    def __init__(self, cfg, name='grappa', batch_col=0, coords_col=(1, 4)):
         super(GNN, self).__init__()
 
         # Get the chain input parameters
@@ -84,7 +84,8 @@ class GNN(torch.nn.Module):
         self.start_dir_opt = base_config.get('start_dir_opt', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
 
-        self.batch_index = base_config.get('batch_index', 3)
+        self.batch_index = batch_col
+        self.coords_index = coords_col
 
         # Interpret node type as list of classes to cluster, -1 means all classes
         if isinstance(self.node_type, int): self.node_type = [self.node_type]
@@ -105,25 +106,27 @@ class GNN(torch.nn.Module):
         if 'dbscan' in cfg[name]:
             cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > 0 else [0,1,2,3]
             cfg[name]['dbscan']['min_size']        = self.node_min_size
-            self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan')
+            self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan',
+                                            batch_col=self.batch_index,
+                                            coords_col=self.coords_index)
 
         # If requested, initialize two MLPs for kinematics predictions
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
         if self.kinematics_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
-            self.kinematics_type = base_config.get('kinematics_type', True)
-            self.kinematics_momentum = base_config.get('kinematics_momentum', True)
+            self.kinematics_type = base_config.get('kinematics_type', False)
+            self.kinematics_momentum = base_config.get('kinematics_momentum', False)
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
                 type_net_mode = type_config.get('mode', 'edl')
                 if type_net_mode == 'standard':
-                    self.type_net = MomentumNet(node_output_feats, 
-                                                num_output=5, 
+                    self.type_net = MomentumNet(node_output_feats,
+                                                num_output=5,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 evidential=False)
                 elif type_net_mode == 'edl':
-                    self.type_net = MomentumNet(node_output_feats, 
-                                                num_output=5, 
+                    self.type_net = MomentumNet(node_output_feats,
+                                                num_output=5,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 evidential=True)
                 else:
@@ -133,8 +136,8 @@ class GNN(torch.nn.Module):
                 softplus_and_shift = momentum_config.get('eps', 0.0)
                 logspace = momentum_config.get('logspace', False)
                 if momentum_config.get('mode', 'standard') == 'edl':
-                    self.momentum_net = EvidentialMomentumNet(node_output_feats, 
-                                                              num_output=4, 
+                    self.momentum_net = EvidentialMomentumNet(node_output_feats,
+                                                              num_output=4,
                                                               num_hidden=momentum_config.get('num_hidden', 128),
                                                               eps=softplus_and_shift,
                                                               logspace=logspace)
@@ -148,8 +151,8 @@ class GNN(torch.nn.Module):
             self.vertex_net = MomentumNet(node_output_feats, num_output=5, num_hidden=vertex_config.get('num_hidden', 128))
 
         # Initialize encoders
-        self.node_encoder = node_encoder_construct(cfg[name])
-        self.edge_encoder = edge_encoder_construct(cfg[name])
+        self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
+        self.edge_encoder = edge_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
 
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
@@ -197,7 +200,7 @@ class GNN(torch.nn.Module):
             result['batch_counts'] = [batch_counts]
 
         # Update result with a list of clusters for each batch id
-        batches, bcounts = torch.unique(cluster_data[:,3], return_counts=True)
+        batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
 
@@ -212,7 +215,7 @@ class GNN(torch.nn.Module):
         # If necessary, compute the cluster distance matrix
         dist_mat = None
         if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,:3], clusts, batch_ids, self.edge_dist_metric)
+            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]], clusts, batch_ids, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
@@ -221,7 +224,8 @@ class GNN(torch.nn.Module):
             edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'delaunay':
             import numba as nb
-            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist,
+                                        batch_col=self.batch_index, coords_col=self.coords_index)
         elif self.network == 'mst':
             edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
         elif self.network == 'knn':
@@ -251,8 +255,6 @@ class GNN(torch.nn.Module):
         # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
 
-        # print(x, x.shape, e, e.shape)
-
         # If extra features are provided separately, add them
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)
@@ -260,10 +262,10 @@ class GNN(torch.nn.Module):
         # Add start point and/or start direction to node features if requested
         if self.add_start_point or points is not None:
             if points is None:
-                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6)
+                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
-                dirs = get_cluster_directions(cluster_data, points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
+                dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
                 x = torch.cat([x, dirs.float()], dim=1)
 
         # Bring edge_index and batch_ids to device
@@ -317,17 +319,20 @@ class GNNLoss(torch.nn.modules.loss._Loss):
                 name: <name of the edge loss>
                 <dictionary of arguments to pass to the loss>
     """
-    def __init__(self, cfg, name='grappa_loss'):
+    def __init__(self, cfg, name='grappa_loss', batch_col=0, coords_col=(1, 4)):
         super(GNNLoss, self).__init__()
+
+        self.batch_index = batch_col
+        self.coords_index = coords_col
 
         # Initialize the node and edge losses, if requested
         self.apply_node_loss, self.apply_edge_loss = False, False
         if 'node_loss' in cfg[name]:
             self.apply_node_loss = True
-            self.node_loss = node_loss_construct(cfg[name])
+            self.node_loss = node_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
         if 'edge_loss' in cfg[name]:
             self.apply_edge_loss = True
-            self.edge_loss = edge_loss_construct(cfg[name])
+            self.edge_loss = edge_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
 
 
     def forward(self, result, clust_label, graph=None, node_label=None, iteration=None):

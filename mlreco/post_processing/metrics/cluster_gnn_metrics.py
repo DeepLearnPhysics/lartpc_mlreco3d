@@ -4,11 +4,7 @@ import numpy as np
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters
-
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
+from mlreco.post_processing.common import extent
 
 
 @post_processing('cluster-gnn-metrics', ['clust_data', 'particles'], ['edge_pred', 'clusts', 'node_pred', 'edge_index'])
@@ -43,6 +39,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     edge_pred_label = module_cfg.get('edge_pred', 'edge_pred')
 
     # Get the post processor parameters
+    coords_col = module_cfg.get('coords_col', (1, 4))
     column = module_cfg.get('target_col', 6)
     column_source = module_cfg.get('source_col', 5)
     chain = module_cfg.get('chain', 'chain')
@@ -71,6 +68,8 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         group_ids.append(int(v[cts.argmax()]))
         v, cts = np.unique(clust_data[data_idx][c,5], return_counts=True)
         cluster_ids.append(int(v[cts.argmax()]))
+    group_ids = np.array(group_ids, dtype=np.int64)
+    cluster_ids = np.array(cluster_ids, dtype=np.int64)
 
     # Assign predicted group ids
     n = len(clusts[data_idx])
@@ -83,6 +82,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         # Determine the predicted group by chosing the most likely primary for each secondary
         primary_ids = np.unique(edge_index[data_idx][:,0])
         node_pred = node_assignment_bipartite(edge_index[data_idx], edge_pred[data_idx][:,1], primary_ids, n)
+    node_pred = np.array(node_pred, dtype=np.int64)
 
     # primary prediction
     node_pred_primary = None
@@ -155,7 +155,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             pred_d = extent(pred_voxels)
             original_d = extent(original_voxels)
 
-            boundaries = np.min(np.concatenate([true_voxels[:, :3], spatial_size - true_voxels[:, :3]], axis=1))
+            boundaries = np.min(np.concatenate([true_voxels[:, coords_col[0]:coords_col[1]], spatial_size - true_voxels[:, coords_col[0]:coords_col[1]]], axis=1))
             true_fragments_count = len(true_cluster)
             pred_fragments_count = len(pred_cluster)
             overlap_fragments_count = len(overlap_cluster)
@@ -185,6 +185,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         # Evaluate clustering metrics
         if integrated_metrics:
             print('integrated metrics')
+            print(np.hstack(clusts[data_idx])[:, None])
             ari, ami, sbd, pur, eff = clustering_metrics(np.hstack(clusts[data_idx])[:, None],
                                                         np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(group_ids)]),
                                                         np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(node_pred)]))
