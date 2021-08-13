@@ -31,7 +31,7 @@ class FullChain(FullChainGNN):
         if self.enable_uresnet:
             self.uresnet_lonely = UResNet_Chain(cfg['uresnet_ppn'],
                                                 name='uresnet_lonely')
-            self.input_features = cfg['uresnet_ppn']['uresnet_lonely'].get('features', 1)
+            self.input_features = self.uresnet_lonely.net.num_input
 
         if self.enable_ppn:
             self.ppn            = PPN(cfg['uresnet_ppn'])
