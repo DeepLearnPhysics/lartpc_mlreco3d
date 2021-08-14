@@ -26,8 +26,8 @@ class MCDropoutEncoder(torch.nn.Module):
     def __init__(self, cfg, name='mcdropout_encoder'):
         super(MCDropoutEncoder, self).__init__()
         setup_cnn_configuration(self, cfg, name)
-        
-        self.model_config = cfg[name]
+
+        self.model_config = cfg.get(name, {})
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
         self.num_filters = self.model_config.get('num_filters', 16)
@@ -40,7 +40,7 @@ class MCDropoutEncoder(torch.nn.Module):
 
         self.pool_mode = self.model_config.get('pool_mode', 'global_average')
 
-        self.dropout_p = self.model_config['dropout_p']
+        self.dropout_p = self.model_config.get('dropout_p', 0.5)
         self.dropout_layer_index = self.model_config.get(
             'dropout_layers', set([i for i in range(self.depth // 2, self.depth)]))
 

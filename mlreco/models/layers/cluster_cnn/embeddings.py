@@ -56,7 +56,7 @@ class SPICE(torch.nn.Module):
         super(SPICE, self).__init__()
         setup_cnn_configuration(self, cfg, name)
 
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
         self.embedding_decoder = UResNetDecoder(cfg, name='embedding_decoder')
         self.seed_decoder = UResNetDecoder(cfg, name='seediness_decoder')

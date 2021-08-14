@@ -20,7 +20,7 @@ class SparseResidualEncoder(UResNetEncoder):
         #print("RESENCODER = ", cfg)
         super(SparseResidualEncoder, self).__init__(cfg, name=name)
 
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)

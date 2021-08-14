@@ -19,7 +19,7 @@ class UResNet_Chain(nn.Module):
 
     def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)\
 
         # Parameters for Deghosting
@@ -132,7 +132,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, reduction='sum', batch_col=3):
         super(SegmentationLoss, self).__init__(reduction=reduction)
-        self._cfg = cfg['uresnet_lonely']
+        self._cfg = cfg.get('uresnet_lonely', {})
         self._ghost = self._cfg.get('ghost', False)
         self._ghost_label = self._cfg.get('ghost_label', -1)
         self._num_classes = self._cfg.get('num_classes', 5)

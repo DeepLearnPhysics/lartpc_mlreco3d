@@ -410,6 +410,7 @@ class trainval(object):
                     module_keys.append((key, config[key]))
 
         if model_paths: #self._model_path and self._model_path != '':
+            #print(self._net.state_dict().keys())
             for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
                     if self._train:
@@ -438,6 +439,7 @@ class trainval(object):
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
                                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+                                    #print('Loading %s from checkpoint' % other_name)
                                 else:
                                     missing_keys.append((name, other_name))
                         # if module == 'grappa_inter':
@@ -446,7 +448,7 @@ class trainval(object):
                         #         if 'node_encoder'  in key or 'edge_encoder' in key:
                         #             print(key)
                         if missing_keys:
-                            #print(checkpoint['state_dict'].keys())
+                            print(checkpoint['state_dict'].keys())
                             for m in missing_keys:
                                 print("WARNING Missing key %s (%s)" % m)
 

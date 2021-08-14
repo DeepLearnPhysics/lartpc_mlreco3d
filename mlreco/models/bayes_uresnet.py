@@ -14,15 +14,17 @@ from mlreco.models.experimental.bayes.factories import uq_classification_loss_co
 
 class BayesianUResNet(torch.nn.Module):
 
+    MODULES = []
+
     def __init__(self, cfg, name='bayesian_uresnet'):
         super(BayesianUResNet, self).__init__()
         setup_cnn_configuration(self, cfg, name)
 
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_samples = self.model_config.get('num_samples', 20)
 
-        self.encoder = BayesianEncoder(cfg)
+        self.encoder = MCDropoutEncoder(cfg)
         self.decoder = MCDropoutDecoder(cfg)
 
         self.mode = self.model_config.get('mode', 'standard')
@@ -131,8 +133,8 @@ class SegmentationLoss(nn.Module):
 
     def __init__(self, cfg, name='bayesian_uresnet'):
         super(SegmentationLoss, self).__init__()
-        self.loss_config = cfg[name]
-        self.loss_fn_name = self.loss_config['loss_fn']
+        self.loss_config = cfg.get(name, {})
+        self.loss_fn_name = self.loss_config.get('loss_fn', 'evd_sumsq')
         self.loss_fn = uq_classification_loss_construct(self.loss_fn_name)
         self.one_hot = self.loss_config.get('one_hot', False)
         self.num_classes = self.loss_config.get('num_classes', 5)

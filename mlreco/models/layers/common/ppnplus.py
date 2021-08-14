@@ -149,7 +149,7 @@ class PPN(torch.nn.Module):
         super(PPN, self).__init__()
         setup_cnn_configuration(self, cfg, name)
 
-        self.model_cfg = cfg[name]
+        self.model_cfg = cfg.get(name, {})
         # UResNet Configurations
         self.reps = self.model_cfg.get('reps', 2)
         self.depth = self.model_cfg.get('num_strides', 5)
@@ -337,7 +337,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     def __init__(self, cfg, name='ppn'):
         super(PPNLonelyLoss, self).__init__()
-        self.loss_config = cfg[name]
+        self.loss_config = cfg.get(name, {})
         # pprint(self.loss_config)
         self.mask_loss_name = self.loss_config.get('mask_loss_name', 'BCE')
         if self.mask_loss_name == "BCE":

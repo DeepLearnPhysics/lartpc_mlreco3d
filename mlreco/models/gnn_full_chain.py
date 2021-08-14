@@ -80,27 +80,31 @@ class FullChainGNN(torch.nn.Module):
         # Initialize the particle aggregator modules
         if self.enable_gnn_shower:
             self.grappa_shower     = GNN(cfg, name='grappa_shower', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._shower_id        = cfg['grappa_shower']['base'].get('node_type', 0)
-            self._shower_use_true_particles = cfg['grappa_shower'].get('use_true_particles', False)
+            grappa_shower_cfg      = cfg.get('grapa_shower', {})
+            self._shower_id        = grappa_shower_cfg.get('base', {}).get('node_type', 0)
+            self._shower_use_true_particles = grappa_shower_cfg.get('use_true_particles', False)
 
         if self.enable_gnn_track:
             self.grappa_track      = GNN(cfg, name='grappa_track', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._track_id         = cfg['grappa_track']['base'].get('node_type', 1)
-            self._track_use_true_particles = cfg['grappa_track'].get('use_true_particles', False)
+            grappa_track_cfg       = cfg.get('grappa_track', {})
+            self._track_id         = grappa_track_cfg.get('base', {}).get('node_type', 1)
+            self._track_use_true_particles =grappa_track_cfg.get('use_true_particles', False)
 
         if self.enable_gnn_particle:
             self.grappa_particle   = GNN(cfg, name='grappa_particle', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._particle_ids     = cfg['grappa_particle']['base'].get('node_type', [0,1])
-            self._particle_use_true_particles = cfg['grappa_particle'].get('use_true_particles', False)
+            grappa_particle_cfg    = cfg.get('grappa_particle', {})
+            self._particle_ids     = grappa_particle_cfg.get('base', {}).get('node_type', [0,1])
+            self._particle_use_true_particles = grappa_particle_cfg.get('use_true_particles', False)
 
         if self.enable_gnn_inter:
             self.grappa_inter      = GNN(cfg, name='grappa_inter', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._inter_ids        = cfg['grappa_inter']['base'].get('node_type', [0,1,2,3])
-            self._inter_use_true_particles = cfg['grappa_inter'].get('use_true_particles', False)
+            grappa_inter_cfg = cfg.get('grappa_inter', {})
+            self._inter_ids        = grappa_inter_cfg.get('base', {}).get('node_type', [0,1,2,3])
+            self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._kinematics_use_true_particles = cfg['grappa_kinematics'].get('use_true_particles', False)
+            self._kinematics_use_true_particles = cfg.get('grappa_kinematics', {}).get('use_true_particles', False)
 
     def run_gnn(self, grappa, input, result, clusts, labels, kwargs={}):
         """
@@ -943,7 +947,7 @@ def setup_chain_cfg(self, cfg):
 
     Make sure config is logically sound with some basic checks
     """
-    chain_cfg = cfg['chain']
+    chain_cfg = cfg.get('chain', {})
 
     self.use_me                = chain_cfg.get('use_mink', True)
     self.batch_col = 0 if self.use_me else 3
