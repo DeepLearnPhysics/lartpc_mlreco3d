@@ -29,12 +29,12 @@ class FullChain(FullChainGNN):
 
         # Initialize the UResNet+PPN modules
         if self.enable_uresnet:
-            self.uresnet_lonely = UResNet_Chain(cfg['uresnet_ppn'],
+            self.uresnet_lonely = UResNet_Chain(cfg.get('uresnet_ppn', {}),
                                                 name='uresnet_lonely')
             self.input_features = self.uresnet_lonely.net.num_input
 
         if self.enable_ppn:
-            self.ppn            = PPN(cfg['uresnet_ppn'])
+            self.ppn            = PPN(cfg.get('uresnet_ppn', {}))
 
         # Initialize the CNN dense clustering module
         # We will only use GraphSPICE for CNN based clustering, as it is
@@ -43,22 +43,22 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = MinkGraphSPICE(cfg)
-            self.gs_manager                = ClusterGraphConstructor(cfg['graph_spice']['constructor_cfg'], batch_col=self.batch_col)
+            self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}), batch_col=self.batch_col)
             #self.gs_manager.training       = True # FIXME
-            self._gspice_skip_classes      = cfg['graph_spice']['skip_classes']
-            self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg['graph_spice']['gspice_fragment_manager'], batch_col=self.batch_col)
+            self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
+            self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
 
         if self.enable_dbscan:
-            self.frag_cfg = cfg['dbscan']['dbscan_fragment_manager']
+            self.frag_cfg = cfg.get('dbscan', {}).get('dbscan_fragment_manager', {})
             self.dbscan_fragment_manager = DBSCANFragmentManager(self.frag_cfg,
                                                                  mode='mink')
 
         # Initialize the interaction classifier module
         if self.enable_cosmic:
-            self.cosmic_discriminator = SparseResidualEncoder(cfg['cosmic_discriminator'])
-            self._cosmic_use_input_data = cfg['cosmic_discriminator'].get(
-                'use_input_data', True)
-            self._cosmic_use_true_interactions = cfg['cosmic_discriminator'].get('use_true_interactions', False)
+            cosmic_cfg = cfg.get('cosmic_discriminator', {})
+            self.cosmic_discriminator = SparseResidualEncoder(cosmic_cfg)
+            self._cosmic_use_input_data = cosmic_cfg.get('use_input_data', True)
+            self._cosmic_use_true_interactions = cosmic_cfg.get('use_true_interactions', False)
 
         print('Total Number of Trainable Parameters (mink_full_chain)= {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
@@ -345,13 +345,13 @@ class FullChainLoss(FullChainLoss):
 
         # Initialize loss components
         if self.enable_uresnet:
-            self.uresnet_loss            = SegmentationLoss(cfg['uresnet_ppn'], batch_col=self.batch_col)
+            self.uresnet_loss            = SegmentationLoss(cfg.get('uresnet_ppn', {}), batch_col=self.batch_col)
         if self.enable_ppn:
-            self.ppn_loss                = PPNLonelyLoss(cfg['uresnet_ppn'], name='ppn')
+            self.ppn_loss                = PPNLonelyLoss(cfg.get('uresnet_ppn', {}), name='ppn')
         if self.enable_cnn_clust:
             # As ME is an updated model, ME backend full chain will not support old SPICE
             # for CNN Clustering.
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg['graph_spice_loss']['skip_classes']
+            self._gspice_skip_classes = cfg.get('graph_spice_loss', {}).get('skip_classes', {})

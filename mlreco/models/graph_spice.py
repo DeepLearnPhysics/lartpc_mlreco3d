@@ -34,19 +34,21 @@ class MinkGraphSPICE(nn.Module):
         - dimension: dimension of input dataset.
     '''
 
+    MODULES = ['constructor_cfg', 'embedder_cfg', 'kernel_cfg', 'gspice_fragment_manager']
+
     def __init__(self, cfg, name='graph_spice'):
         super(MinkGraphSPICE, self).__init__()
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.skip_classes = self.model_config.get('skip_classes', [2, 3, 4])
         self.dimension = self.model_config.get('dimension', 3)
         self.embedder_name = self.model_config.get('embedder', 'graph_spice_embedder')
-        self.embedder = GraphSPICEEmbedder(self.model_config['embedder_cfg'])
+        self.embedder = GraphSPICEEmbedder(self.model_config.get('embedder_cfg', {}))
         self.node_dim = self.model_config.get('node_dim', 16)
 
-        self.kernel_cfg = self.model_config['kernel_cfg']
+        self.kernel_cfg = self.model_config.get('kernel_cfg', {})
         self.kernel_fn = gs_kernel_construct(self.kernel_cfg)
 
-        constructor_cfg = self.model_config['constructor_cfg']
+        constructor_cfg = self.model_config.get('constructor_cfg', {})
 
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
@@ -93,13 +95,13 @@ class GraphSPICELoss(nn.Module):
 
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICELoss, self).__init__()
-        self.loss_config = cfg[name]
-        self.loss_name = self.loss_config['name']
+        self.loss_config = cfg.get(name, {})
+        self.loss_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.skip_classes = self.loss_config.get('skip_classes', [2, 3, 4])
-        self.eval_mode = self.loss_config['eval']
+        self.eval_mode = self.loss_config.get('eval', False)
         self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
 
-        constructor_cfg = self.loss_config['constructor_cfg']
+        constructor_cfg = self.loss_config.get('constructor_cfg', {})
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
         self.gs_manager.training = ~self.eval_mode
 

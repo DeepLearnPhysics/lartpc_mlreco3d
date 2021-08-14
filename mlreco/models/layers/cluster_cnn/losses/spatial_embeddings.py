@@ -12,7 +12,7 @@ class MaskBCELoss(nn.Module):
     '''
     def __init__(self, cfg, name='spice_loss'):
         super(MaskBCELoss, self).__init__()
-        self.loss_config = cfg[name]
+        self.loss_config = cfg.get(name, {})
         self.seediness_weight = self.loss_config.get('seediness_weight', 0.0)
         self.embedding_weight = self.loss_config.get('embedding_weight', 1.0)
         self.smoothing_weight = self.loss_config.get('smoothing_weight', 1.0)

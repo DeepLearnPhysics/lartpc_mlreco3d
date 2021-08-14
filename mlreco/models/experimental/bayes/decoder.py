@@ -25,12 +25,8 @@ class MCDropoutDecoder(torch.nn.Module):
         super(MCDropoutDecoder, self).__init__()
         setup_cnn_configuration(self, cfg, name)
 
-        self.model_config = cfg[name]
-
-        print(self.model_config)
-
         # UResNet Configurations
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.reps         = self.model_config.get('reps', 2)
         self.kernel_size  = self.model_config.get('kernel_size', 2)
         self.depth        = self.model_config.get('depth', 5)
@@ -45,7 +41,7 @@ class MCDropoutDecoder(torch.nn.Module):
         self.encoder_nPlanes = [i * self.enc_nfilters for i in range(1, self.depth + 1)]
         self.nPlanes[-1] = self.encoder_nPlanes[-1]
 
-        self.dropout_p = self.model_config['dropout_p']
+        self.dropout_p = self.model_config.get('dropout_p', 0.5)
         self.dropout_layer_index = self.model_config.get(
             'dropout_layers', set([i for i in range(self.depth // 2, self.depth)]))
 

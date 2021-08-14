@@ -28,11 +28,11 @@ class UResNetEncoder(torch.nn.Module):
     '''
     def __init__(self, cfg, name='uresnet_encoder'):
         # To allow UResNet to inherit directly from UResNetEncoder
-        #super(UResNetEncoder, self).__init__()
-        torch.nn.Module.__init__(self)
+        super(UResNetEncoder, self).__init__()
+        #torch.nn.Module.__init__(self)
         setup_cnn_configuration(self, cfg, name)
 
-        model_cfg = cfg[name]
+        model_cfg = cfg.get(name, {})
         # UResNet Configurations
         self.reps = model_cfg.get('reps', 2)
         self.depth = model_cfg.get('depth', 5)
@@ -135,13 +135,11 @@ class UResNetEncoder(torch.nn.Module):
 class UResNetDecoder(torch.nn.Module):
 
     def __init__(self, cfg, name='uresnet_decoder'):
-        #super(UResNetDecoder, self).__init__()
+        super(UResNetDecoder, self).__init__()
         setup_cnn_configuration(self, cfg, name)
 
-        self.model_config = cfg[name]
-
         # UResNet Configurations
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
         self.kernel_size = self.model_config.get('kernel_size', 2)
         self.depth = self.model_config.get('depth', 5)
@@ -211,7 +209,7 @@ class UResNetDecoder(torch.nn.Module):
         return self.decoder(final, encoderTensors)
 
 
-class UResNet(UResNetEncoder, UResNetDecoder):
+class UResNet(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
@@ -230,10 +228,15 @@ class UResNet(UResNetEncoder, UResNetDecoder):
         Receptive field size for very first convolution after input layer.
     '''
     def __init__(self, cfg, name='uresnet'):
-        #super(UResNet, self).__init__(cfg, name=name)
-        UResNetEncoder.__init__(self, cfg, name=name)
-        UResNetDecoder.__init__(self, cfg, name=name)
-        #setup_cnn_configuration(self, cfg, name)
+        super(UResNet, self).__init__()
+        #UResNetEncoder.__init__(self, cfg, name=name)
+        #UResNetDecoder.__init__(self, cfg, name=name)
+        setup_cnn_configuration(self, cfg, name)
+        self.encoder = UResNetEncoder(cfg, name=name)
+        self.decoder = UResNetDecoder(cfg, name=name)
+
+        self.num_filters = self.encoder.num_filters
+
         print('Total Number of Trainable Parameters (mink/layers/uresnet) = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
 

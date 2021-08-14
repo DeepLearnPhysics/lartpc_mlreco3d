@@ -29,8 +29,8 @@ def gs_kernel_dict():
 
 def gs_kernel_construct(cfg):
     models = gs_kernel_dict()
-    name = cfg['name']
-    num_features = cfg['num_features']
+    name = cfg.get('name', 'default')
+    num_features = cfg.get('num_features', 1)
     args = cfg.get('args', {})
     if not name in models:
         raise Exception("Unknown kernel function name provided")

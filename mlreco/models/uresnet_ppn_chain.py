@@ -18,8 +18,8 @@ class UResNetPPN(nn.Module):
     def __init__(self, cfg):
         super(UResNetPPN, self).__init__()
         self.model_config = cfg
-        self.ghost = cfg['uresnet_lonely'].get('ghost', False)
-        assert self.ghost == cfg['ppn'].get('ghost', False)
+        self.ghost = cfg.get('uresnet_lonely', {}).get('ghost', False)
+        assert self.ghost == cfg.get('ppn', {}).get('ghost', False)
         self.backbone = UResNet_Chain(cfg)
         self.ppn = PPN(cfg)
         self.num_classes = self.backbone.num_classes
