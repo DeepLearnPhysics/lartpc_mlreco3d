@@ -18,22 +18,22 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     """
     hoverinfo=['x','y','text'] if dim == 2 else ['x','y','z','text']
     if not type(color) == type(str()):
-        if not len(points) == len(color): 
+        if not len(points) == len(color):
             print('ERROR: size of the points (%d) not matching with the color (%d)' % (len(points),len(color)))
             raise ValueError
     if hovertext is None:
         if color is not None and not type(color) == type(str()):
             if dim == 2:
-                hovertext = ['x: %.2f<br>y: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,:2].flatten(),color[i].flatten()])) for i in range(len(points))]
+                hovertext = ['x: %.2f<br>y: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,1:3].flatten(),color[i].flatten()])) for i in range(len(points))]
             elif dim == 3:
-                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,:3].flatten(),color[i].flatten()])) for i in range(len(points))]
+                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f<br>value: %.2f' % tuple(np.concatenate([points[i,1:4].flatten(),color[i].flatten()])) for i in range(len(points))]
             hoverinfo = 'text'
         else:
             if dim == 2:
-                hovertext = ['x: %.2f<br>y: %.2f' % tuple(points[i,:2].flatten()) for i in range(len(points))]
+                hovertext = ['x: %.2f<br>y: %.2f' % tuple(points[i,1:3].flatten()) for i in range(len(points))]
             if dim == 3:
-                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f' % tuple(points[i,:3].flatten()) for i in range(len(points))]
-            hoverinfo = 'text'            
+                hovertext = ['x: %.2f<br>y: %.2f<br>z: %.2f' % tuple(points[i,1:4].flatten()) for i in range(len(points))]
+            hoverinfo = 'text'
     if cmin is None and color is not None and not type(color) == type(str()):
         cmin = min(color)
     if cmax is None and color is not None and not type(color) == type(str()):
@@ -46,8 +46,8 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
         dim = 2
 
     args=dict(
-        x=points[:,0],
-        y=points[:,1],
+        x=points[:,1],
+        y=points[:,2],
         mode='markers',
         marker = dict(
             size = markersize,
@@ -63,7 +63,7 @@ def scatter_points(points, dim=3, markersize=5, color='orange', colorscale=None,
     args.update(kwargs)
 
     if dim == 3:
-        args['z'] = points[:,2]
+        args['z'] = points[:,3]
         return [go.Scatter3d(**args)]
     else:
         return [go.Scatter(**args)]

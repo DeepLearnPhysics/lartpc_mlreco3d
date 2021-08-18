@@ -44,7 +44,7 @@ class FullChain(FullChainGNN):
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = MinkGraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}), batch_col=self.batch_col)
-            #self.gs_manager.training       = True # FIXME
+            self.gs_manager.training       = self.training
             self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
 
