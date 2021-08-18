@@ -103,7 +103,7 @@ class GraphSPICELoss(nn.Module):
 
         constructor_cfg = self.loss_config.get('constructor_cfg', {})
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
-        self.gs_manager.training = ~self.eval_mode
+        self.gs_manager.training = self.eval_mode
 
         self.invert = self.loss_config.get('invert', False)
         # print("LOSS FN = ", self.loss_fn)
@@ -141,12 +141,12 @@ class GraphSPICELoss(nn.Module):
 
             edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
 
-            print("Number of Wrong Edges = {} / {}".format(
-                torch.sum(edge_diff).item(), edge_diff.shape[0]))
-
-            print("Number of True Dropped Edges = {} / {}".format(
-                torch.sum(result['edge_truth'][0] < 0.5).item(),
-                edge_diff.shape[0]))
+            # print("Number of Wrong Edges = {} / {}".format(
+            #     torch.sum(edge_diff).item(), edge_diff.shape[0]))
+            #
+            # print("Number of True Dropped Edges = {} / {}".format(
+            #     torch.sum(result['edge_truth'][0] < 0.5).item(),
+            #     edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
         return res
