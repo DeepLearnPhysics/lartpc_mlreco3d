@@ -11,6 +11,7 @@ from mlreco.models.layers.common.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.factories import uq_classification_loss_construct
+from mlreco.models.layers.common.uresnet_layers import UResNet
 
 class BayesianUResNet(torch.nn.Module):
 
@@ -127,10 +128,11 @@ class BayesianUResNet(torch.nn.Module):
             return self.standard_forward(input)
 
 
-class DUQUResNet(MENetworkBase):
+class DUQUResNet(torch.nn.Module):
 
     def __init__(self, cfg, name='duq_uresnet'):
-        super(DUQUResNet, self).__init__(cfg)
+        super(DUQUResNet, self).__init__()
+        setup_cnn_configuration(self, cfg, name)
         self.model_config = cfg[name]
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_samples = self.model_config.get('num_samples', 20)

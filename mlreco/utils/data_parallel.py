@@ -5,7 +5,7 @@ import torch
 from torch.nn.parallel.scatter_gather import scatter, gather, scatter_kwargs
 
 
-class DataParallel(torch.nn.parallel.DistributedDataParallel):
+class DataParallel(torch.nn.parallel.DataParallel):
     """
     Scatters and gathers data for multi-gpu training.
 
@@ -78,7 +78,7 @@ class DataParallel(torch.nn.parallel.DistributedDataParallel):
 
         else:
             results = []
-            num_outputs = len(outputs[0])
+            num_outputs = len(outputs[0])        
             for i in range(num_outputs):
                 results.append([])
                 for output in outputs:  # Iterate over GPUs

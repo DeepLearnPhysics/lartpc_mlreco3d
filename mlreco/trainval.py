@@ -372,6 +372,8 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
+        print(self._gpus)
+
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
