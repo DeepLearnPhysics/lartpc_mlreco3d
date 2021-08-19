@@ -8,7 +8,7 @@ from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
 
 # @numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 @numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
-def form_clusters(data, min_size=-1, column=5, batch_index=3, cluster_classes=[-1], shape_index=-1):
+def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up each of the clusters in the input tensor.
@@ -29,7 +29,7 @@ def form_clusters(data, min_size=-1, column=5, batch_index=3, cluster_classes=[-
 def _form_clusters(data: nb.float64[:,:],
                    min_size: nb.int64 = -1,
                    column: nb.int64 = 5,
-                   batch_index: nb.int64 = 3,
+                   batch_index: nb.int64 = 0,
                    cluster_classes: nb.types.List(nb.int64) = nb.typed.List([-1]),
                    shape_index: nb.int64 = -1) -> nb.types.List(nb.int64[:]):
 
@@ -88,7 +88,7 @@ def _reform_clusters(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'])
-def get_cluster_batch(data, clusts, batch_index=3):
+def get_cluster_batch(data, clusts, batch_index=0):
     """
     Function that returns the batch ID of each cluster.
     This should be unique for each cluster, assert that it is.
@@ -104,7 +104,7 @@ def get_cluster_batch(data, clusts, batch_index=3):
 @nb.njit
 def _get_cluster_batch(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
-                       batch_index: nb.int64 = 3) -> nb.int64[:]:
+                       batch_index: nb.int64 = 0) -> nb.int64[:]:
 
     labels = np.empty(len(clusts), dtype=np.int64)
     for i, c in enumerate(clusts):
@@ -366,7 +366,7 @@ def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
                               groupwise: nb.boolean = False,
-                              coords_index: nb.types.List(nb.int64[:]) = [0, 3]) -> nb.float64[:,:]:
+                              coords_index: nb.types.List(nb.int64[:]) = [1, 4]) -> nb.float64[:,:]:
     # Get batch_ids and group_ids
     batch_ids = _get_cluster_batch(data, clusts)
     if not groupwise:
