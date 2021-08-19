@@ -400,12 +400,12 @@ class ClusterGraphConstructor:
             batch_index = cluster_label[:, self.batch_col].int().cpu().numpy()
             segment_label = cluster_label[:, self.seg_col].int().cpu().numpy()
             fragment_label = cluster_label[:, self.cluster_col].int().cpu().numpy()
-            label_pos = cluster_label[:, :3].int().cpu().numpy()
+            label_pos = cluster_label[:, 1:4].int().cpu().numpy()
         else:
             batch_index = cluster_label[:, self.batch_col].astype(int)
             segment_label = cluster_label[:, self.seg_col].astype(int)
             fragment_label = cluster_label[:, self.cluster_col].astype(int)
-            label_pos = cluster_label[:, :3]
+            label_pos = cluster_label[:, 1:4]
         for bidx in np.unique(batch_index):
             batch_mask = batch_index == bidx
             labels_batch = cluster_label[batch_mask]
@@ -455,8 +455,7 @@ class ClusterGraphConstructor:
 
             # assert False
             # print(self.node_pred.get_example(entry).pos)
-            pred = self.node_pred.get_example(entry).x
-            # print(pred.unique())
+            pred = self._node_pred.get_example(entry).x
             # print(labels.unique())
             for f in metrics:
                 score = f(pred, labels)

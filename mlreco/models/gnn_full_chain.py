@@ -726,6 +726,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 res['graph_spice_accuracy'] = res_graph_spice['accuracy']
                 if 'edge_loss' in res_graph_spice:
                     res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
+                if 'edge_accuracy' in res_graph_spice:
                     res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
                 res['graph_spice_occ_loss'] = res_graph_spice['occ_loss']
                 res['graph_spice_cov_loss'] = res_graph_spice['cov_loss']

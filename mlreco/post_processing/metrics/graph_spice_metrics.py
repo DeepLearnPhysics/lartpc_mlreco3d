@@ -24,19 +24,21 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    skip_classes = cfg['model']['modules']['spice_loss']['skip_classes']
-    mask = ~np.isin(labels[:, -1], skip_classes)
+    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
+    invert = cfg['model']['modules']['graph_spice_loss']['invert']
+    #mask = ~np.isin(labels[:, -1], skip_classes)
+    mask = ~np.isin(np.argmax(res['segmentation'][0], axis=1), skip_classes)
+    labels[:, -1] = torch.tensor(np.argmax(res['segmentation'][0], axis=1))
+
     labels = labels[mask]
-
-    name = cfg['post_processing']['graph_spice_metrics']['output_filename']
-
+    #name = cfg['post_processing']['graph_spice_metrics']['output_filename']
     graph = res['graph'][0]
 
     graph_info = res['graph_info'][0]
 
     # Reassign index numbers
     index_mapping = { key : val for key, val in zip(
-        range(0, len(graph_info.Index.unique())), data_index)}
+       range(0, len(graph_info.Index.unique())), data_index)}
 
     graph_info['Index'] = graph_info['Index'].map(index_mapping)
     # print(graph_info)
@@ -46,7 +48,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
     gs_manager = ClusterGraphConstructor(constructor_cfg,
                                          graph_batch=graph,
                                          graph_info=graph_info)
-    gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
+    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
     funcs = [ARI, SBD, purity, efficiency, num_true_clusters, num_pred_clusters]
     df = gs_manager.evaluate_nodes(labels, funcs)
 
@@ -69,7 +71,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
     data_index = data_blob['index']
     skip_classes = cfg['model']['modules']['spice_loss']['skip_classes']
     mask = ~np.isin(labels[:, -1], skip_classes)
-    labels = labels[mask]
+    #labels = labels[mask]
 
     name = cfg['post_processing']['graph_spice_metrics_loop_threshold']['output_filename']
 
