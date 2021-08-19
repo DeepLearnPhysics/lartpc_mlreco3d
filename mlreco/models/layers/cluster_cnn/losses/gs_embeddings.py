@@ -296,7 +296,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             ft_embedding = out['feature_embeddings'][i]
             covariance = out['covariance'][i]
             occupancy = out['occupancy'][i]
-            nbatch = batch_idx.unique().shape[0]
+            # nbatch = batch_idx.unique().shape[0]
 
             for bidx in batch_idx.unique(sorted=True):
                 batch_mask = batch_idx == bidx

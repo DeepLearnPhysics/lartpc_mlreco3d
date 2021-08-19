@@ -103,7 +103,7 @@ class GraphSPICELoss(nn.Module):
 
         constructor_cfg = self.loss_config.get('constructor_cfg', {})
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
-        self.gs_manager.training = self.eval_mode
+        self.gs_manager.training = ~self.eval_mode
 
         self.invert = self.loss_config.get('invert', False)
         # print("LOSS FN = ", self.loss_fn)
