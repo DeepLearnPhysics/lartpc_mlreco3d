@@ -50,6 +50,9 @@ def default_gnn_metrics(cfg,
         truth_valid = event_particle_labels[valid]
         pred_valid = np.argmax(logits[valid], axis=1)
         entropy_valid = entropy_event[valid]
+
+        print(result['node_pred_p'][batch_id])
+        assert False
         
         p_pred_valid = result['node_pred_p'][batch_id].reshape(-1)[valid]
         p_truth_valid = event_momentum_labels[valid]
@@ -87,7 +90,7 @@ def evidential_gnn_metrics(cfg,
         append = False
 
     fout = CSVData(
-        os.path.join(logdir, 'evidential-segnet-metrics.csv'), append=append)
+        os.path.join(logdir, 'evidential-gnn-metrics.csv'), append=append)
 
     for batch_id, evidence in enumerate(result['node_pred_type']):
 
@@ -122,12 +125,12 @@ def evidential_gnn_metrics(cfg,
 
         for i in range(num_valid):
 
-            fout.record(('Index', 
+            fout.record(('Index', 'loss', 
                          'Truth', 'Prediction', 
                          'Entropy', 'Uncertainty', 'Strength',
                          'Momentum Truth', 'Momentum Prediction', 
                          'Momentum Aleatoric', 'Momentum Epistemic'),
-                        (int(index[batch_id]), 
+                        (int(index[batch_id]), float(result['loss'][0]),
                          int(truth_valid[i]), int(pred_valid[i]), 
                          entropy_event[i], uncertainty_event[i], S[valid][i],
                          p_truth_valid[i], p_pred_valid[i], 
