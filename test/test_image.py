@@ -21,7 +21,7 @@ def test_full_chain():
     hs.trainer.backward()
 
     print('Loss', output['loss'][0])
-    assert np.allclose(output['loss'][0], 10.972)
+    assert np.allclose(output['loss'][0], 3.8945, rtol=1e-3)
 
 
 if __name__ == '__main__':

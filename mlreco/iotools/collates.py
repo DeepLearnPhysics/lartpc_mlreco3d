@@ -72,7 +72,7 @@ def CollateSparse(batch):
                                   dtype=np.float32)
 
             coords_minibatch = []
-            feats_minibatch = []
+            #feats_minibatch = []
 
             for bidx, sample in enumerate(batch):
                 batch_index = np.full(shape=(coords[bidx].shape[0], 1),
@@ -83,20 +83,43 @@ def CollateSparse(batch):
 
                 coords_minibatch.append(batched_coords)
 
-            coords = torch.Tensor(concat(coords_minibatch, axis=0))
+            #coords = torch.Tensor(concat(coords_minibatch, axis=0))
+            coords = concat(coords_minibatch, axis=0)
 
             result[key] = coords
         else:
             if isinstance(batch[0][key], tuple) and \
                isinstance(batch[0][key][0], np.ndarray) and \
                len(batch[0][key][0].shape) == 2:
-               # For pairs (coordinate tensor, feature tensor)
-                coords = [sample[key][0] for sample in batch]
-                features = [sample[key][1] for sample in batch]
-                coords, features = ME.utils.sparse_collate(coords, features)
-                result[key] = torch.cat([coords.float(),
-                                         features.float()], dim=1)
+                # For pairs (coordinate tensor, feature tensor)
 
+                # Previously using ME.utils.sparse_collate which is the "official" way,
+                # and an argument can be made that
+                # > when something gets updated with regards to coordinate batching
+                # > (in MinkowskiEngine), any necessary changes will also be made
+                # > to ME.utils.sparse_collate
+                #
+                # However that forces us to return a torch.Tensor (or convert that back
+                # to a numpy array) + such changes to coordinate batching would
+                # have a wider impact on our code anyway.
+                # Returning a torch.Tensor is inconsistent (other options return np.array)
+                # + forces us to convert input data to .numpy() in visualization,
+                # event if we do not run any network.
+                # Hence keeping the homemade collate for now.
+
+                # coords = [sample[key][0] for sample in batch]
+                # features = [sample[key][1] for sample in batch]
+                # print(coords, features)
+                # coords, features = ME.utils.sparse_collate(coords, features)
+                # print('after', coords, features)
+                # result[key] = torch.cat([coords.float(),
+                #                          features.float()], dim=1)
+                voxels = concat( [ concat( [np.full(shape=[len(sample[key][0]),1], fill_value=batch_id, dtype=np.int32),
+                                            sample[key][0]],
+                                           axis=1 ) for batch_id, sample in enumerate(batch) ],
+                                 axis = 0)
+                data = concat([sample[key][1] for sample in batch], axis=0)
+                result[key] = concat([voxels, data], axis=1)
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
                  #

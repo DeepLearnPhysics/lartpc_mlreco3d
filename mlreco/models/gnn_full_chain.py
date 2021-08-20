@@ -724,8 +724,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
                 res['graph_spice_loss'] = res_graph_spice['loss']
                 res['graph_spice_accuracy'] = res_graph_spice['accuracy']
-                #res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
-                #res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
+                if 'edge_loss' in res_graph_spice:
+                    res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
+                if 'edge_accuracy' in res_graph_spice:
+                    res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
                 res['graph_spice_occ_loss'] = res_graph_spice['occ_loss']
                 res['graph_spice_cov_loss'] = res_graph_spice['cov_loss']
                 res['graph_spice_sp_intra'] = res_graph_spice['sp_intra']
@@ -913,9 +915,11 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
             if self.enable_cnn_clust:
                 if not self._enable_graph_spice:
-                    print('Clustering Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
+                    print('Clustering Embedding Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
                 else:
                     print('Clustering Accuracy: {:.4f}'.format(res_graph_spice['accuracy']))
+                    if 'edge_accuracy' in res_graph_spice:
+                        print('Clustering Edge Accuracy: {:.4f}'.format(res_graph_spice['edge_accuracy']))
             if self.enable_gnn_shower:
                 print('Shower fragment clustering accuracy: {:.4f}'.format(res_gnn_shower['edge_accuracy']))
                 print('Shower primary prediction accuracy: {:.4f}'.format(res_gnn_shower['node_accuracy']))

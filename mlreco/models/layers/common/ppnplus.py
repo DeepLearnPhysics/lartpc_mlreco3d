@@ -152,7 +152,7 @@ class PPN(torch.nn.Module):
         self.model_cfg = cfg.get(name, {})
         # UResNet Configurations
         self.reps = self.model_cfg.get('reps', 2)
-        self.depth = self.model_cfg.get('num_strides', 5)
+        self.depth = self.model_cfg.get('depth', 5)
         self.num_classes = self.model_cfg.get('num_classes', 5)
         self.num_filters = self.model_cfg.get('filters', 16)
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
@@ -346,7 +346,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             self.lossfn = BinaryCELogDiceLoss()
         else:
             NotImplementedError
-        self.resolution = self.loss_config.get('ppn_resolution', 5.0)
+        self.resolution = self.loss_config.get('ppn_resolution', 1.0)
         self.regloss = torch.nn.MSELoss()
         self.segloss = torch.nn.functional.cross_entropy
         self.particles_label_seg_col = self.loss_config.get(

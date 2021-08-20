@@ -220,7 +220,6 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         loss = defaultdict(list)
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
-        #print(semantic_classes)
         counts = 0
         for sc in semantic_classes:
             if int(sc) == 4:
@@ -296,7 +295,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             ft_embedding = out['feature_embeddings'][i]
             covariance = out['covariance'][i]
             occupancy = out['occupancy'][i]
-            nbatch = batch_idx.unique().shape[0]
+            # nbatch = batch_idx.unique().shape[0]
 
             for bidx in batch_idx.unique(sorted=True):
                 batch_mask = batch_idx == bidx
@@ -342,7 +341,8 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.loss_config = cfg[name]
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
-        self.invert = self.edge_loss_cfg.get('invert', False)
+        #self.invert = self.edge_loss_cfg.get('invert', False)
+        self.invert = cfg.get('invert', False)
         self.edge_loss = WeightedEdgeLoss(**self.edge_loss_cfg)
         self.is_eval = cfg['eval']
 
