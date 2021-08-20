@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 import numpy as np
 import pytest
 
@@ -276,7 +273,7 @@ def test_parse_particle_coords(event_cluster3d, event_particles):
     assert len(output[0].shape) == 2
     assert len(output[1].shape) == 2
     assert output[0].shape[1] == 3
-    assert output[1].shape[1] == 4
+    assert output[1].shape[1] == 5
     assert output[0].shape[0] == output[1].shape[0]
 
 def test_parse_particle_graph():

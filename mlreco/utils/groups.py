@@ -251,7 +251,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
     # and the ancestor track ids
     ancestor_vtxs = []
     track_ids = []
-    ancestor_track_ids = np.empty(0, dtype=np.int)
+    ancestor_track_ids = np.empty(0, dtype=int)
     for particle in particle_v:
         ancestor_vtx = [
             particle.ancestor_x(),
@@ -268,7 +268,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
         axis=0,
     ).tolist()
     # loop over each cluster to assign interaction ids
-    interaction_ids = np.ones(particle_v.size(), dtype=np.int)*(-1)
+    interaction_ids = np.ones(particle_v.size(), dtype=int)*(-1)
     for clust_id in range(particle_v.size()):
         # get the interaction id from the unique list (index is the id)
         interaction_ids[clust_id] = interaction_vtx_list.index(

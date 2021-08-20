@@ -28,10 +28,11 @@ def through_muons(cfg, module_cfg, data_blob, res, logdir, iteration, **kwargs):
     spatial_size = module_cfg.get('spatial_size', 768)
     track_label = module_cfg.get('track_label', 1)
     threshold = module_cfg.get('threshold', 5)
+    cords_col = module_cfg.get('coords_col', (1, 4))
 
     row_names, row_values = [], []
     for p in particles[data_idx][particles_seg[data_idx] == track_label]:
-        voxels = input_data[data_idx][p][:, :3]
+        voxels = input_data[data_idx][p][:, coords_col[0]:coords_col[1]]
         delta_x = voxels[:, 0].max() - voxels[:, 0].min()
         # Is it touching along x axis?
 

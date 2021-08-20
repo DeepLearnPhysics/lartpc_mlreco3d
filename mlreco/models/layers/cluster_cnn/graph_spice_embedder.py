@@ -14,7 +14,7 @@ class GraphSPICEEmbedder(UResNet):
 
     def __init__(self, cfg, name='graph_spice_embedder'):
         super(GraphSPICEEmbedder, self).__init__(cfg)
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.feature_embedding_dim = self.model_config.get(
             'feature_embedding_dim', 8)
         self.spatial_embedding_dim = self.model_config.get(

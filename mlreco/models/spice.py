@@ -23,7 +23,7 @@ class SPICELoss(nn.Module):
     def __init__(self, cfg, name='spice_loss'):
         super(SPICELoss, self).__init__()
 
-        self.loss_config = cfg[name]
+        self.loss_config = cfg.get(name, {})
 
         self.loss_func_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.loss_func = spice_loss_construct(self.loss_func_name)

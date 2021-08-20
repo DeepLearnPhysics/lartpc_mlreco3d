@@ -27,6 +27,8 @@ def model_dict():
         "singlep": (singlep.ParticleImageClassifier, singlep.ParticleTypeLoss),
         # SPICE
         "spice": (spice.MinkSPICE, spice.SPICELoss),
+        # Graph neural network Particle Aggregation (GrapPA)
+        "grappa": (grappa.GNN, grappa.GNNLoss),
         # Graph SPICE
         "graph_spice": (graph_spice.MinkGraphSPICE, graph_spice.GraphSPICELoss),
         # Bayesian Classifier

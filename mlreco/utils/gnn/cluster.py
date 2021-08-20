@@ -30,7 +30,7 @@ def _form_clusters(data: nb.float64[:,:],
                    min_size: nb.int64 = -1,
                    column: nb.int64 = 5,
                    batch_index: nb.int64 = 3,
-                   cluster_classes: nb.types.List(nb.int64)=[-1],
+                   cluster_classes: nb.types.List(nb.int64) = nb.typed.List([-1]),
                    shape_index: nb.int64 = -1) -> nb.types.List(nb.int64[:]):
 
     # Create a mask which restricts the voxels to those with shape in cluster_classes

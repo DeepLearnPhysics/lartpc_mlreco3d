@@ -24,6 +24,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     clusters = clust_data
     attention = mask_ppn2
     num_classes = module_cfg.get('num_classes', 5)
+    coords_col = module_cfg.get('coords_col', (1, 4))
 
     pool_op = np.max
     if module_cfg.get('pool_op', 'max') == 'mean':
@@ -40,7 +41,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     # type and idx in this order = -2, -1
     # print(np.unique(points_label_idx[:, -2]), np.unique(points_label_idx[:, -1]))
 
-    ppn_voxels = points[data_idx][:, :3] + 0.5 + input_data[data_idx][:, :3]
+    ppn_voxels = points[data_idx][:, :3] + 0.5 + input_data[data_idx][:, coords_col[0]:coords_col[1]]
     ppn_score  = scipy.special.softmax(points[data_idx][:, 3:5], axis=1)[:, 1]
     ppn_type   = scipy.special.softmax(points[data_idx][:, 5:], axis=1)
 
@@ -109,11 +110,11 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     # num_voxels_cluster_closest_true_point = []
     for c in range(num_classes):
         true_mask = points_label_idx[:, seg_label_col] == c
-        d = cdist(ppn_voxels, points_label_idx[true_mask][:, :3])
+        d = cdist(ppn_voxels, points_label_idx[true_mask][:, coords_col[0]:coords_col[1]])
         #print(d.shape)
         if d.shape[1] > 0:
             distance_to_closest_true_point_type.append(d.min(axis=1))
-            closest_true_coords.append(points_label_idx[true_mask][d.argmin(axis=1)][:, :3])
+            closest_true_coords.append(points_label_idx[true_mask][d.argmin(axis=1)][:, coords_col[0]:coords_col[1]])
             # print(particles[data_idx])
             # print(d.argmin(axis=1))
             # print(points_label_idx[d.argmin(axis=1), -1])
@@ -128,12 +129,12 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             closest_true_coords.append(-1 * np.ones((ppn_voxels.shape[0], 3)))
             # num_voxels_closest_true_point.append(-1 * np.ones(ppn_voxels.shape[0],))
             # num_voxels_cluster_closest_true_point.append(-1 * np.ones(ppn_voxels.shape[0],))
-        d = cdist(ppn_voxels, input_data[data_idx][segment_label[data_idx][:, -1] == c][:, :3])
+        d = cdist(ppn_voxels, input_data[data_idx][segment_label[data_idx][:, -1] == c][:, coords_col[0]:coords_col[1]])
         if d.shape[1] > 0:
             distance_to_closest_true_pix_type.append(d.min(axis=1))
         else:
             distance_to_closest_true_pix_type.append(-1 * np.ones(ppn_voxels.shape[0],))
-        d = cdist(ppn_voxels, input_data[data_idx][predictions[data_idx] == c][:, :3])
+        d = cdist(ppn_voxels, input_data[data_idx][predictions[data_idx] == c][:, coords_col[0]:coords_col[1]])
         if d.shape[1] > 0:
             distance_to_closest_pred_pix_type.append(d.min(axis=1))
         else:
@@ -149,7 +150,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                         ppn_score[i], ppn_voxels[i, 0], ppn_voxels[i, 1], ppn_voxels[i, 2], np.argmax(ppn_type[i]), ppn_occupancy[i], closest_true_coords[i, 0], closest_true_coords[i, 1], closest_true_coords[i, 2]) + tuple(distance_to_closest_true_point_type[:, i]) + tuple(ppn_type[i]) + tuple(distance_to_closest_true_pix_type[:, i]) + tuple(distance_to_closest_pred_pix_type[:, i]))
 
     # Distance to closest pred point (regardless of type)
-    d = cdist(ppn_voxels, points_label_idx[:, :3])
+    d = cdist(ppn_voxels, points_label_idx[:, coords_col[0]:coords_col[1]])
     #print(d.shape)
     distance_to_closest_pred_point = d.min(axis=0)
     distance_to_closest_pred_point_nodelta = d[ppn_type[:, 3] < 0.5, :].min(axis=0)
@@ -164,12 +165,12 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     distance_to_closest_pred_pix_type = []
     distance_to_closest_pred_point_type = []
     for c in range(num_classes):
-        d2 = cdist(points_label_idx[:, :3], input_data[data_idx][segment_label[data_idx][:, -1] == c][:, :3])
+        d2 = cdist(points_label_idx[:, coords_col[0]:coords_col[1]], input_data[data_idx][segment_label[data_idx][:, -1] == c][:, coords_col[0]:coords_col[1]])
         if d2.shape[1] > 0:
             distance_to_closest_true_pix_type.append(d2.min(axis=1))
         else:
             distance_to_closest_true_pix_type.append(-1 * np.ones(points_label_idx.shape[0],))
-        d3 = cdist(points_label_idx[:, :3], input_data[data_idx][predictions[data_idx] == c][:, :3])
+        d3 = cdist(points_label_idx[:, coords_col[0]:coords_col[1]], input_data[data_idx][predictions[data_idx] == c][:, coords_col[0]:coords_col[1]])
         if d3.shape[1] > 0:
             distance_to_closest_pred_pix_type.append(d3.min(axis=1))
         else:
@@ -198,7 +199,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             if clusters is not None:
                 num_voxels_cluster = np.count_nonzero(clusters[data_idx][:, -1] == int(points_label_idx[i, cluster_col]))
         # Whether this point is already missed in mask_ppn2 or not
-        is_in_attention = cdist(input_data[data_idx][ppn_mask][:, :3], [np.floor(points_label_idx[i, :3])]).min(axis=0) < 1.
+        is_in_attention = cdist(input_data[data_idx][ppn_mask][:, coords_col[0]:coords_col[1]], [np.floor(points_label_idx[i, coords_col[0]:coords_col[1]])]).min(axis=0) < 1.
         rows_gt_names.append(('distance_to_closest_pred_point', 'distance_to_closest_pred_point_nodelta', 'type', 'score_of_closest_pred_point', 'x', 'y', 'z', 'closest_x', 'closest_y', 'closest_z',
                         'attention', 'particle_idx', 'num_voxels', 'num_voxels_cluster', 'energy_deposit', 'distance_to_closest_pred_point_same_type') + tuple(['distance_to_closest_pred_point_type_%d' % c for c in range(num_classes)]) + tuple(['type_of_closest_pred_point_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_true_pix_type_%d' % c for c in range(num_classes)]) + tuple(['distance_to_closest_pred_pix_type_%d' % c for c in range(num_classes)]))
         rows_gt_values.append((distance_to_closest_pred_point[i], distance_to_closest_pred_point_nodelta[i], points_label_idx[i, seg_label_col], score_of_closest_pred_point[i],

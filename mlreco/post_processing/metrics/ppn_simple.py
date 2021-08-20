@@ -4,7 +4,7 @@ import scipy
 import os
 from mlreco.utils import CSVData
 from mlreco.utils.dbscan import dbscan_points
-from mlreco.utils.ppn import mink_ppn_selector
+from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
 
 def pairwise_distances(v1, v2):
@@ -60,17 +60,17 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration):
         mask_ppn_batch = mask_ppn[-1][batch_mask]
 
         res = {
-            'points': points_batch,
-            'mask_ppn': mask_ppn_batch,
-            'segmentation': segmentation_batch,
-            'ppn_score': scipy.special.expit(pixel_score)
+            'points': [points_batch],
+            'mask_ppn': [mask_ppn_batch],
+            'segmentation': [segmentation_batch],
+            #'ppn_score': scipy.special.expit(pixel_score)
         }
 
         pred_seg = np.argmax(segmentation_batch, axis=1).astype(int)
         acc_seg  = np.sum(pred_seg == slabels) \
                  / float(segmentation_batch.shape[0])
 
-        ppn = mink_ppn_selector(clabels, res)
+        ppn = uresnet_ppn_type_point_selector(clabels, res)
         if ppn.shape[0] == 0:
             continue
 

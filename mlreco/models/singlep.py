@@ -19,7 +19,7 @@ class ParticleImageClassifier(nn.Module):
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
         self.encoder = SparseResidualEncoder(cfg)
-        self.num_classes = cfg[name].get('num_classes', 5)
+        self.num_classes = cfg.get(name, {}).get('num_classes', 5)
         self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
 
         print('Total Number of Trainable Parameters = {}'.format(
@@ -65,7 +65,7 @@ class DUQParticleClassifier(ParticleImageClassifier):
 
     def __init__(self, cfg, name='duq_particle_classifier'):
         super(DUQParticleClassifier, self).__init__(cfg, name=name)
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.final_layer = None
         self.gamma = self.model_config.get('gamma', 0.99)
         self.sigma = self.model_config.get('sigma', 0.3)
@@ -131,7 +131,7 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
     MODULES = ['network_base', 'particle_image_classifier', 'mink_encoder']
     def __init__(self, cfg, name='evidential_image_classifier'):
         super(EvidentialParticleClassifier, self).__init__(cfg, name=name)
-        self.final_layer_name = cfg[name].get('final_layer_name', 'relu')
+        self.final_layer_name = cfg.get(name, {}).get('final_layer_name', 'relu')
         if self.final_layer_name == 'relu':
             self.final_layer = nn.Sequential(
                 nn.Linear(self.encoder.latent_size, self.num_classes),
@@ -142,7 +142,7 @@ class EvidentialParticleClassifier(ParticleImageClassifier):
                 nn.Softplus())
         else:
             raise Exception("Unknown output activation name %s provided" % self.final_layer_name)
-        self.eps = cfg[name].get('eps', 0.0)
+        self.eps = cfg.get(name, {}).get('eps', 0.0)
 
     def forward(self, input):
         point_cloud, = input
@@ -168,11 +168,11 @@ class BayesianParticleClassifier(torch.nn.Module):
     def __init__(self, cfg, name='bayesian_particle_classifier'):
         super(BayesianParticleClassifier, self).__init__()
         setup_cnn_configuration(self, cfg, name)
-        
-        self.model_config = cfg[name]
+
+        self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)
         self.encoder_type = self.model_config.get('encoder_type', 'full_dropout')
-        self.encoder = BayesianEncoder(cfg)
+        self.encoder = MCDropoutEncoder(cfg)
         self.logit_layer = nn.Sequential(
             nn.ReLU(),
             nn.Linear(self.encoder.latent_size, self.num_classes))
@@ -277,8 +277,9 @@ class MultiLabelCrossEntropy(nn.Module):
         super(MultiLabelCrossEntropy, self).__init__()
         self.xentropy = nn.BCELoss(reduction='none')
         self.num_classes = 5
-        self.grad_w = cfg[name].get('grad_w', 0.0)
-        self.grad_penalty = cfg[name].get('grad_penalty', True)
+        model_cfg = cfg.get(name, {})
+        self.grad_w = model_cfg.get('grad_w', 0.0)
+        self.grad_penalty = model_cfg.get('grad_penalty', True)
 
 
     @staticmethod
@@ -344,8 +345,8 @@ class EvidentialLearningLoss(nn.Module):
 
     def __init__(self, cfg, name='evidential_learning_loss'):
         super(EvidentialLearningLoss, self).__init__()
-        self.loss_config = cfg[name]
-        self.evd_loss_name = self.loss_config.get('evd_loss_name', 'sumsq')
+        self.loss_config = cfg.get(name, {})
+        self.evd_loss_name = self.loss_config.get('evd_loss_name', 'evd_sumsq')
         self.num_classes = self.loss_config.get('num_classes', 5)
         self.num_total_iter = self.loss_config.get('num_total_iter', 50000)
         self.loss_fn = EVDLoss(self.evd_loss_name, 'mean', T=self.num_total_iter)

@@ -7,6 +7,20 @@ Current coverage is sparse:
 
 Contributions welcome to help extend the coverage.
 
+### How to check that a container image works
+The script `test_image.py` uses the example config (with sequential batch sampling)
+to check that the loss value of the first iteration is close to what we expect.
+It also runs backward and will fail if backward fails for some reason.
+
+If the file `config/chain/me_train_example.cfg` changes, this reference loss value may need to be
+adjusted accordingly.
+
+You can run the script either way:
+```
+$ python3 test/test_image.py
+$ pytest test/test_image.py
+```
+
 ### How to fix tests
 You made changes to a model and now the tests fail? Double check these elements:
 

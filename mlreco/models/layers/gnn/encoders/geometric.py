@@ -57,7 +57,8 @@ class ClustGeoNodeEncoder(torch.nn.Module):
 
             # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
             # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
-            w, v = torch.symeig(A, eigenvectors=True)
+            #w, v = torch.symeig(A, eigenvectors=True)
+            w, v = torch.linalg.eigh(A, UPLO='U')
             dirwt = 1.0 - w[1] / w[2]
             B = A / w[2]
 

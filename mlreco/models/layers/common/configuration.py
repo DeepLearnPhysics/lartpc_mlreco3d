@@ -2,7 +2,7 @@ def setup_cnn_configuration(self, cfg, name):
     '''
     Base function for global network parameters.
     '''
-    model_cfg = cfg[name]
+    model_cfg = cfg.get(name, {})
     # Dimension of dataset
     self.D = model_cfg.get('data_dim', 3)
     # Number of input data features
