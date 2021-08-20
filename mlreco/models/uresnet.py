@@ -106,7 +106,6 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         If ghost = True, then num_classes should not count the ghost class.
         If ghost_label > -1, then we perform only ghost segmentation.
         """
-
         assert len(result['segmentation']) == len(label)
         batch_ids = [d[:, self._batch_col] for d in label]
         # print("batch ids", batch_ids)
@@ -129,7 +128,6 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 elif self._ghost:
                     # check and warn about invalid labels
                     unique_label,unique_count = torch.unique(event_label,return_counts=True)
-
                     if (unique_label > self._num_classes).long().sum():
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)

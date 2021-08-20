@@ -26,6 +26,9 @@ class Handlers:
     def keys(self):
         return list(self.__dict__.keys())
 
+
+# Use this function instead of itertools.cycle to avoid creating  a memory leak.
+# (itertools.cycle attempts to save all outputs in order to re-cycle through them)
 def cycle(data_io):
     while True:
         for x in data_io:
@@ -351,9 +354,9 @@ def train_loop(handlers):
         if logger == 'default':
             log(handlers, tstamp_iteration,
                 tsum, result_blob, cfg, epoch, data_blob['index'][0])
-        # elif logger == 'tensorboard':
-        #     log_tensorboard(handlers, tstamp_iteration,
-        #         tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        elif logger == 'tensorboard':
+            log_tensorboard(handlers, tstamp_iteration,
+                tsum, result_blob, cfg, epoch, data_blob['index'][0])
         else:
             raise ValueError('Unrecognized logger type: {}!'.format(logger))
         # Log metrics/do analysis

@@ -11,6 +11,7 @@ from mlreco.models.layers.common.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.factories import uq_classification_loss_construct
+<<<<<<< HEAD
 from mlreco.models.layers.common.uresnet_layers import UResNet
 
 class BayesianUResNet(torch.nn.Module):
@@ -34,6 +35,10 @@ class BayesianUResNet(torch.nn.Module):
 
         num_classes: number of segmentation classes (default: 5)
     """
+=======
+
+class BayesianUResNet(torch.nn.Module):
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
 
     MODULES = []
 
@@ -60,12 +65,15 @@ class BayesianUResNet(torch.nn.Module):
                                                 self.num_classes)
 
     def mc_forward(self, input, num_samples=None):
+<<<<<<< HEAD
         """
         Forwarding operation for MC Dropout segmentation network.
 
         Args:
             num_samples: number of stochastic forward samples to be taken
         """
+=======
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
 
         res = defaultdict(list)
 
@@ -106,9 +114,13 @@ class BayesianUResNet(torch.nn.Module):
         return res
 
     def evidential_forward(self, input):
+<<<<<<< HEAD
         """
         Forawrding operation for evidential segmentation network.
         """
+=======
+
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             x = ME.SparseTensor(coordinates=x[:, :4],
@@ -133,9 +145,13 @@ class BayesianUResNet(torch.nn.Module):
 
 
     def standard_forward(self, input):
+<<<<<<< HEAD
         """
         Forwarding operation for standard dropout segmentation network.
         """
+=======
+
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             x = ME.SparseTensor(coordinates=x[:, :4],
@@ -151,9 +167,12 @@ class BayesianUResNet(torch.nn.Module):
         return out
 
     def forward(self, input):
+<<<<<<< HEAD
         """
         
         """
+=======
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
 
         if self.mode == 'mc_dropout':
             return self.mc_forward(input)
@@ -163,6 +182,7 @@ class BayesianUResNet(torch.nn.Module):
             return self.standard_forward(input)
 
 
+<<<<<<< HEAD
 class DUQUResNet(torch.nn.Module):
     """
     Single Pass Deep Uncertainty Quantification Network
@@ -250,16 +270,23 @@ class DUQUResNet(torch.nn.Module):
             self.m = self.gamma * self.m + (1 - self.gamma) * features_sum
 
 
+=======
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
 class SegmentationLoss(nn.Module):
 
     def __init__(self, cfg, name='bayesian_uresnet'):
         super(SegmentationLoss, self).__init__()
         self.loss_config = cfg.get(name, {})
+<<<<<<< HEAD
         self.loss_fn_name = self.loss_config.get('loss_fn', 'cross_entropy')
         self.loss_fn = uq_classification_loss_construct(self.loss_fn_name)
 
         print(self.loss_fn)
 
+=======
+        self.loss_fn_name = self.loss_config.get('loss_fn', 'evd_sumsq')
+        self.loss_fn = uq_classification_loss_construct(self.loss_fn_name)
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
         self.one_hot = self.loss_config.get('one_hot', False)
         self.num_classes = self.loss_config.get('num_classes', 5)
 
@@ -274,8 +301,12 @@ class SegmentationLoss(nn.Module):
         # TODO Add weighting
         logits = outputs['segmentation']
         if 'evd' in self.loss_fn_name:
+<<<<<<< HEAD
             # convert evidence to alpha concentration params.
             segmentation = [logits[0] + 1.0]
+=======
+            segmentation = [logits[0] + 1.0] # convert evidence to alpha concentration params.
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
         else:
             segmentation = logits
         device = segmentation[0].device
@@ -296,8 +327,12 @@ class SegmentationLoss(nn.Module):
                 loss_label = event_label
                 if self.one_hot:
                     loss_label = torch.eye(self.num_classes, device=device)[event_label]
+<<<<<<< HEAD
                     loss_seg = self.loss_fn(event_segmentation, loss_label, 
                                             t=iteration)
+=======
+                    loss_seg = self.loss_fn(event_segmentation, loss_label, t=iteration)
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
                 else:
                     loss_seg = self.loss_fn(event_segmentation, loss_label)
                 if weight is not None:
@@ -308,8 +343,12 @@ class SegmentationLoss(nn.Module):
                     total_loss += torch.mean(loss_seg)
                 # Accuracy
                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
+<<<<<<< HEAD
                 acc = (predicted_labels == event_label).sum().item() \
                     / float(predicted_labels.nelement())
+=======
+                acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20
                 total_acc += acc
                 count += 1
 
@@ -317,6 +356,7 @@ class SegmentationLoss(nn.Module):
             'accuracy': total_acc/count,
             'loss': total_loss/count
         }
+<<<<<<< HEAD
 
 
 class DUQSegmentationLoss(nn.Module):
@@ -391,3 +431,5 @@ class DUQSegmentationLoss(nn.Module):
             acc_types['accuracy_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
         return res
+=======
+>>>>>>> 6b92e81e9c1fc114ddd64a093201d5c65382fb20

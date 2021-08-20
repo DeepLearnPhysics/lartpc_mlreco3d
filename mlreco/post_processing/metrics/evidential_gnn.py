@@ -50,9 +50,6 @@ def default_gnn_metrics(cfg,
         truth_valid = event_particle_labels[valid]
         pred_valid = np.argmax(logits[valid], axis=1)
         entropy_valid = entropy_event[valid]
-
-        print(result['node_pred_p'][batch_id])
-        assert False
         
         p_pred_valid = result['node_pred_p'][batch_id].reshape(-1)[valid]
         p_truth_valid = event_momentum_labels[valid]

@@ -1,7 +1,6 @@
 from mlreco.utils import unwrap
 import warnings
 import torch
-
 import os
 import mlreco.utils as utils
 from mlreco.models import construct
