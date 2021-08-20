@@ -110,7 +110,6 @@ class EVDLoss(nn.Module):
         super(EVDLoss, self).__init__()
         self.T = T  # Total epoch counts for which to anneal kld component. 
         self.evd_loss = evd_loss_construct(evd_loss_name)
-        print("EVD LOSS NAME = ", evd_loss_name)
         self.kld_loss = evd_kl_divergence
         self.reduction = reduction
         self.one_hot = one_hot
@@ -145,6 +144,12 @@ class EVDLoss(nn.Module):
             return loss.sum()
         else:
             raise Exception("Unknown reduction method %s provided" % self.reduction)
+
+
+    def __str__(self):
+        str_format = "EVDLoss(name={}, reduction={}, one_hot={}, num_classes={}, mode={})"
+        return str_format.format(self.evd_loss_name, self.reduction, 
+                                 self.one_hot, self.num_classes, self.mode)
 
 
 def nll_regression_loss(logits, targets, eps=1e-6):

@@ -14,6 +14,26 @@ from mlreco.models.experimental.bayes.factories import uq_classification_loss_co
 from mlreco.models.layers.common.uresnet_layers import UResNet
 
 class BayesianUResNet(torch.nn.Module):
+    """
+    UResNet with Uncertainty Quantification
+
+    The backbone model consists of UResNet Encoder-Decoder format with
+    standard residual layers for the shallow half and dropout residual layers
+    for the deep half of the network. 
+
+    Args:
+        mode (str): string indicator for slight changes in network
+        behavior/architecture. Supports three options:
+            - standard: standard dropout segmentation network. This also
+            includes MCDropout segnet, since training behavior is identical 
+            for both standard and mcdropout networks. 
+            - evd: Changes network into evidential segmentation network 
+    
+        num_samples: if used as MCDropout Segnet, the number of stochastic
+        forward samples to be taken.
+
+        num_classes: number of segmentation classes (default: 5)
+    """
 
     MODULES = []
 
@@ -40,6 +60,12 @@ class BayesianUResNet(torch.nn.Module):
                                                 self.num_classes)
 
     def mc_forward(self, input, num_samples=None):
+        """
+        Forwarding operation for MC Dropout segmentation network.
+
+        Args:
+            num_samples: number of stochastic forward samples to be taken
+        """
 
         res = defaultdict(list)
 
@@ -80,7 +106,9 @@ class BayesianUResNet(torch.nn.Module):
         return res
 
     def evidential_forward(self, input):
-
+        """
+        Forawrding operation for evidential segmentation network.
+        """
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             x = ME.SparseTensor(coordinates=x[:, :4],
@@ -105,7 +133,9 @@ class BayesianUResNet(torch.nn.Module):
 
 
     def standard_forward(self, input):
-
+        """
+        Forwarding operation for standard dropout segmentation network.
+        """
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             x = ME.SparseTensor(coordinates=x[:, :4],
@@ -121,6 +151,9 @@ class BayesianUResNet(torch.nn.Module):
         return out
 
     def forward(self, input):
+        """
+        
+        """
 
         if self.mode == 'mc_dropout':
             return self.mc_forward(input)
@@ -131,6 +164,16 @@ class BayesianUResNet(torch.nn.Module):
 
 
 class DUQUResNet(torch.nn.Module):
+    """
+    Single Pass Deep Uncertainty Quantification Network
+    Original Paper: https://arxiv.org/abs/2003.02037
+
+    Implementation adapted from the DUQ main Github Repository:
+    https://github.com/y0ast/deterministic-uncertainty-quantification
+
+    Author: Joost van Amersfoort
+
+    """
 
     def __init__(self, cfg, name='duq_uresnet'):
         super(DUQUResNet, self).__init__()
@@ -147,12 +190,15 @@ class DUQUResNet(torch.nn.Module):
         self.embedding_dim = self.model_config.get('embedding_dim', 10)
         self.latent_size = self.model_config.get('latent_size', 32)
 
-        self.w = nn.Parameter(torch.zeros(self.embedding_dim, self.num_classes, self.latent_size))
+        self.w = nn.Parameter(torch.zeros(self.embedding_dim, 
+                                          self.num_classes, 
+                                          self.latent_size))
 
         nn.init.kaiming_normal_(self.w, nonlinearity='relu')
 
         self.register_buffer('N', torch.ones(self.num_classes) * 20)
-        self.register_buffer('m', torch.normal(torch.zeros(self.embedding_dim, self.num_classes), 0.05))
+        self.register_buffer('m', torch.normal(
+            torch.zeros(self.embedding_dim, self.num_classes), 0.05))
 
         self.m = self.m * self.N.unsqueeze(0)
 
@@ -185,22 +231,20 @@ class DUQUResNet(torch.nn.Module):
             'score': [y_pred],
             'embedding': [z],
             'input': [point_cloud],
-            'centroids' : [self.m.detach().cpu().numpy() / self.N.detach().cpu().numpy()]
+            'centroids' : [self.m.detach().cpu().numpy() \
+                           / self.N.detach().cpu().numpy()]
         }
 
         self.z = z
         self.y_pred = y_pred
-
-        print(res['score'][0].shape)
-        print(res['embedding'][0].shape)
-
         
         return res
 
     def update_buffers(self):
         with torch.no_grad():
             # normalizing value per class, assumes y is one_hot encoded
-            self.N = torch.max(self.gamma * self.N + (1 - self.gamma) * self.y_pred.sum(0), torch.ones_like(self.N))
+            self.N = torch.max(self.gamma * self.N + (1 - self.gamma) \
+                   * self.y_pred.sum(0), torch.ones_like(self.N))
             # compute sum of embeddings on class by class basis
             features_sum = torch.einsum('ijk,ik->jk', self.z, self.y_pred)
             self.m = self.gamma * self.m + (1 - self.gamma) * features_sum
@@ -211,8 +255,11 @@ class SegmentationLoss(nn.Module):
     def __init__(self, cfg, name='bayesian_uresnet'):
         super(SegmentationLoss, self).__init__()
         self.loss_config = cfg.get(name, {})
-        self.loss_fn_name = self.loss_config.get('loss_fn', 'evd_sumsq')
+        self.loss_fn_name = self.loss_config.get('loss_fn', 'cross_entropy')
         self.loss_fn = uq_classification_loss_construct(self.loss_fn_name)
+
+        print(self.loss_fn)
+
         self.one_hot = self.loss_config.get('one_hot', False)
         self.num_classes = self.loss_config.get('num_classes', 5)
 
@@ -227,7 +274,8 @@ class SegmentationLoss(nn.Module):
         # TODO Add weighting
         logits = outputs['segmentation']
         if 'evd' in self.loss_fn_name:
-            segmentation = [logits[0] + 1.0] # convert evidence to alpha concentration params.
+            # convert evidence to alpha concentration params.
+            segmentation = [logits[0] + 1.0]
         else:
             segmentation = logits
         device = segmentation[0].device
@@ -248,7 +296,8 @@ class SegmentationLoss(nn.Module):
                 loss_label = event_label
                 if self.one_hot:
                     loss_label = torch.eye(self.num_classes, device=device)[event_label]
-                    loss_seg = self.loss_fn(event_segmentation, loss_label, t=iteration)
+                    loss_seg = self.loss_fn(event_segmentation, loss_label, 
+                                            t=iteration)
                 else:
                     loss_seg = self.loss_fn(event_segmentation, loss_label)
                 if weight is not None:
@@ -259,7 +308,8 @@ class SegmentationLoss(nn.Module):
                     total_loss += torch.mean(loss_seg)
                 # Accuracy
                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
-                acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
+                acc = (predicted_labels == event_label).sum().item() \
+                    / float(predicted_labels.nelement())
                 total_acc += acc
                 count += 1
 

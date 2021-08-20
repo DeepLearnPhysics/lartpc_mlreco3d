@@ -9,7 +9,9 @@ from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels
-from mlreco.utils.cluster.fragmenter import DBSCANFragmentManager, GraphSPICEFragmentManager, format_fragments
+from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager, 
+                                             GraphSPICEFragmentManager, 
+                                             format_fragments)
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 
 class FullChain(FullChainGNN):
@@ -43,11 +45,15 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = MinkGraphSPICE(cfg)
-            self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}), batch_col=self.batch_col)
+            self.gs_manager                = ClusterGraphConstructor(
+                cfg.get('graph_spice', {}).get('constructor_cfg', {}), 
+                batch_col=self.batch_col)
             self.gs_manager.training       = self.training
             self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_invert            = cfg.get('graph_spice_loss', {}).get('invert', False)
-            self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
+            self._gspice_fragment_manager  = GraphSPICEFragmentManager(
+                cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), 
+                batch_col=self.batch_col)
 
         if self.enable_dbscan:
             self.frag_cfg = cfg.get('dbscan', {}).get('dbscan_fragment_manager', {})
