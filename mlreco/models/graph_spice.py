@@ -56,6 +56,8 @@ class MinkGraphSPICE(nn.Module):
         self.gs_manager = ClusterGraphConstructor(constructor_cfg, batch_col=0)
         self.gs_manager.training = self.training
 
+        print(self)
+
 
     def filter_class(self, input):
         '''
