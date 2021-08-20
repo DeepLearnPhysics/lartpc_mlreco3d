@@ -2,7 +2,7 @@ import torch
 import MinkowskiEngine as ME
 import numpy as np
 
-from mlreco.models.gnn_full_chain import FullChainGNN, FullChainLoss
+from mlreco.models.layers.common.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
