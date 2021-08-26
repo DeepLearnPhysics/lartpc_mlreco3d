@@ -880,8 +880,12 @@ def parse_cluster3d_kinematics(data):
                         dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
             clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
-    np_voxels   = np.concatenate(clusters_voxels, axis=0)
-    np_features = np.concatenate(clusters_features, axis=0)
+    if len(clusters_voxels) > 0:
+        np_voxels   = np.concatenate(clusters_voxels, axis=0)
+        np_features = np.concatenate(clusters_features, axis=0)
+    else:
+        np_voxels = np.empty((0, 3), dtype=np.int32)
+        np_features = np.empty((0, 9), dtype=np.float32)
     # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
 
     # print(np_features[mask][:, [0, 1, 5, 6]])

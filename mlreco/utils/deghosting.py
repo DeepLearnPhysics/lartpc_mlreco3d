@@ -30,7 +30,9 @@ def adapt_labels(result, label_seg, label_clustering,
             batch_mask = coords[:, batch_column] == batch_id
             batch_coords = coords[batch_mask]
             batch_clustering = label_clustering[i][label_clustering[i][:, batch_column] == batch_id]
-
+            if len(batch_clustering) == 0:
+                continue
+                
             # Prepare new labels
             new_label_clustering = -1. * torch.ones((batch_coords.size(0),
                                                      batch_clustering.size(1)))

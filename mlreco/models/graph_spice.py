@@ -56,6 +56,9 @@ class MinkGraphSPICE(nn.Module):
         self.gs_manager = ClusterGraphConstructor(constructor_cfg, batch_col=0)
         self.gs_manager.training = self.training
 
+        # print(self)
+        # print('Total Number of Trainable Parameters (graph_spice)= {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def filter_class(self, input):
         '''

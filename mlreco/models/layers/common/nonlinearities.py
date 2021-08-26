@@ -10,6 +10,9 @@ from MinkowskiNonlinearity import MinkowskiNonlinearityBase
 class MinkowskiLeakyReLU(MinkowskiNonlinearityBase):
     MODULE = nn.LeakyReLU
 
+    def __repr__(self):
+        return self.__class__.__name__ + '(negative_slope = ' + str(self.module.negative_slope) + ')'
+
 class MinkowskiELU(MinkowskiNonlinearityBase):
     MODULE = nn.ELU
 class MinkowskiMish(nn.Module):

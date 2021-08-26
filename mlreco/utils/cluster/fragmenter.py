@@ -83,7 +83,7 @@ class DBSCANFragmentManager(FragmentManager):
     '''
     Full chain model fragment mananger for DBSCAN Clustering
     '''
-    def __init__(self, frag_cfg: dict, mode='scn', **kwargs):
+    def __init__(self, frag_cfg: dict, mode='mink', **kwargs):
         super(DBSCANFragmentManager, self).__init__(frag_cfg, **kwargs)
         dbscan_frag = {'dbscan_frag': frag_cfg}
         if mode == 'mink':

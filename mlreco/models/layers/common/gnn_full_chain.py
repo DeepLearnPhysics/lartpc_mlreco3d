@@ -1012,7 +1012,7 @@ def setup_chain_cfg(self, cfg):
     if self.enable_ghost:
         assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
         if self.enable_ppn:
-            assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
+            assert cfg['uresnet_ppn']['ppn']['ghost']
 
     # Enforce basic logical order
     # 1. Need semantics for everything
