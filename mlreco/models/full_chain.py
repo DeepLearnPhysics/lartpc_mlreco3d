@@ -28,6 +28,7 @@ class FullChain(FullChainGNN):
         super(FullChain, self).__init__(cfg)
 
         # Initialize the UResNet+PPN modules
+        self.input_features = 1
         if self.enable_uresnet:
             self.uresnet_lonely = UResNet_Chain(cfg.get('uresnet_ppn', {}),
                                                 name='uresnet_lonely')
@@ -43,8 +44,9 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = MinkGraphSPICE(cfg)
-            self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}), batch_col=self.batch_col)
-            self.gs_manager.training       = self.training
+            self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
+                                                                    batch_col=self.batch_col,
+                                                                    training=self.training)
             self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_invert            = cfg.get('graph_spice_loss', {}).get('invert', False)
             self._gspice_fragment_manager  = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
@@ -211,11 +213,11 @@ class FullChain(FullChainGNN):
 
         ghost_feature_maps = []
 
-        for ghost_tensor in result['ghost']:
-            ghost_feature_maps.append(ghost_tensor)
-        result['ghost'] = ghost_feature_maps
-
         if self.enable_ghost:
+            for ghost_tensor in result['ghost']:
+                ghost_feature_maps.append(ghost_tensor)
+            result['ghost'] = ghost_feature_maps
+
             # Update input based on deghosting results
             # if self.cheat_ghost:
             #     assert label_seg is not None
@@ -274,6 +276,7 @@ class FullChain(FullChainGNN):
         }
         semantic_labels = torch.argmax(cnn_result['segmentation'][0],
                                        dim=1).flatten()
+        # semantic_labels = label_seg[0][:, -1]
 
 
         if self.enable_cnn_clust:
@@ -288,21 +291,22 @@ class FullChain(FullChainGNN):
 
                 graph_spice_label = torch.cat((label_clustering[0][:, :-1],
                                                semantic_labels.reshape(-1,1)), dim=1)
-
+                cnn_result['graph_spice_label'] = [graph_spice_label]
                 spatial_embeddings_output = self.graph_spice((input[0][:,:5],
                                                                      graph_spice_label))
                 cnn_result.update(spatial_embeddings_output)
 
-                self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
-                                              spatial_embeddings_output['graph_info'][0])
-
-                self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert)
-                cluster_predictions = self.gs_manager._node_pred.x
-                filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
-                                            semantic_labels[filtered_semantic][:, None],
-                                            cluster_predictions.to(device)[:, None]], dim=1)
 
                 if self.process_fragments:
+                    self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
+                                                  spatial_embeddings_output['graph_info'][0])
+
+                    self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert)
+                    cluster_predictions = self.gs_manager._node_pred.x
+                    filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
+                                                semantic_labels[filtered_semantic][:, None],
+                                                cluster_predictions.to(device)[:, None]], dim=1)
+
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragments'].extend(fragment_data[0])
                     cluster_result['frag_batch_ids'].extend(fragment_data[1])
@@ -355,4 +359,4 @@ class FullChainLoss(FullChainLoss):
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg.get('graph_spice_loss', {}).get('skip_classes', {})
+            self._gspice_skip_classes = cfg.get('graph_spice_loss', {}).get('skip_classes', [])

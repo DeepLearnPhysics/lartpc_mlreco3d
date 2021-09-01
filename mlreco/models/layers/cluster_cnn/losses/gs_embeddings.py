@@ -190,7 +190,6 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         if len(occ_loss.squeeze().size()) and len(groups.size()):
             occ_loss = scatter_mean(occ_loss.squeeze(), groups)
             # occ_loss = occ_loss[occ_loss > 0]
-
             return occ_loss.mean()
         else:
             #print(occ_loss.squeeze().size(), groups.size())
@@ -230,6 +229,15 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             cov = covariance[index]
             occ = occupancy[index]
             groups = clabels[index]
+
+            # Remove groups labeled -1
+            mask = groups != -1
+            sp_emb = sp_emb[mask]
+            ft_emb = ft_emb[mask]
+            cov = cov[mask]
+            occ = occ[mask]
+            groups = groups[mask]
+
             groups_unique, _ = unique_label_torch(groups)
             if groups_unique.shape[0] < 2:
                 continue

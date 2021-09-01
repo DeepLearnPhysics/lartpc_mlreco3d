@@ -6,7 +6,7 @@ import MinkowskiEngine as ME
 
 from mlreco.models.layers.common.uresnet_layers import UResNet
 from collections import defaultdict
-from mlreco.models.layers.common.activation_normalization_factories import activations_construct
+from mlreco.models.layers.common.activation_normalization_factories import activations_construct, normalizations_construct
 
 class UResNet_Chain(nn.Module):
 
@@ -31,12 +31,12 @@ class UResNet_Chain(nn.Module):
         self.D = self.net.D
 
         self.output = [
-            ME.MinkowskiBatchNorm(self.F,
-                eps=self.net.norm_args.get('eps', 0.00001),
-                momentum=self.net.norm_args.get('momentum', 0.1)),
-            activations_construct('lrelu', negative_slope=0.33),
-            ME.MinkowskiLinear(self.F, self.num_classes)]
+            normalizations_construct(self.net.norm, self.F, **self.net.norm_args),
+            #activations_construct(self.net.activation_name, **self.net.activation_args),
+            activations_construct(self.net.activation_name, negative_slope=0.33),
+            ]
         self.output = nn.Sequential(*self.output)
+        self.linear_segmentation = ME.MinkowskiLinear(self.F, self.num_classes)
 
         if self.ghost:
             print("Ghost Masking is enabled for UResNet Segmentation")
@@ -44,13 +44,14 @@ class UResNet_Chain(nn.Module):
 
         print('Total Number of Trainable Parameters (mink_uresnet)= {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        #print(self)
+        print(self)
     def forward(self, input):
         out = defaultdict(list)
         for igpu, x in enumerate(input):
             res = self.net(x)
             feats = res['decoderTensors'][-1]
-            seg = self.output(feats)
+            feats = self.output(feats)
+            seg = self.linear_segmentation(feats)
             out['segmentation'].append(seg.F)
             out['finalTensor'].append(res['finalTensor'])
             out['encoderTensors'].append(res['encoderTensors'])
@@ -130,7 +131,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         ["parse_sparse3d_scn", (int,), (3, 1)]
     ]
 
-    def __init__(self, cfg, reduction='sum', batch_col=3):
+    def __init__(self, cfg, reduction='sum', batch_col=0):
         super(SegmentationLoss, self).__init__(reduction=reduction)
         self._cfg = cfg.get('uresnet_lonely', {})
         self._ghost = self._cfg.get('ghost', False)
@@ -200,12 +201,12 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         # Accuracy ghost2ghost = fraction of correcly predicted
                         # ghost points as ghost points
                         if float(num_ghost_points.item()) > 0:
-                            ghost2ghost += (predicted_mask[event_label == 5] == 1).sum().item() / float(num_ghost_points.item())
+                            ghost2ghost += (predicted_mask[event_label == self._num_classes] == 1).sum().item() / float(num_ghost_points.item())
 
                         # Accuracy noghost2noghost = fraction of correctly predicted
                         # non ghost points as non ghost points
                         if float(num_nonghost_points.item()) > 0:
-                            nonghost2nonghost += (predicted_mask[event_label < 5] == 0).sum().item() / float(num_nonghost_points.item())
+                            nonghost2nonghost += (predicted_mask[event_label < self._num_classes] == 0).sum().item() / float(num_nonghost_points.item())
 
                         # Global ghost predictions accuracy
                         acc_mask = predicted_mask.eq_(mask_label).sum().item() / float(predicted_mask.nelement())
@@ -266,8 +267,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
             results = {
                 'accuracy': uresnet_acc/count,
                 'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count,
-                'mask_acc': mask_acc / count,
-                'mask_loss': self._beta * mask_loss / count,
+                'ghost_mask_acc': mask_acc / count,
+                'ghost_mask_loss': self._beta * mask_loss / count,
                 'uresnet_loss': self._alpha * uresnet_loss / count,
                 'uresnet_acc': uresnet_acc / count,
                 'ghost2ghost': ghost2ghost / count,
