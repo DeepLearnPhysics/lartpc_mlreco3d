@@ -249,6 +249,8 @@ class FullChain(FullChainGNN):
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             if self.enable_ppn:
                 deghost_result['points']            = [result['points'][0][deghost]]
+                if 'classify_endpoints' in deghost_result:
+                    deghost_result['classify_endpoints'] = [result['classify_endpoints'][0][deghost]]
                 deghost_result['mask_ppn'][0][-1]   = result['mask_ppn'][0][-1][deghost]
                 #print(len(result['ppn_score']))
                 #deghost_result['ppn_score'][0][-1]   = result['ppn_score'][0][-1][deghost]
@@ -306,7 +308,8 @@ class FullChain(FullChainGNN):
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],
                                                 cluster_predictions.to(device)[:, None]], dim=1)
-
+                    # For the record - (self.gs_manager._node_pred.pos == input[0][filtered_semantic][:, 1:4]).all()
+                    # ie ordering of voxels is the same in node predictions and (filtered) input data
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragments'].extend(fragment_data[0])
                     cluster_result['frag_batch_ids'].extend(fragment_data[1])

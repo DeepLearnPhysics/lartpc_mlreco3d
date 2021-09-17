@@ -195,7 +195,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 #     print("--------------Batch IDX----------------")
                 #     print(batch_idx)
                 #     assert False
-                # print(target)
+                # print(target, len(batch_idx), len(np.unique(batch_idx.astype(np.int32))))
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b

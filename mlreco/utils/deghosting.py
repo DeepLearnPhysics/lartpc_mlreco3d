@@ -32,7 +32,7 @@ def adapt_labels(result, label_seg, label_clustering,
             batch_clustering = label_clustering[i][label_clustering[i][:, batch_column] == batch_id]
             if len(batch_clustering) == 0:
                 continue
-                
+
             # Prepare new labels
             new_label_clustering = -1. * torch.ones((batch_coords.size(0),
                                                      batch_clustering.size(1)))
@@ -60,7 +60,7 @@ def adapt_labels(result, label_seg, label_clustering,
     return complete_label_clustering
 
 
-def adapt_labels_numpy(result, label_seg, label_clustering, num_classes=5):
+def adapt_labels_numpy(result, label_seg, label_clustering, num_classes=5, batch_col=0, coords_col=(1, 4)):
     """
     Returns new cluster labels that have the same size as the input w/ ghost points.
     Points predicted as nonghost but that are true ghosts get the cluster label of
@@ -68,20 +68,23 @@ def adapt_labels_numpy(result, label_seg, label_clustering, num_classes=5):
     Points that are true ghosts and predicted as ghosts get "emtpy" (-1) values.
     Return shape: (input w/ ghost points, label_clusters_features)
     """
+    c1, c2 = coords_col
     complete_label_clustering = []
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :4]
         label_c = []
         #print(len(coords[:, -1].unique()))
-        for batch_id in np.unique(coords[:, -1]):
-            batch_mask = coords[:, -1] == batch_id
+        for batch_id in np.unique(coords[:, batch_col]):
+            batch_mask = coords[:, batch_col] == batch_id
             batch_coords = coords[batch_mask]
-            batch_clustering = label_clustering[i][label_clustering[i][:, 3] == batch_id]
+            batch_clustering = label_clustering[i][label_clustering[i][:, batch_col] == batch_id]
+            if len(batch_clustering) == 0:
+                continue
             nonghost_mask = (result['ghost'][i][batch_mask].argmax(axis=1) == 0)
             # Select voxels predicted as nonghost, but true ghosts
             mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
             # Assign them to closest cluster
-            d = cdist(batch_coords[mask, :3], batch_clustering[:, :3]).argmin(axis=1)
+            d = cdist(batch_coords[mask, c1:c2], batch_clustering[:, c1:c2]).argmin(axis=1)
             additional_label_clustering = np.concatenate([batch_coords[mask], batch_clustering[d, 4:]], axis=1)
             # Prepare new labels
             new_label_clustering = -1. * np.ones((batch_coords.shape[0], batch_clustering.shape[1]))

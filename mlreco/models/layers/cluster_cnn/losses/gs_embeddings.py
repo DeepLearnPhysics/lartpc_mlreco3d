@@ -239,6 +239,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             groups = groups[mask]
 
             groups_unique, _ = unique_label_torch(groups)
+            #print(torch.unique(groups_unique, return_counts=True))
             if groups_unique.shape[0] < 2:
                 continue
             sp_centroids = find_cluster_means(sp_emb, groups_unique)

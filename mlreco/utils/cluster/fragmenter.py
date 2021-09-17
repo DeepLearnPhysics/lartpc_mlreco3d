@@ -245,14 +245,18 @@ class GraphSPICEFragmentManager(FragmentManager):
             - frag_seg
 
         '''
-        offset = 0
         all_fragments, all_frag_batch_ids, all_fragments_seg = [], [], []
         for b in filtered_input[:, self._batch_column].unique():
             mask = filtered_input[:, self._batch_column] == b
             original_mask = original_input[:, self._batch_column] == b
+            # How many voxels belong to that batch
             n = torch.count_nonzero(original_mask)
+            # The index start of the batch in original data
+            # - note: we cannot simply accumulate the values
+            # of n, as this will fail if a batch is missing
+            # from the original data (eg no track in that batch).
+            offset = torch.nonzero(original_mask).min().item()
             fragments, frag_batch_ids, fragments_seg = self.process(filtered_input[mask], n.item(), filtered_semantic[original_mask], offset=offset)
-            offset += n.item()
             all_fragments.extend(fragments)
             all_frag_batch_ids.extend(frag_batch_ids)
             all_fragments_seg.extend(fragments_seg)

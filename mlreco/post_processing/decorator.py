@@ -56,7 +56,8 @@ def post_processing(filename, data_capture, output_capture):
             # Get the relevant data products - index is special, no need to specify it.
             kwargs['index'] = data_blob['index']
             # We need true segmentation label for deghosting masks/adapting labels
-            if deghosting and 'seg_label' not in data_capture:
+            #if deghosting and 'seg_label' not in data_capture:
+            if 'seg_label' not in data_capture:
                 data_capture.append('seg_label')
 
             for key in data_capture:
@@ -82,7 +83,7 @@ def post_processing(filename, data_capture, output_capture):
                 if 'seg_prediction' in kwargs:
                     kwargs['seg_prediction'] = [kwargs['seg_prediction'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_prediction']))]
                 if 'segmentation' in kwargs:
-                    kwargs['segmentation'] = [kwargs['segmentation'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_prediction']))]
+                    kwargs['segmentation'] = [kwargs['segmentation'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['segmentation']))]
                 if 'kinematics' in kwargs:
                     kwargs['kinematics'] = adapt_labels(res, kwargs['seg_label'], kwargs['kinematics'])
                 # This needs to come last - in adapt_labels seg_label is the original one
@@ -106,10 +107,14 @@ def post_processing(filename, data_capture, output_capture):
                     for name in log_name:
                         fout.append(CSVData(os.path.join(logdir, '%s-event-%07d.csv' % (name, tree_idx))))
 
-                if np.isin(output_capture, ['embeddings', 'margins', 'seediness']).any():
-                    kwargs['embeddings'] = np.array(res['embeddings'])[batch_ids == data_idx]
-                    kwargs['margins'] = np.array(res['margins'])[batch_ids == data_idx]
-                    kwargs['seediness'] = np.array(res['seediness'])[batch_ids == data_idx]
+                for key in ['embeddings', 'margins', 'seediness']: # add points?
+                    if key in output_capture:
+                        kwargs[key] = np.array(res[key])[batch_ids == data_idx]
+
+                # if np.isin(output_capture, ['embeddings', 'margins', 'seediness']).any():
+                #     kwargs['embeddings'] = np.array(res['embeddings'])[batch_ids == data_idx]
+                #     kwargs['margins'] = np.array(res['margins'])[batch_ids == data_idx]
+                #     kwargs['seediness'] = np.array(res['seediness'])[batch_ids == data_idx]
 
                 out = func(cfg, module_cfg, data_blob, res, logdir, iteration, **kwargs)
                 if isinstance(out, tuple):

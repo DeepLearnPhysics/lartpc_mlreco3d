@@ -6,6 +6,7 @@ from mlreco.utils.metrics import *
 
 from pprint import pprint
 
+from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 from mlreco.utils.cluster.cluster_graph_constructor import (
     ClusterGraphConstructor, get_edge_weight)
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
@@ -21,14 +22,23 @@ def num_pred_clusters(pred, truth):
 def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     append = True if iteration else False
+    ghost = cfg['post_processing']['graph_spice_metrics'].get('ghost', False)
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
     skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
     invert = cfg['model']['modules']['graph_spice_loss']['invert']
+    segmentation = res['segmentation'][0]
+    if ghost:
+        labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
+        labels = labels[0]
+        ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+        segmentation = segmentation[ghost_mask]
+        # print(labels.shape, segmentation.shape)
+
     #mask = ~np.isin(labels[:, -1], skip_classes)
-    mask = ~np.isin(np.argmax(res['segmentation'][0], axis=1), skip_classes)
-    labels[:, -1] = torch.tensor(np.argmax(res['segmentation'][0], axis=1))
+    mask = ~np.isin(np.argmax(segmentation, axis=1), skip_classes)
+    labels[:, -1] = torch.tensor(np.argmax(segmentation, axis=1))
 
     labels = labels[mask]
     #name = cfg['post_processing']['graph_spice_metrics']['output_filename']

@@ -50,7 +50,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     #if not edge_pred_label in res: continue
     bipartite = cfg['model']['modules'][chain].get('network', 'complete') == 'bipartite'
     node_predictions = node_pred
-    original_clust_data = clust_data_noghost
+    original_clust_data = clust_data_noghost if clust_data_noghost is not None else clust_data
 
     if not len(clusts) or not len(clust_data):
         return (), ()
