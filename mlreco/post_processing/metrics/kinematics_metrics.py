@@ -41,7 +41,7 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
 
     # Loop over events
     particle_graph_idx = counter
-    if particle_graph_idx >= len(particle_graph) or np.unique(particle_graph[particle_graph_idx][:, -1])[0] != data_idx:
+    if particle_graph_idx >= len(particle_graph) or np.unique(particle_graph[particle_graph_idx][:, 0])[0] != data_idx:
         print("No particle graph")
         return (), ()
 
@@ -56,7 +56,7 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     node_true_cluster_id = get_cluster_label(kinematics[data_idx], pred_particles, column=6) # cluster id
 
     clust_ids = get_cluster_label(clust_data[data_idx], pred_particles, 5) # or 6 ?
-    subgraph = particle_graph[particle_graph_idx][:, :2]
+    subgraph = particle_graph[particle_graph_idx][:, 1:3]
     true_edge_index = get_fragment_edges(subgraph, clust_ids)
     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index) # shape (E,), values 0 or 1
 
