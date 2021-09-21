@@ -136,7 +136,7 @@ class EdgeChannelLoss(torch.nn.Module):
                         continue
                 elif 'particle_forest' in self.target:
                     clust_ids = get_cluster_label(labels, clusts, self.source_col)
-                    subgraph = graph[i][graph[i][:,-1] == j, :2]
+                    subgraph = graph[i][graph[i][:, self.batch_col] == j, self.coords_col[0]:self.coords_col[0]+2]
                     true_edge_index = get_fragment_edges(subgraph, clust_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
                 else:
