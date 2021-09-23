@@ -378,6 +378,7 @@ def get_particle_id(particles_v, nu_ids):
     }
 
     particle_ids = np.empty(len(nu_ids))
+    # nu_id = 0 for MPR/cosmic, nu_id = 1 for MPV/neutrino
     for i in range(len(particle_ids)):
         group_id = particles_v[i].group_id()
 
