@@ -222,14 +222,14 @@ class NodeKinematicsLoss(torch.nn.Module):
                     # Exclude vertex that is outside of the volume
                     good_index = torch.all(torch.abs(node_assn_vtx) <= 1., dim=1)
 
-                    #positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+                    positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     # Take the max for each cluster - e.g. for a shower, the primary fragment only
                     # is marked as primary particle, so taking majority count would eliminate the shower
                     # from primary particles for vertex identification purpose.
-                    positives = []
-                    for c in clusts:
-                        positives.append(labels[c, self.vtx_positives_col].max().item())
-                    positives = np.array(positives)
+                    # positives = []
+                    # for c in clusts:
+                    #     positives.append(labels[c, self.vtx_positives_col].max().item())
+                    # positives = np.array(positives)
 
                     positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
                     # for now only sum losses, they get averaged below in results dictionary
