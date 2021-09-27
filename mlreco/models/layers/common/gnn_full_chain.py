@@ -702,23 +702,25 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'occupancy': out['occupancy'],
                     'coordinates': out['coordinates'],
                     'batch_indices': out['batch_indices'],
-                    'segmentation': [out['segmentation'][0][deghost]] if self.enable_ghost else [out['segmentation'][0]]
+                    #'segmentation': [out['segmentation'][0][deghost]] if self.enable_ghost else [out['segmentation'][0]]
                 }
-                select_classes = ~(torch.argmax(graph_spice_out['segmentation'][0], dim=1)[:, None].cpu() == torch.tensor(self._gspice_skip_classes)).any(-1)
-                graph_spice_out['segmentation'] = [graph_spice_out['segmentation'][0][select_classes]]
 
-                # FIXME seg_label or segmentation predictions?
-                # print(torch.argmax(out['segmentation'][0], dim=1)[:, None].size())
-                # FIXME deghost not always true
                 segmentation_pred = out['segmentation'][0]
                 if self.enable_ghost:
                     segmentation_pred = segmentation_pred[deghost]
                 gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(segmentation_pred, dim=1)[:, None]], dim=1)
-                # if self.enable_ghost:
-                #     gs_seg_label = gs_seg_label[deghost]
-                # print(gs_seg_label.size())
-                # print(gs_seg_label[gs_seg_label[:, -1] ==1].size())
-                res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], cluster_label)
+                #gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
+
+                # NOTE: We need to limit loss computation to voxels that are
+                # in the intersection of truth and prediction.
+                # Setting seg label to -1 does not work (embeddings already
+                # have a shape based on predicted semantics). Instead we set
+                # the cluster label to -1 and the GraphSPICEEmbeddingLoss
+                # will remove voxels with true cluster label -1.
+                gs_cluster_label = cluster_label[0]
+                gs_cluster_label[(gs_cluster_label[:, -1] != torch.argmax(segmentation_pred, dim=1)), 5] = -1
+                #res['gs_cluster_label'] = [gs_cluster_label]
+                res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], [gs_cluster_label])
                 #print(res_graph_spice.keys())
                 accuracy += res_graph_spice['accuracy']
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
@@ -1012,7 +1014,7 @@ def setup_chain_cfg(self, cfg):
     if self.enable_ghost:
         assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
         if self.enable_ppn:
-            assert cfg['uresnet_ppn']['ppn']['downsample_ghost']
+            assert cfg['uresnet_ppn']['ppn']['ghost']
 
     # Enforce basic logical order
     # 1. Need semantics for everything

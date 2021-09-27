@@ -19,7 +19,7 @@ class GraphSPICEEmbedder(UResNet):
             'feature_embedding_dim', 8)
         self.spatial_embedding_dim = self.model_config.get(
             'spatial_embedding_dim', 3)
-        self.num_classses = self.model_config.get('num_classes', 5)
+        self.num_classes = self.model_config.get('num_classes', 5)
         self.coordConv = self.model_config.get('coordConv', True)
 
         self.covariance_mode = self.model_config.get('covariance_mode', 'exp')
@@ -48,6 +48,9 @@ class GraphSPICEEmbedder(UResNet):
         self.outputFeatureEmbeddings = nn.Linear(self.num_filters,
                                                  self.feature_embedding_dim)
 
+        # self.outputSegmentation = nn.Linear(self.num_filters,
+        #                                    self.num_classes)
+
         self.outputCovariance = nn.Linear(self.num_filters, 2)
 
         self.outputOccupancy = nn.Linear(self.num_filters, 1)
@@ -58,6 +61,10 @@ class GraphSPICEEmbedder(UResNet):
         # Pytorch Activations
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
+
+        # print('Total Number of Trainable Parameters (graph_spice_embedder)= {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        # print([name for name, param in self.named_parameters()])
 
     def get_embeddings(self, input):
         '''
@@ -75,7 +82,7 @@ class GraphSPICEEmbedder(UResNet):
         coords = point_cloud[:, 0:self.D+1].int()
         features = point_cloud[:, self.D+1:].float()
 
-        normalized_coords = (coords[:, :3] - float(self.spatial_size) / 2) \
+        normalized_coords = (coords[:, 1:self.D+1] - float(self.spatial_size) / 2) \
                     / (float(self.spatial_size) / 2)
         if self.coordConv:
             features = torch.cat([normalized_coords, features], dim=1)
@@ -104,6 +111,9 @@ class GraphSPICEEmbedder(UResNet):
         out = self.outputOccupancy(output_features)
         occupancy = self.occ_func(out)
 
+        # Segmentation
+        # segmentation = self.outputSegmentation(output_features)
+
         hypergraph_features = torch.cat([
             spatial_embeddings,
             feature_embeddings,
@@ -116,7 +126,8 @@ class GraphSPICEEmbedder(UResNet):
             "feature_embeddings": [feature_embeddings],
             "occupancy": [occupancy],
             "features": [output_features],
-            "hypergraph_features": [hypergraph_features]
+            "hypergraph_features": [hypergraph_features],
+            # "segmentation": [segmentation]
         }
 
         return res

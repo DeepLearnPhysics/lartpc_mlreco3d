@@ -53,10 +53,9 @@ class MinkGraphSPICE(nn.Module):
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
         # Cluster Graph Manager
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg, batch_col=0)
-        self.gs_manager.training = self.training
-
-        print(self)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
+                                                batch_col=0,
+                                                training=self.training)
 
 
     def filter_class(self, input):
@@ -100,12 +99,16 @@ class GraphSPICELoss(nn.Module):
         self.loss_config = cfg.get(name, {})
         self.loss_name = self.loss_config.get('name', 'se_lovasz_inter')
         self.skip_classes = self.loss_config.get('skip_classes', [2, 3, 4])
+        # We use the semantic label -1 to account
+        # for semantic prediction mistakes.
+        # self.skip_classes += [-1]
         self.eval_mode = self.loss_config.get('eval', False)
         self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
 
         constructor_cfg = self.loss_config.get('constructor_cfg', {})
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
-        self.gs_manager.training = ~self.eval_mode
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
+                                                batch_col=0,
+                                                training=~self.eval_mode)
 
         self.invert = self.loss_config.get('invert', False)
         # print("LOSS FN = ", self.loss_fn)
@@ -125,7 +128,7 @@ class GraphSPICELoss(nn.Module):
 
         '''
         slabel, clabel = self.filter_class(segment_label, cluster_label)
-        # print(slabel[0].size())
+
         graph = result['graph'][0]
         graph_info = result['graph_info'][0]
         self.gs_manager.replace_state(graph, graph_info)

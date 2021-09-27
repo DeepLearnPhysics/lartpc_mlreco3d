@@ -26,7 +26,7 @@ class WeightedEdgeLoss(nn.Module):
         if self.invert:
             y = (targets < 0.5).float()
         else:
-            y = (targets > 0.5).float()
+            y = targets #(targets > 0.5).float()
         device = logits.device
         weight = torch.ones(targets.shape[0]).to(device)
 
@@ -190,7 +190,6 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         if len(occ_loss.squeeze().size()) and len(groups.size()):
             occ_loss = scatter_mean(occ_loss.squeeze(), groups)
             # occ_loss = occ_loss[occ_loss > 0]
-
             return occ_loss.mean()
         else:
             #print(occ_loss.squeeze().size(), groups.size())
@@ -230,7 +229,17 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             cov = covariance[index]
             occ = occupancy[index]
             groups = clabels[index]
+
+            # Remove groups labeled -1
+            mask = groups != -1
+            sp_emb = sp_emb[mask]
+            ft_emb = ft_emb[mask]
+            cov = cov[mask]
+            occ = occ[mask]
+            groups = groups[mask]
+
             groups_unique, _ = unique_label_torch(groups)
+            #print(torch.unique(groups_unique, return_counts=True))
             if groups_unique.shape[0] < 2:
                 continue
             sp_centroids = find_cluster_means(sp_emb, groups_unique)
@@ -295,6 +304,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             ft_embedding = out['feature_embeddings'][i]
             covariance = out['covariance'][i]
             occupancy = out['occupancy'][i]
+            # segmentation = out['segmentation'][i]
             # nbatch = batch_idx.unique().shape[0]
 
             for bidx in batch_idx.unique(sorted=True):
@@ -307,6 +317,11 @@ class GraphSPICEEmbeddingLoss(nn.Module):
                 covariance_batch = covariance[batch_mask]
                 occupancy_batch = occupancy[batch_mask]
 
+                # loss_seg = self.seg_loss_fn(segmentation_batch, slabels_batch)
+                # acc_seg = float(torch.sum(torch.argmax(
+                #     segmentation_batch, dim=1) == slabels_batch)) \
+                #         / float(segmentation_batch.shape[0])
+
                 loss_class, acc_class = self.combine_multiclass(
                     sp_embedding_batch, ft_embedding_batch,
                     covariance_batch, occupancy_batch,
@@ -316,11 +331,15 @@ class GraphSPICEEmbeddingLoss(nn.Module):
                 for s, acc in acc_class.items():
                     accuracy[s].append(acc)
 
+                # loss['gs_loss_seg'].append(loss_seg)
+                # accuracy['gs_acc_seg'].append(acc_seg)
+
         loss_avg = {}
         acc_avg = defaultdict(float)
 
         for key, val in loss.items():
             loss_avg[key] = sum(val) / len(val)
+        # loss_avg['loss'] += loss_avg['gs_loss_seg']
         for key, val in accuracy.items():
             acc_avg[key] = sum(val) / len(val)
 

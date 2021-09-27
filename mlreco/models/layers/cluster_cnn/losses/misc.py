@@ -207,7 +207,7 @@ def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
         intra_loss = torch.mean(scatter_mean(l, labels))
         return intra_loss
     else:
-        #print(l.size(), labels.size())
+        # print('intra_cluster_loss', l.size(), labels.size())
         return 0.0
 
 

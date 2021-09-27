@@ -158,6 +158,7 @@ class PPN(torch.nn.Module):
         self.nPlanes = [i * self.num_filters for i in range(1, self.depth+1)]
         self.ppn_score_threshold = self.model_cfg.get('score_threshold', 0.5)
         self.input_kernel = self.model_cfg.get('input_kernel', 3)
+        self._classify_endpoints = self.model_cfg.get('classify_endpoints', False)
 
         # Initialize Decoder
         self.decoding_block = []
@@ -213,6 +214,13 @@ class PPN(torch.nn.Module):
                                                        kernel_size=3,
                                                        stride=1,
                                                        dimension=self.D)
+
+        if self._classify_endpoints:
+            self.ppn_endpoint = ME.MinkowskiConvolution(self.nPlanes[0],
+                                                        2,
+                                                        kernel_size=3,
+                                                        stride=1,
+                                                        dimension=self.D)
 
         self.resolution = self.model_cfg.get('ppn_resolution', 1.0)
 
@@ -318,6 +326,8 @@ class PPN(torch.nn.Module):
         pixel_pred = self.ppn_pixel_pred(x)
         ppn_type = self.ppn_type(x)
         ppn_final_score = self.ppn_final_score(x)
+        if self._classify_endpoints:
+            ppn_endpoint = self.ppn_endpoint(x)
 
         # X, Y, Z, logits, and prob score
         points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
@@ -329,6 +339,8 @@ class PPN(torch.nn.Module):
             'ppn_coords': [ppn_coords],
             'ppn_output_coordinates': [ppn_output_coordinates],
         }
+        if self._classify_endpoints:
+            res['classify_endpoints'] = [ppn_endpoint.F]
 
         return res
 
@@ -351,6 +363,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.segloss = torch.nn.functional.cross_entropy
         self.particles_label_seg_col = self.loss_config.get(
             'particles_label_seg_col', -2)
+
+        # Endpoint classification (optional)
+        self._classify_endpoints = self.loss_config.get('classify_endpoints', False)
+        self._track_label = self.loss_config.get('track_label', 1)
 
     @staticmethod
     def pairwise_distances(v1, v2):
@@ -375,7 +391,13 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         total_acc = 0
         device = segment_label[0].device
 
-        res = {}
+        res = {
+            'reg_loss': 0.,
+            'mask_loss': 0.,
+            'type_loss': 0.,
+            'classify_endpoints_loss': 0.,
+            'classify_endpoints_acc': 0.
+        }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
             particles = particles_label[igpu]
@@ -396,11 +418,11 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     scores_event = ppn_score_layer[batch_index_layer].squeeze()
                     points_event = coords_layer[batch_index_layer]
 
-                    d = self.pairwise_distances(
+                    d_true = self.pairwise_distances(
                         points_label,
                         points_event[:, 1:4].float().cuda())
 
-                    d_positives = (d < self.resolution * \
+                    d_positives = (d_true < self.resolution * \
                                    2**(len(ppn_layers) - layer)).any(dim=0)
 
                     num_positives = d_positives.sum()
@@ -460,13 +482,49 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                                  positive_labels.long(),
                                                  weight=w.to(device))
 
+                        # --- Endpoint classification loss
+                        if self._classify_endpoints:
+                            tracks = positive_labels == self._track_label
+                            loss_point_class, acc_point_class, point_class_count = 0., 0., 0.
+                            loss_classify_endpoints, acc_classify_endpoints = 0., 1.
+                            if tracks.sum().item() > 0:
+                                # Start and end points separately in case of overlap
+                                for point_class in range(2):
+                                    point_class_mask = particles[particles[:, 0].int() == b][:, -1] == point_class
+                                    #true = event_particles[event_particles[:, -4] == b][torch.argmin(distances_positives, dim=0), -1]
+                                    point_class_positives = (d_true[point_class_mask, :] < self.resolution).any(dim=0)
+                                    point_class_index = d[point_class_mask, :][:, point_class_positives]
+
+                                    if point_class_index.nelement():
+                                        point_class_index = torch.argmin(point_class_index, dim=0)
+
+                                        true = particles[particles[:, 0].int() == b][point_class_mask][point_class_index, -1]
+                                        #pred = result['classify_endpoints'][i][batch_index][event_mask][positives]
+                                        pred = result['classify_endpoints'][igpu][batch_index_layer][point_class_positives]
+                                        tracks = event_types_label[point_class_index] == self._track_label
+                                        if tracks.sum().item():
+                                            loss_point_class += torch.mean(self.segloss(pred[tracks].double(), true[tracks].long()))
+                                            acc_point_class += (torch.argmax(pred[tracks], dim=-1) == true[tracks]).sum().item() / float(true[tracks].nelement())
+                                            point_class_count += 1
+
+                                if point_class_count:
+                                    loss_classify_endpoints = loss_point_class / point_class_count
+                                    acc_classify_endpoints = acc_point_class / point_class_count
+                                    #total_loss += loss_classify_endpoints.float()
+                            res['classify_endpoints_loss'] += float(loss_classify_endpoints) / num_batches
+                            res['classify_endpoints_acc'] += float(acc_classify_endpoints) / num_batches
+                        # --- end of Endpoint classification
+
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)
                         reg_loss = d2.mean()
-                        res['reg_loss'] = float(reg_loss)
-                        res['type_loss'] = float(type_loss)
-                        res['mask_loss'] = float(mask_loss_final)
+                        res['reg_loss'] += float(reg_loss) / num_batches
+                        res['type_loss'] += float(type_loss) / num_batches
+                        res['mask_loss'] += float(mask_loss_final) / num_batches
                         total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches
+                        if self._classify_endpoints:
+                            total_loss += loss_classify_endpoints / num_batches
+
                 loss_layer /= num_batches
                 loss_gpu += loss_layer
             loss_gpu /= len(ppn_layers)

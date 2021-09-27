@@ -95,7 +95,10 @@ class UResNetEncoder(torch.nn.Module):
               1) encoderTensors (list): list of intermediate SparseTensors
               2) finalTensor (SparseTensor): feature tensor at
               deepest layer.
-        '''
+        # '''
+        # print('input' , self.input_layer)
+        # for name, param in self.input_layer.named_parameters():
+        #     print(name, param.shape, param)
         x = self.input_layer(x)
         encoderTensors = [x]
         features_ppn = [x]

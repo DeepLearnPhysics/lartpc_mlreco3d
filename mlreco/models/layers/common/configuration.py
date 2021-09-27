@@ -8,7 +8,7 @@ def setup_cnn_configuration(self, cfg, name):
     # Number of input data features
     self.num_input = model_cfg.get('num_input', 1)
     # Allow biases in convolutions and linear layers
-    self.allow_bias = model_cfg.get('allow_bias', True)
+    self.allow_bias = model_cfg.get('allow_bias', False)
     # Spatial size of dataset
     self.spatial_size = model_cfg.get('spatial_size', 512)
 

@@ -286,16 +286,25 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     [x,y,z,bid,label] of ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = out['points'][entry]#.cpu().detach().numpy()
+    points = np.array(out['points'])#[entry]#.cpu().detach().numpy()
+    ppn_coords = out['ppn_coords']
+    # If 'points' is specified in `concat_result`,
+    # then it won't be unwrapped.
+    if points.shape[0] == ppn_coords[-1].shape[0]:
+        #pass
+        points = points[ppn_coords[-1][:, 0] == entry, :]
+    else: # in case it has been unwrapped (possible in no-ghost scenario)
+        points = out['points'][entry]
+
     enable_classify_endpoints = 'classify_endpoints' in out
     if enable_classify_endpoints:
-        classify_endpoints = out['classify_endpoints'][entry]
+        classify_endpoints = np.array(out['classify_endpoints'])[ppn_coords[-1][:, 0] == entry, :]#[entry]
 
     # Difference in naming between SCN/ME
     if 'mask_ppn' not in out:
         mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     else:
-        mask_ppn = out['mask_ppn'][entry][-1]
+        mask_ppn = out['mask_ppn'][-1][ppn_coords[-1][:, 0] == entry, :]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -304,12 +313,12 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if 'ghost' in out:
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
-        points = points[mask_ghost]
-        if enable_classify_endpoints:
-            classify_endpoints = classify_endpoints[mask_ghost]
-        mask_ppn = mask_ppn[mask_ghost]
+        #points = points[mask_ghost]
+        #if enable_classify_endpoints:
+        #    classify_endpoints = classify_endpoints[mask_ghost]
+        #mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
-        scores = scores[mask_ghost]
+        #scores = scores[mask_ghost]
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean
@@ -340,16 +349,16 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
-                    d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
+                    d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
                     ppn_mask = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
+                    final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
                     final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
                     if enable_classify_endpoints:
                         final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
         else:
-            final_points = [points[batch_index][mask][:, coords_col[0]:coords_col[1]] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
+            final_points = [points[batch_index][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
             final_scores = [scores[batch_index][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]

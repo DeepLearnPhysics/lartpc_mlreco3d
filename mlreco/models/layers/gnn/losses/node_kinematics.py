@@ -69,8 +69,8 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.batch_col = batch_col
         self.coords_col = coords_col
 
-        self.type_col = loss_config.get('target_col', 7)
-        self.momentum_col = loss_config.get('target_col', 8)
+        self.type_col = loss_config.get('type_col', 7)
+        self.momentum_col = loss_config.get('momentum_col', 8)
         self.vtx_col = loss_config.get('vtx_col', 9)
         self.vtx_positives_col = loss_config.get('vtx_positives_col', 12)
 
