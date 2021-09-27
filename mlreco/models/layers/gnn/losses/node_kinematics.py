@@ -321,8 +321,8 @@ class NodeKinematicsLoss(torch.nn.Module):
 
 class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
 
-    def __init__(self, loss_config):
-        super(NodeEvidentialKinematicsLoss, self).__init__(loss_config)
+    def __init__(self, loss_config, **kwargs):
+        super(NodeEvidentialKinematicsLoss, self).__init__(loss_config, **kwargs)
         evd_loss_name = loss_config.get('evd_loss_name', 'evd_nll')
         T = loss_config.get('T', 50000)
         self.type_lossfn = EVDLoss(evd_loss_name,
