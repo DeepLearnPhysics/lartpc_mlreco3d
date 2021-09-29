@@ -2,7 +2,7 @@
 import numpy as np
 
 from mlreco.post_processing import post_processing
-from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics, primary_assignment
+from mlreco.utils.gnn.evaluation import node_purity_mask, edge_assignment, node_assignment, node_assignment_score, node_assignment_bipartite, clustering_metrics, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.post_processing.common import extent
 
@@ -48,7 +48,9 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     spatial_size = module_cfg.get('spatial_size', 768)
 
     #if not edge_pred_label in res: continue
-    bipartite = cfg['model']['modules'][chain].get('network', 'complete') == 'bipartite'
+    bipartite = cfg['model']['modules'][chain]['base'].get('network', 'complete') == 'bipartite'
+    group_pred_alg = cfg['model']['modules'][chain + '_loss'].get('node_loss', {}).get('group_pred_alg', 'score')
+
     node_predictions = node_pred
     original_clust_data = clust_data_noghost if clust_data_noghost is not None else clust_data
 
@@ -66,7 +68,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     for c in clusts[data_idx]:
         v, cts = np.unique(clust_data[data_idx][c,column], return_counts=True)
         group_ids.append(int(v[cts.argmax()]))
-        v, cts = np.unique(clust_data[data_idx][c,5], return_counts=True)
+        v, cts = np.unique(clust_data[data_idx][c,column_source], return_counts=True)
         cluster_ids.append(int(v[cts.argmax()]))
     group_ids = np.array(group_ids, dtype=np.int64)
     cluster_ids = np.array(cluster_ids, dtype=np.int64)
@@ -77,7 +79,12 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     if not bipartite:
         # Determine the predicted group IDs by using union find
         edge_assn = np.argmax(edge_pred[data_idx], axis=1)
-        node_pred = node_assignment(edge_index[data_idx], edge_assn, n)
+        if group_pred_alg == 'threshold':
+            node_pred = node_assignment(edge_index[data_idx], edge_assn, n)
+        elif group_pred_alg == 'score':
+            node_pred = node_assignment_score(edge_index[data_idx], edge_pred[data_idx], n)
+        else:
+            raise ValueError('Group prediction algorithm not recognized: ' + group_pred_alg)
     else:
         # Determine the predicted group by chosing the most likely primary for each secondary
         primary_ids = np.unique(edge_index[data_idx][:,0])
@@ -192,12 +199,15 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         else:
             ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
         primary_accuracy = -1.
+        high_purity = -1
         if node_pred_primary is not None:
             primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
+            high_purity = node_purity_mask(cluster_ids, group_ids).any()
+            print(data_idx, "primary accuracy", primary_accuracy, high_purity)
         # Store
         row_names = ('ari', 'ami', 'sbd', 'pur', 'eff',
-                    'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts', 'primary_accuracy')
+                    'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts', 'primary_accuracy', 'high_purity')
         row_values = (ari, ami, sbd, pur, eff,
-                    n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred)), primary_accuracy)
+                    n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred)), primary_accuracy, high_purity)
 
     return row_names, row_values

@@ -117,7 +117,7 @@ class NodePrimaryLoss(torch.nn.Module):
 
                 # Compute accuracy of assignment (fraction of correctly assigned nodes)
                 total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
-
+                # print(i, j, torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()/len(node_assn))
                 # Increment the number of nodes
                 n_clusts += len(clusts)
 
@@ -128,7 +128,7 @@ class NodePrimaryLoss(torch.nn.Module):
                 'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device),
                 'n_clusts': n_clusts
             }
-
+        print('total acc', total_acc/n_clusts)
         return {
             'accuracy': total_acc/n_clusts,
             'loss': total_loss/n_clusts,

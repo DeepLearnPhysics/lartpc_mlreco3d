@@ -344,7 +344,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1, 4)):
+def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=(1, 4)):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only
@@ -359,13 +359,16 @@ def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1
     Returns:
         np.ndarray: (N,3/6) particle wise start (and end points in RANDOMIZED ORDER)
     """
-    return _get_cluster_points_label(data, particles, clusts, groupwise, list(coords_index))
+    return _get_cluster_points_label(data, particles, clusts, groupwise,
+                                    batch_col=batch_col,
+                                    coords_index=list(coords_index))
 
 @nb.njit
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
                               groupwise: nb.boolean = False,
+                              batch_col: nb.int64 = 0,
                               coords_index: nb.types.List(nb.int64[:]) = [1, 4]) -> nb.float64[:,:]:
     # Get batch_ids and group_ids
     batch_ids = _get_cluster_batch(data, clusts)
@@ -373,13 +376,13 @@ def _get_cluster_points_label(data: nb.float64[:,:],
         points = np.empty((len(clusts), 3), dtype=data.dtype)
         clust_ids = _get_cluster_label(data, clusts)
         for i, c in enumerate(clusts):
-            batch_mask = np.where(particles[:,3] == batch_ids[i])[0]
+            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
             idx = batch_mask[clust_ids[i]]
-            points[i] = particles[idx,:3]
+            points[i] = particles[idx, coords_index[0]:coords_index[1]]
     else:
         points = np.empty((len(clusts), 6), dtype=data.dtype)
         for i, g in enumerate(clusts): # Here clusters are groups
-            batch_mask = np.where(particles[:,3] == batch_ids[i])[0]
+            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
             clust_ids  = np.unique(data[g,5]).astype(np.int64)
             minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
             order = np.array([0, 1, 2, 4, 5, 6]) if np.random.choice(2) else np.array([4, 5, 6, 0, 1, 2])

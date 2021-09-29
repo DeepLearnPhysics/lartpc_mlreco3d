@@ -432,6 +432,7 @@ class trainval(object):
                             # include a dot to avoid accidentally replacing in unrelated places
                             # eg if there is a different module called something_uresnet1_something
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                            #print(name, other_name)
                             # Additionally, only select weights related to current module
                             if module in name:
                                 # if module == 'spatial_embeddings' :

@@ -245,7 +245,8 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
                            'group_pred': 'shower_group_pred'}
-
+            result['shower_gnn_points'] = [kwargs['points']]
+            result['shower_gnn_extra_feats'] = [kwargs['extra_feats']]
             self.run_gnn(self.grappa_shower,
                          input,
                          result,

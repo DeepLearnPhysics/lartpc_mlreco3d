@@ -339,11 +339,11 @@ class FullChain(FullChainGNN):
 
         cnn_result.update(fragments_result)
 
-        if self.enable_cnn_clust:
+        if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({ 'semantic_labels': [semantic_labels] })
             if label_clustering is not None:
                 cnn_result.update({ 'label_clustering': [label_clustering] })
-                
+
         def return_to_original(result):
             if self.enable_ghost:
                 result['segmentation'][0] = segmentation
