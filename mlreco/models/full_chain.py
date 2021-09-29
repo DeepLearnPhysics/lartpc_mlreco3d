@@ -48,7 +48,9 @@ class FullChain(FullChainGNN):
             self.graph_spice               = MinkGraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
                                                                     batch_col=self.batch_col,
-                                                                    training=self.training)
+                                                                    training=False) # for downstream, need to run prediction in inference mode
+            self.gs_manager.ths = 0.9 # edge cut threshold is usually 0. during training, but 0.9 at inference
+
             self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_invert            = cfg.get('graph_spice_loss', {}).get('invert', False)
             self._gspice_fragment_manager  = GraphSPICEFragmentManager(
@@ -286,17 +288,22 @@ class FullChain(FullChainGNN):
 
 
         if self.enable_cnn_clust:
-            if label_clustering is None:
-                raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time.")
+            if label_clustering is None and self.training:
+                raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time for training.")
 
             filtered_semantic = ~(semantic_labels[..., None].cpu() == \
                                     torch.Tensor(self._gspice_skip_classes)).any(-1)
 
             # If there are voxels to process in the given semantic classes
             if torch.count_nonzero(filtered_semantic) > 0:
-
-                graph_spice_label = torch.cat((label_clustering[0][:, :-1],
-                                               semantic_labels.reshape(-1,1)), dim=1)
+                if label_clustering is not None and self.training:
+                    # If we are training, need cluster labels to define edge truth.
+                    graph_spice_label = torch.cat((label_clustering[0][:, :-1],
+                                                   semantic_labels.reshape(-1,1)), dim=1)
+                else:
+                    # Otherwise semantic predictions is enough.
+                    graph_spice_label = torch.cat((input[0][:, :4],
+                                                    semantic_labels.reshape(-1, 1)), dim=1)
                 cnn_result['graph_spice_label'] = [graph_spice_label]
                 spatial_embeddings_output = self.graph_spice((input[0][:,:5],
                                                                      graph_spice_label))
@@ -336,12 +343,11 @@ class FullChain(FullChainGNN):
 
         cnn_result.update(fragments_result)
 
-        if self.enable_cnn_clust and label_clustering is not None:
-            cnn_result.update({
-                'label_clustering': [label_clustering],
-                'semantic_labels' : [semantic_labels],
-            })
-
+        if self.enable_cnn_clust:
+            cnn_result.update({ 'semantic_labels': [semantic_labels] })
+            if label_clustering is not None:
+                cnn_result.update({ 'label_clustering': [label_clustering] })
+                
         def return_to_original(result):
             if self.enable_ghost:
                 result['segmentation'][0] = segmentation

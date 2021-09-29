@@ -68,7 +68,7 @@ def post_processing(filename, data_capture, output_capture):
                     continue
                 if not len(module_cfg.get(key, key)):
                     continue
-                kwargs[key] = res[module_cfg.get(key, key)]
+                kwargs[key] = res.get(module_cfg.get(key, key), None)
                 if key == 'segmentation':
                     kwargs['segmentation'] = [res['segmentation'][i] for i in range(len(res['segmentation']))]
                     kwargs['seg_prediction'] = [res['segmentation'][i].argmax(axis=1) for i in range(len(res['segmentation']))]
@@ -77,17 +77,17 @@ def post_processing(filename, data_capture, output_capture):
                 kwargs['ghost_mask'] = [res['ghost'][i].argmax(axis=1) == 0 for i in range(len(res['ghost']))]
                 kwargs['true_ghost_mask'] = [ kwargs['seg_label'][i][:, -1] < 5 for i in range(len(kwargs['seg_label']))]
 
-                if 'clust_data' in kwargs:
+                if 'clust_data' in kwargs and kwargs['clust_data'] is not None:
                     kwargs['clust_data_noghost'] = kwargs['clust_data'] # Save the clust_data before deghosting
                     kwargs['clust_data'] = adapt_labels(res, kwargs['seg_label'], kwargs['clust_data'])
-                if 'seg_prediction' in kwargs:
+                if 'seg_prediction' in kwargs and kwargs['seg_prediction'] is not None:
                     kwargs['seg_prediction'] = [kwargs['seg_prediction'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_prediction']))]
-                if 'segmentation' in kwargs:
+                if 'segmentation' in kwargs and kwargs['segmentation'] is not None:
                     kwargs['segmentation'] = [kwargs['segmentation'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['segmentation']))]
-                if 'kinematics' in kwargs:
+                if 'kinematics' in kwargs and kwargs['kinematics'] is not None:
                     kwargs['kinematics'] = adapt_labels(res, kwargs['seg_label'], kwargs['kinematics'])
                 # This needs to come last - in adapt_labels seg_label is the original one
-                if 'seg_label' in kwargs:
+                if 'seg_label' in kwargs and kwargs['seg_label'] is not None:
                     kwargs['seg_label_noghost'] = kwargs['seg_label']
                     kwargs['seg_label'] = [kwargs['seg_label'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_label']))]
 

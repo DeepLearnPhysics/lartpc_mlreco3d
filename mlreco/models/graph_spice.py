@@ -53,9 +53,10 @@ class MinkGraphSPICE(nn.Module):
         self.use_raw_features = self.model_config.get('use_raw_features', False)
 
         # Cluster Graph Manager
+        # `training` needs to be set at forward time.
+        # Before that, self.training is always True.
         self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                batch_col=0,
-                                                training=self.training)
+                                                batch_col=0)
 
 
     def filter_class(self, input):
@@ -72,6 +73,7 @@ class MinkGraphSPICE(nn.Module):
         '''
 
         '''
+        self.gs_manager.training = self.training
         point_cloud, labels = self.filter_class(input)
         res = self.embedder([point_cloud])
 

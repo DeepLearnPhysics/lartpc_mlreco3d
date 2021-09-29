@@ -126,10 +126,6 @@ class FullChainGNN(torch.nn.Module):
 
         # Pass data through the GrapPA model
         gnn_output = grappa(input, clusts, **kwargs)
-        true_labels = None
-
-        if 'label_clustering' in result:
-            true_labels = result['label_clustering'][0][0]
 
         # Update the result dictionary if the corresponding label exists
         for l, tag in labels.items():
@@ -418,8 +414,11 @@ class FullChainGNN(torch.nn.Module):
         part_primary_ids = part_result['part_primary_ids']
         counts = part_result['counts']
 
-        label_clustering =  result['label_clustering'][0]
-        device = label_clustering[0].device
+        label_clustering = result['label_clustering'][0] if 'label_clustering' in result else None
+        if label_clustering is None and (self.use_true_fragments or (self.enable_cosmic and self._cosmic_use_true_interactions)):
+            raise Exception('Need clustering labels to use true fragments or true interactions.')
+
+        device = input[0].device
 
         if self.enable_gnn_inter:
             # For showers, select primary for extra feature extraction
@@ -825,8 +824,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
 
-            res['inter_edge_loss'] = res_gnn_inter['loss']
-            res['inter_edge_accuracy'] = res_gnn_inter['accuracy']
+            res['inter_edge_loss'] = res_gnn_inter['edge_loss']
+            res['inter_edge_accuracy'] = res_gnn_inter['edge_accuracy']
             if 'node_loss' in out:
                 res['inter_node_loss'] = res_gnn_inter['node_loss']
                 res['inter_node_accuracy'] = res_gnn_inter['node_accuracy']
@@ -941,7 +940,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
             if 'node_pred_vtx' in out:
                 #print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
-                print('Primary score accuracy: {:.4f}'.format(res['vtx_score_acc']))
+                print('Primary particle score accuracy: {:.4f}'.format(res['vtx_score_acc']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res

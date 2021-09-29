@@ -875,8 +875,11 @@ def parse_cluster3d_kinematics(data):
                             fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
             vtx_z = np.full(shape=(cluster.as_vector().size()),
                             fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
+            # is_primary = np.full(shape=(cluster.as_vector().size()),
+            #             fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
+            #             dtype=np.float32)
             is_primary = np.full(shape=(cluster.as_vector().size()),
-                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
+                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].group_id() == particles_v[i].parent_id())),
                         dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
             clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
