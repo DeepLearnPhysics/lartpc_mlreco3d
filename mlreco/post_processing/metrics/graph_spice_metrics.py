@@ -57,7 +57,9 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     gs_manager = ClusterGraphConstructor(constructor_cfg,
                                          graph_batch=graph,
-                                         graph_info=graph_info)
+                                         graph_info=graph_info,
+                                         batch_col=0,
+                                         training=False)
     gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
     funcs = [ARI, SBD, purity, efficiency, num_true_clusters, num_pred_clusters]
     df = gs_manager.evaluate_nodes(labels, funcs)
@@ -76,14 +78,30 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     append = True if iteration else False
+    ghost = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('ghost', False)
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    skip_classes = cfg['model']['modules']['spice_loss']['skip_classes']
-    mask = ~np.isin(labels[:, -1], skip_classes)
-    #labels = labels[mask]
+    invert = cfg['model']['modules']['graph_spice_loss']['invert']
+    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
+    segmentation = res['segmentation'][0]
+    if ghost:
+        labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
+        labels = labels[0]
+        ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+        segmentation = segmentation[ghost_mask]
 
-    name = cfg['post_processing']['graph_spice_metrics_loop_threshold']['output_filename']
+    use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
+
+    if use_labels:
+        mask = ~np.isin(labels[:, -1], skip_classes)
+    else:
+        mask = ~np.isin(np.argmax(segmentation, axis=1), skip_classes)
+        labels[:, -1] = torch.tensor(np.argmax(segmentation, axis=1))
+
+    labels = labels[mask]
+
+    #name = cfg['post_processing']['graph_spice_metrics_loop_threshold']['output_filename']
 
     graph = res['graph'][0]
 
@@ -98,7 +116,11 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
-    edge_ths_range = np.linspace(0.01, 0.1, 20)
+    min_ths = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('min_edge_threshold', 0.)
+    max_ths = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('max_edge_threshold', 1.)
+    step_ths = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('step_edge_threshold', 0.1)
+
+    edge_ths_range = np.arange(min_ths, max_ths, step_ths)
 
     for edge_ths in edge_ths_range:
 
@@ -109,7 +131,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
         gs_manager = ClusterGraphConstructor(constructor_cfg,
                                             graph_batch=graph,
                                             graph_info=graph_info)
-        gs_manager.fit_predict(gen_numpy_graph=True, invert=True)
+        gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
         funcs = [ARI, SBD, purity, efficiency, num_true_clusters,
                  num_pred_clusters, edge_threshold]
         column_names = ['ARI', 'SBD', 'Purity', 'Efficiency', 'num_true_clusters',

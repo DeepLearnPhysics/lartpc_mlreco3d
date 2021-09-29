@@ -101,6 +101,7 @@ class FullChainGNN(torch.nn.Module):
             grappa_inter_cfg = cfg.get('grappa_inter', {})
             self._inter_ids        = grappa_inter_cfg.get('base', {}).get('node_type', [0,1,2,3])
             self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
+            self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
@@ -157,7 +158,6 @@ class FullChainGNN(torch.nn.Module):
         Merge fragments into particle instances, retain
         primary fragment id of each group
         """
-
         voxel_inds = counts[:b].sum().item()+np.arange(counts[b].item())
         primary_labels = None
         if node_pred in result:
@@ -322,6 +322,7 @@ class FullChainGNN(torch.nn.Module):
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         particles, part_primary_ids = [], []
+        assert len(counts) == len(np.unique(frag_batch_ids))
         for b in range(len(counts)):
             mask = (frag_batch_ids == b)
             # Append one particle per particle group
@@ -422,6 +423,16 @@ class FullChainGNN(torch.nn.Module):
         device = input[0].device
 
         if self.enable_gnn_inter:
+            if self._inter_use_true_particles:
+                print(label_clustering)
+                particles = form_clusters(label_clustering, min_size=-1, column=self.inter_source_col, cluster_classes=self._inter_ids)
+                part_seg = get_cluster_label(label_clustering, particles, column=-1)
+                part_batch_ids = get_cluster_batch(label_clustering, particles, batch_index=0)
+                cluster_ids = get_cluster_label(label_clustering, particles[part_seg == 0], column=5)
+                group_ids = get_cluster_label(label_clustering, particles[part_seg == 0], column=6)
+                part_primary_ids = [np.where(cluster_ids[part_batch_ids[part_seg == 0] == b] == group_ids[part_batch_ids[part_seg == 0] == b])[0][0] if part_seg[idx] == 0 else -1 for idx, b in enumerate(part_batch_ids)]
+                assert len(part_primary_ids) == len(particles)
+                _, counts = torch.unique(label_clustering[:, 0], return_counts=True)
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
@@ -430,9 +441,11 @@ class FullChainGNN(torch.nn.Module):
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
 
-                    p = voxel_inds[result['fragments'][0]\
+                    p = voxel_inds[result['shower_fragments'][0]\
                                   [part_batch_ids[i]][part_primary_ids[i]]]
                 extra_feats_particles.append(p)
+
+            result['extra_feats_particles'] = [extra_feats_particles]
             same_length = np.all([len(p) == len(extra_feats_particles[0]) \
                                  for p in extra_feats_particles])
 
