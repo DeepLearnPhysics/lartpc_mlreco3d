@@ -128,7 +128,7 @@ class NodePrimaryLoss(torch.nn.Module):
                 'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device),
                 'n_clusts': n_clusts
             }
-        print('total acc', total_acc/n_clusts)
+
         return {
             'accuracy': total_acc/n_clusts,
             'loss': total_loss/n_clusts,

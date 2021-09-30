@@ -61,7 +61,8 @@ def post_processing(filename, data_capture, output_capture):
                 data_capture.append('seg_label')
 
             for key in data_capture:
-                kwargs[key] = data_blob[module_cfg.get(key, defaultNameToIO.get(key, key))]
+                if module_cfg.get(key, defaultNameToIO.get(key, key)) in data_blob:
+                    kwargs[key] = data_blob[module_cfg.get(key, defaultNameToIO.get(key, key))]
 
             for key in output_capture:
                 if key in ['embeddings', 'margins', 'seediness']:
@@ -93,7 +94,15 @@ def post_processing(filename, data_capture, output_capture):
 
             batch_ids = []
             for data_idx, _ in enumerate(kwargs['index']):
-                batch_ids.append(np.ones((kwargs['seg_label'][data_idx].shape[0],)) * data_idx)
+                if 'seg_label' in kwargs:
+                    n = kwargs['seg_label'][data_idx].shape[0]
+                elif 'kinematics' in kwargs:
+                    n = kwargs['kinematics'][data_idx].shape[0]
+                elif 'clust_data' in kwargs:
+                    n = kwargs['clust_data'][data_idx].shape[0]
+                else:
+                    raise Exception('Need some labels to run postprocessing')
+                batch_ids.append(np.ones((n,)) * data_idx)
             batch_ids = np.hstack(batch_ids)
             kwargs['batch_ids'] = batch_ids
 

@@ -10,10 +10,10 @@ from mlreco.post_processing.common import extent
 
 
 @post_processing('kinematics-metrics',
-                ['seg_label', 'clust_data', 'particles', 'kinematics', 'particle_graph'],
+                ['clust_data', 'particles', 'kinematics', 'particle_graph'],
                 ['kinematics_particles', 'inter_particles', 'node_pred_type', 'node_pred_p', 'flow_edge_pred', 'kinematics_edge_index'])
 def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        data_idx=None, seg_label=None, clust_data=None, particles=None, kinematics=None,
+                        data_idx=None, clust_data=None, particles=None, kinematics=None,
                         particle_graph=None, kinematics_particles=None, inter_particles=None, node_pred_type=None,
                         node_pred_p=None, flow_edge_pred=None, kinematics_edge_index=None, counter=None, **kwargs):
     """

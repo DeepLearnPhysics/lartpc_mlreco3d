@@ -203,7 +203,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         if node_pred_primary is not None:
             primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
             high_purity = node_purity_mask(cluster_ids, group_ids).any()
-            print(data_idx, "primary accuracy", primary_accuracy, high_purity)
+            #print(data_idx, "primary accuracy", primary_accuracy, high_purity)
         # Store
         row_names = ('ari', 'ami', 'sbd', 'pur', 'eff',
                     'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts', 'primary_accuracy', 'high_purity')

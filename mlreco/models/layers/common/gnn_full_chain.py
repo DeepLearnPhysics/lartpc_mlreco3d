@@ -245,8 +245,8 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
                            'group_pred': 'shower_group_pred'}
-            result['shower_gnn_points'] = [kwargs['points']]
-            result['shower_gnn_extra_feats'] = [kwargs['extra_feats']]
+            # result['shower_gnn_points'] = [kwargs['points']]
+            # result['shower_gnn_extra_feats'] = [kwargs['extra_feats']]
             self.run_gnn(self.grappa_shower,
                          input,
                          result,
@@ -424,19 +424,40 @@ class FullChainGNN(torch.nn.Module):
 
         if self.enable_gnn_inter:
             if self._inter_use_true_particles:
-                print(label_clustering)
-                particles = form_clusters(label_clustering, min_size=-1, column=self.inter_source_col, cluster_classes=self._inter_ids)
-                part_seg = get_cluster_label(label_clustering, particles, column=-1)
-                part_batch_ids = get_cluster_batch(label_clustering, particles, batch_index=0)
-                cluster_ids = get_cluster_label(label_clustering, particles[part_seg == 0], column=5)
-                group_ids = get_cluster_label(label_clustering, particles[part_seg == 0], column=6)
-                part_primary_ids = [np.where(cluster_ids[part_batch_ids[part_seg == 0] == b] == group_ids[part_batch_ids[part_seg == 0] == b])[0][0] if part_seg[idx] == 0 else -1 for idx, b in enumerate(part_batch_ids)]
-                assert len(part_primary_ids) == len(particles)
-                _, counts = torch.unique(label_clustering[:, 0], return_counts=True)
+                #label_clustering = [label_clustering[0].cpu().numpy()]
+                particles = form_clusters(label_clustering[0].int().cpu().numpy(), min_size=-1, column=self.inter_source_col, cluster_classes=self._inter_ids)
+                particles = np.array(particles, dtype=object)
+                part_seg = get_cluster_label(label_clustering[0].int(), particles, column=-1)
+                part_batch_ids = get_cluster_batch(label_clustering[0], particles, batch_index=0)
+
+                #print(result['shower_fragments'][0])
+                #print(result['frags'][0][result['frag_seg'][0] == 0])
+                #print(result['fragments'][0][result['fragments_seg'][0] == 0])
+
+                # part_primary_ids = []
+                # for idx, b in enumerate(part_batch_ids):
+                # #     print(np.count_nonzero(frag_batch_ids == b))
+                # #     print(np.count_nonzero(frag_batch_ids == b) > 0 and part_seg[idx] == 0)
+                # #     print(np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0])
+                #     cluster_ids = get_cluster_label(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], column=5)
+                #     group_ids = get_cluster_label(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], column=6)
+                #     frag_batch_ids = get_cluster_batch(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], batch_index=0)
+                #
+                #     for g in np.unique(group_ids):
+                #         if part_seg[idx] == 0:
+                #             prim = np.where(cluster_ids[(frag_batch_ids == b) & (group_ids == g)] == group_ids[(frag_batch_ids == b) & (group_ids == g)])[0]
+                #             if len(prim) > 0:
+                #                 part_primary_ids.append(prim[0])
+                #                 continue
+                #         part_primary_ids.append(-1)
+                # #part_primary_ids = [np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0][0] if len(np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0]) else -1 for idx, b in enumerate(part_batch_ids)]
+                # assert len(part_primary_ids) == len(particles)
+                _, counts = torch.unique(label_clustering[0][:, 0], return_counts=True)
+
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
-                if part_seg[i] == 0:
+                if part_seg[i] == 0 and not self._inter_use_true_particles:
 
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
@@ -445,7 +466,7 @@ class FullChainGNN(torch.nn.Module):
                                   [part_batch_ids[i]][part_primary_ids[i]]]
                 extra_feats_particles.append(p)
 
-            result['extra_feats_particles'] = [extra_feats_particles]
+            # result['extra_feats_particles'] = [extra_feats_particles]
             same_length = np.all([len(p) == len(extra_feats_particles[0]) \
                                  for p in extra_feats_particles])
 
