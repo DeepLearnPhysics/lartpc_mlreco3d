@@ -165,7 +165,8 @@ class MinkDBSCANFragmenter(DBSCANFragmenter):
             # FIXME ppn_score not in output?
             numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
                             'points'      : [output['points'][0].detach().cpu().numpy()],
-                            'mask_ppn'    : [output['mask_ppn'][0].detach().cpu().numpy()]}
+                            'mask_ppn'    : [x.detach().cpu().numpy() for x in output['mask_ppn'][0]],
+                            'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
                             #'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
 
             points =  uresnet_ppn_type_point_selector(data, numpy_output,

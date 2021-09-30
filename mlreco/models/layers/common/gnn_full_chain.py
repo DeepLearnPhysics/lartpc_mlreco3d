@@ -80,7 +80,7 @@ class FullChainGNN(torch.nn.Module):
         # Initialize the particle aggregator modules
         if self.enable_gnn_shower:
             self.grappa_shower     = GNN(cfg, name='grappa_shower', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_shower_cfg      = cfg.get('grapa_shower', {})
+            grappa_shower_cfg      = cfg.get('grappa_shower', {})
             self._shower_id        = grappa_shower_cfg.get('base', {}).get('node_type', 0)
             self._shower_use_true_particles = grappa_shower_cfg.get('use_true_particles', False)
 
@@ -238,13 +238,18 @@ class FullChainGNN(torch.nn.Module):
                                                           input,
                                                           result,
                                                           use_ppn=self.use_ppn_in_gnn,
-                                                          use_supp=True)
+                                                          use_supp=self.use_supp_in_gnn)
 
             output_keys = {'clusts'    : 'shower_fragments',
                            'node_pred' : 'shower_node_pred',
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
                            'group_pred': 'shower_group_pred'}
+            # shower_grappa_input = input
+            # if self.use_true_fragments and 'points' not in kwargs:
+            #     # Add true particle coords to input
+            #     print("adding true points to grappa shower input")
+            #     shower_grappa_input += result['true_points']
             # result['shower_gnn_points'] = [kwargs['points']]
             # result['shower_gnn_extra_feats'] = [kwargs['extra_feats']]
             self.run_gnn(self.grappa_shower,
@@ -263,7 +268,7 @@ class FullChainGNN(torch.nn.Module):
                                                              input,
                                                              result,
                                                              use_ppn=self.use_ppn_in_gnn,
-                                                             use_supp=True)
+                                                             use_supp=self.use_supp_in_gnn)
 
             output_keys = {'clusts'    : 'track_fragments',
                            'node_pred' : 'track_node_pred',
@@ -287,7 +292,7 @@ class FullChainGNN(torch.nn.Module):
                                                        input,
                                                        result,
                                                        use_ppn=self.use_ppn_in_gnn,
-                                                       use_supp=True)
+                                                       use_supp=self.use_supp_in_gnn)
 
             kwargs['groups'] = frag_seg[mask]
 
@@ -803,7 +808,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             res['shower_node_loss'] = res_gnn_shower['node_loss']
             res['shower_edge_accuracy'] = res_gnn_shower['edge_accuracy']
             res['shower_node_accuracy'] = res_gnn_shower['node_accuracy']
-
+            print('loss', res['shower_edge_loss'], res['shower_node_loss'], res_gnn_shower['loss'])
             accuracy += res_gnn_shower['accuracy']
             loss += self.shower_gnn_weight*res_gnn_shower['loss']
 
@@ -1043,6 +1048,7 @@ def setup_chain_cfg(self, cfg):
 
     # Whether to use PPN information (GNN shower clustering step only)
     self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
+    self.use_supp_in_gnn    = chain_cfg.get('use_supp_in_gnn', True)
 
     # Make sure the deghosting config is consistent
     if self.enable_ghost:

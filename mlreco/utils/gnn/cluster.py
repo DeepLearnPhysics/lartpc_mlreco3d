@@ -354,6 +354,7 @@ def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, co
     Args:
         data (torch.tensor)     : (N,6) Voxel coordinates [x, y, z, batch_id, value, clust_id, group_id]
         particles (torch.tensor): (N,9) Point coordinates [start_x, start_y, start_z, batch_id, last_x, last_y, last_z, start_t, shape_id]
+                                (obtained with parse_particle_coords)
         clusts ([np.ndarray])   : (C) List of arrays of voxel IDs in each cluster
         groupwise (bool)        : Whether or not to get a single point per group (merges shower fragments)
     Returns:

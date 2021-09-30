@@ -304,7 +304,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if 'mask_ppn' not in out:
         mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     else:
-        mask_ppn = out['mask_ppn'][-1][ppn_coords[-1][:, 0] == entry, :]
+        mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -338,7 +338,9 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         final_softmax = []
         final_endpoints = []
         batch_index = batch_ids == b
-        mask = ((~(mask_ppn[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        batch_index2 = ppn_coords[-1][:, 0] == b
+        # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
+        mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)

@@ -410,7 +410,7 @@ def parse_particle_points(data, include_point_tagging=False):
         coordinate
     np_values: np.ndarray
         a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
-        and the particle data index in this order.
+        and the particle data index in this order. (optionally: end/start tagging)
     """
     particles_v = data[1].as_vector()
     part_info = get_ppn_info(particles_v, data[0].meta())

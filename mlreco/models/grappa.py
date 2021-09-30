@@ -252,7 +252,7 @@ class GNN(torch.nn.Module):
         x = self.node_encoder(cluster_data, clusts)
         # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
-
+        # print(x.shape, len(clusts), extra_feats is None, points is None, self.add_start_point)
         # If extra features are provided separately, add them
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)
