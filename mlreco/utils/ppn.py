@@ -290,7 +290,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     ppn_coords = out['ppn_coords']
     # If 'points' is specified in `concat_result`,
     # then it won't be unwrapped.
-    if points.shape[0] == ppn_coords[-1].shape[0]:
+    if len(points) == len(ppn_coords[-1]):
         #pass
         points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
