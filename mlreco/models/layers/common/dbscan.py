@@ -14,7 +14,7 @@ def distances(v1, v2, eps=1e-6):
     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
     return torch.sqrt(torch.clamp(torch.pow(v2_2 - v1_2, 2).sum(2), min=eps))
 
-    
+
 class DBSCANFragmenter(torch.nn.Module):
     """
     DBSCAN Layer that uses sklearn's DBSCAN implementation
@@ -119,21 +119,25 @@ class DBSCANFragmenter(torch.nn.Module):
         # If tracks are clustered, get the track points from the PPN output
         data = data.detach().cpu().numpy()
         track_points = None
-        if self.track_label in self.cluster_classes:
-            # FIXME ppn_score not in output?
-            numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
-                            'points'      : [output['points'][0].detach().cpu().numpy()],
-                            'mask_ppn'    : [x.detach().cpu().numpy() for x in output['mask_ppn'][0]],
-                            'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
-                            #'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
+        if self.break_tracks and self.track_label in self.cluster_classes:
+            assert output is not None or points is not None
+            if points is None:
+                numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
+                                'points'      : [output['points'][0].detach().cpu().numpy()],
+                                'mask_ppn'    : [x.detach().cpu().numpy() for x in output['mask_ppn'][0]],
+                                'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
+                                #'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
 
-            points =  uresnet_ppn_type_point_selector(data, numpy_output,
-                                        score_threshold      = self.ppn_score_threshold,
-                                        type_threshold       = self.ppn_type_threshold,
-                                        type_score_threshold = self.ppn_type_score_threshold)
-            point_labels = points[:, 12]
-            track_points = points[(point_labels == self.track_label) | \
-                                  (point_labels == self.michel_label),:self.dim+1]
+                points =  uresnet_ppn_type_point_selector(data, numpy_output,
+                                            score_threshold      = self.ppn_score_threshold,
+                                            type_threshold       = self.ppn_type_threshold,
+                                            type_score_threshold = self.ppn_type_score_threshold)
+                point_labels = points[:, 12]
+            else:
+                points_labels = points[:, -1]
+            # track_points = points[(point_labels == self.track_label) | \
+            #                       (point_labels == self.michel_label),:self.dim+1]
+            track_points = points[point_labels != self.delta_label, :self.dim+1]
 
         # Break down the input data to its components
         bids = np.unique(data[:, self.batch_col].astype(int))

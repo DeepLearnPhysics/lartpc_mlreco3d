@@ -808,7 +808,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             res['shower_node_loss'] = res_gnn_shower['node_loss']
             res['shower_edge_accuracy'] = res_gnn_shower['edge_accuracy']
             res['shower_node_accuracy'] = res_gnn_shower['node_accuracy']
-            print('loss', res['shower_edge_loss'], res['shower_node_loss'], res_gnn_shower['loss'])
+
             accuracy += res_gnn_shower['accuracy']
             loss += self.shower_gnn_weight*res_gnn_shower['loss']
 

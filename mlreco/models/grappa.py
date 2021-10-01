@@ -104,7 +104,7 @@ class GNN(torch.nn.Module):
 
         # If requested, use DBSCAN to form clusters from semantics
         if 'dbscan' in cfg[name]:
-            cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > 0 else [0,1,2,3]
+            cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > -1 else [0,1,2,3]
             cfg[name]['dbscan']['min_size']        = self.node_min_size
             self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan',
                                             batch_col=self.batch_index,
