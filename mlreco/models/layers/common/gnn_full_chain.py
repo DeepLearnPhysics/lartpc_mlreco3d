@@ -327,8 +327,8 @@ class FullChainGNN(torch.nn.Module):
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         particles, part_primary_ids = [], []
-        assert len(counts) == len(np.unique(frag_batch_ids))
-        for b in range(len(counts)):
+        #assert len(counts) == len(np.unique(frag_batch_ids))
+        for b in np.unique(frag_batch_ids):
             mask = (frag_batch_ids == b)
             # Append one particle per particle group
             # To use true group predictions, change use_group_pred to True

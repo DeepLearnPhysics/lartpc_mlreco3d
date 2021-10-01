@@ -134,7 +134,7 @@ class DBSCANFragmenter(torch.nn.Module):
                                             type_score_threshold = self.ppn_type_score_threshold)
                 point_labels = points[:, 12]
             else:
-                points_labels = points[:, -1]
+                point_labels = points[:, -1]
             # track_points = points[(point_labels == self.track_label) | \
             #                       (point_labels == self.michel_label),:self.dim+1]
             track_points = points[point_labels != self.delta_label, :self.dim+1]
