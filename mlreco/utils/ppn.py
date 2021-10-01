@@ -283,7 +283,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     type_threshold - distance threshold for matching w/ semantic type prediction
     Returns
     -------
-    [x,y,z,bid,label] of ppn-predicted points
+    [bid,x,y,z,score softmax values (2 columns), occupancy,
+    type softmax scores (5 columns), predicted type,
+    (optional) endpoint type]
+    1 row per ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
     points = np.array(out['points'])#[entry]#.cpu().detach().numpy()
@@ -385,7 +388,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                     if enable_classify_endpoints:
                         all_endpoints.append(pool_op(final_endpoints[c], axis=0))
                     all_batch.append(b)
-    result = (all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types,)
+    result = (all_batch, all_points, all_scores, all_occupancy, all_softmax, all_types,)
     if enable_classify_endpoints:
         result = result + (all_endpoints,)
     return np.column_stack( result )

@@ -75,7 +75,7 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
     if ppn.shape[0] == 0:
         return [(rows_gt_names, rows_gt_values), (rows_pred_names, rows_pred_values)]
 
-    ppn_voxels = ppn[:, :3]
+    ppn_voxels = ppn[:, 1:4]
     #ppn_score = ppn[:, 4]
     ppn_score = ppn[:, 5]
     #ppn_occupancy = ppn[:, 5]
