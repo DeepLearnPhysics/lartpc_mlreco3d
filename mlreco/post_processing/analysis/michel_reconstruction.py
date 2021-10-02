@@ -183,7 +183,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                 ablated_cluster = MIP_cluster_coords[np.linalg.norm(MIP_cluster_coords-MIP_min_coords, axis=1)>15.0]
                 if ablated_cluster.shape[0] > 0:
                     new_cluster = DBSCAN(eps=one_pixel, min_samples=5).fit(ablated_cluster).labels_
-                    is_edge = len(np.unique(new_cluster[new_cluster>-1])) == MIP_label
+                    is_edge = len(np.unique(new_cluster[new_cluster>-1])) == 1
                 else:
                     is_edge = True
             # print(is_attached, is_edge)
@@ -203,7 +203,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                     # we take the one that has most overlap
                     # closest_true_id = closest_clusters_final[np.bincount(closest_clusters_final).argmax()]
                     closest_true_id = np.bincount(closest_clusters_final).argmax()
-                    overlap_pixels_index = (closest_clusters == closest_true_id) & (np.min(distances, axis=1)<one_pixel)
+                    #overlap_pixels_index = (closest_clusters == closest_true_id) & (np.min(distances, axis=1)<one_pixel)
                     if closest_true_id > -1:
                         closest_true_index = label_pred[predictions==Michel_label][current_index]==Michel_label
                         # Intersection
