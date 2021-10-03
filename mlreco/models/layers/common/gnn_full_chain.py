@@ -676,9 +676,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
         if self.enable_uresnet:
             res_seg = self.uresnet_loss(out, seg_label)
-            res.update(res_seg)
-            res['seg_accuracy'] = res_seg['accuracy']
-            res['seg_loss'] = res_seg['loss']
+            for key in res_seg:
+                res['uresnet_' + key] = res_seg[key]
             accuracy += res_seg['accuracy']
             loss += self.segmentation_weight*res_seg['loss']
             #print('uresnet ', self.segmentation_weight, res_seg['loss'], loss)
@@ -686,9 +685,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         if self.enable_ppn:
             # Apply the PPN loss
             res_ppn = self.ppn_loss(out, seg_label, ppn_label)
-            res.update(res_ppn)
-            res['ppn_accuracy'] = res_ppn['ppn_acc']
-            res['ppn_loss'] = res_ppn['ppn_loss']
+            for key in res_ppn:
+                res['ppn_' + key] = res_ppn[key]
 
             accuracy += res_ppn['ppn_acc']
             loss += self.ppn_weight*res_ppn['ppn_loss']
@@ -763,19 +761,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 #print(res_graph_spice.keys())
                 accuracy += res_graph_spice['accuracy']
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
-                res['graph_spice_loss'] = res_graph_spice['loss']
-                res['graph_spice_accuracy'] = res_graph_spice['accuracy']
-                if 'edge_loss' in res_graph_spice:
-                    res['graph_spice_edge_loss'] = res_graph_spice['edge_loss']
-                if 'edge_accuracy' in res_graph_spice:
-                    res['graph_spice_edge_accuracy'] = res_graph_spice['edge_accuracy']
-                res['graph_spice_occ_loss'] = res_graph_spice['occ_loss']
-                res['graph_spice_cov_loss'] = res_graph_spice['cov_loss']
-                res['graph_spice_sp_intra'] = res_graph_spice['sp_intra']
-                res['graph_spice_sp_inter'] = res_graph_spice['sp_inter']
-                res['graph_spice_ft_intra'] = res_graph_spice['ft_intra']
-                res['graph_spice_ft_inter'] = res_graph_spice['ft_inter']
-                res['graph_spice_ft_reg']   = res_graph_spice['ft_reg']
+                for key in res_graph_spice:
+                    res['graph_spice_' + key] = res_graph_spice[key]
             else:
                 # Apply the CNN dense clustering loss to HE voxels only
                 he_mask = segment_label < 4
@@ -786,9 +773,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 #cluster_label[0] = cluster_label[0][he_mask]
                 # FIXME does this suppose that clust_label has same ordering as embeddings?
                 res_cnn_clust = self.spatial_embeddings_loss(cnn_clust_output, clust_label)
-                res.update(res_cnn_clust)
-                res['cnn_clust_accuracy'] = res_cnn_clust['accuracy']
-                res['cnn_clust_loss'] = res_cnn_clust['loss']
+                for key in res_cnn_clust:
+                    res['cnn_clust_' + key] = res_cnn_clust[key]
 
                 accuracy += res_cnn_clust['accuracy']
                 loss += self.cnn_clust_weight*res_cnn_clust['loss']
@@ -804,10 +790,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_index':out['shower_edge_index']
                 }
             res_gnn_shower = self.shower_gnn_loss(gnn_out, cluster_label)
-            res['shower_edge_loss'] = res_gnn_shower['edge_loss']
-            res['shower_node_loss'] = res_gnn_shower['node_loss']
-            res['shower_edge_accuracy'] = res_gnn_shower['edge_accuracy']
-            res['shower_node_accuracy'] = res_gnn_shower['node_accuracy']
+            for key in res_gnn_shower:
+                res['grappa_shower_' + key] = res_gnn_shower[key]
 
             accuracy += res_gnn_shower['accuracy']
             loss += self.shower_gnn_weight*res_gnn_shower['loss']
@@ -822,9 +806,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_index':out['track_edge_index']
                 }
             res_gnn_track = self.track_gnn_loss(gnn_out, cluster_label)
-            res['track_edge_loss'] = res_gnn_track['loss']
-            res['track_edge_accuracy'] = res_gnn_track['accuracy']
-
+            for key in res_gnn_track:
+                res['grappa_track_' + key] = res_gnn_track[key]
             accuracy += res_gnn_track['accuracy']
             loss += self.track_gnn_weight*res_gnn_track['loss']
 
@@ -839,10 +822,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_index':out['particle_edge_index']
                 }
             res_gnn_part = self.particle_gnn_loss(gnn_out, cluster_label)
-            res['particle_edge_loss'] = res_gnn_part['edge_loss']
-            res['particle_node_loss'] = res_gnn_part['node_loss']
-            res['particle_edge_accuracy'] = res_gnn_part['edge_accuracy']
-            res['particle_node_accuracy'] = res_gnn_part['node_accuracy']
+            for key in res_gnn_particle:
+                res['grappa_particle_' + key] = res_gnn_particle[key]
 
             accuracy += res_gnn_part['accuracy']
             loss += self.particle_gnn_weight*res_gnn_part['loss']
@@ -863,23 +844,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
 
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
-
-            res['inter_edge_loss'] = res_gnn_inter['edge_loss']
-            res['inter_edge_accuracy'] = res_gnn_inter['edge_accuracy']
-            if 'node_loss' in out:
-                res['inter_node_loss'] = res_gnn_inter['node_loss']
-                res['inter_node_accuracy'] = res_gnn_inter['node_accuracy']
-            if 'type_loss' in res_gnn_inter:
-                res['type_loss'] = res_gnn_inter['type_loss']
-                res['type_accuracy'] = res_gnn_inter['type_accuracy']
-            if 'p_loss' in res_gnn_inter:
-                res['p_loss'] = res_gnn_inter['p_loss']
-                res['p_accuracy'] = res_gnn_inter['p_accuracy']
-            if 'vtx_position_loss' in res_gnn_inter:
-                res['vtx_position_loss'] = res_gnn_inter['vtx_position_loss']
-                res['vtx_score_loss'] = res_gnn_inter['vtx_score_loss']
-                res['vtx_position_acc'] = res_gnn_inter['vtx_position_acc']
-                res['vtx_score_acc'] = res_gnn_inter['vtx_score_acc']
+            for key in res_gnn_inter:
+                res['grappa_inter_' + key] = res_gnn_inter[key]
 
             accuracy += res_gnn_inter['accuracy']
             loss += self.inter_gnn_weight*res_gnn_inter['loss']
@@ -898,21 +864,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_p' in out:
                 gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             res_kinematics = self.kinematics_loss(gnn_out, kinematics_label, graph=particle_graph)
-
-            #res['kinematics_loss'] = self.kinematics_p_weight * res_kinematics['p_loss'] + self.kinematics_type_weight * res_kinematics['type_loss'] #res_kinematics['loss']
-            res['kinematics_loss'] = res_kinematics['node_loss']
-            res['kinematics_accuracy'] = res_kinematics['accuracy']
-            if 'type_loss' in res_kinematics:
-                res['type_loss'] = res_kinematics['type_loss']
-                res['type_accuracy'] = res_kinematics['type_accuracy']
-            if 'p_loss' in res_kinematics:
-                res['p_loss'] = res_kinematics['p_loss']
-                res['p_accuracy'] = res_kinematics['p_accuracy']
-            if 'type_loss' in res_kinematics or 'p_loss' in res_kinematics:
-                res['kinematics_n_clusts_type'] = res_kinematics['n_clusts_type']
-                res['kinematics_n_clusts_momentum'] = res_kinematics['n_clusts_momentum']
-                res['kinematics_n_clusts_vtx'] = res_kinematics['n_clusts_vtx']
-                res['kinematics_n_clusts_vtx_positives'] = res_kinematics['n_clusts_vtx_positives']
+            for key in res_kinematics:
+                res['grappa_kinematics_' + key] = res_kinematics[key]
 
             accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
@@ -932,10 +885,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             }
 
             res_cosmic = self.cosmic_loss(gnn_out, cluster_label)
-            res['cosmic_loss'] = res_cosmic['loss']
-            res['cosmic_accuracy'] = res_cosmic['accuracy']
-            #res['cosmic_accuracy_cosmic'] = res_cosmic['cosmic_acc']
-            #res['cosmic_accuracy_nu'] = res_cosmic['nu_acc']
+            for key in res_cosmic:
+                res['cosmic_' + key] = res_cosmic[key]
 
             accuracy += res_cosmic['accuracy']
             loss += self.cosmic_weight * res_cosmic['loss']
@@ -975,12 +926,20 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
             if 'node_pred_type' in out:
-                print('Particle ID accuracy: {:.4f}'.format(res['type_accuracy']))
+                if 'grappa_inter_type_accuracy' in res:
+                    print('Particle ID accuracy: {:.4f}'.format(res['grappa_inter_type_accuracy']))
+                elif 'grappa_kinematics_type_accuracy' in res:
+                    print('Particle ID accuracy: {:.4f}'.format(res['grappa_kinematics_type_accuracy']))
             if 'node_pred_p' in out:
-                print('Momentum accuracy: {:.4f}'.format(res['p_accuracy']))
+                if 'grappa_inter_p_accuracy' in res:
+                    print('Momentum accuracy: {:.4f}'.format(res['grappa_inter_p_accuracy']))
+                elif 'grappa_kinematics_p_accuracy' in res:
+                    print('Momentum accuracy: {:.4f}'.format(res['grappa_kinematics_p_accuracy']))
             if 'node_pred_vtx' in out:
-                #print('Vertex position accuracy: {:.4f}'.format(res['vtx_position_acc']))
-                print('Primary particle score accuracy: {:.4f}'.format(res['vtx_score_acc']))
+                if 'grappa_inter_vtx_score_acc' in res:
+                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_inter_vtx_score_acc']))
+                elif 'grappa_kinematics_vtx_score_acc' in res:
+                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_kinematics_vtx_score_acc']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
