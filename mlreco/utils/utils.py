@@ -80,6 +80,14 @@ class stopwatch(object):
     """
     def __init__(self):
         self._watch={}
+        
+    def reset(self,key):
+        '''
+        Reset a stopwatch for a unique key
+        INPUT
+         - key can be any object but typically a string to tag a time measurement
+        '''
+        self._watch[key] = [-1,-1]
 
     def start(self,key):
         """
@@ -96,6 +104,7 @@ class stopwatch(object):
          - key can be any object but typically a string to tag a time measurement
         """
         data = self._watch[key]
+        if data[1]<0 : return
         if data[0]<0 : data[0] = time.time() - data[1]
 
     def time(self,key):
@@ -106,6 +115,7 @@ class stopwatch(object):
         """
         if not key in self._watch: return 0
         data = self._watch[key]
+        if data[1] < 0: return 0
         return data[0] if data[0]>0 else time.time() - data[1]
 
 

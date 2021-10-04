@@ -318,7 +318,8 @@ def train_loop(handlers):
         epoch = handlers.iteration / float(len(handlers.data_io))
         tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
         handlers.watch.start('iteration')
-
+        handlers.watch.reset('save')
+        
         checkpt_step = cfg['trainval']['checkpoint_step'] and \
                         cfg['trainval']['weight_prefix'] and \
                         ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
