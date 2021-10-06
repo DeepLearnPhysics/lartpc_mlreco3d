@@ -413,7 +413,10 @@ class trainval(object):
             #print(self._net.state_dict().keys())
             for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
-                    raise ValueError('File not found: %s for module %s\n' % (model_path, module))
+                    if self._train:
+                        raise ValueError('File not found: %s for module %s\n' % (model_path, module))
+                    else:
+                        continue
                 print('Restoring weights for %s from %s...' % (module,model_path))
                 with open(model_path, 'rb') as f:
                     checkpoint = torch.load(f, map_location='cpu')

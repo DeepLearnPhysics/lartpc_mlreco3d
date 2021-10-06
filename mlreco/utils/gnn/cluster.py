@@ -99,7 +99,10 @@ def get_cluster_batch(data, clusts, batch_index=0):
     Returns:
         np.ndarray: (C) List of batch IDs
     """
-    return _get_cluster_batch(data, clusts, batch_index)
+    if len(clusts) > 0:
+        return _get_cluster_batch(data, clusts, batch_index)
+    else:
+        return np.empty((0,), dtype=np.int32)
 
 @nb.njit
 def _get_cluster_batch(data: nb.float64[:,:],
@@ -126,7 +129,10 @@ def get_cluster_label(data, clusts, column=5):
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
-    return _get_cluster_label(data, clusts, column)
+    if len(clusts) > 0:
+        return _get_cluster_label(data, clusts, column)
+    else:
+        return np.empty((0,), dtype=np.int32)
 
 @nb.njit
 def _get_cluster_label(data: nb.float64[:,:],

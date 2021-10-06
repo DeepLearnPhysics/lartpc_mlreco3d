@@ -420,7 +420,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                     d_true = self.pairwise_distances(
                         points_label,
-                        points_event[:, 1:4].float().cuda())
+                        points_event[:, 1:4].float().to(device))
 
                     d_positives = (d_true < self.resolution * \
                                    2**(len(ppn_layers) - layer)).any(dim=0)
@@ -444,7 +444,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     if layer == len(ppn_layers)-1:
 
                         # Get Final Layers
-                        anchors = coords_layer[batch_particle_index][:, 1:4].float().cuda() + 0.5
+                        anchors = coords_layer[batch_particle_index][:, 1:4].float().to(device) + 0.5
                         pixel_score = points[batch_particle_index][:, -1]
                         pixel_logits = points[batch_particle_index][:, 3:8]
                         pixel_pred = points[batch_particle_index][:, :3] + anchors

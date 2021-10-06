@@ -102,6 +102,7 @@ class FullChainGNN(torch.nn.Module):
             self._inter_ids        = grappa_inter_cfg.get('base', {}).get('node_type', [0,1,2,3])
             self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
             self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
+            self._inter_use_shower_primary = grappa_inter_cfg.get('use_shower_primary', True)
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
@@ -327,8 +328,10 @@ class FullChainGNN(torch.nn.Module):
 
         # Merge fragments into particle instances, retain primary fragment id of showers
         particles, part_primary_ids = [], []
+        # It is possible that len(counts) > len(np.unique(frag_batch_ids))
         #assert len(counts) == len(np.unique(frag_batch_ids))
-        for b in np.unique(frag_batch_ids):
+        # Can happen e.g. if an event has no shower fragments
+        for b in range(len(counts)):
             mask = (frag_batch_ids == b)
             # Append one particle per particle group
             # To use true group predictions, change use_group_pred to True
@@ -462,8 +465,7 @@ class FullChainGNN(torch.nn.Module):
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
-                if part_seg[i] == 0 and not self._inter_use_true_particles:
-
+                if part_seg[i] == 0 and not self._inter_use_true_particles and self._inter_use_shower_primary:
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
 
