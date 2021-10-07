@@ -10,7 +10,6 @@ def model_dict():
     from . import singlep
     from . import graph_spice
     from . import bayes_uresnet
-    from . import particle_transformer
 
     from . import full_chain
 
@@ -44,9 +43,6 @@ def model_dict():
         'duq_singlep': (singlep.DUQParticleClassifier, singlep.MultiLabelCrossEntropy),
         # Single Particle VGG
         "single_particle_vgg": (singlep.SingleParticleVGG, singlep.ParticleTypeLoss),
-        
-        # -----------------------Experimental------------------------------
-        "particle_transformer": (particle_transformer.VisionTransformer, grappa.GNNLoss)
     }
     return models
 
