@@ -264,7 +264,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         if not n_clusts:
             result = {
                 'accuracy': 0.,
-                'loss': torch.tensor(0., requires_grad=True, device=types[0].device, dtype=torch.float),
+                'loss': torch.tensor(0., requires_grad=True, device=types[0].device if len(types) and torch.is_tensor(types[0]) else 'cpu', dtype=torch.float),
                 'n_clusts_momentum': n_clusts_momentum,
                 'n_clusts_type': n_clusts_type,
                 'n_clusts_vtx': n_clusts_vtx,

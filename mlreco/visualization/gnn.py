@@ -57,7 +57,10 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
     # Define the node features (label, color)
     n = len(clusters)
     if not len(clust_labels): clust_labels = np.ones(n)
-    node_labels = ['Instance ID: %d<br>Group ID: %d<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    if len(clust_labels) and isinstance(clust_labels[0], float):
+        node_labels = ['Instance ID: %d<br>Group ID: %0.3f<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    else:
+        node_labels = ['Instance ID: %d<br>Group ID: %d<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
 
     # Assert if there is edges to draw
     draw_edges = bool(len(edge_index))

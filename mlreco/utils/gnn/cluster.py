@@ -99,7 +99,10 @@ def get_cluster_batch(data, clusts, batch_index=0):
     Returns:
         np.ndarray: (C) List of batch IDs
     """
-    return _get_cluster_batch(data, clusts, batch_index)
+    if len(clusts) > 0:
+        return _get_cluster_batch(data, clusts, batch_index)
+    else:
+        return np.empty((0,), dtype=np.int32)
 
 @nb.njit
 def _get_cluster_batch(data: nb.float64[:,:],
@@ -126,7 +129,10 @@ def get_cluster_label(data, clusts, column=5):
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
-    return _get_cluster_label(data, clusts, column)
+    if len(clusts) > 0:
+        return _get_cluster_label(data, clusts, column)
+    else:
+        return np.empty((0,), dtype=np.int32)
 
 @nb.njit
 def _get_cluster_label(data: nb.float64[:,:],
@@ -264,11 +270,6 @@ def _get_cluster_features(data: nb.float64[:,:],
         clust = clusts[ids[k]]
         x = data[clust, coords_col[0]:coords_col[1]]
 
-        # Do not waste time with computations with size 1 clusters, default to zeros
-        if len(clust) < 2:
-            feats[k] = np.concatenate((x.flatten(), np.zeros(12), np.array([len(clust)])))
-            continue
-
         # Center data
         center = mean_nb(x, 0)
         x = x - center
@@ -277,8 +278,11 @@ def _get_cluster_features(data: nb.float64[:,:],
         A = x.T.dot(x)
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
-        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
+        # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
         w, v = np.linalg.eigh(A)
+        if w[2] == 0.:
+            feats[k] = np.concatenate((center, np.zeros(12), np.array([len(clust)])))
+            continue
         dirwt = 1.0 - w[1] / w[2]
         B = A / w[2]
 
@@ -344,7 +348,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1, 4)):
+def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=(1, 4)):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only
@@ -354,18 +358,22 @@ def get_cluster_points_label(data, particles, clusts, groupwise, coords_index=(1
     Args:
         data (torch.tensor)     : (N,6) Voxel coordinates [x, y, z, batch_id, value, clust_id, group_id]
         particles (torch.tensor): (N,9) Point coordinates [start_x, start_y, start_z, batch_id, last_x, last_y, last_z, start_t, shape_id]
+                                (obtained with parse_particle_coords)
         clusts ([np.ndarray])   : (C) List of arrays of voxel IDs in each cluster
         groupwise (bool)        : Whether or not to get a single point per group (merges shower fragments)
     Returns:
         np.ndarray: (N,3/6) particle wise start (and end points in RANDOMIZED ORDER)
     """
-    return _get_cluster_points_label(data, particles, clusts, groupwise, list(coords_index))
+    return _get_cluster_points_label(data, particles, clusts, groupwise,
+                                    batch_col=batch_col,
+                                    coords_index=list(coords_index))
 
 @nb.njit
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
                               groupwise: nb.boolean = False,
+                              batch_col: nb.int64 = 0,
                               coords_index: nb.types.List(nb.int64[:]) = [1, 4]) -> nb.float64[:,:]:
     # Get batch_ids and group_ids
     batch_ids = _get_cluster_batch(data, clusts)
@@ -373,13 +381,13 @@ def _get_cluster_points_label(data: nb.float64[:,:],
         points = np.empty((len(clusts), 3), dtype=data.dtype)
         clust_ids = _get_cluster_label(data, clusts)
         for i, c in enumerate(clusts):
-            batch_mask = np.where(particles[:,3] == batch_ids[i])[0]
+            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
             idx = batch_mask[clust_ids[i]]
-            points[i] = particles[idx,:3]
+            points[i] = particles[idx, coords_index[0]:coords_index[1]]
     else:
         points = np.empty((len(clusts), 6), dtype=data.dtype)
         for i, g in enumerate(clusts): # Here clusters are groups
-            batch_mask = np.where(particles[:,3] == batch_ids[i])[0]
+            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
             clust_ids  = np.unique(data[g,5]).astype(np.int64)
             minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
             order = np.array([0, 1, 2, 4, 5, 6]) if np.random.choice(2) else np.array([4, 5, 6, 0, 1, 2])

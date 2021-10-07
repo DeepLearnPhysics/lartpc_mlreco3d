@@ -82,7 +82,7 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         #ppn = ppn[ppn[:, -1] != delta]
         #ppn = ppn[ppn[:, -3] < 0.1]
         #print(ppn.shape, ppn[:5])
-        ppn_voxels = ppn[:, :3]
+        ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_occupancy = ppn[:, 6]
         ppn_type = ppn[:, 7:(7+num_classes)]#np.repeat(ppn[:, -1][:, None], num_classes, axis=1)

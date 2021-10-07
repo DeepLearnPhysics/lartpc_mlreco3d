@@ -117,9 +117,9 @@ class FullChain(FullChainGNN):
         # If requested, extract PPN-related features
         kwargs = {}
         if use_ppn:
-            points_tensor = result['points'][0].detach().double()
             ppn_points = torch.empty((0,6), device=input[0].device,
                                             dtype=torch.double)
+            points_tensor = result['points'][0].detach().double()
             for i, f in enumerate(fragments[mask]):
                 if frag_seg[mask][i] == 1:
                     dist_mat = torch.cdist(input[0][f,1:4], input[0][f,1:4])
@@ -137,9 +137,12 @@ class FullChain(FullChainGNN):
                     dmask  = torch.nonzero(torch.max(
                         torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
                         as_tuple=True)[0]
-                    scores = torch.sigmoid(points_tensor[f, -1])
-                    argmax = dmask[torch.argmax(scores[dmask])] \
-                             if len(dmask) else torch.argmax(scores)
+                    # scores = torch.sigmoid(points_tensor[f, -1])
+                    # argmax = dmask[torch.argmax(scores[dmask])] \
+                    #          if len(dmask) else torch.argmax(scores)
+                    scores = torch.softmax(points_tensor[f, -2:], dim=1)
+                    argmax = dmask[torch.argmax(scores[dmask, -1])] \
+                             if len(dmask) else torch.argmax(scores[:, -1])
                     start  = input[0][f][argmax,1:4] + \
                              points_tensor[f][argmax,:3] + 0.5
                     ppn_points = torch.cat((ppn_points,
@@ -184,18 +187,25 @@ class FullChain(FullChainGNN):
         '''
         device = input[0].device
 
-        label_seg, label_clustering = None, None
+        label_seg, label_clustering, coords = None, None, None
         if len(input) == 3:
             input, label_seg, label_clustering = input
             input = [input]
             label_seg = [label_seg]
             label_clustering = [label_clustering]
-        if len(input) == 2:
+        elif len(input) == 2:
             input, label_clustering = input
             input = [input]
             label_clustering = [label_clustering]
+        # elif len(input) == 4:
+        #     input, label_seg, label_clustering, coords = input
+        #     input = [input]
+        #     label_seg = [label_seg]
+        #     label_clustering = [label_clustering]
+        #     coords = [coords]
 
         result = {}
+
         if self.enable_uresnet:
             result = self.uresnet_lonely([input[0][:,:4+self.input_features]])
         if self.enable_ppn:
@@ -343,11 +353,15 @@ class FullChain(FullChainGNN):
 
         cnn_result.update(fragments_result)
 
-        if self.enable_cnn_clust:
+        if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({ 'semantic_labels': [semantic_labels] })
             if label_clustering is not None:
                 cnn_result.update({ 'label_clustering': [label_clustering] })
-                
+
+        # if self.use_true_fragments and coords is not None:
+        #     print('adding true points info')
+        #     cnn_result['true_points'] = coords
+
         def return_to_original(result):
             if self.enable_ghost:
                 result['segmentation'][0] = segmentation

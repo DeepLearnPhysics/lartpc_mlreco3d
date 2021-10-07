@@ -283,14 +283,17 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     type_threshold - distance threshold for matching w/ semantic type prediction
     Returns
     -------
-    [x,y,z,bid,label] of ppn-predicted points
+    [bid,x,y,z,score softmax values (2 columns), occupancy,
+    type softmax scores (5 columns), predicted type,
+    (optional) endpoint type]
+    1 row per ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
     points = np.array(out['points'])#[entry]#.cpu().detach().numpy()
     ppn_coords = out['ppn_coords']
     # If 'points' is specified in `concat_result`,
     # then it won't be unwrapped.
-    if points.shape[0] == ppn_coords[-1].shape[0]:
+    if len(points) == len(ppn_coords[-1]):
         #pass
         points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
@@ -304,7 +307,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if 'mask_ppn' not in out:
         mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
     else:
-        mask_ppn = out['mask_ppn'][-1][ppn_coords[-1][:, 0] == entry, :]
+        mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -338,7 +341,9 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         final_softmax = []
         final_endpoints = []
         batch_index = batch_ids == b
-        mask = ((~(mask_ppn[batch_index] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        batch_index2 = ppn_coords[-1][:, 0] == b
+        # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
+        mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
         num_classes = 5
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)
@@ -383,9 +388,14 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                     if enable_classify_endpoints:
                         all_endpoints.append(pool_op(final_endpoints[c], axis=0))
                     all_batch.append(b)
-    result = (all_points, all_batch, all_scores, all_occupancy, all_softmax, all_types,)
+    result = (all_batch, all_points, all_scores, all_occupancy, all_softmax, all_types,)
     if enable_classify_endpoints:
         result = result + (all_endpoints,)
+    if len(result) == 0:
+        if enable_classify_endpoints:
+            return np.empty((0, 15), dtype=np.float32)
+        else:
+            return np.empty((0, 13), dtype=np.float32)
     return np.column_stack( result )
 
 

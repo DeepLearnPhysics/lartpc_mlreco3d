@@ -104,7 +104,7 @@ class GNN(torch.nn.Module):
 
         # If requested, use DBSCAN to form clusters from semantics
         if 'dbscan' in cfg[name]:
-            cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > 0 else [0,1,2,3]
+            cfg[name]['dbscan']['cluster_classes'] = self.node_type if self.node_type[0] > -1 else [0,1,2,3]
             cfg[name]['dbscan']['min_size']        = self.node_min_size
             self.dbscan = DBSCANFragmenter(cfg[name], name='dbscan',
                                             batch_col=self.batch_index,
@@ -254,7 +254,7 @@ class GNN(torch.nn.Module):
         x = self.node_encoder(cluster_data, clusts)
         # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
-
+        # print(x.shape, len(clusts), extra_feats is None, points is None, self.add_start_point)
         # If extra features are provided separately, add them
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)

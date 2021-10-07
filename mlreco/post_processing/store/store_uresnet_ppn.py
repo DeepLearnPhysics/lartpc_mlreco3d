@@ -206,7 +206,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
             pts = uresnet_ppn_type_point_selector(data_blob['input_data'][data_idx], res, entry=data_idx, score_threshold=ppn_score_threshold, type_threshold=ppn_type_threshold)
             for i, row in enumerate(pts):
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
-                            (tree_idx, row[0], row[1], row[2], 14, row[-1]))
+                            (tree_idx, row[1], row[2], row[3], 14, row[-1]))
                 fout.write()
         if not store_per_iteration:
             fout.close()

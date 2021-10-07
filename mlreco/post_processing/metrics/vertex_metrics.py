@@ -112,7 +112,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             ppn = uresnet_ppn_type_point_selector(clust_input, clust_res, entry=0, score_threshold=0.5, type_threshold=2)
             if ppn.shape[0] == 0:
                 continue
-            ppn_voxels = ppn[:, :3]
+            ppn_voxels = ppn[:, coords_col[0]:coords_col[1]]
             ppn_score = ppn[:, 5]
             #ppn_occupancy = ppn[:, 6]
             ppn_type = ppn[:, 7:12]
