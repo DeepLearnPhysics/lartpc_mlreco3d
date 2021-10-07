@@ -270,11 +270,6 @@ def _get_cluster_features(data: nb.float64[:,:],
         clust = clusts[ids[k]]
         x = data[clust, coords_col[0]:coords_col[1]]
 
-        # Do not waste time with computations with size 1 clusters, default to zeros
-        if len(clust) < 2:
-            feats[k] = np.concatenate((x.flatten(), np.zeros(12), np.array([len(clust)])))
-            continue
-
         # Center data
         center = mean_nb(x, 0)
         x = x - center
@@ -283,8 +278,11 @@ def _get_cluster_features(data: nb.float64[:,:],
         A = x.T.dot(x)
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
-        # This step assumes points are not superimposed, i.e. that largest eigenvalue != 0
+        # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
         w, v = np.linalg.eigh(A)
+        if w[2] == 0.:
+            feats[k] = np.concatenate((center, np.zeros(12), np.array([len(clust)])))
+            continue
         dirwt = 1.0 - w[1] / w[2]
         B = A / w[2]
 

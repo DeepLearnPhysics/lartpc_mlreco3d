@@ -49,18 +49,22 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         if not is_primary: continue
         pred_primary_count += 1
         pred_primary_particles.append((pred_idx, pred_part))
-
+        #print('Predicted primary', pred_idx, len(pred_part))
+    #print(clust_data[data_idx].shape, kinematics[data_idx].shape)
     # Loop over true interactions
     for inter_id in np.unique(clust_data[data_idx][:, 7]):
+        if inter_id == -1:
+            continue
         interaction_mask = clust_data[data_idx][:, 7] == inter_id
 
         #print(np.where(interaction_mask)[0])
         #nu_id = get_cluster_label(clust_data[data_idx], np.where(interaction_mask)[0], column=8)
-        nu_id = np.unique(clust_data[data_idx][interaction_mask, 8])
-        if len(nu_id) > 1:
-            raise Exception("Interaction has > 1 nu id !")
-        else:
-            nu_id = nu_id[0]
+        nu_id, counts = np.unique(clust_data[data_idx][interaction_mask, 8], return_counts=True)
+        nu_id = nu_id[np.argmax(counts)]
+        # if len(nu_id) > 1:
+        #     raise Exception("Interaction has > 1 nu id !")
+        # else:
+        #     nu_id = nu_id[0]
 
         # We only want to process MPV/Neutrino true interactions
         if nu_id < 1: continue
@@ -68,24 +72,26 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         # Identify true primary particles
         primary_count = 0
         primary_particles = []
+        #print(np.unique(kinematics[data_idx][:, 12], return_counts=True))
         for part_id in np.unique(clust_data[data_idx][interaction_mask, 6]):
             particle = particles_asis[data_idx][int(part_id)]
-            particle_mask = clust_data[data_idx][interaction_mask, 6] == part_id
+            particle_mask = interaction_mask & (clust_data[data_idx][:, 6] == part_id)
             #print(inter_id, particle.creation_process(), particle.nu_current_type(), particle.nu_interaction_type())
-            is_primary = get_cluster_label(kinematics[data_idx][interaction_mask], [np.where(particle_mask)[0]], column=12)
+            is_primary = get_cluster_label(kinematics[data_idx], [np.where(particle_mask)[0]], column=12)
+            #print(part_id, particle.pdg_code(), is_primary)
             pdg = particle.pdg_code()
             if is_primary > 0:
                 primary_count += 1
                 primary_particles.append((particle, np.where(particle_mask)[0]))
-
+                #print('true primary particle', particle.pdg_code(), len(np.where(particle_mask)[0]))
         #print("interaction has primaries = ", primary_count)
 
         # Loop over true primary particles and match to predicted primary particle
         matched_primaries_count = 0
         for p, part in primary_particles:
-            part_idx = np.unique(clust_data[data_idx][interaction_mask][part, 6])[0]
-            part_type = np.unique(clust_data[data_idx][interaction_mask][part, 9])[0]
-            true_seg = np.unique(clust_data[data_idx][interaction_mask][part, 10])[0]
+            part_idx = np.unique(clust_data[data_idx][part, 6])[0]
+            part_type = np.unique(clust_data[data_idx][part, 9])[0]
+            true_seg = np.unique(clust_data[data_idx][part, 10])[0]
             matched_pred_part = None
             matched_pred_idx = -1
             max_intersection = 0
@@ -106,7 +112,7 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
                 pred_type = np.argmax(node_pred_type[data_idx][matched_pred_idx])
                 pred_seg = particles_seg[data_idx][matched_pred_idx]
                 #sum_pred_voxels = clust_data[data_idx][matched_pred_part, 4].sum()
-
+                #print('matching ', matched_pred_idx, part_idx, part_type)
             row_names_primaries.append(("inter_id", "true_id", "num_true_voxels", "num_pred_voxels",
                                         "overlap", "true_type", "pred_type", "true_pdg", "pred_id",
                                         "true_seg", "pred_seg", "sum_true_voxels", #"sum_pred_voxels",
@@ -122,12 +128,12 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
                             primary_count, matched_primaries_count, len(particles[data_idx]), pred_primary_count))
 
     # Loop over predicted interactions
-    row_names_pred, row_values_pred = [], []
-    for inter_id in np.unique(inter_group_pred[data_idx]):
-        interaction_mask = inter_group_pred[data_idx] == inter_id
-        current_interaction = particles[data_idx][interaction_mask]
-        current_types = np.argmax(node_pred_type[data_idx][interaction_mask], axis=1)
-        current_particles_seg = particles_seg[data_idx][interaction_mask]
+    # row_names_pred, row_values_pred = [], []
+    # for inter_id in np.unique(inter_group_pred[data_idx]):
+    #     interaction_mask = inter_group_pred[data_idx] == inter_id
+    #     current_interaction = particles[data_idx][interaction_mask]
+    #     current_types = np.argmax(node_pred_type[data_idx][interaction_mask], axis=1)
+    #     current_particles_seg = particles_seg[data_idx][interaction_mask]
 
         # # Require >= 1 electron shower
         # keep1 = (shower_label in current_particles_seg) and (electron_label in current_types[current_particles_seg == shower_label])

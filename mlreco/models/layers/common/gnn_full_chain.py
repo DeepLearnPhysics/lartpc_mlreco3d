@@ -468,9 +468,10 @@ class FullChainGNN(torch.nn.Module):
                 if part_seg[i] == 0 and not self._inter_use_true_particles and self._inter_use_shower_primary:
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
+                    if len(voxel_inds) and len(result['shower_fragments'][0][part_batch_ids[i]]) > 0:
+                        p = voxel_inds[result['shower_fragments'][0]\
+                                      [part_batch_ids[i]][part_primary_ids[i]]]
 
-                    p = voxel_inds[result['shower_fragments'][0]\
-                                  [part_batch_ids[i]][part_primary_ids[i]]]
                 extra_feats_particles.append(p)
 
             # result['extra_feats_particles'] = [extra_feats_particles]
