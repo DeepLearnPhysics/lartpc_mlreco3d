@@ -84,14 +84,14 @@ class NearestNeighborsAssigner(StrayAssigner):
     '''
     Assigns orphans to the k-nearest cluster using simple kNN Classifier.
     '''
-    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
+    def __init__(self, X, labels, metric_fn : Callable = 'minkowski', **kwargs):
         super(NearestNeighborsAssigner, self).__init__()
         self.k = kwargs.get('k', 10)
-        self._neigh = KNeighborsClassifier(n_neighbors=10)
-        self._neigh.fit(X)
+        self._neigh = KNeighborsClassifier(n_neighbors=10, metric=metric_fn, **kwargs)
+        self._neigh.fit(X, labels)
 
-    def assign_orphans(self, X, get_proba=False):
-        pred = self._neigh.predict(X)
+    def assign_orphans(self, orphans, get_proba=False):
+        pred = self._neigh.predict(orphans)
         self._pred = pred
         if get_proba:
             self._proba = self._neigh.predict_proba(orphans)
@@ -295,10 +295,8 @@ class ClusterGraphConstructor:
 
 
     def fit_predict_one(self, entry,
-                        gen_numpy_graph=False,
                         min_points=0,
                         cluster_all=True,
-                        remainder_alg='knn',
                         invert=False) -> Tuple[np.ndarray, nx.Graph]:
         '''
         Generate predicted fragment cluster labels for single subgraph.
@@ -335,17 +333,22 @@ class ClusterGraphConstructor:
         pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
         G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
+        orphans = []
         for i, comp in enumerate(nx.connected_components(G)):
-            # print(i)
             if len(comp) < min_points:
+                orphans.append(comp)
                 continue
             x = np.asarray(list(comp))
             pred[x] = i
 
         G.pos = subgraph.pos.cpu().numpy()
-
-        new_labels, _ = unique_label(pred[pred >= 0])
-        pred[pred >= 0] = new_labels
+        nonorphan_mask = pred >= 0
+        new_labels, _ = unique_label(pred[nonorphan_mask])
+        pred[nonorphan_mask] = new_labels
+        if not cluster_all:
+            stray_assigner = NearestNeighborsAssigner(G.pos[nonorphan_mask], new_labels)
+            orphan_labels = stray_assigner.assign_orphans(G.pos[~nonorphan_mask])
+            pred[~nonorphan_mask] = orphan_labels
 
         return pred, G, subgraph
 
