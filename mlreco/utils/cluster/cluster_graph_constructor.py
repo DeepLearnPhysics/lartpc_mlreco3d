@@ -375,7 +375,8 @@ class ClusterGraphConstructor:
     def evaluate_nodes(self, cluster_label : np.ndarray,
                              metrics : List[ Callable ],
                              skip=[],
-                             column_names=None):
+                             column_names=None,
+                             ignore_index=[-1]):
         '''
         Evaluate accuracy metrics for node predictions using a list of
         scoring functions.
@@ -385,7 +386,7 @@ class ClusterGraphConstructor:
             fragment_label, and segmentation label.
             - metrics : List of accuracy metric evaluation functions.
             - skip: list of graph ids to skip evaluation.
-
+            - ignore_index: list of true cluster ids to ignore
         Constructs a GraphBatch object containing true labels and stores it
         as an attribute to self.
         '''
@@ -457,9 +458,12 @@ class ClusterGraphConstructor:
             # assert False
             # print(self.node_pred.get_example(entry).pos)
             pred = self._node_pred.get_example(entry).x
-            # print(labels.unique())
+            mask = ~np.isin(labels, ignore_index)
+            if np.count_nonzero(mask) == 0:
+                continue
+
             for f in metrics:
-                score = f(pred, labels)
+                score = f(pred[mask], labels[mask])
                 # print(score)
                 add_columns[f.__name__].append(score)
 
