@@ -57,7 +57,7 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     return outer
 
 
-@nb.njit
+@nb.njit(cache=True)
 def unique_nb(x: nb.int64[:]) -> (nb.int64[:], nb.int64[:]):
     b = np.sort(x.flatten())
     unique = list(b[:1])
@@ -71,7 +71,7 @@ def unique_nb(x: nb.int64[:]) -> (nb.int64[:], nb.int64[:]):
     return unique, counts
 
 
-@nb.njit
+@nb.njit(cache=True)
 def submatrix_nb(x:nb.float64[:,:],
                  index1: nb.int64[:],
                  index2: nb.int64[:]) -> nb.float64[:,:]:
@@ -85,7 +85,7 @@ def submatrix_nb(x:nb.float64[:,:],
     return subx
 
 
-@nb.njit
+@nb.njit(cache=True)
 def cdist_nb(x1: nb.float64[:,:],
              x2: nb.float64[:,:]) -> nb.float64[:,:]:
     """
@@ -98,7 +98,7 @@ def cdist_nb(x1: nb.float64[:,:],
     return res
 
 
-@nb.njit
+@nb.njit(cache=True)
 def mean_nb(x: nb.float64[:,:],
             axis: nb.int64) -> nb.float64[:]:
     """
@@ -115,7 +115,7 @@ def mean_nb(x: nb.float64[:,:],
     return mean
 
 
-@nb.njit
+@nb.njit(cache=True)
 def argmax_nb(x: nb.float64[:,:],
               axis: nb.int64) -> nb.int64[:]:
     """
@@ -132,7 +132,7 @@ def argmax_nb(x: nb.float64[:,:],
     return argmax
 
 
-@nb.njit
+@nb.njit(cache=True)
 def softmax_nb(x: nb.float64[:,:],
                axis: nb.int64) -> nb.float64[:,:]:
     assert axis == 0 or axis == 1
@@ -143,7 +143,7 @@ def softmax_nb(x: nb.float64[:,:],
         return exps/np.sum(exps,axis=1).reshape(-1,1)
 
 
-@nb.njit
+@nb.njit(cache=True)
 def log_loss_nb(x1: nb.boolean[:], x2: nb.float64[:]) -> nb.float64:
     if len(x1) > 0:
         return -(np.sum(np.log(x2[x1])) + np.sum(np.log(1.-x2[~x1])))/len(x1)
