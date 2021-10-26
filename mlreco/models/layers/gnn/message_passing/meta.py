@@ -31,6 +31,11 @@ class MetaLayerModel(nn.Module):
 
         self.num_mp = self.model_config.get('num_mp', 3)
 
+        self.logit_mode = self.model_config.get('logit_mode', 'logits')
+        if self.logit_mode == 'evidential':
+            self.softplus = nn.Softplus()
+            self.softplus_shift = self.model_config.get('softplus_shift', 0.0001)
+
         node_input  = self.node_input
         node_output = self.node_output
         edge_input  = self.edge_input
@@ -68,12 +73,17 @@ class MetaLayerModel(nn.Module):
         x_pred = self.node_predictor(x)
         e_pred = self.edge_predictor(e)
 
+        if self.logit_mode == 'evidential':
+            node_pred = self.softplus(x_pred) + self.softplus_shift
+            edge_pred = self.softplus(e_pred) + self.softplus_shift
+        else:
+            node_pred = x_pred
+            edge_pred = e_pred
         res = {
-            'node_pred': [x_pred],
-            'edge_pred': [e_pred],
+            'node_pred': [node_pred],
+            'edge_pred': [edge_pred],
             'node_features': [x]
             }
-
         return res
 
 
