@@ -5,7 +5,7 @@ try:
     import MinkowskiEngine as ME
 except ImportError:
     pass
-    
+
 from mlreco.iotools.factories import loader_factory
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
@@ -57,6 +57,8 @@ def process_config(cfg, verbose=True):
             cfg['trainval']['seed'] = int(time.time())
         else:
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
+        # Set MinkowskiEngine number of threads
+        os.environ['OMP_NUM_THREADS'] = '16' # default value
 
     if 'iotool' in cfg:
 

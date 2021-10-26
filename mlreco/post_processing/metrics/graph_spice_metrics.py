@@ -18,6 +18,30 @@ def num_true_clusters(pred, truth):
 def num_pred_clusters(pred, truth):
     return len(np.unique(pred))
 
+def num_small_clusters(pred, truth, threshold=5):
+    val, cnts = np.unique(pred, return_counts=True)
+    return np.count_nonzero(cnts < threshold)
+
+def modified_ARI(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return ARI(pred[mask & mask2], truth[mask & mask2])
+
+def modified_purity(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return purity(pred[mask & mask2], truth[mask & mask2])
+
+def modified_efficiency(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return efficiency(pred[mask & mask2], truth[mask & mask2])
 
 def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
@@ -26,6 +50,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
+    print(data_index)
     skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
     invert = cfg['model']['modules']['graph_spice_loss']['invert']
     segmentation = res['segmentation'][0]
@@ -36,9 +61,19 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
         segmentation = segmentation[ghost_mask]
         # print(labels.shape, segmentation.shape)
 
-    #mask = ~np.isin(labels[:, -1], skip_classes)
-    mask = ~np.isin(np.argmax(segmentation, axis=1), skip_classes)
-    labels[:, -1] = torch.tensor(np.argmax(segmentation, axis=1))
+
+    semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
+    print(semantic_pred, labels[:, -1].astype(int))
+    print(np.count_nonzero(semantic_pred.cpu().numpy() == labels[:, -1].astype(int)))
+    # Only compute loss on voxels where true/predicted semantics agree
+    print(np.unique(labels[:, 5], return_counts=True))
+    labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
+    print(np.unique(labels[:, 5], return_counts=True))
+    labels[:, -1] = semantic_pred
+
+    mask = ~np.isin(labels[:, -1], skip_classes)
+
+    #np.save('/sdf/home/l/ldomine/lartpc_mlreco3d/semantic_predictions.npy', labels)
 
     labels = labels[mask]
     #name = cfg['post_processing']['graph_spice_metrics']['output_filename']
@@ -61,9 +96,13 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
                                          batch_col=0,
                                          training=False)
     gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
-    funcs = [ARI, SBD, purity, efficiency, num_true_clusters, num_pred_clusters]
+    funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
+            num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)
-
+    import pandas as pd
+    pd.set_option('display.max_columns', None)
+    print(df.head(10))
+    assert False
     fout = CSVData(os.path.join(logdir, 'graph-spice-metrics.csv'), append=append)
 
     for row in df.iterrows():
@@ -84,14 +123,16 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
     data_index = data_blob['index']
     invert = cfg['model']['modules']['graph_spice_loss']['invert']
     skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
-    segmentation = res['segmentation'][0]
-    if ghost:
-        labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
-        labels = labels[0]
-        ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
-        segmentation = segmentation[ghost_mask]
-
     use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
+
+    if not use_labels:
+        segmentation = res['segmentation'][0]
+        if ghost:
+            labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
+            labels = labels[0]
+            ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+            segmentation = segmentation[ghost_mask]
+
 
     if use_labels:
         mask = ~np.isin(labels[:, -1], skip_classes)

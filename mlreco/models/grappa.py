@@ -156,7 +156,7 @@ class GNN(torch.nn.Module):
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
 
-    def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None):
+    def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None, batch_size=None):
         """
         Prepares particle clusters and feed them to the GNN model.
 
@@ -202,6 +202,16 @@ class GNN(torch.nn.Module):
         batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
+
+        # If an event is missing from the input data - e.g., deghosting
+        # erased everything (extreme case but possible if very few voxels)
+        # then we might be miscounting batches. Ensure that batches is the
+        # same length as batch_size if specified.
+        if batch_size is not None:
+            new_bcounts = torch.zeros(batch_size, dtype=torch.int64, device=bcounts.device)
+            new_bcounts[batches.long()] = bcounts
+            bcounts = new_bcounts
+            batches = torch.arange(batch_size, dtype=batches.dtype)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         cvids = np.concatenate([np.arange(n.item()) for n in bcounts])
