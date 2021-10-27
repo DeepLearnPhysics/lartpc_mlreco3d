@@ -1,8 +1,8 @@
 import numpy as np
 import numba as nb
 import torch
+import inspect
 from functools import wraps
-from inspect import signature
 
 def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     '''
@@ -19,9 +19,14 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
         @wraps(fn)
         def inner(*args, **kwargs):
             # Convert the positional arguments in args into key:value pairs in kwargs
-            keys = list(signature(fn).parameters.keys())
+            keys = list(inspect.signature(fn).parameters.keys())
             for i, val in enumerate(args):
                 kwargs[keys[i]] = val
+
+            # Extract the default values for the remaining parameters
+            for key, val in inspect.signature(fn).parameters.items():
+                if key not in kwargs and val.default != inspect.Parameter.empty:
+                    kwargs[key] = val.default
 
             # If a torch output is request, register the input dtype and device location
             if keep_torch:

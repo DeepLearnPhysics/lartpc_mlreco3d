@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import random
 import torch
 import numpy as np
@@ -39,7 +35,6 @@ class GNN(torch.nn.Module):
             network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
             edge_max_dist     : <maximal edge Euclidean length (default -1)>
             edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-            edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
             merge_batch       : <flag for whether to merge batches (default False)>
             merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
             merge_batch_size  : <size of batch merging (default 2)>
@@ -94,7 +89,6 @@ class GNN(torch.nn.Module):
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
-        self.edge_dist_numpy = base_config.get('edge_dist_numpy',False)
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
 
         # If requested, merge images together within the batch

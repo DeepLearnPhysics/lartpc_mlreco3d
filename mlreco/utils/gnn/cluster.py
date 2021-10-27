@@ -6,8 +6,7 @@ from typing import List
 
 from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
 
-# @numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -170,8 +169,8 @@ def _get_momenta_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_centers(data, clusts, coords_index=(1, 4)):
+@numba_wrapper(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
+def get_cluster_centers(data, clusts, coords_index=[1, 4]):
     """
     Function that returns the coordinate of the centroid
     associated with the listed clusters.
@@ -182,7 +181,7 @@ def get_cluster_centers(data, clusts, coords_index=(1, 4)):
     Returns:
         np.ndarray: (C,3) tensor of cluster centers
     """
-    return _get_cluster_centers(data, clusts, list(coords_index))
+    return _get_cluster_centers(data, clusts, coords_index)
 
 @nb.njit(cache=True)
 def _get_cluster_centers(data: nb.float64[:,:],
@@ -347,8 +346,8 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=(1, 4)):
+@numba_wrapper(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
+def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only
@@ -366,7 +365,7 @@ def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, co
     """
     return _get_cluster_points_label(data, particles, clusts, groupwise,
                                     batch_col=batch_col,
-                                    coords_index=list(coords_index))
+                                    coords_index=coords_index)
 
 @nb.njit(cache=True)
 def _get_cluster_points_label(data: nb.float64[:,:],
