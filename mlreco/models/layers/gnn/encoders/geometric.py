@@ -99,7 +99,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters
-        self.use_numpy = model_config.get('use_numpy', False)
+        self.use_numpy = model_config.get('use_numpy', True)
         self.batch_col = batch_col
         self.coords_col = coords_col
 
