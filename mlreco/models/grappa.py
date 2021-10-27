@@ -177,7 +177,7 @@ class GNN(torch.nn.Module):
         # Form list of list of voxel indices, one list per cluster in the requested class
         if clusts is None:
             if hasattr(self, 'dbscan'):
-                clusts = self.dbscan(cluster_data, points=particles.detach().cpu().numpy() if len(data) > 1 else None)
+                clusts = self.dbscan(cluster_data, points=particles if len(data) > 1 else None)
             else:
                 clusts = form_clusters(cluster_data.detach().cpu().numpy(), self.node_min_size, self.source_col, cluster_classes=self.node_type)
 
@@ -201,10 +201,10 @@ class GNN(torch.nn.Module):
         # then we might be miscounting batches. Ensure that batches is the
         # same length as batch_size if specified.
         if batch_size is not None:
-            new_bcounts = torch.zeros(batch_size, dtype=torch.int64, device=bcounts.device)
-            new_bcounts[batches.long()] = bcounts
+            new_bcounts = np.zeros(batch_size, dtype=np.int64, device=bcounts.device)
+            new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
-            batches = torch.arange(batch_size, dtype=batches.dtype)
+            batches = np.arange(batch_size, dtype=batches.dtype)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
@@ -249,9 +249,8 @@ class GNN(torch.nn.Module):
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
-        # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
-        # print(x.shape, len(clusts), extra_feats is None, points is None, self.add_start_point)
+
         # If extra features are provided separately, add them
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)

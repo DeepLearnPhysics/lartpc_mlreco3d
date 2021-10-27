@@ -117,7 +117,8 @@ class DBSCANFragmenter(torch.nn.Module):
         from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
         # If tracks are clustered, get the track points from the PPN output
-        data = data.detach().cpu().numpy()
+        if isinstance(data, torch.Tensor): data = data.detach().cpu().numpy()
+        if points is not None and isinstance(points, torch.Tensor): points = points.detach().cpu().numpy()
         track_points = None
         if self.break_tracks and self.track_label in self.cluster_classes:
             assert output is not None or points is not None

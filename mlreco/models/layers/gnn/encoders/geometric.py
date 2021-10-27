@@ -110,14 +110,14 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         undirected = not edge_index.shape[1] or (not edge_index.shape[1] % 2 and [edge_index[1, 0], edge_index[0, 0]] == edge_index[:, half_idx].tolist())
         if undirected: edge_index = edge_index[:, :half_idx]
 
-        # Get the voxel set
-        voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()
-
         # If numpy is to be used, bring data to cpu, pass through Numba function
         # Otherwise use torch-based implementation of cluster_edge_features
         if self.use_numpy:
             feats = cluster_edge_features(data, clusts, edge_index.T, batch_col=self.batch_col, coords_col=self.coords_col)
         else:
+            # Get the voxel set
+            voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()
+
             # Here is a torch-based implementation of cluster_edge_features
             feats = []
             for e in edge_index.T:
