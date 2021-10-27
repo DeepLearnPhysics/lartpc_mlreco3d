@@ -6,7 +6,7 @@ from mlreco.models.layers.common.dbscan import DBSCANFragmenter
 from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
-from mlreco.utils.gnn.data import merge_batch
+from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
 
@@ -188,11 +188,11 @@ class GNN(torch.nn.Module):
         # If requested, merge images together within the batch
         if self.merge_batch:
             cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
-            _, batch_counts = np.unique(batch_list, return_counts=True)
+            batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
         # Update result with a list of clusters for each batch id
-        batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
+        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
 
@@ -207,12 +207,8 @@ class GNN(torch.nn.Module):
             batches = torch.arange(batch_size, dtype=batches.dtype)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
-        cvids = np.concatenate([np.arange(n.item()) for n in bcounts])
-        cbids = [np.where(batch_ids == b.item())[0] for b in batches]
-        same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
-        clusts_np = np.array([c for c in clusts if len(c)], dtype=object if not same_length else np.int64)
-        same_length = [np.all([len(c) == len(clusts_np[b][0]) for c in clusts_np[b]]) for b in cbids]
-        result['clusts'] = [[np.array([cvids[c].astype(np.int64) for c in clusts_np[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(cbids)]]
+        clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
+        result['clusts'] = [clusts_split]
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
@@ -248,9 +244,8 @@ class GNN(torch.nn.Module):
         if not edge_index.shape[1]:
             return {**result, 'edge_index':[np.empty((2,0)) for _ in batches]}
 
-        ebids = [np.where(batch_ids[edge_index[0]] == b.item())[0] for b in batches]
-        ecids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
-        result['edge_index'] = [[ecids[edge_index[:,b]].T for b in ebids]]
+        edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
+        result['edge_index'] = [edge_index_split]
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
@@ -274,7 +269,7 @@ class GNN(torch.nn.Module):
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=cluster_data.device)
 
-        # Pass through the model, update resultz
+        # Pass through the model, update result
         out = self.gnn_model(x, index, e, xbatch)
         result['node_pred'] = [[out['node_pred'][0][b] for b in cbids]]
         result['edge_pred'] = [[out['edge_pred'][0][b] for b in ebids]]
