@@ -115,7 +115,7 @@ class GraphSPICELoss(nn.Module):
                                                 batch_col=0,
                                                 training=~self.eval_mode)
 
-        self.invert = self.loss_config.get('invert', False)
+        self.invert = self.loss_config.get('invert', True)
         # print("LOSS FN = ", self.loss_fn)
 
     def filter_class(self, segment_label, cluster_label):

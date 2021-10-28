@@ -50,9 +50,8 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    print(data_index)
     skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
-    invert = cfg['model']['modules']['graph_spice_loss']['invert']
+    invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
     segmentation = res['segmentation'][0]
     if ghost:
         labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
@@ -63,12 +62,8 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
 
     semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
-    print(semantic_pred, labels[:, -1].astype(int))
-    print(np.count_nonzero(semantic_pred.cpu().numpy() == labels[:, -1].astype(int)))
     # Only compute loss on voxels where true/predicted semantics agree
-    print(np.unique(labels[:, 5], return_counts=True))
     labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
-    print(np.unique(labels[:, 5], return_counts=True))
     labels[:, -1] = semantic_pred
 
     mask = ~np.isin(labels[:, -1], skip_classes)
@@ -99,10 +94,9 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
     funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
             num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)
-    import pandas as pd
-    pd.set_option('display.max_columns', None)
-    print(df.head(10))
-    assert False
+    #import pandas as pd
+    #pd.set_option('display.max_columns', None)
+
     fout = CSVData(os.path.join(logdir, 'graph-spice-metrics.csv'), append=append)
 
     for row in df.iterrows():
@@ -121,7 +115,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    invert = cfg['model']['modules']['graph_spice_loss']['invert']
+    invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
     skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
     use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
 
