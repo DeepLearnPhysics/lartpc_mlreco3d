@@ -204,7 +204,7 @@ class GNN(torch.nn.Module):
             new_bcounts = np.zeros(batch_size, dtype=np.int64)
             new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
-            batches = np.arange(batch_size, dtype=batches.dtype)
+            batches = np.arange(batch_size)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
