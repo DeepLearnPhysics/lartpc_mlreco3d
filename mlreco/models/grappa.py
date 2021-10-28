@@ -201,7 +201,7 @@ class GNN(torch.nn.Module):
         # then we might be miscounting batches. Ensure that batches is the
         # same length as batch_size if specified.
         if batch_size is not None:
-            new_bcounts = np.zeros(batch_size, dtype=np.int64, device=bcounts.device)
+            new_bcounts = np.zeros(batch_size, dtype=np.int64)
             new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
             batches = np.arange(batch_size, dtype=batches.dtype)
