@@ -167,18 +167,46 @@ class BayesianParticleClassifier(torch.nn.Module):
 
     def __init__(self, cfg, name='bayesian_particle_classifier'):
         super(BayesianParticleClassifier, self).__init__()
-        setup_cnn_configuration(self, cfg, name)
+        setup_cnn_configuration(self, cfg, 'network_base')
 
         self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)
-        self.encoder_type = self.model_config.get('encoder_type', 'full_dropout')
         self.encoder = MCDropoutEncoder(cfg)
-        self.logit_layer = nn.Sequential(
-            nn.ReLU(),
-            nn.Linear(self.encoder.latent_size, self.num_classes))
+
+        self.mode = self.model_config.get('mode', 'mc_dropout')
+
+        if self.mode == 'evidential':
+            self.logit_layer = nn.Sequential(
+                nn.Linear(self.encoder.latent_size, self.num_classes),
+                nn.Softplus())
+        else:
+            self.logit_layer = nn.Sequential(
+                nn.ReLU(),
+                nn.Linear(self.encoder.latent_size, self.num_classes))
 
         self.num_samples = self.model_config.get('num_samples', 20)
-        self.mode = self.model_config.get('mode', 'mc_dropout')
+        self.eps = self.model_config.get('eps', 0.0)
+        print('Dropout network will run inference on {} mode'.format(self.mode))
+
+
+    def evidential_forward(self, input):
+        point_cloud, = input
+        out = self.encoder(point_cloud)
+        out = self.logit_layer(out) + self.eps
+
+        concentration = out + 1.0
+        S = torch.sum(concentration, dim=1, keepdim=True)
+        uncertainty = self.num_classes / (S + 0.000001)
+
+        res = {}
+
+        res['evidence'] = [out]
+        res['uncertainty'] = [uncertainty]
+        res['concentration'] = [concentration]
+        res['expected_probability'] = [concentration / S]
+
+        return res
+
 
     def mc_forward(self, input, num_samples=None):
 
@@ -239,6 +267,8 @@ class BayesianParticleClassifier(torch.nn.Module):
     def forward(self, input):
         if (not self.training) and (self.mode == 'mc_dropout'):
             return self.mc_forward(input)
+        elif self.mode == 'evidential':
+            return self.evidential_forward(input)
         else:
             return self.standard_forward(input)
 
