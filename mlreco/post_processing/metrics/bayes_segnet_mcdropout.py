@@ -15,7 +15,7 @@ def bayes_segnet_mcdropout(cfg,
                            logdir, 
                            iteration):
 
-    labels = data_blob['segment_label'][0].cpu().numpy()
+    labels = data_blob['segment_label'][0]
     index = data_blob['index']
     # logits = result['logits'][0]
     if processor_cfg['mode'] != 'mc_dropout':
@@ -26,7 +26,7 @@ def bayes_segnet_mcdropout(cfg,
 
     pred = np.argmax(result['segmentation'][0], axis=1)
     index = np.asarray(index)
-    batch_index = data_blob['input_data'][0][:, 0].cpu().numpy().astype(int)
+    batch_index = data_blob['input_data'][0][:, 0].astype(int)
 
     if iteration:
         append = True

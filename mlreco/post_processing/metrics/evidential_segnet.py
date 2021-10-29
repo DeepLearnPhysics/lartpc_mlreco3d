@@ -13,7 +13,7 @@ import torch
 
 def evidential_segnet_metrics(cfg, processor_cfg, data_blob, result, logdir, iteration):
 
-    labels = data_blob['segment_label'][0].cpu().numpy()
+    labels = data_blob['segment_label'][0]
     index = data_blob['index']
     # logits = result['logits'][0]
     if processor_cfg['mode'] != 'mc_dropout':

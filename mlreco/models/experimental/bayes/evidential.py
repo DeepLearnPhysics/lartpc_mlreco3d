@@ -122,7 +122,7 @@ class EVDLoss(nn.Module):
         device = alpha.device
         if self.one_hot:
             eye = torch.eye(self.num_classes).to(device=device)
-            y = eye[labels]
+            y = eye[labels.long()]
         else:
             y = labels
 

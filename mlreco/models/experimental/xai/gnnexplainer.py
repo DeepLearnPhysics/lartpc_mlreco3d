@@ -28,6 +28,15 @@ class GNNExplainerWrapper(torch.nn.Module):
 
 
 class MetaLayerModelExplainer(GNNExplainer):
+    '''
+    GNN Explainer reformatted to handle MetaLayerModels
+
+    This implementation is largely a copy from Pytorch Geometric:
+    https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/nn/models/gnn_explainer.html
+    © Copyright 2021, Matthias Fey. Revision 788a4c05.
+
+    This patchwork is only temporary. 
+    '''
 
     def __init__(self, model, **kwargs):
         super(MetaLayerModelExplainer, self).__init__(model, **kwargs)

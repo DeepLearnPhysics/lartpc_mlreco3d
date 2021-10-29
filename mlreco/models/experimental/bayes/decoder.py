@@ -23,7 +23,7 @@ class MCDropoutDecoder(torch.nn.Module):
 
     def __init__(self, cfg, name='mcdropout_decoder'):
         super(MCDropoutDecoder, self).__init__()
-        setup_cnn_configuration(self, cfg, name)
+        setup_cnn_configuration(self, cfg, 'network_base')
 
         # UResNet Configurations
         self.model_config = cfg.get(name, {})

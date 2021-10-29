@@ -1,3 +1,4 @@
+from functools import reduce
 import numpy as np
 import torch
 import torch.nn as nn
@@ -48,7 +49,7 @@ class MetaLayerModel(nn.Module):
                 MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
                                     leakiness=self.leakiness),
                           node_model=NodeLayer(node_input, node_output, edge_output,
-                                                leakiness=self.leakiness)
+                                                leakiness=self.leakiness, reduction=self.aggr)
                           #global_model=GlobalModel(node_output, 1, 32)
                          )
             )
@@ -174,7 +175,7 @@ class NodeLayer(nn.Module):
 
         - output: [C, F_o] Tensor with F_o output node feature
     '''
-    def __init__(self, node_in, node_out, edge_in, leakiness=0.0):
+    def __init__(self, node_in, node_out, edge_in, leakiness=0.0, reduction='mean'):
         super(NodeLayer, self).__init__()
 
         self.node_mlp_1 = nn.Sequential(
@@ -188,6 +189,8 @@ class NodeLayer(nn.Module):
             nn.Linear(node_out, node_out)
         )
 
+        self.reduction = reduction
+
         self.node_mlp_2 = nn.Sequential(
             BatchNorm1d(node_in + node_out),
             nn.Linear(node_in + node_out, node_out),
@@ -200,11 +203,11 @@ class NodeLayer(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch):
-        from torch_scatter import scatter_mean
+        from torch_scatter import scatter
         row, col = edge_index
         out = torch.cat([x[row], edge_attr], dim=1)
         out = self.node_mlp_1(out)
-        out = scatter_mean(out, col, dim=0, dim_size=x.size(0))
+        out = scatter(out, col, dim=0, dim_size=x.size(0), reduce=self.reduction)
         out = torch.cat([x, out], dim=1)
         return self.node_mlp_2(out)
 
@@ -246,7 +249,7 @@ class GlobalModel(nn.Module):
 
         - output: [C, F_o] Tensor with F_o output node feature
     '''
-    def __init__(self, node_in, batch_size, global_out, leakiness=0.0):
+    def __init__(self, node_in, batch_size, global_out, leakiness=0.0, reduction='mean'):
         super(GlobalModel, self).__init__()
 
         self.global_mlp = nn.Sequential(
@@ -260,12 +263,14 @@ class GlobalModel(nn.Module):
             nn.Linear(global_out, global_out)
         )
 
+        self.reduction = reduction
+
     def forward(self, x, edge_index, edge_attr, u, batch):
-        from torch_scatter import scatter_mean
+        from torch_scatter import scatter
         # x: [N, F_x], where N is the number of nodes.
         # edge_index: [2, E] with max entry N - 1.
         # edge_attr: [E, F_e]
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
-        out = torch.cat([u, scatter_mean(x, batch, dim=0)], dim=1)
+        out = torch.cat([u, scatter(x, batch, dim=0, reduce=self.reduction)], dim=1)
         return self.global_mlp(out)
