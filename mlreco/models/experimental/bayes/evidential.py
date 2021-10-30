@@ -85,9 +85,9 @@ def evd_kl_divergence(alpha, beta=None):
 
 def evd_loss_dict():
     loss_fn = {
-        'evd_digamma': digamma_evd_loss,
-        'evd_sumsq': sumsq_evd_loss,
-        'evd_nll': nll_evd_loss
+        'edl_digamma': digamma_evd_loss,
+        'edl_sumsq': sumsq_evd_loss,
+        'edl_nll': nll_evd_loss
     }
     return loss_fn
 
@@ -106,7 +106,7 @@ class EVDLoss(nn.Module):
     Classification Uncertainty
     '''
     def __init__(self, evd_loss_name, reduction='none', T=50000, 
-                 one_hot=True, mode='concentration'):
+                 one_hot=True, num_classes=5, mode='concentration'):
         super(EVDLoss, self).__init__()
         self.T = T  # Total epoch counts for which to anneal kld component. 
         self.evd_loss = evd_loss_construct(evd_loss_name)
@@ -114,15 +114,15 @@ class EVDLoss(nn.Module):
         self.kld_loss = evd_kl_divergence
         self.reduction = reduction
         self.one_hot = one_hot
-        self.num_classes = 5
+        self.num_classes = num_classes
         self.mode = mode
 
     def forward(self, alpha, labels, t=0):
 
         device = alpha.device
-        if not self.one_hot:
+        if self.one_hot:
             eye = torch.eye(self.num_classes).to(device=device)
-            y = eye[labels]
+            y = eye[labels.long()]
         else:
             y = labels
 

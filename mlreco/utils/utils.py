@@ -3,7 +3,7 @@ import torch
 import time
 import torch_geometric
 import pandas as pd
-
+import os
 
 def to_numpy(s):
     use_scn, use_mink = True, True
@@ -174,3 +174,23 @@ class CSVData:
     def close(self):
         if self._str is not None:
             self._fout.close()
+
+
+class ChunkCSVData:
+    
+    def __init__(self, fout, append=True, chunksize=1000):
+        self.name = fout
+        if append:
+            self.append = 'a'
+        else:
+            self.append = 'w'
+        self.chunksize = chunksize
+
+        self.header = not os.path.exists(self.name)
+        
+    def record(self, df):
+        df.to_csv(self.name, 
+                  mode=self.append, 
+                  chunksize=self.chunksize, 
+                  index=False, 
+                  header=self.header)
