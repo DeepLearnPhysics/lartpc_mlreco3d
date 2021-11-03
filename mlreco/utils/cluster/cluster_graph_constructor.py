@@ -70,7 +70,7 @@ class StrayAssigner(ABC):
     '''
     Abstract Class for orphan assigning functors.
     '''
-    def __init__(self, X, Y, metric_fn : Callable = None):
+    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
         self.clustered = X
         self.d = metric_fn
         self.partial_labels = Y
@@ -89,7 +89,7 @@ class NearestNeighborsAssigner(StrayAssigner):
             X: Points to run Nearest-Neighbor Classifier (N x F)
             Y: Labels of Points (N, )
         '''
-        super(NearestNeighborsAssigner, self).__init__()
+        super(NearestNeighborsAssigner, self).__init__(X, Y, **kwargs)
         self._neigh = KNeighborsClassifier(**kwargs)
         self._neigh.fit(X, Y)
 
@@ -111,7 +111,7 @@ class RadiusNeighborsAssigner(StrayAssigner):
             X: Points to run Nearest-Neighbor Classifier (N x F)
             Y: Labels of Points (N, )
         '''
-        super(RadiusNeighborsAssigner, self).__init__()
+        super(RadiusNeighborsAssigner, self).__init__(X, Y, **kwargs)
         self._neigh = RadiusNeighborsClassifier(**kwargs)
         self._neigh.fit(X, Y)
 
@@ -155,8 +155,12 @@ class ClusterGraphConstructor:
 
         # Clustering Algorithm Parameters
         self.ths = constructor_cfg.get('edge_cut_threshold', 0.0) # Prob values 0-1
+        if self.training:
+            self.ths = 0.0
         # print("Edge Threshold Probability Score = ", self.ths)
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
+        # Radius within which orphans get assigned to neighbor cluster
+        self._orphans_radius = constructor_cfg.get('orphans_radius', 1.0)
 
         # GraphBatch containing graphs per semantic class.
         if graph_batch is None:
@@ -372,7 +376,9 @@ class ClusterGraphConstructor:
         orphan_mask = pred < 0
         if orphan_mask.any():
             orphans = G.pos[orphan_mask]
-            assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask], pred[~orphan_mask])
+            assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask], pred[~orphan_mask].astype(int),
+                                            radius=self._orphans_radius,
+                                            outlier_label=-1)
             orphan_labels = assigner.assign_orphans(orphans)
             pred[orphan_mask] = orphan_labels
 
@@ -492,6 +498,9 @@ class ClusterGraphConstructor:
             pred = self._node_pred.get_example(entry).x
             mask = ~np.isin(labels, ignore_index)
             if np.count_nonzero(mask) == 0:
+                print('No node to cluster in CGC')
+                for f in metrics:
+                    add_columns[f.__name__].append(np.nan)
                 continue
 
             for f in metrics:

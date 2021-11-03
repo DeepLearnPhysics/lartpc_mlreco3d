@@ -237,8 +237,8 @@ class PPN(torch.nn.Module):
                 'use_true_ghost_mask', False)
             self.downsample_ghost = self.model_cfg.get('downsample_ghost', True)
 
-        print('Total Number of Trainable Parameters (mink_ppnplus)= {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        # print('Total Number of Trainable Parameters (mink_ppnplus)= {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, final, decoderTensors, ghost=None, ghost_labels=None):
         '''

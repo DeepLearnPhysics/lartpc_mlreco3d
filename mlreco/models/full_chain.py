@@ -47,11 +47,13 @@ class FullChain(FullChainGNN):
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
                                                                     batch_col=self.batch_col,
                                                                     training=False) # for downstream, need to run prediction in inference mode
-            self.gs_manager.ths = 0.1 # edge cut threshold is usually 0. during training, but 0.9 at inference
+            # edge cut threshold is usually 0. (unspecified) during training, but 0.1 at inference
+            self.gs_manager.ths = cfg.get('graph_spice', {}).get('constructor_cfg', {}).get('edge_cut_threshold', 0.1)
 
             self._gspice_skip_classes         = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_invert               = cfg.get('graph_spice_loss', {}).get('invert', True)
             self._gspice_fragment_manager     = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
+            self._gspice_min_points           = cfg.get('graph_spice', {}).get('min_points', 1)
 
         if self.enable_dbscan:
             self.frag_cfg = cfg.get('dbscan', {}).get('dbscan_fragment_manager', {})
@@ -65,8 +67,8 @@ class FullChain(FullChainGNN):
             self._cosmic_use_input_data = cosmic_cfg.get('use_input_data', True)
             self._cosmic_use_true_interactions = cosmic_cfg.get('use_true_interactions', False)
 
-        print('Total Number of Trainable Parameters (mink_full_chain)= {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        # print('Total Number of Trainable Parameters (mink_full_chain)= {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def get_extra_gnn_features(self,
                                fragments,
@@ -320,7 +322,7 @@ class FullChain(FullChainGNN):
                     self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
                                                   spatial_embeddings_output['graph_info'][0])
 
-                    self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert)
+                    self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert, min_points=self._gspice_min_points)
                     cluster_predictions = self.gs_manager._node_pred.x
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],

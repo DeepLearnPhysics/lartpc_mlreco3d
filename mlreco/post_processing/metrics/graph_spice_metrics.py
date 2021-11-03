@@ -50,21 +50,23 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
+    skip_classes = cfg['model']['modules']['graph_spice']['skip_classes']
+    min_points = cfg['model']['modules']['graph_spice'].get('min_points', 1)
     invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
+    use_labels = cfg['post_processing']['graph_spice_metrics'].get('use_labels', True)
+
     segmentation = res['segmentation'][0]
     if ghost:
         labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
         labels = labels[0]
         ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
         segmentation = segmentation[ghost_mask]
-        # print(labels.shape, segmentation.shape)
 
-
-    semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
-    # Only compute loss on voxels where true/predicted semantics agree
-    labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
-    labels[:, -1] = semantic_pred
+    if not use_labels:
+        semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
+        # Only compute loss on voxels where true/predicted semantics agree
+        labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
+        labels[:, -1] = semantic_pred
 
     mask = ~np.isin(labels[:, -1], skip_classes)
 
@@ -90,7 +92,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
                                          graph_info=graph_info,
                                          batch_col=0,
                                          training=False)
-    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
+    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
     funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
             num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)
@@ -116,7 +118,8 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
     invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
-    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
+    skip_classes = cfg['model']['modules']['graph_spice']['skip_classes']
+    min_points = cfg['model']['modules']['graph_spice'].get('min_points', 1)
     use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
 
     if not use_labels:
@@ -166,7 +169,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
         gs_manager = ClusterGraphConstructor(constructor_cfg,
                                             graph_batch=graph,
                                             graph_info=graph_info)
-        gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
+        gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
         funcs = [ARI, SBD, purity, efficiency, num_true_clusters,
                  num_pred_clusters, edge_threshold]
         column_names = ['ARI', 'SBD', 'Purity', 'Efficiency', 'num_true_clusters',
