@@ -21,7 +21,7 @@ class MetaLayerModel(nn.Module):
         self.node_output    = self.model_config.get('node_output_feats', 32)
         self.edge_output    = self.model_config.get('edge_output_feats', self.edge_input)
         self.global_output  = self.model_config.get('global_output_feats', 32)
-        self.aggr           = self.model_config.get('aggr', 'add')
+        self.aggr           = self.model_config.get('aggr', 'mean')
         self.leakiness      = self.model_config.get('leakiness', 0.1)
 
         self.edge_updates = torch.nn.ModuleList()
