@@ -134,7 +134,7 @@ class SegmentationLoss(nn.Module):
     def __init__(self, cfg, name='mcdropout_uresnet'):
         super(SegmentationLoss, self).__init__()
         self.loss_config = cfg.get(name, {})
-        self.loss_fn_name = self.loss_config.get('loss_fn', 'evd_sumsq')
+        self.loss_fn_name = self.loss_config.get('loss_fn', 'edl_sumsq')
         self.loss_fn_args = self.loss_config.get('loss_fn_args', {})
         if 'edl' in self.loss_fn_name:
             self.loss_fn = EVDLoss(self.loss_fn_name, **self.loss_fn_args)

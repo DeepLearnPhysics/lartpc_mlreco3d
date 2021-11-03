@@ -47,7 +47,7 @@ class FullChain(FullChainGNN):
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
                                                                     batch_col=self.batch_col,
                                                                     training=False) # for downstream, need to run prediction in inference mode
-            self.gs_manager.ths = 0.9 # edge cut threshold is usually 0. during training, but 0.9 at inference
+            self.gs_manager.ths = 0.1 # edge cut threshold is usually 0. during training, but 0.9 at inference
 
             self._gspice_skip_classes         = cfg.get('graph_spice', {}).get('skip_classes', [])
             self._gspice_invert               = cfg.get('graph_spice_loss', {}).get('invert', True)

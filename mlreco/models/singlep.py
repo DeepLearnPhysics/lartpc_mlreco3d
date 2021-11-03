@@ -376,7 +376,7 @@ class EvidentialLearningLoss(nn.Module):
     def __init__(self, cfg, name='evidential_learning_loss'):
         super(EvidentialLearningLoss, self).__init__()
         self.loss_config = cfg.get(name, {})
-        self.evd_loss_name = self.loss_config.get('evd_loss_name', 'evd_sumsq')
+        self.evd_loss_name = self.loss_config.get('evd_loss_name', 'edl_sumsq')
         self.num_classes = self.loss_config.get('num_classes', 5)
         self.num_total_iter = self.loss_config.get('num_total_iter', 50000)
         self.loss_fn = EVDLoss(self.evd_loss_name, 'mean', T=self.num_total_iter)

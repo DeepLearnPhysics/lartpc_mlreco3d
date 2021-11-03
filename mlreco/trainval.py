@@ -389,6 +389,7 @@ class trainval(object):
 
 
     def load_weights(self, module_config, model_paths):
+        iteration = 0
         # Breadth first search of model_path
         # module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -469,6 +470,7 @@ class trainval(object):
                     if module == '':  # Root model sets iteration
                         iteration = checkpoint['global_step'] + 1
                 print('Done.')
+        return iteration
 
 
     def initialize(self):
@@ -512,12 +514,11 @@ class trainval(object):
 
         self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
 
-        iteration = 0
         model_paths = []
         if self._trainval_config.get('model_path',''):
             model_paths.append(('', self._trainval_config['model_path'], ''))
 
-        self.load_weights(module_config, model_paths)
+        iteration = self.load_weights(module_config, model_paths)
 
         # Replace model with calibrated model on uncertainty calibration mode
         if 'calibration' in module_config:
