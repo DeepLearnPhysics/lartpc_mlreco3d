@@ -121,10 +121,27 @@ def mean_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
+def argmin_nb(x: nb.float64[:,:],
+              axis: nb.int64) -> nb.int64[:]:
+    """
+    Numba implementation of np.argmin(x, axis)
+    """
+    assert axis == 0 or axis == 1
+    argmin = np.empty(x.shape[1-axis], dtype=np.int64)
+    if axis == 0:
+        for i in range(len(argmin)):
+            argmin[i] = np.argmin(x[:,i])
+    else:
+        for i in range(len(argmin)):
+            argmin[i] = np.argmin(x[i])
+    return argmin
+
+
+@nb.njit(cache=True)
 def argmax_nb(x: nb.float64[:,:],
               axis: nb.int64) -> nb.int64[:]:
     """
-    Numba implementation of np.mean(x, axis)
+    Numba implementation of np.argmax(x, axis)
     """
     assert axis == 0 or axis == 1
     argmax = np.empty(x.shape[1-axis], dtype=np.int64)
@@ -135,6 +152,23 @@ def argmax_nb(x: nb.float64[:,:],
         for i in range(len(argmax)):
             argmax[i] = np.argmax(x[i])
     return argmax
+
+
+@nb.njit(cache=True)
+def all_nb(x: nb.float64[:,:],
+              axis: nb.int64) -> nb.int64[:]:
+    """
+    Numba implementation of np.all(x, axis)
+    """
+    assert axis == 0 or axis == 1
+    all = np.empty(x.shape[1-axis], dtype=np.bool_)
+    if axis == 0:
+        for i in range(len(all)):
+            all[i] = np.all(x[:,i])
+    else:
+        for i in range(len(all)):
+            all[i] = np.all(x[i])
+    return all
 
 
 @nb.njit(cache=True)
