@@ -1,6 +1,9 @@
 # Defines inputs to the GNN networks
 import numpy as np
+import numba as nb
 import torch
+
+from mlreco.utils.numba import numba_wrapper, unique_nb
 
 from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
@@ -149,3 +152,74 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         particles[batch_selection,3] = int(i)
 
     return data, particles, merging_batch_id_list
+
+
+@numba_wrapper(list_args=['clusts'])
+def split_clusts(clusts, batch_ids, batches, counts):
+    """
+    Splits a batched list of clusters into individual
+    lists of clusters, one per batch ID.
+
+    Args:
+        clusts ([np.ndarray]) : (C) List of arrays of global voxel IDs in each cluster
+        batch_ids (np.ndarray): (C) List of cluster batch ids
+        batches (np.ndarray)  : (B) List of batch ids in this batch
+        counts (np.ndarray)   : (B) Number of voxels in each batch
+    Returns:
+        [[np.ndarray]]: (B) List of list of arrays of batchwise voxels IDs in each cluster
+        [np.ndarray]  : (B) List of cluster IDs in each batch
+    """
+    clusts_split, cbids = _split_clusts(clusts, batch_ids, batches, counts)
+
+    # Cast the list of clusters to np.array (object type)
+    same_length = [np.all([len(c) == len(bclusts[0]) for c in bclusts]) for bclusts in clusts_split]
+    return [np.array(clusts_split[b], dtype=np.object if not sl else np.int64) for b, sl in enumerate(same_length)], cbids
+
+@nb.njit(cache=True)
+def _split_clusts(clusts: nb.types.List(nb.int64[:]),
+                  batch_ids: nb.int64[:],
+                  batches: nb.int64[:],
+                  counts: nb.int64[:]) -> (nb.types.List(nb.types.List(nb.int64[:])), nb.types.List(nb.int64[:])):
+
+    # Get the batchwise voxel IDs for all pixels in the clusters
+    cvids = np.empty(np.sum(counts), dtype=np.int64)
+    index = 0
+    for n in counts:
+        cvids[index:index+n] = np.arange(n, dtype=np.int64)
+        index += n
+
+    # For each batch ID, get the list of clusters that belong to it
+    cbids = [np.where(batch_ids == b)[0] for b in batches]
+
+    # Split the cluster list into a list of list, one per batch iD
+    return [[cvids[clusts[k]] for k in cids] for cids in cbids], cbids
+
+
+@nb.njit(cache=True)
+def split_edge_index(edge_index: nb.int64[:,:],
+                     batch_ids: nb.int64[:],
+                     batches: nb.int64[:]) -> (nb.types.List(nb.int64[:,:]), nb.types.List(nb.int64[:])):
+    """
+    Splits a batched list of edges into individual
+    lists of edges, one per batch ID.
+
+    Args:
+        edge_index (np.ndarray): (E,2) List of edges
+        batch_ids (np.ndarray) : (C) List of cluster batch ids
+        batches (np.ndarray)   : (B) List of batch ids in this batch
+    Returns:
+        [np.ndarray]: (B) List of list of edges
+        [np.ndarray]: (B) List of edge IDs in each batch
+    """
+    # For each batch ID, get the list of edges that belong to it
+    ebids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in batches]
+
+    # For each batch ID, find the cluster IDs within that batch
+    ecids = np.empty(len(batch_ids), dtype=np.int64)
+    index = 0
+    for n in unique_nb(batch_ids)[1]:
+        ecids[index:index+n] = np.arange(n, dtype=np.int64)
+        index += n
+
+    # Split the edge index into a list of edge indices
+    return [np.ascontiguousarray(np.vstack((ecids[edge_index[0][b]], ecids[edge_index[1][b]])).T) for b in ebids], ebids

@@ -6,33 +6,39 @@ from scipy.spatial.distance import cdist
 
 def track_clustering(voxels, points, method='masked_dbscan', **kwargs):
     if method == 'masked_dbscan':
-        pair_mat  = cdist(points, voxels)
+        pair_mat  = cdist(points, voxels, metric=kwargs['metric'])
         dist_mask = np.all((pair_mat > kwargs['mask_radius']), axis=0)
-        labels = sklearn.cluster.DBSCAN(eps=kwargs['eps'], min_samples=kwargs['min_samples']).fit(voxels).labels_
+        labels = sklearn.cluster.DBSCAN(eps=kwargs['eps'],
+                                        min_samples=kwargs['min_samples'],
+                                        metric=kwargs['metric']).fit(voxels).labels_
         for i in np.unique(labels):
             global_mask  = labels == i
             active_mask  = dist_mask & global_mask
             passive_mask = ~dist_mask & global_mask
             if np.sum(active_mask):
-                res = sklearn.cluster.DBSCAN(eps=kwargs['eps'], min_samples=kwargs['min_samples']).fit(voxels[active_mask])
+                res = sklearn.cluster.DBSCAN(eps=kwargs['eps'],
+                                             min_samples=kwargs['min_samples'],
+                                             metric=kwargs['metric']).fit(voxels[active_mask])
                 labels[active_mask] = np.max(labels)+1+res.labels_
                 if np.sum(passive_mask):
-                    dist_mat = cdist(voxels[active_mask], voxels[passive_mask])
+                    dist_mat = cdist(voxels[active_mask], voxels[passive_mask], metric=kwargs['metric'])
                     args = np.argmin(dist_mat, axis=0)
                     labels[passive_mask] = labels[active_mask][args]
 
         return labels
 
     elif method == 'closest_path':
-        pair_mat = cdist(voxels, points)
-        labels   = sklearn.cluster.DBSCAN(eps=kwargs['eps'], min_samples=kwargs['min_samples']).fit(voxels).labels_
+        pair_mat = cdist(voxels, points, metric=kwargs['metric'])
+        labels   = sklearn.cluster.DBSCAN(eps=kwargs['eps'],
+                                          min_samples=kwargs['min_samples'],
+                                          metric=kwargs['metric']).fit(voxels).labels_
         for l in np.unique(labels):
             group_mask  = labels == l
             point_mask  = np.min(pair_mat[group_mask], axis=0) < kwargs['eps']
             point_ids   = np.unique(np.argmin(pair_mat[np.ix_(group_mask, point_mask)], axis=0))
             if len(point_ids) > 2:
                 # Build a graph on the group voxels that respect the DBSCAN distance scale
-                dist_mat  = cdist(voxels[group_mask], voxels[group_mask])
+                dist_mat  = cdist(voxels[group_mask], voxels[group_mask], metric=kwargs['metric'])
                 graph     = dist_mat * (dist_mat < kwargs['eps'])
                 cs_graph  = scipy.sparse.csr_matrix(graph)
 

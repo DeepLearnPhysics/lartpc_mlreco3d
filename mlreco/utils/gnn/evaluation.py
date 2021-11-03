@@ -7,7 +7,7 @@ from mlreco.utils.metrics import SBD, AMI, ARI, purity_efficiency
 
 int_array = nb.int64[:]
 
-@nb.njit
+@nb.njit(cache=True)
 def edge_assignment(edge_index: nb.int64[:,:],
                     groups: nb.int64[:]) -> nb.int64[:]:
     """
@@ -24,7 +24,7 @@ def edge_assignment(edge_index: nb.int64[:,:],
     return groups[edge_index[:,0]] == groups[edge_index[:,1]]
 
 
-@nb.njit
+@nb.njit(cache=True)
 def edge_assignment_from_graph(edge_index: nb.int64[:,:],
                                true_edge_index: nb.int64[:,:]) -> nb.int64[:]:
     """
@@ -45,7 +45,7 @@ def edge_assignment_from_graph(edge_index: nb.int64[:,:],
     return edge_assn
 
 
-@nb.njit
+@nb.njit(cache=True)
 def union_find(edge_index: nb.int64[:,:],
                n: nb.int64) -> (nb.int64[:], nb.types.DictType(nb.int64, nb.int64[:])):
     """
@@ -72,7 +72,7 @@ def union_find(edge_index: nb.int64[:,:],
     return group_ids, groups
 
 
-@nb.njit
+@nb.njit(cache=True)
 def node_assignment(edge_index: nb.int64[:,:],
                     edge_label: nb.int64[:],
                     n: nb.int64) -> nb.int64[:]:
@@ -93,7 +93,7 @@ def node_assignment(edge_index: nb.int64[:,:],
     return union_find(on_edges, n)[0]
 
 
-@nb.njit
+@nb.njit(cache=True)
 def node_assignment_bipartite(edge_index: nb.int64[:,:],
                               edge_label: nb.int64[:],
                               primaries: nb.int64[:],
@@ -124,7 +124,7 @@ def node_assignment_bipartite(edge_index: nb.int64[:,:],
     return group_ids
 
 
-@nb.njit
+@nb.njit(cache=True)
 def primary_assignment(node_scores: nb.float32[:,:],
                        group_ids: nb.int64[:] = None) -> nb.boolean[:]:
     """
@@ -150,7 +150,7 @@ def primary_assignment(node_scores: nb.float32[:,:],
     return primary_labels
 
 
-@nb.njit
+@nb.njit(cache=True)
 def adjacency_matrix(edge_index: nb.int64[:,:],
                      n: nb.int64) -> nb.boolean[:,:]:
     """
@@ -169,7 +169,7 @@ def adjacency_matrix(edge_index: nb.int64[:,:],
     return adj_mat
 
 
-@nb.njit
+@nb.njit(cache=True)
 def grouping_loss(pred_mat: nb.float32[:],
                   target_mat: nb.boolean[:],
                   loss: str = 'ce') -> np.float32:
@@ -196,7 +196,7 @@ def grouping_loss(pred_mat: nb.float32[:],
         raise ValueError('Loss type not recognized')
 
 
-@nb.njit
+@nb.njit(cache=True)
 def edge_assignment_score(edge_index: nb.int64[:,:],
                           edge_scores: nb.float32[:,:],
                           n: nb.int64) -> (nb.int64[:,:], nb.float32):
@@ -259,7 +259,7 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
     return best_index, best_groups, best_loss
 
 
-@nb.njit
+@nb.njit(cache=True)
 def node_assignment_score(edge_index: nb.int64[:,:],
                           edge_scores: nb.float32[:,:],
                           n: nb.int64) -> nb.int64[:]:
@@ -278,7 +278,7 @@ def node_assignment_score(edge_index: nb.int64[:,:],
     return edge_assignment_score(edge_index, edge_scores, n)[1]
 
 
-#@nb.njit
+#@nb.njit(cache=True)
 def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
                            node_label: nb.int64[:]) -> nb.int64[:]:
     """
@@ -302,7 +302,7 @@ def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
     return vlabel
 
 
-@nb.njit
+@nb.njit(cache=True)
 def node_purity_mask(clust_ids: nb.int64[:],
                      group_ids: nb.int64[:]) -> nb.boolean[:]:
     """
@@ -328,7 +328,7 @@ def node_purity_mask(clust_ids: nb.int64[:],
     return purity_mask
 
 
-@nb.njit
+@nb.njit(cache=True)
 def edge_purity_mask(edge_index: nb.int64[:,:],
                      clust_ids: nb.int64[:],
                      group_ids: nb.int64[:]) -> nb.boolean[:]:
@@ -356,7 +356,7 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
     return purity_mask
 
 
-@nb.njit
+@nb.njit(cache=True)
 def relabel_groups(clust_ids: nb.int64[:],
                    true_group_ids: nb.int64[:],
                    pred_group_ids: nb.int64[:]) -> nb.int64[:]:

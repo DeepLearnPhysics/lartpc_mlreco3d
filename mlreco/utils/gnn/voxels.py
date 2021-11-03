@@ -17,7 +17,7 @@ def get_voxel_features(data, max_dist=5.0):
     """
     return _get_voxel_features(voxels, max_dist)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_voxel_features(data: nb.float32[:,:], max_dist=5.0):
 
     # Compute intervoxel distance matrix

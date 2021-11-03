@@ -41,6 +41,7 @@ class DBSCANFragmenter(torch.nn.Module):
         # Global DBSCAN clustering parameters
         self.dim             = model_cfg.get('dim', 3)
         self.eps             = model_cfg.get('eps', 1.999)
+        self.metric          = model_cfg.get('metric', 'euclidean')
         self.min_samples     = model_cfg.get('min_samples', 1)
         self.min_size        = model_cfg.get('min_size', 3)
         self.num_classes     = model_cfg.get('num_classes', 4)
@@ -93,10 +94,12 @@ class DBSCANFragmenter(torch.nn.Module):
                                               method      = self.track_clustering_method,
                                               eps         = self.eps[k],
                                               min_samples = self.min_samples[k],
+                                              metric      = self.metric,
                                               mask_radius = self.ppn_mask_radius)
                 else:
                     labels = sklearn.cluster.DBSCAN(eps=self.eps[k],
-                                                    min_samples=self.min_samples[k]).fit(voxels).labels_
+                                                    min_samples=self.min_samples[k],
+                                                    metric=self.metric).fit(voxels).labels_
 
                 # Build clusters for this class
                 if self.break_tracks and s == self.track_label:
@@ -117,7 +120,8 @@ class DBSCANFragmenter(torch.nn.Module):
         from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
         # If tracks are clustered, get the track points from the PPN output
-        data = data.detach().cpu().numpy()
+        if isinstance(data, torch.Tensor): data = data.detach().cpu().numpy()
+        if points is not None and isinstance(points, torch.Tensor): points = points.detach().cpu().numpy()
         track_points = None
         if self.break_tracks and self.track_label in self.cluster_classes:
             assert output is not None or points is not None

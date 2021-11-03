@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import random
 import torch
 import numpy as np
@@ -10,7 +6,7 @@ from mlreco.models.layers.common.dbscan import DBSCANFragmenter
 from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
-from mlreco.utils.gnn.data import merge_batch
+from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
 
@@ -39,7 +35,6 @@ class GNN(torch.nn.Module):
             network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
             edge_max_dist     : <maximal edge Euclidean length (default -1)>
             edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-            edge_dist_numpy   : <use numpy to compute inter cluster distance (default False)>
             merge_batch       : <flag for whether to merge batches (default False)>
             merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
             merge_batch_size  : <size of batch merging (default 2)>
@@ -94,7 +89,6 @@ class GNN(torch.nn.Module):
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
-        self.edge_dist_numpy = base_config.get('edge_dist_numpy',False)
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
 
         # If requested, merge images together within the batch
@@ -184,7 +178,7 @@ class GNN(torch.nn.Module):
         # Form list of list of voxel indices, one list per cluster in the requested class
         if clusts is None:
             if hasattr(self, 'dbscan'):
-                clusts = self.dbscan(cluster_data, points=particles.detach().cpu().numpy() if len(data) > 1 else None)
+                clusts = self.dbscan(cluster_data, points=particles if len(data) > 1 else None)
             else:
                 clusts = form_clusters(cluster_data.detach().cpu().numpy(), self.node_min_size, self.source_col, cluster_classes=self.node_type)
 
@@ -195,11 +189,11 @@ class GNN(torch.nn.Module):
         # If requested, merge images together within the batch
         if self.merge_batch:
             cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
-            _, batch_counts = np.unique(batch_list, return_counts=True)
+            batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
         # Update result with a list of clusters for each batch id
-        batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
+        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
 
@@ -208,18 +202,14 @@ class GNN(torch.nn.Module):
         # then we might be miscounting batches. Ensure that batches is the
         # same length as batch_size if specified.
         if batch_size is not None:
-            new_bcounts = torch.zeros(batch_size, dtype=torch.int64, device=bcounts.device)
-            new_bcounts[batches.long()] = bcounts
+            new_bcounts = np.zeros(batch_size, dtype=np.int64)
+            new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
-            batches = torch.arange(batch_size, dtype=batches.dtype)
+            batches = np.arange(batch_size)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
-        cvids = np.concatenate([np.arange(n.item()) for n in bcounts])
-        cbids = [np.where(batch_ids == b.item())[0] for b in batches]
-        same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
-        clusts_np = np.array([c for c in clusts if len(c)], dtype=object if not same_length else np.int64)
-        same_length = [np.all([len(c) == len(clusts_np[b][0]) for c in clusts_np[b]]) for b in cbids]
-        result['clusts'] = [[np.array([cvids[c].astype(np.int64) for c in clusts_np[b]], dtype=np.object if not same_length[idx] else np.int64) for idx, b in enumerate(cbids)]]
+        clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
+        result['clusts'] = [clusts_split]
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
@@ -255,15 +245,13 @@ class GNN(torch.nn.Module):
         if not edge_index.shape[1]:
             return {**result, 'edge_index':[np.empty((2,0)) for _ in batches]}
 
-        ebids = [np.where(batch_ids[edge_index[0]] == b.item())[0] for b in batches]
-        ecids = np.concatenate([np.arange(n) for n in np.unique(batch_ids, return_counts=True)[1]])
-        result['edge_index'] = [[ecids[edge_index[:,b]].T for b in ebids]]
+        edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
+        result['edge_index'] = [edge_index_split]
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
-        # print("edge_index 1 = ", edge_index)
         e = self.edge_encoder(cluster_data, clusts, edge_index)
-        # print(x.shape, len(clusts), extra_feats is None, points is None, self.add_start_point)
+
         # If extra features are provided separately, add them
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)

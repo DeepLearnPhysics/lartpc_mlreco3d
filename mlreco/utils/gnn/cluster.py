@@ -6,8 +6,7 @@ from typing import List
 
 from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
 
-# @numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -25,7 +24,7 @@ def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-
     """
     return _form_clusters(data, min_size, column, batch_index, cluster_classes, shape_index)
 
-@nb.njit
+@nb.njit(cache=True)
 def _form_clusters(data: nb.float64[:,:],
                    min_size: nb.int64 = -1,
                    column: nb.int64 = 5,
@@ -75,7 +74,7 @@ def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     """
     return _reform_clusters(data, clust_ids, batch_ids, column, batch_col)
 
-@nb.njit
+@nb.njit(cache=True)
 def _reform_clusters(data: nb.float64[:,:],
                      clust_ids: nb.int64[:],
                      batch_ids: nb.int64[:],
@@ -104,7 +103,7 @@ def get_cluster_batch(data, clusts, batch_index=0):
     else:
         return np.empty((0,), dtype=np.int32)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_batch(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
                        batch_index: nb.int64 = 0) -> nb.int64[:]:
@@ -134,7 +133,7 @@ def get_cluster_label(data, clusts, column=5):
     else:
         return np.empty((0,), dtype=np.int32)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_label(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
                        column: nb.int64 = 5) -> nb.int64[:]:
@@ -160,7 +159,7 @@ def get_momenta_label(data, clusts, column=8):
     """
     return _get_momenta_label(data, clusts, column)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_momenta_label(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
                        column: nb.int64 = 8) -> nb.float64[:]:
@@ -170,8 +169,8 @@ def _get_momenta_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_centers(data, clusts, coords_index=(1, 4)):
+@numba_wrapper(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
+def get_cluster_centers(data, clusts, coords_index=[1, 4]):
     """
     Function that returns the coordinate of the centroid
     associated with the listed clusters.
@@ -182,9 +181,9 @@ def get_cluster_centers(data, clusts, coords_index=(1, 4)):
     Returns:
         np.ndarray: (C,3) tensor of cluster centers
     """
-    return _get_cluster_centers(data, clusts, list(coords_index))
+    return _get_cluster_centers(data, clusts, coords_index)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_centers(data: nb.float64[:,:],
                          clusts: nb.types.List(nb.int64[:]),
                          coords_index: nb.types.List(nb.int64[:]) = [0, 3]) -> nb.float64[:,:]:
@@ -208,7 +207,7 @@ def get_cluster_sizes(data, clusts):
     """
     return _get_cluster_sizes(data, clusts)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_sizes(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:])) -> nb.int64[:]:
     sizes = np.empty(len(clusts), dtype=np.int64)
@@ -231,7 +230,7 @@ def get_cluster_energies(data, clusts):
     """
     return _get_cluster_energies(data, clusts)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_energies(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:])) -> nb.float64[:]:
     energies = np.empty(len(clusts), dtype=data.dtype)
@@ -257,7 +256,7 @@ def get_cluster_features(data: nb.float64[:,:],
     """
     return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_features(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
                           batch_col: nb.int64 = 0,
@@ -347,8 +346,8 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=(1, 4)):
+@numba_wrapper(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
+def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
     - If fragments (groupwise=False), returns start point only
@@ -366,9 +365,9 @@ def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, co
     """
     return _get_cluster_points_label(data, particles, clusts, groupwise,
                                     batch_col=batch_col,
-                                    coords_index=list(coords_index))
+                                    coords_index=coords_index)
 
-@nb.njit
+@nb.njit(cache=True)
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
@@ -418,7 +417,7 @@ def get_cluster_start_points(data, clusts):
     """
     return _get_cluster_start_points(data, clusts)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_start_points(data: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
     points = np.empty((len(clusts), 3))
@@ -444,7 +443,7 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     """
     return _get_cluster_directions(data, starts, clusts, max_dist, optimize)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_directions(data: nb.float64[:,:],
                             starts: nb.float64[:,:],
                             clusts: nb.types.List(nb.int64[:]),
@@ -460,7 +459,7 @@ def _get_cluster_directions(data: nb.float64[:,:],
     return dirs
 
 
-@nb.njit
+@nb.njit(cache=True)
 def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]):
     """
     Finds the start point of a cluster by:
@@ -493,7 +492,7 @@ def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]
     return voxels[ids[0]], voxels[ids[1]]
 
 
-@nb.njit
+@nb.njit(cache=True)
 def cluster_direction(voxels: nb.float64[:,:],
                       start: nb.float64[:],
                       max_dist: nb.float64 = -1,
@@ -560,7 +559,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     return mean
 
 
-@nb.njit
+@nb.njit(cache=True)
 def umbrella_curv(voxels: nb.float64[:,:],
                   voxid: nb.int64) -> nb.float64:
     """
@@ -583,7 +582,7 @@ def umbrella_curv(voxels: nb.float64[:,:],
     return abs(np.mean([np.dot((voxels[i]-refvox)/np.linalg.norm(voxels[i]-refvox), axis) for i in range(len(voxels)) if i != voxid]))
 
 
-@nb.njit
+@nb.njit(cache=True)
 def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
     """
     Computes the direction of the principal axis of a cloud of points
