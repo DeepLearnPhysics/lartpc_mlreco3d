@@ -15,7 +15,7 @@ from mlreco.utils.metrics import *
 from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
 
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier
 from scipy.special import expit
 
 
@@ -84,14 +84,39 @@ class NearestNeighborsAssigner(StrayAssigner):
     '''
     Assigns orphans to the k-nearest cluster using simple kNN Classifier.
     '''
-    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
+    def __init__(self, X, Y, **kwargs):
+        '''
+            X: Points to run Nearest-Neighbor Classifier (N x F)
+            Y: Labels of Points (N, )
+        '''
         super(NearestNeighborsAssigner, self).__init__()
-        self.k = kwargs.get('k', 10)
-        self._neigh = KNeighborsClassifier(n_neighbors=10)
-        self._neigh.fit(X)
+        self._neigh = KNeighborsClassifier(**kwargs)
+        self._neigh.fit(X, Y)
 
-    def assign_orphans(self, X, get_proba=False):
-        pred = self._neigh.predict(X)
+    def assign_orphans(self, orphans, get_proba=False):
+        pred = self._neigh.predict(orphans)
+        self._pred = pred
+        if get_proba:
+            self._proba = self._neigh.predict_proba(orphans)
+            self._max_proba = np.max(self._proba, axis=1)
+        return pred
+
+
+class RadiusNeighborsAssigner(StrayAssigner):
+    '''
+    Assigns orphans to the k-nearest cluster using simple kNN Classifier.
+    '''
+    def __init__(self, X, Y, **kwargs):
+        '''
+            X: Points to run Nearest-Neighbor Classifier (N x F)
+            Y: Labels of Points (N, )
+        '''
+        super(RadiusNeighborsAssigner, self).__init__()
+        self._neigh = RadiusNeighborsClassifier(**kwargs)
+        self._neigh.fit(X, Y)
+
+    def assign_orphans(self, orphans, get_proba=False):
+        pred = self._neigh.predict(orphans)
         self._pred = pred
         if get_proba:
             self._proba = self._neigh.predict_proba(orphans)
@@ -342,7 +367,14 @@ class ClusterGraphConstructor:
             x = np.asarray(list(comp))
             pred[x] = i
 
+        # Assign orphans
         G.pos = subgraph.pos.cpu().numpy()
+        orphan_mask = pred < 0
+        if orphan_mask.any():
+            orphans = G.pos[orphan_mask]
+            assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask], pred[~orphan_mask])
+            orphan_labels = assigner.assign_orphans(orphans)
+            pred[orphan_mask] = orphan_labels
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels
