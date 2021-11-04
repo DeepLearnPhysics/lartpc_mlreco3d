@@ -367,7 +367,7 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
         self.invert = cfg.get('invert', True)
-        self.edge_loss = WeightedEdgeLoss(**self.edge_loss_cfg)
+        self.edge_loss = WeightedEdgeLoss(invert=self.invert, **self.edge_loss_cfg)
         self.is_eval = cfg['eval']
 
     def forward(self, result, segment_label, cluster_label):
