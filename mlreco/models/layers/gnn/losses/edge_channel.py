@@ -35,6 +35,7 @@ class EdgeChannelLoss(torch.nn.Module):
 
         self.source_col = loss_config.get('source_col', 5)
         self.target_col = loss_config.get('target_col', 6)
+        self.primary_col = loss_config.get('primary_col', 10)
 
         # Set the loss
         self.loss = loss_config.get('loss', 'CE')
@@ -93,7 +94,8 @@ class EdgeChannelLoss(torch.nn.Module):
                 # If high purity is requested, remove edges in groups without a primary
                 if self.high_purity:
                     clust_ids   = get_cluster_label(labels, clusts, self.source_col)
-                    purity_mask = edge_purity_mask(edge_index, clust_ids, group_ids)
+                    primary_ids = get_cluster_label(labels, clusts, self.primary_col)
+                    purity_mask = edge_purity_mask(edge_index, clust_ids, group_ids, primary_ids)
                     if not purity_mask.any():
                         continue
                     edge_index  = edge_index[purity_mask]

@@ -675,12 +675,12 @@ def parse_cluster3d_full(data):
     if len(data) > 2:
         particle_mpv = data[2].as_vector()
 
-    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id, get_particle_id
-    #group_ids = get_valid_group_id(cluster_event, particles_v)
-    group_ids = np.array([p.group_id() for p in particles_v])
-    inter_ids = get_interaction_id(particles_v)
-    nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particle_mpv)
-    pids      = get_particle_id(particles_v, nu_ids)
+    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
+    group_ids =   np.array([p.group_id() for p in particles_v])
+    inter_ids =   get_interaction_id(particles_v)
+    nu_ids      = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particle_mpv)
+    pids        = get_particle_id(particles_v, nu_ids)
+    primary_ids = get_primary_id(cluster_event, particles_v)
 
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
@@ -699,21 +699,23 @@ def parse_cluster3d_full(data):
                                fill_value=group_ids[i], dtype=np.float32)
             inter_id = np.full(shape=(cluster.as_vector().size()),
                                fill_value=inter_ids[i], dtype=np.float32)
-            pdg = np.full(shape=(cluster.as_vector().size()),
-                          fill_value=pids[i], dtype=np.float32)
             nu_id = np.full(shape=(cluster.as_vector().size()),
                             fill_value=nu_ids[i], dtype=np.float32)
+            pdg = np.full(shape=(cluster.as_vector().size()),
+                          fill_value=pids[i], dtype=np.float32)
+            primary_id = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=primary_ids[i], dtype=np.float32)
             sem_type = np.full(shape=(cluster.as_vector().size()),
                                fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,pdg,sem_type]))
+            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,pdg,primary_id,sem_type]))
 
     if len(clusters_voxels):
         np_voxels   = np.concatenate(clusters_voxels, axis=0)
         np_features = np.concatenate(clusters_features, axis=0)
     else:
         np_voxels   = np.empty(shape=(0, 3), dtype=np.float32)
-        np_features = np.empty(shape=(0, 7), dtype=np.float32)
+        np_features = np.empty(shape=(0, 8), dtype=np.float32)
 
     return np_voxels, np_features
 
@@ -762,8 +764,7 @@ def parse_cluster3d_types(data):
     if len(data) > 2:
         particle_mpv = data[2].as_vector()
 
-    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id
-    #group_ids = get_valid_group_id(cluster_event, particles_v)
+    from mlreco.utils.groups import get_interaction_id, get_nu_id
     group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
@@ -839,8 +840,7 @@ def parse_cluster3d_kinematics(data):
     if len(data) > 2:
         particle_mpv = data[2].as_vector()
 
-    from mlreco.utils.groups import get_valid_group_id, get_interaction_id, get_nu_id, get_particle_id
-    #group_ids = get_valid_group_id(cluster_event, particles_v)
+    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id
     group_ids = np.array([p.group_id() for p in particles_v])
     inter_ids = get_interaction_id(particles_v)
     nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
