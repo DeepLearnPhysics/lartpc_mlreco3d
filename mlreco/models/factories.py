@@ -39,6 +39,8 @@ def model_dict():
         "duq_uresnet": (bayes_uresnet.DUQUResNet, bayes_uresnet.DUQSegmentationLoss),
         # Evidential Classifier
         'evidential_singlep': (singlep.EvidentialParticleClassifier, singlep.EvidentialLearningLoss),
+        # Evidential Classifier with Dropout
+        'evidential_dropout_singlep': (singlep.BayesianParticleClassifier, singlep.EvidentialLearningLoss),
         # Deep Single Pass Uncertainty Quantification
         'duq_singlep': (singlep.DUQParticleClassifier, singlep.MultiLabelCrossEntropy),
         # Single Particle VGG

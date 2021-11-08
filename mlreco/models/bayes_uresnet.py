@@ -10,8 +10,7 @@ from mlreco.models.layers.common.activation_normalization_factories import (acti
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
-from mlreco.models.experimental.bayes.factories import uq_classification_loss_construct
-from mlreco.models.layers.common.uresnet_layers import UResNet
+from mlreco.models.experimental.bayes.evidential import EVDLoss
 
 class BayesianUResNet(torch.nn.Module):
     """
@@ -37,9 +36,9 @@ class BayesianUResNet(torch.nn.Module):
 
     MODULES = []
 
-    def __init__(self, cfg, name='bayesian_uresnet'):
+    def __init__(self, cfg, name='mcdropout_uresnet'):
         super(BayesianUResNet, self).__init__()
-        setup_cnn_configuration(self, cfg, name)
+        setup_cnn_configuration(self, cfg, 'network_base')
 
         self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)
@@ -50,7 +49,7 @@ class BayesianUResNet(torch.nn.Module):
 
         self.mode = self.model_config.get('mode', 'standard')
 
-        if 'evd' in self.model_config.get('loss_fn', 'cross_entropy'):
+        if 'edl' in self.model_config.get('loss_fn', 'cross_entropy'):
             self.classifier = nn.Sequential(
                 ME.MinkowskiLinear(self.encoder.num_filters, self.num_classes),
                 ME.MinkowskiSoftplus()
@@ -82,8 +81,8 @@ class BayesianUResNet(torch.nn.Module):
 
             device = x.device
 
-            x_sparse = ME.SparseTensor(coordinates=x[:, :4],
-                                       features=x[:, -1].view(-1, 1))
+            x_sparse = ME.SparseTensor(coordinates=x[:, :4].int(),
+                                       features=x[:, -1].view(-1, 1).float())
 
             pvec = torch.zeros((num_voxels, self.num_classes)).to(device)
             logits = torch.zeros((num_voxels, self.num_classes)).to(device)
@@ -111,8 +110,8 @@ class BayesianUResNet(torch.nn.Module):
         """
         out = defaultdict(list)
         for igpu, x in enumerate(input):
-            x = ME.SparseTensor(coordinates=x[:, :4],
-                                features=x[:, -1].view(-1, 1))
+            x = ME.SparseTensor(coordinates=x[:, :4].int(),
+                                features=x[:, -1].view(-1, 1).float())
             res_encoder = self.encoder.encoder(x)
             print([t.F.shape for t in res_encoder['encoderTensors']])
             decoderTensors = self.decoder(res_encoder['finalTensor'],
@@ -138,8 +137,8 @@ class BayesianUResNet(torch.nn.Module):
         """
         out = defaultdict(list)
         for igpu, x in enumerate(input):
-            x = ME.SparseTensor(coordinates=x[:, :4],
-                                features=x[:, -1].view(-1, 1))
+            x = ME.SparseTensor(coordinates=x[:, :4].int(),
+                                features=x[:, -1].view(-1, 1).float())
             res_encoder = self.encoder.encoder(x)
             print([t.F.shape for t in res_encoder['encoderTensors']])
             decoderTensors = self.decoder(res_encoder['finalTensor'],
@@ -252,14 +251,17 @@ class DUQUResNet(torch.nn.Module):
 
 class SegmentationLoss(nn.Module):
 
-    def __init__(self, cfg, name='bayesian_uresnet'):
+    def __init__(self, cfg, name='mcdropout_uresnet'):
         super(SegmentationLoss, self).__init__()
         self.loss_config = cfg.get(name, {})
-        self.loss_fn_name = self.loss_config.get('loss_fn', 'cross_entropy')
-        self.loss_fn = uq_classification_loss_construct(self.loss_fn_name)
-
-        print(self.loss_fn)
-
+        self.loss_fn_name = self.loss_config.get('loss_fn', 'evd_sumsq')
+        self.loss_fn_args = self.loss_config.get('loss_fn_args', {})
+        if 'edl' in self.loss_fn_name:
+            self.loss_fn = EVDLoss(self.loss_fn_name, **self.loss_fn_args)
+        elif self.loss_fn_name == 'cross_entropy':
+            self.loss_fn = torch.nn.functional.cross_entropy
+        else:
+            raise ValueError('Loss function {} not recognized'.format(self.loss_fn_name))
         self.one_hot = self.loss_config.get('one_hot', False)
         self.num_classes = self.loss_config.get('num_classes', 5)
 
@@ -273,9 +275,8 @@ class SegmentationLoss(nn.Module):
         '''
         # TODO Add weighting
         logits = outputs['segmentation']
-        if 'evd' in self.loss_fn_name:
-            # convert evidence to alpha concentration params.
-            segmentation = [logits[0] + 1.0]
+        if 'edl' in self.loss_fn_name:
+            segmentation = [logits[0] + 1.0] # convert evidence to alpha concentration params.
         else:
             segmentation = logits
         device = segmentation[0].device

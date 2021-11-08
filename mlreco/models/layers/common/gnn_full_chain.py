@@ -127,7 +127,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         # Pass data through the GrapPA model
-        gnn_output = grappa(input, clusts, **kwargs)
+        gnn_output = grappa(input, clusts, batch_size=self.batch_size, **kwargs)
 
         # Update the result dictionary if the corresponding label exists
         for l, tag in labels.items():
@@ -469,8 +469,16 @@ class FullChainGNN(torch.nn.Module):
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
                     if len(voxel_inds) and len(result['shower_fragments'][0][part_batch_ids[i]]) > 0:
-                        p = voxel_inds[result['shower_fragments'][0]\
-                                      [part_batch_ids[i]][part_primary_ids[i]]]
+                        try:
+                            p = voxel_inds[result['shower_fragments'][0]\
+                                          [part_batch_ids[i]][part_primary_ids[i]]]
+                        except IndexError as e:
+                            print(len(result['shower_fragments'][0]))
+                            print([part_batch_ids[i]])
+                            print(part_primary_ids[i])
+                            print(len(voxel_inds))
+                            print(result['shower_fragments'][0][part_batch_ids[i]][part_primary_ids[i]])
+                            raise e
 
                 extra_feats_particles.append(p)
 
@@ -580,7 +588,13 @@ class FullChainGNN(torch.nn.Module):
             interactions = np.array(interactions, dtype=object if not same_length else np.int64)
             inter_batch_ids = np.array(inter_batch_ids)
 
-            _, counts = torch.unique(input[0][:, self.batch_col], return_counts=True)
+            batches, counts = torch.unique(input[0][:, self.batch_col], return_counts=True)
+            # In case one of the events is "missing" and len(counts) < batch_size
+            if len(counts) < self.batch_size:
+                new_counts = torch.zeros(batch_size, dtype=torch.int64, device=counts.device)
+                new_counts[batches] = counts
+                counts = new_counts
+                
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
@@ -748,7 +762,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 segmentation_pred = out['segmentation'][0]
                 if self.enable_ghost:
                     segmentation_pred = segmentation_pred[deghost]
-                gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(segmentation_pred, dim=1)[:, None]], dim=1)
+                if self._gspice_use_true_labels:
+                    gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
+                else:
+                    gs_seg_label = torch.cat([cluster_label[0][:, :4], torch.argmax(segmentation_pred, dim=1)[:, None]], dim=1)
                 #gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
 
                 # NOTE: We need to limit loss computation to voxels that are
@@ -758,7 +775,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # the cluster label to -1 and the GraphSPICEEmbeddingLoss
                 # will remove voxels with true cluster label -1.
                 gs_cluster_label = cluster_label[0]
-                gs_cluster_label[(gs_cluster_label[:, -1] != torch.argmax(segmentation_pred, dim=1)), 5] = -1
+                if not self._gspice_use_true_labels:
+                    gs_cluster_label[(gs_cluster_label[:, -1] != torch.argmax(segmentation_pred, dim=1)), 5] = -1
                 #res['gs_cluster_label'] = [gs_cluster_label]
                 res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], [gs_cluster_label])
                 #print(res_graph_spice.keys())
@@ -957,12 +975,14 @@ def setup_chain_cfg(self, cfg):
     chain_cfg = cfg.get('chain', {})
 
     self.use_me                = chain_cfg.get('use_mink', True)
-    self.batch_col = 0 if self.use_me else 3
-    self.coords_col = (1, 4) if self.use_me else (0, 3)
+    self.batch_col             = 0 if self.use_me else 3
+    self.coords_col            = (1, 4) if self.use_me else (0, 3)
+    self.batch_size            = None # To be set at forward time
 
     self.process_fragments     = chain_cfg.get('process_fragments', False)
     self.use_true_fragments    = chain_cfg.get('use_true_fragments', False)
     self.use_true_particles    = chain_cfg.get('use_true_particles', False)
+    self._gspice_use_true_labels      = cfg.get('graph_spice', {}).get('use_true_labels', False)
 
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
     self.cheat_ghost           = chain_cfg.get('cheat_ghost', False)

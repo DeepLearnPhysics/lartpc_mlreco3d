@@ -145,4 +145,7 @@ def softmax_nb(x: nb.float64[:,:],
 
 @nb.njit
 def log_loss_nb(x1: nb.boolean[:], x2: nb.float64[:]) -> nb.float64:
-    return -(np.sum(np.log(x2[x1])) + np.sum(np.log(1.-x2[~x1])))/len(x1)
+    if len(x1) > 0:
+        return -(np.sum(np.log(x2[x1])) + np.sum(np.log(1.-x2[~x1])))/len(x1)
+    else:
+        return 0.

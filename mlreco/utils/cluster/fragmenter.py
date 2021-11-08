@@ -10,7 +10,7 @@ from mlreco.utils.cluster.dense_cluster import fit_predict, gaussian_kernel_cuda
 from mlreco.models.layers.common.dbscan import DBSCANFragmenter
 
 
-def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
+def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_size=None):
     """
     INPUTS:
         - fragments
@@ -24,7 +24,14 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column):
     frag_batch_ids_np = np.array(frag_batch_ids)
     frag_seg_np = np.array(frag_seg)
 
-    _, counts = torch.unique(batch_column, return_counts=True)
+    batches, counts = torch.unique(batch_column, return_counts=True)
+    # In case one of the events is "missing" and len(counts) < batch_size
+    if batch_size is not None:
+        new_counts = torch.zeros(batch_size, dtype=torch.int64, device=counts.device)
+        new_counts[batches.long()] = counts
+        counts = new_counts
+        # `batches` does not matter after this
+
     vids = np.concatenate([np.arange(n.item()) for n in counts])
     bcids = [np.where(frag_batch_ids_np == b)[0] for b in range(len(counts))]
     same_length = [np.all([len(c) == len(fragments_np[b][0]) \

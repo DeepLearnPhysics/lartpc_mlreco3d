@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import MinkowskiEngine as ME
 
 from mlreco.models.layers.cluster_cnn.losses.gs_embeddings import *
 from mlreco.models.layers.cluster_cnn import gs_kernel_construct, spice_loss_construct
@@ -58,6 +59,15 @@ class MinkGraphSPICE(nn.Module):
         self.gs_manager = ClusterGraphConstructor(constructor_cfg,
                                                 batch_col=0)
 
+
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
 
     def filter_class(self, input):
         '''

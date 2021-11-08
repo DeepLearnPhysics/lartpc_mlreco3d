@@ -3,11 +3,15 @@ import warnings
 import torch
 import os
 import mlreco.utils as utils
+
 from mlreco.models import construct
+from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
+
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.utils.utils import to_numpy
 import re
 from mlreco.utils.adabound import AdaBound, AdaBoundW
+from pprint import pprint
 
 class trainval(object):
     """
@@ -169,7 +173,7 @@ class trainval(object):
         return train_blob, loss_blob
 
 
-    def train_step(self, data_iter, iteration=None):
+    def train_step(self, data_iter, iteration=None, log_time=True):
         """
         data_blob is the output of the function get_data_minibatched.
         It is a dictionary where data_blob[key] = list of length
@@ -183,10 +187,9 @@ class trainval(object):
         # Run backward once for all the previous forward
         self._watch.start_cputime('backward_cpu')
         self.backward()
-        self._watch.stop_cputime('backward_cpu')
-        self._watch.stop('train')
-        self._watch.stop_cputime('train_step_cputime')
-        self.tspent_sum['train'] += self._watch.time('train')
+        if log_time:
+            self._watch.stop('train')
+            self.tspent_sum['train'] += self._watch.time('train')
         return data_blob,res_combined
 
 
@@ -317,30 +320,44 @@ class trainval(object):
 
             return res
 
-    def initialize(self):
-        # To use DataParallel all the inputs must be on devices[0] first
-        model = None
+    def initialize_calibrator(self, model, module_config):
 
-        model,criterion = construct(self._model_name)
-        module_config = self._model_config['modules']
-        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
+        self._calibration_config = module_config['calibration']
+        msg = '''
+        WARNING: The model config was passed with the argument: <calibration>.
+                    The base model will be set to eval() mode regardless of trainval['train'],
+                    and trainval will only perform optimization for the calibration model. 
 
-        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
+                    Uncertainty Calibration model is set to: "{}"
+        '''.format(self._calibration_config['name'])
+        print(msg)
+        
+        calibrator = calibrator_construct(self._calibration_config['name'])
+        wrapped_model = calibrator(model, self._calibration_config)
+        clossfn_name = self._calibration_config['loss']
+        logit_name = self._calibration_config.get('logit_name', 'logits')
+        clossfn_args = self._calibration_config.get('loss_args', {})
+        calibrator_criterion = calibrator_loss_construct(clossfn_name, logit_name, **clossfn_args)
+        # Replace DataParallel model with calibrator-wrapped model
+        # Replace Criterion with calibrator loss
+        self._net.module = wrapped_model
+        self._criterion = calibrator_criterion
 
-        self._model = model(module_config)
+        if self._train:
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
+        else:
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-        # module-by-module weights loading + param freezing
+        optim_class = eval('torch.optim.' + self._optim)
+        self._optimizer = optim_class([self._net.module.calibration_params], **self._optim_args)
+        if self._lr_scheduler is not None:
+            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
+        else:
+            self._scheduler = None
 
-        # Check if freeze weights is requested + enforce if so
-        for module_name in module_config:
-            if not hasattr(self._model, module_name) or not isinstance(getattr(self._model,module_name),torch.nn.Module):
-                continue
-            module = getattr(self._model,module_name)
-            if module_config[module_name].get('freeze_weights',False):
-                print('Freezing weights for a sub-module',module_name)
-                for param in module.parameters():
-                    param.requires_grad = False
 
+    def freeze_weights(self, module_config):
         # Breadth-first search for freeze_weight parameter in config
         # (very similar to weight loading below)
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -371,38 +388,8 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
-        print(self._gpus)
 
-        self._net = DataParallel(self._model, device_ids=self._gpus)
-
-        if self._train:
-            self._net.train().cuda() if len(self._gpus) else self._net.train()
-        else:
-            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
-
-        if self._optim == 'AdaBound':
-            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
-        elif self._optim == 'AdaBoundW':
-            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
-        else:
-            optim_class = eval('torch.optim.' + self._optim)
-            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
-
-        # learning rate scheduler
-        if self._lr_scheduler is not None:
-            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
-            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
-        else:
-            self._scheduler = None
-
-
-        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
-
-        iteration = 0
-        model_paths = []
-        if self._trainval_config.get('model_path',''):
-            model_paths.append(('', self._trainval_config['model_path'], ''))
-
+    def load_weights(self, module_config, model_paths):
         # Breadth first search of model_path
         # module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -483,5 +470,58 @@ class trainval(object):
                     if module == '':  # Root model sets iteration
                         iteration = checkpoint['global_step'] + 1
                 print('Done.')
+
+
+    def initialize(self):
+        # To use DataParallel all the inputs must be on devices[0] first
+        model = None
+
+        model,criterion = construct(self._model_name)
+        module_config = self._model_config['modules']
+
+        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
+
+        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
+
+        self._model = model(module_config)
+
+        # module-by-module weights loading + param freezing
+        self.freeze_weights(module_config)
+
+        self._net = DataParallel(self._model, device_ids=self._gpus)
+
+        if self._train:
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
+        else:
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
+
+        if self._optim == 'AdaBound':
+            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
+        elif self._optim == 'AdaBoundW':
+            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
+        else:
+            optim_class = eval('torch.optim.' + self._optim)
+            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+
+        # learning rate scheduler
+        if self._lr_scheduler is not None:
+            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
+        else:
+            self._scheduler = None
+
+
+        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
+
+        iteration = 0
+        model_paths = []
+        if self._trainval_config.get('model_path',''):
+            model_paths.append(('', self._trainval_config['model_path'], ''))
+
+        self.load_weights(module_config, model_paths)
+
+        # Replace model with calibrated model on uncertainty calibration mode
+        if 'calibration' in module_config:
+            self.initialize_calibrator(self._net.module, module_config)
 
         return iteration

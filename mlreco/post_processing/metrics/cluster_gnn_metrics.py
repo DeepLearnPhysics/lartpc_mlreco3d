@@ -2,7 +2,7 @@
 import numpy as np
 
 from mlreco.post_processing import post_processing
-from mlreco.utils.gnn.evaluation import node_purity_mask, edge_assignment, node_assignment, node_assignment_score, node_assignment_bipartite, clustering_metrics, primary_assignment
+from mlreco.utils.gnn.evaluation import node_purity_mask, edge_purity_mask, edge_assignment_score, edge_assignment, node_assignment, node_assignment_score, node_assignment_bipartite, clustering_metrics, primary_assignment
 from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.post_processing.common import extent
 
@@ -15,8 +15,9 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     """
     Compute metrics for GRAPPA stage (GNN clustering).
 
-    If `enable_physics_metrics` is set to True, then it
-    assumes a config w/ ghost points. TODO
+    `enable_physics_metrics` = compute detailed cluster-wise metrics
+    `integrated_metrics` = compute voxel-wise ARI/Purity/Efficiency metrics
+    (only if `enable_physics_metrics: False`)
 
     Parameters
     ----------
@@ -50,6 +51,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     #if not edge_pred_label in res: continue
     bipartite = cfg['model']['modules'][chain]['base'].get('network', 'complete') == 'bipartite'
     group_pred_alg = cfg['model']['modules'][chain + '_loss'].get('node_loss', {}).get('group_pred_alg', 'score')
+    high_purity = cfg['model']['modules'][chain + '_loss'].get('edge_loss', {}).get('high_purity', False)
 
     node_predictions = node_pred
     original_clust_data = clust_data_noghost if clust_data_noghost is not None else clust_data
@@ -72,6 +74,14 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         cluster_ids.append(int(v[cts.argmax()]))
     group_ids = np.array(group_ids, dtype=np.int64)
     cluster_ids = np.array(cluster_ids, dtype=np.int64)
+
+    #print('clusts', [len(c) for c in clusts[data_idx]], len(group_ids), edge_index[data_idx].shape)
+    #edge_assn = edge_assignment(edge_index[data_idx], group_ids)
+    #purity_mask = edge_purity_mask(edge_index[data_idx], cluster_ids, group_ids)
+    #edge_predictions, _, _ = edge_assignment_score(edge_index[data_idx], edge_pred[data_idx], n)
+    #print('metrics' , edge_pred[data_idx].shape, edge_assn.shape, edge_pred[data_idx][:10], np.unique(edge_assn, return_counts=True))
+    #print(np.sum(edge_assn == np.argmax(edge_pred[data_idx], axis=1))/len(edge_assn))
+    #print(np.sum(edge_assn[purity_mask] == np.argmax(edge_pred[data_idx][purity_mask], axis=1))/len(edge_assn[purity_mask]))
 
     # Assign predicted group ids
     n = len(clusts[data_idx])
@@ -189,20 +199,38 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
 
     else:
         integrated_metrics = module_cfg.get('integrated_metrics', False)
-        # Evaluate clustering metrics
+        # Evaluate clustering metrics pixel-wise
         if integrated_metrics:
-            print('integrated metrics')
-            print(np.hstack(clusts[data_idx])[:, None])
-            ari, ami, sbd, pur, eff = clustering_metrics(np.hstack(clusts[data_idx])[:, None],
-                                                        np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(group_ids)]),
-                                                        np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(node_pred)]))
+            pixel_group_ids = np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(group_ids)])
+            pixel_cluster_ids = np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(cluster_ids)])
+            pixel_clusts = np.hstack(clusts[data_idx])[:, None]
+            pixel_node_pred = np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(node_pred)])
+
+            if high_purity:
+                purity_mask = node_purity_mask(cluster_ids, group_ids)
+                if not purity_mask.any():
+                    return (), ()
+                pixel_group_ids = np.hstack([[g] * len(clusts[data_idx][purity_mask][c_idx]) for c_idx, g in enumerate(group_ids[purity_mask])])
+                pixel_clusts = np.hstack(clusts[data_idx][purity_mask])[:, None]
+                pixel_node_pred = np.hstack([[g] * len(clusts[data_idx][purity_mask][c_idx]) for c_idx, g in enumerate(node_pred[purity_mask])])
+
+            ari, ami, sbd, pur, eff = clustering_metrics(pixel_clusts,
+                                                        pixel_group_ids,
+                                                        pixel_node_pred)
         else:
-            ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
+            if not high_purity:
+                ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
+            else:
+                purity_mask = node_purity_mask(cluster_ids, group_ids)
+                if not purity_mask.any():
+                    return (), ()
+                ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx][purity_mask], group_ids[purity_mask], node_pred[purity_mask])
+            #print(ari, pur, eff)
         primary_accuracy = -1.
         high_purity = -1
         if node_pred_primary is not None:
             primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
-            high_purity = node_purity_mask(cluster_ids, group_ids).any()
+            high_purity = purity_mask.any()
             #print(data_idx, "primary accuracy", primary_accuracy, high_purity)
         # Store
         row_names = ('ari', 'ami', 'sbd', 'pur', 'eff',

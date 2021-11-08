@@ -129,6 +129,7 @@ class GNN(torch.nn.Module):
                                                 num_output=5,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 evidential=True)
+                    self.edge_softplus = torch.nn.Softplus()
                 else:
                     raise ValueError('Unrecognized Particle ID Type Net Mode: ', type_net_mode)
             if self.kinematics_momentum:
@@ -157,7 +158,7 @@ class GNN(torch.nn.Module):
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
 
-    def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None):
+    def forward(self, data, clusts=None, groups=None, points=None, extra_feats=None, batch_size=None):
         """
         Prepares particle clusters and feed them to the GNN model.
 
@@ -203,6 +204,16 @@ class GNN(torch.nn.Module):
         batches, bcounts = torch.unique(cluster_data[:,self.batch_index], return_counts=True)
         if not len(clusts):
             return {**result, 'clusts': [[np.array([]) for _ in batches]]}
+
+        # If an event is missing from the input data - e.g., deghosting
+        # erased everything (extreme case but possible if very few voxels)
+        # then we might be miscounting batches. Ensure that batches is the
+        # same length as batch_size if specified.
+        if batch_size is not None:
+            new_bcounts = torch.zeros(batch_size, dtype=torch.int64, device=bcounts.device)
+            new_bcounts[batches.long()] = bcounts
+            bcounts = new_bcounts
+            batches = torch.arange(batch_size, dtype=batches.dtype)
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         cvids = np.concatenate([np.arange(n.item()) for n in bcounts])
@@ -272,6 +283,9 @@ class GNN(torch.nn.Module):
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=cluster_data.device)
 
+        result['input_node_features'] = [[x[b] for b in cbids]]
+        result['input_edge_features'] = [[e[b] for b in ebids]]
+
         # Pass through the model, update resultz
         out = self.gnn_model(x, index, e, xbatch)
         result['node_pred'] = [[out['node_pred'][0][b] for b in cbids]]
@@ -292,6 +306,9 @@ class GNN(torch.nn.Module):
                     result['node_pred_p_epistemic'] = [[epistemic[b] for b in cbids]]
                 else:
                     result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
+        else:
+            # If final post-gnn MLP is not given, set type features to node_pred.
+            result['node_pred_type'] = result['node_pred']
 
         if self.vertex_mlp:
             node_pred_vtx = self.vertex_net(out['node_features'][0])

@@ -51,11 +51,9 @@ class FullChain(FullChainGNN):
                                                                     training=False) # for downstream, need to run prediction in inference mode
             self.gs_manager.ths = 0.9 # edge cut threshold is usually 0. during training, but 0.9 at inference
 
-            self._gspice_skip_classes      = cfg.get('graph_spice', {}).get('skip_classes', [])
-            self._gspice_invert            = cfg.get('graph_spice_loss', {}).get('invert', False)
-            self._gspice_fragment_manager  = GraphSPICEFragmentManager(
-                cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), 
-                batch_col=self.batch_col)
+            self._gspice_skip_classes         = cfg.get('graph_spice', {}).get('skip_classes', [])
+            self._gspice_invert               = cfg.get('graph_spice_loss', {}).get('invert', False)
+            self._gspice_fragment_manager     = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
 
         if self.enable_dbscan:
             self.frag_cfg = cfg.get('dbscan', {}).get('dbscan_fragment_manager', {})
@@ -197,12 +195,11 @@ class FullChain(FullChainGNN):
             input, label_clustering = input
             input = [input]
             label_clustering = [label_clustering]
-        # elif len(input) == 4:
-        #     input, label_seg, label_clustering, coords = input
-        #     input = [input]
-        #     label_seg = [label_seg]
-        #     label_clustering = [label_clustering]
-        #     coords = [coords]
+
+        # Store batch size for GNN formatting
+        batches = torch.unique(input[0][:, self.batch_col])
+        assert len(batches) == batches.max().int().item() + 1
+        self.batch_size = len(batches)
 
         result = {}
 
@@ -292,10 +289,11 @@ class FullChain(FullChainGNN):
             'frag_batch_ids': [],
             'frag_seg': []
         }
-        semantic_labels = torch.argmax(cnn_result['segmentation'][0],
-                                       dim=1).flatten()
-        # semantic_labels = label_seg[0][:, -1]
-
+        if self._gspice_use_true_labels:
+            semantic_labels = label_seg[0][:, -1]
+        else:
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0],
+                                           dim=1).flatten()
 
         if self.enable_cnn_clust:
             if label_clustering is None and self.training:
@@ -349,7 +347,8 @@ class FullChain(FullChainGNN):
         fragments_result = format_fragments(cluster_result['fragments'],
                                             cluster_result['frag_batch_ids'],
                                             cluster_result['frag_seg'],
-                                            input[0][:, self.batch_col])
+                                            input[0][:, self.batch_col],
+                                            batch_size=self.batch_size)
 
         cnn_result.update(fragments_result)
 

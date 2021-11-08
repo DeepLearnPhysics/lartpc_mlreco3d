@@ -309,6 +309,9 @@ def node_purity_mask(clust_ids: nb.int64[:],
     Function which creates a mask that is False only for nodes
     which belong to a group with more than a single clear primary.
 
+    Note: It is possible that the single true primary has been
+    broken into several nodes.
+
     Args:
         clust_ids (np.ndarray)  : (C) Array of cluster IDs
         group_ids (np.ndarray)  : (C) Array of cluster group IDs
@@ -318,7 +321,8 @@ def node_purity_mask(clust_ids: nb.int64[:],
     purity_mask = np.zeros(len(clust_ids), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = group_ids == g
-        if np.sum(group_mask) > 1 and np.sum(clust_ids[group_mask] == g) == 1:
+        if np.sum(group_mask) > 1 and (np.sum(clust_ids[group_mask] == g) == 1 \
+                                or len(np.unique(clust_ids[group_mask][clust_ids[group_mask] == g])) == 1):
             purity_mask[group_mask] = np.ones(np.sum(group_mask))
 
     return purity_mask
@@ -343,7 +347,7 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
     purity_mask = np.ones(len(edge_index), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = np.where(group_ids == g)[0]
-        if np.sum(clust_ids[group_mask] == g) != 1:
+        if np.sum(clust_ids[group_mask] == g) != 1 and len(np.unique(clust_ids[group_mask][clust_ids[group_mask] == g])) != 1:
             edge_mask = np.empty(len(edge_index), dtype=np.bool_)
             for k, e in enumerate(edge_index):
                 edge_mask[k] = (e[0] == group_mask).any() & (e[1] == group_mask).any()
