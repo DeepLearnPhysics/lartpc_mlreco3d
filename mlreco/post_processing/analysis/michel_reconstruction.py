@@ -4,51 +4,40 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import cdist
 from mlreco.utils import CSVData
 
-def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
+def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
     """
     Very simple algorithm to reconstruct Michel clusters from UResNet semantic
     segmentation output.
-
-    Parameters
-    ----------
-    data_blob: dict
-        Input dictionary returned by iotools
-    res: dict
-        Results from the network, dictionary using `analysis_keys`
-    cfg: dict
-        Configuration
-    idx: int
-        Iteration number
 
     Notes
     -----
     Assumes 3D
 
-    Input
-    -----
-    Requires the following analysis keys:
-    - `segmentation` output of UResNet
-    - `ghost` predictions of GhostNet
-    Requires the following input keys:
-    - `input_data`
-    - `segment_label`
-    - `particles_label` to get detailed information such as energy.
-    - `clusters_label` from `cluster3d_mcst` for true clusters informations
+    Configuration
+    -------------
+    ```
+      michel_reconstruction:
+        store_method: per-iteration
+        dbscan: False
+        particles: particles_asis
+    ```
 
     Output
     ------
     Writes 2 CSV files:
-    - `michel_reconstruction-*`
-    - `michel_reconstruction2-*`
+    - `michel_reconstruction-reco-*`
+    - `michel_reconstruction-true-*`
     """
-    method_cfg = cfg['post_processing']['michel_reconstruction']
-    coords_col = method_cfg.get('coords_col', (1, 4))
+    coords_col = module_cfg.get('coords_col', (1, 4))
+    particles_label = module_cfg.get('particles', 'particles_label')
+    cluster_label   = module_cfg.get('cluster_label', 'cluster_label')
+    segment_label   = module_cfg.get('segment_label', 'segment_label')
 
     # Create output CSV
     store_per_iteration = True
-    if method_cfg is not None and method_cfg.get('store_method',None) is not None:
-        assert(method_cfg['store_method'] in ['per-iteration','per-event'])
-        store_per_iteration = method_cfg['store_method'] == 'per-iteration'
+    if module_cfg is not None and module_cfg.get('store_method',None) is not None:
+        assert(module_cfg['store_method'] in ['per-iteration','per-event'])
+        store_per_iteration = module_cfg['store_method'] == 'per-iteration'
 
     fout_reco,fout_true=None,None
     if store_per_iteration:
@@ -65,10 +54,10 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
             fout_true=CSVData(os.path.join(logdir, 'michel-reconstruction-true-event-%07d.csv' % event_idx))
 
         # from input/labels
-        label       = data_blob['segment_label'  ][batch_id][:,-1]
+        label       = data_blob[segment_label][batch_id][:,-1]
         #label_raw   = data_blob['sparse3d_pcluster_semantics'][batch_id]
-        clusters    = data_blob['clusters_label' ][batch_id]
-        particles   = data_blob['particles_label'][batch_id]
+        clusters    = data_blob[cluster_label][batch_id]
+        particles   = data_blob[particles_label][batch_id]
         true_ghost_mask = label < 5
         data_masked     = data[true_ghost_mask]
         label_masked    = label[true_ghost_mask]
@@ -76,7 +65,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         one_pixel = 5#2.8284271247461903
 
         # Retrieve semantic labels corresponding to clusters
-        clusters_semantics = clusters[:, -1]
+        clusters_semantics = clusters[:, 10]
 
         # from network output
         segmentation = res['segmentation'][batch_id]
@@ -104,7 +93,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         if Michel_all.shape[0] == 0:  # FIXME
             continue
         #print(Michel_all.shape)
-        if method_cfg.get('dbscan', False):
+        if module_cfg.get('dbscan', False):
             shower_label = 0
             lowE_label = 4
             #Michel_coords = clusters[(clusters_semantics == Michel_label) | (clusters_semantics == shower_label) | (clusters_semantics == lowE_label)][:, :3]
@@ -113,7 +102,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                 shower_lowE_clusters = DBSCAN(eps=one_pixel, min_samples=1).fit(shower_lowE[:, coords_col[0]:coords_col[1]]).labels_
 
                 d = cdist(Michel_all[:, coords_col[0]:coords_col[1]], shower_lowE[:, coords_col[0]:coords_col[1]])
-                select_shower = (d.min(axis=0) < method_cfg.get('threshold', 2.))
+                select_shower = (d.min(axis=0) < module_cfg.get('threshold', 2.))
                 select_shower_clusters = np.unique(shower_lowE_clusters[(shower_lowE_clusters>-1) & select_shower])
                 fragments = []
                 for shower_id in select_shower_clusters:
@@ -140,7 +129,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
         # Michel_true_clusters = DBSCAN(eps=one_pixel, min_samples=5).fit(Michel_coords).labels_
         # Michel_true_clusters = [Michel_coords[Michel_coords[:, -2] == gid] for gid in np.unique(Michel_coords[:, -2])]
         #print(clusters.shape, label.shape)
-        Michel_true_clusters = Michel_all[:, -3].astype(np.int64)
+        Michel_true_clusters = Michel_all[:, 6].astype(np.int64)
 
         # Michel_start = Michel_particles[:, :3]
         for cluster in np.unique(Michel_true_clusters):
@@ -216,6 +205,7 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                                 michel_pred_sum_pix_true += v[-1]
 
                         michel_true_num_pix = particles[closest_true_id].num_voxels()
+                        #print(michel_true_num_pix, particles[closest_true_id].pdg_code())
                         michel_true_sum_pix = Michel_all[Michel_true_clusters == closest_true_id][:, -4].sum()
                         # Register true energy
                         # Match to MC Michel
@@ -236,7 +226,8 @@ def michel_reconstruction(cfg, data_blob, res, logdir, iteration):
                               'is_attached', 'is_edge', 'michel_true_energy', 'true_num_pix_cluster'),
                              (batch_id, iteration, event_idx, np.count_nonzero(current_index),
                               data_pred[(predictions==Michel_label).reshape((-1,)), ...][current_index][:, -1].sum(),
-                              michel_pred_num_pix_true, michel_pred_sum_pix_true, michel_true_num_pix, michel_true_sum_pix,
+                              michel_pred_num_pix_true, michel_pred_sum_pix_true,
+                              michel_true_num_pix, michel_true_sum_pix,
                               is_attached, is_edge, michel_true_energy, michel_true_num_pix_cluster))
             fout_reco.write()
 
