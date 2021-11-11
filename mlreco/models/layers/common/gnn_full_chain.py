@@ -889,7 +889,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
             accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
-            loss += self.kinematics_weight * res['kinematics_loss']
+            loss += self.kinematics_weight * res['grappa_kinematics_loss']
 
             # Loss on edge predictions (particle hierarchy)
             res['flow_loss'] = res_kinematics['edge_loss']

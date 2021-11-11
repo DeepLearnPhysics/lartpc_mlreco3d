@@ -1,8 +1,8 @@
 ## Tests
-Current coverage is sparse:
-- makes sure all models can be constructed
-- makes sure the forward can run for *some* models (only if `INPUT_SCHEMA` is specified)
-- makes sure the backward can run too, for *some* models (only if `INPUT_SCHEMA` is specified)
+Current test coverage is sparse:
+- makes sure all models can be constructed (`test_models_basic.py`)
+- makes sure the forward can run for *some* models (only if `INPUT_SCHEMA` is specified, in `test_models_forward.py`)
+- makes sure the backward can run too, for *some* models (only if `INPUT_SCHEMA` is specified, in `test_models_full.py`)
 - some basic functions and some (not all) parsers are tested
 
 Contributions welcome to help extend the coverage.
@@ -10,7 +10,7 @@ Contributions welcome to help extend the coverage.
 ### How to check that a container image works
 The script `test_image.py` uses the example config (with sequential batch sampling)
 to check that the loss value of the first iteration is close to what we expect.
-It also runs backward and will fail if backward fails for some reason.
+It also runs the backward pass and will fail if backward fails for some reason.
 
 If the file `config/chain/me_train_example.cfg` changes, this reference loss value may need to be
 adjusted accordingly.

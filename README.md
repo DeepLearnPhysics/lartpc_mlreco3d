@@ -4,7 +4,7 @@
 
 This repository contains code used for training and running machine learning models on LArTPC data.
 
-![Full chain](https://deeplearnphysics.org/lartpc_mlreco3d_tutorials/_images/logo.png)
+![Full chain](./images/full_chain.png)
 
 ## Installation
 We recommend using a Singularity or Docker containers pulled from `deeplearnphysics/larcv2`: https://hub.docker.com/r/deeplearnphysics/larcv2. It needs to have at least
@@ -106,15 +106,16 @@ post_processing:
   script_compute_something:
     parameter1: True
 ```  
+See the [postprocessing](./mlreco/post_processing/README.md) instructions for more information.
 
 ## Repository Structure
+* `bin` contains very simple scripts that run the training/inference functions.
+* `config` has various example configuration files.
+* `docs` Documentation (in progress)
+* `mlreco` the main code lives there!
+* `test` some testing using Pytest
 
-The 'mlreco' module contains several submodules:
-* 'models' - contains model definitions
-* 'iotools' - contains parsers for `larcv` data as well as utilities used for sampling and turning data into batches
-* 'visualization' - several visualization tools for data
-* 'utils' - a hodgepodge of functions used in a variety of places
-* `post_processing` - scripts that can be re-used to compute common metrics / analysis.
+Please consult the README of each folder respectively for more information.
 
 ## Contributing
 
