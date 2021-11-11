@@ -12,3 +12,4 @@ from .nue_selection import nue_selection
 from .stopping_muons import stopping_muons
 from .through_muons import through_muons
 from .track_clustering import track_clustering
+from .muon_residual_range import muon_residual_range
