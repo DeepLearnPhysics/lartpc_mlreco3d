@@ -95,6 +95,9 @@ class GNN(torch.nn.Module):
         self.merge_batch = base_config.get('merge_batch', False)
         self.merge_batch_mode = base_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = base_config.get('merge_batch_size', 2)
+        if self.merge_batch_mode not in ['const', 'fluc']:
+            raise ValueError('Batch merging mode not supported, must be one of const or fluc')
+        self.merge_batch_fluc = self.merge_batch_mode == 'fluc'
 
         # If requested, use DBSCAN to form clusters from semantics
         if 'dbscan' in cfg[name]:
@@ -187,7 +190,7 @@ class GNN(torch.nn.Module):
 
         # If requested, merge images together within the batch
         if self.merge_batch:
-            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
+            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc, self.batch_index)
             batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
