@@ -8,7 +8,7 @@ services:
 before_script:
 - git log
 script:
-- docker run --mount type=bind,source=$PWD,target=/app/lartpc_mlreco3d deeplearnphysics/larcv2:ub20.04-cuda11.1-cudnn8-pytorch1.9.0-larndsim pytest /app/lartpc_mlreco3d/test
+- docker run --mount type=bind,source=$PWD,target=/app/lartpc_mlreco3d deeplearnphysics/larcv2:ub20.04-cuda11.1-cudnn8-pytorch1.9.0-larndsim pytest --import-mode=importlib /app/lartpc_mlreco3d/test
 notifications:
   email:
     on_success: always
