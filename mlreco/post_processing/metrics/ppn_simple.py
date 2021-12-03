@@ -25,61 +25,28 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
     num_classes = processor_cfg.get('num_classes', 5)
     clust_data = clust_data[data_idx]
 
-    # ppn_layers   = result['ppn_layers'][0]
-    # ppn_coords   = result['ppn_coords']
-    # points       = result['points']#[0]
     seg_label = seg_label[data_idx]
     segmentation = segmentation[data_idx]
     points = np.array(points)
-    # mask_ppn     = result['mask_ppn']
-    batch_index  = ppn_coords[-1][:, 0]
 
     rows_gt_names, rows_gt_values = [], []
     rows_pred_names, rows_pred_values = [], []
 
-    batch_mask      = batch_index == data_idx
-    slabels         = seg_label[:, -1]#.int().numpy()
-    clabels         = clust_data#[batch_mask]#.float().numpy()
-    lowE_mask       = slabels != 4
-    ppn_score_layer = ppn_layers[-1][batch_index == data_idx]
-    coords_layer    = ppn_coords[-1][batch_index == data_idx]
+    slabels         = seg_label[:, -1]
+    clabels         = clust_data
 
-    pixel_pred   = points[batch_index == data_idx][:,  0:3] \
-                 + coords_layer[:, 1:4]
-    pixel_score  = points[batch_index == data_idx][:, -1]
-    pixel_logits = points[batch_index == data_idx][:,  3:8]
-    points_label = points_label[data_idx]#[particles[:, 0] == data_idx]
+    points_label = points_label[data_idx]
 
     # Initialize log if one per event
-    points_batch = points[batch_mask]
-    segmentation_batch = segmentation#[batch_mask]
-    mask_ppn_batch = mask_ppn[-1][batch_mask]
-
-    res = {
-        'points': [points_batch],
-        'mask_ppn': [[mask_ppn_batch]],
-        'segmentation': [segmentation_batch],
-        #'ppn_score': scipy.special.expit(pixel_score)
-    }
-    # if 'ghost' in result:
-    #     res['ghost'] = result['ghost']
-
+    segmentation_batch = segmentation
     pred_seg = np.argmax(segmentation_batch, axis=1).astype(int)
-    acc_seg  = np.sum(pred_seg == slabels) \
-             / float(segmentation_batch.shape[0])
 
-    #ppn = uresnet_ppn_type_point_selector(clabels, res)
-    #ppn = uresnet_ppn_type_point_selector(seg_label, res)
     ppn = uresnet_ppn_type_point_selector(data_blob['input_data'][data_idx], result, entry=data_idx)
     if ppn.shape[0] == 0:
         return [(rows_gt_names, rows_gt_values), (rows_pred_names, rows_pred_values)]
 
     ppn_voxels = ppn[:, 1:4]
-    #ppn_score = ppn[:, 4]
     ppn_score = ppn[:, 5]
-    #ppn_occupancy = ppn[:, 5]
-    ppn_occupancy = ppn[:, 6]
-    #ppn_type = ppn[:, 11]
     ppn_type = ppn[:, 12]
 
     d = cdist(points_label[:, 1:4], ppn_voxels)
@@ -87,15 +54,15 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
     d_pred_to_closest_true = d.min(axis=0)
     pred_to_closest_true_coords = points_label[d.argmin(axis=0)]
     d_true_to_closest_pred = d.min(axis=1)
-    true_seg_voxels = seg_label#[batch_mask]#.numpy()
+    true_seg_voxels = seg_label
     true_mip_voxels = true_seg_voxels[slabels == 1]
 
     # Loop over true ppn points
     for i, true_point in enumerate(points_label):
 
-        true_point_coord = true_point[1:4]#.cpu().numpy()
+        true_point_coord = true_point[1:4]
         true_point_type = true_point[4]
-        true_point_idx = true_point[5]
+        true_point_idx = int(true_point[5])
         p = particles[data_idx][true_point_idx]
 
         rows_gt_names.append(('Class',
@@ -113,7 +80,6 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
 
     for i, pred_point in enumerate(ppn_voxels):
         pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
-        x, y, z = pred_point
         closest_x, closest_y, closest_z = pred_to_closest_true_coords[i][1:4]
         segmentation_voxels = clabels[:, 1:4][pred_seg == pred_point_type]
         if segmentation_voxels.shape[0] > 0:
@@ -123,7 +89,6 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
             d_same_type_closest = d_same_type.min(axis=1)[0]
         else:
             d_same_type_closest = -1
-        # points_label_track = points_label[points_label[:, 4] == 1]
         if true_mip_voxels.shape[0] > 0:
             d_mip = pairwise_distances(
                 torch.Tensor(pred_point).view(1, -1),

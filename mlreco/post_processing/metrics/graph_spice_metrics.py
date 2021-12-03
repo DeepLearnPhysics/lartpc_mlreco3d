@@ -92,7 +92,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
                                          graph_info=graph_info,
                                          batch_col=0,
                                          training=False)
-    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
+    gs_manager.fit_predict(invert=invert, min_points=min_points)
     funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
             num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)

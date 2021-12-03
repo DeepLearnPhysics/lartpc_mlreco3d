@@ -143,6 +143,8 @@ class ClusterGraphConstructor:
         self.batch_col = batch_col
         self.training = training # Default mode is evaluation, this is set otherwise when we initialize
 
+        self.constructor_cfg = constructor_cfg
+
         # Initial Neighbor Graph Construction Mode
         mode = constructor_cfg.get('mode', 'knn')
         if mode == 'knn':
@@ -197,8 +199,60 @@ class ClusterGraphConstructor:
         return (u == v).long()
 
 
+    def _initialize_graph_unwrapped(self, res: dict,
+                                          labels: list):
+        '''
+        CGC initializer for unwrapped tensors. 
+        (see initialize_graph for functionality)
+        '''
+        features = res['hypergraph_features']
+        batch_indices = res['batch_indices']
+        coordinates = res['coordinates']
+        assert len(features) != len(labels)
+        assert len(features) != torch.unique(batch_indices).shpae[0]
+        data_list = []
+        graph_id = 0
+        index = 0
+
+        for i, bidx in enumerate(torch.unique(batch_indices)):
+            coords_batch = coordinates[i]
+            features_batch = features[i]
+            labels_batch = labels[i]
+
+            for c in torch.unique(labels_batch[:, self.seg_col]):
+                class_mask = labels_batch[:, self.seg_col] == c
+                coords_class = coords_batch[class_mask]
+                features_class = features_batch[class_mask]
+
+                edge_indices = self._init_graph(coords_class, **self.kwargs)
+                data = GraphData(x=features_class,
+                                 pos=coords_class,
+                                 edge_index=edge_indices)
+                graph_id_key = dict(Index=index,
+                                    BatchID=int(bidx),
+                                    SemanticID=int(c),
+                                    GraphID=graph_id)
+                graph_id += 1
+                self._info.append(graph_id_key)
+
+                if self.training:
+                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
+                    truth = self.get_edge_truth(edge_indices, frag_labels)
+                    data.edge_truth = truth
+                data_list.append(data)
+            index += 1
+
+        self._info = pd.DataFrame(self._info)
+        self.data_list = data_list
+        self._graph_batch = self._graph_batch.from_data_list(data_list)
+        self._num_total_nodes = self._graph_batch.x.shape[0]
+        self._node_dim = self._graph_batch.x.shape[1]
+        self._num_total_edges = self._graph_batch.edge_index.shape[1]
+
+
     def initialize_graph(self, res : dict,
-                               labels: torch.Tensor):
+                               labels: Union[torch.Tensor, list],
+                               unwrapped=False):
         '''
         From GraphSPICE Embedder Output, initialize GraphBatch object
         with edge truth labels.
@@ -211,6 +265,9 @@ class ClusterGraphConstructor:
         (one per unique image id and segmentation class), and stores graph
         collection as attribute.
         '''
+        if unwrapped:
+            return self._initialize_graph_unwrapped(res, labels)
+
         features = res['hypergraph_features'][0]
         batch_indices = res['batch_indices'][0]
         coordinates = res['coordinates'][0]
@@ -324,10 +381,7 @@ class ClusterGraphConstructor:
 
 
     def fit_predict_one(self, entry,
-                        gen_numpy_graph=False,
                         min_points=0,
-                        cluster_all=True,
-                        remainder_alg='knn',
                         invert=False) -> Tuple[np.ndarray, nx.Graph]:
         '''
         Generate predicted fragment cluster labels for single subgraph.
@@ -403,7 +457,7 @@ class ClusterGraphConstructor:
         for entry in entry_list:
             pred, G, subgraph = self.fit_predict_one(entry, **kwargs)
             batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
-            pred_data_list.append(GraphData(x=torch.Tensor(pred),
+            pred_data_list.append(GraphData(x=torch.Tensor(pred).long(),
                                             pos=torch.Tensor(G.pos)))
             # node_pred[batch_index] = pred
         self._node_pred = GraphBatch.from_data_list(pred_data_list)

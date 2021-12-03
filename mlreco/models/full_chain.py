@@ -322,7 +322,7 @@ class FullChain(FullChainGNN):
                     self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
                                                   spatial_embeddings_output['graph_info'][0])
 
-                    self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert, min_points=self._gspice_min_points)
+                    self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
                     cluster_predictions = self.gs_manager._node_pred.x
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],
@@ -336,6 +336,8 @@ class FullChain(FullChainGNN):
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
+            print('Input = ', input[0].shape)
+            print('points = ', cnn_result['points'][0].shape)
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
             cluster_result['fragments'].extend(fragment_data[0])
             cluster_result['frag_batch_ids'].extend(fragment_data[1])
