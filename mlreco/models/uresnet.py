@@ -64,54 +64,6 @@ class UResNet_Chain(nn.Module):
         return out
 
 
-# class SegmentationLoss(nn.Module):
-#
-#     def __init__(self, cfg, name='segmentation_loss'):
-#         super(SegmentationLoss, self).__init__()
-#         self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
-#
-#     def forward(self, outputs, label, weight=None):
-#         '''
-#         segmentation[0], label and weight are lists of size #gpus = batch_size.
-#         segmentation has as many elements as UResNet returns.
-#         label[0] has shape (N, dim + batch_id + 1)
-#         where N is #pts across minibatch_size events.
-#         '''
-#         # TODO Add weighting
-#         segmentation = outputs['segmentation']
-#
-#         assert len(segmentation) == len(label)
-#         # if weight is not None:
-#         #     assert len(data) == len(weight)
-#         batch_ids = [d[:, 0] for d in label]
-#         total_loss = 0
-#         total_acc = 0
-#         count = 0
-#         # Loop over GPUS
-#         for i in range(len(segmentation)):
-#             for b in batch_ids[i].unique():
-#                 batch_index = batch_ids[i] == b
-#                 event_segmentation = segmentation[i][batch_index]
-#                 event_label = label[i][:, -1][batch_index]
-#                 event_label = torch.squeeze(event_label, dim=-1).long()
-#                 loss_seg = self.cross_entropy(event_segmentation, event_label)
-#                 if weight is not None:
-#                     event_weight = weight[i][batch_index]
-#                     event_weight = torch.squeeze(event_weight, dim=-1).float()
-#                     total_loss += torch.mean(loss_seg * event_weight)
-#                 else:
-#                     total_loss += torch.mean(loss_seg)
-#                 # Accuracy
-#                 predicted_labels = torch.argmax(event_segmentation, dim=-1)
-#                 acc = (predicted_labels == event_label).sum().item() / float(predicted_labels.nelement())
-#                 total_acc += acc
-#                 count += 1
-#
-#         return {
-#             'accuracy': total_acc/count,
-#             'loss': total_loss/count
-#         }
-
 class SegmentationLoss(torch.nn.modules.loss._Loss):
     """
     Loss definition for UResNet.
@@ -182,15 +134,18 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         print('Invalid semantic label found (will be ignored)')
                         print('Semantic label values:',unique_label)
                         print('Label counts:',unique_count)
+
                     event_ghost = result['ghost'][i][batch_index]  # (N, 2)
                     # 0 = not a ghost point, 1 = ghost point
                     mask_label = (event_label == self._num_classes).long()
-                    # loss_mask = self.cross_entropy(event_ghost, mask_label)
                     num_ghost_points = (mask_label == 1).sum().float()
                     num_nonghost_points = (mask_label == 0).sum().float()
-                    fraction = num_ghost_points / (num_ghost_points + num_nonghost_points)
+                    fraction = num_ghost_points \
+                             / (num_ghost_points + num_nonghost_points)
                     weight = torch.stack([fraction, 1. - fraction]).float()
-                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, mask_label, weight=weight)
+                    loss_mask = torch.nn.functional.cross_entropy(event_ghost, 
+                                                                  mask_label, 
+                                                                  weight=weight)
                     mask_loss += loss_mask
                     # mask_loss += torch.mean(loss_mask)
 
@@ -202,15 +157,18 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         # Accuracy ghost2ghost = fraction of correcly predicted
                         # ghost points as ghost points
                         if float(num_ghost_points.item()) > 0:
-                            ghost2ghost += (predicted_mask[event_label == self._num_classes] == 1).sum().item() / float(num_ghost_points.item())
+                            ghost2ghost += (predicted_mask[event_label == self._num_classes] == 1).sum().item() \
+                                        / float(num_ghost_points.item())
 
                         # Accuracy noghost2noghost = fraction of correctly predicted
                         # non ghost points as non ghost points
                         if float(num_nonghost_points.item()) > 0:
-                            nonghost2nonghost += (predicted_mask[event_label < self._num_classes] == 0).sum().item() / float(num_nonghost_points.item())
+                            nonghost2nonghost += (predicted_mask[event_label < self._num_classes] == 0).sum().item() \
+                                              / float(num_nonghost_points.item())
 
                         # Global ghost predictions accuracy
-                        acc_mask = predicted_mask.eq_(mask_label).sum().item() / float(predicted_mask.nelement())
+                        acc_mask = predicted_mask.eq_(mask_label).sum().item() \
+                                 / float(predicted_mask.nelement())
                         mask_acc += acc_mask
 
                     # Now mask to compute the rest of UResNet loss

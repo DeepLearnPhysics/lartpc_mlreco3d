@@ -388,12 +388,8 @@ class ClusterGraphConstructor:
 
         INPUTS:
             - entry number
-            - gen_numpy_graph: whether to generate and output a networkx
-            graph object with numpy converted graph attributes.
             - min_points: minimum voxel count required to assign
             unique cluster label during first pass.
-            - cluster_all: if False, function will leave orphans as is
-            with label -1.
             - remainder_alg: algorithm used to handle orphans
 
         Returns:
@@ -418,9 +414,10 @@ class ClusterGraphConstructor:
         pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
         G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
+        orphans = []
         for i, comp in enumerate(nx.connected_components(G)):
-            # print(i)
             if len(comp) < min_points:
+                orphans.append(comp)
                 continue
             x = np.asarray(list(comp))
             pred[x] = i
