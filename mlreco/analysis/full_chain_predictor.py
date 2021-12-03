@@ -7,51 +7,8 @@ from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
 from scipy.special import softmax
-
-
-class Particle:
-    '''
-    Simple Particle Class with managable __repr__ and __str__ functions.
-    '''
-    def __init__(self, coords, group_id, semantic_type, interaction_id, 
-                 pid, pid_conf, momentum, batch_id=0):
-        self.id = group_id
-        self.points = coords
-        self.semantic_type = semantic_type
-        self.pid = pid
-        self.pid_conf = pid_conf
-        self.momentum = momentum
-        self.interaction_id = interaction_id
-        self.batch_id = batch_id
-#         self.fragments = fragment_ids
-        self.semantic_keys = {
-            0: 'Shower Fragment',
-            1: 'Track',
-            2: 'Michel Electron',
-            3: 'Delta Ray',
-            4: 'LowE Depo'
-        }
-    
-        self.pid_keys = {
-            0: 'Photon',
-            1: 'Electron',
-            2: 'Muon',
-            3: 'Pion',
-            4: 'Proton'
-        }
-        
-    def __str__(self):
-        return self.__repr__()
-    
-    def __repr__(self):
-        fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15} | PID: {:<8}%, Conf = {:.2f} | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.batch_id, self.id, 
-                         self.semantic_keys[self.semantic_type], 
-                         self.pid_keys[self.pid], 
-                         self.pid_conf * 100,
-                         self.interaction_id,
-                         self.points.shape[0])
-        return msg
+from .particle import Particle
+from .point_matching import *
 
 
 class FullChainPredictor:
@@ -288,7 +245,18 @@ class FullChainPredictor:
             part = Particle(voxels, i, semantic_type, interaction_id, 
                             pids[i], softmax(type_logits[i])[pids[i]], 0)
             out.append(part)
-            
+
+        ppn_results = self._fit_predict_ppn(entry)
+
+        match_points_to_particles(ppn_results, out)
+        for p in out:
+            if p.semantic_type == 0:
+                pt = get_shower_startpoint(p)
+                p.startpoint = pt
+            elif p.semantic_type == 1:
+                pts = get_track_endpoints(p)
+                p.endpoints = pts
+
         return out
 
 
