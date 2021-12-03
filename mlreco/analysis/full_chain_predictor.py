@@ -6,16 +6,20 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
+from scipy.special import softmax
+
 
 class Particle:
     '''
     Simple Particle Class with managable __repr__ and __str__ functions.
     '''
-    def __init__(self, coords, group_id, semantic_type, interaction_id, pid, momentum, batch_id=0):
+    def __init__(self, coords, group_id, semantic_type, interaction_id, 
+                 pid, pid_conf, momentum, batch_id=0):
         self.id = group_id
         self.points = coords
         self.semantic_type = semantic_type
         self.pid = pid
+        self.pid_conf = pid_conf
         self.momentum = momentum
         self.interaction_id = interaction_id
         self.batch_id = batch_id
@@ -37,22 +41,14 @@ class Particle:
         }
         
     def __str__(self):
-        msg = '''
-        Particle(Batch = {}, ID = {})
-            - semantic_type: {}
-            - PID: {}
-            - Interaction ID: {}
-        '''.format(self.batch_id, self.id, 
-                   self.semantic_keys[self.semantic_type], 
-                   self.pid_keys[self.pid], 
-                   self.interaction_id)
-        return msg
+        return self.__repr__()
     
     def __repr__(self):
-        fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15} | PID: {:<8} | Interaction ID: {:<2} | Size: {:<5} )"
+        fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15} | PID: {:<8}%, Conf = {:.2f} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
+                         self.pid_conf * 100,
                          self.interaction_id,
                          self.points.shape[0])
         return msg
@@ -159,11 +155,6 @@ class FullChainPredictor:
             - graph
             - graph_info
         '''
-        
-        from mlreco.utils.metrics import ARI, SBD, purity, efficiency
-        from mlreco.post_processing.metrics.graph_spice_metrics import (modified_ARI, 
-                                                                modified_efficiency, 
-                                                                modified_purity)
         import warnings
         warnings.filterwarnings('ignore') 
         
@@ -294,7 +285,8 @@ class FullChainPredictor:
             voxels = point_cloud[p]
             semantic_type = particles_seg[i]
             interaction_id = inter_group_pred[i]
-            part = Particle(voxels, i, semantic_type, interaction_id, pids[i], 0)
+            part = Particle(voxels, i, semantic_type, interaction_id, 
+                            pids[i], softmax(type_logits[i])[pids[i]], 0)
             out.append(part)
             
         return out
