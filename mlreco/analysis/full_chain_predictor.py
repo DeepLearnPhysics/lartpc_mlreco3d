@@ -153,7 +153,10 @@ class FullChainPredictor:
         return new_labels
     
     def _fit_predict_fragments(self, entry, randomize=False):
-        
+        '''
+                
+        '''
+
         fragments = self.result['fragments'][entry]
         
         num_voxels = self.data_blob['input_data'][entry].shape[0]
