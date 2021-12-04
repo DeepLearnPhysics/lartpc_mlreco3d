@@ -221,6 +221,7 @@ class trainval(object):
                 avoid_keys  = [k for k,v in input_data.items() if not k in concat_keys]
                 avoid_keys += [k for k,v in res.items()        if not k in concat_keys]
                 input_data,res = utils.list_concat(input_data,res,avoid_keys=avoid_keys)
+
             # Below for more sophisticated unwrapping functions
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.

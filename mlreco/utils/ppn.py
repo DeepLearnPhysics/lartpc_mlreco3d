@@ -289,7 +289,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     1 row per ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = np.array(out['points'])#[entry]#.cpu().detach().numpy()
+    points = out['points'][0]#[entry]#.cpu().detach().numpy()
     ppn_coords = out['ppn_coords']
     # If 'points' is specified in `concat_result`,
     # then it won't be unwrapped.
@@ -301,7 +301,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
 
     enable_classify_endpoints = 'classify_endpoints' in out
     if enable_classify_endpoints:
-        classify_endpoints = np.array(out['classify_endpoints'])[ppn_coords[-1][:, 0] == entry, :]#[entry]
+        classify_endpoints = out['classify_endpoints'][0][ppn_coords[-1][:, 0] == entry, :]#[entry]
 
     # Difference in naming between SCN/ME
     if 'mask_ppn' not in out:
