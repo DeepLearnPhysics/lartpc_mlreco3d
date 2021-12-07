@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import MinkowskiEngine as ME
 
 from mlreco.models.layers.cluster_cnn.losses.gs_embeddings import *
 from mlreco.models.layers.cluster_cnn import gs_kernel_construct, spice_loss_construct
@@ -62,6 +63,15 @@ class MinkGraphSPICE(nn.Module):
         # print('Total Number of Trainable Parameters (graph_spice)= {}'.format(
         #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
+
     def filter_class(self, input):
         '''
         Filter classes according to segmentation label.
@@ -101,21 +111,23 @@ class GraphSPICELoss(nn.Module):
 
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICELoss, self).__init__()
+        self.model_config = cfg.get('graph_spice', {})
         self.loss_config = cfg.get(name, {})
+
         self.loss_name = self.loss_config.get('name', 'se_lovasz_inter')
-        self.skip_classes = self.loss_config.get('skip_classes', [2, 3, 4])
+        self.skip_classes = self.model_config.get('skip_classes', [2, 3, 4])
         # We use the semantic label -1 to account
         # for semantic prediction mistakes.
         # self.skip_classes += [-1]
         self.eval_mode = self.loss_config.get('eval', False)
         self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
 
-        constructor_cfg = self.loss_config.get('constructor_cfg', {})
+        constructor_cfg = self.model_config.get('constructor_cfg', {})
         self.gs_manager = ClusterGraphConstructor(constructor_cfg,
                                                 batch_col=0,
                                                 training=~self.eval_mode)
 
-        self.invert = self.loss_config.get('invert', False)
+        self.invert = self.loss_config.get('invert', True)
         # print("LOSS FN = ", self.loss_fn)
 
     def filter_class(self, segment_label, cluster_label):

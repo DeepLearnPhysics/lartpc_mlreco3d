@@ -240,8 +240,8 @@ class UResNet(torch.nn.Module):
 
         self.num_filters = self.encoder.num_filters
 
-        print('Total Number of Trainable Parameters (mink/layers/uresnet) = {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
+        # print('Total Number of Trainable Parameters (mink/layers/uresnet) = {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, input):
         coords = input[:, 0:self.D+1].int()

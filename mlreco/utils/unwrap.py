@@ -241,7 +241,6 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
         element_map = {}
         batch_ctrs  = []
         for target in target_list_keys:
-            #print(target)
             dlist = outputs[target][data_index]
             for d in dlist:
                 # print(d)

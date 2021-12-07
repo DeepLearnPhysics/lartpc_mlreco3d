@@ -15,7 +15,7 @@ from mlreco.utils.metrics import *
 from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
 
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier
 from scipy.special import expit
 
 
@@ -70,7 +70,7 @@ class StrayAssigner(ABC):
     '''
     Abstract Class for orphan assigning functors.
     '''
-    def __init__(self, X, Y, metric_fn : Callable = None):
+    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
         self.clustered = X
         self.d = metric_fn
         self.partial_labels = Y
@@ -84,14 +84,39 @@ class NearestNeighborsAssigner(StrayAssigner):
     '''
     Assigns orphans to the k-nearest cluster using simple kNN Classifier.
     '''
-    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
-        super(NearestNeighborsAssigner, self).__init__()
-        self.k = kwargs.get('k', 10)
-        self._neigh = KNeighborsClassifier(n_neighbors=10)
-        self._neigh.fit(X)
+    def __init__(self, X, Y, **kwargs):
+        '''
+            X: Points to run Nearest-Neighbor Classifier (N x F)
+            Y: Labels of Points (N, )
+        '''
+        super(NearestNeighborsAssigner, self).__init__(X, Y, **kwargs)
+        self._neigh = KNeighborsClassifier(**kwargs)
+        self._neigh.fit(X, Y)
 
-    def assign_orphans(self, X, get_proba=False):
-        pred = self._neigh.predict(X)
+    def assign_orphans(self, orphans, get_proba=False):
+        pred = self._neigh.predict(orphans)
+        self._pred = pred
+        if get_proba:
+            self._proba = self._neigh.predict_proba(orphans)
+            self._max_proba = np.max(self._proba, axis=1)
+        return pred
+
+
+class RadiusNeighborsAssigner(StrayAssigner):
+    '''
+    Assigns orphans to the k-nearest cluster using simple kNN Classifier.
+    '''
+    def __init__(self, X, Y, **kwargs):
+        '''
+            X: Points to run Nearest-Neighbor Classifier (N x F)
+            Y: Labels of Points (N, )
+        '''
+        super(RadiusNeighborsAssigner, self).__init__(X, Y, **kwargs)
+        self._neigh = RadiusNeighborsClassifier(**kwargs)
+        self._neigh.fit(X, Y)
+
+    def assign_orphans(self, orphans, get_proba=False):
+        pred = self._neigh.predict(orphans)
         self._pred = pred
         if get_proba:
             self._proba = self._neigh.predict_proba(orphans)
@@ -130,8 +155,12 @@ class ClusterGraphConstructor:
 
         # Clustering Algorithm Parameters
         self.ths = constructor_cfg.get('edge_cut_threshold', 0.0) # Prob values 0-1
+        if self.training:
+            self.ths = 0.0
         # print("Edge Threshold Probability Score = ", self.ths)
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
+        # Radius within which orphans get assigned to neighbor cluster
+        self._orphans_radius = constructor_cfg.get('orphans_radius', 1.0)
 
         # GraphBatch containing graphs per semantic class.
         if graph_batch is None:
@@ -342,7 +371,17 @@ class ClusterGraphConstructor:
             x = np.asarray(list(comp))
             pred[x] = i
 
+        # Assign orphans
         G.pos = subgraph.pos.cpu().numpy()
+        orphan_mask = pred < 0
+        if orphan_mask.any():
+            orphans = G.pos[orphan_mask]
+            if not orphan_mask.all():
+                assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask], pred[~orphan_mask].astype(int),
+                                                radius=self._orphans_radius,
+                                                outlier_label=-1)
+                orphan_labels = assigner.assign_orphans(orphans)
+                pred[orphan_mask] = orphan_labels
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels
@@ -460,6 +499,9 @@ class ClusterGraphConstructor:
             pred = self._node_pred.get_example(entry).x
             mask = ~np.isin(labels, ignore_index)
             if np.count_nonzero(mask) == 0:
+                print('No node to cluster in CGC')
+                for f in metrics:
+                    add_columns[f.__name__].append(np.nan)
                 continue
 
             for f in metrics:

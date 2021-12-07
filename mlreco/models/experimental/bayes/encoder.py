@@ -25,7 +25,7 @@ class MCDropoutEncoder(torch.nn.Module):
     """
     def __init__(self, cfg, name='mcdropout_encoder'):
         super(MCDropoutEncoder, self).__init__()
-        setup_cnn_configuration(self, cfg, name)
+        setup_cnn_configuration(self, cfg, 'network_base')
 
         self.model_config = cfg.get(name, {})
         self.reps = self.model_config.get('reps', 2)
@@ -166,9 +166,8 @@ class MCDropoutEncoder(torch.nn.Module):
 
     def forward(self, input_tensor):
 
-        # print(input_tensor)
-        x = ME.SparseTensor(coordinates=input_tensor[:, :4],
-                            features=input_tensor[:, -1].view(-1, 1))
+        x = ME.SparseTensor(coordinates=input_tensor[:, :4].int(),
+                            features=input_tensor[:, -1].view(-1, 1).float())
         # Encoder
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']

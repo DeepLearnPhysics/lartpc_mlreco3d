@@ -49,6 +49,8 @@ def kinematics_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         return (), ()
 
     pred_particles = kinematics_particles[data_idx] if kinematics_particles is not None else inter_particles[data_idx]
+    if len(pred_particles) < 1:
+        return (), ()
     node_pred_type = node_pred_type[data_idx] if node_pred_type is not None else None
     node_pred_p = node_pred_p[data_idx] if node_pred_p is not None else None
     edge_pred = flow_edge_pred[data_idx].argmax(axis=1) if flow_edge_pred is not None else None # shape (E,)

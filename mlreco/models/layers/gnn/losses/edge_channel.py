@@ -3,6 +3,7 @@ import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.network import get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, edge_purity_mask
+from mlreco.models.experimental.bayes.evidential import EVDLoss
 
 class EdgeChannelLoss(torch.nn.Module):
     """
@@ -50,6 +51,10 @@ class EdgeChannelLoss(torch.nn.Module):
             p = loss_config.get('p', 1)
             margin = loss_config.get('margin', 1.0)
             self.lossfn = torch.nn.MultiMarginLoss(p=p, margin=margin, reduction=self.reduction)
+        elif self.loss == 'EVD':
+            evd_loss_name = loss_config.get('evd_loss_name', 'evd_nll')
+            T = loss_config.get('T', 50000)
+            self.lossfn = EVDLoss(evd_loss_name, reduction=self.reduction,T=T, num_classes=2, mode='evidence')
         else:
             raise ValueError('Loss not recognized: ' + self.loss)
 

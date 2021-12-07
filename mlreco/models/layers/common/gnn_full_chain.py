@@ -594,7 +594,7 @@ class FullChainGNN(torch.nn.Module):
                 new_counts = torch.zeros(batch_size, dtype=torch.int64, device=counts.device)
                 new_counts[batches] = counts
                 counts = new_counts
-                
+
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
@@ -638,7 +638,6 @@ class FullChainGNN(torch.nn.Module):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
-
         return result
 
 
@@ -890,7 +889,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
             accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
-            loss += self.kinematics_weight * res['kinematics_loss']
+            loss += self.kinematics_weight * res['grappa_kinematics_loss']
 
             # Loss on edge predictions (particle hierarchy)
             res['flow_loss'] = res_kinematics['edge_loss']
