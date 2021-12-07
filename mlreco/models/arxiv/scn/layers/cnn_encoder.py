@@ -161,7 +161,6 @@ class ResidualEncoder(UResNetEncoder):
             features_enc.append(x)
             x = self.encoding_conv[i](x)
         out = self.pool(x).features
-        # print(out)
         out = out.view(batch_size, -1)
         out = self.linear(out)
         return out

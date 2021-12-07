@@ -80,6 +80,7 @@ class stopwatch(object):
     """
     def __init__(self):
         self._watch={}
+        self._cpu_watch = {}
 
     def start(self,key):
         """
@@ -97,6 +98,18 @@ class stopwatch(object):
         """
         data = self._watch[key]
         if data[0]<0 : data[0] = time.time() - data[1]
+
+    def start_cputime(self, key):
+        self._cpu_watch[key] = [-1,time.process_time()]
+
+    def stop_cputime(self, key):
+        data = self._cpu_watch[key]
+        if data[0]<0 : data[0] = time.process_time() - data[1]
+
+    def time_cputime(self, key):
+        if not key in self._cpu_watch: return 0
+        data = self._cpu_watch[key]
+        return data[0] if data[0]>0 else time.process_time() - data[1]
 
     def time(self,key):
         """

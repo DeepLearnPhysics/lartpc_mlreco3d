@@ -129,11 +129,13 @@ class GNN(torch.nn.Module):
             if self.kinematics_momentum:
                 momentum_config = cfg[name].get('momentum_net', {})
                 softplus_and_shift = momentum_config.get('eps', 0.0)
+                logspace = momentum_config.get('logspace', False)
                 if momentum_config.get('mode', 'standard') == 'edl':
                     self.momentum_net = EvidentialMomentumNet(node_output_feats,
                                                               num_output=4,
                                                               num_hidden=momentum_config.get('num_hidden', 128),
-                                                              eps=softplus_and_shift)
+                                                              eps=softplus_and_shift,
+                                                              logspace=logspace)
                 else:
                     self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
 
@@ -286,8 +288,8 @@ class GNN(torch.nn.Module):
                 node_pred_p = self.momentum_net(out['node_features'][0])
                 if isinstance(self.momentum_net, EvidentialMomentumNet):
                     result['node_pred_p'] = [[node_pred_p[b] for b in cbids]]
-                    aleatoric = node_pred_p[:, 3] / (node_pred_p[:, 2] - 1.0 + 1e-6)
-                    epistemic = node_pred_p[:, 3] / (node_pred_p[:, 1] * (node_pred_p[:, 2] - 1.0 + 1e-6))
+                    aleatoric = node_pred_p[:, 3] / (node_pred_p[:, 2] - 1.0 + 0.001)
+                    epistemic = node_pred_p[:, 3] / (node_pred_p[:, 1] * (node_pred_p[:, 2] - 1.0 + 0.001))
                     result['node_pred_p_aleatoric'] = [[aleatoric[b] for b in cbids]]
                     result['node_pred_p_epistemic'] = [[epistemic[b] for b in cbids]]
                 else:

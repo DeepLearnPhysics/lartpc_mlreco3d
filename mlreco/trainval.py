@@ -1,7 +1,6 @@
 from mlreco.utils import unwrap
 import warnings
 import torch
-import time
 import os
 import mlreco.utils as utils
 
@@ -9,7 +8,6 @@ from mlreco.models import construct
 from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
 
 from mlreco.utils.data_parallel import DataParallel
-import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
 from mlreco.utils.adabound import AdaBound, AdaBoundW
@@ -181,12 +179,13 @@ class trainval(object):
         It is a dictionary where data_blob[key] = list of length
         BATCH_SIZE / (MINIBATCH_SIZE * len(GPUS))
         """
-
+        self._watch.start_cputime('train_step_cputime')
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
         data_blob,res_combined = self.forward(data_iter, iteration=iteration)
         # print(data_blob['index'])
         # Run backward once for all the previous forward
+        self._watch.start_cputime('backward_cpu')
         self.backward()
         if log_time:
             self._watch.stop('train')
@@ -222,6 +221,7 @@ class trainval(object):
                 avoid_keys  = [k for k,v in input_data.items() if not k in concat_keys]
                 avoid_keys += [k for k,v in res.items()        if not k in concat_keys]
                 input_data,res = utils.list_concat(input_data,res,avoid_keys=avoid_keys)
+
             # Below for more sophisticated unwrapping functions
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
@@ -278,6 +278,7 @@ class trainval(object):
             #    data.append([data_blob[key][i] for key in input_keys])
 
             self._watch.start('forward')
+            self._watch.start_cputime('forward_cpu')
 
             if not torch.cuda.is_available():
                 train_blob = train_blob[0]
@@ -300,6 +301,7 @@ class trainval(object):
                     self._loss.append(loss_acc['loss'])
 
             self._watch.stop('forward')
+            self._watch.stop_cputime('forward_cpu')
             self.tspent_sum['forward'] += self._watch.time('forward')
 
             # Record results
