@@ -3,6 +3,8 @@ import os
 from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import cdist
 from mlreco.utils import CSVData
+from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
+
 
 def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
     """
@@ -32,6 +34,7 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
     particles_label = module_cfg.get('particles', 'particles_label')
     cluster_label   = module_cfg.get('cluster_label', 'cluster_label')
     segment_label   = module_cfg.get('segment_label', 'segment_label')
+    # should_adapt_labels    = module_cfg.get('adapt_labels', False)
 
     # Create output CSV
     store_per_iteration = True
@@ -43,6 +46,7 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
     if store_per_iteration:
         fout_reco=CSVData(os.path.join(logdir, 'michel-reconstruction-reco-iter-%07d.csv' % iteration))
         fout_true=CSVData(os.path.join(logdir, 'michel-reconstruction-true-iter-%07d.csv' % iteration))
+        fout_matched=CSVData(os.path.join(logdir, 'michel-reconstruction-matched-iter-%07d.csv' % iteration))
 
     # Loop over events
     for batch_id,data in enumerate(data_blob['input_data']):
@@ -52,11 +56,14 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
         if not store_per_iteration:
             fout_reco=CSVData(os.path.join(logdir, 'michel-reconstruction-reco-event-%07d.csv' % event_idx))
             fout_true=CSVData(os.path.join(logdir, 'michel-reconstruction-true-event-%07d.csv' % event_idx))
+            fout_matched=CSVData(os.path.join(logdir, 'michel-reconstruction-matched-event-%07d.csv' % event_idx))
 
         # from input/labels
         label       = data_blob[segment_label][batch_id][:,-1]
         #label_raw   = data_blob['sparse3d_pcluster_semantics'][batch_id]
         clusters    = data_blob[cluster_label][batch_id]
+        # if should_adapt_labels:
+        #     clusters = adapt_labels(res, data_blob[segment_label], data_blob[cluster_label])[batch_id]
         particles   = data_blob[particles_label][batch_id]
         true_ghost_mask = label < 5
         data_masked     = data[true_ghost_mask]
@@ -135,7 +142,8 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
         for cluster in np.unique(Michel_true_clusters):
             # print("True", np.count_nonzero(Michel_true_clusters == cluster))
             # TODO sum_pix
-            fout_true.record(('batch_id', 'iteration', 'event_idx', 'num_pix', 'sum_pix'),
+            fout_true.record(('batch_id', 'iteration', 'event_idx',
+                             'num_pix', 'sum_pix'),
                              (batch_id, iteration, event_idx,
                               np.count_nonzero(Michel_true_clusters == cluster),
                               Michel_all[Michel_true_clusters == cluster][:, -4].sum()))
@@ -184,6 +192,15 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
 
         candidates = np.isin(Michel_pred_clusters, Michel_pred_clusters_id[Michel_is_edge & Michel_is_attached])
 
+        # Record all predicted Michel cluster
+        for idx, Michel_id in enumerate(Michel_pred_clusters_id):
+            current_index = Michel_pred_clusters == Michel_id
+            fout_reco.record(('batch_id', 'iteration', 'event_idx', 'is_attached', 'is_edge',
+                            'num_pix'),
+                             (batch_id, iteration, event_idx, Michel_is_attached[idx], Michel_is_edge[idx],
+                             np.count_nonzero(current_index)))
+            fout_reco.write()
+
         if np.count_nonzero(candidates) == 0:
             continue
 
@@ -220,7 +237,7 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
             #         michel_true_num_pix_cluster += 1
 
             # Record every predicted Michel cluster in CSV
-            fout_reco.record(('batch_id', 'iteration', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
+            fout_matched.record(('batch_id', 'iteration', 'event_idx', 'pred_num_pix', 'pred_sum_pix',
                               'pred_num_pix_true', 'pred_sum_pix_true',
                               'true_num_pix', 'true_sum_pix',
                               'is_attached', 'is_edge', 'michel_true_energy', 'true_num_pix_cluster'),
@@ -228,12 +245,14 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
                               michel_pred_num_pix_true, michel_pred_sum_pix_true,
                               michel_true_num_pix, michel_true_sum_pix,
                               is_attached, is_edge, michel_true_energy, michel_true_num_pix_cluster))
-            fout_reco.write()
+            fout_matched.write()
 
         if not store_per_iteration:
             fout_reco.close()
             fout_true.close()
+            fout_matched.close()
 
     if store_per_iteration:
         fout_reco.close()
         fout_true.close()
+        fout_matched.close()
