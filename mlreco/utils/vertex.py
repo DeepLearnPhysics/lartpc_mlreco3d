@@ -1,25 +1,27 @@
 import numpy as np
 import scipy
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
+from mlreco.utils.ppn import get_track_endpoints_geo
 
 
-def predict_vertex(inter_idx, data_idx, input_data, res,
-                    coords_col=(1, 4), primary_label=1,
-                    shower_label=0, track_label=1, endpoint_label=0,
-                    attaching_threshold=2, inter_threshold=10):
+def get_ppn_points_per_particles(input_data, res,
+                                primary_particles, primary_particles_seg,
+                                data_idx=0, coords_col=(1, 4),
+                                attaching_threshold=2,
+                                track_label=1,
+                                shower_label=0):
     """
-    Heuristic to find the vertex by looking at
-    - predicted primary particles within predicted interaction
-    - predicted PPN points for these primary particles
+    Get predicted PPN points
 
-    For now, very simple: taking the barycenter of potential candidates.
+    Returns:
+    - list of N arrays of shape (M_i,f) of M_i PPN candidate points, f corresponds to the number
+    of feature in the output of uresnet_ppn_type_point_selector.
+    - array of N lists of voxel indices, corresponding to the particles
+    whose predicted semantic is track or shower.
+    N is the number of particles which are either track or shower (predicted).
     """
     clusts = res['inter_particles'][data_idx]
-    inter_mask = res['inter_group_pred'][data_idx] == inter_idx
-    interaction = clusts[inter_mask]
 
-    # Identify predicted primary particles within the interaction
-    primary_particles = np.argmax(res['node_pred_vtx'][data_idx][inter_mask][:, 3:], axis=1) == primary_label
     ppn_candidates, c_candidates = [], []
     ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res,
                                         entry=data_idx,
@@ -49,8 +51,8 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
         all_voxels = input_data[data_idx][mask_ghost]
 
     # Look at PPN predictions for each primary particle
-    for c_idx, c in enumerate(clusts[inter_mask][primary_particles]):
-        c_seg = res['particles_seg'][data_idx][inter_mask][primary_particles][c_idx]
+    for c_idx, c in enumerate(primary_particles):
+        c_seg = primary_particles_seg[c_idx]
         if c_seg == shower_label:
             # TODO select primary fragment
             shower_primaries = np.argmax(res['shower_node_pred'][data_idx], axis=1) == 0
@@ -96,6 +98,40 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
         # # ppn_candidates.append(ppn[((ppn_type[:, track_label] > 0.5) & (ppn_endpoints == endpoint_label)) | (ppn_type[:, shower_label] > 0.5)])
         # ppn_candidates.append(ppn[((ppn_type[:, track_label] > 0.5) ) | (ppn_type[:, shower_label] > 0.5)])
         c_candidates.append(c)
+
+    return ppn_candidates, c_candidates
+
+def predict_vertex(inter_idx, data_idx, input_data, res,
+                    coords_col=(1, 4), primary_label=1,
+                    shower_label=0, track_label=1, endpoint_label=0,
+                    attaching_threshold=2, inter_threshold=10):
+    """
+    Heuristic to find the vertex by looking at
+    - predicted primary particles within predicted interaction
+    - predicted PPN points for these primary particles
+
+    For now, very simple: taking the barycenter of potential candidates.
+    """
+    clusts = res['inter_particles'][data_idx]
+    inter_mask = res['inter_group_pred'][data_idx] == inter_idx
+    interaction = clusts[inter_mask]
+
+    # Identify predicted primary particles within the interaction
+    primary_particles = np.argmax(res['node_pred_vtx'][data_idx][inter_mask][:, 3:], axis=1) == primary_label
+
+    ppn_candidates, c_candidates = get_ppn_points_per_particles(input_data, res,
+                                                            clusts[inter_mask][primary_particles],
+                                                            res['particles_seg'][data_idx][inter_mask][primary_particles],
+                                                            data_idx=data_idx,
+                                                            attaching_threshold=attaching_threshold,
+                                                            track_label=track_label,
+                                                            shower_label=shower_label,
+                                                            coords_col=coords_col)
+
+    all_voxels = input_data[data_idx]
+    if 'ghost' in res:
+        mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
+        all_voxels = input_data[data_idx][mask_ghost]
 
     if len(ppn_candidates) > 1:
         # print('now', len(ppn_candidates))

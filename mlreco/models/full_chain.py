@@ -9,10 +9,12 @@ from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels
-from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager, 
-                                             GraphSPICEFragmentManager, 
+from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
+                                             GraphSPICEFragmentManager,
                                              format_fragments)
+from mlreco.utils.ppn import get_track_endpoints_geo
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
+
 
 class FullChain(FullChainGNN):
     '''
@@ -122,17 +124,8 @@ class FullChain(FullChainGNN):
             points_tensor = result['points'][0].detach().double()
             for i, f in enumerate(fragments[mask]):
                 if frag_seg[mask][i] == 1:
-                    dist_mat = torch.cdist(input[0][f,1:4], input[0][f,1:4])
-                    idx = torch.argmax(dist_mat)
-                    idxs = int(idx)//len(f), int(idx)%len(f)
-                    scores = torch.sigmoid(points_tensor[f, -1])
-                    correction0 = points_tensor[f][idxs[0], :3] + \
-                                  0.5 if scores[idxs[0]] > 0.5 else 0.0
-                    correction1 = points_tensor[f][idxs[1], :3] + \
-                                  0.5 if scores[idxs[1]] > 0.5 else 0.0
-                    end_points = torch.cat([input[0][f[idxs[0]],1:4] + correction0,
-                                            input[0][f[idxs[1]],1:4] + correction1]).reshape(1,-1)
-                    ppn_points = torch.cat((ppn_points, end_points), dim=0)
+                    end_points = get_track_endpoints_geo(input[0], f, points_tensor)
+                    ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(
                         torch.abs(points_tensor[f,:3]), dim=1).values < 1.,

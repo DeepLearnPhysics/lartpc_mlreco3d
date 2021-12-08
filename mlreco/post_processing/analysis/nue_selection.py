@@ -6,6 +6,115 @@ from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.vertex import predict_vertex, get_vertex
 from mlreco.utils.groups import type_labels
 
+def get_predicted_primary_particles(res, data_idx=0):
+    """
+    Returns a list of predicted primary particles.
+
+    Each element in the list is a tuple:
+    - index of the predicted particles (within all predicted particles)
+    - list of voxel indices for this particle
+    """
+    particles = res['particles']
+    node_pred_vtx = res['node_pred_vtx']
+
+    pred_primary_particles = []
+    #print(np.amax(particles[data_idx]), clust_data[data_idx].shape)
+    for pred_idx, pred_part in enumerate(particles[data_idx]):
+        is_primary = np.argmax(node_pred_vtx[data_idx][pred_idx, 3:])
+        if not is_primary: continue
+        pred_primary_particles.append((pred_idx, pred_part))
+    return pred_primary_particles
+
+def get_true_primary_particles(clust_data, particles_asis, inter_id,
+                            data_idx=0,
+                            min_particle_voxel_count=20,
+                            clust_data_noghost=None):
+    """
+    Returns a list of true primary particles.
+
+    Each element in the list is a tuple:
+    - larcv::Particle corresponding to the particle
+    - list of voxel indices for this particle
+    """
+    interaction_mask = clust_data[data_idx][:, 7] == inter_id
+    primary_particles = []
+    #print(np.unique(kinematics[data_idx][:, 12], return_counts=True))
+    for part_id in np.unique(clust_data[data_idx][interaction_mask, 6]):
+        # Ignore -1 - double check, I don't think that is possible
+        # if part_id < 0:
+        #     continue
+        particle = particles_asis[data_idx][int(part_id)]
+        particle_mask = interaction_mask & (clust_data[data_idx][:, 6] == part_id)
+
+        is_primary = particle.group_id() == particle.parent_id()
+        #pdg = particle.pdg_code()
+        # List of voxel indices for this particle
+        particle_idx = np.where(particle_mask)[0]
+
+        # Same but using true non-ghost labels
+        if clust_data_noghost is not None:
+            particle_noghost_idx = np.where((clust_data_noghost[data_idx][:, 7] == inter_id) & (clust_data_noghost[data_idx][:, 6] == part_id))[0]
+        else:
+            particle_noghost_idx = particle_idx
+
+        # Only record if primary + above voxel count threshold
+        if is_primary and len(particle_noghost_idx) > min_particle_voxel_count:
+            primary_particles.append((particle, particle_idx))
+    return primary_particles
+
+
+def match(primary_particles, pred_primary_particles, min_overlap_count=1):
+    """
+    Input:
+    - array of N true particles (list of voxel indices)
+    - array of M predicted particles (list of voxel indices)
+
+    Returns:
+    - array of N matched predicted particles, contains index
+    of matched particle within [0, M[ for each true particle.
+    - array of N values, contains overlap for each true particle
+    with matched particle.
+
+    Entries where the overlap is < min_overlap_count get assigned -1.
+    """
+    overlap_matrix = np.zeros((len(primary_particles), len(pred_primary_particles)), dtype=np.int64)
+
+    for i, part in enumerate(primary_particles):
+        for j, pred_part in enumerate(pred_primary_particles):
+            overlap_matrix[i, j] = len(np.intersect1d(part, pred_part))
+
+    idx = overlap_matrix.argmax(axis=1)
+    intersections = overlap_matrix.max(axis=1)
+
+    idx[intersections < min_overlap_count] = -1
+    intersections[intersections < min_overlap_count] = -1
+
+    return idx, intersections
+
+def match_interactions(clust_data, inter_id, inter_group_pred, particles,
+                    data_idx=0, min_overlap_count=1):
+    """
+    Use match (overlap) function to match a true interaction (defined by
+    inter_id) with a predicted interaction.
+
+    Returns:
+    - index of matched predicted interaction (within inter_group_pred)
+    - overlap count
+    (-1 if no match was found)
+    """
+    interaction_mask = clust_data[data_idx][:, 7] == inter_id
+    inter_group_pred_idx = inter_group_pred[data_idx][inter_group_pred[data_idx]>-1]
+    matched_inter_idx, matched_inter_overlap = match([np.where(interaction_mask)[0]],
+        [np.hstack(particles[data_idx][inter_group_pred[data_idx] == iid]) for iid in np.unique(inter_group_pred_idx)],
+        min_overlap_count=min_overlap_count)
+
+    idx = matched_inter_idx[0]
+    intersection = matched_inter_overlap[0]
+
+    if idx > -1:
+        idx = inter_group_pred_idx[idx]
+
+    return idx, intersection
 
 @post_processing(['nue-selection-true', 'nue-selection-primaries'],
                 ['input_data', 'seg_label', 'clust_data', 'particles_asis', 'kinematics'],
@@ -57,16 +166,8 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
     #
     # 1. Find predicted primary particles in the event
     #
-    pred_primary_count = 0
-    pred_primary_particles = []
-    #print(np.amax(particles[data_idx]), clust_data[data_idx].shape)
-    for pred_idx, pred_part in enumerate(particles[data_idx]):
-        is_primary = np.argmax(node_pred_vtx[data_idx][pred_idx, 3:])
-        if not is_primary: continue
-        pred_primary_count += 1
-        pred_primary_particles.append((pred_idx, pred_part))
-        #print('Predicted primary', pred_idx, len(pred_part))
-    #print(clust_data[data_idx].shape, kinematics[data_idx].shape)
+    pred_primary_particles = get_predicted_primary_particles(res, data_idx=data_idx)
+    pred_primary_count = len(pred_primary_particles)
 
     #
     # 2. Loop over true interactions
@@ -85,27 +186,9 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         #
         # 3. Identify true primary particles
         #
-        primary_count = 0
-        primary_particles = []
-        #print(np.unique(kinematics[data_idx][:, 12], return_counts=True))
-        for part_id in np.unique(clust_data[data_idx][interaction_mask, 6]):
-            # Ignore -1 - double check, I don't think that is possible
-            # if part_id < 0:
-            #     continue
-            particle = particles_asis[data_idx][int(part_id)]
-            particle_mask = interaction_mask & (clust_data[data_idx][:, 6] == part_id)
+        primary_particles = get_true_primary_particles(clust_data, particles_asis, inter_id, data_idx=data_idx)
+        primary_count = len(primary_particles)
 
-            is_primary = particle.group_id() == particle.parent_id()
-            pdg = particle.pdg_code()
-            # List of voxel indices for this particle
-            particle_idx = np.where(particle_mask)[0]
-            # Same but using true non-ghost labels
-            particle_noghost_idx = np.where((clust_data_noghost[data_idx][:, 7] == inter_id) & (clust_data_noghost[data_idx][:, 6] == part_id))[0]
-            # Only record if primary + above voxel count threshold
-            if is_primary and len(particle_noghost_idx) > min_particle_voxel_count:
-                primary_count += 1
-                primary_particles.append((particle, particle_idx))
-        #print('primary count', primary_count)
         #
         # Select interactions that have
         # - at least 1 lepton among primary particles
@@ -128,7 +211,10 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         for pdg in primary_types:
             pred_primary_pdgs[pdg] = 0
 
-        for p, part in primary_particles:
+        matched_idx, matched_overlap = match([p for _, p in primary_particles],
+                                            [p for _, p in pred_primary_particles],
+                                            min_overlap_count=min_overlap_count)
+        for i, (p, part) in enumerate(primary_particles):
             if int(p.pdg_code()) in primary_pdgs:
                 true_primary_pdgs[int(p.pdg_code())] += 1
             # Record energy if electron/proton is contained
@@ -144,23 +230,20 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
             part_idx = get_cluster_label(clust_data[data_idx], [part], column=6)[0]
             part_type = get_cluster_label(clust_data[data_idx], [part], column=9)[0]
             true_seg = get_cluster_label(clust_data[data_idx], [part], column=10)[0]
-            matched_pred_part = None
-            matched_pred_idx = -1
-            max_intersection = 0
-            for pred_idx, pred_part in pred_primary_particles:
-                intersection = np.intersect1d(part, pred_part)
-                if len(intersection) > max_intersection:
-                    max_intersection = len(intersection)
-                    matched_pred_part = pred_part
-                    matched_pred_idx = pred_idx
+
+            matched_pred_idx = matched_idx[i]
+            max_intersection = matched_overlap[i]
 
             num_pred_voxels = -1
             pred_type = -1
             pred_seg = -1
             sum_pred_voxels = -1
             pred_length = -1
-            if max_intersection > min_overlap_count:
+            matched_pred_part = []
+            if matched_pred_idx > -1:
                 # We found a match for this particle.
+                matched_pred_part = pred_primary_particles[matched_pred_idx][1]
+
                 matched_primaries_count += 1
                 num_pred_voxels = len(matched_pred_part)
                 pred_type = np.argmax(node_pred_type[data_idx][matched_pred_idx])
@@ -190,14 +273,8 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         # 5. Loop over predicted interactions and
         # find a match for current true interaction
         #
-        matched_inter_id = -1
-        max_overlap = 0
-        for iid in np.unique(inter_group_pred[data_idx]):
-            pred_interaction_mask = np.hstack(particles[data_idx][inter_group_pred[data_idx] == iid])
-            intersection = np.intersect1d(pred_interaction_mask, np.where(interaction_mask)[0])
-            if len(intersection) > max_overlap:
-                max_overlap = len(intersection)
-                matched_inter_id = iid
+        matched_inter_id, max_overlap = match_interactions(clust_data, inter_id, inter_group_pred, particles, data_idx=data_idx)
+
         matched_inter_num_voxels = -1
         vtx_resolution = -1
         if matched_inter_id > -1:
