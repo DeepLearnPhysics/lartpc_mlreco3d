@@ -48,7 +48,7 @@ def get_track_endpoints(particle : Particle, verbose=False):
     if particle.ppn_candidates.shape[0] == 0:
         print("Particle {} has no PPN candidates!"\
             " Running brute-force endpoint finder...".format(particle.id))
-        get_track_endpoints_brute_force(particle)
+        get_track_endpoints_centroid(particle)
     elif particle.ppn_candidates.shape[0] == 1:
         print("Particle {} has only one PPN candidate!"\
             " Running brute-force endpoint finder...".format(particle.id))
@@ -57,15 +57,15 @@ def get_track_endpoints(particle : Particle, verbose=False):
             particle.ppn_candidates.shape[0], particle.id))
     centroid = particle.points.mean(axis=0)
     ppn_coordinates = particle.ppn_candidates[['x', 'y', 'z']].to_numpy()
-    dist = cdist(centroid.reshape(1, -1), 
-                 particle.ppn_candidates[['x', 'y', 'z']].to_numpy()).squeeze()
+    dist = cdist(centroid.reshape(1, -1), ppn_coordinates).squeeze()
     endpt_inds = dist.argsort()[-2:]
-    endpoints = ppn_coordinates[endpt_inds]
+    endpoints = particle.ppn_candidates.iloc[endpt_inds]
     particle.endpoints = endpoints
     return endpoints
 
 
-def get_track_endpoints_brute_force(particle):
+
+def get_track_endpoints_centroid(particle):
     '''
     Computes track endpoints without ppn predictions by
     selecting the farthest two points from the coordinate centroid. 

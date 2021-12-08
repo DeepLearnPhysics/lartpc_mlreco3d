@@ -71,7 +71,7 @@ def match(primary_particles, pred_primary_particles, min_overlap_count=1):
 
     Returns:
     - array of N matched predicted particles, contains index
-    of matched particle within [0, M[ for each true particle.
+    of matched particle within [0, M] for each true particle.
     - array of N values, contains overlap for each true particle
     with matched particle.
 

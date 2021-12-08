@@ -8,8 +8,10 @@ from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
 from scipy.special import softmax
-from .particle import Particle
+from .particle import Particle, TruthParticle
 from .point_matching import *
+
+from mlreco.utils.groups import type_labels as TYPE_LABELS
 
 
 class FullChainPredictor:
@@ -67,7 +69,7 @@ class FullChainPredictor:
     4) Does not support deghosting at the moment. (TODO)
     '''
     def __init__(self, model, data_blob, result, cfg):
-        self.module_config = cfg
+        self.module_config = cfg['model']['modules']
         self.data_blob = data_blob
         self.result = result
         self.num_batches = len(data_blob['input_data'])
@@ -193,6 +195,7 @@ class FullChainPredictor:
             new_labels[mask] = c
         return new_labels
     
+
     def _fit_predict_fragments(self, entry, randomize=False):
         '''
                 
@@ -214,6 +217,7 @@ class FullChainPredictor:
             
         return new_labels
     
+
     def _fit_predict_groups(self, entry, randomize=False):
         
         particles = self.result['particles'][entry]
@@ -231,7 +235,8 @@ class FullChainPredictor:
             
         return new_labels
     
-    def _fit_predict_interactions(self, entry, randomize=True):
+
+    def _fit_predict_interactions(self, entry, randomize=False):
         
         inter_group_pred = self.result['inter_group_pred'][entry]
         particles = self.result['particles'][entry]
@@ -248,6 +253,7 @@ class FullChainPredictor:
             
         return new_labels
     
+
     def _fit_predict_pids(self, entry):
         
         particles = self.result['particles'][entry]
@@ -262,7 +268,8 @@ class FullChainPredictor:
             
         return pred_pids
     
-    def _fit_predict_particles(self, entry, relabel=True, **kwargs):
+
+    def _fit_predict_particles(self, entry, relabel=False, **kwargs):
         
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
         depositions = self.data_blob['input_data'][entry][:, 4]
@@ -282,14 +289,23 @@ class FullChainPredictor:
         assert len(inter_group_pred) == len(particles)
         assert len(particles_seg) == len(particles)
         assert len(pids) == len(particles)
+
+        node_pred_vtx = self.result['node_pred_vtx'][entry]
+
+        pred_group_ids = self._fit_predict_groups(entry)
+
+        assert node_pred_vtx.shape[0] == len(particles)
         
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
             semantic_type = particles_seg[i]
             interaction_id = inter_group_pred[i]
+            is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, semantic_type, interaction_id, 
-                            pids[i], softmax(type_logits[i])[pids[i]], 0, 
-                            depositions=depositions)
+                            pids[i], batch_id=entry, 
+                            depositions=depositions, is_primary=is_primary, 
+                            pid_conf=softmax(type_logits[i])[pids[i]])
+            part.voxel_indices = p
             out.append(part)
 
         ppn_results = self._fit_predict_ppn(entry)
@@ -304,6 +320,7 @@ class FullChainPredictor:
                 p.endpoints = pts
 
         return out
+
 
     def fit_predict_entry(self, entry, **kwargs):
         '''
@@ -327,6 +344,7 @@ class FullChainPredictor:
             'pred_pids': pred_pids
         }
 
+
     def fit_predict(self):
         '''
         Predict all samples in a given batch contained in <data_blob>.
@@ -340,6 +358,7 @@ class FullChainPredictor:
             all_predictions_batch.append(pred_dict)
 
         return all_predictions_batch
+
 
 class FullChainEvaluator(FullChainPredictor):
     '''
@@ -405,6 +424,8 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     '''
+
+
     def __init__(self, model, data_blob, result, cfg):
         super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
         
@@ -427,3 +448,44 @@ class FullChainEvaluator(FullChainPredictor):
             out[fn.__name__] = fn(pred_seg, true_seg)
 
         return pred_seg, true_seg, out
+
+
+    def get_true_particles(self, entry):
+
+        labels = self.data_blob['cluster_label'][entry]
+        particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
+
+        particles = []
+
+        for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
+            pid = int(p.id())
+            if pid not in particle_ids:
+                continue
+            is_primary = p.group_id() == p.parent_id()
+            if p.pdg_code() not in TYPE_LABELS:
+                continue
+            pdg = TYPE_LABELS[p.pdg_code()]
+            mask = labels[:, 6] == pid
+            coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+            semantic_type = np.unique(labels[mask][:, -1])
+            if semantic_type.shape[0] > 1:
+                raise ValueError("Interaction ID of Particle {} is not "\
+                    "unique: {}".format(pid, str(semantic_type)))
+            else:
+                semantic_type = semantic_type[0]
+            interaction_id = np.unique(labels[mask][:, 7].astype(int))
+            if interaction_id.shape[0] > 1:
+                raise ValueError("Interaction ID of Particle {} is not "\
+                    "unique: {}".format(pid, str(interaction_id)))
+            else:
+                interaction_id = interaction_id[0]
+            fragments = np.unique(labels[mask][:, 5].astype(int))
+            depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
+            particle = TruthParticle(coords, pid, semantic_type, interaction_id, 
+                pdg, batch_id=entry, depositions=depositions, is_primary=is_primary)
+            particle.fragments = fragments
+            particle.particle_asis = p
+            particle.voxel_indices = np.where(mask)[0]
+            particles.append(particle)
+
+        return particles
