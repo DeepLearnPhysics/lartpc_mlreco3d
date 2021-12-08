@@ -46,8 +46,12 @@ def get_track_endpoints(particle : Particle, verbose=False):
             " endpoints to tracks!".format(particle.id, 
                                            particle.semantic_type))
     if particle.ppn_candidates.shape[0] == 0:
-        raise AttributeError(
-            "Particle {} has no PPN candidates!".format(particle.id))
+        print("Particle {} has no PPN candidates!"\
+            " Running brute-force endpoint finder...".format(particle.id))
+        get_track_endpoints_brute_force(particle)
+    elif particle.ppn_candidates.shape[0] == 1:
+        print("Particle {} has only one PPN candidate!"\
+            " Running brute-force endpoint finder...".format(particle.id))
     if verbose:
         print("Found {} PPN candidate points for particle {}".format(
             particle.ppn_candidates.shape[0], particle.id))
@@ -59,6 +63,21 @@ def get_track_endpoints(particle : Particle, verbose=False):
     endpoints = ppn_coordinates[endpt_inds]
     particle.endpoints = endpoints
     return endpoints
+
+
+def get_track_endpoints_brute_force(particle):
+    '''
+    Computes track endpoints without ppn predictions by
+    selecting the farthest two points from the coordinate centroid. 
+    '''
+    coords = particle.points
+    centroid = coords.mean(axis=0)
+    dist = cdist(coords, centroid.reshape(1, -1))
+    inds = dist.squeeze().argsort()[-2:]
+    endpoints = coords[inds]
+    particle.endpoints = endpoints
+    return endpoints
+
 
 def get_shower_startpoint(particle : Particle, verbose=False):
     '''

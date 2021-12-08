@@ -1,3 +1,4 @@
+from typing import Callable, Tuple
 import numpy as np
 import pandas as pd
 
@@ -12,17 +13,58 @@ from .point_matching import *
 
 
 class FullChainPredictor:
+
+    CONCAT_RESULT = ['input_node_features', 
+                     'input_edge_features', 
+                     'points', 'ppn_coords', 'mask_ppn', 'ppn_layers', 
+                     'classify_endpoints', 'seediness', 'margins', 
+                     'embeddings', 'fragments', 'fragments_seg', 
+                     'shower_fragments', 'shower_edge_index',
+                     'shower_edge_pred','shower_node_pred',
+                     'shower_group_pred','track_fragments', 
+                     'track_edge_index', 'track_node_pred', 'track_edge_pred', 
+                     'track_group_pred', 'particle_fragments', 
+                     'particle_edge_index', 'particle_node_pred', 
+                     'particle_edge_pred', 'particle_group_pred', 
+                     'particles','inter_edge_index', 'inter_node_pred', 
+                     'inter_edge_pred', 'node_pred_p', 'node_pred_type', 
+                     'flow_edge_pred', 'kinematics_particles', 
+                     'kinematics_edge_index', 'clust_fragments', 
+                     'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 
+                     'node_pred_vtx', 'total_num_points', 
+                     'total_nonghost_points', 'spatial_embeddings', 
+                     'occupancy', 'hypergraph_features', 
+                     'features', 'feature_embeddings', 'covariance']
     '''
     Helper class for full chain prediction.
 
-    Usage:
+    Usage Example:
 
         model = Trainer._net.module
         entry = 0   # batch id
-        predictor = FullChainPredictor(model, data_blob, res, 
-                                       cfg['model']['modules'])
+        predictor = FullChainPredictor(model, data_blob, res, cfg['model']['modules'])
         pred_seg = predictor._fit_predict_semantics(entry)
 
+    Instructions
+    -----------------------------------------------------------------------
+
+    1) To avoid confusion between different quantities, the label namings under
+    iotools.schema must be set as follows:
+
+        schema:
+            input_data:
+                - parse_sparse3d_scn
+                - sparse3d_pcluster
+
+    2) By default, unwrapper must be turned ON under trainval:
+
+        trainval:
+            unwrapper: unwrap_3d_mink
+
+    3) Some outputs needs to be listed under trainval.concat_result.
+    The predictor will run through a checklist to ensure this condition
+
+    4) Does not support deghosting at the moment. (TODO)
     '''
     def __init__(self, model, data_blob, result, cfg):
         self.module_config = cfg
@@ -43,17 +85,16 @@ class FullChainPredictor:
                 in the model. Cannot initialize Fragment Manager!
             '''
             raise AttributeError(msg)
+
+        concat_result = cfg['trainval']['concat_result']
+        check_concat = set(self.CONCAT_RESULT)
+        for i, key in enumerate(concat_result):
+            if not key in check_concat:
+                raise ValueError("Output key <{}> should be listed under "\
+                    "trainval.concat_result!".format(key))
         
             
     def _fit_predict_ppn(self, entry):
-        '''
-        Requires:
-            - segmentation
-            - points
-            - mask_ppn
-            - ppn_layers
-            - ppn_coords
-        '''
         index = self.index[entry]
         segmentation = self.result['segmentation'][entry]
         pred_seg = np.argmax(segmentation, axis=1).astype(int)
@@ -221,9 +262,10 @@ class FullChainPredictor:
             
         return pred_pids
     
-    def _fit_predict_particles(self, entry, relabel=True):
+    def _fit_predict_particles(self, entry, relabel=True, **kwargs):
         
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
+        depositions = self.data_blob['input_data'][entry][:, 4]
         particles = self.result['particles'][entry]
         inter_group_pred = self.result['inter_group_pred'][entry]
         
@@ -246,12 +288,13 @@ class FullChainPredictor:
             semantic_type = particles_seg[i]
             interaction_id = inter_group_pred[i]
             part = Particle(voxels, i, semantic_type, interaction_id, 
-                            pids[i], softmax(type_logits[i])[pids[i]], 0)
+                            pids[i], softmax(type_logits[i])[pids[i]], 0, 
+                            depositions=depositions)
             out.append(part)
 
         ppn_results = self._fit_predict_ppn(entry)
 
-        match_points_to_particles(ppn_results, out)
+        match_points_to_particles(ppn_results, out, **kwargs)
         for p in out:
             if p.semantic_type == 0:
                 pt = get_shower_startpoint(p)
@@ -262,10 +305,125 @@ class FullChainPredictor:
 
         return out
 
+    def fit_predict_entry(self, entry, **kwargs):
+        '''
+        Predict all labels of a given batch index <entry>.
+        '''
+        pred_seg = self._fit_predict_semantics(entry)
+        pred_fragments = self._fit_predict_fragments(entry, **kwargs)
+        pred_groups = self._fit_predict_groups(entry, **kwargs)
+        pred_interactions = self._fit_predict_interactions(entry, **kwargs)
+        pred_ppn = self._fit_predict_ppn(entry, **kwargs)
+        pred_particles = self._fit_predict_particles(entry, **kwargs)
+        pred_pids = self._fit_predict_pids(entry)
+
+        return {
+            'pred_seg': pred_seg,
+            'pred_fragments': pred_fragments,
+            'pred_groups': pred_groups,
+            'pred_interactions': pred_interactions,
+            'pred_ppn': pred_ppn,
+            'pred_particles': pred_particles,
+            'pred_pids': pred_pids
+        }
+
+    def fit_predict(self):
+        '''
+        Predict all samples in a given batch contained in <data_blob>.
+
+        '''
+        all_predictions_batch = []
+
+        for entry in range(self.num_batches):
+
+            pred_dict = self.fit_predict_entry(entry)
+            all_predictions_batch.append(pred_dict)
+
+        return all_predictions_batch
 
 class FullChainEvaluator(FullChainPredictor):
     '''
-    TODO
+    Helper class for full chain prediction and evaluation.
+
+    Usage:
+
+        model = Trainer._net.module
+        entry = 0   # batch id
+        predictor = FullChainEvaluator(model, data_blob, res, 
+                                       cfg['model']['modules'])
+        pred_seg = predictor._fit_predict_semantics(entry)
+
+    To avoid confusion between different quantities, the label namings under
+    iotools.schema must be set as follows:
+
+        schema:
+            input_data:
+                - parse_sparse3d_scn
+                - sparse3d_pcluster
+            segment_label:
+                - parse_sparse3d_scn
+                - sparse3d_pcluster_semantics
+            cluster_label:
+                - parse_cluster3d_clean_full
+                #- parse_cluster3d_full
+                - cluster3d_pcluster
+                - particle_pcluster
+                #- particle_mpv
+                - sparse3d_pcluster_semantics
+            particles_label:
+                - parse_particle_points_with_tagging
+                - sparse3d_pcluster
+                - particle_corrected
+            kinematics_label:
+                - parse_cluster3d_kinematics_clean
+                - cluster3d_pcluster
+                - particle_corrected
+                #- particle_mpv
+                - sparse3d_pcluster_semantics
+            particle_graph:
+                - parse_particle_graph_corrected
+                - particle_corrected
+                - cluster3d_pcluster
+            particles_asis:
+                - parse_particle_asis
+                - particle_pcluster
+                - cluster3d_pcluster
+
+
+    Instructions
+    ----------------------------------------------------------------
+
+    All evaluation functions <self.evaluate_xxx> share the following form:
+
+        f(entry, metrics_fns) -> (pred, truth, Dict[Any])
+
+    A "metric function" is a function g(pred, truth) -> Any. 
+    This allows one to make his/her own evaluaton functions if needed.
+
+    Example:
+
+
+
     '''
-    def __init__(self, model, data_blob, result, cfg, labels):
+    def __init__(self, model, data_blob, result, cfg):
         super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
+        
+        
+    def evaluate_semantics(self, entry: int, metric_fns : List[Callable]):
+        '''
+        Inputs:
+            - entry: Batch ID number
+
+        Returns:
+            - pred (1D np.array): predicted segmentation labels
+            - truth (1D np.array): true segmentation labels
+            - metric_fns: List of evaluation functions (default = [Accuracy])
+        '''
+        pred_seg = self._fit_predict_semantics(entry)
+        true_seg = self.data_blob['segment_label'][entry]
+
+        out = {}
+        for fn in metric_fns:
+            out[fn.__name__] = fn(pred_seg, true_seg)
+
+        return pred_seg, true_seg, out
