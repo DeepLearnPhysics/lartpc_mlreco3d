@@ -271,16 +271,24 @@ def group_points(ppn_pts, batch, label):
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                                    batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),**kwargs):
+                                    batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
+                                    selection=None, num_classes=5, **kwargs):
     """
     Postprocessing of PPN points.
+
     Parameters
     ----------
     data - 5-types sparse tensor
-    out - uresnet_ppn_type output
+    out - output dictionary of the full chain
     score_threshold - minimal detection score
     type_score_threshold - minimal score for a point type prediction to be considered
     type_threshold - distance threshold for matching w/ semantic type prediction
+    entry - which index to look at (within a batch of events)
+    score_pool - which operation to use to pool PPN points scores (max/min/mean)
+    enforce_type - whether to force PPN points predicted of type X
+                    to be within N voxels of a voxel with same predicted semantic
+    selection - list of list of indices to consider exclusively (eg to get PPN predictions
+                within a cluster). Shape Batch size x N_voxels (not square)
     Returns
     -------
     [bid,x,y,z,score softmax values (2 columns), occupancy,
@@ -344,7 +352,18 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         batch_index2 = ppn_coords[-1][:, 0] == b
         # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
         mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
-        num_classes = 5
+        # If we want to restrict the postprocessing to specific voxels
+        # (e.g. within a particle cluster, not the full event)
+        # then use the argument `selection`.
+        if selection is not None:
+            new_mask = np.zeros(mask.shape, dtype=np.bool)
+            if len(selection) > 0 and isinstance(selection[0], list):
+                indices = np.array(selection[int(b)])
+            else:
+                indices = np.array(selection)
+            new_mask[indices] = mask[indices]
+            mask = new_mask
+
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)
         if enable_classify_endpoints:
@@ -460,3 +479,36 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
 
     # return indices of points in input, offsets
     return pts_out
+
+
+def get_track_endpoints_geo(data, f, points_tensor=None):
+    """
+    Compute endpoints of a track-like cluster f
+    based on PPN point predictions (coordinates
+    and scores) and geometry (voxels farthest
+    apart from each other in the cluster).
+
+    If points_tensor is left unspecified, the endpoints will
+    be purely based on geometry.
+    
+    Input:
+    - data is the input data tensor, which can be indexed by f.
+    - points_tensor is the output of PPN 'points' (optional)
+    - f is a list of voxel indices for voxels that belong to the track.
+
+    Output:
+    - array of shape (2, 3) (2 endpoints, 3 coordinates each)
+    """
+    dist_mat = torch.cdist(data[f,1:4], data[f,1:4])
+    idx = torch.argmax(dist_mat)
+    idxs = int(idx)//len(f), int(idx)%len(f)
+    scores = torch.sigmoid(points_tensor[f, -1])
+    correction0, correction1 = 0.0, 0.0
+    if points_tensor is not None:
+        correction0 = points_tensor[f][idxs[0], :3] + \
+                      0.5 if scores[idxs[0]] > 0.5 else 0.0
+        correction1 = points_tensor[f][idxs[1], :3] + \
+                      0.5 if scores[idxs[1]] > 0.5 else 0.0
+    end_points = torch.cat([data[f[idxs[0]],1:4] + correction0,
+                            data[f[idxs[1]],1:4] + correction1])
+    return end_points

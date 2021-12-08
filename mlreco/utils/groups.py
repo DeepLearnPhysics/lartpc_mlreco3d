@@ -346,6 +346,19 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
 
     return nu_id
 
+
+type_labels = {
+    22: 0,  # photon
+    11: 1,  # e-
+    -11: 1, # e+
+    13: 2,  # mu-
+    -13: 2, # mu+
+    211: 3, # pi+
+    -211: 3, # pi-
+    2212: 4, # protons
+}
+
+
 def get_particle_id(particles_v, nu_ids):
     '''
     Function that gives one of five labels to particles of
@@ -366,17 +379,6 @@ def get_particle_id(particles_v, nu_ids):
     Outputs:
         - array: (N) list of group ids
     '''
-    type_labels = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
-
     particle_ids = np.empty(len(nu_ids))
     # nu_id = 0 for MPR/cosmic, nu_id = 1 for MPV/neutrino
     for i in range(len(particle_ids)):
