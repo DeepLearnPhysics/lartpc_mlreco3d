@@ -354,7 +354,7 @@ class FullChainPredictor:
         return vertex_info
     
 
-    def get_particles(self, entry, **kwargs) -> List[Particle]:
+    def get_particles(self, entry, semantic_type=False, threshold=2) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -410,10 +410,10 @@ class FullChainPredictor:
         
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
-            semantic_type = particles_seg[i]
+            seg_label = particles_seg[i]
             interaction_id = inter_group_pred[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
-            part = Particle(voxels, i, semantic_type, interaction_id, 
+            part = Particle(voxels, i, seg_label, interaction_id, 
                             pids[i], batch_id=entry, 
                             depositions=depositions, is_primary=is_primary, 
                             pid_conf=softmax(type_logits[i])[pids[i]])
@@ -422,7 +422,8 @@ class FullChainPredictor:
 
         ppn_results = self._fit_predict_ppn(entry)
 
-        match_points_to_particles(ppn_results, out, **kwargs)
+        match_points_to_particles(ppn_results, out, threshold=threshold)
+        # This should probably be separated to a selection algorithm
         for p in out:
             if p.semantic_type == 0:
                 pt = get_shower_startpoint(p)
@@ -480,7 +481,7 @@ class FullChainPredictor:
             'pred_fragments': pred_fragments,
             'pred_groups': pred_groups,
             'pred_interaction_labels': pred_interaction_labels,
-            'pred_ppn': pred_ppn,
+            # 'pred_ppn': pred_ppn,
             'pred_pids': pred_pids
         }
 
@@ -660,17 +661,19 @@ class FullChainEvaluator(FullChainPredictor):
         return out
 
 
-    def match_particles(self, entry, relabel=False, **kwargs):
-        pred_particles = self.get_particles(entry, **kwargs)
+    def match_particles(self, entry, relabel=False, primaries=True,
+                        min_overlap_count=1, threshold=2):
+        pred_particles = self.get_particles(entry, threshold=threshold)
         true_particles = self.get_true_particles(entry)
         match = match_particles_fn(pred_particles, true_particles, 
-                                   relabel=relabel, **kwargs)
+                                   relabel=relabel, primaries=primaries,
+                                   min_overlap_count=min_overlap_count)
         return match
 
 
-    def match_interactions(self, entry, relabel_particles=False, 
-                           relabel_interactions=False, **kwargs):
-        pred_ias = self.get_interactions(entry, **kwargs)
+    def match_interactions(self, entry, min_overlap_count=1):
+        pred_ias = self.get_interactions(entry)
         true_ias = self.get_true_interactions(entry)
-        match = match_interactions_fn(pred_ias, true_ias, **kwargs)
+        match = match_interactions_fn(pred_ias, true_ias, 
+                                      min_overlap_count=min_overlap_count)
         return match

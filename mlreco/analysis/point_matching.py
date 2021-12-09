@@ -26,6 +26,7 @@ def match_points_to_particles(ppn_points : pd.DataFrame,
             "'PPN Point Type' == {}".format(semantic_type))
     else:
         ppn_points_type = ppn_points
+        # TODO: Fix semantic type ppn selection
     
     ppn_coords = ppn_points_type[['x', 'y', 'z']].to_numpy()
     for particle in particles:

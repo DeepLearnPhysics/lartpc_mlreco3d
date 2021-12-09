@@ -142,8 +142,8 @@ def match_particles_fn(pred_particles  : List[Particle],
             overlap_matrix[i, j] = len(np.intersect1d(tp.voxel_indices, 
                                                       p.voxel_indices))
 
-    idx = overlap_matrix.argmax(axis=1)
-    intersections = overlap_matrix.max(axis=1)
+    idx = overlap_matrix.argmax(axis=0)
+    intersections = overlap_matrix.max(axis=0)
 
     idx[intersections < min_overlap_count] = -1
     intersections[intersections < min_overlap_count] = -1
