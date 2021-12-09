@@ -105,23 +105,24 @@ class Interaction:
         if self.vertex is None:
             self.vertex = [None, None, None]
 
+        self.particle_ids = [p.id for p in self.particles]
+
 
     def __repr__(self):
 
-        msg = "Interaction {}, Vertex: x={}, y={}, z={}\n"\
+        msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "-----------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
 
     def __str__(self):
         return "Interaction(id={}, vertex={}, Particles={})".format(
-            self.id, str(self.vertex), str([p.id for p in self.particles]))
+            self.id, str(self.vertex), str(self.particle_ids))
 
 
-
-def match_particles(pred_particles  : List[Particle], 
-                    truth_particles : List[TruthParticle], 
-                    primaries=True, min_overlap_count=1):
+def match_particles_fn(pred_particles  : List[Particle], 
+                       truth_particles : List[TruthParticle], 
+                       primaries=True, min_overlap_count=1, relabel=False):
 
     part_p, part_t = pred_particles, truth_particles
     if primaries:
@@ -154,22 +155,25 @@ def match_particles(pred_particles  : List[Particle],
             matched_truth = None
         else:
             matched_truth = part_t[select_idx]
+        if relabel:  # TODO: This can potentially lead to duplicate labels
+            p.id = j
+            matched_truth.id = j
         matches.append((p, matched_truth))
 
     return matches, idx, intersections
 
 
-def match_interactions(pred_interactions : List[Interaction], 
-                       true_interactions : List[Interaction], 
-                       min_overlap_count=1):
+def match_interactions_fn(pred_interactions : List[Interaction], 
+                          true_interactions : List[Interaction], 
+                          min_overlap_count=1, relabel=False):
     
-    f = partial(match_particles, primaries=False, 
-                min_overlap_count=min_overlap_count)
+    f = partial(match_particles_fn, primaries=False, 
+                min_overlap_count=min_overlap_count, relabel=relabel)
     
     return f(pred_interactions, true_interactions)
 
 
-def group_particles_to_interactions(particles):
+def group_particles_to_interactions_fn(particles : List[Particle]):
 
     interactions = defaultdict(list)
     for p in particles:

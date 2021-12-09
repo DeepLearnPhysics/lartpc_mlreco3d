@@ -9,7 +9,8 @@ def get_ppn_points_per_particles(input_data, res,
                                 data_idx=0, coords_col=(1, 4),
                                 attaching_threshold=2,
                                 track_label=1,
-                                shower_label=0):
+                                shower_label=0,
+                                unwrapped=False):
     """
     Get predicted PPN points
 
@@ -21,12 +22,12 @@ def get_ppn_points_per_particles(input_data, res,
     N is the number of particles which are either track or shower (predicted).
     """
     clusts = res['inter_particles'][data_idx]
-
     ppn_candidates, c_candidates = [], []
     ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res,
                                         entry=data_idx,
                                         score_threshold=0.5,
-                                        type_threshold=2)
+                                        type_threshold=2,
+                                        unwrapped=unwrapped)
                                         #selection=c)
 
     # if ppn.shape[0] == 0:
@@ -98,13 +99,12 @@ def get_ppn_points_per_particles(input_data, res,
         # # ppn_candidates.append(ppn[((ppn_type[:, track_label] > 0.5) & (ppn_endpoints == endpoint_label)) | (ppn_type[:, shower_label] > 0.5)])
         # ppn_candidates.append(ppn[((ppn_type[:, track_label] > 0.5) ) | (ppn_type[:, shower_label] > 0.5)])
         c_candidates.append(c)
-
     return ppn_candidates, c_candidates
 
 def predict_vertex(inter_idx, data_idx, input_data, res,
                     coords_col=(1, 4), primary_label=1,
                     shower_label=0, track_label=1, endpoint_label=0,
-                    attaching_threshold=2, inter_threshold=10):
+                    attaching_threshold=2, inter_threshold=10, unwrapped=False):
     """
     Heuristic to find the vertex by looking at
     - predicted primary particles within predicted interaction
@@ -113,6 +113,9 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
     For now, very simple: taking the barycenter of potential candidates.
     """
     clusts = res['inter_particles'][data_idx]
+    if inter_idx not in set(res['inter_group_pred'][data_idx]):
+        raise ValueError("Interaction ID: {} does not exist for data entry : {}.\n"\
+            " Available Interactions: {}".format(inter_idx, data_idx, str(np.unique(res['inter_group_pred'][data_idx]))))
     inter_mask = res['inter_group_pred'][data_idx] == inter_idx
     interaction = clusts[inter_mask]
 
@@ -126,7 +129,9 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
                                                             attaching_threshold=attaching_threshold,
                                                             track_label=track_label,
                                                             shower_label=shower_label,
-                                                            coords_col=coords_col)
+                                                            coords_col=coords_col,
+                                                            unwrapped=unwrapped)
+
 
     all_voxels = input_data[data_idx]
     if 'ghost' in res:

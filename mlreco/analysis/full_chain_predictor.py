@@ -8,10 +8,11 @@ from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
 from scipy.special import softmax
-from .particle import Particle, TruthParticle
+from .particle import *
 from .point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
+from mlreco.utils.vertex import get_vertex, predict_vertex
 
 
 class FullChainPredictor:
@@ -104,10 +105,11 @@ class FullChainPredictor:
         ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry], 
                                               self.result, 
                                               entry=entry)
+        print(ppn.shape)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
-        
+
         update_dict = defaultdict(list)
         for i, pred_point in enumerate(ppn_voxels):
             pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
@@ -179,8 +181,8 @@ class FullChainPredictor:
     
         return pred, G, subgraph
     
-    
-    def randomize_labels(self, labels):
+    @staticmethod
+    def randomize_labels(labels):
         
         labels, _ = unique_label(labels)
         
@@ -196,10 +198,7 @@ class FullChainPredictor:
         return new_labels
     
 
-    def _fit_predict_fragments(self, entry, randomize=False):
-        '''
-                
-        '''
+    def _fit_predict_fragments(self, entry):
 
         fragments = self.result['fragments'][entry]
         
@@ -211,14 +210,10 @@ class FullChainPredictor:
             
         new_labels = pred_frag_labels
             
-        if randomize:
-            new_labels = self.randomize_labels(pred_frag_labels)
-            new_labels[pred_frag_labels == -1] = -1
-            
         return new_labels
     
 
-    def _fit_predict_groups(self, entry, randomize=False):
+    def _fit_predict_groups(self, entry):
         
         particles = self.result['particles'][entry]
         num_voxels = self.data_blob['input_data'][entry].shape[0]
@@ -229,14 +224,10 @@ class FullChainPredictor:
             
         new_labels = pred_group_labels
             
-        if randomize:
-            new_labels = self.randomize_labels(pred_group_labels)
-            new_labels[pred_group_labels == -1] = -1
-            
         return new_labels
     
 
-    def _fit_predict_interactions(self, entry, randomize=False):
+    def _fit_predict_interaction_labels(self, entry):
         
         inter_group_pred = self.result['inter_group_pred'][entry]
         particles = self.result['particles'][entry]
@@ -247,9 +238,6 @@ class FullChainPredictor:
             pred_inter_labels[mask] = inter_group_pred[i]
             
         new_labels = pred_inter_labels
-        if randomize:
-            new_labels = self.randomize_labels(pred_inter_labels)
-            new_labels[pred_inter_labels == -1] = -1
             
         return new_labels
     
@@ -267,17 +255,23 @@ class FullChainPredictor:
             pred_pids[mask] = pids[i]
             
         return pred_pids
+
+
+    def _fit_predict_vertex_info(self, entry, inter_idx, **kwargs):
+
+        vertex_info = predict_vertex(inter_idx, entry, 
+                                     self.data_blob['input_data'],
+                                     self.result, **kwargs)
+
+        return vertex_info
     
 
-    def _fit_predict_particles(self, entry, relabel=False, **kwargs):
+    def get_particles(self, entry, **kwargs) -> List[Particle]:
         
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
         depositions = self.data_blob['input_data'][entry][:, 4]
         particles = self.result['particles'][entry]
         inter_group_pred = self.result['inter_group_pred'][entry]
-        
-        if relabel:
-            inter_group_pred, _ = unique_label(inter_group_pred)
         
         particles_seg = self.result['particles_seg'][entry]
         
@@ -322,42 +316,60 @@ class FullChainPredictor:
         return out
 
 
-    def fit_predict_entry(self, entry, **kwargs):
+    def get_interactions(self, entry, **kwargs) -> List[Interaction]:
+        particles = self.get_particles(entry, **kwargs)
+        out = group_particles_to_interactions_fn(particles)
+        for ia in out:
+            vertex_info = self._fit_predict_vertex_info(entry, ia.id)
+            ia.vertex = vertex_info[2]
+        return out
+
+
+    def fit_predict_labels(self, entry, **kwargs):
         '''
         Predict all labels of a given batch index <entry>.
+
+        We define <labels> to be 1d tensors that annotate voxels. 
         '''
         pred_seg = self._fit_predict_semantics(entry)
         pred_fragments = self._fit_predict_fragments(entry, **kwargs)
         pred_groups = self._fit_predict_groups(entry, **kwargs)
-        pred_interactions = self._fit_predict_interactions(entry, **kwargs)
+        pred_interaction_labels = self._fit_predict_interaction_labels(entry, **kwargs)
         pred_ppn = self._fit_predict_ppn(entry, **kwargs)
-        pred_particles = self._fit_predict_particles(entry, **kwargs)
         pred_pids = self._fit_predict_pids(entry)
 
         return {
             'pred_seg': pred_seg,
             'pred_fragments': pred_fragments,
             'pred_groups': pred_groups,
-            'pred_interactions': pred_interactions,
+            'pred_interaction_labels': pred_interaction_labels,
             'pred_ppn': pred_ppn,
-            'pred_particles': pred_particles,
             'pred_pids': pred_pids
         }
 
 
-    def fit_predict(self):
+    def fit_predict(self, **kwargs):
         '''
         Predict all samples in a given batch contained in <data_blob>.
 
         '''
-        all_predictions_batch = []
+        labels = []
+        list_particles, list_interactions = [], []
 
         for entry in range(self.num_batches):
 
             pred_dict = self.fit_predict_entry(entry)
-            all_predictions_batch.append(pred_dict)
+            labels.append(pred_dict)
+            particles = self.get_particles(entry, **kwargs)
+            interactions = self.get_interactions(entry)
+            list_particles.append(particles)
+            list_interactions.append(interactions)
 
-        return all_predictions_batch
+        self._particles = list_particles
+        self._interactions = list_interactions
+        self._labels = labels
+
+        return labels
 
 
 class FullChainEvaluator(FullChainPredictor):
@@ -421,33 +433,11 @@ class FullChainEvaluator(FullChainPredictor):
 
     Example:
 
-
-
     '''
 
 
     def __init__(self, model, data_blob, result, cfg):
         super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
-        
-        
-    def evaluate_semantics(self, entry: int, metric_fns : List[Callable]):
-        '''
-        Inputs:
-            - entry: Batch ID number
-
-        Returns:
-            - pred (1D np.array): predicted segmentation labels
-            - truth (1D np.array): true segmentation labels
-            - metric_fns: List of evaluation functions (default = [Accuracy])
-        '''
-        pred_seg = self._fit_predict_semantics(entry)
-        true_seg = self.data_blob['segment_label'][entry]
-
-        out = {}
-        for fn in metric_fns:
-            out[fn.__name__] = fn(pred_seg, true_seg)
-
-        return pred_seg, true_seg, out
 
 
     def get_true_particles(self, entry):
@@ -489,3 +479,44 @@ class FullChainEvaluator(FullChainPredictor):
             particles.append(particle)
 
         return particles
+
+
+    def get_true_interactions(self, entry) -> List[Interaction]:
+        true_particles = self.get_true_particles(entry)
+        out = group_particles_to_interactions_fn(true_particles)
+        vertices = self.get_true_vertices(entry)
+        for ia in out:
+            ia.vertex = vertices[ia.id]
+        return out
+
+
+    def get_true_vertices(self, entry):
+        inter_idxs = np.unique(self.data_blob['cluster_label'][entry][:, 7].astype(int))
+        out = {}
+        for inter_idx in inter_idxs:
+            if inter_idx < 0:
+                continue
+            vtx = get_vertex(self.data_blob['kinematics_label'],
+                            self.data_blob['cluster_label'],
+                            data_idx=entry,
+                            inter_idx=inter_idx)
+            out[inter_idx] = vtx
+        return out
+
+
+    def match_particles(self, entry, relabel=False, **kwargs):
+        pred_particles = self.get_particles(entry, **kwargs)
+        true_particles = self.get_true_particles(entry)
+        match = match_particles_fn(pred_particles, true_particles, 
+                                   relabel=relabel, **kwargs)
+        return match
+
+
+    def match_interactions(self, entry, relabel_particles=False, 
+                           relabel_interactions=False, **kwargs):
+        pred_ias = self.get_interactions(entry, **kwargs)
+        true_ias = self.get_true_interactions(entry)
+        match = match_interactions_fn(pred_ias, true_ias, 
+                                      relabel_particles=relabel_particles,
+                                      relabel=relabel_interactions, **kwargs)
+        return match
