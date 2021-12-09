@@ -38,14 +38,15 @@ class FullChainPredictor:
                      'total_nonghost_points', 'spatial_embeddings', 
                      'occupancy', 'hypergraph_features', 
                      'features', 'feature_embeddings', 'covariance']
+
     '''
-    Helper class for full chain prediction.
+    User Interface for full chain inference.
 
     Usage Example:
 
         model = Trainer._net.module
         entry = 0   # batch id
-        predictor = FullChainPredictor(model, data_blob, res, cfg['model']['modules'])
+        predictor = FullChainPredictor(model, data_blob, res, cfg)
         pred_seg = predictor._fit_predict_semantics(entry)
 
     Instructions
@@ -98,6 +99,16 @@ class FullChainPredictor:
         
             
     def _fit_predict_ppn(self, entry):
+        '''
+        Method for predicting ppn predictions.
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - df (pd.DataFrame): pandas dataframe of ppn points, with
+            x, y, z, coordinates, Score, Type, and sample index.
+        '''
         index = self.index[entry]
         segmentation = self.result['segmentation'][entry]
         pred_seg = np.argmax(segmentation, axis=1).astype(int)
@@ -127,35 +138,37 @@ class FullChainPredictor:
         
     def _fit_predict_semantics(self, entry):
         '''
-        Requires:
-            - segmentation
+        Method for predicting semantic segmentation labels. 
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - labels: 1D numpy integer array of predicted segmentation labels.  
         '''
         segmentation = self.result['segmentation'][entry]
-        out = np.argmax(segmentation, axis=1)
+        out = np.argmax(segmentation, axis=1).astype(int)
         return out
-        
-    
-#     def _fit_predict_dbscan_fragments(self, entry):
-        
-#         wrapped_data = np.vstack(self.data_blob['input_data'])
-        
-#         cnn_result = {
-#             'segmentation': np.vstack(self.result['segmentation']),
-#             'points': np.vstack(self.result['points']), 
-#             'ppn_coords': np.vstack(self.data_blob['ppn_coords']), 
-#             'mask_ppn': np.vstack(self.data_blob['mask_ppn']), 
-#         }
-        
-#         fragment_data = self.dbscan_fragment_manager(wrapped_data, )
-        
-#         pass
-    
+
+
     def _fit_predict_gspice_fragments(self, entry):
         '''
-        Requires:
-            - segmentation
-            - graph
-            - graph_info
+        Method for predicting fragment labels (dense clustering)
+        using graph spice. 
+
+        Inputs:
+
+            - entry: Batch number to retrieve example.
+
+        Returns:
+
+            - pred: 1D numpy integer array of predicted fragment labels.
+            The labels only range over classes which were designated to be
+            processed in GraphSPICE. 
+
+            - G: networkx graph representing the current entry
+
+            - subgraph: same graph in torch_geometric.Data format. 
         '''
         import warnings
         warnings.filterwarnings('ignore') 
@@ -183,7 +196,9 @@ class FullChainPredictor:
     
     @staticmethod
     def randomize_labels(labels):
-        
+        '''
+        Simple method to randomize label order (useful for plotting)
+        '''
         labels, _ = unique_label(labels)
         
         N = np.unique(labels).shape[0]
@@ -199,7 +214,23 @@ class FullChainPredictor:
     
 
     def _fit_predict_fragments(self, entry):
+        '''
+        Method for obtaining voxel-level fragment labels for full image, 
+        including labels from both GraphSPICE and DBSCAN. 
 
+        "Voxel-level" means that the label tensor has the same length
+        as the full point cloud of the current image (specified by entry #)
+
+        If a voxel is not assigned to any fragment (ex. low E depositions),
+        we assign -1 as its fragment label. 
+
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - labels: 1D numpy integer array of predicted fragment labels.  
+        '''
         fragments = self.result['fragments'][entry]
         
         num_voxels = self.data_blob['input_data'][entry].shape[0]
@@ -214,7 +245,19 @@ class FullChainPredictor:
     
 
     def _fit_predict_groups(self, entry):
-        
+        '''
+        Method for obtaining voxel-level group labels. 
+
+        If a voxel does not belong to any particle (ex. low E depositions),
+        we assign -1 as its group (particle) label. 
+
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - labels: 1D numpy integer array of predicted group labels.  
+        '''
         particles = self.result['particles'][entry]
         num_voxels = self.data_blob['input_data'][entry].shape[0]
         pred_group_labels = -np.ones(num_voxels).astype(int)
@@ -228,7 +271,19 @@ class FullChainPredictor:
     
 
     def _fit_predict_interaction_labels(self, entry):
-        
+        '''
+        Method for obtaining voxel-level interaction labels for full image.
+
+        If a voxel does not belong to any interaction (ex. low E depositions),
+        we assign -1 as its interaction (particle) label. 
+
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - labels: 1D numpy integer array of predicted interaction labels.  
+        '''
         inter_group_pred = self.result['inter_group_pred'][entry]
         particles = self.result['particles'][entry]
         num_voxels = self.data_blob['input_data'][entry].shape[0]
@@ -243,7 +298,20 @@ class FullChainPredictor:
     
 
     def _fit_predict_pids(self, entry):
-        
+        '''
+        Method for obtaining voxel-level particle type 
+        (photon, electron, muon, ...) labels for full image.
+
+        If a voxel does not belong to any particle (ex. low E depositions),
+        we assign -1 as its particle type label. 
+
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+        Returns:
+            - labels: 1D numpy integer array of predicted particle type labels.  
+        '''
         particles = self.result['particles'][entry]
         type_logits = self.result['node_pred_type'][entry]
         pids = np.argmax(type_logits, axis=1)
@@ -258,7 +326,27 @@ class FullChainPredictor:
 
 
     def _fit_predict_vertex_info(self, entry, inter_idx, **kwargs):
+        '''
+        Method for obtaining interaction vertex information given
+        entry number and interaction ID number.
 
+        Inputs:
+            - entry: Batch number to retrieve example.
+
+            - inter_idx: Interaction ID number. 
+
+        If the interaction specified by <inter_idx> does not exist
+        in the sample numbered by <entry>, function will raise a
+        ValueError. 
+
+        Returns:
+            - vertex_info: tuple of length 4, with the following objects:
+                * ppn_candidates: 
+                * c_candidates: 
+                * vtx_candidate: (x,y,z) coordinate of predicted vertex
+                * vtx_std: standard error on the predicted vertex
+                
+        '''
         vertex_info = predict_vertex(inter_idx, entry, 
                                      self.data_blob['input_data'],
                                      self.result, **kwargs)
@@ -267,7 +355,37 @@ class FullChainPredictor:
     
 
     def get_particles(self, entry, **kwargs) -> List[Particle]:
-        
+        '''
+        Method for retriving particle list for given batch index.
+
+        The output particles will have its ppn candidates attached as
+        attributes in the form of pandas dataframes (same as _fit_predict_ppn)
+
+        Method also performs endpoint prediction for tracks and startpoint
+        prediction for showers. 
+
+        1) If a track has no or only one ppn candidate, the endpoints
+        will be calculated by selecting two voxels that have the largest
+        separation distance. Otherwise, the two ppn candidates with the
+        largest separation from the particle coordinate centroid will be
+        selected. 
+
+        2) If a shower has no ppn candidates, <get_shower_startpoint> 
+        will raise an Exception. Otherwise it selects the ppn candidate
+        with the closest Hausdorff distance to the particle point cloud
+        (smallest point-to-set distance)
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+            - semantic_type (optional): if True, only ppn candiates with the
+            same predicted semantic type will be matched to its corresponding
+            particle.
+            - threshold (float, optional): threshold distance to attach
+            ppn point to particle. 
+
+        Returns:
+            - out: List of <Particle> instances (see Particle class definition).
+        '''
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
         depositions = self.data_blob['input_data'][entry][:, 4]
         particles = self.result['particles'][entry]
@@ -317,6 +435,25 @@ class FullChainPredictor:
 
 
     def get_interactions(self, entry, **kwargs) -> List[Interaction]:
+        '''
+        Method for retriving interaction list for given batch index.
+
+        The output particles will have its constituent particles attached as
+        attributes as List[Particle]. 
+
+        Method also performs vertex prediction for each interaction.
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+            - semantic_type (optional): if True, only ppn candiates with the
+            same predicted semantic type will be matched to its corresponding
+            particle.
+            - threshold (float, optional): threshold distance to attach
+            ppn point to particle. 
+
+        Returns:
+            - out: List of <Interaction> instances (see particle.Interaction).
+        '''
         particles = self.get_particles(entry, **kwargs)
         out = group_particles_to_interactions_fn(particles)
         for ia in out:
@@ -352,6 +489,15 @@ class FullChainPredictor:
         '''
         Predict all samples in a given batch contained in <data_blob>.
 
+        After calling fit_predict, the prediction information can be accessed
+        as follows:
+
+            - self._labels[entry]: labels dict (see fit_predict_labels) for 
+            batch id <entry>.
+
+            - self._particles[entry]: list of particles for batch id <entry>.
+
+            - self._interactions[entry]: list of interactions for batch id <entry>.
         '''
         labels = []
         list_particles, list_interactions = [], []
@@ -380,9 +526,8 @@ class FullChainEvaluator(FullChainPredictor):
 
         model = Trainer._net.module
         entry = 0   # batch id
-        predictor = FullChainEvaluator(model, data_blob, res, 
-                                       cfg['model']['modules'])
-        pred_seg = predictor._fit_predict_semantics(entry)
+        predictor = FullChainEvaluator(model, data_blob, res, cfg)
+        pred_seg = predictor.get_true_labels(entry, mode='segmentation')
 
     To avoid confusion between different quantities, the label namings under
     iotools.schema must be set as follows:
@@ -424,15 +569,9 @@ class FullChainEvaluator(FullChainPredictor):
     Instructions
     ----------------------------------------------------------------
 
-    All evaluation functions <self.evaluate_xxx> share the following form:
-
-        f(entry, metrics_fns) -> (pred, truth, Dict[Any])
-
-    A "metric function" is a function g(pred, truth) -> Any. 
-    This allows one to make his/her own evaluaton functions if needed.
-
-    Example:
-
+    The FullChainEvaluator share the same methods as FullChainPredictor, 
+    with additional methods to retrieve ground truth information for each 
+    abstraction level. 
     '''
 
 
@@ -440,8 +579,24 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
 
 
-    def get_true_particles(self, entry):
+    def get_true_particles(self, entry) -> List[TruthParticle]:
+        '''
+        Get list of <TruthParticle> instances for given <entry> batch id. 
 
+        The method will return particles only if its id number appears in
+        the group_id column of cluster_label. 
+
+        Each TruthParticle will contain the following information (attributes):
+
+            points: N x 3 coordinate array for particle's full image. 
+            id: group_id 
+            semantic_type: true semantic type
+            interaction_id: true interaction id 
+            pid: PDG type (photons: 0, electrons: 1, ...)
+            fragments: list of integers corresponding to constituent fragment
+                id number
+            p: true momentum vector
+        '''
         labels = self.data_blob['cluster_label'][entry]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
 
@@ -473,6 +628,7 @@ class FullChainEvaluator(FullChainPredictor):
             depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
             particle = TruthParticle(coords, pid, semantic_type, interaction_id, 
                 pdg, batch_id=entry, depositions=depositions, is_primary=is_primary)
+            particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
             particle.particle_asis = p
             particle.voxel_indices = np.where(mask)[0]
@@ -516,7 +672,5 @@ class FullChainEvaluator(FullChainPredictor):
                            relabel_interactions=False, **kwargs):
         pred_ias = self.get_interactions(entry, **kwargs)
         true_ias = self.get_true_interactions(entry)
-        match = match_interactions_fn(pred_ias, true_ias, 
-                                      relabel_particles=relabel_particles,
-                                      relabel=relabel_interactions, **kwargs)
+        match = match_interactions_fn(pred_ias, true_ias, **kwargs)
         return match

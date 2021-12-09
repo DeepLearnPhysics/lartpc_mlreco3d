@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from typing import List
-from collections import defaultdict
+from typing import Counter, List
+from collections import defaultdict, Counter
 from functools import partial
 class Particle:
     '''
@@ -106,6 +106,8 @@ class Interaction:
             self.vertex = [None, None, None]
 
         self.particle_ids = [p.id for p in self.particles]
+
+        self.counter = Counter([p.pid for p in self.particles])
 
 
     def __repr__(self):
