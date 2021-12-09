@@ -44,7 +44,7 @@ class Particle:
     
     def __repr__(self):
         fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
-            " | PID: {:<8}, Conf = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
+            " | PID: {:<8} | Conf = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
@@ -75,7 +75,7 @@ class TruthParticle(Particle):
 
 class Interaction:
 
-    def __init__(self, interaction_id, particles, vertex=None):
+    def __init__(self, interaction_id, particles, vertex=None, nu_id=None):
         self.id = interaction_id
         self.particles = particles
 
@@ -105,9 +105,11 @@ class Interaction:
         if self.vertex is None:
             self.vertex = [None, None, None]
 
-        self.particle_ids = [p.id for p in self.particles]
+        self.nu_id = nu_id
 
-        self.counter = Counter([p.pid for p in self.particles])
+        self.particle_ids = [p.id for p in self.particles]
+        self.particle_counts = Counter([p.pid for p in self.particles])
+
 
 
     def __repr__(self):
@@ -118,8 +120,8 @@ class Interaction:
         return msg + self.particles_summary
 
     def __str__(self):
-        return "Interaction(id={}, vertex={}, Particles={})".format(
-            self.id, str(self.vertex), str(self.particle_ids))
+        return "Interaction(id={}, vertex={}, nu_id={}, Particles={})".format(
+            self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
 def match_particles_fn(pred_particles  : List[Particle], 
@@ -175,13 +177,21 @@ def match_interactions_fn(pred_interactions : List[Interaction],
     return f(pred_interactions, true_interactions)
 
 
-def group_particles_to_interactions_fn(particles : List[Particle]):
+def group_particles_to_interactions_fn(particles : List[Particle], get_nu_id=False):
 
     interactions = defaultdict(list)
     for p in particles:
         interactions[p.interaction_id].append(p)
 
+    nu_id = None
     for int_id, particles in interactions.items():
-        interactions[int_id] = Interaction(int_id, particles)
+        if get_nu_id:
+            nu_id = np.unique([p.nu_id for p in particles])
+            if nu_id.shape[0] > 1:
+                raise ValueError("Interaction {} has non-unique particle "\
+                    "nu_ids: {}".format(int_id, str(nu_id)))
+            else:
+                nu_id = nu_id[0]
+        interactions[int_id] = Interaction(int_id, particles, nu_id=nu_id)
 
     return list(interactions.values())

@@ -613,18 +613,28 @@ class FullChainEvaluator(FullChainPredictor):
             pdg = TYPE_LABELS[p.pdg_code()]
             mask = labels[:, 6] == pid
             coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+            
             semantic_type = np.unique(labels[mask][:, -1])
             if semantic_type.shape[0] > 1:
                 raise ValueError("Interaction ID of Particle {} is not "\
                     "unique: {}".format(pid, str(semantic_type)))
             else:
                 semantic_type = semantic_type[0]
+
             interaction_id = np.unique(labels[mask][:, 7].astype(int))
             if interaction_id.shape[0] > 1:
                 raise ValueError("Interaction ID of Particle {} is not "\
                     "unique: {}".format(pid, str(interaction_id)))
             else:
                 interaction_id = interaction_id[0]
+
+            nu_id = np.unique(labels[mask][:, 8].astype(int))
+            if nu_id.shape[0] > 1:
+                raise ValueError("Neutrino ID of Particle {} is not "\
+                    "unique: {}".format(pid, str(nu_id)))
+            else:
+                nu_id = nu_id[0]
+
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
             particle = TruthParticle(coords, pid, semantic_type, interaction_id, 
@@ -632,6 +642,7 @@ class FullChainEvaluator(FullChainPredictor):
             particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
             particle.particle_asis = p
+            particle.nu_id = nu_id
             particle.voxel_indices = np.where(mask)[0]
             particles.append(particle)
 
@@ -640,7 +651,7 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry) -> List[Interaction]:
         true_particles = self.get_true_particles(entry)
-        out = group_particles_to_interactions_fn(true_particles)
+        out = group_particles_to_interactions_fn(true_particles, get_nu_id=True)
         vertices = self.get_true_vertices(entry)
         for ia in out:
             ia.vertex = vertices[ia.id]
