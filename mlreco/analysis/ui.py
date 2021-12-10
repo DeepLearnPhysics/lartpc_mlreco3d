@@ -78,17 +78,18 @@ class FullChainPredictor:
         self.index = self.data_blob['index']
         
         # For Fragment Clustering
-        self.cluster_graph_constructor = model.gs_manager
-        if model.enable_cnn_clust:
-            self.gspice_fragment_manager = model._gspice_fragment_manager
-        if model.enable_dbscan:
-            self.dbscan_fragment_manager = model.dbscan_fragment_manager
-        if not (model.enable_cnn_clust or model.enable_dbscan):
-            msg = '''
-                Neither CNN clustering nor dbscan clustering is enabled
-                in the model. Cannot initialize Fragment Manager!
-            '''
-            raise AttributeError(msg)
+        if model is not None:
+            self.cluster_graph_constructor = model.gs_manager
+            if model.enable_cnn_clust:
+                self.gspice_fragment_manager = model._gspice_fragment_manager
+            if model.enable_dbscan:
+                self.dbscan_fragment_manager = model.dbscan_fragment_manager
+            if not (model.enable_cnn_clust or model.enable_dbscan):
+                msg = '''
+                    Neither CNN clustering nor dbscan clustering is enabled
+                    in the model. Cannot initialize Fragment Manager!
+                '''
+                raise AttributeError(msg)
 
         concat_result = cfg['trainval']['concat_result']
         check_concat = set(self.CONCAT_RESULT)
@@ -116,24 +117,19 @@ class FullChainPredictor:
         ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry], 
                                               self.result, 
                                               entry=entry)
-        print(ppn.shape)
+        # print(ppn.shape)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
 
-        update_dict = defaultdict(list)
+        ppn_candidates = []
         for i, pred_point in enumerate(ppn_voxels):
             pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            update_dict['Index'].append(index)
-            update_dict['PPN Point Type'].append(pred_point_type)
-            update_dict['PPN Point Score'].append(pred_point_score)
-            update_dict['x'].append(x)
-            update_dict['y'].append(y)
-            update_dict['z'].append(z)
+            ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
         
-        df = pd.DataFrame(update_dict)
-        return df
+        ppn_candidates = np.vstack(ppn_candidates)
+        return ppn_candidates
             
         
     def _fit_predict_semantics(self, entry):
@@ -354,7 +350,7 @@ class FullChainPredictor:
         return vertex_info
     
 
-    def get_particles(self, entry, semantic_type=False, threshold=2) -> List[Particle]:
+    def get_particles(self, entry, semantic_type=False, ppn_distance_threshold=2) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -422,7 +418,8 @@ class FullChainPredictor:
 
         ppn_results = self._fit_predict_ppn(entry)
 
-        match_points_to_particles(ppn_results, out, threshold=threshold)
+        match_points_to_particles(ppn_results, out, 
+            ppn_distance_threshold=ppn_distance_threshold)
         # This should probably be separated to a selection algorithm
         for p in out:
             if p.semantic_type == 0:
@@ -617,6 +614,7 @@ class FullChainEvaluator(FullChainPredictor):
             p: true momentum vector
         '''
         labels = self.data_blob['cluster_label'][entry]
+        segment_label = self.data_blob['segment_label'][entry]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
 
         particles = []
@@ -629,13 +627,17 @@ class FullChainEvaluator(FullChainPredictor):
             if p.pdg_code() not in TYPE_LABELS:
                 continue
             pdg = TYPE_LABELS[p.pdg_code()]
-            mask = labels[:, 6] == pid
+            mask = labels[:, 6].astype(int) == pid
             coords = self.data_blob['input_data'][entry][mask][:, 1:4]
-            
-            semantic_type = np.unique(labels[mask][:, -1])
+        
+            # Check semantics
+            semantic_type, sem_counts = np.unique(
+                segment_label[mask][:, -1].astype(int), return_counts=True)
             if semantic_type.shape[0] > 1:
-                raise ValueError("Interaction ID of Particle {} is not "\
-                    "unique: {}".format(pid, str(semantic_type)))
+                print("Semantic Type of Particle {} is not "\
+                    "unique: {}, {}".format(pid, str(semantic_type), str(sem_counts)))
+                perm = sem_counts.argsort()
+                semantic_type = semantic_type[perm][0]
             else:
                 semantic_type = semantic_type[0]
 
@@ -669,7 +671,8 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry) -> List[Interaction]:
         true_particles = self.get_true_particles(entry)
-        out = group_particles_to_interactions_fn(true_particles, get_nu_id=True)
+        out = group_particles_to_interactions_fn(true_particles, 
+                                                 get_nu_id=True, mode='truth')
         vertices = self.get_true_vertices(entry)
         for ia in out:
             ia.vertex = vertices[ia.id]

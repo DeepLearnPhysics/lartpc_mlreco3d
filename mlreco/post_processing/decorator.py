@@ -38,7 +38,6 @@ def post_processing(filename, data_capture, output_capture):
         def wrapper(cfg, module_cfg, data_blob, res, logdir, iteration):
             # The config block should have the same name as the analysis function
             # module_cfg = cfg['post_processing'].get(func.__name__, {})
-
             log_name = module_cfg.get('filename', filename)
             deghosting = module_cfg.get('ghost', False)
 
