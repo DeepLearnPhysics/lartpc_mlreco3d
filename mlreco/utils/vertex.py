@@ -190,9 +190,7 @@ def get_vertex(kinematics, cluster_label, data_idx, inter_idx,
     """
     inter_mask = cluster_label[data_idx][:, 7] == inter_idx
     primary_mask = kinematics[data_idx][:, vtx_col+3] == primary_label
-    #print(inter_idx, inter_mask.sum(), (inter_mask & primary_mask).sum(), cluster_label[data_idx].shape, kinematics[data_idx].shape)
     mask = inter_mask if (inter_mask & primary_mask).sum() == 0 else inter_mask & primary_mask
-    #print(kinematics[data_idx][mask].shape, kinematics[data_idx][inter_mask].shape)
     vtx, counts = np.unique(kinematics[data_idx][mask][:, [vtx_col, vtx_col+1, vtx_col+2]], axis=0, return_counts=True)
     vtx = vtx[np.argmax(counts)]
     return vtx

@@ -574,10 +574,28 @@ class FullChainEvaluator(FullChainPredictor):
     with additional methods to retrieve ground truth information for each 
     abstraction level. 
     '''
+    LABEL_TO_COLUMN = {
+        'segment_label': -1,
+        'fragment_label': 5,
+        'group_label': 6,
+        'interaction_label': 7,
+        'pdg_label': 9,
+        'nu_label': 8
+    }
 
 
     def __init__(self, model, data_blob, result, cfg):
         super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
+    
+    
+    def get_true_labels(self, entry, name, schema='cluster_label'):
+        if name not in self.LABEL_TO_COLUMN:
+            raise KeyError("Invalid label identifier name: {}. "\
+                "Available column names = {}".format(
+                    name, str(list(self.LABEL_TO_COLUMN.values()))))
+        column_idx = self.LABEL_TO_COLUMN[name]
+        return self.data_blob[schema][entry][:, column_idx]
+
 
 
     def get_true_particles(self, entry) -> List[TruthParticle]:
