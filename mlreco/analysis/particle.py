@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from typing import Counter, List
+from typing import Counter, List, Union
 from collections import defaultdict, Counter
 from functools import partial
 class Particle:
@@ -57,7 +57,8 @@ class Particle:
                  'pred_particle_endpoint_1_z',
                  'pred_particle_endpoint_2_x', 
                  'pred_particle_endpoint_2_y', 
-                 'pred_particle_endpoint_2_z']
+                 'pred_particle_endpoint_2_z',
+                 'pred_particle_status']
 
         values = [
             self.id,
@@ -74,7 +75,8 @@ class Particle:
             self.endpoints[0, 2],
             self.endpoints[1, 0],
             self.endpoints[1, 1],
-            self.endpoints[1, 2]
+            self.endpoints[1, 2],
+            'valid'
         ]
 
         return names, values
@@ -115,9 +117,10 @@ class NullParticle:
                  self.prefix + '_particle_endpoint_1_z',
                  self.prefix + '_particle_endpoint_2_x', 
                  self.prefix + '_particle_endpoint_2_y', 
-                 self.prefix + '_particle_endpoint_2_z']
+                 self.prefix + '_particle_endpoint_2_z',
+                 self.prefix + '_particle_status']
 
-        values = [np.nan] * len(names)
+        values = [np.nan] * len(names) + ['null']
 
         return names, values
 
@@ -160,7 +163,8 @@ class TruthParticle(Particle):
                  'true_particle_endpoint_1_z',
                  'true_particle_endpoint_2_x', 
                  'true_particle_endpoint_2_y', 
-                 'true_particle_endpoint_2_z']
+                 'true_particle_endpoint_2_z',
+                 'true_particle_status']
 
         values = [
             self.id,
@@ -175,10 +179,23 @@ class TruthParticle(Particle):
             self.endpoints[0][2],
             self.endpoints[1][0],
             self.endpoints[1][1],
-            self.endpoints[1][2]
+            self.endpoints[1][2],
+            'valid'
         ]
 
         return names, values
+
+
+    def is_contained(self, spatial_size):
+
+        p = self.particle_asis
+        check_contained = p.position().x() >= 0 and p.position().x() <= spatial_size \
+            and p.position().y() >= 0 and p.position().y() <= spatial_size \
+            and p.position().z() >= 0 and p.position().z() <= spatial_size \
+            and p.end_position().x() >= 0 and p.end_position().x() <= spatial_size \
+            and p.end_position().y() >= 0 and p.end_position().y() <= spatial_size \
+            and p.end_position().z() >= 0 and p.end_position().z() <= spatial_size
+        return check_contained
 
 
 class Interaction:
@@ -238,7 +255,8 @@ class Interaction:
                  'pred_interaction_count_protons', 
                  'pred_interaction_vtx_x',
                  'pred_interaction_vtx_y', 
-                 'pred_interaction_vtx_z']
+                 'pred_interaction_vtx_z',
+                 'pred_interaction_status']
 
         values = [
             self.id,
@@ -252,7 +270,8 @@ class Interaction:
             self.particle_counts[4],
             self.vertex[0],
             self.vertex[1],
-            self.vertex[2]
+            self.vertex[2],
+            'valid'
         ]
 
         return names, values
@@ -288,9 +307,10 @@ class NullInteraction:
                  self.prefix + '_interaction_count_protons', 
                  self.prefix + '_interaction_vtx_x',
                  self.prefix + '_interaction_vtx_y', 
-                 self.prefix + '_interaction_vtx_z']
+                 self.prefix + '_interaction_vtx_z',
+                 self.prefix + '_interaction_status']
 
-        values = [np.nan] * len(names)
+        values = [np.nan] * len(names) + ['null']
 
         return names, values
 
@@ -323,7 +343,8 @@ class TruthInteraction(Interaction):
                  'true_interaction_count_protons', 
                  'true_interaction_vtx_x',
                  'true_interaction_vtx_y', 
-                 'true_interaction_vtx_z']
+                 'true_interaction_vtx_z',
+                 'true_interaction_status']
 
         values = [
             self.id,
@@ -337,7 +358,8 @@ class TruthInteraction(Interaction):
             self.particle_counts[4],
             self.vertex[0],
             self.vertex[1],
-            self.vertex[2]
+            self.vertex[2],
+            'valid'
         ]
 
         return names, values
@@ -354,10 +376,15 @@ class TruthInteraction(Interaction):
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
-def match_particles_fn(pred_particles  : List[Particle], 
-                       truth_particles : List[TruthParticle], 
+def match_particles_fn(pred_particles  : Union[List[Particle], List[TruthParticle]], 
+                       truth_particles : Union[List[Particle], List[TruthParticle]], 
                        primaries=True, min_overlap_count=1, relabel=False,
                        mode='particles'):
+    '''
+    Match each Particle in <pred_particles> to <truth_particles>
+    The number of matches will be equal to the length of <pred_particles>. 
+    
+    '''
 
     if mode == 'particles':
         null_instance = NullParticle()
@@ -376,15 +403,11 @@ def match_particles_fn(pred_particles  : List[Particle],
             if tp.is_primary:
                 part_t.append(tp)
 
-    
-
     overlap_matrix = np.zeros((len(part_t), len(part_p)), dtype=np.int64)
     for i, tp in enumerate(part_t):
         for j, p in enumerate(part_p):
             overlap_matrix[i, j] = len(np.intersect1d(tp.voxel_indices, 
                                                       p.voxel_indices))
-
-    print(overlap_matrix, overlap_matrix.shape)
 
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)

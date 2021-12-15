@@ -12,30 +12,28 @@ from mlreco.analysis.particle import NullInteraction, match_particles_fn
 from pprint import pprint
 
 
-@post_processing(['topologies'],
+@post_processing(['nu-selection-pt'],
                 ['input_data', 'seg_label', 'clust_data', 'particles_asis', 'kinematics'],
                 ['segmentation', 'inter_group_pred', 'particles', 'particles_seg', 'node_pred_type', 'node_pred_vtx'])
-def multiple_topologies(cfg, module_cfg, data_blob, res, logdir, iteration,
+def multiple_topologies(cfg, processor_cfg, data_blob, res, logdir, iteration,
                 data_idx=None, input_data=None, clust_data=None, particles_asis=None, kinematics=None,
                 inter_group_pred=None, particles=None, particles_seg=None,
                 node_pred_type=None, node_pred_vtx=None, clust_data_noghost=None, **kwargs):
 
+    spatial_size = processor_cfg.get('spatial_size', 768)
+
     row_names, row_values = [], []
-    predictor = FullChainEvaluator(None, data_blob, res, cfg)
-    matches, _, _ = predictor.match_interactions(data_idx, min_overlap_count=10)
+    predictor = FullChainEvaluator(None, data_blob, res, cfg, processor_cfg)
+    print('**************************************************************')
+    matches, _, _ = predictor.match_interactions(data_idx, mode='tp')
     index = predictor.index[data_idx]
     for pair in matches:
         pred_int, true_int = pair[0], pair[1]
+        pprint(pred_int)
+        pprint(true_int)
         if isinstance(true_int, NullInteraction):
             continue
         parts, true_parts = pair[0].particles, pair[1].particles
-        vtx, true_vtx = pair[0].vertex, pair[1].vertex
-        pred_counter = pair[0].particle_counts
-        true_counter = pair[1].particle_counts
-
-        pprint(parts)
-
-        pprint(true_parts)
 
         matched_particles, _, _ = match_particles_fn(parts, true_parts, 
             primaries=True, min_overlap_count=10)
@@ -47,6 +45,9 @@ def multiple_topologies(cfg, module_cfg, data_blob, res, logdir, iteration,
         for ppair in matched_particles:
 
             pred_p, true_p = ppair[0], ppair[1]
+
+            print("    ", pred_p)
+            print("    ", true_p)
 
             pred_particle_names, pred_particle_values = pred_p.get_names_and_values()
             true_particle_names, true_particle_values = true_p.get_names_and_values()
@@ -60,6 +61,5 @@ def multiple_topologies(cfg, module_cfg, data_blob, res, logdir, iteration,
                 tuple([index]
                  + pred_inter_values + true_inter_values \
                  + pred_particle_values + true_particle_values))
-    for i in range(len(row_names[0])):
-        print(row_names[0][i], row_values[0][i])
+
     return row_names, row_values

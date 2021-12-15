@@ -70,7 +70,7 @@ class FullChainPredictor:
 
     4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, model, data_blob, result, cfg):
+    def __init__(self, model, data_blob, result, cfg, predictor_cfg={}):
         self.module_config = cfg['model']['modules']
         self.data_blob = data_blob
         self.result = result
@@ -97,6 +97,17 @@ class FullChainPredictor:
             if not key in check_concat:
                 raise ValueError("Output key <{}> should be listed under "\
                     "trainval.concat_result!".format(key))
+
+        self.spatial_size             = predictor_cfg.get('spatial_size', 768)
+        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 10)
+        # Minimum voxel count for a true non-ghost particle to be considered
+        self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
+        # We want to count how well we identify interactions with some PDGs
+        # as primary particles
+        self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
+        self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
+        self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
+        
         
             
     def _fit_predict_ppn(self, entry):
@@ -321,7 +332,7 @@ class FullChainPredictor:
         return pred_pids
 
 
-    def _fit_predict_vertex_info(self, entry, inter_idx, **kwargs):
+    def _fit_predict_vertex_info(self, entry, inter_idx):
         '''
         Method for obtaining interaction vertex information given
         entry number and interaction ID number.
@@ -345,12 +356,14 @@ class FullChainPredictor:
         '''
         vertex_info = predict_vertex(inter_idx, entry, 
                                      self.data_blob['input_data'],
-                                     self.result, **kwargs)
+                                     self.result, 
+                                     attaching_threshold=self.attaching_threshold,
+                                     inter_threshold=self.inter_threshold)
 
         return vertex_info
     
 
-    def get_particles(self, entry, semantic_type=False, ppn_distance_threshold=2) -> List[Particle]:
+    def get_particles(self, entry, primaries=True) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -416,10 +429,16 @@ class FullChainPredictor:
             part.voxel_indices = p
             out.append(part)
 
+        if primaries:
+            out = [p for p in out if p.is_primary]
+
+        if len(out) == 0:
+            return out
+
         ppn_results = self._fit_predict_ppn(entry)
 
         match_points_to_particles(ppn_results, out, 
-            ppn_distance_threshold=ppn_distance_threshold)
+            ppn_distance_threshold=self.attaching_threshold)
         # This should probably be separated to a selection algorithm
         for p in out:
             if p.semantic_type == 0:
@@ -432,7 +451,7 @@ class FullChainPredictor:
         return out
 
 
-    def get_interactions(self, entry, **kwargs) -> List[Interaction]:
+    def get_interactions(self, entry, primaries=True) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -452,7 +471,7 @@ class FullChainPredictor:
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-        particles = self.get_particles(entry, **kwargs)
+        particles = self.get_particles(entry, primaries=primaries)
         out = group_particles_to_interactions_fn(particles)
         for ia in out:
             vertex_info = self._fit_predict_vertex_info(entry, ia.id)
@@ -460,17 +479,17 @@ class FullChainPredictor:
         return out
 
 
-    def fit_predict_labels(self, entry, **kwargs):
+    def fit_predict_labels(self, entry):
         '''
         Predict all labels of a given batch index <entry>.
 
         We define <labels> to be 1d tensors that annotate voxels. 
         '''
         pred_seg = self._fit_predict_semantics(entry)
-        pred_fragments = self._fit_predict_fragments(entry, **kwargs)
-        pred_groups = self._fit_predict_groups(entry, **kwargs)
-        pred_interaction_labels = self._fit_predict_interaction_labels(entry, **kwargs)
-        pred_ppn = self._fit_predict_ppn(entry, **kwargs)
+        pred_fragments = self._fit_predict_fragments(entry)
+        pred_groups = self._fit_predict_groups(entry)
+        pred_interaction_labels = self._fit_predict_interaction_labels(entry)
+        pred_ppn = self._fit_predict_ppn(entry)
         pred_pids = self._fit_predict_pids(entry)
 
         return {
@@ -581,8 +600,8 @@ class FullChainEvaluator(FullChainPredictor):
     }
 
 
-    def __init__(self, model, data_blob, result, cfg):
-        super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg)
+    def __init__(self, model, data_blob, result, cfg, processor_cfg={}):
+        super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg, processor_cfg)
     
     
     def get_true_labels(self, entry, name, schema='cluster_label'):
@@ -594,8 +613,8 @@ class FullChainEvaluator(FullChainPredictor):
         return self.data_blob[schema][entry][:, column_idx]
 
 
-
-    def get_true_particles(self, entry) -> List[TruthParticle]:
+    def get_true_particles(self, entry, primaries=True,
+                           min_particle_voxel_count=20) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id. 
 
@@ -636,8 +655,10 @@ class FullChainEvaluator(FullChainPredictor):
             if semantic_type.shape[0] > 1:
                 print("Semantic Type of Particle {} is not "\
                     "unique: {}, {}".format(pid, str(semantic_type), str(sem_counts)))
-                perm = sem_counts.argsort()
-                semantic_type = semantic_type[perm][0]
+                perm = sem_counts.argmax()
+                print(semantic_type, sem_counts, perm)
+                semantic_type = semantic_type[perm]
+                print(semantic_type, sem_counts)
             else:
                 semantic_type = semantic_type[0]
 
@@ -664,13 +685,18 @@ class FullChainEvaluator(FullChainPredictor):
             particle.particle_asis = p
             particle.nu_id = nu_id
             particle.voxel_indices = np.where(mask)[0]
-            particles.append(particle)
+            if particle.voxel_indices.shape[0] > min_particle_voxel_count:
+                particles.append(particle)
+
+        if primaries:
+            particles = [p for p in particles if p.is_primary]
 
         return particles
 
 
-    def get_true_interactions(self, entry) -> List[Interaction]:
-        true_particles = self.get_true_particles(entry)
+    def get_true_interactions(self, entry, primaries=True,
+                              min_particle_voxel_count=20) -> List[Interaction]:
+        true_particles = self.get_true_particles(entry, primaries=primaries)
         out = group_particles_to_interactions_fn(true_particles, 
                                                  get_nu_id=True, mode='truth')
         vertices = self.get_true_vertices(entry)
@@ -693,19 +719,32 @@ class FullChainEvaluator(FullChainPredictor):
         return out
 
 
-    def match_particles(self, entry, relabel=False, primaries=True,
-                        min_overlap_count=1, threshold=2):
-        pred_particles = self.get_particles(entry, threshold=threshold)
-        true_particles = self.get_true_particles(entry)
+    def match_particles(self, entry, relabel=False, primaries=True, mode='pt'):
+        if mode == 'pt':
+            pred_particles = self.get_particles(entry, primaries=primaries)
+            true_particles = self.get_true_particles(entry, primaries=primaries)
+        elif mode == 'tp':
+            true_particles = self.get_particles(entry, primaries=primaries)
+            pred_particles = self.get_true_particles(entry, primaries=primaries)
+        else:
+            raise ValueError("Mode {} is not valid. For matching each"\
+                " prediction to truth, use 'pt' (and vice versa).")
         match = match_particles_fn(pred_particles, true_particles, 
                                    relabel=relabel, primaries=primaries,
-                                   min_overlap_count=min_overlap_count)
+                                   min_overlap_count=self.min_overlap_count)
         return match
 
 
-    def match_interactions(self, entry, min_overlap_count=1):
-        pred_ias = self.get_interactions(entry)
-        true_ias = self.get_true_interactions(entry)
+    def match_interactions(self, entry, mode='pt'):
+        if mode == 'pt':
+            pred_ias = self.get_interactions(entry)
+            true_ias = self.get_true_interactions(entry)
+        elif mode == 'tp':
+            true_ias = self.get_interactions(entry)
+            pred_ias = self.get_true_interactions(entry)
+        else:
+            raise ValueError("Mode {} is not valid. For matching each"\
+                " prediction to truth, use 'pt' (and vice versa).")
         match = match_interactions_fn(pred_ias, true_ias, 
-                                      min_overlap_count=min_overlap_count)
+                                      min_overlap_count=self.min_overlap_count)
         return match
