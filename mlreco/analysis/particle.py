@@ -57,8 +57,7 @@ class Particle:
                  'pred_particle_endpoint_1_z',
                  'pred_particle_endpoint_2_x', 
                  'pred_particle_endpoint_2_y', 
-                 'pred_particle_endpoint_2_z',
-                 'pred_particle_status']
+                 'pred_particle_endpoint_2_z']
 
         values = [
             self.id,
@@ -75,8 +74,7 @@ class Particle:
             self.endpoints[0, 2],
             self.endpoints[1, 0],
             self.endpoints[1, 1],
-            self.endpoints[1, 2],
-            'valid'
+            self.endpoints[1, 2]
         ]
 
         return names, values
@@ -117,10 +115,9 @@ class NullParticle:
                  self.prefix + '_particle_endpoint_1_z',
                  self.prefix + '_particle_endpoint_2_x', 
                  self.prefix + '_particle_endpoint_2_y', 
-                 self.prefix + '_particle_endpoint_2_z',
-                 self.prefix + '_particle_status']
+                 self.prefix + '_particle_endpoint_2_z']
 
-        values = [np.nan] * len(names) + ['null']
+        values = [np.nan] * len(names)
 
         return names, values
 
@@ -163,8 +160,7 @@ class TruthParticle(Particle):
                  'true_particle_endpoint_1_z',
                  'true_particle_endpoint_2_x', 
                  'true_particle_endpoint_2_y', 
-                 'true_particle_endpoint_2_z',
-                 'true_particle_status']
+                 'true_particle_endpoint_2_z']
 
         values = [
             self.id,
@@ -179,8 +175,7 @@ class TruthParticle(Particle):
             self.endpoints[0][2],
             self.endpoints[1][0],
             self.endpoints[1][1],
-            self.endpoints[1][2],
-            'valid'
+            self.endpoints[1][2]
         ]
 
         return names, values
@@ -255,8 +250,7 @@ class Interaction:
                  'pred_interaction_count_protons', 
                  'pred_interaction_vtx_x',
                  'pred_interaction_vtx_y', 
-                 'pred_interaction_vtx_z',
-                 'pred_interaction_status']
+                 'pred_interaction_vtx_z']
 
         values = [
             self.id,
@@ -270,8 +264,7 @@ class Interaction:
             self.particle_counts[4],
             self.vertex[0],
             self.vertex[1],
-            self.vertex[2],
-            'valid'
+            self.vertex[2]
         ]
 
         return names, values
@@ -307,10 +300,9 @@ class NullInteraction:
                  self.prefix + '_interaction_count_protons', 
                  self.prefix + '_interaction_vtx_x',
                  self.prefix + '_interaction_vtx_y', 
-                 self.prefix + '_interaction_vtx_z',
-                 self.prefix + '_interaction_status']
+                 self.prefix + '_interaction_vtx_z']
 
-        values = [np.nan] * len(names) + ['null']
+        values = [np.nan] * len(names)
 
         return names, values
 
@@ -343,8 +335,7 @@ class TruthInteraction(Interaction):
                  'true_interaction_count_protons', 
                  'true_interaction_vtx_x',
                  'true_interaction_vtx_y', 
-                 'true_interaction_vtx_z',
-                 'true_interaction_status']
+                 'true_interaction_vtx_z']
 
         values = [
             self.id,
@@ -358,8 +349,7 @@ class TruthInteraction(Interaction):
             self.particle_counts[4],
             self.vertex[0],
             self.vertex[1],
-            self.vertex[2],
-            'valid'
+            self.vertex[2]
         ]
 
         return names, values
@@ -376,10 +366,10 @@ class TruthInteraction(Interaction):
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
-def match_particles_fn(pred_particles  : Union[List[Particle], List[TruthParticle]], 
-                       truth_particles : Union[List[Particle], List[TruthParticle]], 
-                       primaries=True, min_overlap_count=1, relabel=False,
-                       mode='particles'):
+def match(pred_particles  : Union[List[Particle], List[TruthParticle]], 
+          truth_particles : Union[List[Particle], List[TruthParticle]], 
+          primaries=True, min_overlap_count=1,
+          mode='particles'):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>. 
@@ -403,6 +393,10 @@ def match_particles_fn(pred_particles  : Union[List[Particle], List[TruthParticl
             if tp.is_primary:
                 part_t.append(tp)
 
+    if len(part_t) == 0 or len(part_p) == 0:
+        print("No particles/interactions to match.")
+        return [], 0, 0
+
     overlap_matrix = np.zeros((len(part_t), len(part_p)), dtype=np.int64)
     for i, tp in enumerate(part_t):
         for j, p in enumerate(part_p):
@@ -424,9 +418,6 @@ def match_particles_fn(pred_particles  : Union[List[Particle], List[TruthParticl
             matched_truth = null_instance
         else:
             matched_truth = part_t[select_idx]
-        if relabel:  # TODO: This can potentially lead to duplicate labels
-            p.id = j
-            matched_truth.id = j
         matches.append((p, matched_truth))
 
     return matches, idx, intersections
@@ -434,10 +425,10 @@ def match_particles_fn(pred_particles  : Union[List[Particle], List[TruthParticl
 
 def match_interactions_fn(pred_interactions : List[Interaction], 
                           true_interactions : List[Interaction], 
-                          min_overlap_count=1, relabel=False):
+                          min_overlap_count=1):
     
-    f = partial(match_particles_fn, primaries=False, 
-                min_overlap_count=min_overlap_count, relabel=relabel,
+    f = partial(match, primaries=False, 
+                min_overlap_count=min_overlap_count,
                 mode='interactions')
     
     return f(pred_interactions, true_interactions)

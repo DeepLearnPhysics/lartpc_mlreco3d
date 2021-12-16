@@ -159,6 +159,8 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
     vtx_std, vtx_candidate = [-1, -1, -1], [-1, -1, -1]
 
     # Take barycenter
+    # Here ppn_candidates can be [array([], shape=(0, 15), dtype=float64)]
+    # mpvmpr test set event (200-300)
     if len(ppn_candidates):
         ppn_candidates = np.concatenate(ppn_candidates, axis=0)
         #print("ppn_candidates", ppn_candidates[:, :4])
@@ -172,6 +174,9 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
 
         #print("Selecting %d / %d points after dbscan" % (len(ppn_candidates), len(ppn_candidates_group)))
         # Now take barycenter
+        
+        # This part here was giving a divide by zero RuntimeWarning. Best to avoid if possible
+
         vtx_candidate = np.mean(ppn_candidates[:,coords_col[0]:coords_col[1]], axis=0)
         vtx_std = np.std(ppn_candidates[:, coords_col[0]:coords_col[1]], axis=0)
 

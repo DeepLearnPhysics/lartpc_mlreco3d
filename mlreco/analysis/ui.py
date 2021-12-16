@@ -441,6 +441,8 @@ class FullChainPredictor:
             ppn_distance_threshold=self.attaching_threshold)
         # This should probably be separated to a selection algorithm
         for p in out:
+            if p.size < self.min_particle_voxel_count:
+                continue
             if p.semantic_type == 0:
                 pt = get_shower_startpoint(p)
                 p.startpoint = pt
@@ -656,23 +658,25 @@ class FullChainEvaluator(FullChainPredictor):
                 print("Semantic Type of Particle {} is not "\
                     "unique: {}, {}".format(pid, str(semantic_type), str(sem_counts)))
                 perm = sem_counts.argmax()
-                print(semantic_type, sem_counts, perm)
                 semantic_type = semantic_type[perm]
-                print(semantic_type, sem_counts)
             else:
                 semantic_type = semantic_type[0]
 
-            interaction_id = np.unique(labels[mask][:, 7].astype(int))
+            interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int), return_counts=True)
             if interaction_id.shape[0] > 1:
-                raise ValueError("Interaction ID of Particle {} is not "\
+                print("Interaction ID of Particle {} is not "\
                     "unique: {}".format(pid, str(interaction_id)))
+                perm = int_counts.argmax()
+                interaction_id = interaction_id[perm]
             else:
                 interaction_id = interaction_id[0]
 
-            nu_id = np.unique(labels[mask][:, 8].astype(int))
+            nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int), return_counts=True)
             if nu_id.shape[0] > 1:
-                raise ValueError("Neutrino ID of Particle {} is not "\
+                print("Neutrino ID of Particle {} is not "\
                     "unique: {}".format(pid, str(nu_id)))
+                perm = nu_counts.argmax()
+                nu_id = nu_id[perm]
             else:
                 nu_id = nu_id[0]
 
@@ -685,6 +689,7 @@ class FullChainEvaluator(FullChainPredictor):
             particle.particle_asis = p
             particle.nu_id = nu_id
             particle.voxel_indices = np.where(mask)[0]
+
             if particle.voxel_indices.shape[0] > min_particle_voxel_count:
                 particles.append(particle)
 
@@ -729,10 +734,11 @@ class FullChainEvaluator(FullChainPredictor):
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
-        match = match_particles_fn(pred_particles, true_particles, 
-                                   relabel=relabel, primaries=primaries,
-                                   min_overlap_count=self.min_overlap_count)
-        return match
+        matched_pairs = match(pred_particles, true_particles, 
+                              primaries=primaries,
+                              min_overlap_count=self.min_overlap_count, 
+                              mode='particles')
+        return matched_pairs
 
 
     def match_interactions(self, entry, mode='pt'):

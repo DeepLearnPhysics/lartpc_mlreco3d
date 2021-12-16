@@ -82,6 +82,49 @@ def get_track_endpoints_centroid(particle):
     return endpoints
 
 
+def get_track_endpoints_max_dist(particle):
+    '''
+    Computes track endpoints without ppn predictions by
+    selecting two points that have the largest separation. 
+    '''
+    dist_mat = cdist(particle.points, particle.points)
+    ids = np.argmax(dist_mat)
+
+
+# def get_track_endpoints_geo(data, f, points_tensor=None):
+#     """
+#     Compute endpoints of a track-like cluster f
+#     based on PPN point predictions (coordinates
+#     and scores) and geometry (voxels farthest
+#     apart from each other in the cluster).
+
+#     If points_tensor is left unspecified, the endpoints will
+#     be purely based on geometry.
+    
+#     Input:
+#     - data is the input data tensor, which can be indexed by f.
+#     - points_tensor is the output of PPN 'points' (optional)
+#     - f is a list of voxel indices for voxels that belong to the track.
+
+#     Output:
+#     - array of shape (2, 3) (2 endpoints, 3 coordinates each)
+#     """
+#     dist_mat = torch.cdist(data[f,1:4], data[f,1:4])
+#     idx = torch.argmax(dist_mat)
+#     idxs = int(idx)//len(f), int(idx)%len(f)
+#     scores = torch.sigmoid(points_tensor[f, -1])
+#     correction0, correction1 = 0.0, 0.0
+#     if points_tensor is not None:
+#         correction0 = points_tensor[f][idxs[0], :3] + \
+#                       0.5 if scores[idxs[0]] > 0.5 else 0.0
+#         correction1 = points_tensor[f][idxs[1], :3] + \
+#                       0.5 if scores[idxs[1]] > 0.5 else 0.0
+#     end_points = torch.cat([data[f[idxs[0]],1:4] + correction0,
+#                             data[f[idxs[1]],1:4] + correction1])
+#     return end_points
+
+
+
 def get_shower_startpoint(particle : Particle, verbose=False):
     '''
     Using ppn_candiates attached to <Particle>, get one
