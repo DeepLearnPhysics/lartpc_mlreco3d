@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from scipy.spatial.distance import cdist
-from .particle import Particle
+from ..classes.particle import Particle
 
 def match_points_to_particles(ppn_points : np.ndarray, 
                               particles : List[Particle], 

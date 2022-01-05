@@ -1,4 +1,4 @@
-from mlreco.analysis.particle import Particle
+from analysis.classes.particle import Particle
 import numpy as np
 import numba as nb
 

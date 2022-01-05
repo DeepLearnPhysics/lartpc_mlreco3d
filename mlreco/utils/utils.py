@@ -199,7 +199,12 @@ class ChunkCSVData:
             self.append = 'w'
         self.chunksize = chunksize
 
-        self.header = not os.path.exists(self.name)
+        self.header = True
+
+        with open(self.name, 'w') as f:
+            pass
+        # df = pd.DataFrame(list())
+        # df.to_csv(self.name, mode='w')
         
     def record(self, df):
         df.to_csv(self.name, 

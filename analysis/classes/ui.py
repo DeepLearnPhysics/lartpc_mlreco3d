@@ -1,4 +1,4 @@
-from typing import Callable, Tuple
+from typing import Callable, Tuple, List
 import numpy as np
 import pandas as pd
 
@@ -8,8 +8,8 @@ from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
 from scipy.special import softmax
-from .particle import *
-from .point_matching import *
+from analysis.classes.particle import *
+from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex, predict_vertex
@@ -70,26 +70,26 @@ class FullChainPredictor:
 
     4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, model, data_blob, result, cfg, predictor_cfg={}):
+    def __init__(self, data_blob, result, cfg, predictor_cfg={}):
         self.module_config = cfg['model']['modules']
         self.data_blob = data_blob
         self.result = result
         self.num_batches = len(data_blob['input_data'])
         self.index = self.data_blob['index']
         
-        # For Fragment Clustering
-        if model is not None:
-            self.cluster_graph_constructor = model.gs_manager
-            if model.enable_cnn_clust:
-                self.gspice_fragment_manager = model._gspice_fragment_manager
-            if model.enable_dbscan:
-                self.dbscan_fragment_manager = model.dbscan_fragment_manager
-            if not (model.enable_cnn_clust or model.enable_dbscan):
-                msg = '''
-                    Neither CNN clustering nor dbscan clustering is enabled
-                    in the model. Cannot initialize Fragment Manager!
-                '''
-                raise AttributeError(msg)
+        # # For Fragment Clustering
+        # if model is not None:
+        #     self.cluster_graph_constructor = model.gs_manager
+        #     if model.enable_cnn_clust:
+        #         self.gspice_fragment_manager = model._gspice_fragment_manager
+        #     if model.enable_dbscan:
+        #         self.dbscan_fragment_manager = model.dbscan_fragment_manager
+        #     if not (model.enable_cnn_clust or model.enable_dbscan):
+        #         msg = '''
+        #             Neither CNN clustering nor dbscan clustering is enabled
+        #             in the model. Cannot initialize Fragment Manager!
+        #         '''
+        #         raise AttributeError(msg)
 
         concat_result = cfg['trainval']['concat_result']
         check_concat = set(self.CONCAT_RESULT)
@@ -107,7 +107,12 @@ class FullChainPredictor:
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
-        
+
+
+    def __repr__(self):
+
+        msg = "FullChainEvaluator(num_batches={})".format(self.num_batches)
+        return msg
         
             
     def _fit_predict_ppn(self, entry):
@@ -210,8 +215,6 @@ class FullChainPredictor:
         
         N = np.unique(labels).shape[0]
         perm = np.random.permutation(N)
-        
-        print(N, perm)
         
         new_labels = -np.ones(labels.shape[0]).astype(int)
         for i, c in enumerate(perm):
@@ -602,8 +605,8 @@ class FullChainEvaluator(FullChainPredictor):
     }
 
 
-    def __init__(self, model, data_blob, result, cfg, processor_cfg={}):
-        super(FullChainEvaluator, self).__init__(model, data_blob, result, cfg, processor_cfg)
+    def __init__(self, data_blob, result, cfg, processor_cfg={}):
+        super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg)
     
     
     def get_true_labels(self, entry, name, schema='cluster_label'):
@@ -724,17 +727,22 @@ class FullChainEvaluator(FullChainPredictor):
         return out
 
 
-    def match_particles(self, entry, relabel=False, primaries=True, mode='pt'):
+    def match_particles(self, entry, primaries=True, mode='pt'):
+        '''
+        Returns (<Particle>, None) if no match was found
+        '''
         if mode == 'pt':
-            pred_particles = self.get_particles(entry, primaries=primaries)
-            true_particles = self.get_true_particles(entry, primaries=primaries)
+            # Match each pred to one in true
+            particles_from = self.get_particles(entry, primaries=primaries)
+            particles_to = self.get_true_particles(entry, primaries=primaries)
         elif mode == 'tp':
-            true_particles = self.get_particles(entry, primaries=primaries)
-            pred_particles = self.get_true_particles(entry, primaries=primaries)
+            # Match each true to one in pred
+            particles_to = self.get_particles(entry, primaries=primaries)
+            particles_from = self.get_true_particles(entry, primaries=primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
-        matched_pairs = match(pred_particles, true_particles, 
+        matched_pairs = match(particles_from, particles_to, 
                               primaries=primaries,
                               min_overlap_count=self.min_overlap_count, 
                               mode='particles')
@@ -743,14 +751,14 @@ class FullChainEvaluator(FullChainPredictor):
 
     def match_interactions(self, entry, mode='pt'):
         if mode == 'pt':
-            pred_ias = self.get_interactions(entry)
-            true_ias = self.get_true_interactions(entry)
+            ints_from = self.get_interactions(entry)
+            ints_to = self.get_true_interactions(entry)
         elif mode == 'tp':
-            true_ias = self.get_interactions(entry)
-            pred_ias = self.get_true_interactions(entry)
+            ints_to = self.get_interactions(entry)
+            ints_from = self.get_true_interactions(entry)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
-        match = match_interactions_fn(pred_ias, true_ias, 
+        match = match_interactions_fn(ints_from, ints_to, 
                                       min_overlap_count=self.min_overlap_count)
         return match

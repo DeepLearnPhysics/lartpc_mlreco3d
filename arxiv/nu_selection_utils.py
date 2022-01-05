@@ -6,6 +6,7 @@ from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.vertex import predict_vertex, get_vertex
 from mlreco.utils.groups import type_labels
 
+
 def get_predicted_primary_particles(res, data_idx=0):
     """
     Returns a list of predicted primary particles.
@@ -117,7 +118,6 @@ def match_interactions(clust_data, inter_id, inter_group_pred, particles,
         idx = inter_group_pred_idx[idx]
 
     return idx, intersection
-
 
 @post_processing(['nue-selection-true', 'nue-selection-primaries'],
                 ['input_data', 'seg_label', 'clust_data', 'particles_asis', 'kinematics'],

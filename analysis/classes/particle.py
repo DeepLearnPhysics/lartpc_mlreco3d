@@ -4,6 +4,11 @@ import pandas as pd
 from typing import Counter, List, Union
 from collections import defaultdict, Counter
 from functools import partial
+import re
+
+from pprint import pprint
+
+
 class Particle:
     '''
     Simple Particle Class with managable __repr__ and __str__ functions.
@@ -41,7 +46,7 @@ class Particle:
         self.endpoints = -np.ones((2, 3))
 
 
-    def get_names_and_values(self):
+    def get_info(self):
 
         names = ['pred_particle_id', 
                  'pred_particle_type', 
@@ -77,7 +82,7 @@ class Particle:
             self.endpoints[1, 2]
         ]
 
-        return names, values
+        return dict(zip(names, values))
         
     def __str__(self):
         return self.__repr__()
@@ -92,40 +97,6 @@ class Particle:
                          self.interaction_id,
                          self.points.shape[0])
         return msg
-
-
-class NullParticle:
-
-    def __init__(self, prefix='true'):
-        self.prefix = prefix
-
-    def get_names_and_values(self):
-
-        names = [self.prefix + '_particle_id', 
-                 self.prefix + '_particle_type', 
-                 self.prefix + '_particle_is_primary', 
-                 self.prefix + '_particle_size', 
-                 self.prefix + '_particle_conf', 
-                 self.prefix + '_particle_num_ppn_candidates', 
-                 self.prefix + '_particle_startpoint_x', 
-                 self.prefix + '_particle_startpoint_y', 
-                 self.prefix + '_particle_startpoint_z',
-                 self.prefix + '_particle_endpoint_1_x', 
-                 self.prefix + '_particle_endpoint_1_y', 
-                 self.prefix + '_particle_endpoint_1_z',
-                 self.prefix + '_particle_endpoint_2_x', 
-                 self.prefix + '_particle_endpoint_2_y', 
-                 self.prefix + '_particle_endpoint_2_z']
-
-        values = [np.nan] * len(names)
-
-        return names, values
-
-    def __str__(self):
-        return self.__repr__()
-    
-    def __repr__(self):
-        return "NullParticle()"
 
 
 class TruthParticle(Particle):
@@ -146,7 +117,7 @@ class TruthParticle(Particle):
                          self.points.shape[0])
         return msg
 
-    def get_names_and_values(self):
+    def get_info(self):
 
         names = ['true_particle_id', 
                  'true_particle_type', 
@@ -178,7 +149,7 @@ class TruthParticle(Particle):
             self.endpoints[1][2]
         ]
 
-        return names, values
+        return dict(zip(names, values))
 
 
     def is_contained(self, spatial_size):
@@ -237,7 +208,7 @@ class Interaction:
         for p in self.particles:
             assert isinstance(p, Particle)
 
-    def get_names_and_values(self): 
+    def get_info(self): 
 
         names = ['pred_interaction_id', 
                  'pred_interaction_type', 
@@ -267,7 +238,7 @@ class Interaction:
             self.vertex[2]
         ]
 
-        return names, values
+        return dict(zip(names, values))
 
 
     def __repr__(self):
@@ -282,37 +253,6 @@ class Interaction:
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
-class NullInteraction:
-
-    def __init__(self, prefix='true'):
-        self.prefix = prefix
-
-    def get_names_and_values(self):
-
-        names = [self.prefix + '_interaction_id', 
-                 self.prefix + '_interaction_type', 
-                 self.prefix + '_interaction_size', 
-                 self.prefix + '_interaction_particle_counts',
-                 self.prefix + '_interaction_count_photons', 
-                 self.prefix + '_interaction_count_electrons', 
-                 self.prefix + '_interaction_count_muons',
-                 self.prefix + '_interaction_count_pions', 
-                 self.prefix + '_interaction_count_protons', 
-                 self.prefix + '_interaction_vtx_x',
-                 self.prefix + '_interaction_vtx_y', 
-                 self.prefix + '_interaction_vtx_z']
-
-        values = [np.nan] * len(names)
-
-        return names, values
-
-    def __str__(self):
-        return self.__repr__()
-    
-    def __repr__(self):
-        return "NullInteraction()"
-
-
 class TruthInteraction(Interaction):
 
     def __init__(self, *args, **kwargs):
@@ -322,7 +262,7 @@ class TruthInteraction(Interaction):
         for p in self.particles:
             assert isinstance(p, TruthParticle)
 
-    def get_names_and_values(self): 
+    def get_info(self): 
 
         names = ['true_interaction_id', 
                  'true_interaction_type', 
@@ -352,7 +292,7 @@ class TruthInteraction(Interaction):
             self.vertex[2]
         ]
 
-        return names, values
+        return dict(zip(names, values))
 
     def __repr__(self):
 
@@ -366,42 +306,34 @@ class TruthInteraction(Interaction):
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
-def match(pred_particles  : Union[List[Particle], List[TruthParticle]], 
-          truth_particles : Union[List[Particle], List[TruthParticle]], 
-          primaries=True, min_overlap_count=1,
-          mode='particles'):
+def match(particles_from : Union[List[Particle], List[TruthParticle]], 
+          particles_to   : Union[List[Particle], List[TruthParticle]], 
+          primaries=True, min_overlap_count=1):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>. 
     
     '''
 
-    if mode == 'particles':
-        null_instance = NullParticle()
-    elif mode == 'interactions':
-        null_instance = NullInteraction()
-    else:
-        raise ValueError
-
-    part_p, part_t = pred_particles, truth_particles
+    particles_x, particles_y = particles_from, particles_to
     if primaries:
-        part_p, part_t = [], []
-        for p in pred_particles:
-            if p.is_primary:
-                part_p.append(p)
-        for tp in truth_particles:
-            if tp.is_primary:
-                part_t.append(tp)
+        particles_x, particles_y = [], []
+        for px in particles_from:
+            if px.is_primary:
+                particles_x.append(px)
+        for py in particles_to:
+            if py.is_primary:
+                particles_y.append(py)
 
-    if len(part_t) == 0 or len(part_p) == 0:
+    if len(particles_y) == 0 or len(particles_x) == 0:
         print("No particles/interactions to match.")
         return [], 0, 0
 
-    overlap_matrix = np.zeros((len(part_t), len(part_p)), dtype=np.int64)
-    for i, tp in enumerate(part_t):
-        for j, p in enumerate(part_p):
-            overlap_matrix[i, j] = len(np.intersect1d(tp.voxel_indices, 
-                                                      p.voxel_indices))
+    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
+    for i, py in enumerate(particles_y):
+        for j, px in enumerate(particles_x):
+            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices, 
+                                                      px.voxel_indices))
 
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
@@ -411,27 +343,26 @@ def match(pred_particles  : Union[List[Particle], List[TruthParticle]],
 
     matches = []
 
-    for j, p in enumerate(part_p):
+    for j, px in enumerate(particles_x):
         select_idx = idx[j]
         if select_idx < 0:
             # If no truth could be matched, assign None
-            matched_truth = null_instance
+            matched_truth = None
         else:
-            matched_truth = part_t[select_idx]
-        matches.append((p, matched_truth))
+            matched_truth = particles_y[select_idx]
+        matches.append((px, matched_truth))
 
     return matches, idx, intersections
 
 
-def match_interactions_fn(pred_interactions : List[Interaction], 
-                          true_interactions : List[Interaction], 
+def match_interactions_fn(ints_from : List[Interaction], 
+                          ints_to : List[Interaction], 
                           min_overlap_count=1):
     
     f = partial(match, primaries=False, 
-                min_overlap_count=min_overlap_count,
-                mode='interactions')
+                min_overlap_count=min_overlap_count)
     
-    return f(pred_interactions, true_interactions)
+    return f(ints_from, ints_to)
 
 
 def group_particles_to_interactions_fn(particles : List[Particle], 
