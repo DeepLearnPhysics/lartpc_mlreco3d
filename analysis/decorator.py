@@ -46,9 +46,15 @@ def evaluate(filenames, mode='per_image'):
 
             module_config = cfg['model']['modules']
             # # Override paths
-            cfg = recursive_merge(io_cfg, cfg)
+            # cfg = recursive_merge(analysis_config, cfg)
+            event_list = cfg['iotool']['dataset'].get('event_list', None)
+            if event_list is not None:
+                event_list = eval(event_list)
+                if isinstance(event_list, tuple):
+                    assert event_list[0] < event_list[1]
+                    event_list = list(range(event_list[0], event_list[1]))
 
-            loader = loader_factory(cfg)
+            loader = loader_factory(cfg, event_list=event_list)
             dataset = iter(cycle(loader))
             Trainer = trainval(cfg)
             loaded_iteration = Trainer.initialize()
@@ -86,6 +92,7 @@ def evaluate(filenames, mode='per_image'):
                     output_logs[i].record(df)
                     # disable pandas from appending additional header lines
                     output_logs[i].header = False
+                iteration += 1
             
         return process_dataset
     return decorate

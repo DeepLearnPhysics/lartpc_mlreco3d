@@ -49,12 +49,14 @@ def get_track_endpoints(particle : Particle, verbose=False):
             " endpoints to tracks!".format(particle.id, 
                                            particle.semantic_type))
     if particle.ppn_candidates.shape[0] == 0:
-        print("Particle {} has no PPN candidates!"\
-            " Running brute-force endpoint finder...".format(particle.id))
+        if verbose:
+            print("Particle {} has no PPN candidates!"\
+                " Running brute-force endpoint finder...".format(particle.id))
         endpoints = get_track_endpoints_centroid(particle)
     elif particle.ppn_candidates.shape[0] == 1:
-        print("Particle {} has only one PPN candidate!"\
-            " Running brute-force endpoint finder...".format(particle.id))
+        if verbose:
+            print("Particle {} has only one PPN candidate!"\
+                " Running brute-force endpoint finder...".format(particle.id))
         endpoints = get_track_endpoints_centroid(particle)
     else:
         centroid = particle.points.mean(axis=0)

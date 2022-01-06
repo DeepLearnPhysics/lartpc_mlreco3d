@@ -23,7 +23,8 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
     spatial_size = processor_cfg.get('spatial_size', 768)
     pred_to_truth, truth_to_pred = [], []
     predictor = FullChainEvaluator(data_blob, res, module_config, analysis_cfg)
-
+    image_idxs = data_blob['index']
+    # print("2 = ", image_idxs)
 
     # 1. Get Pred -> True matching (for each predicted particle, match one of truth)
 
@@ -56,7 +57,7 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
             if true_p is not None:
                 true_particle_dict = true_p.get_info()
 
-            update_dict = {'index': data_idx}
+            update_dict = {'index': image_idxs[data_idx]}
             update_dict.update(pred_int_dict)
             update_dict.update(true_int_dict)
             update_dict.update(pred_particle_dict)
@@ -93,7 +94,7 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
             if pred_p is not None:
                 pred_particle_dict = pred_p.get_info()
 
-            update_dict = {'index': data_idx}
+            update_dict = {'index': image_idxs[data_idx]}
             update_dict.update(pred_int_dict)
             update_dict.update(true_int_dict)
             update_dict.update(pred_particle_dict)

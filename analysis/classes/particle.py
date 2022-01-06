@@ -308,7 +308,7 @@ class TruthInteraction(Interaction):
 
 def match(particles_from : Union[List[Particle], List[TruthParticle]], 
           particles_to   : Union[List[Particle], List[TruthParticle]], 
-          primaries=True, min_overlap_count=1):
+          primaries=True, min_overlap_count=1, verbose=False):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>. 
@@ -326,7 +326,8 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
                 particles_y.append(py)
 
     if len(particles_y) == 0 or len(particles_x) == 0:
-        print("No particles/interactions to match.")
+        if verbose:
+            print("No particles/interactions to match.")
         return [], 0, 0
 
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)

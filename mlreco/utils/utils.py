@@ -201,6 +201,9 @@ class ChunkCSVData:
 
         self.header = True
 
+        if not os.path.exists(os.path.dirname(self.name)):
+            os.makedirs(os.path.dirname(self.name))
+
         with open(self.name, 'w') as f:
             pass
         # df = pd.DataFrame(list())
