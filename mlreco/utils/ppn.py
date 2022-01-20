@@ -272,7 +272,7 @@ def group_points(ppn_pts, batch, label):
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
                                     batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
-                                    selection=None, num_classes=5, **kwargs):
+                                    selection=None, num_classes=5, apply_deghosting=True, **kwargs):
     """
     Postprocessing of PPN points.
 
@@ -321,7 +321,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
     scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
 
-    if 'ghost' in out:
+    if 'ghost' in out and apply_deghosting:
+        print(out['ghost'][entry].shape)
+        print(event_data.shape)
+        print(uresnet_predictions.shape)
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         #points = points[mask_ghost]

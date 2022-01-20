@@ -11,4 +11,9 @@ def compute_sum_deposited(particle : Particle):
 
 def proton_energy_tabular(particle: Particle):
     assert particle.pid == 4  # Proton
-    
+    x, y = particle.endpoints[0], particle.endpoints[1]
+    l = np.sqrt(np.power(x - y, 2).sum())
+
+def multiple_coulomb_scattering(particle: Particle):
+    assert particle.pid == 2  # Muon
+    pass

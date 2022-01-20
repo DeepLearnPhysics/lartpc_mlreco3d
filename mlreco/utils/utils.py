@@ -209,7 +209,9 @@ class ChunkCSVData:
         # df = pd.DataFrame(list())
         # df.to_csv(self.name, mode='w')
         
-    def record(self, df):
+    def record(self, df, verbose=False):
+        if verbose:
+            print(df)
         df.to_csv(self.name, 
                   mode=self.append, 
                   chunksize=self.chunksize, 

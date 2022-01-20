@@ -25,6 +25,8 @@ class Particle:
         self.interaction_id = interaction_id
         self.batch_id = batch_id
         self.is_primary = kwargs.get('is_primary', False)
+        self.match = []
+        self._match_counts = {}
 #         self.fragments = fragment_ids
         self.semantic_keys = {
             0: 'Shower Fragment',
@@ -89,7 +91,7 @@ class Particle:
     
     def __repr__(self):
         fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
-            " | PID: {:<8} | Conf = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
+            " | PID: {:<8} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
@@ -106,6 +108,8 @@ class TruthParticle(Particle):
     def __init__(self, *args, particle_asis=None, **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
         self.asis = particle_asis
+        self.match = []
+        self._match_counts = {}
 
     def __repr__(self):
         fmt = "TruthParticle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
@@ -169,6 +173,8 @@ class Interaction:
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
         self.id = interaction_id
         self.particles = particles
+        self.match = []
+        self._match_counts = {}
         self.check_validity()
         # Voxel indices of an interaction is defined by the union of
         # constituent particle voxel indices
@@ -188,11 +194,7 @@ class Interaction:
             4: 'Proton'
         }
 
-        self.particles_summary = ""
-        for p in self.particles:
-            pmsg = "    - Particle {}: PID = {}, Size = {} \n".format(
-                p.id, self.pid_keys[p.pid], p.points.shape[0])
-            self.particles_summary += pmsg
+        self.get_particles_summary()
 
         self.vertex = vertex
         if self.vertex is None:
@@ -207,6 +209,14 @@ class Interaction:
     def check_validity(self):
         for p in self.particles:
             assert isinstance(p, Particle)
+
+    def get_particles_summary(self):
+        self.particles_summary = ""
+        self.particles = sorted(self.particles, key=lambda x: x.id)
+        for p in self.particles:
+            pmsg = "    - Particle {}: PID = {}, Size = {}, Match = {} \n".format(
+                p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
+            self.particles_summary += pmsg
 
     def get_info(self): 
 
@@ -243,6 +253,7 @@ class Interaction:
 
     def __repr__(self):
 
+        self.get_particles_summary()
         msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "-----------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
@@ -257,6 +268,8 @@ class TruthInteraction(Interaction):
 
     def __init__(self, *args, **kwargs):
         super(TruthInteraction, self).__init__(*args, **kwargs)
+        self.match = []
+        self._match_counts = {}
 
     def check_validity(self):
         for p in self.particles:
@@ -296,6 +309,7 @@ class TruthInteraction(Interaction):
 
     def __repr__(self):
 
+        self.get_particles_summary()
         msg = "TruthInteraction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "-----------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
@@ -319,9 +333,13 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
     if primaries:
         particles_x, particles_y = [], []
         for px in particles_from:
+            px.match = []
+            px._match_counts = {}
             if px.is_primary:
                 particles_x.append(px)
         for py in particles_to:
+            py.match = []
+            py._match_counts = {}
             if py.is_primary:
                 particles_y.append(py)
 
@@ -351,7 +369,15 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
             matched_truth = None
         else:
             matched_truth = particles_y[select_idx]
+            px.match.append(matched_truth.id)
+            px._match_counts[matched_truth.id] = intersections[j]
+            matched_truth.match.append(px.id)
+            matched_truth._match_counts[px.id] = intersections[j]
         matches.append((px, matched_truth))
+
+    for p in particles_y:
+        p.match = sorted(p.match, key=lambda x: p._match_counts[x],
+                                  reverse=True)
 
     return matches, idx, intersections
 
@@ -378,8 +404,9 @@ def group_particles_to_interactions_fn(particles : List[Particle],
         if get_nu_id:
             nu_id = np.unique([p.nu_id for p in particles])
             if nu_id.shape[0] > 1:
-                raise ValueError("Interaction {} has non-unique particle "\
+                print("Interaction {} has non-unique particle "\
                     "nu_ids: {}".format(int_id, str(nu_id)))
+                nu_id = nu_id[0]
             else:
                 nu_id = nu_id[0]
         if mode == 'pred':

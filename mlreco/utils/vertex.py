@@ -10,7 +10,8 @@ def get_ppn_points_per_particles(input_data, res,
                                 attaching_threshold=2,
                                 track_label=1,
                                 shower_label=0,
-                                unwrapped=False):
+                                unwrapped=False,
+                                apply_deghosting=True):
     """
     Get predicted PPN points
 
@@ -27,7 +28,8 @@ def get_ppn_points_per_particles(input_data, res,
                                         entry=data_idx,
                                         score_threshold=0.5,
                                         type_threshold=2,
-                                        unwrapped=unwrapped)
+                                        unwrapped=unwrapped,
+                                        apply_deghosting=apply_deghosting)
                                         #selection=c)
 
     # if ppn.shape[0] == 0:
@@ -47,7 +49,7 @@ def get_ppn_points_per_particles(input_data, res,
     #ppn = ppn[(ppn_type[:, track_label] > 0.5) | (ppn_type[:, shower_label] > 0.5)]
 
     all_voxels = input_data[data_idx]
-    if 'ghost' in res:
+    if 'ghost' in res and apply_deghosting:
         mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
         all_voxels = input_data[data_idx][mask_ghost]
 
@@ -104,7 +106,7 @@ def get_ppn_points_per_particles(input_data, res,
 def predict_vertex(inter_idx, data_idx, input_data, res,
                     coords_col=(1, 4), primary_label=1,
                     shower_label=0, track_label=1, endpoint_label=0,
-                    attaching_threshold=2, inter_threshold=10, unwrapped=False):
+                    attaching_threshold=2, inter_threshold=10, unwrapped=False, apply_deghosting=True):
     """
     Heuristic to find the vertex by looking at
     - predicted primary particles within predicted interaction
@@ -130,11 +132,12 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
                                                             track_label=track_label,
                                                             shower_label=shower_label,
                                                             coords_col=coords_col,
-                                                            unwrapped=unwrapped)
+                                                            unwrapped=unwrapped,
+                                                            apply_deghosting=apply_deghosting)
 
 
     all_voxels = input_data[data_idx]
-    if 'ghost' in res:
+    if 'ghost' in res and apply_deghosting:
         mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
         all_voxels = input_data[data_idx][mask_ghost]
 

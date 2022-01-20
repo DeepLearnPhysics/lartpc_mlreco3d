@@ -95,3 +95,62 @@ def adapt_labels_numpy(result, label_seg, label_clustering, num_classes=5, batch
         label_c = np.concatenate(label_c, axis=0)
         complete_label_clustering.append(label_c)
     return complete_label_clustering
+
+
+def deghost_labels_and_predictions(data_blob, result):
+    '''
+    Given dictionaries <data_blob> and <result>, apply deghosting to
+    uresnet predictions and labels for use in later reconstruction stages.
+    '''
+
+    print(data_blob['input_data'][0].shape)
+    print(result['ghost'][0].shape)
+    print(data_blob['cluster_label'][0].shape)
+
+
+    result['ghost_mask'] = [
+        result['ghost'][i].argmax(axis=1) == 0 \
+            for i in range(len(result['ghost']))]
+    data_blob['true_ghost_mask'] = [
+        data_blob['segment_label'][i][:, -1] < 5 \
+            for i in range(len(data_blob['segment_label']))]
+
+    data_blob['input_data_noghost'] = data_blob['input_data']
+    data_blob['input_data'] = [data_blob['input_data'][i][mask] \
+        for i, mask in enumerate(result['ghost_mask'])]
+
+    if 'cluster_label' in data_blob \
+        and data_blob['cluster_label'] is not None:
+        # Save the clust_data before deghosting
+        data_blob['cluster_label_noghost'] = data_blob['cluster_label']
+        data_blob['cluster_label'] = adapt_labels_numpy(
+            result, 
+            data_blob['segment_label'], 
+            data_blob['cluster_label'])
+
+    if 'seg_prediction' in result \
+        and result['seg_prediction'] is not None:
+        result['seg_prediction'] = [
+            result['seg_prediction'][i][result['ghost_mask'][i]] \
+                for i in range(len(result['seg_prediction']))]
+
+    if 'segmentation' in result \
+        and result['segmentation'] is not None:
+        result['segmentation'] = [
+            result['segmentation'][i][result['ghost_mask'][i]] \
+                for i in range(len(result['segmentation']))]
+
+    if 'kinematics_label' in data_blob \
+        and data_blob['kinematics_label'] is not None:
+        data_blob['kinematics_label'] = adapt_labels_numpy(
+            result, 
+            data_blob['segment_label'], 
+            data_blob['kinematics_label'])
+            
+    # This needs to come last - in adapt_labels seg_label is the original one
+    if 'segment_label' in data_blob \
+        and data_blob['segment_label'] is not None:
+        data_blob['segment_label_noghost'] = data_blob['segment_label']
+        data_blob['segment_label'] = [
+            data_blob['segment_label'][i][result['ghost_mask'][i]] \
+                for i in range(len(data_blob['segment_label']))]
