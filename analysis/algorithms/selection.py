@@ -1,3 +1,5 @@
+from collections import OrderedDict
+from turtle import update
 
 import analysis
 import numpy as np
@@ -64,7 +66,7 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
                     true_particle_dict = true_p.get_info()
                     true_particle_is_matched = len(true_p.match) > 0
 
-                update_dict = {'index': index}
+                update_dict = OrderedDict({'index': index})
                 update_dict.update(pred_int_dict)
                 update_dict.update(true_int_dict)
                 update_dict.update(pred_particle_dict)
@@ -72,6 +74,8 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
 
                 update_dict['pred_particle_is_matched'] = pred_particle_is_matched
                 update_dict['true_particle_is_matched'] = true_particle_is_matched
+
+                update_dict = dict(sorted(update_dict.items()))
 
                 pred_to_truth.append(update_dict)
 
@@ -110,7 +114,7 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
                     pred_particle_dict = pred_p.get_info()
                     pred_particle_is_matched = len(pred_p.match) > 0
 
-                update_dict = {'index': index}
+                update_dict = OrderedDict({'index': index})
                 update_dict.update(pred_int_dict)
                 update_dict.update(true_int_dict)
                 update_dict.update(pred_particle_dict)
@@ -118,7 +122,7 @@ def nue_selection(data_blob, res, data_idx, analysis_cfg, module_config):
 
                 update_dict['pred_particle_is_matched'] = pred_particle_is_matched
                 update_dict['true_particle_is_matched'] = true_particle_is_matched
-
+                update_dict = dict(sorted(update_dict.items()))
                 truth_to_pred.append(update_dict)
 
 

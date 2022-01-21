@@ -125,7 +125,6 @@ class FullChainGNN(torch.nn.Module):
         =======
         None (modifies the result dict in place)
         """
-
         # Pass data through the GrapPA model
         gnn_output = grappa(input, clusts, batch_size=self.batch_size, **kwargs)
 
@@ -437,29 +436,6 @@ class FullChainGNN(torch.nn.Module):
                 particles = np.array(particles, dtype=object)
                 part_seg = get_cluster_label(label_clustering[0].int(), particles, column=-1)
                 part_batch_ids = get_cluster_batch(label_clustering[0], particles, batch_index=0)
-
-                #print(result['shower_fragments'][0])
-                #print(result['frags'][0][result['frag_seg'][0] == 0])
-                #print(result['fragments'][0][result['fragments_seg'][0] == 0])
-
-                # part_primary_ids = []
-                # for idx, b in enumerate(part_batch_ids):
-                # #     print(np.count_nonzero(frag_batch_ids == b))
-                # #     print(np.count_nonzero(frag_batch_ids == b) > 0 and part_seg[idx] == 0)
-                # #     print(np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0])
-                #     cluster_ids = get_cluster_label(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], column=5)
-                #     group_ids = get_cluster_label(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], column=6)
-                #     frag_batch_ids = get_cluster_batch(label_clustering[0][particles[idx]], result['frags'][0][result['frag_seg'][0] == 0], batch_index=0)
-                #
-                #     for g in np.unique(group_ids):
-                #         if part_seg[idx] == 0:
-                #             prim = np.where(cluster_ids[(frag_batch_ids == b) & (group_ids == g)] == group_ids[(frag_batch_ids == b) & (group_ids == g)])[0]
-                #             if len(prim) > 0:
-                #                 part_primary_ids.append(prim[0])
-                #                 continue
-                #         part_primary_ids.append(-1)
-                # #part_primary_ids = [np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0][0] if len(np.where(cluster_ids[frag_batch_ids == b] == group_ids[frag_batch_ids == b])[0]) else -1 for idx, b in enumerate(part_batch_ids)]
-                # assert len(part_primary_ids) == len(particles)
                 _, counts = torch.unique(label_clustering[0][:, 0], return_counts=True)
 
             # For showers, select primary for extra feature extraction

@@ -1,6 +1,9 @@
 from typing import Union, Callable, Tuple, List
 from abc import ABC, abstractmethod
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import numpy as np
 import pandas as pd
 import torch

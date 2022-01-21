@@ -234,6 +234,7 @@ class trainval(object):
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % self._trainval_config['unwrapper'])
                     raise ImportError
+                # print(input_data['index'])
                 input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:
                 if 'index' in input_data:
