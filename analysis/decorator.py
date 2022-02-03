@@ -44,7 +44,7 @@ def evaluate(filenames, mode='per_image'):
         @wraps(func)
         def process_dataset(cfg, analysis_config):
 
-            io_cfg = analysis_config['iotool']
+            io_cfg = cfg['iotool']
 
             module_config = cfg['model']['modules']
             # # Override paths

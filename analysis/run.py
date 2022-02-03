@@ -7,7 +7,7 @@ current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
 
 from mlreco.main_funcs import process_config
-from analysis.algorithms.selection import nue_selection
+from analysis.algorithms.selection import *
 
 def main(analysis_cfg_path, model_cfg_path):
 
@@ -16,8 +16,11 @@ def main(analysis_cfg_path, model_cfg_path):
     config = yaml.load(open(model_cfg_path, 'r'), Loader=yaml.Loader)
     process_config(config, verbose=False)
 
-    # Run Selection Algorithm
-    nue_selection(config, analysis_config)
+    print(analysis_config)
+    process_func = eval(analysis_config['analysis']['name'])
+
+    # Run Algorithm
+    process_func(config, analysis_config)
 
 
 if __name__=="__main__":

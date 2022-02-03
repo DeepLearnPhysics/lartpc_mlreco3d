@@ -493,17 +493,19 @@ class FullChainPredictor:
         pred_fragments = self._fit_predict_fragments(entry)
         pred_groups = self._fit_predict_groups(entry)
         pred_interaction_labels = self._fit_predict_interaction_labels(entry)
-        pred_ppn = self._fit_predict_ppn(entry)
         pred_pids = self._fit_predict_pids(entry)
 
-        return {
-            'pred_seg': pred_seg,
-            'pred_fragments': pred_fragments,
-            'pred_groups': pred_groups,
-            'pred_interaction_labels': pred_interaction_labels,
-            # 'pred_ppn': pred_ppn,
-            'pred_pids': pred_pids
+        pred = {
+            'segment_label': pred_seg,
+            'fragment_label': pred_fragments,
+            'group_label': pred_groups,
+            'interaction_label': pred_interaction_labels,
+            'pdg_label': pred_pids
         }
+
+        self._pred = pred
+
+        return pred
 
 
     def fit_predict(self, **kwargs):
@@ -525,7 +527,7 @@ class FullChainPredictor:
 
         for entry in range(self.num_batches):
 
-            pred_dict = self.fit_predict_entry(entry)
+            pred_dict = self.fit_predict_labels(entry)
             labels.append(pred_dict)
             particles = self.get_particles(entry, **kwargs)
             interactions = self.get_interactions(entry)
@@ -548,7 +550,7 @@ class FullChainEvaluator(FullChainPredictor):
         model = Trainer._net.module
         entry = 0   # batch id
         predictor = FullChainEvaluator(model, data_blob, res, cfg)
-        pred_seg = predictor.get_true_labels(entry, mode='segmentation')
+        pred_seg = predictor.get_true_label(entry, mode='segmentation')
 
     To avoid confusion between different quantities, the label namings under
     iotools.schema must be set as follows:
@@ -608,13 +610,18 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
     
     
-    def get_true_labels(self, entry, name, schema='cluster_label'):
+    def get_true_label(self, entry, name, schema='cluster_label'):
         if name not in self.LABEL_TO_COLUMN:
             raise KeyError("Invalid label identifier name: {}. "\
                 "Available column names = {}".format(
                     name, str(list(self.LABEL_TO_COLUMN.values()))))
         column_idx = self.LABEL_TO_COLUMN[name]
         return self.data_blob[schema][entry][:, column_idx]
+
+
+    def get_predicted_label(self, entry, name):
+        pred = self.fit_predict_labels(entry)
+        return pred[name]
 
 
     def get_true_particles(self, entry, primaries=True,
@@ -772,6 +779,10 @@ class FullChainEvaluator(FullChainPredictor):
             for interactions in matched_interactions:
                 domain, codomain = interactions
                 if codomain is None:
-                    continue
-                matched_particles = match(domain.particles, codomain.particles)
+                    domain_particles, codomain_particles = domain.particles, []
+                else:
+                    domain_particles, codomain_particles = domain.particles, codomain.particles
+                    # continue
+                matched_particles, _, _ = match(domain_particles, codomain_particles)
+
         return matched_interactions
