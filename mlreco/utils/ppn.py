@@ -303,6 +303,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     # then it won't be unwrapped.
     if len(points) == len(ppn_coords[-1]):
         #pass
+        # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
         points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
         points = out['points'][entry]
@@ -311,15 +312,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if enable_classify_endpoints:
         classify_endpoints = np.array(out['classify_endpoints'])[ppn_coords[-1][:, 0] == entry, :]#[entry]
 
-    # Difference in naming between SCN/ME
-    if 'mask_ppn' not in out:
-        mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
-    else:
-        mask_ppn = out['mask_ppn'][-1]
+    mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
-    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
 
     if 'ghost' in out:
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
@@ -330,6 +326,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         #mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
+
+    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean

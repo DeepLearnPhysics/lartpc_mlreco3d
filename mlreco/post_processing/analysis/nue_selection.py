@@ -65,7 +65,7 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
         if not is_primary: continue
         pred_primary_count += 1
         pred_primary_particles.append((pred_idx, pred_part))
-        #print('Predicted primary', pred_idx, len(pred_part))
+        print(data_idx, 'Predicted primary', pred_idx, " voxel count = ", len(pred_part))
     #print(clust_data[data_idx].shape, kinematics[data_idx].shape)
 
     #

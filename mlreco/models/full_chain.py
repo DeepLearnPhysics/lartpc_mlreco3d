@@ -224,12 +224,7 @@ class FullChain(FullChainGNN):
 
         cnn_result = {}
 
-        ghost_feature_maps = []
-
         if self.enable_ghost:
-            for ghost_tensor in result['ghost']:
-                ghost_feature_maps.append(ghost_tensor)
-            result['ghost'] = ghost_feature_maps
 
             # Update input based on deghosting results
             # if self.cheat_ghost:
@@ -329,6 +324,9 @@ class FullChain(FullChainGNN):
                                                 cluster_predictions.to(device)[:, None]], dim=1)
                     # For the record - (self.gs_manager._node_pred.pos == input[0][filtered_semantic][:, 1:4]).all()
                     # ie ordering of voxels is the same in node predictions and (filtered) input data
+                    # with np.printoptions(precision=3, suppress=True):
+                    #     print('filtered input', filtered_input.shape, filtered_input[:, 0].sum(), filtered_input[:, 1].sum(), filtered_input[:, 2].sum(), filtered_input[:, 3].sum(), filtered_input[:, 4].sum(), filtered_input[:, 5].sum())
+                    #     print(torch.unique( filtered_input[:, 5], return_counts=True))
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragments'].extend(fragment_data[0])
                     cluster_result['frag_batch_ids'].extend(fragment_data[1])

@@ -779,7 +779,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 #res['gs_cluster_label'] = [gs_cluster_label]
                 res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], [gs_cluster_label])
                 #print(res_graph_spice.keys())
-                accuracy += res_graph_spice['accuracy']
+                if 'accuracy' in res_graph_spice:
+                    accuracy += res_graph_spice['accuracy']
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
                 for key in res_graph_spice:
                     res['graph_spice_' + key] = res_graph_spice[key]

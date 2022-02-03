@@ -73,6 +73,8 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
     #np.save('/sdf/home/l/ldomine/lartpc_mlreco3d/semantic_predictions.npy', labels)
 
     labels = labels[mask]
+    if labels.shape[0] == 0:
+        return
     #name = cfg['post_processing']['graph_spice_metrics']['output_filename']
     graph = res['graph'][0]
 
@@ -93,8 +95,9 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
                                          batch_col=0,
                                          training=False)
     gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
-    funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
-            num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
+    funcs = [ARI, purity, efficiency]
+            # num_true_clusters, num_pred_clusters,
+            # num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)
     #import pandas as pd
     #pd.set_option('display.max_columns', None)

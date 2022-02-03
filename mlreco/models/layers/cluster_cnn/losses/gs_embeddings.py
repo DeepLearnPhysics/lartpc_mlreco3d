@@ -217,7 +217,11 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss = defaultdict(list)
+        loss['loss'] = []
+
         accuracy = defaultdict(float)
+        accuracy['accuracy'] = 0.
+
         semantic_classes = slabels.unique()
         counts = 0
         for sc in semantic_classes:
@@ -331,7 +335,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
                     covariance_batch, occupancy_batch,
                     slabels_batch, clabels_batch)
                 for key, val in loss_class.items():
-                    loss[key].append(sum(val) / len(val))
+                    loss[key].append(sum(val) / len(val) if len(val) else 0.)
                 for s, acc in acc_class.items():
                     accuracy[s].append(acc)
 
