@@ -3,6 +3,7 @@ import numpy as np
 from mlreco.utils import CSVData
 
 from mlreco.utils.metrics import *
+from mlreco.utils.cluster.graph_batch import GraphBatch
 
 from pprint import pprint
 
@@ -50,16 +51,18 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
+
     skip_classes = cfg['model']['modules']['graph_spice']['skip_classes']
     min_points = cfg['model']['modules']['graph_spice'].get('min_points', 1)
     invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
     use_labels = cfg['post_processing']['graph_spice_metrics'].get('use_labels', True)
 
-    segmentation = res['segmentation'][0]
+    segmentation = np.concatenate(res['segmentation'], axis=0)
     if ghost:
         labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
-        labels = labels[0]
-        ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+        labels = np.concatenate(labels, axis=0)#labels[0]
+        ghost_mask = np.concatenate(res['ghost'], axis=0)
+        ghost_mask = (ghost_mask.argmax(axis=1) == 0)
         segmentation = segmentation[ghost_mask]
 
     if not use_labels:
@@ -70,13 +73,18 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     mask = ~np.isin(labels[:, -1], skip_classes)
 
-    #np.save('/sdf/home/l/ldomine/lartpc_mlreco3d/semantic_predictions.npy', labels)
-
     labels = labels[mask]
     if labels.shape[0] == 0:
         return
+    batch_ids = np.unique(labels[:, 0])
     #name = cfg['post_processing']['graph_spice_metrics']['output_filename']
     graph = res['graph'][0]
+
+    # graph_batch_ids = graph.batch.unique().cpu().numpy()
+    # batch_mask = np.isin(graph_batch_ids, batch_ids)
+    # graph_list = graph.to_data_list()
+    # corrected_batch_list = np.arange(len(graph_list))[batch_mask]
+    # graph = GraphBatch.from_data_list([graph_list[idx] for idx in corrected_batch_list])
 
     graph_info = res['graph_info'][0]
 
@@ -85,7 +93,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
        range(0, len(graph_info.Index.unique())), data_index)}
 
     graph_info['Index'] = graph_info['Index'].map(index_mapping)
-    # print(graph_info)
+    # graph_info = graph_info[graph_info['Index'].isin(corrected_batch_list)]
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
@@ -126,13 +134,13 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
     use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
 
     if not use_labels:
-        segmentation = res['segmentation'][0]
+        segmentation = np.concatenate(res['segmentation'], axis=0)
         if ghost:
             labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
-            labels = labels[0]
-            ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+            labels = np.concatenate(labels, axis=0)#labels[0]
+            ghost_mask = np.concatenate(res['ghost'], axis=0)
+            ghost_mask = (ghost_mask.argmax(axis=1) == 0)
             segmentation = segmentation[ghost_mask]
-
 
     if use_labels:
         mask = ~np.isin(labels[:, -1], skip_classes)

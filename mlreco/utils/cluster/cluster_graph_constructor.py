@@ -454,7 +454,7 @@ class ClusterGraphConstructor:
             segment_label = cluster_label[:, self.seg_col].astype(int)
             fragment_label = cluster_label[:, self.cluster_col].astype(int)
             label_pos = cluster_label[:, 1:4]
-        print('batch index', batch_index)
+
         for bidx in np.unique(batch_index):
             batch_mask = batch_index == bidx
             labels_batch = cluster_label[batch_mask]
