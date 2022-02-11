@@ -31,7 +31,7 @@ class FullChainPredictor:
                      'particle_edge_index', 'particle_node_pred', 
                      'particle_edge_pred', 'particle_group_pred', 
                      'particles','inter_edge_index', 'inter_node_pred', 
-                     'inter_edge_pred', 'node_pred_p', 'node_pred_type', 
+                     'inter_edge_pred', 'inter_particles', 'node_pred_p', 'node_pred_type', 
                      'flow_edge_pred', 'kinematics_particles', 
                      'kinematics_edge_index', 'clust_fragments', 
                      'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 
@@ -415,12 +415,12 @@ class FullChainPredictor:
 
         node_pred_vtx = self.result['node_pred_vtx'][entry]
 
-        pred_group_ids = self._fit_predict_groups(entry)
-
         assert node_pred_vtx.shape[0] == len(particles)
         
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
+            if voxels.shape[0] < self.min_particle_voxel_count:
+                continue
             seg_label = particles_seg[i]
             interaction_id = inter_group_pred[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
@@ -624,8 +624,30 @@ class FullChainEvaluator(FullChainPredictor):
         return pred[name]
 
 
+    def _apply_true_voxel_cut(self, entry, primaries=True):
+
+        labels = self.data_blob['cluster_label_noghost'][entry]
+
+        particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
+        particles_exclude = []
+
+        for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
+            pid = int(p.id())
+            if pid not in particle_ids:
+                continue
+            is_primary = p.group_id() == p.parent_id()
+            if p.pdg_code() not in TYPE_LABELS:
+                continue
+            mask = labels[:, 6].astype(int) == pid
+            coords = labels[mask][:, 1:4]
+            if coords.shape[0] < self.min_particle_voxel_count:
+                particles_exclude.append(p.id())
+
+        return set(particles_exclude)
+
+
+
     def get_true_particles(self, entry, primaries=True,
-                           min_particle_voxel_count=20,
                            verbose=False) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id. 
@@ -649,14 +671,30 @@ class FullChainEvaluator(FullChainPredictor):
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
 
         particles = []
+        exclude_ids = set([])
 
         for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
             pid = int(p.id())
+            # 1. Check if current pid is one of the existing group ids
             if pid not in particle_ids:
+                # print("PID {} not in particle_ids".format(pid))
                 continue
             is_primary = p.group_id() == p.parent_id()
             if p.pdg_code() not in TYPE_LABELS:
+                # print("PID {} not in TYPE LABELS".format(pid))
                 continue
+            # For deghosting inputs, perform voxel cut with true nonghost coords.
+            if self.deghosting:
+                exclude_ids = self._apply_true_voxel_cut(entry, 
+                    primaries=primaries)
+                if pid in exclude_ids:
+                    # Skip this particle if its below the voxel minimum requirement
+                    # print("PID {} was excluded from the list of particles due"\
+                    #     " to true nonghost voxel cut. Exclude IDS = {}".format(
+                    #         p.id(), str(exclude_ids)
+                    #     ))
+                    continue
+
             pdg = TYPE_LABELS[p.pdg_code()]
             mask = labels[:, 6].astype(int) == pid
             coords = self.data_blob['input_data'][entry][mask][:, 1:4]
@@ -664,11 +702,12 @@ class FullChainEvaluator(FullChainPredictor):
             # Check semantics
             semantic_type, sem_counts = np.unique(
                 labels[mask][:, -1].astype(int), return_counts=True)
-            if verbose and (semantic_type.shape[0] > 1):
-                print("Semantic Type of Particle {} is not "\
-                    "unique: {}, {}".format(pid, 
-                                            str(semantic_type), 
-                                            str(sem_counts)))
+            if semantic_type.shape[0] > 1:
+                if verbose:
+                    print("Semantic Type of Particle {} is not "\
+                        "unique: {}, {}".format(pid, 
+                                                str(semantic_type), 
+                                                str(sem_counts)))
                 perm = sem_counts.argmax()
                 semantic_type = semantic_type[perm]
             else:
@@ -676,9 +715,10 @@ class FullChainEvaluator(FullChainPredictor):
 
             interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int), 
                                                    return_counts=True)
-            if verbose and (interaction_id.shape[0] > 1):
-                print("Interaction ID of Particle {} is not "\
-                    "unique: {}".format(pid, str(interaction_id)))
+            if interaction_id.shape[0] > 1:
+                if verbose:
+                    print("Interaction ID of Particle {} is not "\
+                        "unique: {}".format(pid, str(interaction_id)))
                 perm = int_counts.argmax()
                 interaction_id = interaction_id[perm]
             else:
@@ -686,9 +726,10 @@ class FullChainEvaluator(FullChainPredictor):
 
             nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int), 
                                          return_counts=True)
-            if verbose and (nu_id.shape[0] > 1):
-                print("Neutrino ID of Particle {} is not "\
-                    "unique: {}".format(pid, str(nu_id)))
+            if nu_id.shape[0] > 1:
+                if verbose:
+                    print("Neutrino ID of Particle {} is not "\
+                        "unique: {}".format(pid, str(nu_id)))
                 perm = nu_counts.argmax()
                 nu_id = nu_id[perm]
             else:
@@ -707,7 +748,7 @@ class FullChainEvaluator(FullChainPredictor):
             particle.nu_id = nu_id
             particle.voxel_indices = np.where(mask)[0]
 
-            if particle.voxel_indices.shape[0] > min_particle_voxel_count:
+            if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
                 particles.append(particle)
 
         if primaries:
@@ -763,18 +804,21 @@ class FullChainEvaluator(FullChainPredictor):
         return matched_pairs
 
 
-    def match_interactions(self, entry, mode='pt', match_particles=True):
+    def match_interactions(self, entry, mode='pt', 
+                           primaries=True, match_particles=True, return_counts=False):
         if mode == 'pt':
-            ints_from = self.get_interactions(entry)
-            ints_to = self.get_true_interactions(entry)
+            ints_from = self.get_interactions(entry, primaries=primaries)
+            ints_to = self.get_true_interactions(entry, primaries=primaries)
         elif mode == 'tp':
-            ints_to = self.get_interactions(entry)
-            ints_from = self.get_true_interactions(entry)
+            ints_to = self.get_interactions(entry, primaries=primaries)
+            ints_from = self.get_true_interactions(entry, primaries=primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
-        matched_interactions, _, _ = match_interactions_fn(ints_from, ints_to, 
+                
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, 
                                       min_overlap_count=self.min_overlap_count)
+
         if match_particles:
             for interactions in matched_interactions:
                 domain, codomain = interactions
@@ -785,4 +829,7 @@ class FullChainEvaluator(FullChainPredictor):
                     # continue
                 matched_particles, _, _ = match(domain_particles, codomain_particles)
 
-        return matched_interactions
+        if return_counts:
+            return matched_interactions, counts
+        else:
+            return matched_interactions

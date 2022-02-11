@@ -91,10 +91,11 @@ class Particle:
     
     def __repr__(self):
         fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
-            " | PID: {:<8} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
+            " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
+                         self.is_primary,
                          self.pid_conf * 100,
                          self.interaction_id,
                          self.points.shape[0])
@@ -113,10 +114,11 @@ class TruthParticle(Particle):
 
     def __repr__(self):
         fmt = "TruthParticle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
-            " | PID: {:<8} | Interaction ID: {:<2} | Size: {:<5} )"
+            " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
+                         self.is_primary,
                          self.interaction_id,
                          self.points.shape[0])
         return msg
@@ -205,6 +207,9 @@ class Interaction:
         self.particle_ids = [p.id for p in self.particles]
         self.particle_counts = Counter({ i : 0 for i in range(len(self.pid_keys))})
         self.particle_counts.update([p.pid for p in self.particles])
+
+        self.primary_particle_counts = Counter({ i : 0 for i in range(len(self.pid_keys))})
+        self.primary_particle_counts.update([p.pid for p in self.particles if p.is_primary])
 
     def check_validity(self):
         for p in self.particles:
@@ -358,7 +363,7 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
     intersections = overlap_matrix.max(axis=0)
 
     idx[intersections < min_overlap_count] = -1
-    intersections[intersections < min_overlap_count] = -1
+    # intersections[intersections < min_overlap_count] = -1
 
     matches = []
 
