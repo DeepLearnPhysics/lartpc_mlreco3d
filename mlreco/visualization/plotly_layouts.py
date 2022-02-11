@@ -1,5 +1,142 @@
 import numpy as np
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+
+
+def white_layout():
+    bg_color = 'rgba(0,0,0,0)'
+    grid_color = 'rgba(220,220,220,100)'
+    layout = dict(showlegend=False,
+        autosize=True,
+        height=1000,
+        width=1000,
+        margin=dict(r=20, l=20, b=20, t=20),
+        plot_bgcolor='rgba(255,255,255,0)',
+        paper_bgcolor='rgba(255,255,255,0)',
+        scene1=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    yaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    zaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    aspectmode='cube'),
+        scene2=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    yaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    zaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    aspectmode='cube'),
+        scene3=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    yaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    zaxis=dict(dict(backgroundcolor=bg_color, 
+                                    gridcolor=grid_color)),
+                    aspectmode='cube'))
+    return layout
+
+
+def dualplot(traces_left, traces_right, spatial_size=768, layout=None, 
+             titles=['Left', 'Right']):
+
+    if layout is None:
+        layout = white_layout()
+
+    fig = make_subplots(rows=1, cols=2,
+                        specs=[[{'type': 'scatter3d'}, {'type': 'scatter3d'}]],
+                        subplot_titles=(titles[0], titles[1]), 
+                        horizontal_spacing=0.05, vertical_spacing=0.04)
+    fig.add_traces(traces_left, rows=[1]*len(traces_left), cols=[1]*len(traces_left))
+    fig.add_traces(traces_right, rows=[1]*len(traces_left), cols=[2]*len(traces_left))
+
+    fig.layout = layout
+    fig.update_layout(showlegend=True,
+                      legend=dict(xanchor="left"),
+                      autosize=True,
+                      height=1000,
+                      width=2000)
+    fig.update_layout(
+        scene1 = dict(
+            xaxis = dict(range=[0,spatial_size],),
+                         yaxis = dict(range=[0,spatial_size],),
+                         zaxis = dict(range=[0,spatial_size],),),
+        scene2 = dict(
+            xaxis = dict(range=[0,spatial_size],),
+                         yaxis = dict(range=[0,spatial_size],),
+                         zaxis = dict(range=[0,spatial_size],),),
+        margin=dict(r=20, l=10, b=10, t=10))
+    return fig
+
+
+def trace_particles(particles, color='id'):
+    '''
+    Get Scatter3d traces for a list of <Particle> instances.
+    Each <Particle> will be drawn with the color specified 
+    by its unique particle ID.
+
+    Inputs:
+        - particles: List[Particle]
+
+    Returns:
+        - traces: List[go.Scatter3d]
+    '''
+    traces = []
+    for p in particles:
+        c = int(getattr(p, color))
+        plot = go.Scatter3d(x=p.points[:,0], 
+                            y=p.points[:,1], 
+                            z=p.points[:,2],
+                            mode='markers',
+                            marker=dict(
+                                size=2,
+                                color=c,
+                                colorscale="rainbow",
+                                reversescale=True,
+                                opacity=1),
+                               hovertext=c,
+                       name='Particle {}'.format(c)
+                              )
+        traces.append(plot)
+    return traces
+
+
+def trace_interactions(interactions, color='id'):
+    '''
+    Get Scatter3d traces for a list of <Interaction> instances.
+    Each <Interaction> will be drawn with the color specified 
+    by its unique interaction ID.
+
+    Inputs:
+        - particles: List[Particle]
+
+    Returns:
+        - traces: List[go.Scatter3d]
+    '''
+    traces = []
+    for inter in interactions:
+        particles = inter.particles
+        voxels = []
+        # Merge all particles' voxels into one tensor
+        for p in particles:
+            voxels.append(p.points)
+        voxels = np.vstack(voxels)
+        plot = go.Scatter3d(x=voxels[:,0], 
+                            y=voxels[:,1], 
+                            z=voxels[:,2],
+                            mode='markers',
+                            marker=dict(
+                                size=2,
+                                color=getattr(inter, color),
+                                colorscale="rainbow",
+                                reversescale=True,
+                                opacity=1),
+                               hovertext=int(getattr(inter, color)),
+                       name='Interaction {}'.format(getattr(inter, color))
+                              )
+        traces.append(plot)
+    return traces
+
 
 def plotly_layout3d(ranges=None, titles=None, **kwargs):
     """

@@ -103,11 +103,6 @@ def deghost_labels_and_predictions(data_blob, result):
     uresnet predictions and labels for use in later reconstruction stages.
     '''
 
-    print(data_blob['input_data'][0].shape)
-    print(result['ghost'][0].shape)
-    print(data_blob['cluster_label'][0].shape)
-
-
     result['ghost_mask'] = [
         result['ghost'][i].argmax(axis=1) == 0 \
             for i in range(len(result['ghost']))]
@@ -116,8 +111,13 @@ def deghost_labels_and_predictions(data_blob, result):
             for i in range(len(data_blob['segment_label']))]
 
     data_blob['input_data_noghost'] = data_blob['input_data']
+
+    data_blob['input_data_trueghost'] = [data_blob['input_data'][i][mask] \
+        for i, mask in enumerate(data_blob['true_ghost_mask'])]
+
     data_blob['input_data'] = [data_blob['input_data'][i][mask] \
         for i, mask in enumerate(result['ghost_mask'])]
+
 
     if 'cluster_label' in data_blob \
         and data_blob['cluster_label'] is not None:
