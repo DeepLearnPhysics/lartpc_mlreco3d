@@ -2,19 +2,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-#from mlreco.models.ppn import PPN, PPNLoss
-from mlreco.models.clustercnn_se import ClusterCNN, ClusteringLoss
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
+#from mlreco.models.scn.layers.ppn import PPN, PPNLoss
+from mlreco.models.scn.clustercnn_se import ClusterCNN, ClusteringLoss
+from mlreco.models.layers.common.dbscan import distances
 from mlreco.utils.deghosting import adapt_labels
 
 from mlreco.models.chain.full_cnn import *
-from mlreco.models.gnn.message_passing.meta import MetaLayerModel as GNN
+from mlreco.models.layers.gnn.message_passing.meta import MetaLayerModel as GNN
 from .gnn import node_encoder_construct, edge_encoder_construct
 
 from .cluster_cnn import spice_loss_construct
 from mlreco.models.grappa import GNNLoss
-from mlreco.models.gnn.losses.node_grouping import *
+from mlreco.models.layers.gnn.losses.node_grouping import *
 
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 from mlreco.utils.gnn.network import complete_graph

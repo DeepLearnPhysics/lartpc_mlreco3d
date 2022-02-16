@@ -1,7 +1,7 @@
-mlreco.models.gnn.losses.node\_primary module
+mlreco.models.layers.gnn.losses.node\_primary module
 =============================================
 
-.. automodule:: mlreco.models.gnn.losses.node_primary
+.. automodule:: mlreco.models.layers.gnn.losses.node_primary
    :members:
    :undoc-members:
    :show-inheritance:

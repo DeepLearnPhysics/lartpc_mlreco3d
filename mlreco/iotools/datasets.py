@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import os, glob
 import numpy as np
 from torch.utils.data import Dataset
@@ -77,6 +74,10 @@ class LArCVDataset(Dataset):
         # If event list is provided, register
         if event_list is None:
             self._event_list = np.arange(0, self._entries)
+        elif isinstance(event_list, tuple):
+            event_list = np.arange(event_list[0], event_list[1])
+            self._event_list = event_list
+            self._entries = len(self._event_list)
         else:
             if isinstance(event_list,list): event_list = np.array(event_list).astype(np.int32)
             assert(len(event_list.shape)==1)

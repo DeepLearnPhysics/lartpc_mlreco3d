@@ -1,7 +1,7 @@
-mlreco.models.layers.cascade module
+mlreco.models.layers.common.cascade module
 ===================================
 
-.. automodule:: mlreco.models.layers.cascade
+.. automodule:: mlreco.models.layers.common.cascade
    :members:
    :undoc-members:
    :show-inheritance:

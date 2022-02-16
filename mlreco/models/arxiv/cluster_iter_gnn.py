@@ -253,6 +253,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
         self.reduction = self.model_config.get('reduction', 'mean')
         self.balance_classes = self.model_config.get('balance_classes', False)
         self.target_photons = self.model_config.get('target_photons', False)
+        self.batch_col = self.model_config.get('batch_col', 3)
 
         if self.loss == 'CE':
             self.lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction)
@@ -295,7 +296,7 @@ class IterEdgeChannelLoss(torch.nn.Module):
             cluster_label = clusters[i].detach().cpu().numpy()
             clust_ids = out['clust_ids'][i]
             batch_ids = out['batch_ids'][i]
-            clusts = reform_clusters(cluster_label, clust_ids, batch_ids)
+            clusts = reform_clusters(cluster_label, clust_ids, batch_ids, batch_col=self.batch_col)
 
             # Append the number of iterations
             niter = out['counter'][i][0]

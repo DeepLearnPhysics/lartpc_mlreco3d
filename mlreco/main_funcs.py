@@ -1,20 +1,17 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-import os
-import time
-import datetime
-import glob
-import sys
+import os, time, datetime, glob, sys
 import numpy as np
-import torch
 import pprint
-from mlreco.trainval import trainval
+try:
+    import MinkowskiEngine as ME
+except ImportError:
+    pass
+
 from mlreco.iotools.factories import loader_factory
-from mlreco.utils import utils
-#from mlreco import analysis
-#from mlreco.output_formatters import output
-import mlreco.post_processing as post_processing
+# Important: do not import here anything that might
+# trigger cuda initialization through PyTorch.
+# We need to set CUDA_VISIBLE_DEVICES first, which
+# happens in the process_config function before anything
+# else is allowed to happen.
 
 class Handlers:
     cfg          = None
@@ -38,13 +35,13 @@ def cycle(data_io):
             yield x
 
 
-def train(cfg):
-    handlers = prepare(cfg)
+def train(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     train_loop(handlers)
 
 
-def inference(cfg):
-    handlers = prepare(cfg)
+def inference(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     inference_loop(handlers)
 
 
@@ -60,6 +57,8 @@ def process_config(cfg, verbose=True):
             cfg['trainval']['seed'] = int(time.time())
         else:
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
+        # Set MinkowskiEngine number of threads
+        os.environ['OMP_NUM_THREADS'] = '16' # default value
 
     if 'iotool' in cfg:
 
@@ -100,6 +99,7 @@ def process_config(cfg, verbose=True):
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
+    from mlreco.utils import utils
     # Weight save directory
     if 'trainval' in cfg:
         if cfg['trainval']['weight_prefix']:
@@ -128,6 +128,9 @@ def prepare(cfg, event_list=None):
     OUTPUT
       - Handler instance attached with trainval/DataLoader instances (if in config)
     """
+    import torch
+    from mlreco.trainval import trainval
+
     handlers = Handlers()
     handlers.cfg = cfg
 
@@ -177,11 +180,64 @@ def apply_event_filter(handlers,event_list=None):
     handlers.data_io_iter = iter(cycle(handlers.data_io))
 
 
+def log_tensorboard(handlers, tstamp_iteration, tsum, res, cfg, epoch, first_id):
+    """
+    Logger using the torch.utils.tensorboard interface.
+    """
+    import torch
+    from torch.utils.tensorboard import SummaryWriter
+    from mlreco.utils import utils
+
+    writer_path = os.path.join(cfg['trainval']['log_dir'], 'summary.log')
+    writer = SummaryWriter(writer_path)
+    # writer.add_graph(handlers.trainer._net.module)
+
+    report_step  = cfg['trainval']['report_step'] and \
+                ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
+
+    res_dict = {}
+    for key in res:
+        # Average loss and acc over all the events in this batch
+        # Keys of format %s_count are special and used as counters
+        # e.g. for PPN when there are no particle labels in event
+        #if 'analysis_keys' not in cfg['model'] or key not in cfg['model']['analysis_keys']:
+        if len(res[key]) == 0:
+            continue
+        if isinstance(res[key][0], float) or isinstance(res[key][0], int):
+            if "count" not in key:
+                res_dict[key] = np.mean([np.array(t).mean() for t in res[key]])
+            else:
+                res_dict[key] = np.sum(np.sum([np.array(t).sum() for t in res[key]]))
+
+    mem = 0.
+    if torch.cuda.is_available():
+        mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
+
+    # Organize time info
+    t_iter  = handlers.watch.time('iteration')
+    t_io    = handlers.watch.time('io')
+    t_save  = handlers.watch.time('save')
+    t_net   = handlers.watch.time('train' if cfg['trainval']['train'] else 'forward')
+
+    writer.add_scalar('mem', mem)
+
+    writer.add_scalars('Run', res_dict)
+
+    acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
+    loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
+    writer.add_scalar('accuracy', acc)
+    writer.add_scalar('loss', loss)
+
+
+
 def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         tsum, res, cfg, epoch, first_id):
     """
     Log relevant information to CSV files and stdout.
     """
+    import torch
+    from mlreco.utils import utils
+
     report_step  = cfg['trainval']['report_step'] and \
                 ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
 
@@ -256,6 +312,8 @@ def train_loop(handlers):
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
+    import mlreco.post_processing as post_processing
+
     cfg=handlers.cfg
     tsum = 0.
     while handlers.iteration < cfg['trainval']['iterations']:
@@ -268,10 +326,11 @@ def train_loop(handlers):
                         ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
 
         # Train step
-        data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
-
-        # result_blob['total_num_points'] = [data_blob['input_data'][0].shape[0]]
-        # result_blob['total_nonghost_points'] = [(data_blob['segment_label'][0][:, -1] < 5).sum().item()]
+        if handlers.trainer._time_dependent:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter,
+                                                                 iteration=handlers.iteration)
+        else:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
         # Save snapshot
         if checkpt_step:
@@ -287,8 +346,15 @@ def train_loop(handlers):
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
 
-        log(handlers, tstamp_iteration,
-            tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        logger = cfg['trainval'].get('logger', 'default')
+        if logger == 'default':
+            log(handlers, tstamp_iteration,
+                tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        elif logger == 'tensorboard':
+            log_tensorboard(handlers, tstamp_iteration,
+                tsum, result_blob, cfg, epoch, data_blob['index'][0])
+        else:
+            raise ValueError('Unrecognized logger type: {}!'.format(logger))
         # Log metrics/do analysis
         #if 'analysis' in cfg['model']:
         #    for ana_script in cfg['model']['analysis']:
@@ -311,6 +377,8 @@ def inference_loop(handlers):
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
+    import mlreco.post_processing as post_processing
+
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}

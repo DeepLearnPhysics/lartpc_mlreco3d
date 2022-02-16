@@ -1,7 +1,7 @@
-mlreco.models.gnn.factories module
+mlreco.models.layers.gnn.factories module
 ==================================
 
-.. automodule:: mlreco.models.gnn.factories
+.. automodule:: mlreco.models.layers.gnn.factories
    :members:
    :undoc-members:
    :show-inheritance:

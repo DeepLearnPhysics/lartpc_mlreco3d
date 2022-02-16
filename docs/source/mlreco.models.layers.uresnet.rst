@@ -1,7 +1,7 @@
-mlreco.models.layers.uresnet module
+mlreco.models.scn.layers.uresnet module
 ===================================
 
-.. automodule:: mlreco.models.layers.uresnet
+.. automodule:: mlreco.models.scn.layers.uresnet
    :members:
    :undoc-members:
    :show-inheritance:

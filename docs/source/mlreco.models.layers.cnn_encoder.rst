@@ -1,7 +1,7 @@
-mlreco.models.layers.cnn\_encoder module
+mlreco.models.layers.common.cnn\_encoder module
 ========================================
 
-.. automodule:: mlreco.models.layers.cnn_encoder
+.. automodule:: mlreco.models.scn.layers.cnn_encoder
    :members:
    :undoc-members:
    :show-inheritance:

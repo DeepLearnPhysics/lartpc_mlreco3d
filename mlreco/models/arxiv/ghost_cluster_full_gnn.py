@@ -5,7 +5,7 @@ from __future__ import print_function
 import torch
 import numpy as np
 from mlreco.models.grappa import GNN, GNNLoss
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
+from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.utils.deghosting import adapt_labels
 
 

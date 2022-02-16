@@ -1,7 +1,7 @@
-mlreco.models.layers.stacknet module
+mlreco.models.scn.layers.stacknet module
 ====================================
 
-.. automodule:: mlreco.models.layers.stacknet
+.. automodule:: mlreco.models.scn.layers.stacknet
    :members:
    :undoc-members:
    :show-inheritance:

@@ -251,7 +251,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
     # and the ancestor track ids
     ancestor_vtxs = []
     track_ids = []
-    ancestor_track_ids = np.empty(0, dtype=np.int)
+    ancestor_track_ids = np.empty(0, dtype=int)
     for particle in particle_v:
         ancestor_vtx = [
             particle.ancestor_x(),
@@ -268,7 +268,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
         axis=0,
     ).tolist()
     # loop over each cluster to assign interaction ids
-    interaction_ids = np.ones(particle_v.size(), dtype=np.int)*(-1)
+    interaction_ids = np.ones(particle_v.size(), dtype=int)*(-1)
     for clust_id in range(particle_v.size()):
         # get the interaction id from the unique list (index is the id)
         interaction_ids[clust_id] = interaction_vtx_list.index(
@@ -305,6 +305,8 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         # find the first cluster that has nonzero size
         sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
         nonzero = np.where(sizes > 0)[0]
+        if not len(nonzero):
+            return nu_id
         first_clust_id = nonzero[0]
         # the corresponding interaction id
         nu_interaction_id = interaction_ids[first_clust_id]
@@ -330,6 +332,8 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
             # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
             if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
                 is_mpv[idx] = 1.
+            # else:
+            #     print("fake cosmic", part.pdg_code(), part.shape(), part.creation_process(), part.track_id(), part.ancestor_track_id(), mpv_ids)
         is_mpv = is_mpv.astype(bool)
         nu_interaction_ids = np.unique(interaction_ids[is_mpv])
         for idx, x in enumerate(nu_interaction_ids):
@@ -343,6 +347,19 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
             # nu_id[interaction_ids == x] = idx
 
     return nu_id
+
+
+type_labels = {
+    22: 0,  # photon
+    11: 1,  # e-
+    -11: 1, # e+
+    13: 2,  # mu-
+    -13: 2, # mu+
+    211: 3, # pi+
+    -211: 3, # pi-
+    2212: 4, # protons
+}
+
 
 def get_particle_id(particles_v, nu_ids):
     '''
@@ -364,18 +381,8 @@ def get_particle_id(particles_v, nu_ids):
     Outputs:
         - array: (N) list of group ids
     '''
-    type_labels = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
-
     particle_ids = np.empty(len(nu_ids))
+    # nu_id = 0 for MPR/cosmic, nu_id = 1 for MPV/neutrino
     for i in range(len(particle_ids)):
         group_id = particles_v[i].group_id()
 

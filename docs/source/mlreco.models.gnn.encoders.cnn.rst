@@ -1,7 +1,7 @@
-mlreco.models.gnn.encoders.cnn module
+mlreco.models.layers.gnn.encoders.cnn module
 =====================================
 
-.. automodule:: mlreco.models.gnn.encoders.cnn
+.. automodule:: mlreco.models.layers.gnn.encoders.cnn
    :members:
    :undoc-members:
    :show-inheritance:

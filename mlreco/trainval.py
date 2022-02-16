@@ -1,17 +1,19 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from mlreco.utils import unwrap
 import warnings
 import torch
 import time
 import os
 import mlreco.utils as utils
+
 from mlreco.models import construct
+from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
+
 from mlreco.utils.data_parallel import DataParallel
 import numpy as np
 from mlreco.utils.utils import to_numpy
 import re
-from mlreco.utils.adabound import *
+from mlreco.utils.adabound import AdaBound, AdaBoundW
+from pprint import pprint
 
 class trainval(object):
     """
@@ -30,6 +32,7 @@ class trainval(object):
         self._minibatch_size = self._iotool_config.get('minibatch_size')
         self._input_keys  = self._model_config.get('network_input', [])
         self._output_keys = self._model_config.get('keep_output',[])
+        self._ignore_keys = self._model_config.get('ignore_keys', [])
         self._loss_keys   = self._model_config.get('loss_input', [])
         self._train = self._trainval_config.get('train', True)
         self._model_name = self._model_config.get('name', '')
@@ -58,6 +61,9 @@ class trainval(object):
                 # default
                 self._optim_args['lr'] = 0.001
 
+        # Handle time-dependent loss, such as KL Divergence annealing
+        self._time_dependent = self._trainval_config.get('time_dependent_loss', False)
+
         # learning rate scheduler
         schedule_cfg = self._trainval_config.get('lr_scheduler')
         if schedule_cfg is not None:
@@ -66,6 +72,8 @@ class trainval(object):
             # add mode: iteration or epoch
         else:
             self._lr_scheduler = None
+
+        self._loss = []
 
     def backward(self):
         total_loss = 0.0
@@ -80,6 +88,12 @@ class trainval(object):
         # note that scheduler is stepped every iteration, not every epoch
         if self._scheduler is not None:
             self._scheduler.step()
+
+        # If the model has a buffer that needs to be updated, do it after
+        # trainable parameter updates.
+        if hasattr(self._net.module, 'update_buffers'):
+            print("Updating Buffer...")
+            self._net.module.update_buffers()
 
     def save_state(self, iteration):
         self._watch.start('save')
@@ -112,6 +126,7 @@ class trainval(object):
             for key in minibatch:
                 if not key in data_blob: data_blob[key]=[]
                 data_blob[key].append(minibatch[key])
+
         return data_blob
 
 
@@ -160,7 +175,7 @@ class trainval(object):
         return train_blob, loss_blob
 
 
-    def train_step(self, data_iter):
+    def train_step(self, data_iter, iteration=None, log_time=True):
         """
         data_blob is the output of the function get_data_minibatched.
         It is a dictionary where data_blob[key] = list of length
@@ -169,15 +184,17 @@ class trainval(object):
 
         self._watch.start('train')
         self._loss = []  # Initialize loss accumulator
-        data_blob,res_combined = self.forward(data_iter)
+        data_blob,res_combined = self.forward(data_iter, iteration=iteration)
+        # print(data_blob['index'])
         # Run backward once for all the previous forward
         self.backward()
-        self._watch.stop('train')
-        self.tspent_sum['train'] += self._watch.time('train')
+        if log_time:
+            self._watch.stop('train')
+            self.tspent_sum['train'] += self._watch.time('train')
         return data_blob,res_combined
 
 
-    def forward(self, data_iter):
+    def forward(self, data_iter, iteration=None):
         """
         Run forward for
         flags.BATCH_SIZE / (flags.MINIBATCH_SIZE * len(flags.GPUS)) times
@@ -192,10 +209,11 @@ class trainval(object):
             self._watch.start('io')
             input_data = self.get_data_minibatched(data_iter)
             input_train, input_loss = self.make_input_forward(input_data)
+
             self._watch.stop('io')
             self.tspent_sum['io'] += self._watch.time('io')
 
-            res = self._forward(input_train, input_loss)
+            res = self._forward(input_train, input_loss, iteration=iteration)
 
             # Here, contruct the unwrapped input and output
             # First, handle the case of a simple list concat
@@ -211,12 +229,11 @@ class trainval(object):
             unwrapper = self._trainval_config.get('unwrapper',None)
             if unwrapper is not None:
                 try:
-                    unwrapper = getattr(utils,unwrapper)
+                    unwrapper = getattr(utils.unwrap,unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
-                    print(msg % output_cfg['unwrapper'])
+                    print(msg % self._trainval_config['unwrapper'])
                     raise ImportError
-
                 input_data, res = unwrapper(input_data, res, avoid_keys=concat_keys)
             else:
                 if 'index' in input_data:
@@ -236,7 +253,7 @@ class trainval(object):
         return data_combined, res_combined
 
 
-    def _forward(self, train_blob, loss_blob):
+    def _forward(self, train_blob, loss_blob, iteration=None):
         """
         data/label/weight are lists of size minibatch size.
         For sparse uresnet:
@@ -247,6 +264,7 @@ class trainval(object):
         """
         loss_keys   = self._loss_keys
         output_keys = self._output_keys
+        ignore_keys = self._ignore_keys
         with torch.set_grad_enabled(self._train):
             # Segmentation
             # FIXME set requires_grad = false for labels/weights?
@@ -270,9 +288,14 @@ class trainval(object):
                 train_blob = [train_blob]
 
             # Compute the loss
+            loss_acc = {}
             if len(self._loss_keys):
-                loss_acc = self._criterion(result, *tuple(loss_blob))
-
+                if self._time_dependent:
+                    loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
+                else:
+                    loss_acc = self._criterion(result, *tuple(loss_blob))
+                    #print('hello')
+                    #loss_acc['loss'].backward()
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
@@ -286,6 +309,7 @@ class trainval(object):
                 res[label] = [loss_acc[label].cpu().item() if isinstance(loss_acc[label], torch.Tensor) else loss_acc[label]]
 
             for key in result.keys():
+                if key in ignore_keys: continue
                 if len(output_keys) and not key in output_keys: continue
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
@@ -295,30 +319,44 @@ class trainval(object):
 
             return res
 
-    def initialize(self):
-        # To use DataParallel all the inputs must be on devices[0] first
-        model = None
+    def initialize_calibrator(self, model, module_config):
 
-        model,criterion = construct(self._model_name)
-        module_config = self._model_config['modules']
-        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
+        self._calibration_config = module_config['calibration']
+        msg = '''
+        WARNING: The model config was passed with the argument: <calibration>.
+                    The base model will be set to eval() mode regardless of trainval['train'],
+                    and trainval will only perform optimization for the calibration model. 
 
-        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
+                    Uncertainty Calibration model is set to: "{}"
+        '''.format(self._calibration_config['name'])
+        print(msg)
+        
+        calibrator = calibrator_construct(self._calibration_config['name'])
+        wrapped_model = calibrator(model, self._calibration_config)
+        clossfn_name = self._calibration_config['loss']
+        logit_name = self._calibration_config.get('logit_name', 'logits')
+        clossfn_args = self._calibration_config.get('loss_args', {})
+        calibrator_criterion = calibrator_loss_construct(clossfn_name, logit_name, **clossfn_args)
+        # Replace DataParallel model with calibrator-wrapped model
+        # Replace Criterion with calibrator loss
+        self._net.module = wrapped_model
+        self._criterion = calibrator_criterion
 
-        self._model = model(module_config)
+        if self._train:
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
+        else:
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
 
-        # module-by-module weights loading + param freezing
+        optim_class = eval('torch.optim.' + self._optim)
+        self._optimizer = optim_class([self._net.module.calibration_params], **self._optim_args)
+        if self._lr_scheduler is not None:
+            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
+        else:
+            self._scheduler = None
 
-        # Check if freeze weights is requested + enforce if so
-        for module_name in module_config:
-            if not hasattr(self._model, module_name) or not isinstance(getattr(self._model,module_name),torch.nn.Module):
-                continue
-            module = getattr(self._model,module_name)
-            if module_config[module_name].get('freeze_weights',False):
-                print('Freezing weights for a sub-module',module_name)
-                for param in module.parameters():
-                    param.requires_grad = False
 
+    def freeze_weights(self, module_config):
         # Breadth-first search for freeze_weight parameter in config
         # (very similar to weight loading below)
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
@@ -349,37 +387,11 @@ class trainval(object):
                 if isinstance(config[key], dict):
                     module_keys.append((key, config[key]))
 
-        self._net = DataParallel(self._model,device_ids=self._gpus)
 
-        if self._train:
-            self._net.train().cuda() if len(self._gpus) else self._net.train()
-        else:
-            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
-
-        if self._optim == 'AdaBound':
-            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
-        elif self._optim == 'AdaBoundW':
-            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
-        else:
-            optim_class = eval('torch.optim.' + self._optim)
-            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
-
-        # learning rate scheduler
-        if self._lr_scheduler is not None:
-            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
-            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
-        else:
-            self._scheduler = None
-
-
-        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
-
+    def load_weights(self, module_config, model_paths):
         iteration = 0
-        model_paths = []
-        if self._trainval_config.get('model_path',''):
-            model_paths.append(('', self._trainval_config['model_path'], ''))
         # Breadth first search of model_path
-        #module_keys = list(module_config.items())
+        # module_keys = list(module_config.items())
         module_keys = list(zip(list(module_config.keys()), list(module_config.values())))
         while len(module_keys) > 0:
             module, config = module_keys.pop()
@@ -390,6 +402,7 @@ class trainval(object):
                     module_keys.append((key, config[key]))
 
         if model_paths: #self._model_path and self._model_path != '':
+            #print(self._net.state_dict().keys())
             for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
                     if self._train:
@@ -411,13 +424,15 @@ class trainval(object):
                             # include a dot to avoid accidentally replacing in unrelated places
                             # eg if there is a different module called something_uresnet1_something
                             other_name = re.sub('\.' + module + '\.', '.' + model_name + '.' if len(model_name) > 0 else '.', name)
+                            #print(name, other_name)
                             # Additionally, only select weights related to current module
                             if module in name:
-                                # if module == 'grappa_inter' :
+                                # if module == 'spatial_embeddings' :
                                 #     print(name, other_name, other_name in checkpoint['state_dict'].keys())
                                 if other_name in checkpoint['state_dict'].keys():
                                     ckpt[name] = checkpoint['state_dict'][other_name]
                                     checkpoint['state_dict'][name] = checkpoint['state_dict'].pop(other_name)
+                                    #print('Loading %s from checkpoint' % other_name)
                                 else:
                                     missing_keys.append((name, other_name))
                         # if module == 'grappa_inter':
@@ -455,5 +470,58 @@ class trainval(object):
                     if module == '':  # Root model sets iteration
                         iteration = checkpoint['global_step'] + 1
                 print('Done.')
+        return iteration
+
+
+    def initialize(self):
+        # To use DataParallel all the inputs must be on devices[0] first
+        model = None
+
+        model,criterion = construct(self._model_name)
+        module_config = self._model_config['modules']
+
+        self._criterion = criterion(module_config).cuda() if len(self._gpus) else criterion(module_config)
+
+        self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
+
+        self._model = model(module_config)
+
+        # module-by-module weights loading + param freezing
+        self.freeze_weights(module_config)
+
+        self._net = DataParallel(self._model, device_ids=self._gpus)
+
+        if self._train:
+            self._net.train().cuda() if len(self._gpus) else self._net.train()
+        else:
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
+
+        if self._optim == 'AdaBound':
+            self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
+        elif self._optim == 'AdaBoundW':
+            self._optimizer = AdaBoundW(self._net.parameters(), **self._optim_args)
+        else:
+            optim_class = eval('torch.optim.' + self._optim)
+            self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
+
+        # learning rate scheduler
+        if self._lr_scheduler is not None:
+            scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
+            self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)
+        else:
+            self._scheduler = None
+
+
+        self._softmax = torch.nn.Softmax(dim=1 if 'sparse' in self._model_name else 0)
+
+        model_paths = []
+        if self._trainval_config.get('model_path',''):
+            model_paths.append(('', self._trainval_config['model_path'], ''))
+
+        iteration = self.load_weights(module_config, model_paths)
+
+        # Replace model with calibrated model on uncertainty calibration mode
+        if 'calibration' in module_config:
+            self.initialize_calibrator(self._net.module, module_config)
 
         return iteration

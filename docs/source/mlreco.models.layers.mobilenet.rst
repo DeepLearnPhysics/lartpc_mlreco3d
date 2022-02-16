@@ -1,7 +1,7 @@
-mlreco.models.layers.mobilenet module
+mlreco.models.layers.common.mobilenet module
 =====================================
 
-.. automodule:: mlreco.models.layers.mobilenet
+.. automodule:: mlreco.models.layers.common.mobilenet
    :members:
    :undoc-members:
    :show-inheritance:
