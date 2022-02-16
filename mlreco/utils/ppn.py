@@ -318,9 +318,6 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
 
     if 'ghost' in out and apply_deghosting:
-        print(out['ghost'][entry].shape)
-        print(event_data.shape)
-        print(uresnet_predictions.shape)
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         #points = points[mask_ghost]
@@ -491,7 +488,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None):
 
     If points_tensor is left unspecified, the endpoints will
     be purely based on geometry.
-    
+
     Input:
     - data is the input data tensor, which can be indexed by f.
     - points_tensor is the output of PPN 'points' (optional)
