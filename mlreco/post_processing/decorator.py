@@ -3,6 +3,8 @@ import os
 import numpy as np
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 
+from functools import wraps
+
 
 def post_processing(filename, data_capture, output_capture):
     """
@@ -32,10 +34,10 @@ def post_processing(filename, data_capture, output_capture):
             'points_label': 'particles_label',
             'particles': 'particles_asis'
         }
+        @wraps(func)
         def wrapper(cfg, module_cfg, data_blob, res, logdir, iteration):
             # The config block should have the same name as the analysis function
             # module_cfg = cfg['post_processing'].get(func.__name__, {})
-
             log_name = module_cfg.get('filename', filename)
             deghosting = module_cfg.get('ghost', False)
 

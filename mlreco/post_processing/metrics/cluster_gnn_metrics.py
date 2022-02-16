@@ -2,12 +2,22 @@
 import numpy as np
 
 from mlreco.post_processing import post_processing
-from mlreco.utils.gnn.evaluation import node_purity_mask, edge_purity_mask, edge_assignment_score, edge_assignment, node_assignment, node_assignment_score, node_assignment_bipartite, clustering_metrics, primary_assignment
+from mlreco.utils.gnn.evaluation import (node_purity_mask, 
+                                         edge_purity_mask, 
+                                         edge_assignment_score, 
+                                         edge_assignment, 
+                                         node_assignment, 
+                                         node_assignment_score, 
+                                         node_assignment_bipartite, 
+                                         clustering_metrics, 
+                                         primary_assignment)
 from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.post_processing.common import extent
 
 
-@post_processing('cluster-gnn-metrics', ['clust_data', 'particles'], ['edge_pred', 'clusts', 'node_pred', 'edge_index'])
+@post_processing('cluster-gnn-metrics', 
+                 ['clust_data', 'particles'], 
+                 ['edge_pred', 'clusts', 'node_pred', 'edge_index'])
 def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                         edge_pred=None, clusts=None, node_pred=None, edge_index=None,
                         clust_data=None, particles=None, data_idx=None, clust_data_noghost=None,

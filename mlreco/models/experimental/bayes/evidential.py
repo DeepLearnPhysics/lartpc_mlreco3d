@@ -110,7 +110,6 @@ class EVDLoss(nn.Module):
         super(EVDLoss, self).__init__()
         self.T = T  # Total epoch counts for which to anneal kld component. 
         self.evd_loss = evd_loss_construct(evd_loss_name)
-        print("EVD LOSS NAME = ", evd_loss_name)
         self.kld_loss = evd_kl_divergence
         self.reduction = reduction
         self.one_hot = one_hot
@@ -147,6 +146,12 @@ class EVDLoss(nn.Module):
             raise Exception("Unknown reduction method %s provided" % self.reduction)
 
 
+    def __str__(self):
+        str_format = "EVDLoss(name={}, reduction={}, one_hot={}, num_classes={}, mode={})"
+        return str_format.format(self.evd_loss_name, self.reduction, 
+                                 self.one_hot, self.num_classes, self.mode)
+
+
 def nll_regression_loss(logits, targets, eps=1e-6):
     '''
     Negative log loss for Dirichlet prior evidential learning.
@@ -159,8 +164,7 @@ def nll_regression_loss(logits, targets, eps=1e-6):
     RETURNS:
         - loss (FloatTensor): N x 1 non-reduced loss for each example. 
     '''
-    logits = logits.view(-1, 4)
-    gamma, nu, alpha, beta = torch.split(logits, 4, dim=1)
+    gamma, nu, alpha, beta = logits[:, 0], logits[:, 1], logits[:, 2], logits[:, 3]
     omega = 2.0 * beta * (1.0 + nu)
     nll = 0.5 * (np.log(np.pi) - torch.log(nu + 1e-5))  \
         - alpha * torch.log(omega)  \
@@ -170,20 +174,16 @@ def nll_regression_loss(logits, targets, eps=1e-6):
     return torch.clamp(nll, min=0)
 
 def kld_regression_loss(logits, targets, eps=1e-6):
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
     loss = torch.abs(targets - gamma + eps) * (2.0 * nu + alpha)
     return loss
 
 def kld_evd_l2_loss(logits, targets, eps=1e-6):
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
     loss = torch.pow(targets - gamma + eps, 2) * (2.0 * nu + alpha)
     return loss
 
 def kl_nig(logits, targets, eps=0.01):
-
-    logits = logits.view(-1, 4)
     gamma, nu, alpha = logits[:, 0], logits[:, 1], logits[:, 2]
 
     error = torch.abs(targets - gamma + 1e-6)
@@ -198,7 +198,7 @@ def kl_nig(logits, targets, eps=0.01):
 class EDLRegressionLoss(nn.Module):
 
     def __init__(self, reduction='none', w=0.0, kl_mode='evd',
-                 one_hot='True', mode='concentration', eps=1e-6, T=50000):
+                 one_hot='True', mode='concentration', eps=1e-6, T=50000, logspace=False):
         super(EDLRegressionLoss, self).__init__()
         self.reduction = reduction
         self.one_hot = one_hot
@@ -216,15 +216,24 @@ class EDLRegressionLoss(nn.Module):
             raise ValueError('Unrecognized KL Divergence Error Loss')
         self.w = w
         self.T = T
+        self.logspace = logspace
 
     def forward(self, logits, targets, iteration=None):
+
+        logits = logits.view(-1, 4)
+        if self.logspace:
+            p_true = torch.log(targets + 1e-6)
+        else:
+            p_true = targets
+
+        assert len(targets.shape) == 1
 
         if iteration is not None:
             annealing = min(1.0, float(iteration) / self.T)
         else:
             annealing = self.w
 
-        nll_loss = self.nll_loss(logits, targets, eps=self.eps)
-        kld_loss = self.kld_loss(logits, targets, eps=self.eps)
+        nll_loss = self.nll_loss(logits, p_true, eps=self.eps)
+        kld_loss = self.kld_loss(logits, p_true, eps=self.eps)
 
         return nll_loss + annealing * kld_loss, nll_loss

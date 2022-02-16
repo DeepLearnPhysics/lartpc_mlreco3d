@@ -110,7 +110,7 @@ def evidential_gnn_metrics(cfg,
 
         for i in range(num_valid):
 
-            fout.record(('Index', 
+            fout.record(('Index', 'loss', 
                          'Truth', 'Prediction', 
                          'Entropy', 'Uncertainty', 'Strength',
                          'p0', 'p1', 'p2', 'p3', 'p4'),

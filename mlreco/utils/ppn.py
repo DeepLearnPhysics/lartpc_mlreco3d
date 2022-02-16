@@ -272,7 +272,7 @@ def group_points(ppn_pts, batch, label):
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
                                     batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
-                                    selection=None, num_classes=5, **kwargs):
+                                    selection=None, num_classes=5, apply_deghosting=True, **kwargs):
     """
     Postprocessing of PPN points.
 
@@ -297,7 +297,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     1 row per ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = np.array(out['points'])#[entry]#.cpu().detach().numpy()
+    points = out['points'][0]#[entry]#.cpu().detach().numpy()
     ppn_coords = out['ppn_coords']
     # If 'points' is specified in `concat_result`,
     # then it won't be unwrapped.
@@ -310,14 +310,17 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
 
     enable_classify_endpoints = 'classify_endpoints' in out
     if enable_classify_endpoints:
-        classify_endpoints = np.array(out['classify_endpoints'])[ppn_coords[-1][:, 0] == entry, :]#[entry]
+        classify_endpoints = out['classify_endpoints'][0][ppn_coords[-1][:, 0] == entry, :]#[entry]
 
     mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
 
-    if 'ghost' in out:
+    if 'ghost' in out and apply_deghosting:
+        print(out['ghost'][entry].shape)
+        print(event_data.shape)
+        print(uresnet_predictions.shape)
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         #points = points[mask_ghost]
@@ -477,3 +480,36 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
 
     # return indices of points in input, offsets
     return pts_out
+
+
+def get_track_endpoints_geo(data, f, points_tensor=None):
+    """
+    Compute endpoints of a track-like cluster f
+    based on PPN point predictions (coordinates
+    and scores) and geometry (voxels farthest
+    apart from each other in the cluster).
+
+    If points_tensor is left unspecified, the endpoints will
+    be purely based on geometry.
+    
+    Input:
+    - data is the input data tensor, which can be indexed by f.
+    - points_tensor is the output of PPN 'points' (optional)
+    - f is a list of voxel indices for voxels that belong to the track.
+
+    Output:
+    - array of shape (2, 3) (2 endpoints, 3 coordinates each)
+    """
+    dist_mat = torch.cdist(data[f,1:4], data[f,1:4])
+    idx = torch.argmax(dist_mat)
+    idxs = int(idx)//len(f), int(idx)%len(f)
+    scores = torch.sigmoid(points_tensor[f, -1])
+    correction0, correction1 = 0.0, 0.0
+    if points_tensor is not None:
+        correction0 = points_tensor[f][idxs[0], :3] + \
+                      0.5 if scores[idxs[0]] > 0.5 else 0.0
+        correction1 = points_tensor[f][idxs[1], :3] + \
+                      0.5 if scores[idxs[1]] > 0.5 else 0.0
+    end_points = torch.cat([data[f[idxs[0]],1:4] + correction0,
+                            data[f[idxs[1]],1:4] + correction1])
+    return end_points

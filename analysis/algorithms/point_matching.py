@@ -1,0 +1,155 @@
+from typing import List
+import numpy as np
+import pandas as pd
+
+from scipy.spatial.distance import cdist
+from ..classes.particle import Particle
+
+def match_points_to_particles(ppn_points : np.ndarray, 
+                              particles : List[Particle], 
+                              semantic_type=None, ppn_distance_threshold=2):
+    '''
+    For each particle, match ppn_points that have hausdorff distance
+    less than <threshold> and inplace update particle.ppn_candidates
+
+    If semantic_type is set to a class integer value, 
+    points will be matched to particles with the same 
+    predicted semantic type. 
+    
+    Inputs:
+        - ppn_points (N x 4 np.array): (coords, point_type) array 
+        - particles: list of Particles
+
+    '''
+    if semantic_type is not None:
+        ppn_points_type = ppn_points[ppn_points[:, -1] == semantic_type]
+    else:
+        ppn_points_type = ppn_points
+        # TODO: Fix semantic type ppn selection
+    
+    ppn_coords = ppn_points_type[:, :3]
+    for particle in particles:
+        dist = cdist(ppn_coords, particle.points)
+        matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
+        particle.ppn_candidates = matches
+        
+        
+def get_track_endpoints(particle : Particle, verbose=False):
+    '''
+    Using ppn_candiates attached to <Particle>, get two
+    endpoints of tracks by farthest distance from the track's
+    spatial centroid. 
+    '''
+    if verbose:
+        print("Found {} PPN candidate points for particle {}".format(
+            particle.ppn_candidates.shape[0], particle.id))
+    if particle.semantic_type != 1:
+        raise AttributeError(
+            "Particle {} has type {}, can only give"\
+            " endpoints to tracks!".format(particle.id, 
+                                           particle.semantic_type))
+    if particle.ppn_candidates.shape[0] == 0:
+        if verbose:
+            print("Particle {} has no PPN candidates!"\
+                " Running brute-force endpoint finder...".format(particle.id))
+        endpoints = get_track_endpoints_centroid(particle)
+    elif particle.ppn_candidates.shape[0] == 1:
+        if verbose:
+            print("Particle {} has only one PPN candidate!"\
+                " Running brute-force endpoint finder...".format(particle.id))
+        endpoints = get_track_endpoints_centroid(particle)
+    else:
+        centroid = particle.points.mean(axis=0)
+        ppn_coordinates = particle.ppn_candidates[:, :3]
+        dist = cdist(centroid.reshape(1, -1), ppn_coordinates).squeeze()
+        endpt_inds = dist.argsort()[-2:]
+        endpoints = particle.ppn_candidates[endpt_inds]
+        particle.endpoints = endpoints
+    assert endpoints.shape[0] == 2
+    return endpoints
+
+
+
+def get_track_endpoints_centroid(particle):
+    '''
+    Computes track endpoints without ppn predictions by
+    selecting the farthest two points from the coordinate centroid. 
+    '''
+    coords = particle.points
+    centroid = coords.mean(axis=0)
+    dist = cdist(coords, centroid.reshape(1, -1))
+    inds = dist.squeeze().argsort()[-2:]
+    endpoints = coords[inds]
+    particle.endpoints = endpoints
+    return endpoints
+
+
+def get_track_endpoints_max_dist(particle):
+    '''
+    Computes track endpoints without ppn predictions by
+    selecting two points that have the largest separation. 
+    '''
+    dist_mat = cdist(particle.points, particle.points)
+    ids = np.argmax(dist_mat)
+
+
+# def get_track_endpoints_geo(data, f, points_tensor=None):
+#     """
+#     Compute endpoints of a track-like cluster f
+#     based on PPN point predictions (coordinates
+#     and scores) and geometry (voxels farthest
+#     apart from each other in the cluster).
+
+#     If points_tensor is left unspecified, the endpoints will
+#     be purely based on geometry.
+    
+#     Input:
+#     - data is the input data tensor, which can be indexed by f.
+#     - points_tensor is the output of PPN 'points' (optional)
+#     - f is a list of voxel indices for voxels that belong to the track.
+
+#     Output:
+#     - array of shape (2, 3) (2 endpoints, 3 coordinates each)
+#     """
+#     dist_mat = torch.cdist(data[f,1:4], data[f,1:4])
+#     idx = torch.argmax(dist_mat)
+#     idxs = int(idx)//len(f), int(idx)%len(f)
+#     scores = torch.sigmoid(points_tensor[f, -1])
+#     correction0, correction1 = 0.0, 0.0
+#     if points_tensor is not None:
+#         correction0 = points_tensor[f][idxs[0], :3] + \
+#                       0.5 if scores[idxs[0]] > 0.5 else 0.0
+#         correction1 = points_tensor[f][idxs[1], :3] + \
+#                       0.5 if scores[idxs[1]] > 0.5 else 0.0
+#     end_points = torch.cat([data[f[idxs[0]],1:4] + correction0,
+#                             data[f[idxs[1]],1:4] + correction1])
+#     return end_points
+
+
+
+def get_shower_startpoint(particle : Particle, verbose=False):
+    '''
+    Using ppn_candiates attached to <Particle>, get one
+    startpoint of shower by nearest hausdorff distance. 
+    '''
+    if particle.semantic_type != 0:
+        raise AttributeError(
+            "Particle {} has type {}, can only give"\
+            " startpoints to shower fragments!".format(
+                particle.id, particle.semantic_type))
+    if verbose:
+        print("Found {} PPN candidate points for particle {}".format(
+            particle.ppn_candidates.shape[0], particle.id))
+    if particle.ppn_candidates.shape[0] == 0:
+        print("Particle {} has no PPN candidates!".format(particle.id))
+        startpoint = -np.ones(3)
+    else:
+        centroid = particle.points.mean(axis=0)
+        ppn_coordinates = particle.ppn_candidates[:, :3]
+        dist = np.linalg.norm((ppn_coordinates - centroid), axis=1)
+        index = dist.argsort()[0]
+        startpoint = ppn_coordinates[index]
+    particle.startpoint = startpoint
+    assert sum(startpoint.shape) == 3
+    return startpoint
+

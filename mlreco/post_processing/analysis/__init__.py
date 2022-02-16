@@ -8,7 +8,6 @@ from .instance_clustering import instance_clustering
 from .michel_reconstruction_2d import michel_reconstruction_2d
 from .michel_reconstruction_noghost import michel_reconstruction_noghost
 from .michel_reconstruction import michel_reconstruction
-from .nue_selection import nue_selection
 from .stopping_muons import stopping_muons
 from .through_muons import through_muons
 from .track_clustering import track_clustering
