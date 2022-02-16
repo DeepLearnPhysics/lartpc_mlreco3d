@@ -96,7 +96,6 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
         true_point_coord = true_point[1:4]#.cpu().numpy()
         true_point_type = true_point[4]
         true_point_idx = true_point[5].astype(np.int64)
-        # print(len(particles[data_idx]), true_point_idx, true_point)
         p = particles[data_idx][true_point_idx]
 
         rows_gt_names.append(('Class',

@@ -232,18 +232,22 @@ class NodeKinematicsLoss(torch.nn.Module):
                     # positives = np.array(positives)
 
                     positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
-                    # for now only sum losses, they get averaged below in results dictionary
-                    loss2 = self.vtx_score_loss(node_pred_vtx[good_index, 3:], positives[good_index])
-                    loss1 = torch.sum(torch.mean(self.vtx_position_loss(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()]), dim=1))
 
-                    total_loss += loss1 + loss2
+                    # Do not apply loss to nodes labeled -1 (unknown class)
+                    node_mask = torch.nonzero(positives > -1, as_tuple=True)[0]
+                    if len(node_mask):
+                        # for now only sum losses, they get averaged below in results dictionary
+                        loss2 = self.vtx_score_loss(node_pred_vtx[good_index, 3:], positives[good_index])
+                        loss1 = torch.sum(torch.mean(self.vtx_position_loss(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()]), dim=1))
 
-                    vtx_position_loss += float(loss1)
-                    vtx_score_loss += float(loss2)
+                        total_loss += loss1 + loss2
 
-                    n_clusts_vtx += (good_index).sum().item()
-                    n_clusts_vtx_positives += (good_index & positives.bool()).sum().item()
-                    # print("Removing", (~good_index).sum().item(), len(good_index) )
+                        vtx_position_loss += float(loss1)
+                        vtx_score_loss += float(loss2)
+
+                        n_clusts_vtx += (good_index).sum().item()
+                        n_clusts_vtx_positives += (good_index & positives.bool()).sum().item()
+                        # print("Removing", (~good_index).sum().item(), len(good_index) )
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)

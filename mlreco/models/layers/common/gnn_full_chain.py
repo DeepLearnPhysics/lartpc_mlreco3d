@@ -759,6 +759,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 }
 
                 segmentation_pred = out['segmentation'][0]
+
                 if self.enable_ghost:
                     segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
