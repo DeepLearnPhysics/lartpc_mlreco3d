@@ -37,6 +37,7 @@ class Particle:
         }
     
         self.pid_keys = {
+            -1: 'None',
             0: 'Photon',
             1: 'Electron',
             2: 'Muon',
@@ -46,45 +47,6 @@ class Particle:
 
         self.startpoint = -np.ones(3)
         self.endpoints = -np.ones((2, 3))
-
-
-    def get_info(self):
-
-        names = ['pred_particle_id', 
-                 'pred_particle_type', 
-                 'pred_particle_is_primary', 
-                 'pred_particle_size', 
-                 'pred_particle_conf', 
-                 'pred_particle_num_ppn_candidates', 
-                 'pred_particle_startpoint_x', 
-                 'pred_particle_startpoint_y', 
-                 'pred_particle_startpoint_z',
-                 'pred_particle_endpoint_1_x', 
-                 'pred_particle_endpoint_1_y', 
-                 'pred_particle_endpoint_1_z',
-                 'pred_particle_endpoint_2_x', 
-                 'pred_particle_endpoint_2_y', 
-                 'pred_particle_endpoint_2_z']
-
-        values = [
-            self.id,
-            self.pid,
-            self.is_primary,
-            self.size,
-            self.pid_conf,
-            self.ppn_candidates.shape[0],
-            self.startpoint[0],
-            self.startpoint[1],
-            self.startpoint[2],
-            self.endpoints[0, 0],
-            self.endpoints[0, 1],
-            self.endpoints[0, 2],
-            self.endpoints[1, 0],
-            self.endpoints[1, 1],
-            self.endpoints[1, 2]
-        ]
-
-        return dict(zip(names, values))
         
     def __str__(self):
         return self.__repr__()
@@ -97,6 +59,46 @@ class Particle:
                          self.pid_keys[self.pid], 
                          self.is_primary,
                          self.pid_conf * 100,
+                         self.interaction_id,
+                         self.points.shape[0])
+        return msg
+
+
+class ParticleFragment(Particle):
+    '''
+    Reserved for particle fragments.
+    '''
+    def __init__(self, coords, fragment_id, semantic_type, interaction_id, 
+                 group_id, batch_id=0, depositions=None, alias="Particle", **kwargs):
+        self.id = fragment_id
+        self.points = coords
+        self.size = coords.shape[0]
+        self.depositions = depositions
+        self.semantic_type = semantic_type
+        self.group_id = group_id
+        self.interaction_id = interaction_id
+        self.batch_id = batch_id
+        self.is_primary = kwargs.get('is_primary', False)
+        self.semantic_keys = {
+            0: 'Shower Fragment',
+            1: 'Track',
+            2: 'Michel Electron',
+            3: 'Delta Ray',
+            4: 'LowE Depo'
+        }
+
+        self.startpoint = -np.ones(3)
+
+    def __str__(self):
+        return self.__repr__()
+    
+    def __repr__(self):
+        fmt = "ParticleFragment( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
+            " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
+        msg = fmt.format(self.batch_id, self.id, 
+                         self.semantic_keys[self.semantic_type], 
+                         self.group_id, 
+                         self.is_primary,
                          self.interaction_id,
                          self.points.shape[0])
         return msg
@@ -122,40 +124,6 @@ class TruthParticle(Particle):
                          self.interaction_id,
                          self.points.shape[0])
         return msg
-
-    def get_info(self):
-
-        names = ['true_particle_id', 
-                 'true_particle_type', 
-                 'true_particle_is_primary', 
-                 'true_particle_size', 
-                 'true_particle_startpoint_x', 
-                 'true_particle_startpoint_y', 
-                 'true_particle_startpoint_z',
-                 'true_particle_endpoint_1_x', 
-                 'true_particle_endpoint_1_y', 
-                 'true_particle_endpoint_1_z',
-                 'true_particle_endpoint_2_x', 
-                 'true_particle_endpoint_2_y', 
-                 'true_particle_endpoint_2_z']
-
-        values = [
-            self.id,
-            self.pid,
-            self.is_primary,
-            self.size,
-            self.startpoint[0],
-            self.startpoint[1],
-            self.startpoint[2],
-            self.endpoints[0][0],
-            self.endpoints[0][1],
-            self.endpoints[0][2],
-            self.endpoints[1][0],
-            self.endpoints[1][1],
-            self.endpoints[1][2]
-        ]
-
-        return dict(zip(names, values))
 
 
     def is_contained(self, spatial_size):
@@ -223,38 +191,6 @@ class Interaction:
                 p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
             self.particles_summary += pmsg
 
-    def get_info(self): 
-
-        names = ['pred_interaction_id', 
-                 'pred_interaction_type', 
-                 'pred_interaction_size', 
-                 'pred_interaction_particle_counts',
-                 'pred_interaction_count_photons', 
-                 'pred_interaction_count_electrons', 
-                 'pred_interaction_count_muons',
-                 'pred_interaction_count_pions', 
-                 'pred_interaction_count_protons', 
-                 'pred_interaction_vtx_x',
-                 'pred_interaction_vtx_y', 
-                 'pred_interaction_vtx_z']
-
-        values = [
-            self.id,
-            self.nu_id,
-            self.size,
-            self.num_particles,
-            self.particle_counts[0],
-            self.particle_counts[1],
-            self.particle_counts[2],
-            self.particle_counts[3],
-            self.particle_counts[4],
-            self.vertex[0],
-            self.vertex[1],
-            self.vertex[2]
-        ]
-
-        return dict(zip(names, values))
-
 
     def __repr__(self):
 
@@ -279,38 +215,6 @@ class TruthInteraction(Interaction):
     def check_validity(self):
         for p in self.particles:
             assert isinstance(p, TruthParticle)
-
-    def get_info(self): 
-
-        names = ['true_interaction_id', 
-                 'true_interaction_type', 
-                 'true_interaction_size', 
-                 'true_interaction_particle_counts',
-                 'true_interaction_count_photons', 
-                 'true_interaction_count_electrons', 
-                 'true_interaction_count_muons',
-                 'true_interaction_count_pions', 
-                 'true_interaction_count_protons', 
-                 'true_interaction_vtx_x',
-                 'true_interaction_vtx_y', 
-                 'true_interaction_vtx_z']
-
-        values = [
-            self.id,
-            self.nu_id,
-            self.size,
-            self.num_particles,
-            self.particle_counts[0],
-            self.particle_counts[1],
-            self.particle_counts[2],
-            self.particle_counts[3],
-            self.particle_counts[4],
-            self.vertex[0],
-            self.vertex[1],
-            self.vertex[2]
-        ]
-
-        return dict(zip(names, values))
 
     def __repr__(self):
 

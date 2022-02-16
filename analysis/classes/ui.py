@@ -363,6 +363,94 @@ class FullChainPredictor:
                                      apply_deghosting=False)
 
         return vertex_info
+
+
+    def get_fragments(self, entry, primaries=False) -> List[Particle]:
+        '''
+        Method for retriving fragment list for given batch index.
+
+        The output fragments will have its ppn candidates attached as
+        attributes in the form of pandas dataframes (same as _fit_predict_ppn)
+
+        Method also performs startpoint prediction for shower fragments. 
+
+        Inputs:
+            - entry: Batch number to retrieve example.
+            - semantic_type (optional): if True, only ppn candiates with the
+            same predicted semantic type will be matched to its corresponding
+            particle.
+            - threshold (float, optional): threshold distance to attach
+            ppn point to particle. 
+
+        Returns:
+            - out: List of <Particle> instances (see Particle class definition).
+        '''
+        point_cloud = self.data_blob['input_data'][entry][:, 1:4]
+        depositions = self.data_blob['input_data'][entry][:, 4]
+        fragments = self.result['fragments'][entry]
+        fragments_seg = self.result['fragments_seg'][entry]
+
+        shower_mask = fragments_seg == 0
+        shower_frag_primary = np.argmax(self.result['shower_node_pred'][entry], axis=1)
+        shower_group_pred = self.result['shower_group_pred'][entry]
+        track_group_pred = self.result['track_group_pred'][entry]
+
+        assert len(fragments_seg) == len(fragments)
+
+        temp = []
+
+        for i, p in enumerate(fragments):
+            voxels = point_cloud[p]
+            seg_label = fragments_seg[i]
+            part = ParticleFragment(voxels, i, seg_label, -1, -1, batch_id=entry, 
+                            depositions=depositions[p], 
+                            is_primary=False, 
+                            pid_conf=-1,
+                            alias='Fragment')
+            temp.append(part)
+
+        # Label shower fragments as primaries
+        shower_counter = 0
+        for p in temp:
+            if p.semantic_type == 0:
+                is_primary = shower_frag_primary[shower_counter]
+                p.is_primary = bool(is_primary)
+                p.group_id = int(shower_group_pred[shower_counter])
+                shower_counter += 1
+        assert shower_counter == shower_frag_primary.shape[0]
+
+        # Label shower fragments as primaries
+        track_counter = 0
+        for p in temp:
+            if p.semantic_type == 1:
+                p.group_id = int(track_group_pred[track_counter])
+                track_counter += 1
+        assert track_counter == track_group_pred.shape[0]
+
+        # Apply fragment voxel cut
+        out = []
+        for p in temp:
+            if p.points.shape[0] < self.min_particle_voxel_count:
+                continue
+            out.append(p)
+
+        # Check primaries and assign ppn points
+        if primaries:
+            out = [p for p in out if p.is_primary]
+
+        if len(out) == 0:
+            return out
+
+        ppn_results = self._fit_predict_ppn(entry)
+        match_points_to_particles(ppn_results, out, 
+            ppn_distance_threshold=self.attaching_threshold)
+
+        for p in out:
+            if p.semantic_type == 0:
+                pt = get_shower_startpoint(p)
+                p.startpoint = pt
+
+        return out
     
 
     def get_particles(self, entry, primaries=True) -> List[Particle]:
@@ -388,12 +476,7 @@ class FullChainPredictor:
 
         Inputs:
             - entry: Batch number to retrieve example.
-            - semantic_type (optional): if True, only ppn candiates with the
-            same predicted semantic type will be matched to its corresponding
-            particle.
-            - threshold (float, optional): threshold distance to attach
-            ppn point to particle. 
-
+            - primaries: If set to True, only retrieve predicted primaries.
         Returns:
             - out: List of <Particle> instances (see Particle class definition).
         '''
@@ -426,7 +509,7 @@ class FullChainPredictor:
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, seg_label, interaction_id, 
                             pids[i], batch_id=entry, 
-                            depositions=depositions, is_primary=is_primary, 
+                            depositions=depositions[p], is_primary=is_primary, 
                             pid_conf=softmax(type_logits[i])[pids[i]])
             part.voxel_indices = p
             out.append(part)
