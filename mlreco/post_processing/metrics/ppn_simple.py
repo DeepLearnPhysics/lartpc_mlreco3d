@@ -15,15 +15,14 @@ def pairwise_distances(v1, v2):
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 @post_processing(['ppn-metrics-gt', 'ppn-metrics-pred'],
-                ['seg_label', 'points_label', 'clust_data'],
+                ['seg_label', 'points_label', 'clust_data', 'particles'],
                 ['segmentation', 'points', 'mask_ppn', 'ppn_layers', 'ppn_coords'])
 def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
-                data_idx=None, seg_label=None, points_label=None, clust_data=None,
+                data_idx=None, seg_label=None, points_label=None, clust_data=None, particles=None,
                 ppn_layers=None, ppn_coords=None, points=None, segmentation=None,
                 mask_ppn=None, **kwargs):
     import torch
     num_classes = processor_cfg.get('num_classes', 5)
-    particles  = points_label[data_idx]
     clust_data = clust_data[data_idx]
 
     # ppn_layers   = result['ppn_layers'][0]
@@ -49,7 +48,7 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
                  + coords_layer[:, 1:4]
     pixel_score  = points[batch_index == data_idx][:, -1]
     pixel_logits = points[batch_index == data_idx][:,  3:8]
-    points_label = particles#[particles[:, 0] == data_idx]
+    points_label = points_label[data_idx]#[particles[:, 0] == data_idx]
 
     # Initialize log if one per event
     points_batch = points[batch_mask]
@@ -96,12 +95,17 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
 
         true_point_coord = true_point[1:4]#.cpu().numpy()
         true_point_type = true_point[4]
+        true_point_idx = true_point[5].astype(np.int64)
+        p = particles[data_idx][true_point_idx]
+
         rows_gt_names.append(('Class',
+                        'pdg',
                         'min_distance',
                         'x',
                         'y',
                         'z'))
         rows_gt_values.append((int(true_point_type),
+                             p.pdg_code(),
                              d_true_to_closest_pred[i],
                              true_point_coord[0],
                              true_point_coord[1],

@@ -89,7 +89,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
     '''
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICEEmbeddingLoss, self).__init__()
-        self.loss_config = cfg[name]
+        self.loss_config = cfg #[name]
         self.batch_column = self.loss_config.get('batch_column', 0)
 
         self.ft_interloss = self.loss_config.get('ft_interloss_margin', 1.5)
@@ -217,7 +217,11 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
         loss = defaultdict(list)
+        loss['loss'] = []
+
         accuracy = defaultdict(float)
+        accuracy['accuracy'] = 0.
+
         semantic_classes = slabels.unique()
         counts = 0
         for sc in semantic_classes:
@@ -331,7 +335,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
                     covariance_batch, occupancy_batch,
                     slabels_batch, clabels_batch)
                 for key, val in loss_class.items():
-                    loss[key].append(sum(val) / len(val))
+                    loss[key].append(sum(val) / len(val) if len(val) else 0.)
                 for s, acc in acc_class.items():
                     accuracy[s].append(acc)
 
@@ -363,12 +367,11 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
     def __init__(self, cfg, name='graph_spice_loss'):
         super(NodeEdgeHybridLoss, self).__init__()
         # print("CFG + ", cfg)
-        self.loss_config = cfg[name]
+        self.loss_config = cfg #[name]
         self.loss_fn = GraphSPICEEmbeddingLoss(cfg)
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
-        #self.invert = self.edge_loss_cfg.get('invert', False)
-        self.invert = cfg.get('invert', False)
-        self.edge_loss = WeightedEdgeLoss(**self.edge_loss_cfg)
+        self.invert = cfg.get('invert', True)
+        self.edge_loss = WeightedEdgeLoss(invert=self.invert, **self.edge_loss_cfg)
         self.is_eval = cfg['eval']
 
     def forward(self, result, segment_label, cluster_label):

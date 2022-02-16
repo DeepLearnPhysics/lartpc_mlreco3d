@@ -271,16 +271,24 @@ def group_points(ppn_pts, batch, label):
 
 def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_threshold=0.5,
                                     type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                                    batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),**kwargs):
+                                    batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
+                                    selection=None, num_classes=5, **kwargs):
     """
     Postprocessing of PPN points.
+
     Parameters
     ----------
     data - 5-types sparse tensor
-    out - uresnet_ppn_type output
+    out - output dictionary of the full chain
     score_threshold - minimal detection score
     type_score_threshold - minimal score for a point type prediction to be considered
     type_threshold - distance threshold for matching w/ semantic type prediction
+    entry - which index to look at (within a batch of events)
+    score_pool - which operation to use to pool PPN points scores (max/min/mean)
+    enforce_type - whether to force PPN points predicted of type X
+                    to be within N voxels of a voxel with same predicted semantic
+    selection - list of list of indices to consider exclusively (eg to get PPN predictions
+                within a cluster). Shape Batch size x N_voxels (not square)
     Returns
     -------
     [bid,x,y,z,score softmax values (2 columns), occupancy,
@@ -295,6 +303,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     # then it won't be unwrapped.
     if len(points) == len(ppn_coords[-1]):
         #pass
+        # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
         points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
         points = out['points'][entry]
@@ -303,15 +312,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if enable_classify_endpoints:
         classify_endpoints = np.array(out['classify_endpoints'])[ppn_coords[-1][:, 0] == entry, :]#[entry]
 
-    # Difference in naming between SCN/ME
-    if 'mask_ppn' not in out:
-        mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
-    else:
-        mask_ppn = out['mask_ppn'][-1]
+    mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
-    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
 
     if 'ghost' in out:
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
@@ -322,6 +326,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         #mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
+
+    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean
@@ -344,7 +350,18 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         batch_index2 = ppn_coords[-1][:, 0] == b
         # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
         mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
-        num_classes = 5
+        # If we want to restrict the postprocessing to specific voxels
+        # (e.g. within a particle cluster, not the full event)
+        # then use the argument `selection`.
+        if selection is not None:
+            new_mask = np.zeros(mask.shape, dtype=np.bool)
+            if len(selection) > 0 and isinstance(selection[0], list):
+                indices = np.array(selection[int(b)])
+            else:
+                indices = np.array(selection)
+            new_mask[indices] = mask[indices]
+            mask = new_mask
+
         ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
         ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)
         if enable_classify_endpoints:

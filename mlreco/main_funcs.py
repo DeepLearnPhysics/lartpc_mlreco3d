@@ -332,9 +332,6 @@ def train_loop(handlers):
         else:
             data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
-        # result_blob['total_num_points'] = [data_blob['input_data'][0].shape[0]]
-        # result_blob['total_nonghost_points'] = [(data_blob['segment_label'][0][:, -1] < 5).sum().item()]
-
         # Save snapshot
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)

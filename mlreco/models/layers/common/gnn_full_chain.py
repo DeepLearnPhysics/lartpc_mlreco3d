@@ -594,7 +594,7 @@ class FullChainGNN(torch.nn.Module):
                 new_counts = torch.zeros(batch_size, dtype=torch.int64, device=counts.device)
                 new_counts[batches] = counts
                 counts = new_counts
-                
+
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
@@ -638,7 +638,6 @@ class FullChainGNN(torch.nn.Module):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
-
         return result
 
 
@@ -760,6 +759,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 }
 
                 segmentation_pred = out['segmentation'][0]
+
                 if self.enable_ghost:
                     segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
@@ -780,7 +780,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 #res['gs_cluster_label'] = [gs_cluster_label]
                 res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], [gs_cluster_label])
                 #print(res_graph_spice.keys())
-                accuracy += res_graph_spice['accuracy']
+                if 'accuracy' in res_graph_spice:
+                    accuracy += res_graph_spice['accuracy']
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
                 for key in res_graph_spice:
                     res['graph_spice_' + key] = res_graph_spice[key]
@@ -890,7 +891,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
             accuracy += res_kinematics['node_accuracy']
             # Do not forget to take p_weight and type_weight into account (above)
-            loss += self.kinematics_weight * res['kinematics_loss']
+            loss += self.kinematics_weight * res['grappa_kinematics_loss']
 
             # Loss on edge predictions (particle hierarchy)
             res['flow_loss'] = res_kinematics['edge_loss']

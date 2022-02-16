@@ -3,6 +3,7 @@ import numpy as np
 from mlreco.utils import CSVData
 
 from mlreco.utils.metrics import *
+from mlreco.utils.cluster.graph_batch import GraphBatch
 
 from pprint import pprint
 
@@ -50,34 +51,40 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    print(data_index)
-    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
-    invert = cfg['model']['modules']['graph_spice_loss']['invert']
-    segmentation = res['segmentation'][0]
+
+    skip_classes = cfg['model']['modules']['graph_spice']['skip_classes']
+    min_points = cfg['model']['modules']['graph_spice'].get('min_points', 1)
+    invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
+    use_labels = cfg['post_processing']['graph_spice_metrics'].get('use_labels', True)
+
+    segmentation = np.concatenate(res['segmentation'], axis=0)
     if ghost:
         labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
-        labels = labels[0]
-        ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+        labels = np.concatenate(labels, axis=0)#labels[0]
+        ghost_mask = np.concatenate(res['ghost'], axis=0)
+        ghost_mask = (ghost_mask.argmax(axis=1) == 0)
         segmentation = segmentation[ghost_mask]
-        # print(labels.shape, segmentation.shape)
 
-
-    semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
-    print(semantic_pred, labels[:, -1].astype(int))
-    print(np.count_nonzero(semantic_pred.cpu().numpy() == labels[:, -1].astype(int)))
-    # Only compute loss on voxels where true/predicted semantics agree
-    print(np.unique(labels[:, 5], return_counts=True))
-    labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
-    print(np.unique(labels[:, 5], return_counts=True))
-    labels[:, -1] = semantic_pred
+    if not use_labels:
+        semantic_pred = torch.tensor(np.argmax(segmentation, axis=1))
+        # Only compute loss on voxels where true/predicted semantics agree
+        labels[:, 5] = np.where(semantic_pred.cpu().numpy() == labels[:, -1].astype(int), labels[:, 5], -1)
+        labels[:, -1] = semantic_pred
 
     mask = ~np.isin(labels[:, -1], skip_classes)
 
-    #np.save('/sdf/home/l/ldomine/lartpc_mlreco3d/semantic_predictions.npy', labels)
-
     labels = labels[mask]
+    if labels.shape[0] == 0:
+        return
+    batch_ids = np.unique(labels[:, 0])
     #name = cfg['post_processing']['graph_spice_metrics']['output_filename']
     graph = res['graph'][0]
+
+    # graph_batch_ids = graph.batch.unique().cpu().numpy()
+    # batch_mask = np.isin(graph_batch_ids, batch_ids)
+    # graph_list = graph.to_data_list()
+    # corrected_batch_list = np.arange(len(graph_list))[batch_mask]
+    # graph = GraphBatch.from_data_list([graph_list[idx] for idx in corrected_batch_list])
 
     graph_info = res['graph_info'][0]
 
@@ -86,7 +93,7 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
        range(0, len(graph_info.Index.unique())), data_index)}
 
     graph_info['Index'] = graph_info['Index'].map(index_mapping)
-    # print(graph_info)
+    # graph_info = graph_info[graph_info['Index'].isin(corrected_batch_list)]
 
     constructor_cfg = cfg['model']['modules']['graph_spice']['constructor_cfg']
 
@@ -95,14 +102,14 @@ def graph_spice_metrics(cfg, processor_cfg, data_blob, res, logdir, iteration):
                                          graph_info=graph_info,
                                          batch_col=0,
                                          training=False)
-    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
-    funcs = [ARI, purity, efficiency, num_true_clusters, num_pred_clusters,
-            num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
+    gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
+    funcs = [ARI, purity, efficiency]
+            # num_true_clusters, num_pred_clusters,
+            # num_small_clusters, modified_ARI, modified_purity, modified_efficiency]
     df = gs_manager.evaluate_nodes(labels, funcs)
-    import pandas as pd
-    pd.set_option('display.max_columns', None)
-    print(df.head(10))
-    assert False
+    #import pandas as pd
+    #pd.set_option('display.max_columns', None)
+
     fout = CSVData(os.path.join(logdir, 'graph-spice-metrics.csv'), append=append)
 
     for row in df.iterrows():
@@ -121,18 +128,19 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
 
     labels = data_blob['cluster_label'][0]
     data_index = data_blob['index']
-    invert = cfg['model']['modules']['graph_spice_loss']['invert']
-    skip_classes = cfg['model']['modules']['graph_spice_loss']['skip_classes']
+    invert = cfg['model']['modules']['graph_spice_loss'].get('invert', True)
+    skip_classes = cfg['model']['modules']['graph_spice']['skip_classes']
+    min_points = cfg['model']['modules']['graph_spice'].get('min_points', 1)
     use_labels = cfg['post_processing']['graph_spice_metrics_loop_threshold'].get('use_labels', True)
 
     if not use_labels:
-        segmentation = res['segmentation'][0]
+        segmentation = np.concatenate(res['segmentation'], axis=0)
         if ghost:
             labels = adapt_labels(res, data_blob['segment_label'], data_blob['cluster_label'])
-            labels = labels[0]
-            ghost_mask = (res['ghost'][0].argmax(axis=1) == 0)
+            labels = np.concatenate(labels, axis=0)#labels[0]
+            ghost_mask = np.concatenate(res['ghost'], axis=0)
+            ghost_mask = (ghost_mask.argmax(axis=1) == 0)
             segmentation = segmentation[ghost_mask]
-
 
     if use_labels:
         mask = ~np.isin(labels[:, -1], skip_classes)
@@ -172,7 +180,7 @@ def graph_spice_metrics_loop_threshold(cfg, processor_cfg, data_blob, res, logdi
         gs_manager = ClusterGraphConstructor(constructor_cfg,
                                             graph_batch=graph,
                                             graph_info=graph_info)
-        gs_manager.fit_predict(gen_numpy_graph=True, invert=invert)
+        gs_manager.fit_predict(gen_numpy_graph=True, invert=invert, min_points=min_points)
         funcs = [ARI, SBD, purity, efficiency, num_true_clusters,
                  num_pred_clusters, edge_threshold]
         column_names = ['ARI', 'SBD', 'Purity', 'Efficiency', 'num_true_clusters',

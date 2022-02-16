@@ -22,30 +22,11 @@ from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.dbscan import dbscan_types
 from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
-
+from mlreco.utils.groups import type_labels as TYPE_LABELS
 # Global type labels for PDG to Particle Type Label (nominal) conversion.
-TYPE_LABELS = {
-    22: 0,  # photon
-    11: 1,  # e-
-    -11: 1, # e+
-    13: 2,  # mu-
-    -13: 2, # mu+
-    211: 3, # pi+
-    -211: 3, # pi-
-    2212: 4, # protons
-}
+
 
 def parse_particle_singlep_pdg(data):
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
     parts = data[0]
     pdgs = []
     pdg = -1
@@ -745,16 +726,6 @@ def parse_cluster3d_types(data):
     """
     cluster_event = data[0]
     particles_v = data[1].as_vector()
-    TYPE_LABELS = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
     # print(cluster_event)
     # assert False
     meta = cluster_event.meta()

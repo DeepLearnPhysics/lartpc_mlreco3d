@@ -222,7 +222,7 @@ class GraphBatch(Batch):
             self.__slices__[name] = self.__slices__['x']
             self.__cat_dims__[name] = self.__cat_dims__['x']
             self.__cumsum__[name] = self.__cumsum__['x']
-        
+
 
     def add_edge_features(self, edge_feats, name : AnyStr, dtype=None):
         device = self.edge_attr.device
