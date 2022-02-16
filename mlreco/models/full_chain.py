@@ -329,8 +329,8 @@ class FullChain(FullChainGNN):
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
-            print('Input = ', input[0].shape)
-            print('points = ', cnn_result['points'][0].shape)
+            # print('Input = ', input[0].shape)
+            # print('points = ', cnn_result['points'][0].shape)
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
             cluster_result['fragments'].extend(fragment_data[0])
             cluster_result['frag_batch_ids'].extend(fragment_data[1])
