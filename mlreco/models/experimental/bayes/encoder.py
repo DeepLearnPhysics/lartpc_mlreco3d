@@ -36,7 +36,6 @@ class MCDropoutEncoder(torch.nn.Module):
         self.latent_size = self.model_config.get('latent_size', 512)
         final_tensor_shape = self.spatial_size // (2**(self.depth-1))
         self.coordConv = self.model_config.get('coordConv', False)
-        print("Final Tensor Shape = ", final_tensor_shape)
 
         self.pool_mode = self.model_config.get('pool_mode', 'global_average')
 
@@ -45,9 +44,6 @@ class MCDropoutEncoder(torch.nn.Module):
             'dropout_layers', set([i for i in range(self.depth // 2, self.depth)]))
 
         self.add_classifier = self.model_config.get('add_classifier', True)
-
-        print("Dropout Layers = ", self.dropout_layer_index)
-        print("Planes = ", len(self.nPlanes))
 
         # Initialize Input Layer
         if self.coordConv:

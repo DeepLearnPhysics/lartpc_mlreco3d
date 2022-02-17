@@ -9,8 +9,12 @@ from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels
-from mlreco.utils.cluster.fragmenter import DBSCANFragmentManager, GraphSPICEFragmentManager, format_fragments
+from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
+                                             GraphSPICEFragmentManager,
+                                             format_fragments)
+from mlreco.utils.ppn import get_track_endpoints_geo
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
+
 
 class FullChain(FullChainGNN):
     '''
@@ -120,17 +124,8 @@ class FullChain(FullChainGNN):
             points_tensor = result['points'][0].detach().double()
             for i, f in enumerate(fragments[mask]):
                 if frag_seg[mask][i] == 1:
-                    dist_mat = torch.cdist(input[0][f,1:4], input[0][f,1:4])
-                    idx = torch.argmax(dist_mat)
-                    idxs = int(idx)//len(f), int(idx)%len(f)
-                    scores = torch.sigmoid(points_tensor[f, -1])
-                    correction0 = points_tensor[f][idxs[0], :3] + \
-                                  0.5 if scores[idxs[0]] > 0.5 else 0.0
-                    correction1 = points_tensor[f][idxs[1], :3] + \
-                                  0.5 if scores[idxs[1]] > 0.5 else 0.0
-                    end_points = torch.cat([input[0][f[idxs[0]],1:4] + correction0,
-                                            input[0][f[idxs[1]],1:4] + correction1]).reshape(1,-1)
-                    ppn_points = torch.cat((ppn_points, end_points), dim=0)
+                    end_points = get_track_endpoints_geo(input[0], f, points_tensor)
+                    ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
                 else:
                     dmask  = torch.nonzero(torch.max(
                         torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
@@ -317,7 +312,7 @@ class FullChain(FullChainGNN):
                     self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
                                                   spatial_embeddings_output['graph_info'][0])
 
-                    self.gs_manager.fit_predict(gen_numpy_graph=True, invert=self._gspice_invert, min_points=self._gspice_min_points)
+                    self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
                     cluster_predictions = self.gs_manager._node_pred.x
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],
@@ -334,6 +329,8 @@ class FullChain(FullChainGNN):
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
+            # print('Input = ', input[0].shape)
+            # print('points = ', cnn_result['points'][0].shape)
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
             cluster_result['fragments'].extend(fragment_data[0])
             cluster_result['frag_batch_ids'].extend(fragment_data[1])

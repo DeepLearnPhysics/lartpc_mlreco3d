@@ -80,6 +80,7 @@ class stopwatch(object):
     """
     def __init__(self):
         self._watch={}
+        self._cpu_watch = {}
 
     def start(self,key):
         """
@@ -97,6 +98,18 @@ class stopwatch(object):
         """
         data = self._watch[key]
         if data[0]<0 : data[0] = time.time() - data[1]
+
+    def start_cputime(self, key):
+        self._cpu_watch[key] = [-1,time.process_time()]
+
+    def stop_cputime(self, key):
+        data = self._cpu_watch[key]
+        if data[0]<0 : data[0] = time.process_time() - data[1]
+
+    def time_cputime(self, key):
+        if not key in self._cpu_watch: return 0
+        data = self._cpu_watch[key]
+        return data[0] if data[0]>0 else time.process_time() - data[1]
 
     def time(self,key):
         """
@@ -186,9 +199,19 @@ class ChunkCSVData:
             self.append = 'w'
         self.chunksize = chunksize
 
-        self.header = not os.path.exists(self.name)
+        self.header = True
+
+        if not os.path.exists(os.path.dirname(self.name)):
+            os.makedirs(os.path.dirname(self.name))
+
+        with open(self.name, 'w') as f:
+            pass
+        # df = pd.DataFrame(list())
+        # df.to_csv(self.name, mode='w')
         
-    def record(self, df):
+    def record(self, df, verbose=False):
+        if verbose:
+            print(df)
         df.to_csv(self.name, 
                   mode=self.append, 
                   chunksize=self.chunksize, 
