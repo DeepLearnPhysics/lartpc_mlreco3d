@@ -9,7 +9,7 @@ from pprint import pprint
 import time
 
 
-@evaluate(['interactions_tp'], mode='per_batch')
+@evaluate(['interactions_test'], mode='per_batch')
 def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     # Set default fieldnames and values. (Needed for logger to work)
@@ -25,13 +25,10 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     for i, index in enumerate(image_idxs):
 
-        # print('----------------------Index: {}-----------------------'.format(index))
-        # pprint(predictor.get_true_interactions(i, primaries=primaries))
+        print('-------------------Index: {}---------------------'.format(index))
 
         matches = predictor.match_interactions(i, mode='tp', match_particles=True, primaries=primaries)
-        # print('    -----------------Matches---------------------')
-        # print('    ', matches)
-        
+
         for interaction_pair in matches:
             true_int, pred_int = interaction_pair[0], interaction_pair[1]
             if pred_int is not None:
@@ -90,7 +87,6 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                             # Count matched primary leptons
                             pred_count_primary_leptons[p.id] = True
 
-
                 for m in matched_particles:
                     update_dict = OrderedDict({
                         'index': index,
@@ -138,8 +134,5 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                     d['pred_count_primary_leptons'] = sum(pred_count_primary_leptons.values())
                     d['pred_count_primary_particles'] = sum(pred_count_primary_particles.values())
                     interactions_tp.append(d)
-
-        # if index == 200:
-        #     assert False
 
     return [interactions_tp]

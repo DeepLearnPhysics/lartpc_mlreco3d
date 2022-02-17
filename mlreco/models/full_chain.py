@@ -8,7 +8,7 @@ from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-from mlreco.utils.deghosting import adapt_labels
+from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)

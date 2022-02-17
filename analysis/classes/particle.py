@@ -14,11 +14,12 @@ class Particle:
     Simple Particle Class with managable __repr__ and __str__ functions.
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id, 
-                 pid, batch_id=0, depositions=None, **kwargs):
+                 pid, batch_id=0, voxel_indices=None, depositions=None, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
         self.depositions = depositions
+        self.voxel_indices = voxel_indices
         self.semantic_type = semantic_type
         self.pid = pid
         self.pid_conf = kwargs.get('pid_conf', None)

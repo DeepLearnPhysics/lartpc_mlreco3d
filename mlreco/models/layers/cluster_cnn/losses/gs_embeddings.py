@@ -411,7 +411,9 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
             res['edge_accuracy'] = balanced_accuracy
         else:
             edge_loss = 0
-
-        res['loss'] += edge_loss
+        if 'loss' in res:
+            res['loss'] += edge_loss
+        else:
+            res['loss'] = edge_loss
         res['edge_loss'] = float(edge_loss)
         return res

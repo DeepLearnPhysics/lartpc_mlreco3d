@@ -508,10 +508,13 @@ class FullChainPredictor:
             interaction_id = inter_group_pred[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, seg_label, interaction_id, 
-                            pids[i], batch_id=entry, 
-                            depositions=depositions[p], is_primary=is_primary, 
+                            pids[i], 
+                            batch_id=entry, 
+                            voxel_indices=p,
+                            depositions=depositions[p], 
+                            is_primary=is_primary, 
                             pid_conf=softmax(type_logits[i])[pids[i]])
-            part.voxel_indices = p
+            # part.voxel_indices = p
             out.append(part)
 
         if primaries:

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from mlreco.models.grappa import GNN, GNNLoss
-from mlreco.utils.deghosting import adapt_labels
+from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import (form_clusters,
