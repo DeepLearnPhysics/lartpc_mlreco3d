@@ -25,7 +25,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     for i, index in enumerate(image_idxs):
 
-        print('-------------------Index: {}---------------------'.format(index))
+        # print('-------------------Index: {}---------------------'.format(index))
 
         matches = predictor.match_interactions(i, mode='tp', match_particles=True, primaries=primaries)
 
