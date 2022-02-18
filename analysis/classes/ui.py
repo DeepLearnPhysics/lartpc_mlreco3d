@@ -104,9 +104,7 @@ class FullChainPredictor:
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
-
     def __repr__(self):
-
         msg = "FullChainEvaluator(num_batches={})".format(self.num_batches)
         return msg
         

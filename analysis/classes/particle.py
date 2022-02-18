@@ -46,6 +46,8 @@ class Particle:
             4: 'Proton'
         }
 
+        self.sum_edep = np.sum(self.depositions)
+
         self.startpoint = -np.ones(3)
         self.endpoints = -np.ones((2, 3))
         
