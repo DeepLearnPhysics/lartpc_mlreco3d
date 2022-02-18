@@ -25,7 +25,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     for i, index in enumerate(image_idxs):
 
-        # print('-------------------Index: {}---------------------'.format(index))
+        print('-------------------Index: {}---------------------'.format(index))
 
         matches = predictor.match_interactions(i, mode='tp', match_particles=True, primaries=primaries)
 
@@ -37,8 +37,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                 pred_particles, true_particles = [], true_int.particles
 
             # Match true particles to predicted particles
-            matched_particles, _, _ = match(true_particles, pred_particles, 
-                                            primaries=primaries, min_overlap_count=10)
+            matched_particles, _, _ = match(true_particles, pred_particles)
             
             if pred_int is None:
                 print("No predicted interaction match = ", matched_particles)

@@ -37,12 +37,13 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 nonghost_mask = (result['ghost'][i][batch_mask].argmax(dim=1) == 0)
                 # Select voxels predicted as nonghost, but true ghosts
                 mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
-                neighbors = knn(X_train, batch_coords[mask, c1:c2], 1)
-                _, d = neighbors[0], neighbors[1]
-    
-                additional_label_clustering = torch.cat([batch_coords[mask],
-                                                        batch_clustering[d, c3:]], dim=1).float()
-                new_label_clustering[mask] = additional_label_clustering
+                if batch_coords[mask].shape[0] > 0:
+                    neighbors = knn(X_train, batch_coords[mask, c1:c2], 1)
+                    _, d = neighbors[0], neighbors[1]
+        
+                    additional_label_clustering = torch.cat([batch_coords[mask],
+                                                            batch_clustering[d, c3:]], dim=1).float()
+                    new_label_clustering[mask] = additional_label_clustering
             else:
                 nonghost_mask = true_mask[batch_mask]
 

@@ -730,7 +730,6 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-
     def get_true_particles(self, entry, primaries=True,
                            verbose=False) -> List[TruthParticle]:
         '''
@@ -900,8 +899,7 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
                 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, 
-                                      min_overlap_count=self.min_overlap_count)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to)
 
         if match_particles:
             for interactions in matched_interactions:
