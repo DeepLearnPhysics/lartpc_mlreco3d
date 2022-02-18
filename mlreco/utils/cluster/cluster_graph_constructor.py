@@ -22,6 +22,13 @@ from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier
 from scipy.special import expit
 
 
+# Silencing this warning about unclassified (-1) voxels
+# /usr/local/lib/python3.8/dist-packages/sklearn/neighbors/_classification.py:601: UserWarning: Outlier label -1 is not in training classes. All class probabilities of outliers will be assigned with 0.
+#   warnings.warn('Outlier label {} is not in training '
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
+
 def get_edge_weight(sp_emb: torch.Tensor,
                     ft_emb: torch.Tensor,
                     cov: torch.Tensor,
@@ -501,6 +508,7 @@ class ClusterGraphConstructor:
             segment_label = cluster_label[:, self.seg_col].astype(int)
             fragment_label = cluster_label[:, self.cluster_col].astype(int)
             label_pos = cluster_label[:, 1:4]
+
         for bidx in np.unique(batch_index):
             batch_mask = batch_index == bidx
             labels_batch = cluster_label[batch_mask]

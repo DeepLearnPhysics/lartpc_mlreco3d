@@ -303,6 +303,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     # then it won't be unwrapped.
     if len(points) == len(ppn_coords[-1]):
         #pass
+        # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
         points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
         points = out['points'][entry]
@@ -311,20 +312,12 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     if enable_classify_endpoints:
         classify_endpoints = out['classify_endpoints'][0][ppn_coords[-1][:, 0] == entry, :]#[entry]
 
-    # Difference in naming between SCN/ME
-    if 'mask_ppn' not in out:
-        mask_ppn = out['mask_ppn2'][entry]#.cpu().detach().numpy()
-    else:
-        mask_ppn = out['mask_ppn'][-1]
+    mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
-    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
 
     if 'ghost' in out and apply_deghosting:
-        print(out['ghost'][entry].shape)
-        print(event_data.shape)
-        print(uresnet_predictions.shape)
         mask_ghost = np.argmax(out['ghost'][entry], axis=1) == 0
         event_data = event_data[mask_ghost]
         #points = points[mask_ghost]
@@ -333,6 +326,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         #mask_ppn = mask_ppn[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
+
+    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean
@@ -493,7 +488,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None):
 
     If points_tensor is left unspecified, the endpoints will
     be purely based on geometry.
-    
+
     Input:
     - data is the input data tensor, which can be indexed by f.
     - points_tensor is the output of PPN 'points' (optional)

@@ -32,8 +32,9 @@ def get_ppn_points_per_particles(input_data, res,
                                         apply_deghosting=apply_deghosting)
                                         #selection=c)
 
-    # if ppn.shape[0] == 0:
-    #     continue
+    if ppn.shape[0] == 0:
+        return np.empty((0, 3)), np.empty((0,)), np.empty((0, 3)), np.empty((0, 3))
+        
     ppn_voxels = ppn[:, coords_col[0]:coords_col[1]]
     ppn_score = ppn[:, 5]
     #ppn_occupancy = ppn[:, 6]

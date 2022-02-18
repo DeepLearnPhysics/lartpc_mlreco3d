@@ -92,7 +92,7 @@ class MinkGraphSPICE(nn.Module):
 
         res['coordinates'] = [coordinates]
         res['batch_indices'] = [batch_indices]
-
+        
         if self.use_raw_features:
             res['hypergraph_features'] = res['features']
 

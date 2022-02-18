@@ -5,7 +5,8 @@ from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
 
-def get_fragments(input_data, fragments, step=16, track_endpoints=None, spatial_size=768, fiducial=33, min_length=200):
+def get_fragments(input_data, fragments, step=16, track_endpoints=None,
+                spatial_size=768, fiducial=33, min_length=200, neighborhood=21):
     from sklearn.decomposition import PCA
     pca = PCA(n_components=3)
 
@@ -25,19 +26,25 @@ def get_fragments(input_data, fragments, step=16, track_endpoints=None, spatial_
             continue
 
         #
-        # If we want to use rough residual range, then this
-        # block makes sure we are starting from the endpoint.
+        # This block makes sure we are starting from the endpoint.
         # We also recompute the residual range later to use dx estimations.
         #
         endpoint = None
-        if track_endpoints is not None and len(track_endpoints) > 0:
+        if track_endpoints is not None and len(track_endpoints[idx]) > 0:
             from scipy.spatial.distance import cdist
-            distances = cdist(track_endpoints[:, 1:4], coords)
-            if (distances.min(axis=0) < 2).any():
-                endpoint_idx, pt_idx = np.unravel_index(np.argmin(distances), distances.shape)
-                endpoint = new_coords[pt_idx, 0]
-                real_endpoint = track_endpoints[endpoint_idx, 1:4]
+            distances = cdist(track_endpoints[idx][:, 1:4], coords)
 
+            # Pick the one with the highest dQ in the neighborhood
+            neighborhood_dQs = []
+            for pt_idx, point in enumerate(track_endpoints[idx]):
+                dQ = input_data[f, 4][distances[pt_idx, :] < neighborhood].sum()
+                neighborhood_dQs.append(dQ)
+            #print('neighborhood dQ nearby: ', neighborhood_dQs)
+            endpoint_idx = np.argmax(neighborhood_dQs)
+            pt_idx = np.argmin(distances[endpoint_idx, :])
+            endpoint = new_coords[pt_idx, 0]
+            real_endpoint = track_endpoints[idx][endpoint_idx, 1:4]
+            print('picked', real_endpoint, (np.abs(real_endpoint) < fiducial).any() or (np.abs(spatial_size - real_endpoint) < fiducial).any())
         # If None could be found, it probably means
         # that the track is exiting the volume.
         # If it was found but it is too close to the
@@ -51,7 +58,8 @@ def get_fragments(input_data, fragments, step=16, track_endpoints=None, spatial_
         bins = np.digitize(new_coords[:, 0], np.linspace(np.floor(new_coords[:, 0].min()), np.ceil(new_coords[:, 0].max()), int(n)))
         for b in np.unique(bins):
             local_fragments.append(f[bins == b])
-            middle_pt = (new_coords[bins == b, 0].min() + new_coords[bins == b, 0].max()) / 2.
+            #middle_pt = (new_coords[bins == b, 0].min() + new_coords[bins == b, 0].max()) / 2.
+            middle_pt = new_coords[bins == b, 0].min()
             residual_range.append(np.abs(middle_pt - endpoint))
             endpoints.append(real_endpoint)
             cluster_id.append(idx)
@@ -95,17 +103,20 @@ def compute_metrics(local_fragments, cluster_id, residual_range, input_data, end
     return pd.DataFrame(metrics), final_fragments, final_endpoints, np.array(final_cluster_id)
 
 
-def compute_residual_range(input_data, final_cluster_ids, track_endpoints, metrics, final_fragments, endpoints,
-                          spatial_size=768, fiducial=33):
+def compute_residual_range(input_data, final_cluster_ids, metrics, final_fragments, endpoints,
+                          spatial_size=768, fiducial=33, recompute_dx=False):
     from scipy.spatial.distance import cdist
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=3)
 
     #true_cluster_ids = get_cluster_label(clust_label, final_fragments, column=6)
     fragments_batch_ids = get_cluster_batch(input_data, final_fragments)
 
     final_fragments = np.array([np.array(f, dtype=int) for f in final_fragments], dtype=object)
     residual_range = - np.ones((len(final_fragments),))
+    new_dx = - np.ones((len(final_fragments),))
     # Loop over events in current batch
-    for b in fragments_batch_ids:
+    for b in np.unique(fragments_batch_ids):
         batch_mask = fragments_batch_ids == b
         # Loop over track clusters in this event
         for idx in np.unique(final_cluster_ids[batch_mask]):
@@ -128,41 +139,67 @@ def compute_residual_range(input_data, final_cluster_ids, track_endpoints, metri
 
             # Now we want to re-order according to the new distances we just computed.
             perm = np.argsort(np.array(order)[np.argsort(init_perm)])
-
+            # print(b, idx, perm)
             current_distance = 0.
             for f_idx, f in enumerate(track_fragments[perm]):
-                dx = metrics["dx"][batch_mask][final_cluster_ids[batch_mask] == idx].values[perm][f_idx]
+                # Also recompute more accurate dx using a local PCA
+                if recompute_dx:
+                    new_coords = pca.fit_transform(input_data[f, 1:4])
+                    dx = new_coords[:, 0].max() - new_coords[:, 0].min()
+                else:
+                    dx = metrics["dx"][batch_mask][final_cluster_ids[batch_mask] == idx].values[perm][f_idx]
+
                 current_distance += dx
 
                 where = np.where(batch_mask)[0][final_cluster_ids[batch_mask] == idx][perm][f_idx]
                 residual_range[where] = current_distance
+                if residual_range[where] > 1330:
+                    print(b, idx, f_idx, residual_range[where], metrics["dx"][batch_mask][final_cluster_ids[batch_mask] == idx].sum())
+                    #print(metrics["dx"][batch_mask][final_cluster_ids[batch_mask] == idx])
+                new_dx[where] = dx
+
 
     metrics["residual_range"] = residual_range
+    metrics["dx"] = new_dx
     metrics = metrics[metrics["residual_range"] > -1]
     return metrics
 
 
-@post_processing('muon-residual-range',
+@post_processing(['muon-residual-range',
+                'muon-residual-range-selected',
+                'muon-residual-range-endpoints'],
                 ['input_data', 'clust_data', 'points_label'],
                 ['particles', 'particles_seg', 'node_pred_type'])
 def muon_residual_range(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        input_data=None, particles=None, particles_seg=None, node_pred_type=None,
+                        input_data=None, ghost_mask=None, particles=None, particles_seg=None, node_pred_type=None,
                         points_label=None, clust_data=None, data_idx=None, clust_data_noghost=None,
                         **kwargs):
     """
     Compute residual range vs dQ/dx for track-like particles (muons, protons).
     """
     use_true_points = module_cfg.get('use_true_points', False)
+    fiducial        = module_cfg.get('fiducial', 33)
+    step            = module_cfg.get('step', 16) # about 5cm
+    spatial_size    = module_cfg.get('spatial_size', 768)
+    min_length      = module_cfg.get('min_length', 200)
+    neighborhood    = module_cfg.get('neighborhood', 21)
+    association_threshold = module_cfg.get('association_threshold', 5)
+    recompute_dx    = module_cfg.get('recompute_dx', False)
 
     track_label = 1
     track_mask = particles_seg[data_idx] == track_label
     muon_mask = np.argmax(node_pred_type[data_idx], axis=1) == 2
     muon_particles = particles[data_idx][track_mask & muon_mask]
+    if 'ghost' in res:
+        input_data_deghosted = input_data[data_idx][ghost_mask[data_idx]]
+    else:
+        input_data_deghosted = input_data[data_idx]
 
-    step = 16 # about 5cm
     # Bin tracks into smaller fragments
+    true_endpoints = points_label[data_idx][(points_label[data_idx][:, -1] == 1) & (points_label[data_idx][:, 4] == 1)]
+    print('true endpoints', true_endpoints[:, 1:4])
     if use_true_points:
-        track_endpoints = points_label[data_idx][(points_label[data_idx][:, -1] == 1) & (points_label[data_idx][:, 4] == 1)]
+        track_endpoints = true_endpoints
     else:
         ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx)
         #ppn_voxels = ppn[:, 1:4]
@@ -171,10 +208,42 @@ def muon_residual_range(cfg, module_cfg, data_blob, res, logdir, iteration,
         #track_endpoints = ppn[(ppn_endpoints == 1) & (ppn_track_score > 0.5)]
         #track_endpoints = ppn[(ppn_track_score > 0.5)]
         track_endpoints = ppn
-    local_fragments, residual_range, endpoints, cluster_id = get_fragments(input_data[data_idx], muon_particles, step=step, track_endpoints=track_endpoints)
 
+    # Select endpoints
+    from scipy.spatial.distance import cdist
+    selected_endpoints = []
+    for f in muon_particles:
+        distances = cdist(track_endpoints[:, 1:4], input_data_deghosted[f, 1:4])
+        selection = distances.min(axis=1) < association_threshold
+        selected_endpoints.append(track_endpoints[selection])
+
+    local_fragments, residual_range, endpoints, cluster_id = \
+        get_fragments(input_data_deghosted, muon_particles,
+                    step=step, track_endpoints=selected_endpoints,
+                    fiducial=fiducial, spatial_size=spatial_size,
+                    min_length=min_length, neighborhood=neighborhood)
+    # print('true points', points_label[data_idx][(points_label[data_idx][:, -1] == 1) & (points_label[data_idx][:, 4] == 1)][:, :4])
+    # print('predicted endpoints', track_endpoints[:, :4])
+    # print('endpoints', endpoints)
+    # print('residual_range', residual_range)
+    # for f in local_fragments:
+    #     print(input_data[data_idx][f][:, 1:4].mean(axis=0))
     if len(local_fragments) == 0:
-        return (), ()
+        return [((), ()), ((), ()), ((), ())]
+
+    selected_endpoints = np.vstack(selected_endpoints)
+
+    # Store selected endpoints information
+    row_names_selected, row_values_selected = [], []
+    true_d = cdist(selected_endpoints[:, 1:4], true_endpoints[:, 1:4])
+    row_names_selected.extend([("distance_to_closest_true_endpoint",)] * len(selected_endpoints))
+    row_values_selected.extend([(x,) for x in true_d.min(axis=1)])
+
+    row_names_endpoints, row_values_endpoints = [], []
+    selected_endpoints = np.unique(endpoints, axis=0)
+    true_d = cdist(selected_endpoints, true_endpoints[:, 1:4])
+    row_names_endpoints.extend([("distance_to_closest_true_endpoint",)] * len(selected_endpoints))
+    row_values_endpoints.extend([(x,) for x in true_d.min(axis=1)])
 
     # Get true PID label to select true muons
     #true_cluster_id =  get_cluster_label(clust_label, local_fragments, column=6)
@@ -182,13 +251,16 @@ def muon_residual_range(cfg, module_cfg, data_blob, res, logdir, iteration,
     #muons = (true_pdg == 13) | (true_pdg == -13)
 
     # For each smaller fragment compute metrics
-    result, final_fragments, final_endpoints, final_cluster_id = compute_metrics(np.array(local_fragments, dtype=object), cluster_id, np.array(residual_range), input_data[data_idx],  endpoints)
+    result, final_fragments, final_endpoints, final_cluster_id = compute_metrics(np.array(local_fragments, dtype=object), cluster_id, np.array(residual_range), input_data_deghosted,  endpoints)
 
     if len(final_fragments) == 0:
-        return (), ()
+        return [((), ()), ((), ()), ((), ())]
 
     # Refine residual range computation
-    result = compute_residual_range(input_data[data_idx], final_cluster_id, track_endpoints, result, final_fragments, final_endpoints)
+    result = compute_residual_range(input_data_deghosted, final_cluster_id,
+                                result, final_fragments,
+                                final_endpoints, fiducial=fiducial,
+                                spatial_size=spatial_size, recompute_dx=recompute_dx)
 
     row_names, row_values = [], []
     for idx in range(len(result['dQdx'])):
@@ -196,4 +268,4 @@ def muon_residual_range(cfg, module_cfg, data_blob, res, logdir, iteration,
         row_names.append(tuple_names)
         row_values.append(tuple([result[key][idx] for key in tuple_names]))
 
-    return row_names, row_values
+    return [(row_names, row_values), (row_names_selected, row_values_selected), (row_names_endpoints, row_values_endpoints)]
