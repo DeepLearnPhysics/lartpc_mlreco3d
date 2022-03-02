@@ -8,7 +8,7 @@ from mlreco.models.scn.uresnet_lonely import UResNet, SegmentationLoss
 from mlreco.models.scn.layers.ppn import PPN, PPNLoss
 from mlreco.models.layers.common.dbscan import DBScanClusts2
 from mlreco.models.grappa import GNNLoss
-from mlreco.utils.gnn.cluster import relabel_groups, cluster_direction
+from mlreco.utils.gnn.cluster import cluster_direction
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score
 from mlreco.utils.gnn.network import complete_graph
 import mlreco.utils

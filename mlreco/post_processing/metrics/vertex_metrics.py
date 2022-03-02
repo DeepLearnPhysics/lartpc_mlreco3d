@@ -9,7 +9,7 @@ from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
 from mlreco.utils.vertex import predict_vertex, get_vertex
 
 
-@post_processing(['vertex-metrics', 'vertex-candidates', 'vertex-true'],
+@post_processing(['vertex-metrics', 'vertex-candidates', 'vertex-true', 'vertex-distances', 'vertex-distances-others', 'vertex-distances-primaries'],
                 ['input_data', 'seg_label', 'clust_data', 'particles', 'kinematics'],
                 ['node_pred_vtx', 'inter_particles', 'inter_group_pred', 'particles_seg'])
 def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
@@ -27,6 +27,10 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     coords_col          = module_cfg.get('coords_col', (1, 4))
     attaching_threshold = module_cfg.get('attaching_threshold', 2)
     inter_threshold     = module_cfg.get('inter_threshold', 10)
+    other_primaries_threshold = module_cfg.get('other_primaries_threshold', 30)
+    fraction_bad_primaries = module_cfg.get('fraction_bad_primaries', 0.6)
+    min_overlap_count = module_cfg.get('min_overlap_count', 10)
+    pca_radius = module_cfg.get('pca_radius', 21)
 
     node_pred_vtx = node_pred_vtx[data_idx]
     original_node_pred_vtx = node_pred_vtx
@@ -65,20 +69,47 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     masking = lambda ar: ar[mask_ghost] if 'ghost' in res else ar
     vtx_resolution = 0.
     row_candidates_names, row_candidates_values = [], []
+    row_distances_names, row_distances_values = [], []
+    row_distances_others_names, row_distances_others_values = [], []
+    row_distances_primaries_names, row_distances_primaries_values = [], []
     for inter_idx in np.unique(inter_group_pred[data_idx]):
-        ppn_candidates, c_candidates, vtx_candidate, vtx_std = predict_vertex(inter_idx, data_idx, input_data, res,
+        inter_mask = inter_group_pred[data_idx] == inter_idx
+        interaction = inter_particles[data_idx][inter_mask]
+        print('Predicted interaction ', inter_idx, len(np.hstack(interaction)))
+        ppn_candidates, c_candidates, vtx_candidate, vtx_std, ppn_candidates_old, distances, distances_others, distances_primaries = predict_vertex(inter_idx, data_idx, input_data, res,
                                                                             coords_col=coords_col, primary_label=primary_label,
                                                                             shower_label=shower_label, track_label=track_label,
                                                                             endpoint_label=endpoint_label,
                                                                             attaching_threshold=attaching_threshold,
-                                                                            inter_threshold=inter_threshold)
+                                                                            inter_threshold=inter_threshold,
+                                                                            return_distances=True, other_primaries_threshold=other_primaries_threshold, fraction_bad_primaries=fraction_bad_primaries,
+                                                                            pca_radius=pca_radius)
         inter_mask = inter_group_pred[data_idx] == inter_idx
         interaction = inter_particles[data_idx][inter_mask]
         primary_particles = np.argmax(original_node_pred_vtx[inter_mask][:, 3:], axis=1) == primary_label
 
+        if len(distances):
+            for x in np.hstack(distances):
+                row_distances_names.append(("d",))
+                row_distances_values.append((x,))
+        if len(distances_others):
+            distances_others = np.hstack(distances_others)
+            row_distances_others_names.extend([("d",) for _ in distances_others])
+            row_distances_others_values.extend([(x,) for x in distances_others])
+        else:
+            distances_others = np.empty((1,))
+        if len(distances_primaries):
+            #print('distance to primaries', distances_primaries)
+            row_distances_primaries_names.extend([('d',) for _ in distances_primaries])
+            row_distances_primaries_values.extend([(x,) for x in distances_primaries])
+        else:
+            distances_primaries = np.empty((1,))
         # No primary particle in interaction
         if len(clusts[inter_mask][primary_particles]) == 0:
             continue
+
+
+        # Match to a true interaction
 
         is_nu = get_cluster_label(clust_data[data_idx], clusts[inter_mask][primary_particles], column=nu_col)
         #print(is_nu, len(clusts[inter_mask][primary_particles]))
@@ -88,33 +119,57 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         #print(inter_idx, len(clusts[inter_mask]))
         vtx_resolution = -1
         clust_assn_vtx = [-1, -1, -1]
+        max_overlap = 0
+        matched_inter_idx = -1
         if len(ppn_candidates):
             # Now evaluate vertex candidates for this interaction
             clust_assn_vtx = node_assn_vtx[positives.astype(bool) & (inter_mask[good_index])] * spatial_size
             clust_assn_vtx = clust_assn_vtx.mean(axis=0)
-            #print(vtx_candidate, clust_assn_vtx)
-            vtx_resolution += np.linalg.norm(clust_assn_vtx-vtx_candidate)
-            #print("resolution = ", vtx_resolution)
+            print('Clust assn vtx', clust_assn_vtx)
+            for true_inter_idx in np.unique(clust_data[data_idx][:, 7]):
+                if true_inter_idx < 0:
+                    continue
+                true_inter_mask = clust_data[data_idx][:, 7] == true_inter_idx
+                intersection = np.intersect1d(np.where(inter_mask)[0], np.where(true_inter_mask)[0])
+                print('check ', inter_idx, true_inter_idx, intersection)
+                if len(intersection) > max_overlap and len(intersection > min_overlap_count):
+                    max_overlap = len(intersection)
+                    matched_inter_idx = true_inter_idx
+            print('We have candidates and overlap is ', max_overlap)
+            if matched_inter_idx > -1:
+                vtx = get_vertex(kinematics, clust_data, data_idx, matched_inter_idx, vtx_col=vtx_col)
+                print("Vertex candidate and true = ", vtx_candidate, clust_assn_vtx, vtx)
+            else:
+                print("Vertex candidate and true = ", vtx_candidate, clust_assn_vtx, None)
+            vtx_resolution = np.linalg.norm(clust_assn_vtx-vtx_candidate)
+            print("resolution = ", vtx_resolution)
             vtx_candidates.append(vtx_candidate)
-        row_candidates_names.append(("num_ppn_candidates", "vtx_resolution",
+        row_candidates_names.append(("num_ppn_candidates", "num_ppn_associations", "vtx_resolution",
                                     "vtx_candidate_x", "vtx_candidate_y", "vtx_candidate_z",
                                     "vtx_true_x", "vtx_true_y", "vtx_true_z",
                                     "vtx_std_x", "vtx_std_y", "vtx_std_z",
-                                    "num_primaries", "is_nu", "num_pix"))
-        row_candidates_values.append((len(ppn_candidates), vtx_resolution,
+                                    "num_primaries", "is_nu", "num_pix",
+                                    "overlap", "distance_others_min", "distance_others_max",
+                                    "distance_primaries_min", "distance_primaries_max"))
+
+        row_candidates_values.append((len(ppn_candidates), len(ppn_candidates_old), vtx_resolution,
                                     vtx_candidate[0], vtx_candidate[1], vtx_candidate[2],
                                     clust_assn_vtx[0], clust_assn_vtx[1], clust_assn_vtx[2],
                                     vtx_std[0], vtx_std[1], vtx_std[2],
-                                    len(c_candidates), is_nu, np.sum([len(c) for c in clusts[inter_mask][primary_particles]])))
+                                    np.sum(primary_particles), is_nu, np.sum([len(c) for c in clusts[inter_mask][primary_particles]]),
+                                    max_overlap, np.amin(distances_others), np.amax(distances_others),
+                                    np.amin(distances_primaries), np.amax(distances_primaries)))
 
+    row_true_names, row_true_values = [], []
+    """
     vtx_candidates = np.array(vtx_candidates)
     #print(vtx_candidates)
     node_assn_vtx = np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1)
-    row_true_names, row_true_values = [], []
     num_true = len(np.unique(clust_data[data_idx][:, 7]))
     for inter_idx in np.unique(clust_data[data_idx][:, 7]):
         if inter_idx < 0:
             continue
+        print('True interaction ', inter_idx)
         inter_mask = clust_data[data_idx][:, 7] == inter_idx
         vtx = get_vertex(kinematics, clust_data, data_idx, inter_idx, vtx_col=vtx_col)
 
@@ -126,6 +181,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             d = cdist([vtx], vtx_candidates).reshape((-1,))
             vtx_candidate = vtx_candidates[np.argmin(d)]
             distance = np.linalg.norm(vtx_candidate-vtx)
+            print(vtx, vtx_candidates)
         is_nu = clust_data[data_idx][inter_mask][:, 8]
         is_nu = is_nu[is_nu > -1]
         is_nu = np.argmax(np.bincount(is_nu.astype(int))) if len(is_nu) else -1
@@ -148,5 +204,11 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                 (pred_positives == positives)[positives > 0].sum(), (pred_positives == positives)[pred_positives > 0].sum(),
                 accuracy_position, n_clusts_vtx, n_clusts_vtx_positives,
                 vtx_resolution, len(vtx_candidates), num_true)
-
-    return [(row_names, row_values), (row_candidates_names, row_candidates_values), (row_true_names, row_true_values)]
+    """
+    row_names, row_values = (), ()
+    return [(row_names, row_values),
+            (row_candidates_names, row_candidates_values),
+            (row_true_names, row_true_values),
+            (row_distances_names, row_distances_values),
+            (row_distances_others_names, row_distances_others_values),
+            (row_distances_primaries_names, row_distances_primaries_values)]
