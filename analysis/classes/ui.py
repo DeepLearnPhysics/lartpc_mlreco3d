@@ -104,9 +104,7 @@ class FullChainPredictor:
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
-
     def __repr__(self):
-
         msg = "FullChainEvaluator(num_batches={})".format(self.num_batches)
         return msg
         
@@ -508,10 +506,13 @@ class FullChainPredictor:
             interaction_id = inter_group_pred[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, seg_label, interaction_id, 
-                            pids[i], batch_id=entry, 
-                            depositions=depositions[p], is_primary=is_primary, 
+                            pids[i], 
+                            batch_id=entry, 
+                            voxel_indices=p,
+                            depositions=depositions[p], 
+                            is_primary=is_primary, 
                             pid_conf=softmax(type_logits[i])[pids[i]])
-            part.voxel_indices = p
+            # part.voxel_indices = p
             out.append(part)
 
         if primaries:
@@ -729,7 +730,6 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-
     def get_true_particles(self, entry, primaries=True,
                            verbose=False) -> List[TruthParticle]:
         '''
@@ -899,8 +899,7 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pt' (and vice versa).")
                 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, 
-                                      min_overlap_count=self.min_overlap_count)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to)
 
         if match_particles:
             for interactions in matched_interactions:

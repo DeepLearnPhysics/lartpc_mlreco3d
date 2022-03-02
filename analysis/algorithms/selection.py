@@ -9,7 +9,7 @@ from pprint import pprint
 import time
 
 
-@evaluate(['interactions_tp'], mode='per_batch')
+@evaluate(['interactions_test'], mode='per_batch')
 def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     # Set default fieldnames and values. (Needed for logger to work)
@@ -25,13 +25,10 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
     for i, index in enumerate(image_idxs):
 
-        # print('----------------------Index: {}-----------------------'.format(index))
-        # pprint(predictor.get_true_interactions(i, primaries=primaries))
+        print('-------------------Index: {}---------------------'.format(index))
 
         matches = predictor.match_interactions(i, mode='tp', match_particles=True, primaries=primaries)
-        # print('    -----------------Matches---------------------')
-        # print('    ', matches)
-        
+
         for interaction_pair in matches:
             true_int, pred_int = interaction_pair[0], interaction_pair[1]
             if pred_int is not None:
@@ -40,10 +37,8 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                 pred_particles, true_particles = [], true_int.particles
 
             # Match true particles to predicted particles
-            matched_particles, _, _ = match(true_particles, pred_particles, 
-                                            primaries=primaries, min_overlap_count=10)
+            matched_particles, _, _ = match(true_particles, pred_particles)
             
-
             if pred_int is None:
                 print("No predicted interaction match = ", matched_particles)
                 true_count_primary_leptons = true_int.primary_particle_counts[1] \
@@ -69,7 +64,9 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         'true_count_primary_particles': true_count_primary_particles,
                         'true_interaction_is_matched': False,
                         'num_particles': 0,
-                        'num_true_particles': len(true_int.particles)})
+                        'num_true_particles': len(true_int.particles),
+                        'pred_particle_E': -1,
+                        'true_particle_E': p.sum_edep})
                     interactions_tp.append(update_dict)
             
             else:
@@ -89,7 +86,6 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         if (p.pid == 1 or p.pid == 2):
                             # Count matched primary leptons
                             pred_count_primary_leptons[p.id] = True
-
 
                 for m in matched_particles:
                     update_dict = OrderedDict({
@@ -111,7 +107,9 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         'true_count_primary_particles': true_count_primary_particles,
                         'true_interaction_is_matched': True,
                         'num_particles': 0,
-                        'num_true_particles': 0})
+                        'num_true_particles': 0,
+                        'pred_particle_E': -1,
+                        'true_particle_E': -1})
                     
                     update_dict['pred_interaction_id'] = pred_int.id
                     update_dict['true_interaction_id'] = true_int.id
@@ -122,6 +120,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         p2.is_matched = True
                         update_dict['pred_particle_type'] = p2.pid
                         update_dict['pred_particle_size'] = p2.size
+                        update_dict['pred_particle_E'] = p2.sum_edep
                         update_dict['pred_particle_is_primary'] = p2.is_primary
                         update_dict['pred_particle_is_matched'] = True
                         update_dict['true_particle_is_matched'] = True
@@ -129,17 +128,13 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                     update_dict['true_particle_type'] = p1.pid
                     update_dict['true_particle_size'] = p1.size
                     update_dict['true_particle_is_primary'] = p1.is_primary
+                    update_dict['true_particle_E'] = p1.sum_edep
 
                     update_dicts.append(update_dict)
-
-
 
                 for d in update_dicts:
                     d['pred_count_primary_leptons'] = sum(pred_count_primary_leptons.values())
                     d['pred_count_primary_particles'] = sum(pred_count_primary_particles.values())
                     interactions_tp.append(d)
-
-        # if index == 200:
-        #     assert False
 
     return [interactions_tp]
