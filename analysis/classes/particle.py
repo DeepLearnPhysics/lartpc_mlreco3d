@@ -14,7 +14,7 @@ class Particle:
     Simple Particle Class with managable __repr__ and __str__ functions.
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id, 
-                 pid, batch_id=0, voxel_indices=None, depositions=None, **kwargs):
+                 pid, image_id=0, voxel_indices=None, depositions=None, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
@@ -24,7 +24,7 @@ class Particle:
         self.pid = pid
         self.pid_conf = kwargs.get('pid_conf', None)
         self.interaction_id = interaction_id
-        self.batch_id = batch_id
+        self.image_id = image_id
         self.is_primary = kwargs.get('is_primary', False)
         self.match = []
         self._match_counts = {}
@@ -57,7 +57,7 @@ class Particle:
     def __repr__(self):
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.batch_id, self.id, 
+        msg = fmt.format(self.image_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
                          self.is_primary,
@@ -72,7 +72,7 @@ class ParticleFragment(Particle):
     Reserved for particle fragments.
     '''
     def __init__(self, coords, fragment_id, semantic_type, interaction_id, 
-                 group_id, batch_id=0, depositions=None, alias="Particle", **kwargs):
+                 group_id, image_id=0, depositions=None, alias="Particle", **kwargs):
         self.id = fragment_id
         self.points = coords
         self.size = coords.shape[0]
@@ -80,7 +80,7 @@ class ParticleFragment(Particle):
         self.semantic_type = semantic_type
         self.group_id = group_id
         self.interaction_id = interaction_id
-        self.batch_id = batch_id
+        self.image_id = image_id
         self.is_primary = kwargs.get('is_primary', False)
         self.semantic_keys = {
             0: 'Shower Fragment',
@@ -98,7 +98,7 @@ class ParticleFragment(Particle):
     def __repr__(self):
         fmt = "ParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
             " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.batch_id, self.id, 
+        msg = fmt.format(self.image_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.group_id, 
                          self.is_primary,
@@ -120,7 +120,7 @@ class TruthParticle(Particle):
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.batch_id, self.id, 
+        msg = fmt.format(self.image_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
                          self.pid_keys[self.pid], 
                          self.is_primary,
@@ -171,7 +171,7 @@ class Interaction:
 
         self.vertex = vertex
         if self.vertex is None:
-            self.vertex = [-1, -1, -1]
+            self.vertex = np.array([-1, -1, -1])
 
         self.nu_id = nu_id
 
@@ -181,6 +181,12 @@ class Interaction:
 
         self.primary_particle_counts = Counter({ i : 0 for i in range(len(self.pid_keys))})
         self.primary_particle_counts.update([p.pid for p in self.particles if p.is_primary])
+
+        if sum(self.primary_particle_counts.values()) == 0:
+            print("Interaction {} has no primary particles!".format(self.id))
+            self.is_valid = False
+        else:
+            self.is_valid = True
 
     def check_validity(self):
         for p in self.particles:
@@ -198,9 +204,9 @@ class Interaction:
     def __repr__(self):
 
         self.get_particles_summary()
-        msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
-            "-----------------------------------------------\n".format(
-            self.id, self.vertex[0], self.vertex[1], self.vertex[2])
+        msg = "Interaction {}, Valid: {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
+            "--------------------------------------------------------------------\n".format(
+            self.id, self.is_valid, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
 
     def __str__(self):
@@ -251,15 +257,21 @@ def matrix_iou(particles_x, particles_y):
     return overlap_matrix
 
 
-def match(particles_from : Union[List[Particle], List[TruthParticle]], 
-          particles_to   : Union[List[Particle], List[TruthParticle]], 
-          min_overlap=0, verbose=False, mode='iou'):
+def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]], 
+                       particles_to   : Union[List[Particle], List[TruthParticle]], 
+                       min_overlap=0, num_classes=5, verbose=False, mode='iou'):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>. 
     '''
 
     particles_x, particles_y = particles_from, particles_to
+
+    if isinstance(min_overlap, float) or isinstance(min_overlap, int):
+        thresholds = {key : min_overlap for key in np.arange(num_classes)}
+    else:
+        assert len(min_overlap) == num_classes
+        thresholds = {key : val for key, val in zip(np.arange(num_classes), min_overlap)}
 
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
@@ -277,14 +289,15 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 
-    idx[intersections < min_overlap] = -1
+    # idx[intersections < min_overlap] = -1
     # intersections[intersections < min_overlap_count] = -1
 
     matches = []
+    # print(thresholds)
 
     for j, px in enumerate(particles_x):
         select_idx = idx[j]
-        if select_idx < 0:
+        if intersections[j] <= thresholds[px.pid]:
             # If no truth could be matched, assign None
             matched_truth = None
         else:
@@ -304,11 +317,40 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
 
 def match_interactions_fn(ints_from : List[Interaction], 
                           ints_to : List[Interaction], 
-                          min_overlap=0):
+                          min_overlap=0, verbose=False):
     
-    f = partial(match, min_overlap=min_overlap)
-    
-    return f(ints_from, ints_to)
+    ints_x, ints_y = ints_from, ints_to
+
+    if len(ints_y) == 0 or len(ints_x) == 0:
+        if verbose:
+            print("No particles/interactions to match.")
+        return [], 0, 0
+
+    overlap_matrix = matrix_iou(ints_x, ints_y)
+    idx = overlap_matrix.argmax(axis=0)
+    intersections = overlap_matrix.max(axis=0)
+
+    matches = []
+
+    for j, interaction in enumerate(ints_x):
+        select_idx = idx[j]
+        if intersections[j] <= min_overlap:
+            # If no truth could be matched, assign None
+            matched_truth = None
+        else:
+            matched_truth = ints_y[select_idx]
+            interaction.match.append(matched_truth.id)
+            interaction._match_counts[matched_truth.id] = intersections[j]
+            matched_truth.match.append(interaction.id)
+            matched_truth._match_counts[interaction.id] = intersections[j]
+        matches.append((interaction, matched_truth))
+
+    for interaction in ints_y:
+        interaction.match = sorted(interaction.match, 
+                                   key=lambda x: interaction._match_counts[x],
+                                   reverse=True)
+
+    return matches, idx, intersections
 
 
 def group_particles_to_interactions_fn(particles : List[Particle], 

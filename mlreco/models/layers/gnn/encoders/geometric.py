@@ -8,6 +8,22 @@ from mlreco.utils.gnn.data import cluster_features, cluster_edge_features
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
     Produces geometric cluster node features.
+
+    The first 19 features are composed of:
+        - Center (3)
+        - Covariance matrix (9)
+        - Principal axis (3)
+        - Voxel count (1)
+        - Mean energy (1)
+        - RMS energy (1)
+        - Semantic type (1), i.e. most represented type in cluster
+
+    6 features for the end points (duplicated for shower, 
+        randomly ordered for tracks)
+    3 features for direction estimate (mean direction w.r.t. start point)
+
+    Total of 28 hand-engineered features
+
     """
     def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
         super(ClustGeoNodeEncoder, self).__init__()
