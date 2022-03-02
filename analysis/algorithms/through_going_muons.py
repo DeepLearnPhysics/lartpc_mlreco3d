@@ -8,10 +8,10 @@ from analysis.classes.particle import match
 
 from pprint import pprint
 import time
-
+import numpy as np
 
 @evaluate(['acpt_muons_cells', 'acpt_muons'], mode='per_batch')
-def test_through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
+def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Selection of anode-cathode crossing muons
     """
@@ -19,8 +19,9 @@ def test_through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     muon_cells, muons = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
     primaries = analysis_cfg['analysis']['match_primaries']
-    spatial_size = analysis_cfg['analysis']['spatial_size']
-    selection_threshold = analysis_cfg['analysis']['selection_threshold']
+    spatial_size = analysis_cfg['analysis']['processor_cfg']['spatial_size']
+    selection_threshold = analysis_cfg['analysis']['processor_cfg']['selection_threshold']
+    bin_size = analysis_cfg['analysis']['processor_cfg']['bin_size']
 
     predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
     image_idxs = data_blob['index']
@@ -50,9 +51,11 @@ def test_through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'pred_particle_is_primary': p.is_primary,
                     'pred_particle_size': p.size,
                     'projected_x_length': projected_x_length,
-                    'theta_yz': np.atan((coords[:, y].max() - coords[:, y].min())/(coords[:, z].max()-coords[:, z].min())),
-                    'theta_xz':
+                    'theta_yz': np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min())),
+                    #'theta_xz':
                 })
+                muons.append(update_dict)
+                
                 # Bin track in segments
                 bins = np.arange(0, spatial_size, bin_size)
                 y_inds = np.digitize(coords[:, y], bins)
@@ -64,6 +67,7 @@ def test_through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     for z_idx in np.unique(z_inds):
                         for x_idx in np.unique(x_inds):
                             cell = (y_inds == y_idx) & (z_inds == z_idx) & (x_inds == x_idx)
+                            if np.count_nonzero(cell) < 2: continue
                             coords_pca = pca.fit_transform(coords[cell])[:, 0]
                             update_dict = OrderedDict({
                                 'index': index,
