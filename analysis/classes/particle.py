@@ -14,11 +14,12 @@ class Particle:
     Simple Particle Class with managable __repr__ and __str__ functions.
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id, 
-                 pid, batch_id=0, depositions=None, **kwargs):
+                 pid, batch_id=0, voxel_indices=None, depositions=None, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
         self.depositions = depositions
+        self.voxel_indices = voxel_indices
         self.semantic_type = semantic_type
         self.pid = pid
         self.pid_conf = kwargs.get('pid_conf', None)
@@ -45,6 +46,8 @@ class Particle:
             4: 'Proton'
         }
 
+        self.sum_edep = np.sum(self.depositions)
+
         self.startpoint = -np.ones(3)
         self.endpoints = -np.ones((2, 3))
         
@@ -52,7 +55,7 @@ class Particle:
         return self.__repr__()
     
     def __repr__(self):
-        fmt = "Particle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
+        fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
@@ -93,7 +96,7 @@ class ParticleFragment(Particle):
         return self.__repr__()
     
     def __repr__(self):
-        fmt = "ParticleFragment( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
+        fmt = "ParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
             " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
@@ -115,7 +118,7 @@ class TruthParticle(Particle):
         self._match_counts = {}
 
     def __repr__(self):
-        fmt = "TruthParticle( Batch={:<3} | ID={:<3} | Semantic_type: {:<15}"\
+        fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.batch_id, self.id, 
                          self.semantic_keys[self.semantic_type], 
@@ -229,44 +232,52 @@ class TruthInteraction(Interaction):
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 
 
+def matrix_counts(particles_x, particles_y):
+    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
+    for i, py in enumerate(particles_y):
+        for j, px in enumerate(particles_x):
+            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices, 
+                                                      px.voxel_indices))
+    return overlap_matrix
+
+
+def matrix_iou(particles_x, particles_y):
+    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.float32)
+    for i, py in enumerate(particles_y):
+        for j, px in enumerate(particles_x):
+            cap = np.intersect1d(py.voxel_indices, px.voxel_indices)
+            cup = np.union1d(py.voxel_indices, px.voxel_indices)
+            overlap_matrix[i, j] = float(cap.shape[0] / cup.shape[0])
+    return overlap_matrix
+
+
 def match(particles_from : Union[List[Particle], List[TruthParticle]], 
           particles_to   : Union[List[Particle], List[TruthParticle]], 
-          primaries=True, min_overlap_count=1, verbose=False):
+          min_overlap=0, verbose=False, mode='iou'):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>. 
-    
     '''
 
     particles_x, particles_y = particles_from, particles_to
-    if primaries:
-        particles_x, particles_y = [], []
-        for px in particles_from:
-            px.match = []
-            px._match_counts = {}
-            if px.is_primary:
-                particles_x.append(px)
-        for py in particles_to:
-            py.match = []
-            py._match_counts = {}
-            if py.is_primary:
-                particles_y.append(py)
 
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
             print("No particles/interactions to match.")
         return [], 0, 0
 
-    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
-    for i, py in enumerate(particles_y):
-        for j, px in enumerate(particles_x):
-            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices, 
-                                                      px.voxel_indices))
+    if mode == 'counts':
+        overlap_matrix = matrix_counts(particles_x, particles_y)
+    elif mode == 'iou':
+        overlap_matrix = matrix_iou(particles_x, particles_y)
+    else:
+        raise ValueError("Overlap matrix mode {} is not supported.".format(mode))
 
+    # print(overlap_matrix)
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 
-    idx[intersections < min_overlap_count] = -1
+    idx[intersections < min_overlap] = -1
     # intersections[intersections < min_overlap_count] = -1
 
     matches = []
@@ -293,10 +304,9 @@ def match(particles_from : Union[List[Particle], List[TruthParticle]],
 
 def match_interactions_fn(ints_from : List[Interaction], 
                           ints_to : List[Interaction], 
-                          min_overlap_count=1):
+                          min_overlap=0):
     
-    f = partial(match, primaries=False, 
-                min_overlap_count=min_overlap_count)
+    f = partial(match, min_overlap=min_overlap)
     
     return f(ints_from, ints_to)
 
