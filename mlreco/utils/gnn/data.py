@@ -93,7 +93,7 @@ def form_merging_batches(batch_ids, mean_merge_size):
     return np.concatenate([np.full(n,i) for i,n in enumerate(event_cnts)])
 
 
-def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_type='cluster'):
+def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_col=0):
     """
     Merge events in same batch. For example, if batch size = 16 and merge_size = 2,
     output data has a batch size of 8 with each adjacent 2 batches in input data merged.
@@ -109,7 +109,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         np.ndarray: (B) Relabeled tensor
     """
     # Get the batch IDs
-    batch_ids = data[:,3].unique()
+    batch_ids = data[:,batch_col].unique()
 
     # Get the list that dictates how to merge events
     batch_size = len(batch_ids)
@@ -127,12 +127,12 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
     for i in np.unique(merging_batch_id_list):
         # Find the list of voxels that belong to the new batch
         merging_batch_ids = np.where(merging_batch_id_list == i)[0]
-        data_selections = [data[:,3] == j for j in merging_batch_ids]
-        part_selections = [particles[:,3] == j for j in merging_batch_ids]
+        data_selections = [data[:,batch_col] == j for j in merging_batch_ids]
+        part_selections = [particles[:,batch_col] == j for j in merging_batch_ids]
 
         # Relabel the batch column to the new batch id
         batch_selection = torch.sum(torch.stack(data_selections), dim=0).type(torch.bool)
-        data[batch_selection,3] = int(i)
+        data[batch_selection,batch_col] = int(i)
 
         # Relabel the cluster and group IDs by offseting by the number of particles
         clust_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0
@@ -141,7 +141,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
                 data[sel & (data[:,5] > -1),5] += clust_offset
                 data[sel & (data[:,6] > -1),6] += group_offset
                 data[sel & (data[:,7] > -1),7] += int_offset
-                data[sel & (data[:,8] > -1),8] += nu_offset
+                data[sel & (data[:,8] >  0),8] += nu_offset
             clust_offset += torch.sum(part_selections[j])
             group_offset += torch.max(data[sel,6])+1
             int_offset = torch.max(data[sel,7])+1
@@ -149,7 +149,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
-        particles[batch_selection,3] = int(i)
+        particles[batch_selection,batch_col] = int(i)
 
     return data, particles, merging_batch_id_list
 

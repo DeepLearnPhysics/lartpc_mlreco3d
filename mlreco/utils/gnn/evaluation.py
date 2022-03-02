@@ -304,7 +304,8 @@ def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
 
 @nb.njit(cache=True)
 def node_purity_mask(clust_ids: nb.int64[:],
-                     group_ids: nb.int64[:]) -> nb.boolean[:]:
+                     group_ids: nb.int64[:],
+                     primary_ids: nb.int64[:]) -> nb.boolean[:]:
     """
     Function which creates a mask that is False only for nodes
     which belong to a group with more than a single clear primary.
@@ -315,14 +316,15 @@ def node_purity_mask(clust_ids: nb.int64[:],
     Args:
         clust_ids (np.ndarray)  : (C) Array of cluster IDs
         group_ids (np.ndarray)  : (C) Array of cluster group IDs
+        primary_ids (np.ndarray): (C) Array of cluster primary IDs
     Returns:
         np.ndarray: (E) High purity node mask
     """
     purity_mask = np.zeros(len(clust_ids), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = group_ids == g
-        if np.sum(group_mask) > 1 and (np.sum(clust_ids[group_mask] == g) == 1 \
-                                or len(np.unique(clust_ids[group_mask][clust_ids[group_mask] == g])) == 1):
+        if np.sum(group_mask) > 1 and (np.sum(primary_ids[group_mask]) == 1 \
+                                or len(np.unique(clust_ids[group_mask][primary_ids[group_mask] == 1])) == 1):
             purity_mask[group_mask] = np.ones(np.sum(group_mask))
 
     return purity_mask
@@ -331,7 +333,8 @@ def node_purity_mask(clust_ids: nb.int64[:],
 @nb.njit(cache=True)
 def edge_purity_mask(edge_index: nb.int64[:,:],
                      clust_ids: nb.int64[:],
-                     group_ids: nb.int64[:]) -> nb.boolean[:]:
+                     group_ids: nb.int64[:],
+                     primary_ids: nb.int64[:]) -> nb.boolean[:]:
     """
     Function which creates a mask that is False only for edges
     which connect two nodes that both belong to a common group
@@ -341,52 +344,20 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
         edge_index (np.ndarray) : (E,2) Incidence matrix
         clust_ids (np.ndarray)  : (C) Array of cluster IDs
         group_ids (np.ndarray)  : (C) Array of cluster group IDs
+        primary_ids (np.ndarray): (C) Array of cluster primary IDs
     Returns:
         np.ndarray: (E) High purity edge mask
     """
     purity_mask = np.ones(len(edge_index), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = np.where(group_ids == g)[0]
-        if np.sum(clust_ids[group_mask] == g) != 1 and len(np.unique(clust_ids[group_mask][clust_ids[group_mask] == g])) != 1:
+        if np.sum(primary_ids[group_mask]) != 1 and len(np.unique(clust_ids[group_mask][primary_ids[group_mask] == 1])) != 1:
             edge_mask = np.empty(len(edge_index), dtype=np.bool_)
             for k, e in enumerate(edge_index):
                 edge_mask[k] = (e[0] == group_mask).any() & (e[1] == group_mask).any()
             purity_mask[edge_mask] = np.zeros(np.sum(edge_mask))
 
     return purity_mask
-
-
-@nb.njit(cache=True)
-def relabel_groups(clust_ids: nb.int64[:],
-                   true_group_ids: nb.int64[:],
-                   pred_group_ids: nb.int64[:]) -> nb.int64[:]:
-    """
-    Function that resets the value of the group ids according
-    to the predicted group ids, enforcing that clus_id=group_id
-    if the cluster corresponds to a primary
-
-    Args:
-        clust_ids (np.ndarray)       : (C) List of label cluster ids
-        true_group_ids (np.ndarray)  : (C) List of label group ids
-        pred_groups_ids (np.ndarray) : (C) List of predicted group ids
-    Returns:
-        torch.Tensor: (C) Relabeled group ids
-    """
-    new_group_ids = np.empty(len(pred_group_ids), dtype=np.int64)
-    primary_mask = clust_ids == true_group_ids
-    new_id = max(clust_ids)+1
-    for g in np.unique(pred_group_ids):
-        group_mask     = pred_group_ids == g
-        primary_labels = np.where(primary_mask & group_mask)[0]
-        group_id = -1
-        if len(primary_labels) != 1:
-            group_id = new_id
-            new_id += 1
-        else:
-            group_id = clust_ids[primary_labels[0]]
-        new_group_ids[group_mask] = group_id
-
-    return new_group_ids
 
 
 def clustering_metrics(clusts, node_assn, node_pred):

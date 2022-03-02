@@ -7,7 +7,7 @@ from mlreco.models.layers.common.momentum import EvidentialMomentumNet, Momentum
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
 
 class GNN(torch.nn.Module):
@@ -32,6 +32,7 @@ class GNN(torch.nn.Module):
             add_start_dir     : <add predicted start direction to the node features (default False)>
             start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
             start_dir_opt     : <optimize start direction by minimizing relative transverse spread of neighborhood (slow, default: False)>
+            add_start_dedx    : <add predicted start dedx to the node features (default False)>
             network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
             edge_max_dist     : <maximal edge Euclidean length (default -1)>
             edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
@@ -77,6 +78,7 @@ class GNN(torch.nn.Module):
         self.add_start_dir = base_config.get('add_start_dir', False)
         self.start_dir_max_dist = base_config.get('start_dir_max_dist', -1)
         self.start_dir_opt = base_config.get('start_dir_opt', False)
+        self.add_start_dedx = base_config.get('add_start_dedx', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
 
         self.batch_index = batch_col
@@ -95,6 +97,9 @@ class GNN(torch.nn.Module):
         self.merge_batch = base_config.get('merge_batch', False)
         self.merge_batch_mode = base_config.get('merge_batch_mode', 'const')
         self.merge_batch_size = base_config.get('merge_batch_size', 2)
+        if self.merge_batch_mode not in ['const', 'fluc']:
+            raise ValueError('Batch merging mode not supported, must be one of const or fluc')
+        self.merge_batch_fluc = self.merge_batch_mode == 'fluc'
 
         # If requested, use DBSCAN to form clusters from semantics
         if 'dbscan' in cfg[name]:
@@ -190,7 +195,7 @@ class GNN(torch.nn.Module):
 
         # If requested, merge images together within the batch
         if self.merge_batch:
-            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_mode=='fluc')
+            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc, self.batch_index)
             batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
@@ -266,6 +271,9 @@ class GNN(torch.nn.Module):
             if self.add_start_dir:
                 dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
                 x = torch.cat([x, dirs.float()], dim=1)
+            if self.add_start_dedx:
+                dedxs = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.start_dir_max_dist)
+                x = torch.cat([x, dedxs.reshape(-1,1).float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)
