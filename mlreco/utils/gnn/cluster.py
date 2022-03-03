@@ -312,6 +312,117 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_features_normalized(data: nb.float64[:,:],
+                         clusts: nb.types.List(nb.int64[:]),
+                         batch_col: nb.int64 = 0,
+                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    """
+    Function that returns an array of 16 geometric features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
+    """
+    return _get_cluster_features_normalized(data, clusts, batch_col=batch_col, coords_col=coords_col)
+
+@nb.njit(cache=True)
+def _get_cluster_features_normalized(data: nb.float64[:,:],
+                          clusts: nb.types.List(nb.int64[:]),
+                          batch_col: nb.int64 = 0,
+                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), 16), dtype=data.dtype)
+    ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
+                                                  # and throws a warning. To avoid this, use a separate counter to acces clusts.
+    for k in nb.prange(len(clusts)):
+        # Get list of voxels in the cluster
+        clust = clusts[ids[k]]
+        x = data[clust, coords_col[0]:coords_col[1]]
+
+        offset = 768 // 2
+        # normalize
+        x = (x - offset) / offset
+        center = mean_nb(x, 0)
+        # Center data
+        x = x - center
+
+        # Get orientation matrix
+        A = x.T.dot(x)
+
+        # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
+        # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
+        w, v = np.linalg.eigh(A)
+        if w[2] == 0.:
+            feats[k] = np.concatenate((center, np.zeros(12), np.array([len(clust)])))
+            continue
+        dirwt = 1.0 - w[1] / w[2]
+        # Get the principal direction, identify the direction of the spread
+        v0 = v[:,2]
+
+        # Projection all points, x, along the principal axis
+        x0 = x.dot(v0)
+
+        # Evaluate the distance from the points to the principal axis
+        xp0 = x - np.outer(x0, v0)
+        np0 = np.empty(len(xp0), dtype=data.dtype)
+        for i in range(len(xp0)):
+            np0[i] = np.linalg.norm(xp0[i])
+
+        # Flip the principal direction if it is not pointing towards the maximum spread
+        sc = np.dot(x0, np0)
+        if sc < 0:
+            v0 = np.zeros(3, dtype=data.dtype)-v0 # (-)/negative doesn't work with numba for now...
+
+        # Weight direction
+        v0 = dirwt * v0
+
+        a = A.flatten()
+
+        normed_size = (np.array([len(clust)]) - offset) / offset
+        # Append
+        feats[k] = np.concatenate((center, a, v0, normed_size))
+
+    return feats
+
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_features_extended_normalized(data, clusts, batch_col=0, coords_col=(1, 4)):
+    """
+    Function that returns the an array of 3 additional features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,X) Data tensor [x,y,z,batch_id,value,...,sem_type]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
+    """
+    return _get_cluster_features_extended_normalized(data, clusts, batch_col=batch_col, coords_col=coords_col)
+
+def _get_cluster_features_extended_normalized(data: nb.float64[:,:],
+                                   clusts: nb.types.List(nb.int64[:]),
+                                   batch_col: nb.int64 = 0,
+                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), 3), dtype=data.dtype)
+    ids = np.arange(len(clusts)).astype(np.int64)
+    for k in nb.prange(len(clusts)):
+        # Get mean and RMS energy in the cluster
+        clust = clusts[ids[k]]
+        mean_value = np.mean(data[clust,4])
+        std_value = np.std(data[clust,4])
+
+        # Get the cluster semantic class
+        types, cnts = unique_nb(data[clust,-1])
+        major_sem_type = types[np.argmax(cnts)]
+
+        feats[k] = [mean_value, std_value, major_sem_type]
+
+    return feats
+
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
