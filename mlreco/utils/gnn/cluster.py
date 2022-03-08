@@ -332,7 +332,8 @@ def get_cluster_features_normalized(data: nb.float64[:,:],
 def _get_cluster_features_normalized(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
                           batch_col: nb.int64 = 0,
-                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+                          coords_col: nb.types.List(nb.int64[:]) = (1, 4),
+                          spatial_size=768) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 16), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
                                                   # and throws a warning. To avoid this, use a separate counter to acces clusts.
@@ -341,7 +342,7 @@ def _get_cluster_features_normalized(data: nb.float64[:,:],
         clust = clusts[ids[k]]
         x = data[clust, coords_col[0]:coords_col[1]]
 
-        offset = 768 // 2
+        offset = spatial_size // 2
         # normalize
         x = (x - offset) / offset
         center = mean_nb(x, 0)
@@ -400,6 +401,7 @@ def get_cluster_features_extended_normalized(data, clusts, batch_col=0, coords_c
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
     return _get_cluster_features_extended_normalized(data, clusts, batch_col=batch_col, coords_col=coords_col)
+    
 
 def _get_cluster_features_extended_normalized(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),

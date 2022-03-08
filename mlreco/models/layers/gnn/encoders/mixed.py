@@ -10,9 +10,7 @@ class ClustMixNodeEncoder(torch.nn.Module):
     """
     def __init__(self, model_config, **kwargs):
         super(ClustMixNodeEncoder, self).__init__()
-        # print("ClustMixNodeEncoder3 = ", model_config)
-        self.normalize = model_config.get('normalize', True)
-        # require sub-config key
+
         if 'geo_encoder' not in model_config:
             raise ValueError("Require geo_encoder config!")
         if 'cnn_encoder' not in model_config:
@@ -27,8 +25,6 @@ class ClustMixNodeEncoder(torch.nn.Module):
         else:
             node_feats = 16
 
-        self.bn1 = torch.nn.BatchNorm1d(node_feats)
-        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.latent_size)
         self.num_features = node_feats + self.cnn_encoder.encoder.latent_size
         self.linear = torch.nn.Linear(self.num_features, self.num_features)
         self.elu = torch.nn.functional.elu
@@ -36,13 +32,11 @@ class ClustMixNodeEncoder(torch.nn.Module):
 
     def forward(self, data, clusts):
         features_geo = self.geo_encoder(data, clusts)
-        features_geo = self.bn1(features_geo)
         features_cnn = self.cnn_encoder(data, clusts)
-        features_cnn = self.bn2(features_cnn)
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
-        # print(out.shape)
+        print("mixed node = ", out.shape)
         return out
 
 
@@ -64,18 +58,15 @@ class ClustMixEdgeEncoder(torch.nn.Module):
         self.cnn_encoder = edge_encoder_construct(model_config, model_name='cnn_encoder', **kwargs)
 
         node_feats = 19
-        self.bn1 = torch.nn.BatchNorm1d(node_feats)
-        self.bn2 = torch.nn.BatchNorm1d(self.cnn_encoder.encoder.latent_size)
         self.num_features = node_feats + self.cnn_encoder.encoder.latent_size
         self.linear = torch.nn.Linear(self.num_features, self.num_features)
         self.elu = torch.nn.functional.elu
 
     def forward(self, data, clusts, edge_index):
         features_geo = self.geo_encoder(data, clusts, edge_index)
-        features_geo = self.bn1(features_geo)
         features_cnn = self.cnn_encoder(data, clusts, edge_index)
-        features_cnn = self.bn2(features_cnn)
         features_mix = torch.cat([features_geo, features_cnn], dim=1)
         out = self.elu(features_mix)
         out = self.linear(out)
+        print("mixed edge = ", out.shape)
         return out

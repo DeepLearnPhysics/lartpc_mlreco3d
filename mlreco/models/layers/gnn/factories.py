@@ -166,6 +166,7 @@ def edge_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoEdgeEncoder,
+        "geo_norm"       : geometric.NormedClustGeoEdgeEncoder,
         # "cnn2"      : ClustCNNEdgeEncoder,
         "mix_debug" : mixed.ClustMixEdgeEncoder,
         "cnn": ClustCNNMinkEdgeEncoder

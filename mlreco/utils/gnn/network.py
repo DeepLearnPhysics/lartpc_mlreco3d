@@ -303,6 +303,65 @@ def _get_cluster_edge_features(data: nb.float32[:,:],
 
     return feats
 
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_edge_features_normalized(data, clusts, edge_index, batch_col=0, coords_col=(1, 4)):
+    """
+    Function that returns a tensor of edge features for each of the
+    edges connecting clusters in the graph.
+
+    Args:
+        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
+        edge_index (np.ndarray): (2,E) Incidence matrix
+    Returns:
+        np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
+    """
+    return _get_cluster_edge_features_normalized(data, clusts, edge_index)
+    #return _get_cluster_edge_features_vec(data, clusts, edge_index)
+
+@nb.njit(parallel=True, cache=True)
+def _get_cluster_edge_features_normalized(data: nb.float32[:,:],
+                               clusts: nb.types.List(nb.int64[:]),
+                               edge_index: nb.int64[:,:],
+                               batch_col: nb.int64 = 0,
+                               coords_col: nb.types.List(nb.int64[:]) = (1, 4),
+                               spatial_size=768) -> nb.float32[:,:]:
+
+    feats = np.empty((len(edge_index), 19), dtype=data.dtype)
+    for k in nb.prange(len(edge_index)):
+        # Get the voxels in the clusters connected by the edge
+        x1 = data[clusts[edge_index[k,0]], coords_col[0]:coords_col[1]]
+        x2 = data[clusts[edge_index[k,1]], coords_col[0]:coords_col[1]]
+
+        # Normalize coordinates
+        offset = 768 // 2
+        x1 = (x1 - offset) / offset
+        x2 = (x2 - offset) / offset
+
+        # Find the closest set point in each cluster
+        d12 = cdist_nb(x1, x2)
+        imin = np.argmin(d12)
+        i1, i2 = imin//d12.shape[1], imin%d12.shape[1]
+        v1 = x1[i1,:]
+        v2 = x2[i2,:]
+
+        # Displacement
+        disp = v1 - v2
+
+        # Distance
+        lend = np.linalg.norm(disp)
+        if lend > 0:
+            disp = disp / lend
+
+        # Outer product
+        B = np.outer(disp, disp).flatten()
+
+        feats[k] = np.concatenate((v1, v2, disp, np.array([lend]), B))
+
+    return feats
+
+
 @nb.njit(cache=True)
 def _get_cluster_edge_features_vec(data: nb.float32[:,:],
                                    clusts: nb.types.List(nb.int64[:]),

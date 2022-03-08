@@ -32,8 +32,8 @@ class MinkowskiPixelNorm(nn.Module):
         out = features / (norm + self.eps).sqrt()
         return ME.SparseTensor(
             out,
-            coords_key=input.coords_key,
-            coords_manager=input.coords_man)
+            coordinate_manager=input.coordinate_manager,
+            coordinate_map_key=input.coordinate_map_key)
 
     def __repr__(self):
         s = '({}, eps={}, dimension={})'.format(

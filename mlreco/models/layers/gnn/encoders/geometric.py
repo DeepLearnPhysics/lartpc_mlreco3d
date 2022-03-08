@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from torch_scatter import scatter_min
 
-from mlreco.utils.gnn.data import cluster_features, cluster_edge_features, normed_cluster_features
+from mlreco.utils.gnn.data import cluster_features, cluster_edge_features, normed_cluster_features, normed_cluster_edge_features
 
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
@@ -234,7 +234,7 @@ class NormedClustGeoEdgeEncoder(torch.nn.Module):
         # If numpy is to be used, bring data to cpu, pass through Numba function
         # Otherwise use torch-based implementation of cluster_edge_features
         if self.use_numpy:
-            feats = cluster_edge_features(data, clusts, edge_index.T, batch_col=self.batch_col, coords_col=self.coords_col)
+            feats = normed_cluster_edge_features(data, clusts, edge_index.T, batch_col=self.batch_col, coords_col=self.coords_col)
         else:
             # Get the voxel set
             voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()

@@ -882,7 +882,7 @@ class FullChainEvaluator(FullChainPredictor):
         if mode == 'pred_to_true':
             # Match each pred to one in true
             particles_from = self.get_particles(entry, only_primaries=only_primaries)
-            particles_to = self.get_true_particles(entry, only_primarieses=only_primaries)
+            particles_to = self.get_true_particles(entry, only_primaries=only_primaries)
         elif mode == 'true_to_pred':
             # Match each true to one in pred
             particles_to = self.get_particles(entry, only_primaries=only_primaries)
