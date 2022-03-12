@@ -312,6 +312,117 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_features_normalized(data: nb.float64[:,:],
+                         clusts: nb.types.List(nb.int64[:]),
+                         batch_col: nb.int64 = 0,
+                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    """
+    Function that returns an array of 16 geometric features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,3) Voxel coordinates [x, y, z]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
+    """
+    return _get_cluster_features_normalized(data, clusts, batch_col=batch_col, coords_col=coords_col)
+
+@nb.njit(cache=True)
+def _get_cluster_features_normalized(data: nb.float64[:,:],
+                          clusts: nb.types.List(nb.int64[:]),
+                          batch_col: nb.int64 = 0,
+                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), 16), dtype=data.dtype)
+    ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
+                                                  # and throws a warning. To avoid this, use a separate counter to acces clusts.
+    for k in nb.prange(len(clusts)):
+        # Get list of voxels in the cluster
+        clust = clusts[ids[k]]
+        x = data[clust, coords_col[0]:coords_col[1]]
+
+        offset = 768 // 2
+        # normalize
+        x = (x - offset) / offset
+        center = mean_nb(x, 0)
+        # Center data
+        x = x - center
+
+        # Get orientation matrix
+        A = x.T.dot(x)
+
+        # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
+        # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
+        w, v = np.linalg.eigh(A)
+        if w[2] == 0.:
+            feats[k] = np.concatenate((center, np.zeros(12), np.array([len(clust)])))
+            continue
+        dirwt = 1.0 - w[1] / w[2]
+        # Get the principal direction, identify the direction of the spread
+        v0 = v[:,2]
+
+        # Projection all points, x, along the principal axis
+        x0 = x.dot(v0)
+
+        # Evaluate the distance from the points to the principal axis
+        xp0 = x - np.outer(x0, v0)
+        np0 = np.empty(len(xp0), dtype=data.dtype)
+        for i in range(len(xp0)):
+            np0[i] = np.linalg.norm(xp0[i])
+
+        # Flip the principal direction if it is not pointing towards the maximum spread
+        sc = np.dot(x0, np0)
+        if sc < 0:
+            v0 = np.zeros(3, dtype=data.dtype)-v0 # (-)/negative doesn't work with numba for now...
+
+        # Weight direction
+        v0 = dirwt * v0
+
+        a = A.flatten()
+
+        normed_size = (np.array([len(clust)]) - offset) / offset
+        # Append
+        feats[k] = np.concatenate((center, a, v0, normed_size))
+
+    return feats
+
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_features_extended_normalized(data, clusts, batch_col=0, coords_col=(1, 4)):
+    """
+    Function that returns the an array of 3 additional features for
+    each of the clusters in the provided list.
+
+    Args:
+        data (np.ndarray)    : (N,X) Data tensor [x,y,z,batch_id,value,...,sem_type]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+    Returns:
+        np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
+    """
+    return _get_cluster_features_extended_normalized(data, clusts, batch_col=batch_col, coords_col=coords_col)
+
+def _get_cluster_features_extended_normalized(data: nb.float64[:,:],
+                                   clusts: nb.types.List(nb.int64[:]),
+                                   batch_col: nb.int64 = 0,
+                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), 3), dtype=data.dtype)
+    ids = np.arange(len(clusts)).astype(np.int64)
+    for k in nb.prange(len(clusts)):
+        # Get mean and RMS energy in the cluster
+        clust = clusts[ids[k]]
+        mean_value = np.mean(data[clust,4])
+        std_value = np.std(data[clust,4])
+
+        # Get the cluster semantic class
+        types, cnts = unique_nb(data[clust,-1])
+        major_sem_type = types[np.argmax(cnts)]
+
+        feats[k] = [mean_value, std_value, major_sem_type]
+
+    return feats
+
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
@@ -459,6 +570,38 @@ def _get_cluster_directions(data: nb.float64[:,:],
     return dirs
 
 
+@numba_wrapper(cast_args=['data','values','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
+    """
+    Finds the start dEdxs of all the clusters.
+
+    Args:
+        data (torch.tensor)  : (N,3) Voxel coordinates [x, y, z]
+        values (torch.tensor): (N) Voxel values
+        starts (torch.tensor): (C,3) Coordinates of the start points
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        max_dist (float)     : Max distance between start voxel and other voxels
+    Returns:
+        torch.tensor: (N) dEdx values for each cluster
+    """
+    return _get_cluster_dedxs(data, values, starts, clusts, max_dist)
+
+@nb.njit(parallel=True)
+def _get_cluster_dedxs(data: nb.float64[:,:],
+                       values: nb.float64[:],
+                       starts: nb.float64[:,:],
+                       clusts: nb.types.List(nb.int64[:]),
+                       max_dist: nb.float64 = -1) -> nb.float64[:,:]:
+
+    dedxs = np.empty(len(clusts), data.dtype)
+    ids   = np.arange(len(clusts)).astype(np.int64)
+    for k in nb.prange(len(clusts)):
+        # Weird bug here: without the cast (astype), throws a strange noncontiguous error on reshape...
+        dedxs[k] = cluster_dedx(data[clusts[ids[k]],:3], values[clusts[ids[k]]], starts[k].astype(np.float64), max_dist)
+
+    return dedxs
+
+
 @nb.njit(cache=True)
 def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]):
     """
@@ -603,3 +746,32 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
     # Get eigenvectors, select the one which corresponds to the maximal spread
     _, v = np.linalg.eigh(A)
     return v[:,2]
+
+
+@nb.njit
+def cluster_dedx(voxels: nb.float64[:,:],
+                 values: nb.float64[:],
+                 start: nb.float64[:],
+                 max_dist: nb.float64 = 5) -> nb.float64[:]:
+    """
+    Estimates the initial dEdx of a cluster
+
+    Args:
+        voxels (torch.tensor): (N,4) Voxel coordinates [x, y, z]
+        values (torch.tensor): (N) Voxel values
+        starts (torch.tensor): (C,3) Coordinates of the start points
+        max_dist (float)     : Max distance between start voxel and other voxels
+    Returns:
+        torch.tensor: (3) Orientation
+    """
+    # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
+    dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+    if max_dist > 0:
+        voxels = voxels[dist_mat <= max_dist]
+        if len(voxels) < 2:
+            return 0.
+        values = values[dist_mat <= max_dist]
+        dist_mat = dist_mat[dist_mat <= max_dist]
+
+    # Compute the total energy in the neighborhood and the max distance, return ratio
+    return np.sum(values)/np.max(dist_mat)

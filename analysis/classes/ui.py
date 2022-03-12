@@ -77,14 +77,14 @@ class FullChainPredictor:
         # Handle deghosting before anything and save deghosting specific
         # quantities separately from data_blob and result
 
-        self.deghosting = deghosting
+        self.deghosting = self.module_config['chain']['enable_ghost']
         self.data_blob = data_blob
         self.result = result
 
-        if deghosting:
+        if self.deghosting:
             deghost_labels_and_predictions(self.data_blob, self.result)
 
-        self.num_batches = len(data_blob['input_data'])
+        self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
         concat_result = cfg['trainval']['concat_result']
@@ -104,10 +104,8 @@ class FullChainPredictor:
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
-
     def __repr__(self):
-
-        msg = "FullChainEvaluator(num_batches={})".format(self.num_batches)
+        msg = "FullChainEvaluator(num_images={})".format(self.num_images)
         return msg
         
             
@@ -365,7 +363,7 @@ class FullChainPredictor:
         return vertex_info
 
 
-    def get_fragments(self, entry, primaries=False) -> List[Particle]:
+    def get_fragments(self, entry, only_primaries=False) -> List[Particle]:
         '''
         Method for retriving fragment list for given batch index.
 
@@ -435,7 +433,7 @@ class FullChainPredictor:
             out.append(p)
 
         # Check primaries and assign ppn points
-        if primaries:
+        if only_primaries:
             out = [p for p in out if p.is_primary]
 
         if len(out) == 0:
@@ -453,7 +451,7 @@ class FullChainPredictor:
         return out
     
 
-    def get_particles(self, entry, primaries=True) -> List[Particle]:
+    def get_particles(self, entry, only_primaries=True) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -488,6 +486,9 @@ class FullChainPredictor:
         particles_seg = self.result['particles_seg'][entry]
         
         type_logits = self.result['node_pred_type'][entry]
+        input_node_features = [None] * type_logits.shape[0]
+        if 'input_node_features' in self.result:
+            input_node_features = self.result['input_node_features'][entry]
         pids = np.argmax(type_logits, axis=1)
         
         out = []
@@ -495,6 +496,7 @@ class FullChainPredictor:
         assert len(inter_group_pred) == len(particles)
         assert len(particles_seg) == len(particles)
         assert len(pids) == len(particles)
+        assert len(input_node_features) == len(particles)
 
         node_pred_vtx = self.result['node_pred_vtx'][entry]
 
@@ -505,16 +507,23 @@ class FullChainPredictor:
             if voxels.shape[0] < self.min_particle_voxel_count:
                 continue
             seg_label = particles_seg[i]
+            pid = pids[i]
+            if seg_label == 2 or seg_label == 3:
+                pid = 1
             interaction_id = inter_group_pred[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, seg_label, interaction_id, 
-                            pids[i], batch_id=entry, 
-                            depositions=depositions[p], is_primary=is_primary, 
+                            pid, 
+                            batch_id=entry, 
+                            voxel_indices=p,
+                            depositions=depositions[p], 
+                            is_primary=is_primary, 
                             pid_conf=softmax(type_logits[i])[pids[i]])
-            part.voxel_indices = p
+            
+            part.node_features = input_node_features[i]
             out.append(part)
 
-        if primaries:
+        if only_primaries:
             out = [p for p in out if p.is_primary]
 
         if len(out) == 0:
@@ -538,7 +547,7 @@ class FullChainPredictor:
         return out
 
 
-    def get_interactions(self, entry, primaries=True) -> List[Interaction]:
+    def get_interactions(self, entry, drop_nonprimary_particles=True) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -558,7 +567,7 @@ class FullChainPredictor:
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-        particles = self.get_particles(entry, primaries=primaries)
+        particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(particles)
         for ia in out:
             vertex_info = self._fit_predict_vertex_info(entry, ia.id)
@@ -608,7 +617,7 @@ class FullChainPredictor:
         labels = []
         list_particles, list_interactions = [], []
 
-        for entry in range(self.num_batches):
+        for entry in range(self.num_images):
 
             pred_dict = self.fit_predict_labels(entry)
             labels.append(pred_dict)
@@ -680,12 +689,12 @@ class FullChainEvaluator(FullChainPredictor):
     abstraction level. 
     '''
     LABEL_TO_COLUMN = {
-        'segment_label': -1,
-        'fragment_label': 5,
-        'group_label': 6,
-        'interaction_label': 7,
-        'pdg_label': 9,
-        'nu_label': 8
+        'segment': -1,
+        'fragment': 5,
+        'group': 6,
+        'interaction': 7,
+        'pdg': 9,
+        'nu': 8
     }
 
 
@@ -697,7 +706,7 @@ class FullChainEvaluator(FullChainPredictor):
         if name not in self.LABEL_TO_COLUMN:
             raise KeyError("Invalid label identifier name: {}. "\
                 "Available column names = {}".format(
-                    name, str(list(self.LABEL_TO_COLUMN.values()))))
+                    name, str(list(self.LABEL_TO_COLUMN.keys()))))
         column_idx = self.LABEL_TO_COLUMN[name]
         return self.data_blob[schema][entry][:, column_idx]
 
@@ -707,7 +716,7 @@ class FullChainEvaluator(FullChainPredictor):
         return pred[name]
 
 
-    def _apply_true_voxel_cut(self, entry, primaries=True):
+    def _apply_true_voxel_cut(self, entry):
 
         labels = self.data_blob['cluster_label_noghost'][entry]
 
@@ -729,8 +738,7 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-
-    def get_true_particles(self, entry, primaries=True,
+    def get_true_particles(self, entry, only_primaries=True,
                            verbose=False) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id. 
@@ -768,8 +776,7 @@ class FullChainEvaluator(FullChainPredictor):
                 continue
             # For deghosting inputs, perform voxel cut with true nonghost coords.
             if self.deghosting:
-                exclude_ids = self._apply_true_voxel_cut(entry, 
-                    primaries=primaries)
+                exclude_ids = self._apply_true_voxel_cut(entry)
                 if pid in exclude_ids:
                     # Skip this particle if its below the voxel minimum requirement
                     # print("PID {} was excluded from the list of particles due"\
@@ -834,15 +841,15 @@ class FullChainEvaluator(FullChainPredictor):
             if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
                 particles.append(particle)
 
-        if primaries:
+        if only_primaries:
             particles = [p for p in particles if p.is_primary]
 
         return particles
 
 
-    def get_true_interactions(self, entry, primaries=True,
+    def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=20) -> List[Interaction]:
-        true_particles = self.get_true_particles(entry, primaries=primaries)
+        true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(true_particles, 
                                                  get_nu_id=True, mode='truth')
         vertices = self.get_true_vertices(entry)
@@ -866,41 +873,40 @@ class FullChainEvaluator(FullChainPredictor):
         return out
 
 
-    def match_particles(self, entry, primaries=True, mode='pt'):
+    def match_particles(self, entry, 
+                        only_primaries=False, 
+                        mode='pred_to_true', **kwargs):
         '''
         Returns (<Particle>, None) if no match was found
         '''
-        if mode == 'pt':
+        if mode == 'pred_to_true':
             # Match each pred to one in true
-            particles_from = self.get_particles(entry, primaries=primaries)
-            particles_to = self.get_true_particles(entry, primaries=primaries)
-        elif mode == 'tp':
+            particles_from = self.get_particles(entry, only_primaries=only_primaries)
+            particles_to = self.get_true_particles(entry, only_primarieses=only_primaries)
+        elif mode == 'true_to_pred':
             # Match each true to one in pred
-            particles_to = self.get_particles(entry, primaries=primaries)
-            particles_from = self.get_true_particles(entry, primaries=primaries)
+            particles_to = self.get_particles(entry, only_primaries=only_primaries)
+            particles_from = self.get_true_particles(entry, only_primaries=only_primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pt' (and vice versa).")
-        matched_pairs, _, _ = match(particles_from, particles_to, 
-                              primaries=primaries,
-                              min_overlap_count=self.min_overlap_count)
+                " prediction to truth, use 'pred_to_true' (and vice versa).")
+        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to, **kwargs)
         return matched_pairs
 
 
-    def match_interactions(self, entry, mode='pt', 
-                           primaries=True, match_particles=True, return_counts=False):
-        if mode == 'pt':
-            ints_from = self.get_interactions(entry, primaries=primaries)
-            ints_to = self.get_true_interactions(entry, primaries=primaries)
-        elif mode == 'tp':
-            ints_to = self.get_interactions(entry, primaries=primaries)
-            ints_from = self.get_true_interactions(entry, primaries=primaries)
+    def match_interactions(self, entry, mode='pred_to_true', 
+                           drop_nonprimary_particles=True, match_particles=True, return_counts=False):
+        if mode == 'pred_to_true':
+            ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
+            ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
+        elif mode == 'true_to_pred':
+            ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
+            ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pt' (and vice versa).")
+                " prediction to truth, use 'pred_to_true' (and vice versa).")
                 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, 
-                                      min_overlap_count=self.min_overlap_count)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to)
 
         if match_particles:
             for interactions in matched_interactions:
@@ -910,7 +916,7 @@ class FullChainEvaluator(FullChainPredictor):
                 else:
                     domain_particles, codomain_particles = domain.particles, codomain.particles
                     # continue
-                matched_particles, _, _ = match(domain_particles, codomain_particles)
+                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles)
 
         if return_counts:
             return matched_interactions, counts

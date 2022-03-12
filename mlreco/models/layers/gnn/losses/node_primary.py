@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from mlreco.utils.gnn.cluster import get_cluster_label
-from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask, relabel_groups
+from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask
 
 class NodePrimaryLoss(torch.nn.Module):
     """
@@ -30,6 +30,7 @@ class NodePrimaryLoss(torch.nn.Module):
         # Set the loss
         self.batch_col = batch_col
         self.coords_col = coords_col
+        self.primary_col = loss_config.get('primary_col', 10)
 
         self.loss = loss_config.get('loss', 'CE')
         self.reduction = loss_config.get('reduction', 'sum')
@@ -82,29 +83,28 @@ class NodePrimaryLoss(torch.nn.Module):
                 clusts = out['clusts'][i][j]
                 clust_ids = get_cluster_label(labels, clusts)
                 group_ids = get_cluster_label(labels, clusts, column=6)
+                primary_ids = get_cluster_label(labels, clusts, column=self.primary_col)
 
                 # If requested, relabel the group ids in the batch according to the group predictions
                 if self.use_group_pred:
                     if self.group_pred_alg == 'threshold':
-                        pred_group_ids = node_assignment(out['edge_index'][i][j], np.argmax(out['edge_pred'][i][j].detach().cpu().numpy(), axis=1), len(clusts))
+                        group_ids = node_assignment(out['edge_index'][i][j], np.argmax(out['edge_pred'][i][j].detach().cpu().numpy(), axis=1), len(clusts))
                     elif self.group_pred_alg == 'score':
-                        pred_group_ids = node_assignment_score(out['edge_index'][i][j], out['edge_pred'][i][j].detach().cpu().numpy(), len(clusts))
+                        group_ids = node_assignment_score(out['edge_index'][i][j], out['edge_pred'][i][j].detach().cpu().numpy(), len(clusts))
                     else:
                         raise ValueError('Group prediction algorithm not recognized: '+self.group_pred_alg)
-                    group_ids = relabel_groups(clust_ids, group_ids, pred_group_ids)
 
                 # If requested, remove groups that do not contain exactly one primary from the loss
                 if self.high_purity:
-                    purity_mask = node_purity_mask(clust_ids, group_ids)
+                    purity_mask = node_purity_mask(clust_ids, group_ids, primary_ids)
                     if not purity_mask.any():
                         continue
-                    clusts    = clusts[purity_mask]
-                    clust_ids = clust_ids[purity_mask]
-                    group_ids = group_ids[purity_mask]
-                    node_pred = node_pred[np.where(purity_mask)[0]]
+                    clusts      = clusts[purity_mask]
+                    primary_ids = primary_ids[purity_mask]
+                    node_pred   = node_pred[np.where(purity_mask)[0]]
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
-                node_assn = torch.tensor(clust_ids == group_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
+                node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:

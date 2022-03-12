@@ -7,11 +7,12 @@ current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
 
 from mlreco.main_funcs import process_config
-from analysis.algorithms.selection import *
+from analysis.algorithms import *
+
 
 def main(analysis_cfg_path, model_cfg_path):
 
-    analysis_config = yaml.load(open(analysis_cfg_path, 'r'), 
+    analysis_config = yaml.load(open(analysis_cfg_path, 'r'),
                                 Loader=yaml.Loader)
     config = yaml.load(open(model_cfg_path, 'r'), Loader=yaml.Loader)
     process_config(config, verbose=False)

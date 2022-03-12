@@ -183,55 +183,6 @@ def process_group_data(data_grp, data_img):
     return data_grp[inds,:]
 
 
-def get_valid_group_id(cluster_event, particles_v):
-    '''
-    Function that makes sure that the particle for which id = group_id (primary)
-    is a valid group ID. This should be handled somewhere else (e.g. SUPERA)
-
-    Inputs:
-        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
-        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
-    Outputs:
-        - array: (N) list of group ids
-    '''
-    # Only shower fragments that come first in time and deposit energy can be primaries
-    num_clusters = cluster_event.as_vector().size()
-    group_ids = np.array([particles_v[i].group_id() for i in range(particles_v.size())])
-    new_group = num_clusters + 1
-    for i, gid in enumerate(np.unique(group_ids)):
-        # If the group's parent is not EM or LE, nothing to do
-        if particles_v[int(gid)].shape() != 0 and particles_v[int(gid)].shape() != 4:
-            continue
-
-        # If the group's parent is nuclear activity, Delta or Michel, make it non primary
-        process = particles_v[int(gid)].creation_process()
-        parent_pdg_code = abs(particles_v[int(gid)].parent_pdg_code())
-        idxs = np.where(group_ids == gid)[0]
-        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-        # If a group's parent fragment has size zero, make it non primary
-        parent_size = cluster_event.as_vector()[int(gid)].as_vector().size()
-        if not parent_size:
-            idxs = np.where(group_ids == gid)[0]
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-        # If a group's parent is not the first in time, make it non primary
-        idxs = np.where(group_ids == gid)[0]
-        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
-        min_id = np.argmin(clust_times)
-        if idxs[min_id] != gid :
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-    return group_ids
-
-
 def get_interaction_id(particle_v, num_ancestor_loop=1):
     '''
     A function to sort out interaction ids.
@@ -400,3 +351,56 @@ def get_particle_id(particles_v, nu_ids):
             particle_ids[i] = -1
 
     return particle_ids
+
+
+def get_primary_id(cluster_event, particles_v):
+    '''
+    Function that assigns valid primary tags.
+    This could be handled somewhere else (e.g. SUPERA)
+
+    Inputs:
+        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    # Only shower fragments that come first in time and deposit energy can be primaries
+    group_ids    = np.array([p.group_id() for p in particles_v])
+    primary_ids  = np.empty(particles_v.size(), dtype=np.int32)
+    for i, p in enumerate(particles_v):
+        # If the particle is LE, not primary
+        if p.shape() == 4:
+            primary_ids[i] = 0
+            continue
+
+        # If the particle is not EM, use default
+        gid = int(p.group_id())
+        if p.shape() != 0:
+            primary_ids[i] = int(gid == i)
+            continue
+
+        # If the particle is nuclear activity, Delta or Michel, make it non primary
+        process = p.creation_process()
+        parent_pdg_code = abs(p.parent_pdg_code())
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
+            primary_ids[i] = 0
+            continue
+
+        # If a particle's parent fragment has size zero, make it non primary
+        parent_size = cluster_event.as_vector()[gid].as_vector().size()
+        if not parent_size:
+            primary_ids[i] = 0
+            continue
+
+        # If a particle's parent is not the first in time, make it non primary
+        idxs = np.where(group_ids == gid)[0]
+        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        min_id = np.argmin(clust_times)
+        if idxs[min_id] != gid :
+            primary_ids[i] = 0
+            continue
+
+        # Use default otherwise
+        primary_ids[i] = int(gid == i)
+
+    return primary_ids

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from mlreco.models.grappa import GNN, GNNLoss
-from mlreco.utils.deghosting import adapt_labels
+from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import (form_clusters,
@@ -482,7 +482,9 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred': 'inter_node_pred',
                            'node_pred_type': 'node_pred_type',
                            'node_pred_p': 'node_pred_p',
-                           'node_pred_vtx': 'node_pred_vtx'}
+                           'node_pred_vtx': 'node_pred_vtx',
+                           'input_node_features': 'input_node_features',
+                           'input_edge_features': 'input_edge_features'}
 
             self.run_gnn(self.grappa_inter,
                          input,
@@ -500,8 +502,8 @@ class FullChainGNN(torch.nn.Module):
                 raise Exception("Need interaction clustering before kinematic GNN.")
             output_keys = {'clusts': 'kinematics_particles',
                            'edge_index': 'kinematics_edge_index',
-                           'node_pred_p': 'node_pred_p',
-                           'node_pred_type': 'node_pred_type',
+                           'node_pred_p': 'kinematics_node_pred_p',
+                           'node_pred_type': 'kinematics_node_pred_type',
                            'edge_pred': 'flow_edge_pred'}
 
             self.run_gnn(self.grappa_kinematics,
@@ -835,11 +837,12 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'edge_pred':out['inter_edge_pred'],
                     'edge_index':out['inter_edge_index']
                 }
-
             if 'inter_node_pred' in out: gnn_out.update({ 'node_pred': out['inter_node_pred'] })
             if 'node_pred_type' in out:  gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
             if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
+            if 'input_node_features' in out:   gnn_out.update({ 'input_node_features': out['input_node_features'] })
+            if 'input_edge_features' in out:   gnn_out.update({ 'input_edge_features': out['input_edge_features'] })
 
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
             for key in res_gnn_inter:
@@ -975,6 +978,13 @@ def setup_chain_cfg(self, cfg):
     self.enable_gnn_inter      = chain_cfg.get('enable_gnn_inter', False)
     self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
+
+    print("Shower GNN: {}".format(self.enable_gnn_shower))
+    print("Track GNN: {}".format(self.enable_gnn_track))
+    print("Particle GNN: {}".format(self.enable_gnn_particle))
+    print("Interaction GNN: {}".format(self.enable_gnn_inter))
+    print("Kinematics GNN: {}".format(self.enable_gnn_kinematics))
+    print("Cosmic GNN: {}".format(self.enable_cosmic))
 
     if (self.enable_gnn_shower or \
         self.enable_gnn_track or \

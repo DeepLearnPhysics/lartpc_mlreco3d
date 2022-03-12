@@ -54,8 +54,8 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
     fig.update_layout(showlegend=True,
                       legend=dict(xanchor="left"),
                       autosize=True,
-                      height=1000,
-                      width=2000)
+                      height=500,
+                      width=1000)
     fig.update_layout(
         scene1 = dict(
             xaxis = dict(range=[0,spatial_size],),

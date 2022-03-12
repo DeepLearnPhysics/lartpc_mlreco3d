@@ -190,7 +190,7 @@ class CSVData:
 
 
 class ChunkCSVData:
-    
+
     def __init__(self, fout, append=True, chunksize=1000):
         self.name = fout
         if append:
@@ -208,12 +208,12 @@ class ChunkCSVData:
             pass
         # df = pd.DataFrame(list())
         # df.to_csv(self.name, mode='w')
-        
+
     def record(self, df, verbose=False):
         if verbose:
             print(df)
-        df.to_csv(self.name, 
-                  mode=self.append, 
-                  chunksize=self.chunksize, 
-                  index=False, 
+        df.to_csv(self.name,
+                  mode=self.append,
+                  chunksize=self.chunksize,
+                  index=False,
                   header=self.header)
