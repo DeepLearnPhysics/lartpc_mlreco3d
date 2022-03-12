@@ -142,6 +142,7 @@ def node_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoNodeEncoder,
+        "geo_norm"  : geometric.NormedClustGeoNodeEncoder,
         # "cnn2"      : ClustCNNNodeEncoder,
         "mix_debug" : mixed.ClustMixNodeEncoder,
         "cnn": ClustCNNMinkNodeEncoder
