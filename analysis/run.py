@@ -7,8 +7,8 @@ current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
 
 from mlreco.main_funcs import process_config
-from analysis.algorithms.selection import *
-from analysis.algorithms.through_going_muons import *
+from analysis.algorithms import *
+
 
 def main(analysis_cfg_path, model_cfg_path):
 

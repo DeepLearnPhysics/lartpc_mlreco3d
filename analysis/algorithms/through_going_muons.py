@@ -213,7 +213,7 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             # If asked to check predicted PID, exclude non-predicted-muons
             if pid_constraint and p.pid != muon_label: continue
 
-            if keep['ac'] or keep['a'] or keep['c']:
+            if np.any([(keep[key] and key in mode) for key in keep]):
                 # We are keeping this candidate, see if it is a match
                 # for the records keeping
 
@@ -226,19 +226,22 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     t0 = piercing_x / vdrift - drift_length/vdrift
 
                 coords[:, x] = coords[:, x] - t0 * vdrift
+                theta_yz = np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min()))
+                theta_xz = np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min()))
                 update_dict = {
                     'index': index,
                     'pred_particle_type': p.pid,
                     'pred_particle_is_primary': p.is_primary,
                     'pred_particle_size': p.size,
                     'projected_x_length': projected_x_length,
-                    'theta_yz': np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min())),
-                    'theta_xz': np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min())),
+                    'theta_yz': theta_yz,
+                    'theta_xz': theta_xz,
                     'matched': len(p.match),
                     't0': t0,
                     'true_pdg': -1,
                     'true_size': -1,
                     }
+                update_dict.update(keep) # Record what kind of piercing track it was
                 if not data and len(p.match)>0:
                     m = np.array(true_particles)[true_ids == p.match[0]][0]
                     update_dict.update({
@@ -246,6 +249,7 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                         'true_size': m.size
                     })
                 muons.append(OrderedDict(update_dict))
+                track_dict = update_dict
 
                 # Bin track in segments
                 bins = np.arange(0, spatial_size, bin_size)
@@ -262,18 +266,15 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                             coords_pca = pca.fit_transform(coords[cell])[:, 0]
                             update_dict = OrderedDict({
                                 'index': index,
-                                'pred_particle_type': p.pid,
-                                'pred_particle_is_primary': p.is_primary,
-                                'pred_particle_size': p.size,
                                 'cell_dQ': p.depositions[cell].sum(),
                                 'cell_dN': np.count_nonzero(cell),
                                 'cell_dx': coords_pca.max() - coords_pca.min(),
                                 'cell_ybin': y_idx,
                                 'cell_zbin': z_idx,
                                 'cell_xbin': x_idx,
-                                'track_theta_yz': np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min())),
-                                'track_theta_xz': np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min())),
                             })
+                            # Include parent track information
+                            update_dict.update(track_dict)
                             muon_cells.append(update_dict)
 
     return [muon_cells, muons]
