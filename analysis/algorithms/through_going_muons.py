@@ -4,7 +4,6 @@ from sklearn.decomposition import PCA
 
 from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
 from analysis.decorator import evaluate
-from analysis.classes.particle import match
 
 from pprint import pprint
 import time
@@ -145,8 +144,7 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             true_particles = predictor.get_true_particles(i, primaries=False)
             # Match true particles to predicted particles
             true_ids = np.array([p.id for p in true_particles])
-            matched_particles, _, _ = match(true_particles, pred_particles,
-                                            min_overlap=0.1)
+            matched_particles = predictor.match_particles(i, mode='true_to_pred', min_overlap=0.1)
 
         # Loop over predicted particles
         for p in pred_particles:
