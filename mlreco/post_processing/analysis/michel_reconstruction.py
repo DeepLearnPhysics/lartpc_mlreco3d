@@ -72,7 +72,7 @@ def michel_reconstruction(cfg, module_cfg, data_blob, res, logdir, iteration):
         one_pixel = 5#2.8284271247461903
 
         # Retrieve semantic labels corresponding to clusters
-        clusters_semantics = clusters[:, 10]
+        clusters_semantics = clusters[:, -1]
 
         # from network output
         segmentation = res['segmentation'][batch_id]

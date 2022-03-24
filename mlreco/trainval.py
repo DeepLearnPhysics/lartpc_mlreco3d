@@ -216,7 +216,8 @@ class trainval(object):
 
             # Here, contruct the unwrapped input and output
             # First, handle the case of a simple list concat
-            concat_keys = self._trainval_config.get('concat_result',[])
+            default_concat_result = ['input_edge_features', 'input_node_features','points', 'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints', 'seediness', 'margins', 'embeddings', 'fragments', 'fragments_seg', 'shower_fragments', 'shower_edge_index','shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments', 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred', 'particle_fragments', 'particle_edge_index', 'particle_node_pred', 'particle_edge_pred', 'particle_group_pred', 'particles','inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_particles', 'node_pred_p', 'node_pred_type', 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index', 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 'node_pred_vtx', 'total_num_points', 'total_nonghost_points', 'spatial_embeddings', 'occupancy', 'hypergraph_features', 'features', 'feature_embeddings', 'covariance']
+            concat_keys = self._trainval_config.get('concat_result',default_concat_result)
             if len(concat_keys):
                 avoid_keys  = [k for k,v in input_data.items() if not k in concat_keys]
                 avoid_keys += [k for k,v in res.items()        if not k in concat_keys]
@@ -328,12 +329,12 @@ class trainval(object):
         msg = '''
         WARNING: The model config was passed with the argument: <calibration>.
                     The base model will be set to eval() mode regardless of trainval['train'],
-                    and trainval will only perform optimization for the calibration model. 
+                    and trainval will only perform optimization for the calibration model.
 
                     Uncertainty Calibration model is set to: "{}"
         '''.format(self._calibration_config['name'])
         print(msg)
-        
+
         calibrator = calibrator_construct(self._calibration_config['name'])
         wrapped_model = calibrator(model, self._calibration_config)
         clossfn_name = self._calibration_config['loss']

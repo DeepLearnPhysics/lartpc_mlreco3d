@@ -13,7 +13,7 @@ class Particle:
     '''
     Simple Particle Class with managable __repr__ and __str__ functions.
     '''
-    def __init__(self, coords, group_id, semantic_type, interaction_id, 
+    def __init__(self, coords, group_id, semantic_type, interaction_id,
                  pid, image_id=0, voxel_indices=None, depositions=None, **kwargs):
         self.id = group_id
         self.points = coords
@@ -36,7 +36,7 @@ class Particle:
             3: 'Delta Ray',
             4: 'LowE Depo'
         }
-    
+
         self.pid_keys = {
             -1: 'None',
             0: 'Photon',
@@ -50,16 +50,16 @@ class Particle:
 
         self.startpoint = -np.ones(3)
         self.endpoints = -np.ones((2, 3))
-        
+
     def __str__(self):
         return self.__repr__()
-    
+
     def __repr__(self):
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.image_id, self.id, 
-                         self.semantic_keys[self.semantic_type], 
-                         self.pid_keys[self.pid], 
+        msg = fmt.format(self.image_id, self.id,
+                         self.semantic_keys[self.semantic_type],
+                         self.pid_keys[self.pid],
                          self.is_primary,
                          self.pid_conf * 100,
                          self.interaction_id,
@@ -71,7 +71,7 @@ class ParticleFragment(Particle):
     '''
     Reserved for particle fragments.
     '''
-    def __init__(self, coords, fragment_id, semantic_type, interaction_id, 
+    def __init__(self, coords, fragment_id, semantic_type, interaction_id,
                  group_id, image_id=0, depositions=None, alias="Particle", **kwargs):
         self.id = fragment_id
         self.points = coords
@@ -94,13 +94,13 @@ class ParticleFragment(Particle):
 
     def __str__(self):
         return self.__repr__()
-    
+
     def __repr__(self):
         fmt = "ParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
             " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.image_id, self.id, 
-                         self.semantic_keys[self.semantic_type], 
-                         self.group_id, 
+        msg = fmt.format(self.image_id, self.id,
+                         self.semantic_keys[self.semantic_type],
+                         self.group_id,
                          self.is_primary,
                          self.interaction_id,
                          self.points.shape[0])
@@ -120,9 +120,9 @@ class TruthParticle(Particle):
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
-        msg = fmt.format(self.image_id, self.id, 
-                         self.semantic_keys[self.semantic_type], 
-                         self.pid_keys[self.pid], 
+        msg = fmt.format(self.image_id, self.id,
+                         self.semantic_keys[self.semantic_type],
+                         self.pid_keys[self.pid],
                          self.is_primary,
                          self.interaction_id,
                          self.points.shape[0])
@@ -140,7 +140,13 @@ class TruthParticle(Particle):
             and p.end_position().z() >= 0 and p.end_position().z() <= spatial_size
         return check_contained
 
-
+    def purity_efficiency(self, other_particle):
+        overlap = len(np.intersect1d(self.voxel_indices, other_particle.voxel_indices))
+        return {
+            "purity": overlap / len(other_particle.voxel_indices),
+            "efficiency": overlap / len(self.voxel_indices)
+        }
+        
 class Interaction:
 
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
@@ -242,7 +248,7 @@ def matrix_counts(particles_x, particles_y):
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
     for i, py in enumerate(particles_y):
         for j, px in enumerate(particles_x):
-            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices, 
+            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices,
                                                       px.voxel_indices))
     return overlap_matrix
 
@@ -257,12 +263,12 @@ def matrix_iou(particles_x, particles_y):
     return overlap_matrix
 
 
-def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]], 
-                       particles_to   : Union[List[Particle], List[TruthParticle]], 
+def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]],
+                       particles_to   : Union[List[Particle], List[TruthParticle]],
                        min_overlap=0, num_classes=5, verbose=False, mode='iou'):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
-    The number of matches will be equal to the length of <pred_particles>. 
+    The number of matches will be equal to the length of <pred_particles>.
     '''
 
     particles_x, particles_y = particles_from, particles_to
@@ -315,10 +321,10 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     return matches, idx, intersections
 
 
-def match_interactions_fn(ints_from : List[Interaction], 
-                          ints_to : List[Interaction], 
+def match_interactions_fn(ints_from : List[Interaction],
+                          ints_to : List[Interaction],
                           min_overlap=0, verbose=False):
-    
+
     ints_x, ints_y = ints_from, ints_to
 
     if len(ints_y) == 0 or len(ints_x) == 0:
@@ -346,14 +352,14 @@ def match_interactions_fn(ints_from : List[Interaction],
         matches.append((interaction, matched_truth))
 
     for interaction in ints_y:
-        interaction.match = sorted(interaction.match, 
+        interaction.match = sorted(interaction.match,
                                    key=lambda x: interaction._match_counts[x],
                                    reverse=True)
 
     return matches, idx, intersections
 
 
-def group_particles_to_interactions_fn(particles : List[Particle], 
+def group_particles_to_interactions_fn(particles : List[Particle],
                                        get_nu_id=False, mode='pred'):
 
     interactions = defaultdict(list)
@@ -376,5 +382,5 @@ def group_particles_to_interactions_fn(particles : List[Particle],
             interactions[int_id] = TruthInteraction(int_id, particles, nu_id=nu_id)
         else:
             raise ValueError
-            
+
     return list(interactions.values())
