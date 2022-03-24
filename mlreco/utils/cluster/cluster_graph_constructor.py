@@ -212,7 +212,7 @@ class ClusterGraphConstructor:
     def _initialize_graph_unwrapped(self, res: dict,
                                           labels: list):
         '''
-        CGC initializer for unwrapped tensors. 
+        CGC initializer for unwrapped tensors.
         (see initialize_graph for functionality)
         '''
         features = res['hypergraph_features']
@@ -406,6 +406,12 @@ class ClusterGraphConstructor:
             - pred: predicted cluster labels.
 
         '''
+        # min_points is not meant to be used at train time
+        # (it defines orphans to be assigned)
+        if self.training:
+            # raise Exception("Please set min_points: 0 in GraphSpice config at training time.")
+            min_points = 0
+
         subgraph = self._graph_batch.get_example(entry)
         num_nodes = subgraph.num_nodes
         G = nx.Graph()
