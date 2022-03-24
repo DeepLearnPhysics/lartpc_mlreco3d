@@ -62,7 +62,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     pca = PCA(n_components=2)
 
     for i, index in enumerate(image_idxs):
-        pred_particles = predictor.get_particles(i)
+        pred_particles = predictor.get_particles(i, only_primaries=False)
 
         # Match with true particles if available
         if not data:
@@ -93,6 +93,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 # Determine whether attached to Michel or not
                 attached_to_Michel = False
                 Michel_size = -1
+                distance_to_Michel = -1
                 for daughter_p in true_particles:
                     if daughter_p.semantic_type != 2: continue
                     daughter = data_blob['particles_asis'][i][daughter_p.id]
@@ -110,6 +111,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     # print('found Michel in true particles !!!')
                     attached_to_Michel = True
                     Michel_size = daughter_p.size
+                    distance_to_Michel = cdist(tp.points, daughter_p.points).min()
                     break
                 # Determine whether it was matched
                 is_matched = False
@@ -121,6 +123,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 true_muons.append(OrderedDict({
                     'index': index,
                     'attached_to_Michel': attached_to_Michel,
+                    'distance_to_michel': distance_to_Michel,
                     'pdg': p.pdg_code(),
                     'num_voxels': num_voxels,
                     'Michel_num_voxels': Michel_size,
@@ -166,7 +169,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 #'projected_x_length': projected_x_length,
                 'theta_yz': np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min())),
                 'theta_xz': np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min())),
-                'matched': len(p.match),
+                'matched': False,
                 'pca_length': coords_pca.max() - coords_pca.min(),
                 #'t0': t0,
                 'true_pdg': -1,
@@ -182,6 +185,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     m = mp[0]
                     pe = m.purity_efficiency(p)
                     update_dict.update({
+                        'matched': True,
                         'true_pdg': m.pid,
                         'true_size': m.size,
                         'cluster_purity': pe['purity'],

@@ -137,11 +137,11 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     pca = PCA(n_components=2)
 
     for i, index in enumerate(image_idxs):
-        pred_particles = predictor.get_particles(i, primaries=False)
+        pred_particles = predictor.get_particles(i, only_primaries=False)
 
         # Match with true particles if available
         if not data:
-            true_particles = predictor.get_true_particles(i, primaries=False)
+            true_particles = predictor.get_true_particles(i, only_primaries=False)
             # Match true particles to predicted particles
             true_ids = np.array([p.id for p in true_particles])
             matched_particles = predictor.match_particles(i, mode='true_to_pred', min_overlap=0.1)
