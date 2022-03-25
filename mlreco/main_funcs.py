@@ -58,6 +58,10 @@ def process_config(cfg, verbose=True):
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
         # Set MinkowskiEngine number of threads
         os.environ['OMP_NUM_THREADS'] = '16' # default value
+        # Set default concat_result
+        default_concat_result = ['input_edge_features', 'input_node_features','points', 'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints', 'seediness', 'margins', 'embeddings', 'fragments', 'fragments_seg', 'shower_fragments', 'shower_edge_index','shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments', 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred', 'particle_fragments', 'particle_edge_index', 'particle_node_pred', 'particle_edge_pred', 'particle_group_pred', 'particles','inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_particles', 'node_pred_p', 'node_pred_type', 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index', 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 'node_pred_vtx', 'total_num_points', 'total_nonghost_points', 'spatial_embeddings', 'occupancy', 'hypergraph_features', 'features', 'feature_embeddings', 'covariance']
+        if 'concat_result' not in cfg['trainval']:
+            cfg['trainval']['concat_result'] = default_concat_result
 
     if 'iotool' in cfg:
 
