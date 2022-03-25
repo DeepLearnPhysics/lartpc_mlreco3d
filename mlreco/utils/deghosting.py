@@ -40,7 +40,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 if batch_coords[mask].shape[0] > 0:
                     neighbors = knn(X_train, batch_coords[mask, c1:c2], 1)
                     _, d = neighbors[0], neighbors[1]
-        
+
                     additional_label_clustering = torch.cat([batch_coords[mask],
                                                             batch_clustering[d, c3:]], dim=1).float()
                     new_label_clustering[mask] = additional_label_clustering
@@ -166,14 +166,17 @@ def deghost_labels_and_predictions(data_blob, result):
     result['ghost_mask'] = [
         result['ghost'][i].argmax(axis=1) == 0 \
             for i in range(len(result['ghost']))]
-    data_blob['true_ghost_mask'] = [
-        data_blob['segment_label'][i][:, -1] < 5 \
-            for i in range(len(data_blob['segment_label']))]
+
+    if 'segment_label' in data_blob:
+        data_blob['true_ghost_mask'] = [
+            data_blob['segment_label'][i][:, -1] < 5 \
+                for i in range(len(data_blob['segment_label']))]
 
     data_blob['input_data_noghost'] = data_blob['input_data']
 
-    data_blob['input_data_trueghost'] = [data_blob['input_data'][i][mask] \
-        for i, mask in enumerate(data_blob['true_ghost_mask'])]
+    if 'segment_label' in data_blob:
+        data_blob['input_data_trueghost'] = [data_blob['input_data'][i][mask] \
+            for i, mask in enumerate(data_blob['true_ghost_mask'])]
 
     data_blob['input_data'] = [data_blob['input_data'][i][mask] \
         for i, mask in enumerate(result['ghost_mask'])]
@@ -184,8 +187,8 @@ def deghost_labels_and_predictions(data_blob, result):
         # Save the clust_data before deghosting
         data_blob['cluster_label_noghost'] = data_blob['cluster_label']
         data_blob['cluster_label'] = adapt_labels_numpy(
-            result, 
-            data_blob['segment_label'], 
+            result,
+            data_blob['segment_label'],
             data_blob['cluster_label'])
 
     if 'seg_prediction' in result \
@@ -203,10 +206,10 @@ def deghost_labels_and_predictions(data_blob, result):
     if 'kinematics_label' in data_blob \
         and data_blob['kinematics_label'] is not None:
         data_blob['kinematics_label'] = adapt_labels_numpy(
-            result, 
-            data_blob['segment_label'], 
+            result,
+            data_blob['segment_label'],
             data_blob['kinematics_label'])
-            
+
     # This needs to come last - in adapt_labels seg_label is the original one
     if 'segment_label' in data_blob \
         and data_blob['segment_label'] is not None:
