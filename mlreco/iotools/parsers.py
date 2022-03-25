@@ -846,20 +846,24 @@ def parse_cluster3d_kinematics(data):
                             fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
             vtx_z = np.full(shape=(cluster.as_vector().size()),
                             fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
-            # is_primary = np.full(shape=(cluster.as_vector().size()),
-            #             fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
-            #             dtype=np.float32)
+            nu_id = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=nu_ids[i], dtype=np.float32)
             is_primary = np.full(shape=(cluster.as_vector().size()),
                         fill_value=float((nu_ids[i] > 0) and (particles_v[i].group_id() == particles_v[i].parent_id())),
                         dtype=np.float32)
+            inter_id = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=inter_ids[i], dtype=np.float32)
+            sem_type = np.full(shape=(cluster.as_vector().size()),
+                               fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
+            clusters_features.append(np.column_stack([value, cluster_id, group_id, 
+                inter_id, nu_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary, sem_type]))
     if len(clusters_voxels) > 0:
         np_voxels   = np.concatenate(clusters_voxels, axis=0)
         np_features = np.concatenate(clusters_features, axis=0)
     else:
         np_voxels = np.empty((0, 3), dtype=np.int32)
-        np_features = np.empty((0, 9), dtype=np.float32)
+        np_features = np.empty((0, 10), dtype=np.float32)
     # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
 
     # print(np_features[mask][:, [0, 1, 5, 6]])

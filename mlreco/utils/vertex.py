@@ -196,7 +196,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
         for p_idx, points in enumerate(ppn_candidates):
             # No PPN point associated with this primary particle
             if len(points) == 0:
-                print(p_idx, len(c_candidates[p_idx]), ' no points')
+                # print(p_idx, len(c_candidates[p_idx]), ' no points')
                 continue
             #print('distance = ', scipy.spatial.distance.cdist(points[:, coords_col[0]:coords_col[1]], all_voxels[c[p_idx]]).min())
             other_primaries_coordinates = all_voxels[np.hstack([c for idx, c in enumerate(c_candidates) if idx != p_idx])][:, coords_col[0]:coords_col[1]]
@@ -259,7 +259,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
     if len(ppn_candidates2):
         ppn_candidates2 = np.concatenate(ppn_candidates2, axis=0)
         directions = np.concatenate(directions, axis=0)
-        print("ppn_candidates", ppn_candidates2[:, :4], ppn_candidates2.shape)
+        # print("ppn_candidates", ppn_candidates2[:, :4], ppn_candidates2.shape)
 
         if len(ppn_candidates2) > 1:
             closest_points = []
@@ -272,7 +272,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             closest_points = np.stack(closest_points)
         else:
             closest_points = ppn_candidates2[:, coords_col[0]:coords_col[1]]
-        print('closest points', closest_points)
+        # print('closest points', closest_points)
         # Refine with dbscan to eliminate ppn candidates that are
         # far away (e.g. middle of a track)
         # ppn_candidates_group = DBSCAN(eps=7, min_samples=1).fit(ppn_candidates[:, :3]).labels_

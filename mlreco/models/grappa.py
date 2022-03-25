@@ -4,6 +4,7 @@ import numpy as np
 
 from mlreco.models.layers.common.dbscan import DBSCANFragmenter
 from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
+from mlreco.models.experimental.transformers.transformer import TransformerEncoderLayer
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
@@ -68,6 +69,7 @@ class GNN(torch.nn.Module):
 
         # Get the chain input parameters
         base_config = cfg[name].get('base', {})
+        self.name = name
 
         # Choose what type of node to use
         self.node_type = base_config.get('node_type', 0)
@@ -111,6 +113,8 @@ class GNN(torch.nn.Module):
 
         # If requested, initialize two MLPs for kinematics predictions
         self.kinematics_mlp = base_config.get('kinematics_mlp', False)
+        self.kinematics_type = base_config.get('kinematics_type', False)
+        self.kinematics_momentum = base_config.get('kinematics_momentum', False)
         if self.kinematics_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
             self.kinematics_type = base_config.get('kinematics_type', False)
@@ -142,13 +146,22 @@ class GNN(torch.nn.Module):
                                                               eps=softplus_and_shift,
                                                               logspace=logspace)
                 else:
-                    self.momentum_net = MomentumNet(node_output_feats, num_output=1, num_hidden=momentum_config.get('num_hidden', 128))
+                    self.momentum_net = MomentumNet(node_output_feats, 
+                                                    num_output=1, 
+                                                    num_hidden=momentum_config.get('num_hidden', 128))
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
         if self.vertex_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
-            vertex_config = cfg[name].get('vertex_net', {})
-            self.vertex_net = MomentumNet(node_output_feats, num_output=5, num_hidden=vertex_config.get('num_hidden', 128))
+            vertex_config = cfg[name].get('vertex_net', {'name': 'momentum_net'})
+            if vertex_config['name'] == 'momentum_net':
+                self.vertex_net = MomentumNet(node_output_feats, 
+                                              num_output=5, 
+                                              num_hidden=vertex_config.get('num_hidden', 128))
+            elif vertex_config['name'] == 'attention_net':
+                self.vertex_net = TransformerEncoderLayer(node_output_feats, 3, **vertex_config)
+            else:
+                raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
@@ -177,7 +190,6 @@ class GNN(torch.nn.Module):
                 'clusts' ([np.ndarray])   : [(N_0), (N_1), ..., (N_C)] Cluster ids (split batch-wise)
                 'edge_index' (np.ndarray) : (E,2) Incidence matrix (split batch-wise)
         """
-
         cluster_data = data[0]
         if len(data) > 1: particles = data[1]
         result = {}
@@ -187,7 +199,10 @@ class GNN(torch.nn.Module):
             if hasattr(self, 'dbscan'):
                 clusts = self.dbscan(cluster_data, points=particles if len(data) > 1 else None)
             else:
-                clusts = form_clusters(cluster_data.detach().cpu().numpy(), self.node_min_size, self.source_col, cluster_classes=self.node_type)
+                clusts = form_clusters(cluster_data.detach().cpu().numpy(), 
+                                       self.node_min_size, 
+                                       self.source_col, 
+                                       cluster_classes=self.node_type)
 
         # If requested, shuffle the order in which the clusters are listed (used for debugging)
         if self.shuffle_clusters:
@@ -282,7 +297,7 @@ class GNN(torch.nn.Module):
         result['input_node_features'] = [[x[b] for b in cbids]]
         result['input_edge_features'] = [[e[b] for b in ebids]]
 
-        # Pass through the model, update resultz
+        # Pass through the model, update results
         out = self.gnn_model(x, index, e, xbatch)
         result['node_pred'] = [[out['node_pred'][0][b] for b in cbids]]
         result['edge_pred'] = [[out['edge_pred'][0][b] for b in ebids]]

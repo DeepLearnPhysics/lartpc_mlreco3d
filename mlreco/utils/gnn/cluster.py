@@ -42,7 +42,6 @@ def _form_clusters(data: nb.float64[:,:],
         mask = np.arange(len(data), dtype=np.int64)
 
     subdata = data[mask]
-
     # Loop over batches and cluster IDs, append cluster voxel lists
     clusts = []
     for b in np.unique(subdata[:, batch_index]):
