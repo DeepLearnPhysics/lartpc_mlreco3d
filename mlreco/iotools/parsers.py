@@ -50,6 +50,22 @@ def parse_particle_singlep_einit(data):
     return -1
 
 
+def parse_sparse3d_meta(data):
+    event_tensor3d = data[0]
+    meta = event_tensor3d.meta()
+    return [
+        meta.min_x(),
+        meta.min_y(),
+        meta.min_z(),
+        meta.max_x(),
+        meta.max_y(),
+        meta.max_z(),
+        meta.size_voxel_x(),
+        meta.size_voxel_y(),
+        meta.size_voxel_z()
+    ]
+    
+
 def parse_sparse2d_meta(data):
     event_tensor2d = data[0]
     projection_id = 0  # default
