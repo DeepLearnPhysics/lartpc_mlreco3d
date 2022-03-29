@@ -5,23 +5,36 @@ import mlreco.iotools.parsers
 
 class LArCVDataset(Dataset):
     """
-    class: a generic interface for LArCV data files. This Dataset is designed to produce a batch of arbitrary number
-           of data chunks (e.g. input data matrix, segmentation label, point proposal target, clustering labels, etc.).
-           Each data chunk is processed by parser functions defined in the iotools.parsers module. LArCVDataset object
-           can be configured with arbitrary number of parser functions where each function can take arbitrary number of
-           LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
+    A generic interface for LArCV data files.
+
+    This Dataset is designed to produce a batch of arbitrary number
+    of data chunks (e.g. input data matrix, segmentation label, point proposal target, clustering labels, etc.).
+    Each data chunk is processed by parser functions defined in the iotools.parsers module. LArCVDataset object
+    can be configured with arbitrary number of parser functions where each function can take arbitrary number of
+    LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
     """
     def __init__(self, data_schema, data_keys, limit_num_files=0, limit_num_samples=0, event_list=None, skip_event_list=None):
         """
-        Args: data_dirs ..... a list of data directories to find files (up to 10 files read from each dir)
-              data_schema ... a dictionary of string <=> list of strings. The key is a unique name of a data chunk in a batch.
-                              The list must be length >= 2: the first string names the parser function, and the rest of strings
-                              identifies data keys in the input files.
-              data_key ..... a string that is required to be present in the filename
-              limit_num_files ... an integer limiting number of files to be taken per data directory
-              limit_num_samples ... an integer limiting number of samples to be taken per data
-              event_list ... a list of integers to specify which event (ttree index) to process
-              skip_event_list ... a list of integers to specify which events (ttree index) to skip
+        Instantiates the LArCVDataset.
+        
+        Parameters
+        ----------
+        data_dirs : list
+            a list of data directories to find files (up to 10 files read from each dir)
+        data_schema : dict
+            a dictionary of string <=> list of strings. The key is a unique name of a data chunk in a batch.
+            The list must be length >= 2: the first string names the parser function, and the rest of strings
+            identifies data keys in the input files.
+        data_keys : list
+            a list of strings that is required to be present in the filename
+        limit_num_files : int
+            an integer limiting number of files to be taken per data directory
+        limit_num_samples : int
+            an integer limiting number of samples to be taken per data
+        event_list : list
+            a list of integers to specify which event (ttree index) to process
+        skip_event_list : list
+            a list of integers to specify which events (ttree index) to skip
         """
 
         # Create file list

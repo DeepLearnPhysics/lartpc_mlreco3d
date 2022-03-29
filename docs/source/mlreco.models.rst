@@ -1,47 +1,82 @@
 mlreco.models package
 =====================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   mlreco.models.chain
-   mlreco.models.scn.cluster_cnn
-   mlreco.models.layers.gnn
-   mlreco.models.layers
+.. automodule:: mlreco.models
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+mlreco.models.bayes\_uresnet module
+-----------------------------------
 
-   mlreco.models.clustercnn_neural_dbscan
-   mlreco.models.clustercnn_se
-   mlreco.models.clustercnn_single
-   mlreco.models.clusternet
-   mlreco.models.factories
-   mlreco.models.flashmatching_gnn
-   mlreco.models.flashmatching_model
-   mlreco.models.full_chain
-   mlreco.models.full_cnn
-   mlreco.models.grappa
-   mlreco.models.hierarchy
-   mlreco.models.particle_types
-   mlreco.models.ppn
-   mlreco.models.sparse_occuseg
-   mlreco.models.sparseoccuseg_gnn
-   mlreco.models.uresnet
-   mlreco.models.uresnet_clustering
-   mlreco.models.uresnet_lonely
-   mlreco.models.uresnet_ppn_chain
+.. automodule:: mlreco.models.bayes_uresnet
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-Module contents
----------------
+mlreco.models.factories module
+------------------------------
 
-.. automodule:: mlreco.models
+.. automodule:: mlreco.models.factories
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.full\_chain module
+--------------------------------
+
+.. automodule:: mlreco.models.full_chain
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.graph\_spice module
+---------------------------------
+
+.. automodule:: mlreco.models.graph_spice
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.grappa module
+---------------------------
+
+.. automodule:: mlreco.models.grappa
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.singlep module
+----------------------------
+
+.. automodule:: mlreco.models.singlep
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.spice module
+--------------------------
+
+.. automodule:: mlreco.models.spice
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.uresnet module
+----------------------------
+
+.. automodule:: mlreco.models.uresnet
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.models.uresnet\_ppn\_chain module
+----------------------------------------
+
+.. automodule:: mlreco.models.uresnet_ppn_chain
    :members:
    :undoc-members:
    :show-inheritance:

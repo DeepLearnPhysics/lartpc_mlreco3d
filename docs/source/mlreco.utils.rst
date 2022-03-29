@@ -1,32 +1,106 @@
 mlreco.utils package
 ====================
 
+.. automodule:: mlreco.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+mlreco.utils.adabound module
+----------------------------
 
-   mlreco.utils.adabound
-   mlreco.utils.agglomerative
-   mlreco.utils.cluster_cnn
-   mlreco.utils.data_parallel
-   mlreco.utils.dbscan
-   mlreco.utils.deghosting
-   mlreco.utils.dense_cluster
-   mlreco.utils.groups
-   mlreco.utils.metrics
-   mlreco.utils.occuseg
-   mlreco.utils.ppn
-   mlreco.utils.spectral
-   mlreco.utils.track_clustering
-   mlreco.utils.unwrap
-   mlreco.utils.utils
+.. automodule:: mlreco.utils.adabound
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-Module contents
----------------
+mlreco.utils.data\_parallel module
+----------------------------------
 
-.. automodule:: mlreco.utils
+.. automodule:: mlreco.utils.data_parallel
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.dbscan module
+--------------------------
+
+.. automodule:: mlreco.utils.dbscan
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.deghosting module
+------------------------------
+
+.. automodule:: mlreco.utils.deghosting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.groups module
+--------------------------
+
+.. automodule:: mlreco.utils.groups
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.metrics module
+---------------------------
+
+.. automodule:: mlreco.utils.metrics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.numba module
+-------------------------
+
+.. automodule:: mlreco.utils.numba
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.ppn module
+-----------------------
+
+.. automodule:: mlreco.utils.ppn
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.track\_clustering module
+-------------------------------------
+
+.. automodule:: mlreco.utils.track_clustering
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.unwrap module
+--------------------------
+
+.. automodule:: mlreco.utils.unwrap
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.utils module
+-------------------------
+
+.. automodule:: mlreco.utils.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+mlreco.utils.vertex module
+--------------------------
+
+.. automodule:: mlreco.utils.vertex
    :members:
    :undoc-members:
    :show-inheritance:
