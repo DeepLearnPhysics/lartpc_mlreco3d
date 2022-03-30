@@ -5,8 +5,8 @@
 # Required
 version: 2
 formats:
-	- pdf
-	- epub
+  - pdf
+  - epub
 
 # Set the version of Python and other tools you might need
 build:
