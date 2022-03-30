@@ -14,18 +14,6 @@ from collections import Counter
 
 from mlreco.models.layers.cluster_cnn.losses.misc import BinaryCELogDiceLoss
 
-class Attention(nn.Module):
-    def __init__(self):
-        super(Attention, self).__init__()
-
-    def forward(self, x, scores):
-        features = x.F
-        features = features * scores
-        coords = x.C
-        output = ME.SparseTensor(
-            coordinates=coords, features=features)
-        return output
-
 
 class AttentionMask(torch.nn.Module):
     '''
@@ -129,21 +117,63 @@ class ExpandAs(nn.Module):
 
 class PPN(torch.nn.Module):
     '''
-    MinkowskiEngine PPN
+    Point Proposal Network (PPN) implementation using MinkowskiEngine
 
-    Configurations
-    --------------
-    depth : int
+    It requires a UResNet network as a backbone.
+
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth: int, default 5
         Depth of UResNet, also corresponds to how many times we down/upsample.
-    num_filters : int
+    filters: int, default 16
         Number of filters in the first convolution of UResNet.
         Will increase linearly with depth.
-    reps : int, optional
+    reps: int, default 2
         Convolution block repetition factor
-    kernel_size : int, optional
-        Kernel size for the SC (sparse convolutions for down/upsample).
-    input_kernel : int, optional
+    input_kernel: int, default 3
         Receptive field size for very first convolution after input layer.
+    num_classes: int, default 5
+    score_threshold: float, default 0.5
+    classify_endpoints: bool, default False
+        Enable classification of points into start vs end points.
+    ppn_resolution: float, default 1.0
+    ghost: bool, default False
+    downsample_ghost: bool, default True
+    use_true_ghost_mask: bool, default False
+    mask_loss_name: str, default 'BCE'
+        Can be 'BCE' or 'LogDice'
+    particles_label_seg_col: int, default -2
+        Which column corresponds to particles' semantic label
+    track_label: int, default 1
+
+    Output
+    ------
+    points: torch.Tensor
+        Contains  X, Y, Z predictions, semantic class prediction logits, and prob score
+    mask_ppn: list of torch.Tensor
+        Binary mask at various spatial scales of PPN predictions (voxel-wise score > some threshold)
+    ppn_coords: list of torch.Tensor
+        List of XYZ coordinates at various spatial scales.
+    ppn_layers: list of torch.Tensor
+        List of score features at various spatial scales.
+    ppn_output_coordinates: torch.Tensor
+        XYZ coordinates tensor at the very last layer of PPN (initial spatial scale)
+    classify_endpoints: torch.Tensor
+        Logits for end/start point classification.
+
+    See Also
+    --------
+    PPNLonelyLoss, mlreco.models.uresnet_ppn_chain
     '''
     def __init__(self, cfg, name='ppn'):
         super(PPN, self).__init__()
@@ -231,7 +261,7 @@ class PPN(torch.nn.Module):
         self.merge_concat = MergeConcat()
 
         if self.ghost:
-            print("Ghost Masking is enabled for MinkPPN.")
+            #print("Ghost Masking is enabled for MinkPPN.")
             self.ghost_mask = MinkGhostMask(self.D)
             self.use_true_ghost_mask = self.model_cfg.get(
                 'use_true_ghost_mask', False)
@@ -241,15 +271,6 @@ class PPN(torch.nn.Module):
         #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     def forward(self, final, decoderTensors, ghost=None, ghost_labels=None):
-        '''
-        Vanilla UResNet Decoder
-        INPUTS:
-            - encoderTensors (list of SparseTensor): output of encoder.
-        RETURNS:
-            - decoderTensors (list of SparseTensor):
-            list of feature tensors in decoding path at each spatial resolution.
-        '''
-
         ppn_layers, ppn_coords = [], []
         tmp = []
         mask_ppn = []
@@ -346,6 +367,24 @@ class PPN(torch.nn.Module):
 
 
 class PPNLonelyLoss(torch.nn.modules.loss._Loss):
+    """
+    Loss function for PPN.
+
+    Output
+    ------
+    reg_loss: float
+        Distance loss
+    mask_loss: float
+        Binary voxel-wise prediction (is there an object of interest or not)
+    type_loss: float
+        Semantic prediction loss.
+    classify_endpoints_loss: float
+    classify_endpoints_acc: float
+
+    See Also
+    --------
+    PPN, mlreco.models.uresnet_ppn_chain
+    """
 
     def __init__(self, cfg, name='ppn'):
         super(PPNLonelyLoss, self).__init__()
@@ -376,8 +415,6 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
 
     def forward(self, result, segment_label, particles_label):
-        '''
-        '''
         # TODO Add weighting
         assert len(particles_label) == len(segment_label)
 

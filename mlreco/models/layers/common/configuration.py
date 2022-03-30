@@ -1,6 +1,29 @@
 def setup_cnn_configuration(self, cfg, name):
     '''
-    Base function for global network parameters.
+    Base function for global network parameters (CNN-based models).
+    This avoids repeating everywhere the same base configuration.
+    For example, typical usage would be:
+
+    .. code-block:: python
+
+        class UResNetEncoder(torch.nn.Module):
+            def __init__(self, cfg, name='uresnet_encoder'):
+                super(UResNetEncoder, self).__init__()
+                setup_cnn_configuration(self, cfg, name)
+
+    Defines the following default configuration:
+
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
     '''
     model_cfg = cfg.get(name, {})
     # Dimension of dataset

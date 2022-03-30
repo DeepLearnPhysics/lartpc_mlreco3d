@@ -1,7 +1,13 @@
 import torch
 
 def model_dict():
+    """
+    Returns dictionary of model classes using name keys (strings).
 
+    Returns
+    -------
+    dict
+    """
     from . import grappa
 
     from . import uresnet
@@ -50,6 +56,18 @@ def model_dict():
 
 
 def construct(name):
+    """
+    Returns an instance of a model class based on its name key (string).
+
+    Parameters
+    ----------
+    name: str
+        Key for the model. See source code for list of available models.
+
+    Returns
+    -------
+    object
+    """
     models = model_dict()
     if name not in models:
         raise Exception("Unknown model name provided: %s" % name)

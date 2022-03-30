@@ -146,7 +146,7 @@ class TruthParticle(Particle):
             "purity": overlap / len(other_particle.voxel_indices),
             "efficiency": overlap / len(self.voxel_indices)
         }
-        
+
 class Interaction:
 
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
@@ -265,7 +265,7 @@ def matrix_iou(particles_x, particles_y):
 
 def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]],
                        particles_to   : Union[List[Particle], List[TruthParticle]],
-                       min_overlap=0, num_classes=5, verbose=False, mode='iou'):
+                       min_overlap=0, num_classes=5, verbose=False, overlap_mode='iou'):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>.
@@ -284,13 +284,12 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
             print("No particles/interactions to match.")
         return [], 0, 0
 
-    if mode == 'counts':
+    if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(particles_x, particles_y)
-    elif mode == 'iou':
+    elif overlap_mode == 'iou':
         overlap_matrix = matrix_iou(particles_x, particles_y)
     else:
         raise ValueError("Overlap matrix mode {} is not supported.".format(mode))
-
     # print(overlap_matrix)
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
@@ -303,6 +302,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
 
     for j, px in enumerate(particles_x):
         select_idx = idx[j]
+        # print(px.semantic_type, px.id, particles_y[select_idx].semantic_type, particles_y[select_idx].id, intersections[j])
         if intersections[j] <= thresholds[px.pid]:
             # If no truth could be matched, assign None
             matched_truth = None

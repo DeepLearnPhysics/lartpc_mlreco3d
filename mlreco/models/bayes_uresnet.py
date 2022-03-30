@@ -12,26 +12,33 @@ from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss
 
+
 class BayesianUResNet(torch.nn.Module):
     """
     UResNet with Uncertainty Quantification
 
     The backbone model consists of UResNet Encoder-Decoder format with
     standard residual layers for the shallow half and dropout residual layers
-    for the deep half of the network. 
+    for the deep half of the network.
 
-    Args:
-        mode (str): string indicator for slight changes in network
+    Configuration
+    -------------
+    mode: str
+        string indicator for slight changes in network
         behavior/architecture. Supports three options:
+
             - standard: standard dropout segmentation network. This also
-            includes MCDropout segnet, since training behavior is identical 
-            for both standard and mcdropout networks. 
-            - evd: Changes network into evidential segmentation network 
-    
-        num_samples: if used as MCDropout Segnet, the number of stochastic
+            includes MCDropout segnet, since training behavior is identical
+            for both standard and mcdropout networks.
+            - evd: Changes network into evidential segmentation network
+
+    num_samples: int
+        if used as MCDropout Segnet, the number of stochastic
         forward samples to be taken.
 
-        num_classes: number of segmentation classes (default: 5)
+    num_classes: int
+        number of segmentation classes (default: 5)
+
     """
 
     MODULES = []
@@ -106,7 +113,7 @@ class BayesianUResNet(torch.nn.Module):
 
     def evidential_forward(self, input):
         """
-        Forawrding operation for evidential segmentation network.
+        Forwarding operation for evidential segmentation network.
         """
         out = defaultdict(list)
         for igpu, x in enumerate(input):
@@ -151,7 +158,7 @@ class BayesianUResNet(torch.nn.Module):
 
     def forward(self, input):
         """
-        
+
         """
 
         if self.mode == 'mc_dropout':
@@ -189,8 +196,8 @@ class DUQUResNet(torch.nn.Module):
         self.embedding_dim = self.model_config.get('embedding_dim', 10)
         self.latent_size = self.model_config.get('latent_size', 32)
 
-        self.w = nn.Parameter(torch.zeros(self.embedding_dim, 
-                                          self.num_classes, 
+        self.w = nn.Parameter(torch.zeros(self.embedding_dim,
+                                          self.num_classes,
                                           self.latent_size))
 
         nn.init.kaiming_normal_(self.w, nonlinearity='relu')
@@ -211,8 +218,8 @@ class DUQUResNet(torch.nn.Module):
 
     def bilinear(self, z):
         embeddings = self.m / self.N.unsqueeze(0)
-        
-        diff = z - embeddings.unsqueeze(0)            
+
+        diff = z - embeddings.unsqueeze(0)
         y_pred = (- diff**2).mean(1).div(2 * self.sigma**2).exp()
 
         return y_pred
@@ -236,7 +243,7 @@ class DUQUResNet(torch.nn.Module):
 
         self.z = z
         self.y_pred = y_pred
-        
+
         return res
 
     def update_buffers(self):
@@ -297,7 +304,7 @@ class SegmentationLoss(nn.Module):
                 loss_label = event_label
                 if self.one_hot:
                     loss_label = torch.eye(self.num_classes, device=device)[event_label]
-                    loss_seg = self.loss_fn(event_segmentation, loss_label, 
+                    loss_seg = self.loss_fn(event_segmentation, loss_label,
                                             t=iteration)
                 else:
                     loss_seg = self.loss_fn(event_segmentation, loss_label)
@@ -346,13 +353,13 @@ class DUQSegmentationLoss(nn.Module):
             )[0]
 
         gradients = gradients.flatten(start_dim=1)
-        
+
         # L2 norm
         grad_norm = gradients.norm(2, dim=1)
 
         # Two sided penalty
         gradient_penalty = ((grad_norm - 1) ** 2).mean()
-        
+
         # One sided penalty - down
     #     gradient_penalty = F.relu(grad_norm - 1).mean()
 

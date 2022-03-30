@@ -19,50 +19,12 @@ Subpackages
 Submodules
 ----------
 
-mlreco.post\_processing.acpt\_muons module
-------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.post_processing.acpt_muons
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.post\_processing.common module
--------------------------------------
-
-.. automodule:: mlreco.post_processing.common
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.post\_processing.decorator module
-----------------------------------------
-
-.. automodule:: mlreco.post_processing.decorator
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.post\_processing.michel\_shift module
---------------------------------------------
-
-.. automodule:: mlreco.post_processing.michel_shift
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.post\_processing.track\_clustering2 module
--------------------------------------------------
-
-.. automodule:: mlreco.post_processing.track_clustering2
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.post\_processing.track\_clustering\_old module
------------------------------------------------------
-
-.. automodule:: mlreco.post_processing.track_clustering_old
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.post_processing.acpt_muons
+   mlreco.post_processing.common
+   mlreco.post_processing.decorator
+   mlreco.post_processing.michel_shift
+   mlreco.post_processing.track_clustering2
+   mlreco.post_processing.track_clustering_old

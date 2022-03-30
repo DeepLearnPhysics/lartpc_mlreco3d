@@ -12,7 +12,59 @@ from collections import defaultdict
 from mlreco.models.uresnet import UResNet_Chain
 
 class UResNetPPN(nn.Module):
+    """
+    A model made of UResNet backbone and PPN layers. Typical configuration:
 
+    .. code-block:: yaml
+
+        model:
+          name: uresnet_ppn_chain
+          modules:
+            uresnet_lonely:
+              # Your uresnet config here
+            ppn:
+              # Your ppn config here
+
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth: int, default 5
+        Depth of UResNet, also corresponds to how many times we down/upsample.
+    filters: int, default 16
+        Number of filters in the first convolution of UResNet.
+        Will increase linearly with depth.
+    reps: int, default 2
+        Convolution block repetition factor
+    input_kernel: int, default 3
+        Receptive field size for very first convolution after input layer.
+
+    num_classes: int, default 5
+    score_threshold: float, default 0.5
+    classify_endpoints: bool, default False
+        Enable classification of points into start vs end points.
+    ppn_resolution: float, default 1.0
+    ghost: bool, default False
+    downsample_ghost: bool, default True
+    use_true_ghost_mask: bool, default False
+    mask_loss_name: str, default 'BCE'
+        Can be 'BCE' or 'LogDice'
+    particles_label_seg_col: int, default -2
+        Which column corresponds to particles' semantic label
+    track_label: int, default 1
+
+    See Also
+    --------
+    mlreco.models.uresnet.UResNet_Chain, mlreco.models.layers.common.ppnplus.PPN
+    """
     MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
 
     def __init__(self, cfg):
@@ -71,7 +123,11 @@ class UResNetPPN(nn.Module):
 
 
 class UResNetPPNLoss(nn.Module):
-
+    """
+    See Also
+    --------
+    mlreco.models.uresnet.SegmentationLoss, mlreco.models.layers.common.ppnplus.PPNLonelyLoss
+    """
     def __init__(self, cfg):
         super(UResNetPPNLoss, self).__init__()
         self.ppn_loss = PPNLonelyLoss(cfg)

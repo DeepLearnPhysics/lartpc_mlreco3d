@@ -9,42 +9,11 @@ mlreco.iotools.parsers package
 Submodules
 ----------
 
-mlreco.iotools.parsers.clean\_data module
------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.iotools.parsers.clean_data
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.iotools.parsers.cluster module
--------------------------------------
-
-.. automodule:: mlreco.iotools.parsers.cluster
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.iotools.parsers.misc module
-----------------------------------
-
-.. automodule:: mlreco.iotools.parsers.misc
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.iotools.parsers.particles module
----------------------------------------
-
-.. automodule:: mlreco.iotools.parsers.particles
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.iotools.parsers.sparse module
-------------------------------------
-
-.. automodule:: mlreco.iotools.parsers.sparse
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.iotools.parsers.clean_data
+   mlreco.iotools.parsers.cluster
+   mlreco.iotools.parsers.misc
+   mlreco.iotools.parsers.particles
+   mlreco.iotools.parsers.sparse

@@ -6,77 +6,26 @@ mlreco.models package
    :undoc-members:
    :show-inheritance:
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mlreco.models.layers
+
 Submodules
 ----------
 
-mlreco.models.bayes\_uresnet module
------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: mlreco.models.bayes_uresnet
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.factories module
-------------------------------
-
-.. automodule:: mlreco.models.factories
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.full\_chain module
---------------------------------
-
-.. automodule:: mlreco.models.full_chain
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.graph\_spice module
----------------------------------
-
-.. automodule:: mlreco.models.graph_spice
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.grappa module
----------------------------
-
-.. automodule:: mlreco.models.grappa
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.singlep module
-----------------------------
-
-.. automodule:: mlreco.models.singlep
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.spice module
---------------------------
-
-.. automodule:: mlreco.models.spice
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.uresnet module
-----------------------------
-
-.. automodule:: mlreco.models.uresnet
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-mlreco.models.uresnet\_ppn\_chain module
-----------------------------------------
-
-.. automodule:: mlreco.models.uresnet_ppn_chain
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   mlreco.models.bayes_uresnet
+   mlreco.models.factories
+   mlreco.models.full_chain
+   mlreco.models.graph_spice
+   mlreco.models.grappa
+   mlreco.models.singlep
+   mlreco.models.spice
+   mlreco.models.uresnet
+   mlreco.models.uresnet_ppn_chain

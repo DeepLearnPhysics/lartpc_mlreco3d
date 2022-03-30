@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 
 project = 'lartpc_mlreco3d'
-copyright = '2022, DeepLearnPhysics collaboration'
+copyright = '2021-2022, DeepLearnPhysics collaboration'
 author = 'DeepLearnPhysics collaboration'
 
 
@@ -33,6 +33,8 @@ extensions = [
     'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    #'numpydoc',
+    #'sphinx.ext.autosummary',
     'sphinx_copybutton',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode'
@@ -48,7 +50,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 autodoc_default_options = {
     'members': True,
-    'member-order': True,
+    'member-order': 'bysource',
     'special-members': True,
     'undoc-members': True,
     'exclude-members': None,
@@ -63,13 +65,15 @@ autodoc_mock_imports = ["sparseconvnet", "larcv"]
 # html_theme = 'alabaster'
 # html_theme = "sphinx_rtd_theme"
 html_theme = "sphinx_book_theme"
-
+html_theme_options = {
+    "show_toc_level": 5
+}
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-napoleon_custom_sections = ["Shapes", ("Configuration", "params_style")]
+napoleon_custom_sections = ["Shapes", ("Configuration", "params_style"), ("Output", "params_style")]
 napoleon_include_private_with_doc = True
 napoleon_include_special_with_doc = True
 napoleon_include_init_with_doc = True

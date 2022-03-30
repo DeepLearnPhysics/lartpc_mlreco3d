@@ -1,4 +1,4 @@
-mport torch
+import torch
 import torch.nn as nn
 
 import MinkowskiEngine as ME
@@ -148,7 +148,7 @@ class SparseGeneratorSimple(torch.nn.Module):
     def __init__(self, cfg, name='sparse_generator'):
         super(SparseGeneratorSimple, self).__init__()
         setup_cnn_configuration(self, cfg, name)
-        
+
         self.model_config = cfg[name]
         self.reps = self.model_config.get('reps', 2)
         self.depth = self.model_config.get('depth', 7)
