@@ -20,7 +20,6 @@ There are up to four top-level sections in a config file:
 ``iotool`` section
 ------------------
 
-
 ..  rubric:: ``batch_size`` (default: 1)
 
 How many images the network will see at once
@@ -147,23 +146,21 @@ in ``iotools.dataset.schema``.
 ``trainval`` section
 --------------------
 
-..  rubric:: seed
+..  rubric:: ``seed`` (``int``)
 
 Integer to use as random seed.
 
-..  rubric:: unwrapper
+..  rubric:: ``unwrapper`` (default: ``unwrap``, optional)
 
-Can be `unwrap_3d_scn` or `unwrap_2d_scn`.
+For now, can only be ``unwrap``.
 
-.. rubric:: concat_result
+.. rubric:: concat_result (optional, ``list``)
 
-Typically looks like this:
+List of strings. Each string is a key in the output dictionary.
+All outputs listed in ``concat_result`` will NOT undergo the
+standard unwrapping process.
 
-.. code-block:: yaml
-
-    concat_result: ['seediness', 'margins', 'embeddings', 'fragments', 'fragments_seg', 'shower_fragments', 'shower_edge_index','shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments', 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred', 'particle_fragments', 'particle_edge_index', 'particle_node_pred', 'particle_edge_pred', 'particle_group_pred', 'particles','inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'node_pred_p', 'node_pred_type', 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index', 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 'node_pred_vtx', 'total_num_points', 'total_nonghost_points']
-
-.. rubric:: gpus
+.. rubric:: gpus (``string``)
 
 If empty string, use CPU. Otherwise string
 containing one or more GPU ids.
@@ -175,27 +172,35 @@ Includes the weights file prefix, e.g.
 `/path/to/snapshot-` for weights that will be
 named `snapshot-0000.ckpt`, etc.
 
-..  rubric:: iterations
+..  rubric:: iterations (``int``)
 
-..  rubric:: report_step
+How many iterations to run for.
 
-How often to print in the console log.
+..  rubric:: report_step (``int``)
 
-.. rubric:: checkpoint_step
+How often (in iterations) to print in the console log.
 
-How often to save the weights in a
+.. rubric:: checkpoint_step (``int``)
+
+How often (in iterations) to save the weights in a
 checkpoint file.
 
-.. rubric:: model_path
+.. rubric:: model_path (``str``)
 
 Can be empty string. Otherwise, path to a
 checkpoint file to load for the whole model.
 
-.. rubric:: log_dir
+.. note::
+
+    This can use wildcards such as ``*`` to load several
+    checkpoint files. Not to be used for training time,
+    but for inference time (e.g. for validation purpose).
+
+.. rubric:: log_dir (``str``)
 
 Path to a folder where logs will be stored.
 
-..  rubric:: train
+..  rubric:: train (``bool``)
 
 Boolean, whether to use train or inference mode.
 
@@ -216,4 +221,7 @@ Can look like this:
 
 ``post_processing`` section
 ---------------------------
+Post-processing scripts allow use to measure the performance
+of each stage of the chain.
+
 Coming soon.

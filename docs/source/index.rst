@@ -7,6 +7,12 @@ Welcome to lartpc_mlreco3d's documentation!
 ===========================================
 This documentation is meant to host technical details related to ``lartpc_mlreco3d``.
 
+.. seealso::
+
+    If you are looking for more step-by-step tutorials, please visit
+    http://deeplearnphysics.org/lartpc_mlreco3d_tutorials/
+
+
 ..  warning::
 
     This is a work-in-progress. If you see something
@@ -30,7 +36,7 @@ This documentation is meant to host technical details related to ``lartpc_mlreco
 
    UResNet <mlreco.models.uresnet>
    PPN <mlreco.models.uresnet_ppn_chain>
-   Spice <mlreco.models.graph_spice>
+   GraphSpice <mlreco.models.graph_spice>
    Grappa <mlreco.models.grappa>
    Full Chain <mlreco.models.full_chain>
 
@@ -43,7 +49,7 @@ This documentation is meant to host technical details related to ``lartpc_mlreco
 
 
 Indices and tables
-------------------
+~~~~~~~~~~~~~~~~~~
 
 * :ref:`genindex`
 * :ref:`modindex`
