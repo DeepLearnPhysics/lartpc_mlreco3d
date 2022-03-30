@@ -56,7 +56,13 @@ autodoc_default_options = {
     'undoc-members': True,
     'exclude-members': None,
 }
-autodoc_mock_imports = ["sparseconvnet", "larcv"]
+autodoc_mock_imports = [
+    "sparseconvnet",
+    "larcv",
+    "numba",
+    "torch_geometric",
+    "MinkowskiEngine"
+]
 
 # -- Options for HTML output -------------------------------------------------
 
