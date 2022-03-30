@@ -41,7 +41,23 @@ def parse_particle_singlep_pdg(data):
 
 def parse_particle_singlep_einit(data):
     """
-    .. note:: Obsolete (?) to be confirmed by Dae Heun
+    Get each true particle's true initial energy.
+
+    .. code-block:: yaml
+
+        schema:
+          pdg_list:
+            - parse_particle_singlep_einit
+            - particle_pcluster
+
+    Configuration
+    ----------
+    particle_pcluster : larcv::EventParticle
+
+    Returns
+    -------
+    np.ndarray
+        List of true initial energy for each particle in TTree.
     """
     parts = data[0]
     for p in parts.as_vector():
