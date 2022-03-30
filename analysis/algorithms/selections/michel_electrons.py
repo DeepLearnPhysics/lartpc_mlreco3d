@@ -80,14 +80,15 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
     ablation_radius    = processor_cfg.get('ablation_radius', 15)
     ablation_min_samples = processor_cfg.get('ablation_min_samples', 5)
     shower_threshold   = processor_cfg.get('shower_threshold', 10)
+    matching_mode      = processor_cfg.get('matching_mode', 'true_to_pred')
     #
     # ====== Initialization ======
     #
     # Initialize analysis differently depending on data/MC setting
     if not data:
-        predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
     else:
-        predictor = FullChainPredictor(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainPredictor(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
 
@@ -100,7 +101,7 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
             true_particles = predictor.get_true_particles(i, only_primaries=False)
             # Match true particles to predicted particles
             true_ids = np.array([p.id for p in true_particles])
-            matched_particles = predictor.match_particles(i, mode='true_to_pred', min_overlap=0.1)
+            matched_particles = predictor.match_particles(i, mode=matching_mode, min_overlap=5, overlap_mode='counts')
 
             for tp in true_particles:
                 if tp.semantic_type != michel_label: continue
@@ -131,12 +132,15 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 # Determine whether it was matched
                 is_matched = False
                 for mp in matched_particles: # matching is done true to pred
-                    if mp[0] is None or mp[0].id != tp.id: continue
+                    true_idx = 0 if matching_mode == 'true_to_pred' else 1
+                    if mp[true_idx] is None or mp[true_idx].id != tp.id: continue
                     is_matched = True
                     break
+
                 # DBSCAN evaluation
                 dbscan = DBSCAN(eps=one_pixel, min_samples=ablation_min_samples)
                 michel_clusters = dbscan.fit(tp.points).labels_
+                print(np.unique(michel_clusters, return_counts=True))
                 # Record true Michel
                 true_michels.append(OrderedDict({
                     'index': index,
@@ -186,6 +190,7 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
             # Record candidate Michel
             update_dict = {
                 'index': index,
+                'particle_id': p.id,
                 'daughter_num_pix': daughter_num_pix,
                 'daughter_sum_pix': daughter_sum_pix,
                 'distance_to_closest_shower': distance_to_closest_shower,
@@ -200,22 +205,33 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'cluster_purity': -1,
                 'cluster_efficiency': -1,
                 'matched': False,
-                'true_pdg': -1
+                'true_pdg': -1,
+                'true_id': -1,
+                'true_semantic_type': -1,
+                'true_noghost_num_pix': -1,
+                'true_noghost_sum_pix': -1,
+                'true_noghost_primary_num_pix': -1,
+                'true_noghost_primary_sum_pix': -1
             }
 
             if not data:
                 for mp in matched_particles: # matching is done true2pred
-                    if mp[1] is None or mp[1].id != p.id: continue
-                    if mp[0] is None: continue
-                    m = mp[0]
+                    true_idx = 0 if matching_mode == 'true_to_pred' else 1
+                    pred_idx = 1 - true_idx
+                    if mp[pred_idx] is None or mp[pred_idx].id != p.id: continue
+                    if mp[true_idx] is None: continue
+                    m = mp[true_idx]
                     pe = m.purity_efficiency(p)
                     overlap_indices, mindices, _ = np.intersect1d(m.voxel_indices, p.voxel_indices, return_indices=True)
                     truep = data_blob['particles_asis'][i][m.id]
 
                     truecluster = data_blob['cluster_label_noghost'][i][:, 6] == m.id
+                    trueprimary = (data_blob['cluster_label_noghost'][i][:, 6] == m.id) & (data_blob['cluster_label_noghost'][i][:, -1] == michel_label)
                     update_dict.update({
                         'matched': True,
+                        'true_id': m.id,
                         'true_pdg': m.pid,
+                        'true_semantic_type': m.semantic_type,
                         'cluster_purity': pe['purity'],
                         'cluster_efficiency': pe['efficiency'],
                         'true_num_pix': m.size,
@@ -225,8 +241,13 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                         'michel_true_energy_init': truep.energy_init(),
                         'michel_true_energy_deposit': truep.energy_deposit(),
                         'michel_true_num_voxels': truep.num_voxels(),
+                        # cluster_label includes radiative photon in Michel true particle
+                        # so using segmentation labels to find primary ionization as well
+                        # voxel sum will be in MeV here.
                         'true_noghost_num_pix': np.count_nonzero(truecluster),
-                        'true_noghost_sum_pix': data_blob['cluster_label_noghost'][i][truecluster, 4].sum()
+                        'true_noghost_sum_pix': data_blob['cluster_label_noghost'][i][truecluster, 4].sum(),
+                        'true_noghost_primary_num_pix': np.count_nonzero(trueprimary),
+                        'true_noghost_primary_sum_pix': data_blob['cluster_label_noghost'][i][trueprimary, 4].sum()
                     })
 
             michels.append(OrderedDict(update_dict))

@@ -226,7 +226,7 @@ class trainval(object):
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
-            unwrapper = self._trainval_config.get('unwrapper',None)
+            unwrapper = self._trainval_config.get('unwrapper', 'unwrap')
             if unwrapper is not None:
                 try:
                     unwrapper = getattr(utils.unwrap,unwrapper)

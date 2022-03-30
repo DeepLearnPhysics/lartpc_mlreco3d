@@ -20,7 +20,47 @@ class FullChain(FullChainGNN):
     '''
     Full Chain with MinkowskiEngine implementations for CNNs.
 
-    See FullChain class for general description.
+    Modular, End-to-end LArTPC Reconstruction Chain
+
+    - Deghosting for 3D tomographic reconstruction artifiact removal
+    - UResNet for voxel-wise semantic segmentation
+    - PPN for point proposal
+    - DBSCAN/GraphSPICE for dense particle clustering
+    - GrapPA(s) for particle/interaction aggregation and identification
+
+    Configuration goes under the ``modules`` section.
+    The full chain-related sections (as opposed to each
+    module-specific configuration) look like this:
+
+    ..  code-block:: yaml
+
+          modules:
+            chain:
+              enable_uresnet: True
+              enable_ppn: True
+              enable_cnn_clust: True
+              enable_gnn_shower: True
+              enable_gnn_track: True
+              enable_gnn_particle: False
+              enable_gnn_inter: True
+              enable_gnn_kinematics: False
+              enable_cosmic: False
+              enable_ghost: True
+              use_ppn_in_gnn: True
+              verbose: True
+
+    The ``chain`` section enables or disables specific
+    stages of the full chain. When a module is disabled
+    through this section, it will not even be constructed.
+    The configuration blocks for each enabled module should
+    also live under the `modules` section of the configuration.
+
+    To see an example of full chain configuration, head over to
+    https://github.com/DeepLearnPhysics/lartpc_mlreco3d_tutorials/blob/master/book/data/inference.cfg
+
+    See Also
+    --------
+    mlreco.models.layers.common.gnn_full_chain.FullChainGNN, FullChainLoss
     '''
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
@@ -30,6 +70,12 @@ class FullChain(FullChainGNN):
 
     def __init__(self, cfg):
         super(FullChain, self).__init__(cfg)
+
+        # Initialize the charge rescaling module
+        if self.enable_charge_rescaling:
+            self.uresnet_deghost = UResNet_Chain(cfg.get('uresnet_deghost', {}),
+                                                 name='uresnet_lonely')
+            self.deghost_input_features = self.uresnet_deghost.net.num_input
 
         # Initialize the UResNet+PPN modules
         self.input_features = 1
@@ -198,12 +244,36 @@ class FullChain(FullChainGNN):
 
         result = {}
 
+        if self.enable_charge_rescaling:
+            # Pass through the deghosting
+            assert self.enable_ghost
+            last_index = 4 + self.deghost_input_features
+            result.update(self.uresnet_deghost([input[0][:,:last_index]]))
+            result['ghost'] = result['segmentation']
+            deghost = result['ghost'][0].argmax(dim=1) == 0
+
+            # Rescale the charge column
+            hit_charges  = input[0][deghost, last_index  :last_index+3]
+            hit_ids      = input[0][deghost, last_index+3:last_index+6]
+            multiplicity = torch.empty(hit_charges.shape, dtype=torch.long, device=hit_charges.device)
+            for b in batches:
+                batch_mask = input[0][deghost,self.batch_col] == b
+                _, inverse, counts = torch.unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
+                multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
+            charges = torch.sum(hit_charges/multiplicity, dim=1)/3 # 3 planes, take average estimate
+            input[0][deghost, 4] = charges
+
         if self.enable_uresnet:
-            result = self.uresnet_lonely([input[0][:,:4+self.input_features]])
+            if self.enable_charge_rescaling:
+                assert not self.uresnet_lonely.ghost
+                result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
+            else:
+                result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
+
         if self.enable_ppn:
             ppn_input = {}
             ppn_input.update(result)
-            if 'ghost' in ppn_input:
+            if 'ghost' in ppn_input and not self.enable_charge_rescaling:
                 ppn_input['ghost'] = ppn_input['ghost'][0]
                 ppn_output = self.ppn(ppn_input['finalTensor'][0],
                                       ppn_input['decoderTensors'][0],
@@ -212,6 +282,18 @@ class FullChain(FullChainGNN):
                 ppn_output = self.ppn(ppn_input['finalTensor'][0],
                                       ppn_input['decoderTensors'][0])
             result.update(ppn_output)
+
+        if self.enable_charge_rescaling:
+            # Reshape output tensors of UResNet and PPN to be of the original shape
+            for key in ['segmentation', 'points', 'classify_endpoints', 'mask_ppn', 'ppn_coords', 'ppn_layers']:
+                res = result[key][0] if isinstance(result[key][0], torch.Tensor) else result[key][0][-1]
+                tensor = torch.zeros((input[0].shape[0], res.shape[1]), dtype=res.dtype, device=res.device)
+                tensor[deghost] = res
+                if isinstance(result[key][0], torch.Tensor):
+                    result[key][0]     = tensor
+                else:
+                    result[key][0][-1] = tensor
+            result['ppn_output_coordinates'][0] = input[0][:,:4].type(result['ppn_output_coordinates'][0].dtype)
 
         # The rest of the chain only needs 1 input feature
         if self.input_features > 1:
@@ -365,11 +447,20 @@ class FullChain(FullChainGNN):
 
 
 class FullChainLoss(FullChainLoss):
+    """
+    Loss function for the full chain.
+
+    See Also
+    --------
+    FullChain, mlreco.models.layers.common.gnn_full_chain.FullChainLoss
+    """
 
     def __init__(self, cfg):
         super(FullChainLoss, self).__init__(cfg)
 
         # Initialize loss components
+        if self.enable_charge_rescaling:
+            self.deghost_loss            = SegmentationLoss(cfg.get('uresnet_deghost', {}), batch_col=self.batch_col)
         if self.enable_uresnet:
             self.uresnet_loss            = SegmentationLoss(cfg.get('uresnet_ppn', {}), batch_col=self.batch_col)
         if self.enable_ppn:

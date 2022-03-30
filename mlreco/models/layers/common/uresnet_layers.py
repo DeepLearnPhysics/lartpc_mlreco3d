@@ -12,19 +12,37 @@ class UResNetEncoder(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
-    Configurations
-    --------------
-    depth : int
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth : int, default 5
         Depth of UResNet, also corresponds to how many times we down/upsample.
-    num_filters : int
+    filters : int, default 16
         Number of filters in the first convolution of UResNet.
         Will increase linearly with depth.
-    reps : int, optional
+    reps : int, default 2
         Convolution block repetition factor
-    kernel_size : int, optional
-        Kernel size for the SC (sparse convolutions for down/upsample).
-    input_kernel : int, optional
+    input_kernel : int, default 3
         Receptive field size for very first convolution after input layer.
+
+    Output
+    ------
+    encoderTensors: list of ME.SparseTensor
+        list of intermediate tensors (taken between encoding block and convolution)
+        from encoder half
+    finalTensor: ME.SparseTensor
+        feature tensor at deepest layer
+    features_ppn: list of ME.SparseTensor
+        list of intermediate tensors (right after encoding block + convolution)
     '''
     def __init__(self, cfg, name='uresnet_encoder'):
         # To allow UResNet to inherit directly from UResNetEncoder
@@ -86,16 +104,14 @@ class UResNetEncoder(torch.nn.Module):
         '''
         Vanilla UResNet Encoder.
 
-        INPUTS:
-            - x (SparseTensor): MinkowskiEngine SparseTensor
+        Parameters
+        ----------
+        x : MinkowskiEngine SparseTensor
 
-        RETURNS:
-            - result (dict): dictionary of encoder output with
-            intermediate feature planes:
-              1) encoderTensors (list): list of intermediate SparseTensors
-              2) finalTensor (SparseTensor): feature tensor at
-              deepest layer.
-        # '''
+        Returns
+        -------
+        dict
+        '''
         # print('input' , self.input_layer)
         # for name, param in self.input_layer.named_parameters():
         #     print(name, param.shape, param)
@@ -136,7 +152,33 @@ class UResNetEncoder(torch.nn.Module):
 
 
 class UResNetDecoder(torch.nn.Module):
+    """
+    Vanilla UResNet Decoder
 
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth : int, default 5
+        Depth of UResNet, also corresponds to how many times we down/upsample.
+    filters : int, default 16
+        Number of filters in the first convolution of UResNet.
+        Will increase linearly with depth.
+    reps : int, default 2
+        Convolution block repetition factor
+
+    Output
+    ------
+    list of ME.SparseTensor
+    """
     def __init__(self, cfg, name='uresnet_decoder'):
         super(UResNetDecoder, self).__init__()
         setup_cnn_configuration(self, cfg, name)
@@ -144,11 +186,11 @@ class UResNetDecoder(torch.nn.Module):
         # UResNet Configurations
         self.model_config = cfg.get(name, {})
         self.reps = self.model_config.get('reps', 2)  # Conv block repetition factor
-        self.kernel_size = self.model_config.get('kernel_size', 2)
+        #self.kernel_size = self.model_config.get('kernel_size', 2)
         self.depth = self.model_config.get('depth', 5)
         self.num_filters = self.model_config.get('filters', 16)
         self.nPlanes = [i*self.num_filters for i in range(1, self.depth+1)]
-        self.downsample = [self.kernel_size, 2]  # [filter size, filter stride]
+        #self.downsample = [self.kernel_size, 2]  # [filter size, filter stride]
 
         # self.encoder_num_filters = self.model_config.get('encoder_num_filters', None)
         # if self.encoder_num_filters is None:
@@ -192,10 +234,15 @@ class UResNetDecoder(torch.nn.Module):
     def decoder(self, final, encoderTensors):
         '''
         Vanilla UResNet Decoder
-        INPUTS:
-            - encoderTensors (list of SparseTensor): output of encoder.
-        RETURNS:
-            - decoderTensors (list of SparseTensor):
+
+        Parameters
+        ----------
+        encoderTensors : list of SparseTensor
+            output of encoder.
+
+        Returns
+        -------
+        decoderTensors : list of SparseTensor
             list of feature tensors in decoding path at each spatial resolution.
         '''
         decoderTensors = []
@@ -216,19 +263,40 @@ class UResNet(torch.nn.Module):
     '''
     Vanilla UResNet with access to intermediate feature planes.
 
-    Configurations
-    --------------
-    depth : int
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth : int, default 5
         Depth of UResNet, also corresponds to how many times we down/upsample.
-    filters : int
+    filters : int, default 16
         Number of filters in the first convolution of UResNet.
         Will increase linearly with depth.
-    reps : int, optional
+    reps : int, default 2
         Convolution block repetition factor
-    kernel_size : int, optional
-        Kernel size for the SC (sparse convolutions for down/upsample).
-    input_kernel : int, optional
+    input_kernel : int, default 3
         Receptive field size for very first convolution after input layer.
+
+    Output
+    ------
+    encoderTensors: list of ME.SparseTensor
+        list of intermediate tensors (taken between encoding block and convolution)
+        from encoder half
+    decoderTensors: list of ME.SparseTensor
+        list of intermediate tensors (taken between encoding block and convolution)
+        from decoder half
+    finalTensor: ME.SparseTensor
+        feature tensor at deepest layer
+    features_ppn: list of ME.SparseTensor
+        list of intermediate tensors (right after encoding block + convolution)
     '''
     def __init__(self, cfg, name='uresnet'):
         super(UResNet, self).__init__()

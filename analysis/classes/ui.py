@@ -700,7 +700,7 @@ class FullChainEvaluator(FullChainPredictor):
 
     def __init__(self, data_blob, result, cfg, processor_cfg={}, **kwargs):
         super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
-
+        self.michel_primary_ionization_only = processor_cfg.get('michel_primary_ionization_only', False)
 
     def get_true_label(self, entry, name, schema='cluster_label'):
         if name not in self.LABEL_TO_COLUMN:
@@ -787,11 +787,18 @@ class FullChainEvaluator(FullChainPredictor):
 
             pdg = TYPE_LABELS[p.pdg_code()]
             mask = labels[:, 6].astype(int) == pid
-            coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+
+            # If particle is Michel electron, we have the option to
+            # only consider the primary ionization.
+            # Semantic labels only label the primary ionization as Michel.
+            # Cluster labels will have the entire Michel together.
+            if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
+                mask = mask & (labels[:, -1].astype(int) == 2)
 
             # Check semantics
             semantic_type, sem_counts = np.unique(
                 labels[mask][:, -1].astype(int), return_counts=True)
+
             if semantic_type.shape[0] > 1:
                 if verbose:
                     print("Semantic Type of Particle {} is not "\
@@ -802,6 +809,10 @@ class FullChainEvaluator(FullChainPredictor):
                 semantic_type = semantic_type[perm]
             else:
                 semantic_type = semantic_type[0]
+
+
+
+            coords = self.data_blob['input_data'][entry][mask][:, 1:4]
 
             interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
                                                    return_counts=True)
@@ -882,7 +893,7 @@ class FullChainEvaluator(FullChainPredictor):
         if mode == 'pred_to_true':
             # Match each pred to one in true
             particles_from = self.get_particles(entry, only_primaries=only_primaries)
-            particles_to = self.get_true_particles(entry, only_primarieses=only_primaries)
+            particles_to = self.get_true_particles(entry, only_primaries=only_primaries)
         elif mode == 'true_to_pred':
             # Match each true to one in pred
             particles_to = self.get_particles(entry, only_primaries=only_primaries)

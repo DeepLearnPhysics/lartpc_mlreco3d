@@ -1,6 +1,11 @@
 mlreco package
 ==============
 
+.. automodule:: mlreco
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -21,11 +26,3 @@ Submodules
 
    mlreco.main_funcs
    mlreco.trainval
-
-Module contents
----------------
-
-.. automodule:: mlreco
-   :members:
-   :undoc-members:
-   :show-inheritance:

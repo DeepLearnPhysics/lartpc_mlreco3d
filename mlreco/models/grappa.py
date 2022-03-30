@@ -17,11 +17,23 @@ class GNN(torch.nn.Module):
     This class mostly acts as a wrapper that will hand the graph data to another model.
     If DBSCAN is used, use the semantic label tensor as an input.
 
-    For use in config:
-    model:
-      name: grappa
-      modules:
-        grappa:
+    Typical configuration can look like this:
+
+    .. code-block:: yaml
+
+        model:
+          name: grappa
+          modules:
+            grappa:
+              your config goes here
+
+    Configuration
+    -------------
+    base: dict
+        Configuration of base Grappa :
+
+        .. code-block:: yaml
+
           base:
             node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
             node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
@@ -41,24 +53,70 @@ class GNN(torch.nn.Module):
             merge_batch_size  : <size of batch merging (default 2)>
             shuffle_clusters  : <randomize cluster order (default False)>
             kinematics_mlp    : <applies type and momentum MLPs on the node features (default False)>
-          dbscan:
-            <dictionary of dbscan parameters>
+
+    dbscan: dict
+        dictionary of dbscan parameters
+    node_encoder: dict
+
+        .. code-block:: yaml
+
           node_encoder:
             name: <name of the node encoder>
             <dictionary of arguments to pass to the encoder>
             model_path      : <path to the encoder weights>
+            
+    edge_encoder: dict
+
+        .. code-block:: yaml
+
           edge_encoder:
             name: <name of the edge encoder>
             <dictionary of arguments to pass to the encoder>
             model_path      : <path to the encoder weights>
-          node_model:
+
+    gnn_model: dict
+        .. code-block:: yaml
+
+          gnn_model:
             name: <name of the node model>
             <dictionary of arguments to pass to the model>
             model_path      : <path to the model weights>
-          edge_model:
-            name: <name of the edge model>
-            <dictionary of arguments to pass to the model>
-            model_path      : <path to the model weights>
+
+    kinematics_mlp: bool, default False
+        Whether to enable MLP-like layers after the GNN to predict
+        momentum, particle type, etc.
+    kinematics_type: bool
+        Whether to add PID MLP to each node.
+    kinematics_momentum: bool
+        Whether to add momentum MLP to each node.
+    type_net: dict
+        Configuration for the PID MLP (if enabled).
+        Can partial load weights here too.
+    momentum_net: dict
+        Configuration for the Momentum MLP (if enabled).
+        Can partial load weights here too.
+    vertex_mlp: bool, default False
+        Whether to add vertex prediction MLP to each node.
+        Includes primary particle + vertex coordinates predictions.
+    vertex_net: dict
+        Configuration for the Vertex MLP (if enabled).
+        Can partial load weights here too.
+
+    Outputs
+    -------
+    input_node_features:
+    input_edge_features:
+    clusts:
+    edge_index:
+    node_pred:
+    edge_pred:
+    node_pred_p:
+    node_pred_type:
+    node_pred_vtx:
+
+    See Also
+    --------
+    GNNLoss
     """
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
