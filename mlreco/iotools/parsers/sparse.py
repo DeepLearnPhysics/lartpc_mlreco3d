@@ -96,40 +96,6 @@ def parse_sparse3d_scn(data):
     return np_voxels, np.concatenate(output, axis=-1)
 
 
-def parse_semantics(data):
-    """
-    Generate semantic labels from larcv::EventClusterVoxel3D and larcv::EventParticle
-    information only (no larcv::EventSparseTensor3D needed).
-
-    .. code-block:: yaml
-
-        schema:
-          semantic_label:
-            - parse_semantics
-            - cluster3d_pcluster
-            - particle_pcluster
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_pcluster: larcv::EventParticle
-
-    Returns
-    -------
-    voxels: numpy array(int32) with shape (N,3)
-        Coordinates
-    data: numpy array(float32) with shape (N,C)
-        Pixel values/channels, as many channels as specified larcv::EventSparseTensor3D.
-    """
-    from larcv import larcv
-    event_cluster3d = data[0]
-    event_particle  = data[1]
-    event_tensor3d = larcv.generate_semantics(event_cluster3d,event_particle)
-    data = [event_tensor3d]
-    res = parse_sparse3d_scn(data)
-    return res
-
-
 def parse_sparse3d(data):
     """
     A function to retrieve sparse tensor from larcv::EventSparseTensor3D object
@@ -326,35 +292,3 @@ def parse_sparse3d_scn_scales(data):
         # scale_data = scale_data[perm]
         scales.append((scale_voxels, scale_data))
     return scales
-
-
-def parse_sparse3d_fragment(data):
-    """
-    A function to retrieve clusters tensor
-
-    Parameters
-    ----------
-    data: list
-        length 1 array of larcv::EventClusterVoxel3D
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (N,2) where 2 is cluster id and voxel value respectively
-    """
-    img_voxels, img_data = parse_sparse3d_scn(data)
-    perm = np.lexsort(img_voxels.T)
-    img_voxels = img_voxels[perm]
-    img_data = img_data[perm]
-    img_voxels, unique_indices = np.unique(img_voxels, axis=0, return_index=True)
-    img_data = img_data[unique_indices]
-    mask = img_data.squeeze(1) < 4
-    img_voxels, img_data = img_voxels[mask], img_data[mask]
-    perm = np.lexsort(img_voxels.T)
-    img_voxels = img_voxels[perm]
-    img_data = img_data[perm]
-
-    return img_voxels, img_data

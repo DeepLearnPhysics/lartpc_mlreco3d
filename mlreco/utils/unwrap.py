@@ -39,8 +39,11 @@ def list_concat(data_blob, outputs, avoid_keys=[]):
 
     return result_data, result_outputs
 
+
 def unwrap_2d_scn(data_blob, outputs, avoid_keys=[]):
     """
+    For 2D data in SCN format
+
     See unwrap_scn
     """
     return unwrap_scn(data_blob, outputs, 2, avoid_keys)
@@ -48,6 +51,8 @@ def unwrap_2d_scn(data_blob, outputs, avoid_keys=[]):
 
 def unwrap_3d_scn(data_blob, outputs, avoid_keys=[]):
     """
+    For 3D data in SCN format
+
     See unwrap_scn
     """
     return unwrap_scn(data_blob, outputs, 3, avoid_keys)
@@ -55,20 +60,13 @@ def unwrap_3d_scn(data_blob, outputs, avoid_keys=[]):
 
 def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
     """
-    See unwrap_scn
+    Adapted for MinkowskiEngine (batch id column is 0)
     """
     return unwrap_scn(data_blob, outputs, 0, avoid_keys)
 
 
-
-def unwrap_mink(data_blob, outputs, batch_id_col, avoid_keys):
-    """
-    Break down the data_blob and outputs dictionary into events
-    for MinkowskiEngine formatted tensors.
-
-    Function behavior is same as that of unwrap_scn.
-    """
-    pass
+def unwrap(*args, **kwargs):
+    return unwrap_3d_mink(*args, **kwargs)
 
 
 def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):

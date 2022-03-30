@@ -20,7 +20,47 @@ class FullChain(FullChainGNN):
     '''
     Full Chain with MinkowskiEngine implementations for CNNs.
 
-    See FullChain class for general description.
+    Modular, End-to-end LArTPC Reconstruction Chain
+
+    - Deghosting for 3D tomographic reconstruction artifiact removal
+    - UResNet for voxel-wise semantic segmentation
+    - PPN for point proposal
+    - DBSCAN/GraphSPICE for dense particle clustering
+    - GrapPA(s) for particle/interaction aggregation and identification
+
+    Configuration goes under the ``modules`` section.
+    The full chain-related sections (as opposed to each
+    module-specific configuration) look like this:
+
+    ..  code-block:: yaml
+
+          modules:
+            chain:
+              enable_uresnet: True
+              enable_ppn: True
+              enable_cnn_clust: True
+              enable_gnn_shower: True
+              enable_gnn_track: True
+              enable_gnn_particle: False
+              enable_gnn_inter: True
+              enable_gnn_kinematics: False
+              enable_cosmic: False
+              enable_ghost: True
+              use_ppn_in_gnn: True
+              verbose: True
+
+    The ``chain`` section enables or disables specific
+    stages of the full chain. When a module is disabled
+    through this section, it will not even be constructed.
+    The configuration blocks for each enabled module should
+    also live under the `modules` section of the configuration.
+
+    To see an example of full chain configuration, head over to
+    https://github.com/DeepLearnPhysics/lartpc_mlreco3d_tutorials/blob/master/book/data/inference.cfg
+
+    See Also
+    --------
+    mlreco.models.layers.common.gnn_full_chain.FullChainGNN, FullChainLoss
     '''
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
@@ -407,6 +447,13 @@ class FullChain(FullChainGNN):
 
 
 class FullChainLoss(FullChainLoss):
+    """
+    Loss function for the full chain.
+
+    See Also
+    --------
+    FullChain, mlreco.models.layers.common.gnn_full_chain.FullChainLoss
+    """
 
     def __init__(self, cfg):
         super(FullChainLoss, self).__init__(cfg)

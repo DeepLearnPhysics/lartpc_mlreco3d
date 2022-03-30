@@ -13,6 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('./'))
 
 
 # -- Project information -----------------------------------------------------
@@ -55,7 +56,19 @@ autodoc_default_options = {
     'undoc-members': True,
     'exclude-members': None,
 }
-autodoc_mock_imports = ["sparseconvnet", "larcv"]
+autodoc_mock_imports = [
+    "sparseconvnet",
+    "larcv",
+    "numba",
+    "torch_geometric",
+    "MinkowskiEngine",
+    "MinkowskiFunctional",
+    "torch_scatter",
+    "torch_cluster",
+    "networkx",
+    "torch_sparse",
+    "MinkowskiNonlinearity"
+]
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -79,3 +92,5 @@ napoleon_include_special_with_doc = True
 napoleon_include_init_with_doc = True
 
 autosectionlabel_prefix_document = True
+
+master_doc = 'index'
