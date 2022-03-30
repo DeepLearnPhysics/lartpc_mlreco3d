@@ -65,7 +65,9 @@ autodoc_mock_imports = [
     "MinkowskiFunctional",
     "torch_scatter",
     "torch_cluster",
-    "networkx"
+    "networkx",
+    "torch_sparse",
+    "MinkowskiNonlinearity"
 ]
 
 # -- Options for HTML output -------------------------------------------------
