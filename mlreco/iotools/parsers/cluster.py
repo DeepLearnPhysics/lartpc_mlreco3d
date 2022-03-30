@@ -534,6 +534,16 @@ def parse_cluster3d_kinematics_clean(data):
     return grp_voxels, grp_data#[:, :-1]
 
 
+def parse_cluster3d_kinematics_full_clean(data):
+    grp_voxels, grp_data = parse_cluster3d_kinematics_full(data[:-1])
+    _, cluster_data = parse_cluster3d_full(data[:-1])
+    img_voxels, img_data = parse_sparse3d_scn([data[-1]])
+
+    grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
+    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
+    return grp_voxels, grp_data#[:, :-1]
+
+
 def parse_cluster3d_full_fragment(data):
     """
     A function to retrieve clusters tensor

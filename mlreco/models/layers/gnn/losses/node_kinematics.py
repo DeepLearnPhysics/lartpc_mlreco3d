@@ -220,7 +220,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_assn_vtx = node_assn_vtx/self.spatial_size
 
                     # Exclude vertex that is outside of the volume
-                    good_index = torch.all(torch.abs(node_assn_vtx) <= 1., dim=1)
+                    good_index = torch.all( (0 <= node_assn_vtx) & (node_assn_vtx <= 1), dim=1)
 
                     positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     # Take the max for each cluster - e.g. for a shower, the primary fragment only
@@ -708,9 +708,7 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         # Merge vertex labels in units of interaction id
         vtx_scatter_label = scatter(node_assn_vtx, scatter_index, dim=0, reduce='mean')
         node_assn_vtx = vtx_scatter_label/self.spatial_size
-
-        good_index_vtx = torch.all(
-            torch.abs(vtx_scatter_label) <= 1., dim=1)
+        good_index_vtx = torch.all((0 <= node_assn_vtx) & (node_assn_vtx <= 1), dim=1)
 
         # positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
         # Take the max for each cluster - e.g. for a shower, the primary fragment only

@@ -70,6 +70,7 @@ from mlreco.iotools.parsers.cluster import (
     parse_cluster3d_full,
     parse_cluster3d_types,
     parse_cluster3d_kinematics,
+    parse_cluster3d_kinematics_full_clean,
     parse_cluster3d_kinematics_clean,
     parse_cluster3d_full_fragment,
     parse_cluster3d_fragment,
