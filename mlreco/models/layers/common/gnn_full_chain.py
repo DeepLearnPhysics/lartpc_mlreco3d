@@ -936,6 +936,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #print('Loss = ', res['loss'])
 
         if self.verbose:
+            if self.enable_charge_rescaling:
+                print('Deghosting Accuracy: {:.4f}'.format(res_deghost['accuracy']))
             if self.enable_uresnet:
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn:
