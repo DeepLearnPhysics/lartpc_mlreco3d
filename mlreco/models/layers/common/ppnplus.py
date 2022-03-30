@@ -407,6 +407,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self._classify_endpoints = self.loss_config.get('classify_endpoints', False)
         self._track_label = self.loss_config.get('track_label', 1)
 
+        # Restrict the label points to specific classes (pass a list if needed)
+        self._point_classes = self.loss_config.get('point_classes', [])
+
     @staticmethod
     def pairwise_distances(v1, v2):
         v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
@@ -438,6 +441,12 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
             particles = particles_label[igpu]
+            if len(self._point_classes) > 0:
+                classes    = particles[:, self.particles_label_seg_col]
+                class_mask = torch.zeros(len(particles), dtype=torch.bool, device=particles.device)
+                for c in self._point_classes:
+                    class_mask |= classes == c
+                particles = particles[class_mask]
             ppn_layers = result['ppn_layers'][igpu]
             ppn_coords = result['ppn_coords'][igpu]
             points = result['points'][igpu]
