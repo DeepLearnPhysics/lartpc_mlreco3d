@@ -61,7 +61,11 @@ autodoc_mock_imports = [
     "larcv",
     "numba",
     "torch_geometric",
-    "MinkowskiEngine"
+    "MinkowskiEngine",
+    "MinkowskiFunctional",
+    "torch_scatter",
+    "torch_cluster",
+    "networkx"
 ]
 
 # -- Options for HTML output -------------------------------------------------
