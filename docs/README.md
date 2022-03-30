@@ -35,7 +35,7 @@ If you would like to build it yourself on your local computer:
 ```
 $ cd docs/
 $ pip install -r requirements.txt
-$ sphinx-apidoc -f -o ./source ../mlreco/ ../mlreco/models/arxiv/
+$ sphinx-apidoc -f -M -e -o ./source ../mlreco/ ../mlreco/models/arxiv/
 $ make html
 ```
 Then open the file `docs/_build/html/index.html` in your favorite browser.

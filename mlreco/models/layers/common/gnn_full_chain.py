@@ -650,6 +650,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         # Initialize the loss weights
         self.loss_config = cfg.get('full_chain_loss', {})
 
+        self.deghost_weight         = self.loss_config.get('deghost_weight', 1.0)
         self.segmentation_weight    = self.loss_config.get('segmentation_weight', 1.0)
         self.ppn_weight             = self.loss_config.get('ppn_weight', 1.0)
         self.cnn_clust_weight       = self.loss_config.get('cnn_clust_weight', 1.0)
@@ -668,8 +669,20 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         res = {}
         accuracy, loss = 0., 0.
 
+        if self.enable_charge_rescaling:
+            ghost_label = torch.cat((seg_label[0][:,:4], (seg_label[0][:,-1] == 5).type(seg_label[0].dtype).reshape(-1,1)), dim=-1)
+            res_deghost = self.deghost_loss({'segmentation':out['ghost']}, [ghost_label])
+            for key in res_deghost:
+                res['deghost_' + key] = res_deghost[key]
+            accuracy += res_deghost['accuracy']
+            loss += self.deghost_weight*res_deghost['loss']
+            deghost = (seg_label[0][:,-1] < 5) & (out['ghost'][0][:,0] > out['ghost'][0][:,1]) # Only non-ghost (both true and pred) can go in semseg eval
+
         if self.enable_uresnet:
-            res_seg = self.uresnet_loss(out, seg_label)
+            if not self.enable_charge_rescaling:
+                res_seg = self.uresnet_loss(out, seg_label)
+            else:
+                res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][deghost]]}, [seg_label[0][deghost]])
             for key in res_seg:
                 res['uresnet_' + key] = res_seg[key]
             accuracy += res_seg['accuracy']
@@ -893,7 +906,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             loss += self.cosmic_weight * res_cosmic['loss']
 
         # Combine the results
-        accuracy /= int(self.enable_uresnet) + int(self.enable_ppn) + int(self.enable_gnn_shower) \
+        accuracy /= int(self.enable_charge_rescaling) + int(self.enable_uresnet) + int(self.enable_ppn) + int(self.enable_gnn_shower) \
                     + int(self.enable_gnn_inter) + int(self.enable_gnn_track) + int(self.enable_cnn_clust) \
                     + 2*int(self.enable_gnn_kinematics) + int(self.enable_cosmic) + int(self.enable_gnn_particle)
 
@@ -902,6 +915,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         #print('Loss = ', res['loss'])
 
         if self.verbose:
+            if self.enable_charge_rescaling:
+                print('Deghosting Accuracy: {:.4f}'.format(res_deghost['accuracy']))
             if self.enable_uresnet:
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn:
@@ -964,6 +979,7 @@ def setup_chain_cfg(self, cfg):
     self.use_true_particles    = chain_cfg.get('use_true_particles', False)
     self._gspice_use_true_labels      = cfg.get('graph_spice', {}).get('use_true_labels', False)
 
+    self.enable_charge_rescaling = chain_cfg.get('enable_charge_rescaling', False)
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
     self.cheat_ghost           = chain_cfg.get('cheat_ghost', False)
     self.verbose               = chain_cfg.get('verbose', False)
@@ -1020,7 +1036,7 @@ def setup_chain_cfg(self, cfg):
     self.use_supp_in_gnn    = chain_cfg.get('use_supp_in_gnn', True)
 
     # Make sure the deghosting config is consistent
-    if self.enable_ghost:
+    if self.enable_ghost and not self.enable_charge_rescaling:
         assert cfg['uresnet_ppn']['uresnet_lonely']['ghost']
         if self.enable_ppn:
             assert cfg['uresnet_ppn']['ppn']['ghost']

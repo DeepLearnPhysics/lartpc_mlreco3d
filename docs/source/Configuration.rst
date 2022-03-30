@@ -12,33 +12,46 @@ documentation.
 
 There are up to four top-level sections in a config file:
 
-- `iotool`
-- `model`
-- `trainval`
-- `post_processing` (optional)
+- ``iotool``
+- ``model``
+- ``trainval``
+- ``post_processing`` (optional)
 
 ``iotool`` section
 ------------------
 
 
-..  rubric:: batch_size (default: 1)
+..  rubric:: ``batch_size`` (default: 1)
 
-..  rubric:: shuffle (default: True)
+How many images the network will see at once
+during an iteration.
+
+..  rubric:: ``shuffle`` (default: True)
 
 Whether to randomize the dataset sampling.
 
-..  rubric:: num_workers (default: 1)
+..  rubric:: ``num_workers`` (default: 1)
 
 How many workers should be processing the
 dataset in parallel.
 
-..  rubric:: collate_fn (default: None)
+.. tip::
+
+    If you increase your
+    batch size significantly, you may want to
+    increase the number of workers. Conversely
+    if your batch size is small but you have
+    too many workers, the overhead time of
+    starting each worker will slow down the
+    start of your training/inference.
+
+..  rubric:: ``collate_fn`` (default: None)
 
 How to collate data from different events
 into a single batch.
 Can be `None`, `CollateSparse`, `CollateDense`.
 
-..  rubric:: sampler (batch_size, name)
+..  rubric:: ``sampler`` (batch_size, name)
 
 The sampler defines how events are picked in
 the dataset. For training it is better to use
@@ -58,9 +71,20 @@ An example of sampler config looks like this:
 
 .. note:: The batch size should match the one specified above.
 
-..  rubric:: dataset
+..  rubric:: ``dataset``
 
-An example of `dataset` config looks like this:
+Specifies where to find the dataset. It needs several pieces of
+information:
+
+- ``name`` should be ``LArCVDataset`` (only available option at this time)
+- ``data_keys`` is a list of paths where the dataset files live.
+    It accepts a wild card like ``*`` (uses ``glob`` to find files).
+- ``limit_num_files`` is how many files to process from all files listed
+    in ``data_keys``.
+- ``schema`` defines how you want to read your file. More on this in
+    :any:`mlreco.iotools`.
+
+An example of ``dataset`` config looks like this:
 
 ..  code-block:: yaml
     :linenos:
@@ -69,7 +93,6 @@ An example of `dataset` config looks like this:
         name: LArCVDataset
         data_keys:
           - /gpfs/slac/staas/fs1/g/neutrino/kterao/data/wire_mpvmpr_2020_04/train_*.root
-          #- /gpfs/slac/staas/fs1/g/neutrino/kvtsang/data/pdune/mpvmpr/train/larcv*.root
         limit_num_files: 10
         schema:
           input_data:
@@ -79,15 +102,15 @@ An example of `dataset` config looks like this:
 ``model`` section
 -----------------
 
-..  rubric:: name
+..  rubric:: ``name``
 
 Name of the model that you want to run
-(typically one of the models under `mlreco/models`).
+(typically one of the models under ``mlreco/models``).
 
-..  rubric:: modules
+..  rubric:: ``modules``
 
-An example of `modules` looks like this for the model
-`full_chain`:
+An example of ``modules`` looks like this for the model
+``full_chain``:
 
 ..  code-block:: yaml
 
@@ -107,10 +130,19 @@ An example of `modules` looks like this for the model
       some_module:
         ... config of the module ...
 
-..  rubric:: network_input
+..  rubric:: ``network_input``
 
-..  rubric:: loss_input
+This is a list of quantities from the input dataset
+that should be fed to the network as input.
+The names in the list refer to the names specified
+in ``iotools.dataset.schema``.
 
+..  rubric:: ``loss_input``
+
+This is a list of quantities from the input dataset
+that should be fed to the loss function as input.
+The names in the list refer to the names specified
+in ``iotools.dataset.schema``.
 
 ``trainval`` section
 --------------------

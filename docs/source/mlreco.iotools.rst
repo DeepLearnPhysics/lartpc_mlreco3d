@@ -1,6 +1,19 @@
 mlreco.iotools package
 ======================
 
+.. automodule:: mlreco.iotools
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mlreco.iotools.parsers
+
 Submodules
 ----------
 
@@ -10,13 +23,4 @@ Submodules
    mlreco.iotools.collates
    mlreco.iotools.datasets
    mlreco.iotools.factories
-   mlreco.iotools.parsers
    mlreco.iotools.samplers
-
-Module contents
----------------
-
-.. automodule:: mlreco.iotools
-   :members:
-   :undoc-members:
-   :show-inheritance:

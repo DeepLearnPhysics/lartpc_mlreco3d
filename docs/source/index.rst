@@ -17,25 +17,26 @@ This documentation is meant to host technical details related to ``lartpc_mlreco
 
 .. toctree::
    :hidden:
-   :caption: Reference
+   :caption: Guides
 
    GettingStarted
    Configuration
+   HowTo
    I/O Parsers <mlreco.iotools.parsers>
 
 .. toctree::
    :hidden:
    :caption: Quick Links to Models
 
-   UResNet <mlreco.models.uresnet_lonely>
-   PPN <mlreco.models.ppn>
-   Spice <mlreco.models.clustercnn_se>
+   UResNet <mlreco.models.uresnet>
+   PPN <mlreco.models.uresnet_ppn_chain>
+   Spice <mlreco.models.graph_spice>
    Grappa <mlreco.models.grappa>
    Full Chain <mlreco.models.full_chain>
 
 .. toctree::
    :hidden:
-   :caption: Code documentation
+   :caption: Reference
 
    mlreco
 
