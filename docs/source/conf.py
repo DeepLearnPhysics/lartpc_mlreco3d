@@ -13,6 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('./'))
 
 
 # -- Project information -----------------------------------------------------
@@ -80,4 +81,4 @@ napoleon_include_init_with_doc = True
 
 autosectionlabel_prefix_document = True
 
-#master_doc = 'index'
+master_doc = 'index'
