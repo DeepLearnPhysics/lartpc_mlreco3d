@@ -44,8 +44,8 @@ This documentation is meant to host technical details related to ``lartpc_mlreco
    :hidden:
    :caption: Reference
 
+   analysis
    mlreco
-
 
 
 Indices and tables

@@ -73,6 +73,35 @@ You can see the full list of attributes of ``larcv::Particle`` objects
 here:
 https://github.com/DeepLearnPhysics/larcv2/blob/develop/larcv/core/DataFormat/Particle.h
 
+
+Training-related questions
+--------------------------
+
+How to freeze a model
+^^^^^^^^^^^^^^^^^^^^^
+You can freeze the entire model or just a module (subset) of it.
+The keyword in the configuration file is ``freeze_weight``. If you
+put it under ``trainval`` directly, it will freeze the entire network.
+If you put it under a module configuration, it will only freeze that
+module.
+
+How to load partial weights
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``model_path`` does not have to be specified at the global level
+(under ``trainval`` section). If it is, then the weights will be
+loaded for the entire network. But if you want to only load the
+weights for a submodule of the network, you can also specify
+``model_path`` under that module's configuration. It will filter
+weights names based on the module's name to make sure to only load
+weights related to the module.
+
+.. tip::
+
+    If your weights are named differently in your checkpoint file
+    versus in your network, you can use ``model_name`` to fix it.
+
+    TODO: explain more.
+    
 I have another question!
 ^^^^^^^^^^^^^^^^^^^^^^^^
 Ping Laura (@Temigo) or someone else in the `lartpc_mlreco3d` team.

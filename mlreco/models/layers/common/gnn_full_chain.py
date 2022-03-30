@@ -11,59 +11,11 @@ from mlreco.utils.gnn.cluster import (form_clusters,
 
 class FullChainGNN(torch.nn.Module):
     """
-    Modular, End-to-end LArTPC Reconstruction Chain
+    GNN section of the full chain.
 
-    - Deghosting for 3D tomographic reconstruction artifiact removal
-    - UResNet for voxel-wise semantic segmentation
-    - PPN for point proposal
-    - DBSCAN/PILOT/SPICE for dense particle clustering
-    - GrapPA(s) for particle aggregation and identification
-    - CNN for interaction classification
-
-    Configuration goes under the ``modules`` section.
-    The full chain-related sections (as opposed to each
-    module-specific configuration) look like this:
-
-    ..  code-block:: yaml
-
-          modules:
-            chain:
-              enable_uresnet: True
-              enable_ppn: True
-              enable_cnn_clust: True
-              enable_gnn_shower: True
-              enable_gnn_track: True
-              enable_gnn_particle: False
-              enable_gnn_inter: True
-              enable_gnn_kinematics: False
-              enable_cosmic: False
-              enable_ghost: True
-              use_ppn_in_gnn: True
-              verbose: True
-
-
-            # full chain loss and weighting
-            full_chain_loss:
-              segmentation_weight: 1.
-              clustering_weight: 1.
-              ppn_weight: 1.
-              particle_gnn_weight: 1.
-              shower_gnn_weight: 1.
-              track_gnn_weight: 1.
-              inter_gnn_weight: 1.
-              kinematics_weight: 1.
-              kinematics_p_weight: 1.
-              kinematics_type_weight: 1.
-              flow_weight: 1.
-              cosmic_weight: 1.
-
-    The ``chain`` section enables or disables specific
-    stages of the full chain. When a module is disabled
-    through this section, it will not even be constructed.
-    The section ``full_chain_loss`` allows
-    to set different weights to the losses of different stages.
-    The configuration blocks for each enabled module should
-    also live under the `modules` section of the configuration.
+    See Also
+    --------
+    mlreco.models.full_chain.FullChain, FullChainLoss
     """
     MODULES = ['grappa_shower', 'grappa_track', 'grappa_inter',
                'grappa_shower_loss', 'grappa_track_loss', 'grappa_inter_loss',
@@ -622,6 +574,10 @@ class FullChainGNN(torch.nn.Module):
 class FullChainLoss(torch.nn.modules.loss._Loss):
     """
     Loss for UResNet + PPN chain
+
+    See Also
+    --------
+    mlreco.models.full_chain.FullChainLoss, FullChainGNN
     """
     # INPUT_SCHEMA = [
     #     ["parse_sparse3d_scn", (int,), (3, 1)],
@@ -966,6 +922,10 @@ def setup_chain_cfg(self, cfg):
     Prepare both FullChain and FullChainLoss
 
     Make sure config is logically sound with some basic checks
+
+    See Also
+    --------
+    mlreco.models.full_chain.FullChain, FullChainGNN
     """
     chain_cfg = cfg.get('chain', {})
 

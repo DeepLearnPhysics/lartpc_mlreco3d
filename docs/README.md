@@ -58,7 +58,8 @@ If you would like to build it yourself on your local computer:
 ```
 $ cd docs/
 $ pip install -r requirements.txt
-$ sphinx-apidoc -f -M -e -o ./source ../mlreco/ ../mlreco/models/arxiv/
+$ sphinx-apidoc -f -M -e -T -o ./source ../mlreco/ ../mlreco/models/arxiv/
+$ sphinx-apidoc -f -M -e -T -o ./source ../analysis/
 $ make html
 ```
 
