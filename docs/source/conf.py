@@ -79,3 +79,5 @@ napoleon_include_special_with_doc = True
 napoleon_include_init_with_doc = True
 
 autosectionlabel_prefix_document = True
+
+#master_doc = 'index'
