@@ -189,6 +189,7 @@ def node_loss_dict():
     losses = {
         "kinematics"     : node_kinematics.NodeKinematicsLoss,
         "kinematics_edl" : node_kinematics.NodeEvidentialKinematicsLoss,
+        "kinematics_attn": node_kinematics.NodeTransformerLoss,
         "primary"        : node_primary.NodePrimaryLoss,
         "type"           : node_type.NodeTypeLoss
     }

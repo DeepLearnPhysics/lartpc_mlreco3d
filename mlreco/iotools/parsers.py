@@ -772,7 +772,98 @@ def parse_cluster3d_types(data):
     return np_voxels, np_features
 
 
+
 def parse_cluster3d_kinematics(data):
+    """
+    a function to retrieve clusters tensor
+    Parameters
+    ----------
+    data: list
+        length 2 array of larcv::EventClusterVoxel3D and larcv::EventParticle
+        (optional) array of larcv::EventParticle from `particle_mpv_tree`
+    Returns
+    -------
+    np_voxels: np.ndarray
+        a numpy array with the shape (n,3) where 3 represents (x,y,z)
+        coordinate
+    np_features: np.ndarray
+        a numpy array with the shape (n,5) where 5 is voxel value,
+        cluster id, group id, pdg and momentum respectively
+    See Also
+    --------
+    parse_cluster3d_full
+    parse_cluster3d_kinematics_clean
+    Note
+    ----
+    Likely to be merged with `parse_cluster3d_full` soon.
+    """
+    cluster_event = data[0]
+    particles_v = data[1].as_vector()
+    particles_v_asis = parse_particle_asis([data[1], data[0]])
+
+    meta = cluster_event.meta()
+    num_clusters = cluster_event.as_vector().size()
+    clusters_voxels, clusters_features = [], []
+    particle_mpv = None
+    if len(data) > 2:
+        particle_mpv = data[2].as_vector()
+
+    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id
+    group_ids = np.array([p.group_id() for p in particles_v])
+    inter_ids = get_interaction_id(particles_v)
+    nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
+    pids      = get_particle_id(particles_v, nu_ids)
+
+    for i in range(num_clusters):
+        cluster = cluster_event.as_vector()[i]
+        num_points = cluster.as_vector().size()
+        if num_points > 0:
+            x = np.empty(shape=(num_points,), dtype=np.int32)
+            y = np.empty(shape=(num_points,), dtype=np.int32)
+            z = np.empty(shape=(num_points,), dtype=np.int32)
+            value = np.empty(shape=(num_points,), dtype=np.float32)
+            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
+            assert i == particles_v[i].id()
+            cluster_id = np.full(shape=(cluster.as_vector().size()),
+                                 fill_value=particles_v[i].id(), dtype=np.float32)
+            group_id = np.full(shape=(cluster.as_vector().size()),
+                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
+                               fill_value=group_ids[i], dtype=np.float32)
+            px = particles_v[i].px()
+            py = particles_v[i].py()
+            pz = particles_v[i].pz()
+            p = np.sqrt(px**2 + py**2 + pz**2) / 1000.0
+            p = np.full(shape=(cluster.as_vector().size()),
+                                fill_value=p, dtype=np.float32)
+            pdg = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=pids[i], dtype=np.float32)
+            vtx_x = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().x(), dtype=np.float32)
+            vtx_y = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
+            vtx_z = np.full(shape=(cluster.as_vector().size()),
+                            fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
+            # is_primary = np.full(shape=(cluster.as_vector().size()),
+            #             fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
+            #             dtype=np.float32)
+            is_primary = np.full(shape=(cluster.as_vector().size()),
+                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].group_id() == particles_v[i].parent_id())),
+                        dtype=np.float32)
+            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
+    if len(clusters_voxels) > 0:
+        np_voxels   = np.concatenate(clusters_voxels, axis=0)
+        np_features = np.concatenate(clusters_features, axis=0)
+    else:
+        np_voxels = np.empty((0, 3), dtype=np.int32)
+        np_features = np.empty((0, 9), dtype=np.float32)
+    # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
+
+    # print(np_features[mask][:, [0, 1, 5, 6]])
+    return np_voxels, np_features
+
+
+def parse_cluster3d_kinematics_full(data):
     """
     a function to retrieve clusters tensor
 
@@ -864,9 +955,7 @@ def parse_cluster3d_kinematics(data):
     else:
         np_voxels = np.empty((0, 3), dtype=np.int32)
         np_features = np.empty((0, 10), dtype=np.float32)
-    # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
 
-    # print(np_features[mask][:, [0, 1, 5, 6]])
     return np_voxels, np_features
 
 

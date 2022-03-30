@@ -9,7 +9,7 @@ class TransformerEncoderLayer(nn.Module):
     '''
     def __init__(self, num_input, num_output, num_hidden=64, num_layers=3, 
                  d_qk=64, d_v=64, num_heads=8, leakiness=0.0, dropout=True, 
-                 name='attention_net'):
+                 name='attention_net', norm_layer='layer_norm'):
         super(TransformerEncoderLayer, self).__init__()
 
         self.ma_layers = nn.ModuleList()
@@ -20,11 +20,13 @@ class TransformerEncoderLayer(nn.Module):
         for i in range(num_layers):
             self.ma_layers.append(
                 MultiHeadAttention(num_input, d_qk, d_v, num_hidden, 
-                                   num_heads=num_heads, dropout=dropout)
+                                   num_heads=num_heads, dropout=dropout,
+                                   norm_layer=norm_layer)
             )
             self.ffn_layers.append(
                 PositionWiseFFN(num_input, num_hidden, num_hidden, 
-                                leakiness=leakiness, dropout=dropout)
+                                leakiness=leakiness, dropout=dropout,
+                                norm_layer=norm_layer)
             )
             num_input = num_hidden
 
@@ -33,8 +35,6 @@ class TransformerEncoderLayer(nn.Module):
         for i in range(self.num_layers):
             x = self.ma_layers[i](x)
             x = self.ffn_layers[i](x)
-
-        x = x.mean(dim=1)
             
         return x
 
@@ -55,7 +55,7 @@ class MultiHeadAttention(nn.Module):
         if norm_layer == 'layer_norm':
             self.norm = nn.LayerNorm(num_output)
         elif norm_layer == 'batch_norm':
-            self.norm = nn.BatchNorm(num_output)
+            self.norm = nn.BatchNorm1d(num_output)
         else:
             raise ValueError('Normalization layer {} not recognized!'.format(norm_layer))
         
@@ -95,14 +95,19 @@ class MultiHeadAttention(nn.Module):
 class PositionWiseFFN(nn.Module):
     
     def __init__(self, num_input, num_output, num_hidden, 
-                 leakiness=0.0, dropout=True):
+                 leakiness=0.0, dropout=True, norm_layer='layer_norm'):
         super(PositionWiseFFN, self).__init__()
         self.num_input = num_input
         self.num_output = num_output
         
         self.linear1 = nn.Linear(num_input, num_hidden)
         self.linear2 = nn.Linear(num_hidden, num_output)
-        self.norm = nn.LayerNorm(num_output)
+        if norm_layer == 'layer_norm':
+            self.norm = nn.LayerNorm(num_output)
+        elif norm_layer == 'batch_norm':
+            self.norm = nn.BatchNorm1d(num_output)
+        else:
+            raise ValueError('Normalization layer {} not recognized!'.format(norm_layer))
         self.act = nn.LeakyReLU(negative_slope=leakiness)
 
         self.dropout = dropout

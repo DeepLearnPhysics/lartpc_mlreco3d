@@ -163,6 +163,8 @@ class GNN(torch.nn.Module):
             else:
                 raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 
+        print(self.vertex_net)
+
         # Initialize encoders
         self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
         self.edge_encoder = edge_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
