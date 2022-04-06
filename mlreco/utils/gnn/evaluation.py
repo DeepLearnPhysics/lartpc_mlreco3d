@@ -311,7 +311,8 @@ def node_purity_mask(clust_ids: nb.int64[:],
     which belong to a group with more than a single clear primary.
 
     Note: It is possible that the single true primary has been
-    broken into several nodes.
+    broken into several nodes. In that case, the primary is
+    also ambiguous, skip.
 
     Args:
         clust_ids (np.ndarray)  : (C) Array of cluster IDs
@@ -323,8 +324,7 @@ def node_purity_mask(clust_ids: nb.int64[:],
     purity_mask = np.zeros(len(clust_ids), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = group_ids == g
-        if np.sum(group_mask) > 1 and (np.sum(primary_ids[group_mask]) == 1 \
-                                or len(np.unique(clust_ids[group_mask][primary_ids[group_mask] == 1])) == 1):
+        if np.sum(group_mask) > 1 and np.sum(primary_ids[group_mask]) == 1:
             purity_mask[group_mask] = np.ones(np.sum(group_mask))
 
     return purity_mask
@@ -339,6 +339,9 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
     Function which creates a mask that is False only for edges
     which connect two nodes that both belong to a common group
     without a single clear primary.
+
+    Note: It is possible that the single true primary has been
+    broken into several nodes.
 
     Args:
         edge_index (np.ndarray) : (E,2) Incidence matrix
