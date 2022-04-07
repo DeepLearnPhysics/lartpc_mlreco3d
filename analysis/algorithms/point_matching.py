@@ -99,7 +99,8 @@ def get_shower_startpoint(particle : Particle, verbose=False):
         print("Found {} PPN candidate points for particle {}".format(
             particle.ppn_candidates.shape[0], particle.id))
     if particle.ppn_candidates.shape[0] == 0:
-        print("Particle {} has no PPN candidates!".format(particle.id))
+        if verbose:
+            print("Particle {} has no PPN candidates!".format(particle.id))
         startpoint = -np.ones(3)
     else:
         centroid = particle.points.mean(axis=0)

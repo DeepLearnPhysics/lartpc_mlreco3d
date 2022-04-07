@@ -15,6 +15,8 @@ from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex, predict_vertex
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
+from mlreco.utils.gnn.cluster import get_cluster_label
+
 
 class FullChainPredictor:
 
@@ -87,12 +89,12 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        concat_result = cfg['trainval']['concat_result']
-        check_concat = set(self.CONCAT_RESULT)
-        for i, key in enumerate(concat_result):
-            if not key in check_concat:
-                raise ValueError("Output key <{}> should be listed under "\
-                    "trainval.concat_result!".format(key))
+        # concat_result = cfg['trainval']['concat_result']
+        # check_concat = set(self.CONCAT_RESULT)
+        # for i, key in enumerate(concat_result):
+        #     if not key in check_concat:
+        #         raise ValueError("Output key <{}> should be listed under "\
+        #             "trainval.concat_result!".format(key))
 
         self.spatial_size             = predictor_cfg.get('spatial_size', 768)
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 10)
@@ -235,7 +237,7 @@ class FullChainPredictor:
             - entry: Batch number to retrieve example.
 
         Returns:
-            - labels: 1D numpy integer array of predicted fragment labels.
+            - label  iklo s: 1D numpy integer array of predicted fragment labels.
         '''
         fragments = self.result['fragments'][entry]
 
@@ -363,7 +365,10 @@ class FullChainPredictor:
         return vertex_info
 
 
-    def get_fragments(self, entry, only_primaries=False) -> List[Particle]:
+    def get_fragments(self, entry, only_primaries=False,
+                      min_particle_voxel_count=0,
+                      attaching_threshold=2,
+                      semantic_type=None, verbose=False) -> List[Particle]:
         '''
         Method for retriving fragment list for given batch index.
 
@@ -390,17 +395,26 @@ class FullChainPredictor:
 
         shower_mask = fragments_seg == 0
         shower_frag_primary = np.argmax(self.result['shower_node_pred'][entry], axis=1)
-        shower_group_pred = self.result['shower_group_pred'][entry]
-        track_group_pred = self.result['track_group_pred'][entry]
+        # shower_group_pred = self.result['shower_group_pred'][entry]
+        # track_group_pred = self.result['track_group_pred'][entry]
 
         assert len(fragments_seg) == len(fragments)
 
         temp = []
 
+        group_labels = self._fit_predict_groups(entry)
+        inter_labels = self._fit_predict_interaction_labels(entry)
+        group_ids = get_cluster_label(group_labels.reshape(-1, 1), fragments, column=0)
+        inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), fragments, column=0)
+
         for i, p in enumerate(fragments):
             voxels = point_cloud[p]
             seg_label = fragments_seg[i]
-            part = ParticleFragment(voxels, i, seg_label, -1, -1, batch_id=entry,
+            part = ParticleFragment(voxels, i, seg_label, 
+                            interaction_id=inter_ids[i],
+                            group_id=group_ids[i],
+                            image_id=entry,
+                            voxel_indices=p,
                             depositions=depositions[p],
                             is_primary=False,
                             pid_conf=-1,
@@ -413,7 +427,7 @@ class FullChainPredictor:
             if p.semantic_type == 0:
                 is_primary = shower_frag_primary[shower_counter]
                 p.is_primary = bool(is_primary)
-                p.group_id = int(shower_group_pred[shower_counter])
+                # p.group_id = int(shower_group_pred[shower_counter])
                 shower_counter += 1
         assert shower_counter == shower_frag_primary.shape[0]
 
@@ -421,37 +435,42 @@ class FullChainPredictor:
         track_counter = 0
         for p in temp:
             if p.semantic_type == 1:
-                p.group_id = int(track_group_pred[track_counter])
+                # p.group_id = int(track_group_pred[track_counter])
                 track_counter += 1
-        assert track_counter == track_group_pred.shape[0]
+        # assert track_counter == track_group_pred.shape[0]
 
         # Apply fragment voxel cut
         out = []
         for p in temp:
-            if p.points.shape[0] < self.min_particle_voxel_count:
+            if p.points.shape[0] < min_particle_voxel_count:
                 continue
             out.append(p)
 
         # Check primaries and assign ppn points
         if only_primaries:
             out = [p for p in out if p.is_primary]
+        
+        if semantic_type is not None:
+            out = [p for p in out if p.semantic_type == semantic_type]
 
         if len(out) == 0:
             return out
 
         ppn_results = self._fit_predict_ppn(entry)
         match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=self.attaching_threshold)
+            ppn_distance_threshold=attaching_threshold)
 
         for p in out:
             if p.semantic_type == 0:
-                pt = get_shower_startpoint(p)
+                pt = get_shower_startpoint(p, verbose=verbose)
                 p.startpoint = pt
 
         return out
 
 
-    def get_particles(self, entry, only_primaries=True) -> List[Particle]:
+    def get_particles(self, entry, only_primaries=True,
+                      min_particle_voxel_count=10,
+                      attaching_threshold=2) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -502,15 +521,18 @@ class FullChainPredictor:
 
         assert node_pred_vtx.shape[0] == len(particles)
 
+        inter_labels = self._fit_predict_interaction_labels(entry)
+        inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), particles, column=0)
+
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
-            if voxels.shape[0] < self.min_particle_voxel_count:
+            if voxels.shape[0] < min_particle_voxel_count:
                 continue
             seg_label = particles_seg[i]
             pid = pids[i]
             if seg_label == 2 or seg_label == 3:
                 pid = 1
-            interaction_id = inter_group_pred[i]
+            interaction_id = inter_ids[i]
             is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
             part = Particle(voxels, i, seg_label, interaction_id,
                             pid,
@@ -532,10 +554,10 @@ class FullChainPredictor:
         ppn_results = self._fit_predict_ppn(entry)
 
         match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=self.attaching_threshold)
+            ppn_distance_threshold=attaching_threshold)
         # This should probably be separated to a selection algorithm
         for p in out:
-            if p.size < self.min_particle_voxel_count:
+            if p.size < min_particle_voxel_count:
                 continue
             if p.semantic_type == 0:
                 pt = get_shower_startpoint(p)

@@ -72,11 +72,13 @@ class ParticleFragment(Particle):
     Reserved for particle fragments.
     '''
     def __init__(self, coords, fragment_id, semantic_type, interaction_id,
-                 group_id, image_id=0, depositions=None, alias="Particle", **kwargs):
+                 group_id, image_id=0, voxel_indices=None,
+                 depositions=None, **kwargs):
         self.id = fragment_id
         self.points = coords
         self.size = coords.shape[0]
         self.depositions = depositions
+        self.voxel_indices = voxel_indices
         self.semantic_type = semantic_type
         self.group_id = group_id
         self.interaction_id = interaction_id
