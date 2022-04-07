@@ -479,7 +479,7 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
     return pts_out
 
 
-def get_track_endpoints_geo(data, f, points_tensor=None):
+def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False):
     """
     Compute endpoints of a track-like cluster f
     based on PPN point predictions (coordinates
@@ -497,16 +497,28 @@ def get_track_endpoints_geo(data, f, points_tensor=None):
     Output:
     - array of shape (2, 3) (2 endpoints, 3 coordinates each)
     """
-    dist_mat = torch.cdist(data[f,1:4], data[f,1:4])
-    idx = torch.argmax(dist_mat)
+    if use_numpy:
+        import scipy
+        cdist = scipy.spatial.distance.cdist
+        argmax = np.argmax
+        sigmoid = scipy.special.expit
+        cat = lambda x: np.stack(x, axis=0)
+    else:
+        cdist = torch.cdist
+        argmax = torch.argmax
+        sigmoid = torch.sigmoid
+        cat = torch.cat
+
+    dist_mat = cdist(data[f,1:4], data[f,1:4])
+    idx = argmax(dist_mat)
     idxs = int(idx)//len(f), int(idx)%len(f)
-    scores = torch.sigmoid(points_tensor[f, -1])
     correction0, correction1 = 0.0, 0.0
     if points_tensor is not None:
+        scores = sigmoid(points_tensor[f, -1])
         correction0 = points_tensor[f][idxs[0], :3] + \
                       0.5 if scores[idxs[0]] > 0.5 else 0.0
         correction1 = points_tensor[f][idxs[1], :3] + \
                       0.5 if scores[idxs[1]] > 0.5 else 0.0
-    end_points = torch.cat([data[f[idxs[0]],1:4] + correction0,
-                            data[f[idxs[1]],1:4] + correction1])
+    end_points =  cat([data[f[idxs[0]],1:4] + correction0,
+                        data[f[idxs[1]],1:4] + correction1])
     return end_points
