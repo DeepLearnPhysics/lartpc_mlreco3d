@@ -588,11 +588,11 @@ class FullChainPredictor:
         pred_pids = self._fit_predict_pids(entry)
 
         pred = {
-            'segment_label': pred_seg,
-            'fragment_label': pred_fragments,
-            'group_label': pred_groups,
-            'interaction_label': pred_interaction_labels,
-            'pdg_label': pred_pids
+            'segment': pred_seg,
+            'fragment': pred_fragments,
+            'group': pred_groups,
+            'interaction': pred_interaction_labels,
+            'pdg': pred_pids
         }
 
         self._pred = pred
