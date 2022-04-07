@@ -106,42 +106,6 @@ class ClustGeoNodeEncoder(torch.nn.Module):
         return torch.stack(feats, dim=0)
 
 
-class NormedClustGeoNodeEncoder(torch.nn.Module):
-    """
-    Produces geometric cluster node features.
-
-    The first 19 features are composed of:
-        - Center (3)
-        - Covariance matrix (9)
-        - Principal axis (3)
-        - Voxel count (1)
-        - Mean energy (1)
-        - RMS energy (1)
-        - Semantic type (1), i.e. most represented type in cluster
-
-    6 features for the end points (duplicated for shower, 
-        randomly ordered for tracks)
-    3 features for direction estimate (mean direction w.r.t. start point)
-
-    Total of 28 hand-engineered features
-
-    """
-    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
-        super(NormedClustGeoNodeEncoder, self).__init__()
-
-        # Initialize the encoder parameters
-        self.use_numpy = model_config.get('use_numpy', True)
-        self.more_feats = model_config.get('more_feats', False)
-        self.batch_col = batch_col
-        self.coords_col = coords_col
-
-    def forward(self, data, clusts):
-
-        # If numpy is to be used, bring data to CPU, pass through Numba function
-        if self.use_numpy:
-            return normed_cluster_features(data, clusts, extra=self.more_feats, batch_col=self.batch_col, coords_col=self.coords_col)
-
-
 class ClustGeoEdgeEncoder(torch.nn.Module):
     """
     Produces geometric cluster edge features.
@@ -166,75 +130,6 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         # Otherwise use torch-based implementation of cluster_edge_features
         if self.use_numpy:
             feats = cluster_edge_features(data, clusts, edge_index.T, batch_col=self.batch_col, coords_col=self.coords_col)
-        else:
-            # Get the voxel set
-            voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()
-
-            # Here is a torch-based implementation of cluster_edge_features
-            feats = []
-            for e in edge_index.T:
-
-                # Get the voxels in the clusters connected by the edge
-                x1 = voxels[clusts[e[0]]]
-                x2 = voxels[clusts[e[1]]]
-
-                # Find the closest set point in each cluster
-                d12 = torch.cdist(x1,x2)
-                imin = torch.argmin(d12)
-                i1, i2 = imin//len(x2), imin%len(x2)
-                v1 = x1[i1,:] # closest point in c1
-                v2 = x2[i2,:] # closest point in c2
-
-                # Displacement
-                disp = v1 - v2
-
-                # Distance
-                lend = torch.norm(disp)
-                if lend > 0:
-                    disp = disp / lend
-
-                # Outer product
-                B = torch.ger(disp, disp).flatten()
-
-                feats.append(torch.cat([v1, v2, disp, lend.reshape(1), B]))
-
-            feats = torch.stack(feats, dim=0)
-
-        # If the graph is undirected, infer reciprocal features
-        if undirected:
-            feats_flip = feats.clone()
-            feats_flip[:,:3] = feats[:,3:6]
-            feats_flip[:,3:6] = feats[:,:3]
-            feats_flip[:,6:9] = -feats[:,6:9]
-            feats = torch.cat([feats,feats_flip])
-
-        return feats
-
-
-class NormedClustGeoEdgeEncoder(torch.nn.Module):
-    """
-    Produces geometric cluster edge features.
-
-    """
-    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
-        super(NormedClustGeoEdgeEncoder, self).__init__()
-
-        # Initialize the chain parameters
-        self.use_numpy = model_config.get('use_numpy', True)
-        self.batch_col = batch_col
-        self.coords_col = coords_col
-
-    def forward(self, data, clusts, edge_index):
-
-        # Check if the graph is undirected, select the relevant part of the edge index
-        half_idx = int(edge_index.shape[1] / 2)
-        undirected = not edge_index.shape[1] or (not edge_index.shape[1] % 2 and [edge_index[1, 0], edge_index[0, 0]] == edge_index[:, half_idx].tolist())
-        if undirected: edge_index = edge_index[:, :half_idx]
-
-        # If numpy is to be used, bring data to cpu, pass through Numba function
-        # Otherwise use torch-based implementation of cluster_edge_features
-        if self.use_numpy:
-            feats = normed_cluster_edge_features(data, clusts, edge_index.T, batch_col=self.batch_col, coords_col=self.coords_col)
         else:
             # Get the voxel set
             voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()

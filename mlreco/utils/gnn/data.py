@@ -27,24 +27,6 @@ def cluster_features(data, clusts, extra=False, **kwargs):
     return get_cluster_features(data.float(), clusts, **kwargs)
 
 
-def normed_cluster_features(data, clusts, extra=False, **kwargs):
-    """
-    Function that returns an array of 16/19 geometric features for
-    each of the clusters in the provided list.
-
-    Args:
-        data (torch.Tensor)  : (N,3) Voxel coordinates [x, y, z]
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        extra (bool)         : Whether or not to include extended features
-    Returns:
-        np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
-    """
-    if extra:
-        return torch.cat([get_cluster_features_normalized(data.float(), clusts, **kwargs),
-                          get_cluster_features_extended_normalized(data.float(), clusts, **kwargs)], dim=1)
-    return get_cluster_features_normalized(data.float(), clusts, **kwargs)
-
-
 def cluster_edge_features(data, clusts, edge_index, **kwargs):
     """
     Function that returns a tensor of 19 geometric edge features for each of the
@@ -58,21 +40,6 @@ def cluster_edge_features(data, clusts, edge_index, **kwargs):
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
     return get_cluster_edge_features(data.float(), clusts, edge_index, **kwargs)
-
-
-def normed_cluster_edge_features(data, clusts, edge_index, **kwargs):
-    """
-    Function that returns a tensor of 19 geometric edge features for each of the
-    edges connecting clusters in the graph.
-
-    Args:
-        data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (E,2) Incidence matrix
-    Returns:
-        np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
-    """
-    return get_cluster_edge_features_normalized(data.float(), clusts, edge_index, **kwargs)
 
 
 def voxel_features(data, max_dist=5.0):
