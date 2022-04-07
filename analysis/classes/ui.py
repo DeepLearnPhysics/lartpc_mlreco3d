@@ -758,6 +758,8 @@ class FullChainEvaluator(FullChainPredictor):
             p: true momentum vector
         '''
         labels = self.data_blob['cluster_label'][entry]
+        if self.deghosting:
+            labels_noghost = self.data_blob['cluster_label_noghost'][entry]
         segment_label = self.data_blob['segment_label'][entry]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
 
@@ -787,13 +789,16 @@ class FullChainEvaluator(FullChainPredictor):
 
             pdg = TYPE_LABELS[p.pdg_code()]
             mask = labels[:, 6].astype(int) == pid
-
+            if self.deghosting:
+                mask_noghost = labels_noghost[:, 6].astype(int) == pid
             # If particle is Michel electron, we have the option to
             # only consider the primary ionization.
             # Semantic labels only label the primary ionization as Michel.
             # Cluster labels will have the entire Michel together.
             if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
                 mask = mask & (labels[:, -1].astype(int) == 2)
+                if self.deghosting:
+                    mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
             # Check semantics
             semantic_type, sem_counts = np.unique(
@@ -838,11 +843,18 @@ class FullChainEvaluator(FullChainPredictor):
 
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
+            coords_noghost, depositions_noghost = None, None
+            if self.deghosting:
+                coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+                depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+
             particle = TruthParticle(coords, pid,
                 semantic_type, interaction_id, pdg,
                 batch_id=entry,
                 depositions=depositions,
-                is_primary=is_primary)
+                is_primary=is_primary,
+                coords_noghost=coords_noghost,
+                depositions_noghost=depositions_noghost)
             particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
             particle.particle_asis = p

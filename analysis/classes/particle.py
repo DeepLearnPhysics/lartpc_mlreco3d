@@ -111,11 +111,13 @@ class TruthParticle(Particle):
     '''
     Reserved for true particles derived from true labels / true MC information.
     '''
-    def __init__(self, *args, particle_asis=None, **kwargs):
+    def __init__(self, *args, particle_asis=None, coords_noghost=None, depositions_noghost=None, **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
         self.asis = particle_asis
         self.match = []
         self._match_counts = {}
+        self.coords_noghost = coords_noghost
+        self.depositions_noghost = depositions_noghost
 
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
