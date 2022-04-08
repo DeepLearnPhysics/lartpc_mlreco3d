@@ -19,33 +19,6 @@ from mlreco.utils.gnn.cluster import get_cluster_label
 
 
 class FullChainPredictor:
-
-    CONCAT_RESULT = ['input_node_features',
-                     'input_edge_features',
-                     'particle_node_features',
-                     'particle_edge_features',
-                     'track_node_features',
-                     'shower_node_features',
-                     'points', 'ppn_coords', 'mask_ppn', 'ppn_layers',
-                     'classify_endpoints', 'seediness', 'margins',
-                     'embeddings', 'fragments', 'fragments_seg',
-                     'shower_fragments', 'shower_edge_index',
-                     'shower_edge_pred','shower_node_pred',
-                     'shower_group_pred','track_fragments',
-                     'track_edge_index', 'track_node_pred', 'track_edge_pred',
-                     'track_group_pred', 'particle_fragments',
-                     'particle_edge_index', 'particle_node_pred',
-                     'particle_edge_pred', 'particle_group_pred',
-                     'particles','inter_edge_index', 'inter_node_pred',
-                     'inter_edge_pred', 'inter_particles', 'node_pred_p', 'node_pred_type',
-                     'flow_edge_pred', 'kinematics_particles',
-                     'kinematics_edge_index', 'clust_fragments',
-                     'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
-                     'node_pred_vtx', 'total_num_points',
-                     'total_nonghost_points', 'spatial_embeddings',
-                     'occupancy', 'hypergraph_features',
-                     'features', 'feature_embeddings', 'covariance']
-
     '''
     User Interface for full chain inference.
 
@@ -93,13 +66,6 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        # concat_result = cfg['trainval']['concat_result']
-        # check_concat = set(self.CONCAT_RESULT)
-        # for i, key in enumerate(concat_result):
-        #     if not key in check_concat:
-        #         raise ValueError("Output key <{}> should be listed under "\
-        #             "trainval.concat_result!".format(key))
-
         self.spatial_size             = predictor_cfg.get('spatial_size', 768)
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 10)
         # Minimum voxel count for a true non-ghost particle to be considered
@@ -137,7 +103,6 @@ class FullChainPredictor:
             ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
                                                   self.result,
                                                   entry=entry)
-        # print(ppn.shape)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
@@ -243,7 +208,7 @@ class FullChainPredictor:
             - entry: Batch number to retrieve example.
 
         Returns:
-            - label  iklo s: 1D numpy integer array of predicted fragment labels.
+            - new_labels: 1D numpy integer array of predicted fragment labels.
         '''
         fragments = self.result['fragments'][entry]
 
@@ -296,7 +261,7 @@ class FullChainPredictor:
             - entry: Batch number to retrieve example.
 
         Returns:
-            - labels: 1D numpy integer array of predicted interaction labels.
+            - new_labels: 1D numpy integer array of predicted interaction labels.
         '''
         inter_group_pred = self.result['inter_group_pred'][entry]
         particles = self.result['particles'][entry]
@@ -594,13 +559,13 @@ class FullChainPredictor:
 
         Method also performs vertex prediction for each interaction.
 
-        Inputs:
-            - entry: Batch number to retrieve example.
-            - semantic_type (optional): if True, only ppn candiates with the
-            same predicted semantic type will be matched to its corresponding
-            particle.
-            - threshold (float, optional): threshold distance to attach
-            ppn point to particle.
+        Parameters
+        ----------
+        entry: int
+            Batch number to retrieve example.
+        drop_nonprimary_particles: bool (optional)
+            If True, all non-primary particles will not be included in
+            the output interactions' .particle attribute. 
 
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).

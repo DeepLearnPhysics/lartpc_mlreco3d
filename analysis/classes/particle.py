@@ -221,6 +221,10 @@ class Interaction:
         3D coordinates of the predicted interaction vertex
     nu_id: int (Optional, TODO)
         Label indicating whether this interaction is a neutrino interaction
+        WARNING: The nu_id label is most likely unreliable. Don't use this
+        in reconstruction (used for debugging)
+    num_particles: int 
+        total number of particles in this interaction. 
     """
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
         self.id = interaction_id
@@ -294,7 +298,9 @@ class Interaction:
 
 
 class TruthInteraction(Interaction):
-
+    """
+    Analogous data structure for Interactions retrieved from true labels. 
+    """
     def __init__(self, *args, **kwargs):
         super(TruthInteraction, self).__init__(*args, **kwargs)
         self.match = []
@@ -318,6 +324,21 @@ class TruthInteraction(Interaction):
 
 
 def matrix_counts(particles_x, particles_y):
+    """Function for computing the M x N overlap matrix by counts.
+    
+    Parameters
+    ----------
+    particles_x: List[Particle]
+        List of N particles to match with <particles_y>
+    particles_y: List[Particle]
+        List of M particles to match with <particles_x>
+
+    Note the correspondence particles_x -> N and particles_y -> M. 
+
+    Returns
+    -------
+    overlap_matrix: (M, N) np.array of ints
+    """
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
     for i, py in enumerate(particles_y):
         for j, px in enumerate(particles_x):
@@ -327,6 +348,23 @@ def matrix_counts(particles_x, particles_y):
 
 
 def matrix_iou(particles_x, particles_y):
+    """Function for computing the M x N overlap matrix by IoU.
+
+    Here IoU refers to Intersection-over-Union metric. 
+    
+    Parameters
+    ----------
+    particles_x: List[Particle]
+        List of N particles to match with <particles_y>
+    particles_y: List[Particle]
+        List of M particles to match with <particles_x>
+
+    Note the correspondence particles_x -> N and particles_y -> M. 
+
+    Returns
+    -------
+    overlap_matrix: (M, N) np.float array, with range [0, 1]
+    """
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.float32)
     for i, py in enumerate(particles_y):
         for j, px in enumerate(particles_x):
@@ -342,6 +380,57 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>.
+
+    Parameters
+    ----------
+    particles_from: List[Particle] or List[TruthParticle]
+        List of particles to loop over during matching procedure.
+    particles_to: List[Particle] or List[TruthParticle]
+        List of particles to match a given particle from <particles_from>. 
+
+    min_overlap: int, float, or List[int]/List[float]
+        Minimum required overlap value (float for IoU, int for counts)
+        for a valid particle-particle match pair. 
+
+        If min_overlap is a list with same length as <num_classes>,
+        a minimum overlap value will be applied separately
+        for different classes. 
+
+        Example
+        -------
+        match_particles_fn(parts_from, parts_to, 
+                           min_overlap=[0.9, 0.9, 0.99, 0.99], 
+                           num_classes=4)
+        -> This applies a minimum overlap cut of 0.9 IoU for class labels 0
+        and 1, and a cut of 0.99 IoU for class labels 2 and 3. 
+
+    num_classes: int
+        Total number of semantic classes (or any other label).
+        This is used for setting <min_overlap> to differ across different
+        semantic labels, for example. 
+
+    verbose: bool
+        If True, print a message when a given particle has no match. 
+
+    overlap_mode: str
+        Supported modes:
+        
+        'iou': overlap matrix is constructed from computing the
+        intersection-over-union metric. 
+
+        'counts': overlap matrix is constructed from counting the number
+        of shared voxels. 
+
+
+    Returns
+    -------
+    matches: List[Tuple[Particle, Particle]]
+        List of tuples, indicating the matched particles.
+        In case of no valid matches, a particle is matched with None
+    idx: np.array of ints
+        Index of matched particles
+    intersections: np.array of floats/ints
+        IoU/Count information for each matches. 
     '''
 
     particles_x, particles_y = particles_from, particles_to
@@ -354,7 +443,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
 
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
-            print("No particles/interactions to match.")
+            print("No particles to match.")
         return [], 0, 0
 
     if overlap_mode == 'counts':
@@ -362,7 +451,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     elif overlap_mode == 'iou':
         overlap_matrix = matrix_iou(particles_x, particles_y)
     else:
-        raise ValueError("Overlap matrix mode {} is not supported.".format(mode))
+        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
     # print(overlap_matrix)
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
@@ -397,7 +486,9 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
 def match_interactions_fn(ints_from : List[Interaction],
                           ints_to : List[Interaction],
                           min_overlap=0, verbose=False):
-
+    """
+    Same as <match_particles_fn>, but for lists of interactions. 
+    """
     ints_x, ints_y = ints_from, ints_to
 
     if len(ints_y) == 0 or len(ints_x) == 0:
@@ -434,7 +525,23 @@ def match_interactions_fn(ints_from : List[Interaction],
 
 def group_particles_to_interactions_fn(particles : List[Particle],
                                        get_nu_id=False, mode='pred'):
+    """
+    Function for grouping particles to its parent interactions.
 
+    Parameters
+    ----------
+    particles: List[Particle]
+        List of Particle instances to construct Interaction instances from.
+    get_nu_id: bool
+        Option to retrieve neutrino_id (unused)
+    mode: str
+        Supported modes:
+        'pred': output list will contain <Interaction> instances
+        'truth': output list will contain <TruthInteraction> instances.
+
+        Do not mix predicted interactions with TruthInteractions and 
+        interactions constructed from using labels with Interactions.
+    """
     interactions = defaultdict(list)
     for p in particles:
         interactions[p.interaction_id].append(p)
