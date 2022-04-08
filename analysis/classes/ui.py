@@ -22,6 +22,10 @@ class FullChainPredictor:
 
     CONCAT_RESULT = ['input_node_features',
                      'input_edge_features',
+                     'particle_node_features',
+                     'particle_edge_features',
+                     'track_node_features',
+                     'shower_node_features',
                      'points', 'ppn_coords', 'mask_ppn', 'ppn_layers',
                      'classify_endpoints', 'seediness', 'margins',
                      'embeddings', 'fragments', 'fragments_seg',
@@ -105,6 +109,8 @@ class FullChainPredictor:
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
+
+        self.batch_mask = self.data_blob['input_data']
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(self.num_images)
@@ -395,8 +401,11 @@ class FullChainPredictor:
 
         shower_mask = fragments_seg == 0
         shower_frag_primary = np.argmax(self.result['shower_node_pred'][entry], axis=1)
-        # shower_group_pred = self.result['shower_group_pred'][entry]
-        # track_group_pred = self.result['track_group_pred'][entry]
+
+        if 'shower_node_features' in self.result:
+            shower_node_features = self.result['shower_node_features'][entry]
+        if 'track_node_features' in self.result:
+            track_node_features = self.result['track_node_features'][entry]
 
         assert len(fragments_seg) == len(fragments)
 
@@ -421,21 +430,24 @@ class FullChainPredictor:
                             alias='Fragment')
             temp.append(part)
 
-        # Label shower fragments as primaries
+        # Label shower fragments as primaries and attach startpoint
         shower_counter = 0
         for p in temp:
             if p.semantic_type == 0:
                 is_primary = shower_frag_primary[shower_counter]
                 p.is_primary = bool(is_primary)
+                p.startpoint = shower_node_features[shower_counter][19:22]
                 # p.group_id = int(shower_group_pred[shower_counter])
                 shower_counter += 1
         assert shower_counter == shower_frag_primary.shape[0]
 
-        # Label shower fragments as primaries
+        # Attach endpoint to track fragments
         track_counter = 0
         for p in temp:
             if p.semantic_type == 1:
                 # p.group_id = int(track_group_pred[track_counter])
+                p.startpoint = track_node_features[track_counter][19:22]
+                p.endpoint = track_node_features[track_counter][22:25]
                 track_counter += 1
         # assert track_counter == track_group_pred.shape[0]
 
@@ -459,11 +471,6 @@ class FullChainPredictor:
         ppn_results = self._fit_predict_ppn(entry)
         match_points_to_particles(ppn_results, out,
             ppn_distance_threshold=attaching_threshold)
-
-        for p in out:
-            if p.semantic_type == 0:
-                pt = get_shower_startpoint(p, verbose=verbose)
-                p.startpoint = pt
 
         return out
 
@@ -506,8 +513,8 @@ class FullChainPredictor:
 
         type_logits = self.result['node_pred_type'][entry]
         input_node_features = [None] * type_logits.shape[0]
-        if 'input_node_features' in self.result:
-            input_node_features = self.result['input_node_features'][entry]
+        if 'particle_node_features' in self.result:
+            input_node_features = self.result['particle_node_features'][entry]
         pids = np.argmax(type_logits, axis=1)
 
         out = []
@@ -542,7 +549,7 @@ class FullChainPredictor:
                             is_primary=is_primary,
                             pid_conf=softmax(type_logits[i])[pids[i]])
 
-            part.node_features = input_node_features[i]
+            part._node_features = input_node_features[i]
             out.append(part)
 
         if only_primaries:
@@ -553,18 +560,27 @@ class FullChainPredictor:
 
         ppn_results = self._fit_predict_ppn(entry)
 
+        # Get ppn candidates for particle
         match_points_to_particles(ppn_results, out,
             ppn_distance_threshold=attaching_threshold)
-        # This should probably be separated to a selection algorithm
+
+        # Attach startpoint and endpoint 
+        # as done in full chain geometric encoder
         for p in out:
             if p.size < min_particle_voxel_count:
                 continue
             if p.semantic_type == 0:
-                pt = get_shower_startpoint(p)
+                pt = p._node_features[19:22]
+                # Check startpoint is replicated
+                assert(np.sum(
+                    np.abs(pt - p._node_features[22:25])) < 1e-12)
                 p.startpoint = pt
             elif p.semantic_type == 1:
-                pts = get_track_endpoints(p)
-                p.endpoints = pts
+                startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
+                p.startpoint = startpoint
+                p.endpoint = endpoint
+            else:
+                continue
 
         return out
 
@@ -862,6 +878,7 @@ class FullChainEvaluator(FullChainPredictor):
             depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
             particle = TruthParticle(coords, pid,
                 semantic_type, interaction_id, pdg,
+                particle_asis=p,
                 batch_id=entry,
                 depositions=depositions,
                 is_primary=is_primary)

@@ -1,9 +1,10 @@
+from operator import xor
 import random
 import torch
 import numpy as np
 
 from mlreco.models.layers.common.dbscan import DBSCANFragmenter
-from mlreco.models.layers.common.momentum import EvidentialMomentumNet, MomentumNet
+from mlreco.models.layers.common.momentum import DeepMomentumNet, EvidentialMomentumNet, MomentumNet
 from mlreco.models.experimental.transformers.transformer import TransformerEncoderLayer
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
@@ -209,15 +210,27 @@ class GNN(torch.nn.Module):
                                                     num_hidden=momentum_config.get('num_hidden', 128))
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
+        print(self.vertex_mlp)
         if self.vertex_mlp:
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
             vertex_config = cfg[name].get('vertex_net', {'name': 'momentum_net'})
+            self.use_vtx_input_features = vertex_config.get('use_vtx_input_features', False)
             if vertex_config['name'] == 'momentum_net':
                 self.vertex_net = MomentumNet(node_output_feats, 
                                               num_output=5, 
-                                              num_hidden=vertex_config.get('num_hidden', 128))
+                                              num_hidden=vertex_config.get('num_hidden', 64),
+                                              evidential=True) # Enforce positive outputs
+                print(self.vertex_net)
             elif vertex_config['name'] == 'attention_net':
                 self.vertex_net = TransformerEncoderLayer(node_output_feats, 3, **vertex_config)
+                print(self.vertex_net)
+            elif vertex_config['name'] == 'deep_momentum_net':
+                self.vertex_net = DeepMomentumNet(node_output_feats, 
+                                                  num_output=5, 
+                                                  num_hidden=vertex_config.get('num_hidden', 64),
+                                                  num_layers=vertex_config.get('num_layers', 5),
+                                                  evidential=True) # Enforce positive outputs
+                print(self.vertex_net)
             else:
                 raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 
@@ -380,7 +393,12 @@ class GNN(torch.nn.Module):
             result['node_pred_type'] = result['node_pred']
 
         if self.vertex_mlp:
-            node_pred_vtx = self.vertex_net(out['node_features'][0])
+            if self.use_vtx_input_features:
+                print(x)
+                assert False
+                node_pred_vtx = self.vertex_net(x)
+            else:
+                node_pred_vtx = self.vertex_net(out['node_features'][0])
             result['node_pred_vtx'] = [[node_pred_vtx[b] for b in cbids]]
 
         return result

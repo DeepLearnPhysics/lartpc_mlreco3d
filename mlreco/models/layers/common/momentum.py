@@ -39,6 +39,45 @@ class MomentumNet(nn.Module):
         return out
 
 
+class DeepMomentumNet(nn.Module):
+    '''
+    Small MLP for extracting input edge features from two node features.
+
+    USAGE:
+        net = EdgeFeatureNet(16, 16)
+        node_x = torch.randn(16, 5)
+        node_y = torch.randn(16, 5)
+        edge_feature_x2y = net(node_x, node_y) # (16, 5)
+    '''
+    def __init__(self, num_input, num_output=1, num_hidden=512, num_layers=5, evidential=False):
+        super(DeepMomentumNet, self).__init__()
+        self.linear = nn.ModuleList()
+        self.norm = nn.ModuleList()
+        self.num_layers = num_layers
+
+        for i in range(num_layers):
+            self.norm.append(nn.BatchNorm1d(num_input))
+            self.linear.append(nn.Linear(num_input, num_hidden))
+            num_input = num_hidden
+
+        self.final = nn.Linear(num_hidden, num_output)
+
+        self.lrelu = nn.LeakyReLU(negative_slope=0.33)
+        if evidential:
+            self.evidence = nn.Softplus()
+        else:
+            self.evidence = nn.Identity()
+
+    def forward(self, x):
+        for i in range(self.num_layers):
+            x = self.norm[i](x)
+            x = self.lrelu(x)
+            x = self.linear[i](x)
+        x = self.final(x)
+        out = self.evidence(x)
+        return out
+
+
 class EvidentialMomentumNet(nn.Module):
 
     def __init__(self, num_input, num_output=4, 

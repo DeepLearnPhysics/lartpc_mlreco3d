@@ -13,6 +13,7 @@ from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
 from mlreco.utils.ppn import get_track_endpoints_geo
+from mlreco.utils.gnn.data import _get_extra_gnn_features
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 
 
@@ -120,8 +121,8 @@ class FullChain(FullChainGNN):
         # print('Total Number of Trainable Parameters (mink_full_chain)= {}'.format(
         #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
-    def get_extra_gnn_features(self,
-                               fragments,
+    @staticmethod
+    def get_extra_gnn_features(fragments,
                                frag_seg,
                                classes,
                                input,
@@ -154,59 +155,13 @@ class FullChain(FullChainGNN):
             Keys can include `points` (if `use_ppn` is `True`)
             and `extra_feats` (if `use_supp` is True).
         """
-        # Build a mask for the requested classes
-        mask = np.zeros(len(frag_seg), dtype=np.bool)
-        for c in classes:
-            mask |= (frag_seg == c)
-        mask = np.where(mask)[0]
-
-        #print("INPUT = ", input)
-
-        # If requested, extract PPN-related features
-        kwargs = {}
-        if use_ppn:
-            ppn_points = torch.empty((0,6), device=input[0].device,
-                                            dtype=torch.double)
-            points_tensor = result['points'][0].detach().double()
-            for i, f in enumerate(fragments[mask]):
-                if frag_seg[mask][i] == 1:
-                    end_points = get_track_endpoints_geo(input[0], f, points_tensor)
-                    ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
-                else:
-                    dmask  = torch.nonzero(torch.max(
-                        torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
-                        as_tuple=True)[0]
-                    # scores = torch.sigmoid(points_tensor[f, -1])
-                    # argmax = dmask[torch.argmax(scores[dmask])] \
-                    #          if len(dmask) else torch.argmax(scores)
-                    scores = torch.softmax(points_tensor[f, -2:], dim=1)
-                    argmax = dmask[torch.argmax(scores[dmask, -1])] \
-                             if len(dmask) else torch.argmax(scores[:, -1])
-                    start  = input[0][f][argmax,1:4] + \
-                             points_tensor[f][argmax,:3] + 0.5
-                    ppn_points = torch.cat((ppn_points,
-                        torch.cat([start, start]).reshape(1,-1)), dim=0)
-
-            kwargs['points'] = ppn_points
-
-        # If requested, add energy and semantic related features
-        if use_supp:
-            supp_feats = torch.empty((0,3), device=input[0].device,
-                                            dtype=torch.float)
-            for i, f in enumerate(fragments[mask]):
-                values = torch.cat((input[0][f,4].mean().reshape(1),
-                                    input[0][f,4].std().reshape(1))).float()
-                if torch.isnan(values[1]): # Handle size-1 particles
-                    values[1] = input[0][f,4] - input[0][f,4]
-                sem_type = torch.tensor([frag_seg[mask][i]],
-                                        dtype=torch.float,
-                                        device=input[0].device)
-                supp_feats = torch.cat((supp_feats,
-                    torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
-
-            kwargs['extra_feats'] = supp_feats
-
-        return mask, kwargs
+        return _get_extra_gnn_features(fragments, 
+                                       frag_seg, 
+                                       classes, 
+                                       input, 
+                                       result, 
+                                       use_ppn=use_ppn, 
+                                       use_supp=use_supp)
 
 
     def full_chain_cnn(self, input):

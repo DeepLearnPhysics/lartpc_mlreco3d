@@ -11,7 +11,43 @@ from pprint import pprint
 
 class Particle:
     '''
-    Simple Particle Class with managable __repr__ and __str__ functions.
+    Data Structure for managing Particle-level 
+    full chain output information
+
+    Attributes
+    ----------
+    id: int
+        Unique ID of the particle
+    points: (N, 3) np.array
+        3D coordinates of the voxels that belong to this particle
+    size: int
+        Total number of voxels that belong to this particle
+    depositions: (N, 1) np.array
+        Array of energy deposition values for each voxel
+    voxel_indices: (N, ) np.array
+        Numeric integer indices of voxel positions of this particle
+        with respect to the total array of point in a single image.
+    semantic_type: int
+        Semantic type (shower fragment (0), track (1), 
+        michel (2), delta (3), lowE (4)) of this particle. 
+    pid: int
+        PDG Type (Photon (0), Electron (1), Muon (2), 
+        Charged Pion (3), Proton (4)) of this particle. 
+    pid_conf: float
+        Softmax probability score for the most likely pid prediction
+    interaction_id: int
+        Integer ID of the particle's parent interaction
+    image_id: int
+        ID of the image in which this particle resides in
+    is_primary: bool
+        Indicator whether this particle is a primary from an interaction.
+    match: List[int]
+        List of TruthParticle IDs for which this particle is matched to
+
+    startpoint: (1,3) np.array 
+        (1, 3) array of particle's startpoint, if it could be assigned
+    endpoint: (1,3) np.array 
+        (1, 3) array of particle's endpoint, if it could be assigned
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id,
                  pid, image_id=0, voxel_indices=None, depositions=None, **kwargs):
@@ -48,9 +84,6 @@ class Particle:
 
         self.sum_edep = np.sum(self.depositions)
 
-        self.startpoint = -np.ones(3)
-        self.endpoints = -np.ones((2, 3))
-
     def __str__(self):
         return self.__repr__()
 
@@ -69,7 +102,22 @@ class Particle:
 
 class ParticleFragment(Particle):
     '''
-    Reserved for particle fragments.
+    Data structure for managing fragment-level 
+    full chain output information
+
+    Attributes
+    ----------
+    See <Particle> documentation for shared attributes.
+    Below are attributes exclusive to ParticleFragment
+
+    id: int
+        fragment ID of this particle fragment (different from particle id)
+    group_id: int
+        Group ID (alias for Particle ID) for which this fragment belongs to.
+    is_primary: bool
+        If True, then this particle fragment corresponds to 
+        a primary ionization trajectory within the group of fragments that
+        compose a particle. 
     '''
     def __init__(self, coords, fragment_id, semantic_type, interaction_id,
                  group_id, image_id=0, voxel_indices=None,
@@ -92,8 +140,6 @@ class ParticleFragment(Particle):
             4: 'LowE Depo'
         }
 
-        self.startpoint = -np.ones(3)
-
     def __str__(self):
         return self.__repr__()
 
@@ -111,7 +157,18 @@ class ParticleFragment(Particle):
 
 class TruthParticle(Particle):
     '''
-    Reserved for true particles derived from true labels / true MC information.
+    Data structure mirroring <Particle>, reserved for true particles 
+    derived from true labels / true MC information.
+
+    Attributes
+    ----------
+    See <Particle> documentation for shared attributes.
+    Below are attributes exclusive to TruthParticle
+
+    asis: larcv.Particle C++ object (Optional)
+        Raw larcv.Particle C++ object as retrived from parse_particles_asis.
+    match: List[int]
+        List of Particle IDs that match to this TruthParticle
     '''
     def __init__(self, *args, particle_asis=None, **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
@@ -150,7 +207,21 @@ class TruthParticle(Particle):
         }
 
 class Interaction:
+    """
+    Data structure for managing interaction-level
+    full chain output information. 
 
+    Attributes
+    ----------
+    id: int
+        Unique ID (Interaction ID) of this interaction.
+    particles: List[Particle]
+        List of <Particle> objects that belong to this Interaction.
+    vertex: (1,3) np.array (Optional)
+        3D coordinates of the predicted interaction vertex
+    nu_id: int (Optional, TODO)
+        Label indicating whether this interaction is a neutrino interaction
+    """
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
         self.id = interaction_id
         self.particles = particles

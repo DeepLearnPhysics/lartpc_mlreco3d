@@ -111,7 +111,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         else:
             raise ValueError('Regression loss not recognized: ' + self.reg_loss)
 
-        self.vtx_position_loss = torch.nn.L1Loss(reduction='none')
+        self.vtx_position_loss = torch.nn.MSELoss(reduction='none')
         self.vtx_score_loss = torch.nn.CrossEntropyLoss(reduction=self.reduction)
 
         self.compute_momentum_switch = loss_config.get('compute_momentum', True)
@@ -632,6 +632,8 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         super(NodeEvidentialKinematicsLoss, self).__init__(loss_config, **kwargs)
         self.type_lossfn = torch.nn.CrossEntropyLoss(reduction=self.reduction, ignore_index=-1)
         self.use_primaries_for_vtx = loss_config.get('use_primaries_for_vtx', False)
+        self.avg_pool_loss = loss_config.get('avg_pool_loss', False)
+        self.normalize_vtx_label = loss_config.get('normalize_vtx_label', True)
 
     def compute_type(self, node_pred_type, labels, clusts, iteration=None):
         '''
@@ -676,44 +678,28 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         return total_loss, type_loss, n_clusts_type, type_acc
 
     def compute_vertex(self, node_pred_vtx, labels, clusts):
+        
         node_x_vtx = get_cluster_label(labels, clusts, column=self.vtx_col)
         node_y_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+1)
         node_z_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+2)
+
+        node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
+                                    dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
+        
+        vtx_position_loss = 0
+        vtx_score_loss = 0
+        loss = 0
+        n_clusts_vtx = 0
+        n_clusts_vtx_positives = 0
+        vtx_position_acc = 0
+        vtx_score_acc = 0
 
         # Select primaries for vertex regression
         select_primaries = get_cluster_label(labels, clusts, 
                                              column=self.vtx_positives_col)
 
-        scatter_index = get_cluster_label(labels, clusts, column=7)
+        select_primaries = select_primaries.astype(bool)
 
-        # Use only primaries when computing vertex loss
-        if self.use_primaries_for_vtx:
-            nodes_vtx_reg = node_pred_vtx[select_primaries]
-            scatter_index, _ = unique_label(scatter_index[select_primaries])
-        else:
-            nodes_vtx_reg = node_pred_vtx
-            scatter_index, _ = unique_label(scatter_index)
-
-            scatter_index = torch.tensor(
-                scatter_index, dtype=torch.int64).to(node_pred_vtx.device)
-
-        # Global Pool transformer output for each interaction id
-        vtx_scatter = scatter(nodes_vtx_reg, 
-                              scatter_index, 
-                              dim=0, reduce='mean')
-
-        node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
-                                    dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
-
-        # Merge vertex labels in units of interaction id
-        vtx_scatter_label = scatter(node_assn_vtx, scatter_index, dim=0, reduce='mean')
-        node_assn_vtx = vtx_scatter_label/self.spatial_size
-        good_index_vtx = torch.all((0 <= node_assn_vtx) & (node_assn_vtx <= 1), dim=1)
-
-        # positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
-        # Take the max for each cluster - e.g. for a shower, the primary fragment only
-        # is marked as primary particle, so taking majority count would eliminate the shower
-        # from primary particles for vertex identification purpose.
         positives = []
         for c in clusts:
             positives.append(labels[c, self.vtx_positives_col].max().item())
@@ -723,14 +709,44 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
                                             device=node_pred_vtx.device,
                                             requires_grad=False)
 
-        positives_vtx = scatter(positives, scatter_index, dim=0, reduce='mean').bool()
+        # Use only primaries when computing vertex loss
+        if self.use_primaries_for_vtx:
+            # print("Before Primaries = ", node_pred_vtx.shape)
+            nodes_vtx_reg = node_pred_vtx[select_primaries]
+            positives_vtx = positives[select_primaries]
+            node_assn_vtx = node_assn_vtx[select_primaries]
+        else:
+            nodes_vtx_reg = node_pred_vtx
+            positives_vtx = positives
 
-        vtx_position_loss = 0
-        vtx_score_loss = 0
-        loss = 0
-        n_clusts_vtx = 0
-        n_clusts_vtx_positives = 0
-        vtx_position_acc = 0
+        # print("After Primaries = ", nodes_vtx_reg.shape)
+
+        if nodes_vtx_reg.shape[0] < 1:
+            out =  (loss,
+                    vtx_position_loss,
+                    vtx_score_loss,
+                    n_clusts_vtx,
+                    n_clusts_vtx_positives,
+                    vtx_position_acc,
+                    vtx_score_acc)
+            return out
+
+        # positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+        # Take the max for each cluster - e.g. for a shower, the primary fragment only
+        # is marked as primary particle, so taking majority count would eliminate the shower
+        # from primary particles for vertex identification purpose.
+
+        # print("Normalize Vertex Label = ", self.normalize_vtx_label)
+
+        if self.normalize_vtx_label:
+            vtx_scatter_label = node_assn_vtx/self.spatial_size
+            good_index_vtx = torch.all((0 <= vtx_scatter_label) & (vtx_scatter_label <= 1), dim=1)
+        else:
+            vtx_scatter_label = node_assn_vtx
+            good_index_vtx = torch.all((0 <= vtx_scatter_label) & (vtx_scatter_label <= self.spatial_size), dim=1)   
+
+        vtx_scatter = nodes_vtx_reg
+
         vtx_score_acc = float(torch.sum(
             torch.argmax(node_pred_vtx[:, 3:], dim=1) == positives))
 
@@ -741,7 +757,10 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
                                         positives)
             loss1 = torch.sum(torch.mean(
                 self.vtx_position_loss(vtx_scatter[good_index_vtx, :3], 
-                                       node_assn_vtx[good_index_vtx]), dim=1))
+                                       vtx_scatter_label[good_index_vtx]), dim=1))
+
+            # print("Position Loss = ", loss1, vtx_scatter[good_index_vtx].shape)
+            # print("Particle Primary Loss = ", loss2)
 
             loss = loss1 + loss2
 
@@ -754,8 +773,8 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         if vtx_scatter[good_index_vtx].shape[0]:
             # print(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()])
             vtx_position_acc = float(torch.sum(1. - torch.abs(vtx_scatter[good_index_vtx, :3] - \
-                                                              node_assn_vtx[good_index_vtx]) / \
-                                    (torch.abs(node_assn_vtx[good_index_vtx]) + \
+                                                              vtx_scatter_label[good_index_vtx]) / \
+                                    (torch.abs(vtx_scatter_label[good_index_vtx]) + \
                                      torch.abs(vtx_scatter[good_index_vtx, :3]))))/3.
 
         out =  (loss,

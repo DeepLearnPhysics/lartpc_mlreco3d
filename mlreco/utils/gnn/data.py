@@ -3,10 +3,13 @@ import numpy as np
 import numba as nb
 import torch
 
-from mlreco.utils.numba import numba_wrapper, unique_nb
+from typing import Tuple
 
-from .cluster import get_cluster_features, get_cluster_features_extended, get_cluster_features_normalized, get_cluster_features_extended_normalized
-from .network import get_cluster_edge_features, get_voxel_edge_features, get_cluster_edge_features_normalized
+from mlreco.utils.numba import numba_wrapper, unique_nb
+from mlreco.utils.ppn import get_track_endpoints_geo
+
+from .cluster import get_cluster_features, get_cluster_features_extended
+from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
 
 def cluster_features(data, clusts, extra=False, **kwargs):
@@ -154,6 +157,94 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_co
     return data, particles, merging_batch_id_list
 
 
+def _get_extra_gnn_features(fragments,
+                           frag_seg,
+                           classes,
+                           input,
+                           result,
+                           use_ppn=False,
+                           use_supp=False):
+    """
+    Extracting extra features to feed into the GNN particle aggregators
+
+    - PPN: Most likely PPN point for showers,
+            end points for tracks (+ direction estimate)
+    - Supplemental: Mean/RMS energy in the fragment + semantic class
+
+    Parameters
+    ==========
+    fragments: np.ndarray
+    frag_seg: np.ndarray
+    classes: list
+    input: list
+    result: dictionary
+    use_ppn: bool
+    use_supp: bool
+
+    Returns
+    =======
+    mask: np.ndarray
+        Boolean mask to select fragments belonging to one
+        of the requested classes.
+    kwargs: dictionary
+        Keys can include `points` (if `use_ppn` is `True`)
+        and `extra_feats` (if `use_supp` is True).
+    """
+    # Build a mask for the requested classes
+    mask = np.zeros(len(frag_seg), dtype=np.bool)
+    for c in classes:
+        mask |= (frag_seg == c)
+    mask = np.where(mask)[0]
+
+    #print("INPUT = ", input)
+
+    # If requested, extract PPN-related features
+    kwargs = {}
+    if use_ppn:
+        ppn_points = torch.empty((0,6), device=input[0].device,
+                                        dtype=torch.double)
+        points_tensor = result['points'][0].detach().double()
+        for i, f in enumerate(fragments[mask]):
+            if frag_seg[mask][i] == 1:
+                end_points = get_track_endpoints_geo(input[0], f, points_tensor)
+                ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
+            else:
+                dmask  = torch.nonzero(torch.max(
+                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
+                    as_tuple=True)[0]
+                # scores = torch.sigmoid(points_tensor[f, -1])
+                # argmax = dmask[torch.argmax(scores[dmask])] \
+                #          if len(dmask) else torch.argmax(scores)
+                scores = torch.softmax(points_tensor[f, -2:], dim=1)
+                argmax = dmask[torch.argmax(scores[dmask, -1])] \
+                            if len(dmask) else torch.argmax(scores[:, -1])
+                start  = input[0][f][argmax,1:4] + \
+                            points_tensor[f][argmax,:3] + 0.5
+                ppn_points = torch.cat((ppn_points,
+                    torch.cat([start, start]).reshape(1,-1)), dim=0)
+
+        kwargs['points'] = ppn_points
+
+    # If requested, add energy and semantic related features
+    if use_supp:
+        supp_feats = torch.empty((0,3), device=input[0].device,
+                                        dtype=torch.float)
+        for i, f in enumerate(fragments[mask]):
+            values = torch.cat((input[0][f,4].mean().reshape(1),
+                                input[0][f,4].std().reshape(1))).float()
+            if torch.isnan(values[1]): # Handle size-1 particles
+                values[1] = input[0][f,4] - input[0][f,4]
+            sem_type = torch.tensor([frag_seg[mask][i]],
+                                    dtype=torch.float,
+                                    device=input[0].device)
+            supp_feats = torch.cat((supp_feats,
+                torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
+
+        kwargs['extra_feats'] = supp_feats
+
+    return mask, kwargs
+
+
 @numba_wrapper(list_args=['clusts'])
 def split_clusts(clusts, batch_ids, batches, counts):
     """
@@ -179,7 +270,7 @@ def split_clusts(clusts, batch_ids, batches, counts):
 def _split_clusts(clusts: nb.types.List(nb.int64[:]),
                   batch_ids: nb.int64[:],
                   batches: nb.int64[:],
-                  counts: nb.int64[:]) -> (nb.types.List(nb.types.List(nb.int64[:])), nb.types.List(nb.int64[:])):
+                  counts: nb.int64[:]) -> Tuple[nb.types.List(nb.types.List(nb.int64[:])), nb.types.List(nb.int64[:])]:
 
     # Get the batchwise voxel IDs for all pixels in the clusters
     cvids = np.empty(np.sum(counts), dtype=np.int64)
@@ -198,7 +289,7 @@ def _split_clusts(clusts: nb.types.List(nb.int64[:]),
 @nb.njit(cache=True)
 def split_edge_index(edge_index: nb.int64[:,:],
                      batch_ids: nb.int64[:],
-                     batches: nb.int64[:]) -> (nb.types.List(nb.int64[:,:]), nb.types.List(nb.int64[:])):
+                     batches: nb.int64[:]) -> Tuple[nb.types.List(nb.int64[:,:]), nb.types.List(nb.int64[:])]:
     """
     Splits a batched list of edges into individual
     lists of edges, one per batch ID.

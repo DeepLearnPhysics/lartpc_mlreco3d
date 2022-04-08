@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from torch_scatter import scatter_min
 
-from mlreco.utils.gnn.data import cluster_features, cluster_edge_features, normed_cluster_features, normed_cluster_edge_features
+from mlreco.utils.gnn.data import cluster_features, cluster_edge_features
 
 class ClustGeoNodeEncoder(torch.nn.Module):
     """
