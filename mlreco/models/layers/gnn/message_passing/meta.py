@@ -63,6 +63,7 @@ class MetaLayerModel(nn.Module):
         self.edge_predictor = nn.Linear(edge_output, self.edge_classes)
 
     def forward(self, node_features, edge_indices, edge_features, xbatch):
+
         x = node_features.view(-1, self.node_input)
         e = edge_features.view(-1, self.edge_input)
 

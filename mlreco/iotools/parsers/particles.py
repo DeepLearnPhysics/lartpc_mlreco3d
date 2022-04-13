@@ -125,7 +125,7 @@ def parse_neutrino_asis(data):
         schema:
           segment_label:
             - parse_neutrino_asis
-            - neutrino_pcluster
+            - neutrino_mpv
             - cluster3d_pcluster
 
     Configuration

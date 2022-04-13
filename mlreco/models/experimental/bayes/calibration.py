@@ -3,18 +3,6 @@ import torch
 import torch.nn as nn
 
 
-class ECELoss(nn.Module):
-    '''
-    Calculates Expected Calibration Error of a model. 
-    '''
-    pass
-
-class MCELoss(nn.Module):
-    '''
-    Calculates Maximum Calibration Error of a model. 
-    '''
-    pass
-
 def calibrator_dict():
 
     models = {

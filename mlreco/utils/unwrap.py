@@ -248,11 +248,13 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 if not d.shape[0] in element_map:
                     if len(d.shape) < 2:
                         print(target, d.shape)
-
                     batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                     batch_idx = np.unique(d[:,batch_id_loc])
                     batch_ctrs.append(int(np.max(batch_idx)+1))
-                    assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
+                    try:
+                        assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
+                    except AssertionError:
+                        raise AssertionError("Result key {} is not included in concat_result".format(target))
                     where = [d[:,batch_id_loc] == b for b in range(batch_ctrs[-1])]
                     element_map[d.shape[0]] = where
         # print(batch_ctrs)

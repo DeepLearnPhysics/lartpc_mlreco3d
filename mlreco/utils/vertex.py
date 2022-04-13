@@ -11,11 +11,11 @@ def find_closest_points_of_approach(point1, direction1, point2, direction2):
     See also
     https://math.stackexchange.com/a/1993990/391047
     """
-    print(point1, point2)
+    #print(point1, point2)
     common_normal = np.cross(direction1, direction2)
     A = np.stack([direction1, - direction2, common_normal], axis=1)
     b = point2 - point1
-    print(A.shape, b.shape)
+    #print(A.shape, b.shape)
     x = np.linalg.solve(A, b)
     return point1 + x[0] * direction1, point2 + x[1] * direction2
 
@@ -126,12 +126,12 @@ def get_ppn_points_per_particles(input_data, res,
         # If it's a track also use geometry
         if c_seg == track_label:
             end_points = get_track_endpoints_geo(all_voxels, c, use_numpy=True)
-            print(end_points.shape)
+            #print(end_points.shape)
             end_points = np.concatenate([end_points, ppn[good_ppn_predictions, coords_col[0]:coords_col[1]]], axis=0)
         else:
             end_points = ppn[good_ppn_predictions, coords_col[0]:coords_col[1]]
         ppn_candidates.append(end_points)
-        print("getting ppn", c_idx, c_seg, "found points = ", len(end_points), d.min(axis=1).min())
+        #print("getting ppn", c_idx, c_seg, "found points = ", len(end_points), d.min(axis=1).min())
 
     c_indices = np.array(c_indices)
     if return_distances:
@@ -208,10 +208,10 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
         # that is closest to other primary particles in the interaction.
         for p_idx, points in enumerate(ppn_candidates):
             # No PPN point associated with this primary particle
-            print('Looking at ', c_indices[p_idx], len(c_candidates[p_idx]))
+            #print('Looking at ', c_indices[p_idx], len(c_candidates[p_idx]))
 
             if len(points) == 0:
-                print('no points')
+                # print(p_idx, len(c_candidates[p_idx]), ' no points')
                 continue
 
             current_pid = pid[c_indices[p_idx]]
@@ -233,7 +233,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             use_gamma_threshold = (pid[c_indices] != type_labels[22]).sum() <= 1
             for c_idx, c2 in enumerate(c_candidates):
                 if c_idx == p_idx: continue
-                print(c_idx, p_idx, use_gamma_threshold, pid[c_indices[c_idx]] == type_labels[22])
+                #print(c_idx, p_idx, use_gamma_threshold, pid[c_indices[c_idx]] == type_labels[22])
                 # Ignore photons
                 # if no_photon_count > 0 and pid[c_indices[c_idx]] == type_labels[22]: continue
                 if ~use_gamma_threshold and pid[c_indices[c_idx]] == type_labels[22]: continue
@@ -244,7 +244,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             distance_to_other_primaries = np.array(distance_to_other_primaries)
             points_to_other_primaries = np.concatenate(points_to_other_primaries, axis=1)
             #print(points_to_other_primaries.shape, len(points))
-            print(points_to_other_primaries)
+            #print(points_to_other_primaries)
             if len(distance_to_other_primaries) == 0: continue
 
             #d2 = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], other_primaries_coordinates)
@@ -263,13 +263,13 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             #
             use_gamma_threshold = (current_pid == type_labels[22]) or use_gamma_threshold
             if use_gamma_threshold and (other_primaries_gamma_threshold > -1) and (distance_to_other_primaries.min() >= other_primaries_gamma_threshold):
-                print('Skipping photon')
+                #print('Skipping photon')
                 continue
             elif (~use_gamma_threshold or other_primaries_gamma_threshold == -1) and (other_primaries_threshold > -1) and (distance_to_other_primaries.min() >= other_primaries_threshold):
-               print("Skipping", p_idx, (distance_to_other_primaries >= other_primaries_threshold).sum(), len(distance_to_other_primaries), distance_to_other_primaries)
+               #print("Skipping", p_idx, (distance_to_other_primaries >= other_primaries_threshold).sum(), len(distance_to_other_primaries), distance_to_other_primaries)
                continue
 
-            print("best candidate distance = ", best_candidate_distance)
+            #print("best candidate distance = ", best_candidate_distance)
 
             if best_candidate_distance < inter_threshold:
                 # FIXME pick one or all of the points below threshold ?
@@ -277,7 +277,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
                 d = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], [points[candidate_distances.argmin()]])
                 X = all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]][d.reshape((-1,)) < pca_radius]
                 directions.append(pca.fit(X).components_[0][None, :])
-                print("candidate ", ppn_candidates2[-1], np.sum(np.abs(points_to_other_primaries), axis=1).min())
+                #print("candidate ", ppn_candidates2[-1], np.sum(np.abs(points_to_other_primaries), axis=1).min())
 
         #ppn_candidates = ppn_candidates2
         #print('now again', len(ppn_candidates))
@@ -291,7 +291,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
     if len(ppn_candidates2):
         ppn_candidates2 = np.concatenate(ppn_candidates2, axis=0)
         directions = np.concatenate(directions, axis=0)
-        print("ppn_candidates", ppn_candidates2[:, :4], ppn_candidates2.shape)
+        # print("ppn_candidates", ppn_candidates2[:, :4], ppn_candidates2.shape)
 
         if len(ppn_candidates2) > 1:
             closest_points = []
@@ -304,7 +304,6 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             closest_points = np.stack(closest_points)
         else:
             closest_points = ppn_candidates2
-        print('closest points', closest_points)
         # Refine with dbscan to eliminate ppn candidates that are
         # far away (e.g. middle of a track)
         # ppn_candidates_group = DBSCAN(eps=7, min_samples=1).fit(ppn_candidates[:, :3]).labels_

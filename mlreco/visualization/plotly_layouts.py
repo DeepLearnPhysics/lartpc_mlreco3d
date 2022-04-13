@@ -69,8 +69,11 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
     return fig
 
 
-def trace_particles(particles, color='id', size=1,
-                    scatter_ppn=False, highlight_primaries=False, colorscale='rainbow'):
+def trace_particles(particles, color='id', size=1, 
+                    scatter_points=False, 
+                    scatter_ppn=False, 
+                    highlight_primaries=False, 
+                    colorscale='rainbow'):
     '''
     Get Scatter3d traces for a list of <Particle> instances.
     Each <Particle> will be drawn with the color specified
@@ -110,20 +113,47 @@ def trace_particles(particles, color='id', size=1,
                        name='Particle {}'.format(p.id)
                               )
         traces.append(plot)
-        if scatter_ppn and p.is_primary:
-            plot = go.Scatter3d(x=p.ppn_candidates[:,0],
-                y=p.ppn_candidates[:,1],
-                z=p.ppn_candidates[:,2],
-                mode='markers',
-                marker=dict(
-                    size=3,
-                    color=c,
-                    line=dict(width=2, color='red'),
-                    cmin=cmin, cmax=cmax,
-                    colorscale=colorscale,
-                    opacity=0.5),
-                    hovertext=p.ppn_candidates[:, 4],
-                name='PPN {}'.format(p.id))
+        if scatter_points:
+            if hasattr(p, 'startpoint'):
+                plot = go.Scatter3d(x=np.array([p.startpoint[0]]), 
+                    y=np.array([p.startpoint[1]]), 
+                    z=np.array([p.startpoint[2]]),
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='Startpoint {}'.format(p.id))
+                traces.append(plot)
+            if hasattr(p, 'endpoint'):
+                plot = go.Scatter3d(x=np.array([p.endpoint[0]]), 
+                    y=np.array([p.endpoint[1]]), 
+                    z=np.array([p.endpoint[2]]),
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # line=dict(width=2, color='red'),
+                        # cmin=cmin, cmax=cmax,
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='Endpoint {}'.format(p.id))
+                traces.append(plot)
+        elif scatter_ppn:
+            plot = go.Scatter3d(x=p.ppn_candidates[:, 0], 
+                    y=p.ppn_candidates[:, 1], 
+                    z=p.ppn_candidates[:, 2],
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='PPN {}'.format(p.id))
             traces.append(plot)
     return traces
 
