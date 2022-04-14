@@ -9,41 +9,30 @@ from ..classes.particle import Particle
 def match_points_to_particles(ppn_points : np.ndarray,
                               particles : List[Particle],
                               semantic_type=None, ppn_distance_threshold=2):
-    """Function for matching ppn points to particles. 
+    """Function for matching ppn points to particles.
 
     For each particle, match ppn_points that have hausdorff distance
     less than <threshold> and inplace update particle.ppn_candidates
 
-<<<<<<< HEAD
     If semantic_type is set to a class integer value,
     points will be matched to particles with the same
     predicted semantic type.
 
-    Inputs:
-        - ppn_points (N x 4 np.array): (coords, point_type) array
-        - particles: list of Particles
-=======
-    If semantic_type is set to a class integer value, 
-    points will be matched to particles with the same 
-    predicted semantic type. 
-    
     Parameters
     ----------
     ppn_points : (N x 4 np.array)
-        PPN point array with (coords, point_type) 
+        PPN point array with (coords, point_type)
     particles : list of <Particle> objects
-        List of particles for which to match ppn points. 
+        List of particles for which to match ppn points.
     semantic_type: int
         If set to an integer, only match ppn points with prescribed
         semantic type
     ppn_distance_threshold: int or float
-        Maximum distance required to assign ppn point to particle. 
+        Maximum distance required to assign ppn point to particle.
 
     Returns
     -------
         None (operation is in-place)
->>>>>>> upstream/develop
-
     """
     if semantic_type is not None:
         ppn_points_type = ppn_points[ppn_points[:, -1] == semantic_type]
@@ -56,23 +45,14 @@ def match_points_to_particles(ppn_points : np.ndarray,
         dist = cdist(ppn_coords, particle.points)
         matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
         particle.ppn_candidates = matches
-<<<<<<< HEAD
 
-
-=======
-        
 # Deprecated
->>>>>>> upstream/develop
 def get_track_endpoints(particle : Particle, verbose=False):
     """Function for getting endpoints of tracks (DEPRECATED)
 
     Using ppn_candiates attached to <Particle>, get two
     endpoints of tracks by farthest distance from the track's
-<<<<<<< HEAD
     spatial centroid.
-    '''
-=======
-    spatial centroid. 
 
     Parameters
     ----------
@@ -80,15 +60,14 @@ def get_track_endpoints(particle : Particle, verbose=False):
         Track particle for which to obtain endpoint coordinates
     verbose : bool
         If set to True, output print message indicating whether
-        particle has no or only one PPN candidate. 
-    
+        particle has no or only one PPN candidate.
+
     Returns
     -------
     endpoints : (2, 3) np.array
         Xyz coordinates of two endpoints predicted or manually found
-        by network.     
+        by network.
     """
->>>>>>> upstream/develop
     if verbose:
         print("Found {} PPN candidate points for particle {}".format(
             particle.ppn_candidates.shape[0], particle.id))
@@ -119,14 +98,10 @@ def get_track_endpoints(particle : Particle, verbose=False):
 
 
 def get_track_endpoints_centroid(particle):
-    """Helper function for getting track endpoints. 
+    """Helper function for getting track endpoints.
 
     Computes track endpoints without ppn predictions by
-<<<<<<< HEAD
     selecting the farthest two points from the coordinate centroid.
-    '''
-=======
-    selecting the farthest two points from the coordinate centroid. 
 
     Parameters
     ----------
@@ -136,9 +111,8 @@ def get_track_endpoints_centroid(particle):
     -------
     endpoints : (2, 3) np.array
         Xyz coordinates of two endpoints predicted or manually found
-        by network.  
+        by network.
     """
->>>>>>> upstream/develop
     coords = particle.points
     centroid = coords.mean(axis=0)
     dist = cdist(coords, centroid.reshape(1, -1))
@@ -153,11 +127,7 @@ def get_shower_startpoint(particle : Particle, verbose=False):
     """Function for getting startpoint of EM showers. (DEPRECATED)
 
     Using ppn_candiates attached to <Particle>, get one
-<<<<<<< HEAD
     startpoint of shower by nearest hausdorff distance.
-    '''
-=======
-    startpoint of shower by nearest hausdorff distance. 
 
     Parameters
     ----------
@@ -165,16 +135,15 @@ def get_shower_startpoint(particle : Particle, verbose=False):
         Track particle for which to obtain endpoint coordinates
     verbose : bool
         If set to True, output print message indicating whether
-        particle has no or only one PPN candidate. 
+        particle has no or only one PPN candidate.
 
     Returns
     -------
 
     endpoints : (2, 3) np.array
         Xyz coordinates of two endpoints predicted or manually found
-        by network.    
+        by network.
     """
->>>>>>> upstream/develop
     if particle.semantic_type != 0:
         raise AttributeError(
             "Particle {} has type {}, can only give"\

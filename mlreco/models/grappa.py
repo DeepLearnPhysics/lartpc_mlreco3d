@@ -66,7 +66,7 @@ class GNN(torch.nn.Module):
             name: <name of the node encoder>
             <dictionary of arguments to pass to the encoder>
             model_path      : <path to the encoder weights>
-            
+
     edge_encoder: dict
 
         .. code-block:: yaml
@@ -205,8 +205,8 @@ class GNN(torch.nn.Module):
                                                               eps=softplus_and_shift,
                                                               logspace=logspace)
                 else:
-                    self.momentum_net = MomentumNet(node_output_feats, 
-                                                    num_output=1, 
+                    self.momentum_net = MomentumNet(node_output_feats,
+                                                    num_output=1,
                                                     num_hidden=momentum_config.get('num_hidden', 128))
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
@@ -214,15 +214,16 @@ class GNN(torch.nn.Module):
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
             vertex_config = cfg[name].get('vertex_net', {'name': 'momentum_net'})
             self.use_vtx_input_features = vertex_config.get('use_vtx_input_features', False)
-            if vertex_config['name'] == 'momentum_net':
-                self.vertex_net = VertexNet(node_output_feats, 
-                                              num_output=5, 
+            vertex_net_name = vertex_config.get('name', 'momentum_net')
+            if vertex_net_name == 'momentum_net':
+                self.vertex_net = VertexNet(node_output_feats,
+                                              num_output=5,
                                               num_hidden=vertex_config.get('num_hidden', 64)) # Enforce positive outputs
-            elif vertex_config['name'] == 'attention_net':
+            elif vertex_net_name == 'attention_net':
                 self.vertex_net = TransformerEncoderLayer(node_output_feats, 3, **vertex_config)
-            elif vertex_config['name'] == 'deep_vertex_net':
-                self.vertex_net = DeepVertexNet(node_output_feats, 
-                                                  num_output=5, 
+            elif vertex_net_name == 'deep_vertex_net':
+                self.vertex_net = DeepVertexNet(node_output_feats,
+                                                  num_output=5,
                                                   num_hidden=vertex_config.get('num_hidden', 64),
                                                   num_layers=vertex_config.get('num_layers', 5)) # Enforce positive outputs
             else:
@@ -264,9 +265,9 @@ class GNN(torch.nn.Module):
             if hasattr(self, 'dbscan'):
                 clusts = self.dbscan(cluster_data, points=particles if len(data) > 1 else None)
             else:
-                clusts = form_clusters(cluster_data.detach().cpu().numpy(), 
-                                       self.node_min_size, 
-                                       self.source_col, 
+                clusts = form_clusters(cluster_data.detach().cpu().numpy(),
+                                       self.node_min_size,
+                                       self.source_col,
                                        cluster_classes=self.node_type)
 
         # If requested, shuffle the order in which the clusters are listed (used for debugging)

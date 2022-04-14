@@ -126,12 +126,10 @@ def get_ppn_points_per_particles(input_data, res,
         # If it's a track also use geometry
         if c_seg == track_label:
             end_points = get_track_endpoints_geo(all_voxels, c, use_numpy=True)
-            #print(end_points.shape)
             end_points = np.concatenate([end_points, ppn[good_ppn_predictions, coords_col[0]:coords_col[1]]], axis=0)
         else:
             end_points = ppn[good_ppn_predictions, coords_col[0]:coords_col[1]]
         ppn_candidates.append(end_points)
-        #print("getting ppn", c_idx, c_seg, "found points = ", len(end_points), d.min(axis=1).min())
 
     c_indices = np.array(c_indices)
     if return_distances:
@@ -233,7 +231,6 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             use_gamma_threshold = (pid[c_indices] != type_labels[22]).sum() <= 1
             for c_idx, c2 in enumerate(c_candidates):
                 if c_idx == p_idx: continue
-                #print(c_idx, p_idx, use_gamma_threshold, pid[c_indices[c_idx]] == type_labels[22])
                 # Ignore photons
                 # if no_photon_count > 0 and pid[c_indices[c_idx]] == type_labels[22]: continue
                 if ~use_gamma_threshold and pid[c_indices[c_idx]] == type_labels[22]: continue
@@ -244,7 +241,6 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             distance_to_other_primaries = np.array(distance_to_other_primaries)
             points_to_other_primaries = np.concatenate(points_to_other_primaries, axis=1)
             #print(points_to_other_primaries.shape, len(points))
-            #print(points_to_other_primaries)
             if len(distance_to_other_primaries) == 0: continue
 
             #d2 = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], other_primaries_coordinates)
@@ -277,7 +273,6 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
                 d = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], [points[candidate_distances.argmin()]])
                 X = all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]][d.reshape((-1,)) < pca_radius]
                 directions.append(pca.fit(X).components_[0][None, :])
-                #print("candidate ", ppn_candidates2[-1], np.sum(np.abs(points_to_other_primaries), axis=1).min())
 
         #ppn_candidates = ppn_candidates2
         #print('now again', len(ppn_candidates))

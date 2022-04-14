@@ -384,7 +384,7 @@ class FullChainPredictor:
         for i, p in enumerate(fragments):
             voxels = point_cloud[p]
             seg_label = fragments_seg[i]
-            part = ParticleFragment(voxels, i, seg_label, 
+            part = ParticleFragment(voxels, i, seg_label,
                             interaction_id=inter_ids[i],
                             group_id=group_ids[i],
                             image_id=entry,
@@ -426,7 +426,7 @@ class FullChainPredictor:
         # Check primaries and assign ppn points
         if only_primaries:
             out = [p for p in out if p.is_primary]
-        
+
         if semantic_type is not None:
             out = [p for p in out if p.semantic_type == semantic_type]
 
@@ -529,7 +529,7 @@ class FullChainPredictor:
         match_points_to_particles(ppn_results, out,
             ppn_distance_threshold=attaching_threshold)
 
-        # Attach startpoint and endpoint 
+        # Attach startpoint and endpoint
         # as done in full chain geometric encoder
         for p in out:
             if p.size < min_particle_voxel_count:
@@ -565,7 +565,7 @@ class FullChainPredictor:
             Batch number to retrieve example.
         drop_nonprimary_particles: bool (optional)
             If True, all non-primary particles will not be included in
-            the output interactions' .particle attribute. 
+            the output interactions' .particle attribute.
 
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
@@ -922,7 +922,9 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def match_interactions(self, entry, mode='pred_to_true',
-                           drop_nonprimary_particles=True, match_particles=True, return_counts=False):
+                           drop_nonprimary_particles=True,
+                           match_particles=True,
+                           return_counts=False, **kwargs):
         if mode == 'pred_to_true':
             ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
             ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
@@ -933,7 +935,7 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).")
 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, **kwargs)
 
         if match_particles:
             for interactions in matched_interactions:
