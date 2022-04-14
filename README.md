@@ -32,8 +32,8 @@ process_config(cfg)
 train(cfg)
 ```
 
-Some tutorials are available at https://deeplearnphysics.org/lartpc_mlreco3d_tutorials/. More technical documentation is
-available at https://lartpc-mlreco3d.readthedocs.io/.
+* Some tutorials are available at https://deeplearnphysics.org/lartpc_mlreco3d_tutorials/.
+* More technical documentation is available at https://lartpc-mlreco3d.readthedocs.io/.
 
 ### Example Configuration Files
 

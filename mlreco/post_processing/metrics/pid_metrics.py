@@ -11,9 +11,10 @@ from mlreco.post_processing.common import extent
 
 @post_processing('pid-metrics',
                 ['kinematics'],
-                ['clusts', 'node_pred_type'])
+                ['inter_particles', 'node_pred_type'])
 def pid_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        data_idx=None, kinematics=None, clusts=None,
+                        data_idx=None, kinematics=None,
+                        inter_particles=None,
                         node_pred_type=None,
                         counter=None, **kwargs):
     """
@@ -39,7 +40,7 @@ def pid_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     spatial_size = module_cfg.get('spatial_size', 768)
     coords_col = module_cfg.get('coords_col', (1, 4))
 
-    pred_particles = clusts[data_idx]
+    pred_particles = inter_particles[data_idx]
     node_pred_type = node_pred_type[data_idx] if node_pred_type is not None else None
 
     node_true_type = get_cluster_label(kinematics[data_idx], pred_particles, column=7) # pdg label

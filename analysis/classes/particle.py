@@ -11,7 +11,7 @@ from pprint import pprint
 
 class Particle:
     '''
-    Data Structure for managing Particle-level 
+    Data Structure for managing Particle-level
     full chain output information
 
     Attributes
@@ -28,11 +28,11 @@ class Particle:
         Numeric integer indices of voxel positions of this particle
         with respect to the total array of point in a single image.
     semantic_type: int
-        Semantic type (shower fragment (0), track (1), 
-        michel (2), delta (3), lowE (4)) of this particle. 
+        Semantic type (shower fragment (0), track (1),
+        michel (2), delta (3), lowE (4)) of this particle.
     pid: int
-        PDG Type (Photon (0), Electron (1), Muon (2), 
-        Charged Pion (3), Proton (4)) of this particle. 
+        PDG Type (Photon (0), Electron (1), Muon (2),
+        Charged Pion (3), Proton (4)) of this particle.
     pid_conf: float
         Softmax probability score for the most likely pid prediction
     interaction_id: int
@@ -44,9 +44,9 @@ class Particle:
     match: List[int]
         List of TruthParticle IDs for which this particle is matched to
 
-    startpoint: (1,3) np.array 
+    startpoint: (1,3) np.array
         (1, 3) array of particle's startpoint, if it could be assigned
-    endpoint: (1,3) np.array 
+    endpoint: (1,3) np.array
         (1, 3) array of particle's endpoint, if it could be assigned
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id,
@@ -102,7 +102,7 @@ class Particle:
 
 class ParticleFragment(Particle):
     '''
-    Data structure for managing fragment-level 
+    Data structure for managing fragment-level
     full chain output information
 
     Attributes
@@ -115,9 +115,9 @@ class ParticleFragment(Particle):
     group_id: int
         Group ID (alias for Particle ID) for which this fragment belongs to.
     is_primary: bool
-        If True, then this particle fragment corresponds to 
+        If True, then this particle fragment corresponds to
         a primary ionization trajectory within the group of fragments that
-        compose a particle. 
+        compose a particle.
     '''
     def __init__(self, coords, fragment_id, semantic_type, interaction_id,
                  group_id, image_id=0, voxel_indices=None,
@@ -157,7 +157,7 @@ class ParticleFragment(Particle):
 
 class TruthParticle(Particle):
     '''
-    Data structure mirroring <Particle>, reserved for true particles 
+    Data structure mirroring <Particle>, reserved for true particles
     derived from true labels / true MC information.
 
     Attributes
@@ -170,11 +170,13 @@ class TruthParticle(Particle):
     match: List[int]
         List of Particle IDs that match to this TruthParticle
     '''
-    def __init__(self, *args, particle_asis=None, **kwargs):
+    def __init__(self, *args, particle_asis=None, coords_noghost=None, depositions_noghost=None, **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
         self.asis = particle_asis
         self.match = []
         self._match_counts = {}
+        self.coords_noghost = coords_noghost
+        self.depositions_noghost = depositions_noghost
 
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
@@ -209,7 +211,7 @@ class TruthParticle(Particle):
 class Interaction:
     """
     Data structure for managing interaction-level
-    full chain output information. 
+    full chain output information.
 
     Attributes
     ----------
@@ -223,8 +225,8 @@ class Interaction:
         Label indicating whether this interaction is a neutrino interaction
         WARNING: The nu_id label is most likely unreliable. Don't use this
         in reconstruction (used for debugging)
-    num_particles: int 
-        total number of particles in this interaction. 
+    num_particles: int
+        total number of particles in this interaction.
     """
     def __init__(self, interaction_id, particles, vertex=None, nu_id=-1):
         self.id = interaction_id
@@ -259,14 +261,14 @@ class Interaction:
         self.nu_id = nu_id
 
         self.particle_ids = [p.id for p in self.particles]
-        self.particle_counts = Counter({ i : 0 for i in range(len(self.pid_keys))})
-        self.particle_counts.update([p.pid for p in self.particles])
+        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.particle_counts.update([self.pid_keys[p.pid] for p in self.particles])
 
-        self.primary_particle_counts = Counter({ i : 0 for i in range(len(self.pid_keys))})
-        self.primary_particle_counts.update([p.pid for p in self.particles if p.is_primary])
+        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self.particles if p.is_primary])
 
         if sum(self.primary_particle_counts.values()) == 0:
-            print("Interaction {} has no primary particles!".format(self.id))
+            # print("Interaction {} has no primary particles!".format(self.id))
             self.is_valid = False
         else:
             self.is_valid = True
@@ -299,7 +301,7 @@ class Interaction:
 
 class TruthInteraction(Interaction):
     """
-    Analogous data structure for Interactions retrieved from true labels. 
+    Analogous data structure for Interactions retrieved from true labels.
     """
     def __init__(self, *args, **kwargs):
         super(TruthInteraction, self).__init__(*args, **kwargs)
@@ -325,7 +327,7 @@ class TruthInteraction(Interaction):
 
 def matrix_counts(particles_x, particles_y):
     """Function for computing the M x N overlap matrix by counts.
-    
+
     Parameters
     ----------
     particles_x: List[Particle]
@@ -333,7 +335,7 @@ def matrix_counts(particles_x, particles_y):
     particles_y: List[Particle]
         List of M particles to match with <particles_x>
 
-    Note the correspondence particles_x -> N and particles_y -> M. 
+    Note the correspondence particles_x -> N and particles_y -> M.
 
     Returns
     -------
@@ -350,8 +352,8 @@ def matrix_counts(particles_x, particles_y):
 def matrix_iou(particles_x, particles_y):
     """Function for computing the M x N overlap matrix by IoU.
 
-    Here IoU refers to Intersection-over-Union metric. 
-    
+    Here IoU refers to Intersection-over-Union metric.
+
     Parameters
     ----------
     particles_x: List[Particle]
@@ -359,7 +361,7 @@ def matrix_iou(particles_x, particles_y):
     particles_y: List[Particle]
         List of M particles to match with <particles_x>
 
-    Note the correspondence particles_x -> N and particles_y -> M. 
+    Note the correspondence particles_x -> N and particles_y -> M.
 
     Returns
     -------
@@ -386,40 +388,40 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     particles_from: List[Particle] or List[TruthParticle]
         List of particles to loop over during matching procedure.
     particles_to: List[Particle] or List[TruthParticle]
-        List of particles to match a given particle from <particles_from>. 
+        List of particles to match a given particle from <particles_from>.
 
     min_overlap: int, float, or List[int]/List[float]
         Minimum required overlap value (float for IoU, int for counts)
-        for a valid particle-particle match pair. 
+        for a valid particle-particle match pair.
 
         If min_overlap is a list with same length as <num_classes>,
         a minimum overlap value will be applied separately
-        for different classes. 
+        for different classes.
 
         Example
         -------
-        match_particles_fn(parts_from, parts_to, 
-                           min_overlap=[0.9, 0.9, 0.99, 0.99], 
+        match_particles_fn(parts_from, parts_to,
+                           min_overlap=[0.9, 0.9, 0.99, 0.99],
                            num_classes=4)
         -> This applies a minimum overlap cut of 0.9 IoU for class labels 0
-        and 1, and a cut of 0.99 IoU for class labels 2 and 3. 
+        and 1, and a cut of 0.99 IoU for class labels 2 and 3.
 
     num_classes: int
         Total number of semantic classes (or any other label).
         This is used for setting <min_overlap> to differ across different
-        semantic labels, for example. 
+        semantic labels, for example.
 
     verbose: bool
-        If True, print a message when a given particle has no match. 
+        If True, print a message when a given particle has no match.
 
     overlap_mode: str
         Supported modes:
-        
+
         'iou': overlap matrix is constructed from computing the
-        intersection-over-union metric. 
+        intersection-over-union metric.
 
         'counts': overlap matrix is constructed from counting the number
-        of shared voxels. 
+        of shared voxels.
 
 
     Returns
@@ -430,7 +432,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     idx: np.array of ints
         Index of matched particles
     intersections: np.array of floats/ints
-        IoU/Count information for each matches. 
+        IoU/Count information for each matches.
     '''
 
     particles_x, particles_y = particles_from, particles_to
@@ -487,7 +489,7 @@ def match_interactions_fn(ints_from : List[Interaction],
                           ints_to : List[Interaction],
                           min_overlap=0, verbose=False):
     """
-    Same as <match_particles_fn>, but for lists of interactions. 
+    Same as <match_particles_fn>, but for lists of interactions.
     """
     ints_x, ints_y = ints_from, ints_to
 
@@ -539,7 +541,7 @@ def group_particles_to_interactions_fn(particles : List[Particle],
         'pred': output list will contain <Interaction> instances
         'truth': output list will contain <TruthInteraction> instances.
 
-        Do not mix predicted interactions with TruthInteractions and 
+        Do not mix predicted interactions with TruthInteractions and
         interactions constructed from using labels with Interactions.
     """
     interactions = defaultdict(list)
