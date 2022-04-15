@@ -180,7 +180,7 @@ class GNN(torch.nn.Module):
             self.kinematics_momentum = base_config.get('kinematics_momentum', False)
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
-                type_net_mode = type_config.get('mode', 'edl')
+                type_net_mode = type_config.get('mode', 'standard')
                 if type_net_mode == 'standard':
                     self.type_net = MomentumNet(node_output_feats,
                                                 num_output=5,

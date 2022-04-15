@@ -373,6 +373,7 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.invert = cfg.get('invert', True)
         self.edge_loss = WeightedEdgeLoss(invert=self.invert, **self.edge_loss_cfg)
         self.is_eval = cfg['eval']
+        self.acc_fn = IoUScore()
 
     def forward(self, result, segment_label, cluster_label):
 
@@ -395,24 +396,8 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
             else:
                 pred = x >= 0
 
-            false_positives_index = pred & (y < 0.5)
-
-            false_positives = float(torch.sum(pred & (y < 0.5)))
-            false_negatives = float(torch.sum(~pred & (y > 0.5)))
-            true_positives = float(torch.sum(pred & (y > 0.5)))
-            true_negatives = float(torch.sum(~pred & (y < 0.5)))
-
-            tpr = true_positives / (true_positives + false_negatives)
-            tnr = true_negatives / (true_positives + false_positives)
-            fpr = 1 - tnr
-
-            balanced_accuracy = (tpr + tnr) / 2
-
-            # print('TPR = ', tpr)
-            # print('TNR = ', tnr)
-            # print('Balanced Accuracy = ', balanced_accuracy)
-            # print('False Positive Rate = ', fpr)
-            res['edge_accuracy'] = balanced_accuracy
+            iou = self.acc_fn(pred, edge_truth)
+            res['edge_accuracy'] = iou
         else:
             edge_loss = 0
         if 'loss' in res:
