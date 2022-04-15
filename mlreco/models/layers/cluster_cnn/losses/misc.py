@@ -101,6 +101,24 @@ class BinaryLogDiceLoss(torch.nn.Module):
         return -torch.log(dice)
 
 
+class IoUScore(torch.nn.Module):
+
+    def __init__(self):
+        super(IoUScore, self).__init__()
+
+    def forward(self, y_pred, y_true):
+
+        iou = 0
+        intersection = (y_pred == 1) & (y_true == 1)
+        union = (y_pred == 1) | (y_true == 1)
+        if not union:
+            iou = 0
+        else:
+            iou = float(intersection.sum()) / float(union.sum())
+
+        return iou
+
+
 class BinaryCELogDiceLoss(torch.nn.Module):
 
     def __init__(self, gamma=0.3, w_ce=0.2, w_dice=0.8):
