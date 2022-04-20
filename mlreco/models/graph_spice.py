@@ -275,13 +275,10 @@ class GraphSPICELoss(nn.Module):
         result['edge_index'] = [graph.edge_index]
         result['edge_truth'] = [graph.edge_truth]
 
-        if self.invert:
-            pred_labels = result['edge_score'][0] < 0.0
-        else:
-            pred_labels = result['edge_score'][0] >= 0.0
-
-        print("Pred Labels = ", pred_labels.sum(), pred_labels.shape)
-
+        # if self.invert:
+        #     pred_labels = result['edge_score'][0] < 0.0
+        # else:
+        #     pred_labels = result['edge_score'][0] >= 0.0
         # edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
 
         # print("Number of Wrong Edges = {} / {}".format(

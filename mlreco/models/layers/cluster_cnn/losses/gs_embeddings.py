@@ -396,7 +396,7 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
             edge_truth = torch.logical_not(edge_truth.long())
 
         iou = self.acc_fn(pred, edge_truth)
-        iou2 = self.acc_fn(~pred, ~edge_truth)
+        # iou2 = self.acc_fn(~pred, ~edge_truth)
 
         res['edge_accuracy'] = iou
         if 'loss' in res:
