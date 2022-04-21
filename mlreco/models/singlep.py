@@ -9,7 +9,6 @@ from mlreco.models.layers.common.activation_normalization_factories import activ
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss
-from mlreco.models.experimental.xai.simple_cnn import VGG16
 from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 
 class ParticleImageClassifier(nn.Module):
@@ -35,24 +34,6 @@ class ParticleImageClassifier(nn.Module):
         point_cloud, = input
         out = self.encoder(point_cloud)
         out = self.final_layer(out)
-        res = {
-            'logits': [out]
-        }
-        return res
-
-
-class SingleParticleVGG(nn.Module):
-
-    MODULES = ['vgg', 'network_base']
-
-    def __init__(self, cfg, name='vgg_classifier'):
-        super(SingleParticleVGG, self).__init__()
-        self.net = VGG16(cfg)
-
-    def forward(self, input):
-        point_cloud, = input
-        out = self.net(point_cloud)
-        # out = self.final_layer(out)
         res = {
             'logits': [out]
         }

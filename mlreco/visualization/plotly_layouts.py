@@ -13,31 +13,31 @@ def white_layout():
         margin=dict(r=20, l=20, b=20, t=20),
         plot_bgcolor='rgba(255,255,255,0)',
         paper_bgcolor='rgba(255,255,255,0)',
-        scene1=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
+        scene1=dict(xaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color, 
+                    yaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color, 
-                                    gridcolor=grid_color)),
-                    aspectmode='cube'),
-        scene2=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
-                                    gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color, 
-                                    gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color, 
+                    zaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
                     aspectmode='cube'),
-        scene3=dict(xaxis=dict(dict(backgroundcolor=bg_color, 
+        scene2=dict(xaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color, 
+                    yaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color, 
+                    zaxis=dict(dict(backgroundcolor=bg_color,
+                                    gridcolor=grid_color)),
+                    aspectmode='cube'),
+        scene3=dict(xaxis=dict(dict(backgroundcolor=bg_color,
+                                    gridcolor=grid_color)),
+                    yaxis=dict(dict(backgroundcolor=bg_color,
+                                    gridcolor=grid_color)),
+                    zaxis=dict(dict(backgroundcolor=bg_color,
                                     gridcolor=grid_color)),
                     aspectmode='cube'))
     return layout
 
 
-def dualplot(traces_left, traces_right, spatial_size=768, layout=None, 
+def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
              titles=['Left', 'Right']):
 
     if layout is None:
@@ -45,10 +45,10 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
 
     fig = make_subplots(rows=1, cols=2,
                         specs=[[{'type': 'scatter3d'}, {'type': 'scatter3d'}]],
-                        subplot_titles=(titles[0], titles[1]), 
+                        subplot_titles=(titles[0], titles[1]),
                         horizontal_spacing=0.05, vertical_spacing=0.04)
     fig.add_traces(traces_left, rows=[1]*len(traces_left), cols=[1]*len(traces_left))
-    fig.add_traces(traces_right, rows=[1]*len(traces_left), cols=[2]*len(traces_left))
+    fig.add_traces(traces_right, rows=[1]*len(traces_right), cols=[2]*len(traces_right))
 
     fig.layout = layout
     fig.update_layout(showlegend=True,
@@ -70,10 +70,13 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
 
 
 def trace_particles(particles, color='id', size=1, 
-                    scatter_ppn=False, highlight_primaries=False, colorscale='rainbow'):
+                    scatter_points=False, 
+                    scatter_ppn=False, 
+                    highlight_primaries=False, 
+                    colorscale='rainbow'):
     '''
     Get Scatter3d traces for a list of <Particle> instances.
-    Each <Particle> will be drawn with the color specified 
+    Each <Particle> will be drawn with the color specified
     by its unique particle ID.
 
     Inputs:
@@ -95,8 +98,8 @@ def trace_particles(particles, color='id', size=1,
                 opacity = 1
             else:
                 opacity = 0.01
-        plot = go.Scatter3d(x=p.points[:,0], 
-                            y=p.points[:,1], 
+        plot = go.Scatter3d(x=p.points[:,0],
+                            y=p.points[:,1],
                             z=p.points[:,2],
                             mode='markers',
                             marker=dict(
@@ -110,20 +113,47 @@ def trace_particles(particles, color='id', size=1,
                        name='Particle {}'.format(p.id)
                               )
         traces.append(plot)
-        if scatter_ppn and p.is_primary:
-            plot = go.Scatter3d(x=p.ppn_candidates[:,0], 
-                y=p.ppn_candidates[:,1], 
-                z=p.ppn_candidates[:,2],
-                mode='markers',
-                marker=dict(
-                    size=3,
-                    color=c,
-                    line=dict(width=2, color='red'),
-                    cmin=cmin, cmax=cmax,
-                    colorscale=colorscale,
-                    opacity=0.5),
-                    hovertext=p.ppn_candidates[:, 4],
-                name='PPN {}'.format(p.id))
+        if scatter_points:
+            if hasattr(p, 'startpoint'):
+                plot = go.Scatter3d(x=np.array([p.startpoint[0]]), 
+                    y=np.array([p.startpoint[1]]), 
+                    z=np.array([p.startpoint[2]]),
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='Startpoint {}'.format(p.id))
+                traces.append(plot)
+            if hasattr(p, 'endpoint'):
+                plot = go.Scatter3d(x=np.array([p.endpoint[0]]), 
+                    y=np.array([p.endpoint[1]]), 
+                    z=np.array([p.endpoint[2]]),
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # line=dict(width=2, color='red'),
+                        # cmin=cmin, cmax=cmax,
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='Endpoint {}'.format(p.id))
+                traces.append(plot)
+        elif scatter_ppn:
+            plot = go.Scatter3d(x=p.ppn_candidates[:, 0], 
+                    y=p.ppn_candidates[:, 1], 
+                    z=p.ppn_candidates[:, 2],
+                    mode='markers',
+                    marker=dict(
+                        size=3,
+                        color='red',
+                        # colorscale=colorscale,
+                        opacity=1),
+                        # hovertext=p.ppn_candidates[:, 4],
+                    name='PPN {}'.format(p.id))
             traces.append(plot)
     return traces
 
@@ -131,7 +161,7 @@ def trace_particles(particles, color='id', size=1,
 def trace_interactions(interactions, color='id'):
     '''
     Get Scatter3d traces for a list of <Interaction> instances.
-    Each <Interaction> will be drawn with the color specified 
+    Each <Interaction> will be drawn with the color specified
     by its unique interaction ID.
 
     Inputs:
@@ -148,8 +178,8 @@ def trace_interactions(interactions, color='id'):
         for p in particles:
             voxels.append(p.points)
         voxels = np.vstack(voxels)
-        plot = go.Scatter3d(x=voxels[:,0], 
-                            y=voxels[:,1], 
+        plot = go.Scatter3d(x=voxels[:,0],
+                            y=voxels[:,1],
                             z=voxels[:,2],
                             mode='markers',
                             marker=dict(
@@ -200,19 +230,19 @@ def plotly_layout3d(ranges=None, titles=None, **kwargs):
         scene = dict(
             xaxis = dict(nticks=10, range = xrange, showticklabels=True,
                          title='x' if titles is None else titles[0],
-                         backgroundcolor=None, 
+                         backgroundcolor=None,
                          gridcolor="rgb(255, 255, 255)",
                          showbackground=True,
                         ),
             yaxis = dict(nticks=10, range = yrange, showticklabels=True,
                          title='y' if titles is None else titles[1],
-                         backgroundcolor=None, 
+                         backgroundcolor=None,
                          gridcolor="rgb(255, 255, 255)",
                          showbackground=True
                         ),
             zaxis = dict(nticks=10, range = zrange, showticklabels=True,
                          title='z' if titles is None else titles[2],
-                         backgroundcolor=None, 
+                         backgroundcolor=None,
                          gridcolor="rgb(255, 255, 255)",
                          showbackground=True,
                         ),

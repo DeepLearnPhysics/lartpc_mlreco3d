@@ -127,6 +127,7 @@ class FullChainGNN(torch.nn.Module):
             else:
                 part_primary_ids.append(g)
 
+
     def get_all_fragments(self, result, input):
         """
         Given geometric or CNN clustering results and (optional) true
@@ -196,7 +197,8 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred' : 'shower_node_pred',
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
-                           'group_pred': 'shower_group_pred'}
+                           'group_pred': 'shower_group_pred',
+                           'input_node_features': 'shower_node_features'}
             # shower_grappa_input = input
             # if self.use_true_fragments and 'points' not in kwargs:
             #     # Add true particle coords to input
@@ -226,7 +228,8 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred' : 'track_node_pred',
                            'edge_pred' : 'track_edge_pred',
                            'edge_index': 'track_edge_index',
-                           'group_pred': 'track_group_pred'}
+                           'group_pred': 'track_group_pred',
+                           'input_node_features': 'track_node_features'}
 
             self.run_gnn(self.grappa_track,
                          input,
@@ -299,7 +302,6 @@ class FullChainGNN(torch.nn.Module):
                     mask &= (frag_seg != c)
             # Append one particle per shower group
             if self.enable_gnn_shower:
-
                 self.select_particle_in_group(result, counts, b, particles,
                                             part_primary_ids,
                                             'shower_node_pred',
@@ -309,7 +311,6 @@ class FullChainGNN(torch.nn.Module):
                 mask &= (frag_seg != self._shower_id)
             # Append one particle per track group
             if self.enable_gnn_track:
-
                 self.select_particle_in_group(result, counts, b, particles,
                                             part_primary_ids,
                                             'track_node_pred',
@@ -320,7 +321,7 @@ class FullChainGNN(torch.nn.Module):
 
             # Append one particle per fragment that is not already accounted for
             particles.extend(fragments[mask])
-            part_primary_ids.extend(-np.ones(np.sum(mask)))
+            part_primary_ids.extend(-np.ones(np.sum(mask)).astype(int))
 
         same_length = np.all([len(p) == len(particles[0]) for p in particles])
         particles = np.array(particles,
@@ -435,8 +436,8 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred_type': 'node_pred_type',
                            'node_pred_p': 'node_pred_p',
                            'node_pred_vtx': 'node_pred_vtx',
-                           'input_node_features': 'input_node_features',
-                           'input_edge_features': 'input_edge_features'}
+                           'input_node_features': 'particle_node_features',
+                           'input_edge_features': 'particle_edge_features'}
 
             self.run_gnn(self.grappa_inter,
                          input,
@@ -521,7 +522,7 @@ class FullChainGNN(torch.nn.Module):
             batches, counts = torch.unique(input[0][:, self.batch_col], return_counts=True)
             # In case one of the events is "missing" and len(counts) < batch_size
             if len(counts) < self.batch_size:
-                new_counts = torch.zeros(batch_size, dtype=torch.int64, device=counts.device)
+                new_counts = torch.zeros(self.batch_size, dtype=torch.int64, device=counts.device)
                 new_counts[batches] = counts
                 counts = new_counts
 
@@ -955,25 +956,27 @@ def setup_chain_cfg(self, cfg):
     self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
 
-    print("Shower GNN: {}".format(self.enable_gnn_shower))
-    print("Track GNN: {}".format(self.enable_gnn_track))
-    print("Particle GNN: {}".format(self.enable_gnn_particle))
-    print("Interaction GNN: {}".format(self.enable_gnn_inter))
-    print("Kinematics GNN: {}".format(self.enable_gnn_kinematics))
-    print("Cosmic GNN: {}".format(self.enable_cosmic))
+    if self.verbose:
+        print("Shower GNN: {}".format(self.enable_gnn_shower))
+        print("Track GNN: {}".format(self.enable_gnn_track))
+        print("Particle GNN: {}".format(self.enable_gnn_particle))
+        print("Interaction GNN: {}".format(self.enable_gnn_inter))
+        print("Kinematics GNN: {}".format(self.enable_gnn_kinematics))
+        print("Cosmic GNN: {}".format(self.enable_cosmic))
 
     if (self.enable_gnn_shower or \
         self.enable_gnn_track or \
         self.enable_gnn_particle or \
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
-        msg = """
-        Since one of the GNNs are turned on, process_fragments is turned ON.
-        """
-        print(msg)
+        if self.verbose:
+            msg = """
+            Since one of the GNNs are turned on, process_fragments is turned ON.
+            """
+            print(msg)
         self.process_fragments = True
 
-    if self.process_fragments:
+    if self.process_fragments and self.verbose:
         msg = """
         Fragment processing is turned ON. When training CNN models from
          scratch, we recommend turning fragment processing OFF as without

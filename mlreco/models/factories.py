@@ -18,6 +18,7 @@ def model_dict():
     from . import bayes_uresnet
 
     from . import full_chain
+    from . import vertex
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -49,8 +50,8 @@ def model_dict():
         'evidential_dropout_singlep': (singlep.BayesianParticleClassifier, singlep.EvidentialLearningLoss),
         # Deep Single Pass Uncertainty Quantification
         'duq_singlep': (singlep.DUQParticleClassifier, singlep.MultiLabelCrossEntropy),
-        # Single Particle VGG
-        "single_particle_vgg": (singlep.SingleParticleVGG, singlep.ParticleTypeLoss),
+        # Vertex PPN
+        'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss)
     }
     return models
 

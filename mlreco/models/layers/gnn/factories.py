@@ -142,8 +142,6 @@ def node_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoNodeEncoder,
-        "geo_norm"  : geometric.NormedClustGeoNodeEncoder,
-        # "cnn2"      : ClustCNNNodeEncoder,
         "mix_debug" : mixed.ClustMixNodeEncoder,
         "cnn": ClustCNNMinkNodeEncoder
     }
@@ -166,7 +164,6 @@ def edge_encoder_dict():
 
     encoders = {
         "geo"       : geometric.ClustGeoEdgeEncoder,
-        # "cnn2"      : ClustCNNEdgeEncoder,
         "mix_debug" : mixed.ClustMixEdgeEncoder,
         "cnn": ClustCNNMinkEdgeEncoder
     }
@@ -188,6 +185,7 @@ def node_loss_dict():
     losses = {
         "kinematics"     : node_kinematics.NodeKinematicsLoss,
         "kinematics_edl" : node_kinematics.NodeEvidentialKinematicsLoss,
+        "kinematics_attn": node_kinematics.NodeTransformerLoss,
         "primary"        : node_primary.NodePrimaryLoss,
         "type"           : node_type.NodeTypeLoss
     }

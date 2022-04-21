@@ -303,6 +303,7 @@ def _get_cluster_edge_features(data: nb.float32[:,:],
 
     return feats
 
+
 @nb.njit(cache=True)
 def _get_cluster_edge_features_vec(data: nb.float32[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
@@ -350,6 +351,7 @@ def get_voxel_edge_features(data, edge_index, batch_col=0, coords_col=(1, 4)):
         np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
     return _get_voxel_edge_features(data, edge_index, batch_col=batch_col, coords_col=coords_col)
+
 
 @nb.njit(parallel=True, cache=True)
 def _get_voxel_edge_features(data: nb.float32[:,:],
