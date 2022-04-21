@@ -109,9 +109,9 @@ class IoUScore(torch.nn.Module):
     def forward(self, y_pred, y_true):
 
         iou = 0
-        intersection = (y_pred == 1) & (y_true == 1)
-        union = (y_pred == 1) | (y_true == 1)
-        if not union:
+        intersection = (y_pred.long() == 1) & (y_true.long() == 1)
+        union = (y_pred.long() == 1) | (y_true.long() == 1)
+        if not union.any():
             iou = 0
         else:
             iou = float(intersection.sum()) / float(union.sum())
@@ -142,7 +142,7 @@ class BinaryCELogDiceLoss(torch.nn.Module):
         denom = (p**2).sum() + (targets**2).sum()
         dice = torch.clamp((num + eps) / (denom + eps), min=eps, max=1-eps)
         dice_loss = -torch.log(dice)
-        # print("CE = {}, Dice = {}".format(bce, dice_loss))
+        # print("CE = {}, Dice = {} ({})".format(bce, dice_loss, dice))
         return self.w_ce * bce + self.w_dice * dice_loss
 
 

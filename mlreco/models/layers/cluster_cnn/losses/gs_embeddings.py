@@ -44,6 +44,7 @@ class WeightedEdgeLoss(nn.Module):
         #     num_edges = y.shape[0]
         #     w = 1.0 / (1.0 - float(num_pos) / num_edges)
         #     weight[~y.bool()] = w
+        # print(logits.shape, logits.max())
         loss = self.loss_fn(logits, y.float(), weight=weight)
         return loss
 
@@ -372,7 +373,7 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.edge_loss_cfg = self.loss_config.get('edge_loss_cfg', {})
         self.invert = cfg.get('invert', True)
         self.edge_loss = WeightedEdgeLoss(invert=self.invert, **self.edge_loss_cfg)
-        self.is_eval = cfg['eval']
+        # self.is_eval = cfg['eval']
         self.acc_fn = IoUScore()
 
     def forward(self, result, segment_label, cluster_label):
@@ -383,23 +384,21 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         # print(result)
         edge_score = result['edge_score'][0].squeeze()
 
-        if not self.is_eval:
-            edge_truth = result['edge_truth'][0]
-            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
-            edge_loss = edge_loss.mean()
+        edge_truth = result['edge_truth'][0]
+        edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
+        edge_loss = edge_loss.mean()
 
-            x = edge_score.squeeze()
-            y = edge_truth
+        x = edge_score.squeeze()
 
-            if self.invert:
-                pred = x < 0
-            else:
-                pred = x >= 0
+        pred = x >= 0
 
-            iou = self.acc_fn(pred, edge_truth)
-            res['edge_accuracy'] = iou
-        else:
-            edge_loss = 0
+        if self.invert:
+            edge_truth = torch.logical_not(edge_truth.long())
+
+        iou = self.acc_fn(pred, edge_truth)
+        # iou2 = self.acc_fn(~pred, ~edge_truth)
+
+        res['edge_accuracy'] = iou
         if 'loss' in res:
             res['loss'] += edge_loss
         else:

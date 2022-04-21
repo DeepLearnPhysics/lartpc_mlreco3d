@@ -245,10 +245,9 @@ class ClusterGraphConstructor:
                 graph_id += 1
                 self._info.append(graph_id_key)
 
-                if self.training:
-                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                    truth = self.get_edge_truth(edge_indices, frag_labels)
-                    data.edge_truth = truth
+                frag_labels = labels_batch[class_mask][:, self.cluster_col]
+                truth = self.get_edge_truth(edge_indices, frag_labels)
+                data.edge_truth = truth
                 data_list.append(data)
             index += 1
 
@@ -311,11 +310,9 @@ class ClusterGraphConstructor:
                                     GraphID=graph_id)
                 graph_id += 1
                 self._info.append(graph_id_key)
-
-                if self.training:
-                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                    truth = self.get_edge_truth(edge_indices, frag_labels)
-                    data.edge_truth = truth
+                frag_labels = labels_batch[class_mask][:, self.cluster_col]
+                truth = self.get_edge_truth(edge_indices, frag_labels)
+                data.edge_truth = truth
                 data_list.append(data)
             index += 1
 
