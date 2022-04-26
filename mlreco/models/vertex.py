@@ -26,11 +26,14 @@ class VertexPPNChain(nn.Module):
         self.num_filters = self.backbone.F
         self.segmentation = ME.MinkowskiLinear(
             self.num_filters, self.num_classes)
-        print(self)
 
     def forward(self, input):
 
-        labels = None
+        primary_labels = None
+        if self.training:
+            assert(len(input) == 2)
+            primary_labels = input[1][:, -2]
+            segment_labels = input[1][:, -1]
 
         input_tensors = [input[0][:, :5]]
 
@@ -39,11 +42,16 @@ class VertexPPNChain(nn.Module):
         for igpu, x in enumerate(input_tensors):
             # input_data = x[:, :5]
             res = self.backbone([x])
-            res_vertex = self.vertex_ppn(res['finalTensor'][igpu],
-                               res['decoderTensors'][igpu])
+            input_sparse_tensor = res['encoderTensors'][0][0]
             segmentation = self.segmentation(res['decoderTensors'][igpu][-1])
+            res_vertex = self.vertex_ppn(res['finalTensor'][igpu],
+                               res['decoderTensors'][igpu],
+                               input_sparse_tensor=input_sparse_tensor,
+                               primary_labels=primary_labels,
+                               segment_labels=segment_labels)
             out['segmentation'].append(segmentation.F)
             out.update(res_vertex)
+            
 
         return out
 
@@ -68,7 +76,6 @@ class UResNetVertexLoss(nn.Module):
         res = {
             'loss': res_segmentation['loss'] + res_vertex['vertex_loss'],
             'accuracy': (res_segmentation['accuracy'] + res_vertex['vertex_acc']) / 2.0,
-            'reg_loss': res_vertex['reg_loss'],
-            'type_loss': res_vertex['type_loss']
+            'reg_loss': res_vertex['vertex_reg_loss']
         }
         return res

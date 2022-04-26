@@ -48,12 +48,12 @@ class VertexNet(MomentumNet):
                                                    num_hidden=num_hidden, 
                                                    positive_outputs=False)
     def forward(self, x):
-        if x.shape[0] > 1:
-            self.norm1(x)
+        # if x.shape[0] > 1:
+        #     self.norm1(x)
         x = self.linear1(x)
         x = self.lrelu(x)
-        if x.shape[0] > 1:
-            x = self.norm2(x)
+        # if x.shape[0] > 1:
+        #     x = self.norm2(x)
         x = self.linear2(x)
         x = self.lrelu(x)
         x = self.linear3(x)

@@ -111,8 +111,12 @@ class NodeKinematicsLoss(torch.nn.Module):
         else:
             raise ValueError('Regression loss not recognized: ' + self.reg_loss)
 
-        self.vtx_position_loss = torch.nn.MSELoss(reduction='none')
+        self.vtx_position_loss = torch.nn.L1Loss(reduction='none')
         self.vtx_score_loss = torch.nn.CrossEntropyLoss(reduction=self.reduction)
+        self.normalize_vtx_label = loss_config.get('normalize_vtx_label', True)
+        self.use_anchor_points = loss_config.get('use_anchor_points', False)
+        self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
+        self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
 
         self.compute_momentum_switch = loss_config.get('compute_momentum', True)
 
@@ -137,6 +141,12 @@ class NodeKinematicsLoss(torch.nn.Module):
         if not self.compute_momentum_switch:
             compute_momentum = False
         compute_vtx = 'node_pred_vtx' in out
+
+
+        print("OUT = ", out.keys())
+
+        anchors_list = []
+        vertex_labels = []
 
         for i in range(len(types)):
 
@@ -174,15 +184,15 @@ class NodeKinematicsLoss(torch.nn.Module):
                             weights = np.array([float(counts[k])/len(node_assn_type) for k in range(len(vals))])
                             for k, v in enumerate(vals):
                                 loss = (1./weights[k])*self.type_lossfn(node_pred_type[node_assn_type==v], node_assn_type[node_assn_type==v])
-                                total_loss += loss
-                                type_loss += float(loss)
+                                total_loss += self.type_loss_weight * loss
+                                type_loss += self.type_loss_weight * float(loss)
                         else:
                             loss = self.type_lossfn(node_pred_type, node_assn_type)
-                            total_loss += loss
-                            type_loss += float(loss)
+                            total_loss += self.type_loss_weight * loss
+                            type_loss += self.type_loss_weight * float(loss)
 
                         # Increment the number of nodes
-                        n_clusts_type +=len(node_mask)
+                        n_clusts_type += len(node_mask)
 
                 # Increment the momentum loss
                 if compute_momentum:
@@ -217,10 +227,14 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                     node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
                                                 dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
-                    node_assn_vtx = node_assn_vtx/self.spatial_size
 
-                    # Exclude vertex that is outside of the volume
-                    good_index = torch.all( (0 <= node_assn_vtx) & (node_assn_vtx <= 1), dim=1)
+                    if self.normalize_vtx_label:
+                        node_assn_vtx = node_assn_vtx/self.spatial_size
+
+                        # Exclude vertex that is outside of the volume
+                        good_index = torch.all( (0 <= node_assn_vtx) & (node_assn_vtx <= 1), dim=1)
+                    else:
+                        good_index = torch.all( (0 <= node_assn_vtx) & (node_assn_vtx <= self.spatial_size), dim=1)
 
                     positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     # Take the max for each cluster - e.g. for a shower, the primary fragment only
@@ -233,14 +247,37 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                     positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
 
+                    reshaped = out['input_node_features'][i][j][:, 19:25][good_index & positives.bool()].view(-1, 2, 3)
+
                     # Do not apply loss to nodes labeled -1 (unknown class)
-                    node_mask = torch.nonzero(positives > -1, as_tuple=True)[0]
-                    if len(node_mask):
+                    node_mask = good_index & positives.bool()
+                    # print(node_mask.any())
+                    if node_mask.any():
                         # for now only sum losses, they get averaged below in results dictionary
                         loss2 = self.vtx_score_loss(node_pred_vtx[good_index, 3:], positives[good_index])
-                        loss1 = torch.sum(torch.mean(self.vtx_position_loss(node_pred_vtx[good_index & positives.bool(), :3], node_assn_vtx[good_index & positives.bool()]), dim=1))
 
-                        total_loss += loss1 + loss2
+                        pos_pred = node_pred_vtx[node_mask, :3]
+                        pos_label = node_assn_vtx[node_mask]
+
+                        if self.use_anchor_points:
+                            dist_to_anchor = torch.norm(pos_pred.view(-1, 1, 3) - reshaped, dim=2).view(-1, 2)
+                            min_dist = torch.argmin(dist_to_anchor, dim=1)
+                            range_index = torch.arange(reshaped.shape[0]).to(device=reshaped.device).long()
+                            anchors = reshaped[range_index, min_dist, :]
+                            anchors_list.append(anchors)
+                            pos_pred = pos_pred + anchors
+
+                        vertex_labels.append(pos_label)
+                        loss1 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(pos_pred, pos_label), dim=1), 
+                                                       max=self.max_vertex_distance**2))
+
+                        # print(loss1, pos_pred)
+                        # assert False
+
+                        # loss1 = torch.sum(torch.mean(self.vtx_position_loss(pos_pred, pos_label), dim=1))
+                        # print(loss1, loss2)
+                        
+                        total_loss += loss1
 
                         vtx_position_loss += float(loss1)
                         vtx_score_loss += float(loss2)
@@ -301,6 +338,9 @@ class NodeKinematicsLoss(torch.nn.Module):
             'n_clusts_vtx': n_clusts_vtx,
             'n_clusts_vtx_positives': n_clusts_vtx_positives
         }
+
+        result['anchors'] = [anchors_list]
+        result['vertex_labels'] = [vertex_labels]
 
         if compute_type:
             result.update({

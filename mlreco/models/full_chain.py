@@ -331,17 +331,17 @@ class FullChain(FullChainGNN):
 
             # If there are voxels to process in the given semantic classes
             if torch.count_nonzero(filtered_semantic) > 0:
-                if label_clustering is not None and self.training:
-                    # If we are training, need cluster labels to define edge truth.
-                    graph_spice_label = torch.cat((label_clustering[0][:, :-1],
-                                                   semantic_labels.reshape(-1,1)), dim=1)
-                else:
-                    # Otherwise semantic predictions is enough.
-                    graph_spice_label = torch.cat((input[0][:, :4],
-                                                    semantic_labels.reshape(-1, 1)), dim=1)
+                # if label_clustering is not None and self.training:
+                #     # If we are training, need cluster labels to define edge truth.
+                graph_spice_label = torch.cat((label_clustering[0][:, :-1],
+                                                semantic_labels.reshape(-1,1)), dim=1)
+                # else:
+                #     # Otherwise semantic predictions is enough.
+                #     graph_spice_label = torch.cat((input[0][:, :4],
+                #                                     semantic_labels.reshape(-1, 1)), dim=1)
                 cnn_result['graph_spice_label'] = [graph_spice_label]
                 spatial_embeddings_output = self.graph_spice((input[0][:,:5],
-                                                                     graph_spice_label))
+                                                              graph_spice_label))
                 cnn_result.update(spatial_embeddings_output)
 
 
