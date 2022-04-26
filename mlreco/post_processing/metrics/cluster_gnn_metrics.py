@@ -2,21 +2,21 @@
 import numpy as np
 
 from mlreco.post_processing import post_processing
-from mlreco.utils.gnn.evaluation import (node_purity_mask, 
-                                         edge_purity_mask, 
-                                         edge_assignment_score, 
-                                         edge_assignment, 
-                                         node_assignment, 
-                                         node_assignment_score, 
-                                         node_assignment_bipartite, 
-                                         clustering_metrics, 
+from mlreco.utils.gnn.evaluation import (node_purity_mask,
+                                         edge_purity_mask,
+                                         edge_assignment_score,
+                                         edge_assignment,
+                                         node_assignment,
+                                         node_assignment_score,
+                                         node_assignment_bipartite,
+                                         clustering_metrics,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import form_clusters
 from mlreco.post_processing.common import extent
 
 
-@post_processing('cluster-gnn-metrics', 
-                 ['clust_data', 'particles'], 
+@post_processing('cluster-gnn-metrics',
+                 ['clust_data', 'particles'],
                  ['edge_pred', 'clusts', 'node_pred', 'edge_index'])
 def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                         edge_pred=None, clusts=None, node_pred=None, edge_index=None,
@@ -53,6 +53,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     coords_col = module_cfg.get('coords_col', (1, 4))
     column = module_cfg.get('target_col', 6)
     column_source = module_cfg.get('source_col', 5)
+    column_primary = module_cfg.get('primary_col', 10)
     chain = module_cfg.get('chain', 'chain')
 
     enable_physics_metrics = module_cfg.get('enable_physics_metrics', False)
@@ -76,14 +77,17 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         return (), ()
 
     # Use group id to make node labels
-    group_ids, cluster_ids = [], []
+    group_ids, cluster_ids, primary_ids = [], [], []
     for c in clusts[data_idx]:
         v, cts = np.unique(clust_data[data_idx][c,column], return_counts=True)
         group_ids.append(int(v[cts.argmax()]))
         v, cts = np.unique(clust_data[data_idx][c,column_source], return_counts=True)
         cluster_ids.append(int(v[cts.argmax()]))
+        v, cts = np.unique(clust_data[data_idx][c,column_primary], return_counts=True)
+        primary_ids.append(int(v[cts.argmax()]))
     group_ids = np.array(group_ids, dtype=np.int64)
     cluster_ids = np.array(cluster_ids, dtype=np.int64)
+    primary_ids = np.array(primary_ids, dtype=np.int64)
 
     #print('clusts', [len(c) for c in clusts[data_idx]], len(group_ids), edge_index[data_idx].shape)
     #edge_assn = edge_assignment(edge_index[data_idx], group_ids)
@@ -217,7 +221,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             pixel_node_pred = np.hstack([[g] * len(clusts[data_idx][c_idx]) for c_idx, g in enumerate(node_pred)])
 
             if high_purity:
-                purity_mask = node_purity_mask(cluster_ids, group_ids)
+                purity_mask = node_purity_mask(cluster_ids, group_ids, primary_ids)
                 if not purity_mask.any():
                     return (), ()
                 pixel_group_ids = np.hstack([[g] * len(clusts[data_idx][purity_mask][c_idx]) for c_idx, g in enumerate(group_ids[purity_mask])])
@@ -231,7 +235,7 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             if not high_purity:
                 ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx], group_ids, node_pred)
             else:
-                purity_mask = node_purity_mask(cluster_ids, group_ids)
+                purity_mask = node_purity_mask(cluster_ids, group_ids, primary_ids)
                 if not purity_mask.any():
                     return (), ()
                 ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx][purity_mask], group_ids[purity_mask], node_pred[purity_mask])

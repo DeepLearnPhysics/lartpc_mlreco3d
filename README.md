@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.com/DeepLearnPhysics/lartpc_mlreco3d.svg?branch=develop)](https://travis-ci.com/DeepLearnPhysics/lartpc_mlreco3d)
 
+[![Documentation Status](https://readthedocs.org/projects/lartpc-mlreco3d/badge/?version=latest)](https://lartpc-mlreco3d.readthedocs.io/en/latest/?badge=latest)
+
 # A Machine Learning Pipeline for LArTPC Data
 
 This repository contains code used for training and running machine learning models on LArTPC data.
@@ -30,7 +32,8 @@ process_config(cfg)
 train(cfg)
 ```
 
-Some tutorials are available at https://deeplearnphysics.org/lartpc_mlreco3d_tutorials/.
+* Some tutorials are available at https://deeplearnphysics.org/lartpc_mlreco3d_tutorials/.
+* More technical documentation is available at https://lartpc-mlreco3d.readthedocs.io/.
 
 ### Example Configuration Files
 

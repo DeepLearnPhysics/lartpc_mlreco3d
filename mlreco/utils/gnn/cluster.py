@@ -124,16 +124,21 @@ def get_cluster_label(data, clusts, column=5):
         data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
         column (int)         : Column which specifies the cluster ID
+        dtype (dtype)
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
+    dtype = data[:, column].dtype
     if len(clusts) > 0:
-        return _get_cluster_label(data, clusts, column)
+        if dtype == np.int64:
+            return _get_cluster_label_int(data, clusts, column)
+        else:
+            return _get_cluster_label_float(data, clusts, column)
     else:
         return np.empty((0,), dtype=np.int32)
 
 @nb.njit(cache=True)
-def _get_cluster_label(data: nb.float64[:,:],
+def _get_cluster_label_int(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
                        column: nb.int64 = 5) -> nb.int64[:]:
 
@@ -143,6 +148,16 @@ def _get_cluster_label(data: nb.float64[:,:],
         labels[i] = v[np.argmax(np.array(cts))]
     return labels
 
+@nb.njit(cache=True)
+def _get_cluster_label_float(data: nb.float64[:,:],
+                       clusts: nb.types.List(nb.int64[:]),
+                       column: nb.int64 = 5) -> nb.float64[:]:
+
+    labels = np.empty(len(clusts), dtype=np.float64)
+    for i, c in enumerate(clusts):
+        v, cts = unique_nb(data[c, column])
+        labels[i] = v[np.argmax(np.array(cts))]
+    return labels
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_momenta_label(data, clusts, column=8):

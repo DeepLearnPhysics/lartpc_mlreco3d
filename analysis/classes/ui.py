@@ -384,7 +384,7 @@ class FullChainPredictor:
         for i, p in enumerate(fragments):
             voxels = point_cloud[p]
             seg_label = fragments_seg[i]
-            part = ParticleFragment(voxels, i, seg_label, 
+            part = ParticleFragment(voxels, i, seg_label,
                             interaction_id=inter_ids[i],
                             group_id=group_ids[i],
                             image_id=entry,
@@ -426,7 +426,7 @@ class FullChainPredictor:
         # Check primaries and assign ppn points
         if only_primaries:
             out = [p for p in out if p.is_primary]
-        
+
         if semantic_type is not None:
             out = [p for p in out if p.semantic_type == semantic_type]
 
@@ -529,7 +529,7 @@ class FullChainPredictor:
         match_points_to_particles(ppn_results, out,
             ppn_distance_threshold=attaching_threshold)
 
-        # Attach startpoint and endpoint 
+        # Attach startpoint and endpoint
         # as done in full chain geometric encoder
         for p in out:
             if p.size < min_particle_voxel_count:
@@ -565,7 +565,7 @@ class FullChainPredictor:
             Batch number to retrieve example.
         drop_nonprimary_particles: bool (optional)
             If True, all non-primary particles will not be included in
-            the output interactions' .particle attribute. 
+            the output interactions' .particle attribute.
 
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
@@ -591,11 +591,11 @@ class FullChainPredictor:
         pred_pids = self._fit_predict_pids(entry)
 
         pred = {
-            'segment_label': pred_seg,
-            'fragment_label': pred_fragments,
-            'group_label': pred_groups,
-            'interaction_label': pred_interaction_labels,
-            'pdg_label': pred_pids
+            'segment': pred_seg,
+            'fragment': pred_fragments,
+            'group': pred_groups,
+            'interaction': pred_interaction_labels,
+            'pdg': pred_pids
         }
 
         self._pred = pred
@@ -761,6 +761,8 @@ class FullChainEvaluator(FullChainPredictor):
             p: true momentum vector
         '''
         labels = self.data_blob['cluster_label'][entry]
+        if self.deghosting:
+            labels_noghost = self.data_blob['cluster_label_noghost'][entry]
         segment_label = self.data_blob['segment_label'][entry]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
 
@@ -790,13 +792,16 @@ class FullChainEvaluator(FullChainPredictor):
 
             pdg = TYPE_LABELS[p.pdg_code()]
             mask = labels[:, 6].astype(int) == pid
-
+            if self.deghosting:
+                mask_noghost = labels_noghost[:, 6].astype(int) == pid
             # If particle is Michel electron, we have the option to
             # only consider the primary ionization.
             # Semantic labels only label the primary ionization as Michel.
             # Cluster labels will have the entire Michel together.
             if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
                 mask = mask & (labels[:, -1].astype(int) == 2)
+                if self.deghosting:
+                    mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
             # Check semantics
             semantic_type, sem_counts = np.unique(
@@ -841,12 +846,19 @@ class FullChainEvaluator(FullChainPredictor):
 
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
+            coords_noghost, depositions_noghost = None, None
+            if self.deghosting:
+                coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+                depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+
             particle = TruthParticle(coords, pid,
                 semantic_type, interaction_id, pdg,
                 particle_asis=p,
                 batch_id=entry,
                 depositions=depositions,
-                is_primary=is_primary)
+                is_primary=is_primary,
+                coords_noghost=coords_noghost,
+                depositions_noghost=depositions_noghost)
             particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
             particle.particle_asis = p
@@ -910,7 +922,9 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def match_interactions(self, entry, mode='pred_to_true',
-                           drop_nonprimary_particles=True, match_particles=True, return_counts=False):
+                           drop_nonprimary_particles=True,
+                           match_particles=True,
+                           return_counts=False, **kwargs):
         if mode == 'pred_to_true':
             ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
             ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
@@ -921,7 +935,7 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).")
 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, **kwargs)
 
         if match_particles:
             for interactions in matched_interactions:

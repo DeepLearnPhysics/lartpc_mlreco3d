@@ -646,7 +646,6 @@ def parse_cluster3d_clean_full(data):
     # and give labels -1 to all voxels of class 4 and above
     grp_data[:,-1] = img_data[:,-1]
     grp_data[img_data[:,-1] > 3,1:5] = -1
-
     return grp_voxels, grp_data
 
 

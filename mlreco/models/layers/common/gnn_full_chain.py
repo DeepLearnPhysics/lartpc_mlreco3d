@@ -956,25 +956,27 @@ def setup_chain_cfg(self, cfg):
     self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
 
-    print("Shower GNN: {}".format(self.enable_gnn_shower))
-    print("Track GNN: {}".format(self.enable_gnn_track))
-    print("Particle GNN: {}".format(self.enable_gnn_particle))
-    print("Interaction GNN: {}".format(self.enable_gnn_inter))
-    print("Kinematics GNN: {}".format(self.enable_gnn_kinematics))
-    print("Cosmic GNN: {}".format(self.enable_cosmic))
+    if self.verbose:
+        print("Shower GNN: {}".format(self.enable_gnn_shower))
+        print("Track GNN: {}".format(self.enable_gnn_track))
+        print("Particle GNN: {}".format(self.enable_gnn_particle))
+        print("Interaction GNN: {}".format(self.enable_gnn_inter))
+        print("Kinematics GNN: {}".format(self.enable_gnn_kinematics))
+        print("Cosmic GNN: {}".format(self.enable_cosmic))
 
     if (self.enable_gnn_shower or \
         self.enable_gnn_track or \
         self.enable_gnn_particle or \
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
-        msg = """
-        Since one of the GNNs are turned on, process_fragments is turned ON.
-        """
-        print(msg)
+        if self.verbose:
+            msg = """
+            Since one of the GNNs are turned on, process_fragments is turned ON.
+            """
+            print(msg)
         self.process_fragments = True
 
-    if self.process_fragments:
+    if self.process_fragments and self.verbose:
         msg = """
         Fragment processing is turned ON. When training CNN models from
          scratch, we recommend turning fragment processing OFF as without
