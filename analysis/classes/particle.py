@@ -175,6 +175,7 @@ class TruthParticle(Particle):
         self.asis = particle_asis
         self.match = []
         self._match_counts = {}
+        self.pdg_code = particle_asis.pdg_code()
 
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
