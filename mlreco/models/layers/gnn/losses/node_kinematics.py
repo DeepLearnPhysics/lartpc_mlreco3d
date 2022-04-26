@@ -142,9 +142,6 @@ class NodeKinematicsLoss(torch.nn.Module):
             compute_momentum = False
         compute_vtx = 'node_pred_vtx' in out
 
-
-        print("OUT = ", out.keys())
-
         anchors_list = []
         vertex_labels = []
 
