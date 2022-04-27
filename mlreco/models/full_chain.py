@@ -155,12 +155,12 @@ class FullChain(FullChainGNN):
             Keys can include `points` (if `use_ppn` is `True`)
             and `extra_feats` (if `use_supp` is True).
         """
-        return _get_extra_gnn_features(fragments, 
-                                       frag_seg, 
-                                       classes, 
-                                       input, 
-                                       result, 
-                                       use_ppn=use_ppn, 
+        return _get_extra_gnn_features(fragments,
+                                       frag_seg,
+                                       classes,
+                                       input,
+                                       result,
+                                       use_ppn=use_ppn,
                                        use_supp=use_supp)
 
 

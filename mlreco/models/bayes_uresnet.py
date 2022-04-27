@@ -8,6 +8,7 @@ from mlreco.models.layers.common.activation_normalization_factories import (acti
                                           activations_construct,
                                           normalizations_construct)
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
+from mlreco.models.layers.common.uresnet_layers import UResNet
 from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.decoder import MCDropoutDecoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss
@@ -181,10 +182,12 @@ class DUQUResNet(torch.nn.Module):
 
     """
 
+    MODULES = []
+
     def __init__(self, cfg, name='duq_uresnet'):
         super(DUQUResNet, self).__init__()
         setup_cnn_configuration(self, cfg, name)
-        self.model_config = cfg[name]
+        self.model_config = cfg.get(name, {})
         self.num_classes = self.model_config.get('num_classes', 5)
         self.num_samples = self.model_config.get('num_samples', 20)
 
@@ -333,8 +336,8 @@ class DUQSegmentationLoss(nn.Module):
         super(DUQSegmentationLoss, self).__init__()
         self.xentropy = nn.BCELoss(reduction='none')
         self.num_classes = 5
-        self.grad_w = cfg[name].get('grad_w', 0.0)
-        self.grad_penalty = cfg[name].get('grad_penalty', True)
+        self.grad_w = cfg.get(name, {}).get('grad_w', 0.0)
+        self.grad_penalty = cfg.get(name, {}).get('grad_penalty', True)
 
 
     @staticmethod
