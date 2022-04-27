@@ -25,10 +25,16 @@ class DataParallel(torch.nn.parallel.DataParallel):
     Network has a single input.
     """
     def __init__(self, module, device_ids=None, output_device=None, dim=0):
+        is_cpu = len(device_ids) == 0
+        if is_cpu:
+            device_ids = None
+
         super(DataParallel, self).__init__(module,
                                            device_ids=device_ids,
                                            output_device=output_device,
                                            dim=dim)
+        if is_cpu:
+            self.device_ids = None
 
     def scatter(self, inputs, kwargs, device_ids):
         """

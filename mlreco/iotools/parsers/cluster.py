@@ -4,6 +4,7 @@ from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels
 from mlreco.iotools.parsers.sparse import parse_sparse3d_scn
 from mlreco.iotools.parsers.particles import parse_particle_asis
 from mlreco.iotools.parsers.clean_data import clean_data
+from mlreco.utils.groups import type_labels as TYPE_LABELS
 
 
 def parse_cluster2d(data):
@@ -273,7 +274,7 @@ def parse_cluster3d_kinematics_full(data):
             sem_type = np.full(shape=(cluster.as_vector().size()),
                                fill_value=particles_v[i].shape(), dtype=np.float32)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id, 
+            clusters_features.append(np.column_stack([value, cluster_id, group_id,
                 inter_id, nu_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary, sem_type]))
     if len(clusters_voxels) > 0:
         np_voxels   = np.concatenate(clusters_voxels, axis=0)

@@ -252,8 +252,7 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                         class_count = [(event_label == c).sum().float() for c in range(self._num_classes)]
                         sum_class_count = len(event_label)
                         w = torch.Tensor([sum_class_count / c if c.item() > 0 else 0. for c in class_count]).float()
-                        if torch.cuda.is_available():
-                            w = w.cuda()
+                        w = w.to(event_label.device)
                         #print(class_count, w, class_count[0].item() > 0)
                         loss_seg = torch.nn.functional.cross_entropy(event_segmentation, event_label, weight=w)
                     else:
