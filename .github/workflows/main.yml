@@ -40,7 +40,7 @@ jobs:
         run: mkdir -p /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/
 
       - name: Download weight
-        run: wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=1e3uroE9PU6IaZhUApfuRpDbSd2m3Tgi-' -O /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/snapshot-49999.ckpt
+        run: wget --load-cookies i/tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1e3uroE9PU6IaZhUApfuRpDbSd2m3Tgi-' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1e3uroE9PU6IaZhUApfuRpDbSd2m3Tgi-" -O /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/snapshot-49999.ckpt && rm -rf /tmp/cookies.txt
 
       # Run pytest
       - name: Run pytest
