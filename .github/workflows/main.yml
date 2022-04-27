@@ -31,6 +31,17 @@ jobs:
       - name: Check latest commits
         run: git log
         
+      - name: Create folder for dataset
+        run: mkdir -p /sdf/group/neutrino/data/mpvmpr_2020_01_v04/
+
+      - name: Download dataset
+        run: wget http://stanford.edu/~ldomine/mpvmpr_2020_01_v04_small.root -o /sdf/group/neutrino/data/mpvmpr_2020_01_v04/train.root
+      - name: Create folder for weight
+        run: mkdir -p /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/
+
+      - name: Download weight
+        run: wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=1e3uroE9PU6IaZhUApfuRpDbSd2m3Tgi-' -O /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/snapshot-49999.ckpt
+
       # Run pytest
       - name: Run pytest
         run: pytest --import-mode=importlib $GITHUB_WORKSPACE/test
