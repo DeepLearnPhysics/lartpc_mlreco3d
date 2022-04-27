@@ -33,4 +33,4 @@ jobs:
         
       # Run pytest
       - name: Run pytest
-        run: pytest --import-mode=importlib $GITHUB_WORKSPACE/lartpc_mlreco3d/test
+        run: pytest --import-mode=importlib $GITHUB_WORKSPACE/test
