@@ -35,7 +35,7 @@ jobs:
         run: mkdir -p /sdf/group/neutrino/data/mpvmpr_2020_01_v04/
 
       - name: Download dataset
-        run: wget http://stanford.edu/~ldomine/mpvmpr_2020_01_v04_small.root -O /sdf/group/neutrino/data/mpvmpr_2020_01_v04/train.root
+        run: wget http://stanford.edu/~ldomine/mpvmpr_2020_01_v04_small.root -O /sdf/group/neutrino/data/mpvmpr_2020_01_v04/test.root
       - name: Create folder for weight
         run: mkdir -p /sdf/group/neutrino/ldomine/chain/me/v04/weights_inter_clustering9/
 
