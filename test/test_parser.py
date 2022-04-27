@@ -315,24 +315,6 @@ def test_parse_cluster3d_kinematics(event_cluster3d, event_particles):
 def test_parse_cluster3d_kinematics_clean():
     pass
 
-def test_parse_cluster3d_full_fragment():
-    pass
-
-def test_parse_cluster3d_fragment():
-    pass
-
-# Make sure input only has 1 feature
-@pytest.mark.parametrize("event_tensor3d", [1], indirect=True)
-def test_parse_sparse3d_fragment(event_tensor3d):
-    from mlreco.iotools.parsers import parse_sparse3d_fragment
-    output = parse_sparse3d_fragment(event_tensor3d)
-    assert len(output) == 2
-    assert len(output[0].shape) == 2
-    assert len(output[1].shape) == 2
-    assert output[0].shape[1] == 3
-    assert output[1].shape[1] == 1
-    assert output[0].shape[0] == output[1].shape[0]
-
 def test_clean_data():
     pass
 

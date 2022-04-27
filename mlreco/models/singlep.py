@@ -17,14 +17,14 @@ class ParticleImageClassifier(nn.Module):
 
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
-        self.encoder_type = cfg[name].get('encoder_type', 'standard')
+        self.encoder_type = cfg.get(name, {}).get('encoder_type', 'standard')
         if self.encoder_type == 'dropout':
             self.encoder = MCDropoutEncoder(cfg)
         elif self.encoder_type == 'standard':
             self.encoder = SparseResidualEncoder(cfg)
         else:
             raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
-        self.num_classes = cfg[name].get('num_classes', 5)
+        self.num_classes = cfg.get(name, {}).get('num_classes', 5)
         self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
 
         print('Total Number of Trainable Parameters = {}'.format(

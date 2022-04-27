@@ -13,6 +13,7 @@ import re
 from mlreco.utils.adabound import AdaBound, AdaBoundW
 from pprint import pprint
 
+
 class trainval(object):
     """
     Groups all relevant functions for forward/backward of a network.
@@ -281,12 +282,12 @@ class trainval(object):
             self._watch.start('forward')
             self._watch.start_cputime('forward_cpu')
 
-            if not torch.cuda.is_available():
+            if not len(self._gpus):
                 train_blob = train_blob[0]
-
+            print(not self._net.device_ids)
             result = self._net(train_blob)
 
-            if not torch.cuda.is_available():
+            if not len(self._gpus):
                 train_blob = [train_blob]
 
             # Compute the loss
@@ -495,9 +496,9 @@ class trainval(object):
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
-            self._net.train().cuda() if len(self._gpus) else self._net.train()
+            self._net.train().cuda() if len(self._gpus) else self._net.train().cpu()
         else:
-            self._net.eval().cuda() if len(self._gpus) else self._net.eval()
+            self._net.eval().cuda() if len(self._gpus) else self._net.eval().cpu()
 
         if self._optim == 'AdaBound':
             self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
