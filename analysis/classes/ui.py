@@ -916,7 +916,7 @@ class FullChainEvaluator(FullChainPredictor):
             particles_from = self.get_true_particles(entry, only_primaries=only_primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).")
+                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
         matched_pairs, _, _ = match_particles_fn(particles_from, particles_to, **kwargs)
         return matched_pairs
 
@@ -933,7 +933,7 @@ class FullChainEvaluator(FullChainPredictor):
             ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).")
+                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
 
         matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, **kwargs)
 
