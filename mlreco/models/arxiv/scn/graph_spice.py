@@ -135,24 +135,21 @@ class GraphSPICELoss(nn.Module):
         self.gs_manager.replace_state(graph, graph_info)
         result['edge_score'] = [graph.edge_attr]
         result['edge_index'] = [graph.edge_index]
-        if not self.eval_mode:
-            result['edge_truth'] = [graph.edge_truth]
+        result['edge_truth'] = [graph.edge_truth]
 
         if self.invert:
             pred_labels = result['edge_score'][0] < 0.0
         else:
             pred_labels = result['edge_score'][0] >= 0.0
 
-        if not self.eval_mode:
+        edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
 
-            edge_diff = pred_labels != (result['edge_truth'][0] > 0.5)
+        print("Number of Wrong Edges = {} / {}".format(
+            torch.sum(edge_diff).item(), edge_diff.shape[0]))
 
-            print("Number of Wrong Edges = {} / {}".format(
-                torch.sum(edge_diff).item(), edge_diff.shape[0]))
-
-            print("Number of True Dropped Edges = {} / {}".format(
-                torch.sum(result['edge_truth'][0] < 0.5).item(),
-                edge_diff.shape[0]))
+        print("Number of True Dropped Edges = {} / {}".format(
+            torch.sum(result['edge_truth'][0] < 0.5).item(),
+            edge_diff.shape[0]))
 
         res = self.loss_fn(result, slabel, clabel)
         return res

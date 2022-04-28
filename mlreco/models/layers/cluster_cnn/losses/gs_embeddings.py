@@ -375,6 +375,7 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         self.edge_loss = WeightedEdgeLoss(invert=self.invert, **self.edge_loss_cfg)
         # self.is_eval = cfg['eval']
         self.acc_fn = IoUScore()
+        self.use_cluster_labels = cfg.get('use_cluster_labels', True)
 
     def forward(self, result, segment_label, cluster_label):
 
@@ -383,19 +384,20 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         res = self.loss_fn(result, segment_label, group_label)
         # print(result)
         edge_score = result['edge_score'][0].squeeze()
-
-        edge_truth = result['edge_truth'][0]
-        edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
-        edge_loss = edge_loss.mean()
-
         x = edge_score.squeeze()
-
         pred = x >= 0
 
-        if self.invert:
-            edge_truth = torch.logical_not(edge_truth.long())
+        iou, edge_loss = 0, 0
 
-        iou = self.acc_fn(pred, edge_truth)
+        if self.use_cluster_labels:
+            edge_truth = result['edge_truth'][0]
+            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
+            edge_loss = edge_loss.mean()
+
+            if self.invert:
+                edge_truth = torch.logical_not(edge_truth.long())
+
+            iou = self.acc_fn(pred, edge_truth)
         # iou2 = self.acc_fn(~pred, ~edge_truth)
 
         res['edge_accuracy'] = iou

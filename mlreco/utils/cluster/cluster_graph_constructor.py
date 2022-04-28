@@ -173,6 +173,7 @@ class ClusterGraphConstructor:
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
         # Radius within which orphans get assigned to neighbor cluster
         self._orphans_radius = constructor_cfg.get('orphans_radius', 1.0)
+        self.use_cluster_labels = constructor_cfg.get('use_cluster_labels', True)
 
         # GraphBatch containing graphs per semantic class.
         if graph_batch is None:
@@ -310,9 +311,10 @@ class ClusterGraphConstructor:
                                     GraphID=graph_id)
                 graph_id += 1
                 self._info.append(graph_id_key)
-                frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                truth = self.get_edge_truth(edge_indices, frag_labels)
-                data.edge_truth = truth
+                if self.use_cluster_labels:
+                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
+                    truth = self.get_edge_truth(edge_indices, frag_labels)
+                    data.edge_truth = truth
                 data_list.append(data)
             index += 1
 

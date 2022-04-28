@@ -70,7 +70,7 @@ class SparseResidualEncoder(UResNetEncoder):
             features = torch.cat([normalized_coords, features], dim=1)
 
         x = ME.SparseTensor(coordinates=input_tensor[:, :4].int(),
-                            features=features)
+                            features=features.float())
         # Encoder
         encoderOutput = self.encoder(x)
         encoderTensors = encoderOutput['encoderTensors']
