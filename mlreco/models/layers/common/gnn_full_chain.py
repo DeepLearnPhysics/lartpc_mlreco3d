@@ -811,8 +811,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'node_pred_type' in out:  gnn_out.update({ 'node_pred_type': out['node_pred_type'] })
             if 'node_pred_p' in out:     gnn_out.update({ 'node_pred_p': out['node_pred_p'] })
             if 'node_pred_vtx' in out:   gnn_out.update({ 'node_pred_vtx': out['node_pred_vtx'] })
-            if 'input_node_features' in out:   gnn_out.update({ 'input_node_features': out['input_node_features'] })
-            if 'input_edge_features' in out:   gnn_out.update({ 'input_edge_features': out['input_edge_features'] })
+            if 'particle_node_features' in out:   gnn_out.update({ 'input_node_features': out['particle_node_features'] })
+            if 'particle_edge_features' in out:   gnn_out.update({ 'input_edge_features': out['particle_edge_features'] })
 
             res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
             for key in res_gnn_inter:

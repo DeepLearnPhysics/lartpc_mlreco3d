@@ -389,8 +389,6 @@ class GNN(torch.nn.Module):
 
         if self.vertex_mlp:
             if self.use_vtx_input_features:
-                print(x)
-                assert False
                 node_pred_vtx = self.vertex_net(x)
             else:
                 node_pred_vtx = self.vertex_net(out['node_features'][0])

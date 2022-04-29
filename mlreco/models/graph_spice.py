@@ -273,7 +273,8 @@ class GraphSPICELoss(nn.Module):
         self.gs_manager.replace_state(graph, graph_info)
         result['edge_score'] = [graph.edge_attr]
         result['edge_index'] = [graph.edge_index]
-        result['edge_truth'] = [graph.edge_truth]
+        if self.gs_manager.use_cluster_labels:
+            result['edge_truth'] = [graph.edge_truth]
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0
