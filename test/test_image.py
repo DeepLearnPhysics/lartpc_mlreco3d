@@ -32,10 +32,10 @@ def test_full_chain(devices):
     print('Loss', output['loss'][0])
     if devices != '': # GPU mode
         #assert np.allclose(output['loss'][0], 7.5688, rtol=1e-3)
-        assert np.allclose(output['loss'][0], 8.5485, rtol=1e-3)
+        assert np.allclose(output['loss'][0], 7.9252, rtol=1e-3)
     else: # CPU mode
         #assert np.allclose(output['loss'][0], 7.6977, rtol=1e-3)
-        assert np.allclose(output['loss'][0], 8.5341, rtol=1e-3)
+        assert np.allclose(output['loss'][0], 7.8996, rtol=1e-3)
 
 
 if __name__ == '__main__':
