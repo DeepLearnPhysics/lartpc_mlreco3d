@@ -137,6 +137,28 @@ def parse_sparse3d(data):
     return np.concatenate(output, axis=-1)
 
 
+def parse_sparse3d_ghost(data):
+    meta = None
+    output = []
+    np_voxels = None
+    for event_tensor3d in data:
+        num_point = event_tensor3d.as_vector().size()
+        if meta is None:
+            meta = event_tensor3d.meta()
+            np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
+            larcv.fill_3d_voxels(event_tensor3d, np_voxels)
+        else:
+            assert meta == event_tensor3d.meta()
+        np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
+        larcv.fill_3d_pcloud(event_tensor3d, np_data)
+        output.append(np_data)
+
+    #print('ghost', np_voxels.shape, output[0].shape)
+    #print('preghost', output[0])
+    #print('postghost', (output[0]==5).astype(np.float32))
+    return np_voxels, (output[0]==5).astype(np.float32)
+
+
 def parse_weights(data):
     """
     A function to generate weights from larcv::EventSparseTensor3D and larcv::Particle list

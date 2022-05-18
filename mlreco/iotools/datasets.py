@@ -16,7 +16,7 @@ class LArCVDataset(Dataset):
     def __init__(self, data_schema, data_keys, limit_num_files=0, limit_num_samples=0, event_list=None, skip_event_list=None):
         """
         Instantiates the LArCVDataset.
-        
+
         Parameters
         ----------
         data_dirs : list
@@ -109,6 +109,8 @@ class LArCVDataset(Dataset):
         # Set total sample size
         if limit_num_samples > 0 and self._entries > limit_num_samples:
             self._entries = limit_num_samples
+
+        print('Found %d events in file(s)' % len(self._event_list))
 
         # Flag to identify if Trees are initialized or not
         self._trees_ready=False

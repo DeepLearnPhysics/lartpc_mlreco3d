@@ -30,12 +30,12 @@ def test_full_chain(devices):
     hs.trainer.backward()
 
     print('Loss', output['loss'][0])
-    if devices != '':
+    if devices != '': # GPU mode
         #assert np.allclose(output['loss'][0], 7.5688, rtol=1e-3)
-        assert np.allclose(output['loss'][0], 7.7301, rtol=1e-3)
-    else:
+        assert np.allclose(output['loss'][0], 7.9252, rtol=1e-3)
+    else: # CPU mode
         #assert np.allclose(output['loss'][0], 7.6977, rtol=1e-3)
-        assert np.allclose(output['loss'][0], 7.9262, rtol=1e-3)
+        assert np.allclose(output['loss'][0], 7.8996, rtol=1e-3)
 
 
 if __name__ == '__main__':
