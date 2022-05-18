@@ -284,7 +284,7 @@ class trainval(object):
 
             if not len(self._gpus):
                 train_blob = train_blob[0]
-            print(not self._net.device_ids)
+            #print(not self._net.device_ids)
             result = self._net(train_blob)
 
             if not len(self._gpus):
