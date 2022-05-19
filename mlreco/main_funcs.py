@@ -70,7 +70,7 @@ def process_config(cfg, verbose=True):
                                  'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred',
                                  'particle_fragments', 'particle_edge_index', 'particle_node_pred',
                                  'particle_edge_pred', 'particle_group_pred', 'particles',
-                                 'inter_edge_index', 'inter_node_pred', 'inter_edge_pred',
+                                 'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
                                  'inter_particles', 'node_pred_p', 'node_pred_type',
                                  'kinematics_node_pred_p', 'kinematics_node_pred_type',
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',

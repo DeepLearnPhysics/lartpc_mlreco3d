@@ -18,3 +18,4 @@ from .evidential_gnn import evidential_gnn_metrics
 from .evidential_gnn import default_gnn_metrics
 from .duq_metrics import duq_metrics
 from .pid_metrics import pid_metrics
+from .shower_fragments import shower_fragments
