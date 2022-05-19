@@ -360,7 +360,7 @@ class FullChainPredictor:
             - out: List of <Particle> instances (see Particle class definition).
         '''
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
-        depositions = self.data_blob['input_data'][entry][:, 4]
+        depositions = self.result['input_rescaled'][entry][:, 4]
         fragments = self.result['fragments'][entry]
         fragments_seg = self.result['fragments_seg'][entry]
 
@@ -485,7 +485,7 @@ class FullChainPredictor:
             - out: List of <Particle> instances (see Particle class definition).
         '''
         point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
-        depositions      = self.data_blob['input_data'][entry][:, 4]
+        depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particles'][entry]
         # inter_group_pred = self.result['inter_group_pred'][entry]
 
