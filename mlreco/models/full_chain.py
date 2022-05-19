@@ -207,7 +207,7 @@ class FullChain(FullChainGNN):
             result['ghost'] = result['segmentation']
             deghost = result['ghost'][0].argmax(dim=1) == 0
 
-            # Rescale the charge column
+            # Rescale the charge column, store it
             hit_charges  = input[0][deghost, last_index  :last_index+3]
             hit_ids      = input[0][deghost, last_index+3:last_index+6]
             multiplicity = torch.empty(hit_charges.shape, dtype=torch.long, device=hit_charges.device)
@@ -215,8 +215,10 @@ class FullChain(FullChainGNN):
                 batch_mask = input[0][deghost,self.batch_col] == b
                 _, inverse, counts = torch.unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
                 multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
-            charges = torch.sum(hit_charges/multiplicity, dim=1)/3 # 3 planes, take average estimate
+            pmask   = hit_ids > -1
+            charges = torch.sum((hit_charges*pmask)/multiplicity, dim=1)/torch.sum(pmask, dim=1) # Take average estimate
             input[0][deghost, 4] = charges
+            result.update({'input_rescaled':[input[0][deghost,:5]]})
 
         if self.enable_uresnet:
             if self.enable_charge_rescaling:
