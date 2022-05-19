@@ -106,6 +106,7 @@ from mlreco.iotools.parsers.particles import (
 from mlreco.iotools.parsers.sparse import (
     parse_sparse2d_scn,
     parse_sparse3d_scn,
+    parse_sparse3d_ghost,
     parse_sparse3d,
     parse_sparse3d_scn_scales,
     parse_sparse3d_clean,

@@ -274,7 +274,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         # loss1 = torch.sum(torch.mean(self.vtx_position_loss(pos_pred, pos_label), dim=1))
                         # print(loss1, loss2)
                         
-                        total_loss += loss1
+                        total_loss += loss1 + loss2
 
                         vtx_position_loss += float(loss1)
                         vtx_score_loss += float(loss2)
