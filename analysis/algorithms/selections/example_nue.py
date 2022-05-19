@@ -3,16 +3,16 @@ from analysis.algorithms.utils import count_primary_particles, get_particle_prop
 from analysis.classes.ui import FullChainEvaluator
 
 from analysis.decorator import evaluate
-from analysis.classes.particle import match_particles_fn
+from analysis.classes.particle import match_particles_fn, matrix_iou
 
 from pprint import pprint
 import time
 
 
-@evaluate(['interactions', 'particles', 'node_features'], mode='per_batch')
+@evaluate(['interactions', 'particles'], mode='per_batch')
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
 
-    interactions, particles, node_df = [], [], []
+    interactions, particles = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
     primaries = analysis_cfg['analysis']['match_primaries']
 
@@ -58,11 +58,6 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                     prefix='true')
                 if pred_p is not None:
                     pred_particle_dict['true_particle_is_matched'] = True
-                    node_dict = OrderedDict(
-                        {'node_feat_{}'.format(i) : pred_p.node_features[i] \
-                        for i in range(pred_p.node_features.shape[0])})
-                    node_dict['index'] = index
-                    node_df.append(node_dict)
                 else:
                     pred_particle_dict['true_particle_is_matched'] = False
                 pred_particle_dict['particle_match_counts'] = ious[i]
@@ -72,7 +67,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
 
                 particles.append(particles_dict)
         
-    return [interactions, particles, node_df]
+    return [interactions, particles]
 
 
 

@@ -84,11 +84,11 @@ def get_particle_properties(particle: Particle, vertex, prefix=None):
         update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
         
-        if not isinstance(particle, TruthParticle):
-            node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
-                for i in range(particle.node_features.shape[0])})
+        # if not isinstance(particle, TruthParticle):
+        #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
+        #         for i in range(particle.node_features.shape[0])})
 
-            update_dict.update(node_dict)
+        #     update_dict.update(node_dict)
 
     out = attach_prefix(update_dict, prefix)
 

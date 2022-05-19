@@ -155,6 +155,23 @@ class ParticleFragment(Particle):
         return msg
 
 
+class TruthParticleFragment(ParticleFragment):
+
+    def __init__(self, *args, **kwargs):
+        super(TruthParticleFragment, self).__init__(*args, **kwargs)
+
+    def __repr__(self):
+        fmt = "TruthParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
+            " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
+        msg = fmt.format(self.image_id, self.id,
+                         self.semantic_keys[self.semantic_type],
+                         self.group_id,
+                         self.is_primary,
+                         self.interaction_id,
+                         self.points.shape[0])
+        return msg
+
+
 class TruthParticle(Particle):
     '''
     Data structure mirroring <Particle>, reserved for true particles
