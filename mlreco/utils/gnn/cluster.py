@@ -361,23 +361,22 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 
 
 @numba_wrapper(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, coords_index=[1, 4]):
+def get_cluster_points_label(data, particles, clusts, random_order=True, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
-    - If fragments (groupwise=False), returns start point only
-    - If particle instance (groupwise=True), returns start point of primary shower fragment
-      twice if shower, delta or Michel and end points of tracks if track.
+    Returns start point of primary shower fragment twice if shower, delta or Michel 
+    and end points of tracks if track.
 
     Args:
         data (torch.tensor)     : (N,6) Voxel coordinates [x, y, z, batch_id, value, clust_id, group_id]
         particles (torch.tensor): (N,9) Point coordinates [start_x, start_y, start_z, batch_id, last_x, last_y, last_z, start_t, shape_id]
                                 (obtained with parse_particle_coords)
         clusts ([np.ndarray])   : (C) List of arrays of voxel IDs in each cluster
-        groupwise (bool)        : Whether or not to get a single point per group (merges shower fragments)
+        random_order (bool)     : Whether or not to shuffle the start and end points randomly
     Returns:
         np.ndarray: (N,3/6) particle wise start (and end points in RANDOMIZED ORDER)
     """
-    return _get_cluster_points_label(data, particles, clusts, groupwise,
+    return _get_cluster_points_label(data, particles, clusts, random_order,
                                     batch_col=batch_col,
                                     coords_index=coords_index)
 
@@ -385,26 +384,19 @@ def get_cluster_points_label(data, particles, clusts, groupwise, batch_col=0, co
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
-                              groupwise: nb.boolean = False,
+                              random_order: nb.boolean = True,
                               batch_col: nb.int64 = 0,
                               coords_index: nb.types.List(nb.int64[:]) = [1, 4]) -> nb.float64[:,:]:
-    # Get batch_ids and group_ids
+
+    # Get start and end points (one and the same for all but track class)
     batch_ids = _get_cluster_batch(data, clusts)
-    if not groupwise:
-        points = np.empty((len(clusts), 3), dtype=data.dtype)
-        clust_ids = _get_cluster_label(data, clusts)
-        for i, c in enumerate(clusts):
-            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
-            idx = batch_mask[clust_ids[i]]
-            points[i] = particles[idx, coords_index[0]:coords_index[1]]
-    else:
-        points = np.empty((len(clusts), 6), dtype=data.dtype)
-        for i, g in enumerate(clusts): # Here clusters are groups
-            batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
-            clust_ids  = np.unique(data[g,5]).astype(np.int64)
-            minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
-            order = np.array([0, 1, 2, 4, 5, 6]) if np.random.choice(2) else np.array([4, 5, 6, 0, 1, 2])
-            points[i] = particles[batch_mask][clust_ids[minid]][order]
+    points = np.empty((len(clusts), 6), dtype=data.dtype)
+    for i, c in enumerate(clusts): # Here clusters are groups
+        batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
+        clust_ids  = np.unique(data[c, 5]).astype(np.int64)
+        minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
+        order = np.array([0, 1, 2, 4, 5, 6]) if (np.random.choice(2) or not random_order) else np.array([4, 5, 6, 0, 1, 2])
+        points[i] = particles[batch_mask][clust_ids[minid]][order]
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
