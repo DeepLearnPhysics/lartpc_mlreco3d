@@ -74,6 +74,97 @@ here:
 https://github.com/DeepLearnPhysics/larcv2/blob/develop/larcv/core/DataFormat/Particle.h
 
 
+How to get true neutrino information
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. tip::
+
+    As of now (6/1/22) you need to build your own copy of ``larcv2``
+    to have access to the ``larcv::Neutrino`` data structure which
+    stores all of the true neutrino information.
+
+    .. code-block:: bash
+
+        $ git clone https://github.com/DeepLearnPhysics/larcv2.git
+        $ cd larcv2 & git checkout develop
+        $ source configure.sh & make -j4
+
+    If you use ``lartpc_mlreco3d`` in command line, you just need to
+    ``source larcv2/configure.sh`` before running ``lartpc_mlreco3d`` code.
+
+    If instead you rely on a notebook, you will need to load the right version
+    of ``larcv``, the one you just built instead of the default one
+    from the Singularity container.
+
+    .. code-block:: python
+
+        %env LD_LIBRARY_PATH=/path/to/your/larcv2/build/lib:$LD_LIBRARY_PATH
+
+    Replace the path with the correct one where you just built larcv2.
+    This cell should be the first one of your notebook (before you import
+    ``larcv`` or ``lartpc_mlreco3d`` modules).
+
+
+Assuming you are either using a Singularity container that has the right
+larcv2 compiled or you followed the note above explaining how to get it
+by yourself, you can use the ``parse_neutrino_asis`` parser of ``lartpc_mlreco3d``.
+
+
+.. code-block:: yaml
+
+    iotool:
+      dataset:
+        schema:
+          neutrinos:
+            - parse_neutrino_asis
+            - neutrino_mpv
+            - cluster3d_pcluster
+
+
+You can then read ``data['neutrinos'][entry]`` which is a list of
+objects of type ``larcv::Neutrino``. You can check out the header
+file here for a full list of attributes:
+https://github.com/DeepLearnPhysics/larcv2/blob/develop/larcv/core/DataFormat/Neutrino.h
+
+A quick example could be:
+
+.. code-block:: python
+
+    for neutrino in data['neutrinos'][entry]:
+        print(neutrino.pdg_code()) # 12 for nue, 14 for numu
+        print(neutrino.current_type(), neutrino.interaction_type())
+
+If you try this, it will print integers for the current type and interaction type.
+The key to interprete them is in the MCNeutrino header:
+https://internal.dunescience.org/doxygen/MCNeutrino_8h_source.html
+
+
+How to read true SimEnergyDeposits (true voxels)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There is a way to retrieve the true voxels and SimEnergyDeposits particle-wise.
+Add the following block to your configuration under ``iotool.dataset.schema``:
+
+.. code-block:: yaml
+
+    iotool:
+      dataset:
+        schema:
+          simenergydeposits:
+            - parse_cluster3d
+            - cluster3d_sed
+
+
+Then you can read it as such (e.g. using analysis tools' predictor):
+
+.. code-block:: python
+
+    predictor.data_blob['simenergydeposits'][entry]
+
+It will have a shape ``(N, 6)`` where column ``4`` contains the SimEnergyDeposit value
+and column ``5`` contains the particle ID.
+
+
 Training-related questions
 --------------------------
 
@@ -101,7 +192,7 @@ weights related to the module.
     versus in your network, you can use ``model_name`` to fix it.
 
     TODO: explain more.
-    
+
 I have another question!
 ^^^^^^^^^^^^^^^^^^^^^^^^
 Ping Laura (@Temigo) or someone else in the `lartpc_mlreco3d` team.
