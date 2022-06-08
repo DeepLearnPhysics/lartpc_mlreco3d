@@ -9,6 +9,7 @@ from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
+from mlreco.utils.deghosting import compute_rescaled_charge
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
@@ -208,15 +209,7 @@ class FullChain(FullChainGNN):
             deghost = result['ghost'][0].argmax(dim=1) == 0
 
             # Rescale the charge column, store it
-            hit_charges  = input[0][deghost, last_index  :last_index+3]
-            hit_ids      = input[0][deghost, last_index+3:last_index+6]
-            multiplicity = torch.empty(hit_charges.shape, dtype=torch.long, device=hit_charges.device)
-            for b in batches:
-                batch_mask = input[0][deghost,self.batch_col] == b
-                _, inverse, counts = torch.unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
-                multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
-            pmask   = hit_ids > -1
-            charges = torch.sum((hit_charges*pmask)/multiplicity, dim=1)/torch.sum(pmask, dim=1) # Take average estimate
+            charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
             input[0][deghost, 4] = charges
             result.update({'input_rescaled':[input[0][deghost,:5]]})
 
