@@ -23,7 +23,7 @@ class Particle:
     size: int
         Total number of voxels that belong to this particle
     depositions: (N, 1) np.array
-        Array of energy deposition values for each voxel
+        Array of energy deposition values for each voxel (rescaled, ADC units)
     voxel_indices: (N, ) np.array
         Numeric integer indices of voxel positions of this particle
         with respect to the total array of point in a single image.
@@ -54,7 +54,7 @@ class Particle:
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
-        self.depositions = depositions
+        self.depositions = depositions # In rescaled ADC
         self.voxel_indices = voxel_indices
         self.semantic_type = semantic_type
         self.pid = pid
@@ -125,7 +125,7 @@ class ParticleFragment(Particle):
         self.id = fragment_id
         self.points = coords
         self.size = coords.shape[0]
-        self.depositions = depositions
+        self.depositions = depositions # In rescaled ADC
         self.voxel_indices = voxel_indices
         self.semantic_type = semantic_type
         self.group_id = group_id
@@ -157,8 +157,9 @@ class ParticleFragment(Particle):
 
 class TruthParticleFragment(ParticleFragment):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, depositions_MeV=None, **kwargs):
         super(TruthParticleFragment, self).__init__(*args, **kwargs)
+        self.depositions_MeV = depositions_MeV
 
     def __repr__(self):
         fmt = "TruthParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
@@ -186,14 +187,23 @@ class TruthParticle(Particle):
         Raw larcv.Particle C++ object as retrived from parse_particles_asis.
     match: List[int]
         List of Particle IDs that match to this TruthParticle
+    coords_noghost:
+        Coordinates using true labels (not adapted to deghosting output)
+    depositions_noghost:
+        Depositions using true labels (not adapted to deghosting output), in MeV.
+    depositions_MeV:
+        Similar as `depositions`, i.e. using adapted true labels.
+        Using true MeV energy deposits instead of rescaled ADC units.
     '''
-    def __init__(self, *args, particle_asis=None, coords_noghost=None, depositions_noghost=None, **kwargs):
+    def __init__(self, *args, particle_asis=None, coords_noghost=None, depositions_noghost=None,
+                depositions_MeV=None, **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
         self.asis = particle_asis
         self.match = []
         self._match_counts = {}
         self.coords_noghost = coords_noghost
         self.depositions_noghost = depositions_noghost
+        self.depositions_MeV = depositions_MeV
 
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
