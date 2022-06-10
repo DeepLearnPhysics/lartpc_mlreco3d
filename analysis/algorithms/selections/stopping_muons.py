@@ -196,7 +196,11 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             track_dict= update_dict
 
             # Split into segments and compute local dQ/dx
+            if end != 0: # Invert points along PCA
+                coords_pca = coords_pca.max() - coords_pca
+
             bins = np.arange(coords_pca.min(), coords_pca.max(), bin_size)
+            # bin_inds takes values in [1, len(bins)]
             bin_inds = np.digitize(coords_pca, bins)
 
             # spatial_bins = np.arange(0, spatial_size, spatial_bin_size)
@@ -215,7 +219,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'cell_dN':  np.count_nonzero(mask),
                     'cell_dx': dx,
                     'cell_bin': i,
-                    'cell_residual_range': (i if end == 0 else len(bins)-i-1) * bin_size,
+                    'cell_residual_range': (i - 0.5) * bin_size,
                     'nbins': len(bins)
                 })
                 update_dict.update(track_dict)

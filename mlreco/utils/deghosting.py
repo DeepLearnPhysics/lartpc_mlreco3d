@@ -5,6 +5,34 @@ from scipy.spatial.distance import cdist
 from torch_cluster import knn
 
 
+def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, batch_col = 0):
+    """
+    Computes rescaled charge after deghosting
+
+    last_index: 4 + deghost_input_features
+    """
+    if torch.is_tensor(input_data):
+        unique = torch.unique
+        empty = lambda n: torch.empty(n, dtype=torch.long, device=hit_charges.device)
+        sum = lambda x: torch.sum(x, dim=1)
+    else:
+        unique = np.unique
+        empty = np.empty
+        sum = lambda x: np.sum(x, axis=1)
+
+    batches = unique(input_data[:, batch_col])
+    hit_charges  = input_data[deghost_mask, last_index  :last_index+3]
+    hit_ids      = input_data[deghost_mask, last_index+3:last_index+6]
+    multiplicity = empty(hit_charges.shape, )
+    for b in batches:
+        batch_mask = input_data[deghost_mask, batch_col] == b
+        _, inverse, counts = unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
+        multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
+    pmask   = hit_ids > -1
+    charges = sum((hit_charges*pmask)/multiplicity)/sum(pmask) # Take average estimate
+    return charges
+
+
 def adapt_labels_knn(result, label_seg, label_clustering,
                       num_classes=5,
                       batch_column=0,

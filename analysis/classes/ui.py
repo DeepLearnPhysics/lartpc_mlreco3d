@@ -13,7 +13,7 @@ from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex, predict_vertex
-from mlreco.utils.deghosting import deghost_labels_and_predictions
+from mlreco.utils.deghosting import deghost_labels_and_predictions, compute_rescaled_charge
 
 from mlreco.utils.gnn.cluster import get_cluster_label
 
@@ -382,7 +382,7 @@ class FullChainPredictor:
             inter_labels = self._fit_predict_interaction_labels(entry)
             group_ids = get_cluster_label(group_labels.reshape(-1, 1), fragments, column=0)
             inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), fragments, column=0)
-        
+
         else:
             group_ids = np.ones(len(fragments)).astype(int) * -1
             inter_ids = np.ones(len(fragments)).astype(int) * -1
@@ -512,7 +512,7 @@ class FullChainPredictor:
             assert len(self.result['inter_group_pred'][entry]) == len(particles)
             inter_labels = self._fit_predict_interaction_labels(entry)
             inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), particles, column=0)
-        
+
         else:
             inter_ids = np.ones(len(particles)).astype(int) * -1
 
@@ -761,12 +761,15 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-    def get_true_fragments(self, entry, verbose=False) -> List[ParticleFragment]:
+    def get_true_fragments(self, entry, verbose=False) -> List[TruthParticleFragment]:
         '''
-        Get list of true <ParticleFragment> instances for given <entry> batch id. 
+        Get list of <TruthParticleFragment> instances for given <entry> batch id.
         '''
-        
+        # Both are "adapted" labels
         labels = self.data_blob['cluster_label'][entry]
+        segment_label = self.data_blob['segment_label'][entry][:, -1]
+        rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
+
         fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
         fragments = []
 
@@ -787,7 +790,8 @@ class FullChainEvaluator(FullChainPredictor):
 
             points = labels[mask][:, 1:4]
             size = points.shape[0]
-            depositions = labels[mask][:, 4]
+            depositions = rescaled_input_charge[mask]
+            depositions_MeV = labels[mask][:, 4]
             voxel_indices = np.where(mask)[0]
 
             group_id, counts = np.unique(labels[:, 6][mask].astype(int), return_counts=True)
@@ -827,12 +831,13 @@ class FullChainEvaluator(FullChainPredictor):
             else:
                 is_primary = is_primary[0]
 
-            part = ParticleFragment(points, fid, semantic_type,
+            part = TruthParticleFragment(points, fid, semantic_type,
                             interaction_id=interaction_id,
                             group_id=group_id,
                             image_id=entry,
                             voxel_indices=voxel_indices,
                             depositions=depositions,
+                            depositions_MeV=depositions_MeV,
                             is_primary=is_primary,
                             alias='Fragment')
 
@@ -863,8 +868,9 @@ class FullChainEvaluator(FullChainPredictor):
         labels = self.data_blob['cluster_label'][entry]
         if self.deghosting:
             labels_noghost = self.data_blob['cluster_label_noghost'][entry]
-        segment_label = self.data_blob['segment_label'][entry]
+        segment_label = self.data_blob['segment_label'][entry][:, -1]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
+        rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
         particles = []
         exclude_ids = set([])
@@ -945,7 +951,8 @@ class FullChainEvaluator(FullChainPredictor):
                 nu_id = nu_id[0]
 
             fragments = np.unique(labels[mask][:, 5].astype(int))
-            depositions = self.data_blob['input_data'][entry][mask][:, 4].squeeze()
+            depositions_MeV = labels[mask][:, 4]
+            depositions = rescaled_input_charge[mask] # Will be in ADC
             coords_noghost, depositions_noghost = None, None
             if self.deghosting:
                 coords_noghost = labels_noghost[mask_noghost][:, 1:4]
@@ -958,7 +965,8 @@ class FullChainEvaluator(FullChainPredictor):
                 depositions=depositions,
                 is_primary=is_primary,
                 coords_noghost=coords_noghost,
-                depositions_noghost=depositions_noghost)
+                depositions_noghost=depositions_noghost,
+                depositions_MeV=depositions_MeV)
 
             particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
@@ -966,13 +974,13 @@ class FullChainEvaluator(FullChainPredictor):
             particle.nu_id = nu_id
             particle.voxel_indices = np.where(mask)[0]
 
-            particle.startpoint = np.array([p.first_step().x(), 
-                                            p.first_step().y(), 
+            particle.startpoint = np.array([p.first_step().x(),
+                                            p.first_step().y(),
                                             p.first_step().z()])
 
             if semantic_type == 1:
-                particle.endpoint = np.array([p.last_step().x(), 
-                                              p.last_step().y(), 
+                particle.endpoint = np.array([p.last_step().x(),
+                                              p.last_step().y(),
                                               p.last_step().z()])
 
             if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
