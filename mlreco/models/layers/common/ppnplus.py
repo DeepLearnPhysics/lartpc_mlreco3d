@@ -463,6 +463,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     points_label = particles[particles[:, 0].int() == b][:, 1:4]
                     scores_event = ppn_score_layer[batch_index_layer].squeeze()
                     points_event = coords_layer[batch_index_layer]
+                    if len(scores_event.shape) == 0:
+                        continue
 
                     d_true = self.pairwise_distances(
                         points_label,
