@@ -94,15 +94,10 @@ class FullChainPredictor:
             - df (pd.DataFrame): pandas dataframe of ppn points, with
             x, y, z, coordinates, Score, Type, and sample index.
         '''
-        if self.deghosting:
-            # Deghosting is already applied during initialization
-            ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
-                                                  self.result,
-                                                  entry=entry, apply_deghosting=False)
-        else:
-            ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
-                                                  self.result,
-                                                  entry=entry)
+        # Deghosting is already applied during initialization
+        ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
+                                              self.result,
+                                              entry=entry, apply_deghosting=not self.deghosting)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
@@ -113,7 +108,11 @@ class FullChainPredictor:
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
             ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
 
-        ppn_candidates = np.vstack(ppn_candidates)
+        if len(ppn_candidates):
+            ppn_candidates = np.vstack(ppn_candidates)
+        else:
+            enable_classify_endpoints = 'classify_endpoints' in self.result
+            ppn_candidates = np.empty((0, 13 if not enable_classify_endpoints else 15), dtype=np.float32)
         return ppn_candidates
 
 
@@ -488,7 +487,7 @@ class FullChainPredictor:
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particles'][entry]
         # inter_group_pred = self.result['inter_group_pred'][entry]
-
+        #print(point_cloud.shape, depositions.shape, len(particles))
         particles_seg    = self.result['particles_seg'][entry]
 
         type_logits = self.result['node_pred_type'][entry]
@@ -498,10 +497,12 @@ class FullChainPredictor:
         pids = np.argmax(type_logits, axis=1)
 
         out = []
-
+        if point_cloud.shape[0] == 0:
+            return out
         assert len(particles_seg) == len(particles)
         assert len(pids) == len(particles)
         assert len(input_node_features) == len(particles)
+        assert point_cloud.shape[0] == depositions.shape[0]
 
         node_pred_vtx = self.result['node_pred_vtx'][entry]
 

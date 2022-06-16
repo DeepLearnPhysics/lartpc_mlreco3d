@@ -180,7 +180,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     # b-1) Handle the list of ndarrays
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
-    #print(target_array_keys)
+
     # print(unwrap_map)
     for target in target_array_keys:
         data = outputs[target]
@@ -199,6 +199,12 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 #     assert False
                 # print(target, len(batch_idx), len(np.unique(batch_idx.astype(np.int32))))
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
+                # We are going to assume **consecutive numbering of batch idx** starting from 0
+                # b/c problems arise if one of the targets is missing an entry (eg all voxels predicted ghost,
+                # which means a batch idx is missing from batch_idx for target = input_rescaled)
+                # then alignment across targets is lost (output[target][entry] may not correspond to batch id `entry`)
+                batch_idx = np.arange(0, batch_idx.max()+1, 1)
+                # print(target, batch_idx, [np.count_nonzero(d[:,batch_id_loc] == b) for b in batch_idx])
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
                 unwrap_map[d.shape[0]]=batch_map

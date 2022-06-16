@@ -51,7 +51,10 @@ def get_ppn_points_per_particles(input_data, res,
                                         #selection=c)
 
     if ppn.shape[0] == 0:
-        return np.empty((0, 3)), np.empty((0,)), np.empty((0, 3)), np.empty((0, 3))
+        if return_distances:
+            return np.empty((0, 3)), np.empty((0,)), np.empty((0, 3)), np.empty((0, 3))
+        else:
+            return np.empty((0, 3)), np.empty((0,)), np.empty((0, 3))
 
     ppn_voxels = ppn[:, coords_col[0]:coords_col[1]]
     ppn_score = ppn[:, 5]
@@ -69,7 +72,10 @@ def get_ppn_points_per_particles(input_data, res,
     #print('\n', ppn_voxels, '\n')
     all_voxels = input_data[data_idx]
 
-    all_primaries = primary_assignment(res['shower_node_pred'][data_idx], res['shower_group_pred'][data_idx])
+    if 'shower_node_pred' in res:
+        all_primaries = primary_assignment(res['shower_node_pred'][data_idx], res['shower_group_pred'][data_idx])
+    else:
+        all_primaries = []
 
     if 'ghost' in res and apply_deghosting:
         mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
@@ -268,11 +274,16 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             #print("best candidate distance = ", best_candidate_distance)
 
             if best_candidate_distance < inter_threshold:
-                # FIXME pick one or all of the points below threshold ?
-                ppn_candidates2.append(points[candidate_distances.argmin()][None, :])
-                d = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], [points[candidate_distances.argmin()]])
-                X = all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]][d.reshape((-1,)) < pca_radius]
-                directions.append(pca.fit(X).components_[0][None, :])
+                # Look at all of the points below threshold, pick first one for which we can make a direction
+                all_mask = candidate_distances < inter_threshold
+                best_idx = np.where(all_mask)[0][candidate_distances[all_mask].argsort()]
+                for b in best_idx:
+                    d = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], [points[b]])
+                    X = all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]][d.reshape((-1,)) < pca_radius]
+                    if X.shape[0] >= 3:
+                        ppn_candidates2.append(points[b][None, :])
+                        directions.append(pca.fit(X).components_[0][None, :])
+                        break
 
         #ppn_candidates = ppn_candidates2
         #print('now again', len(ppn_candidates))

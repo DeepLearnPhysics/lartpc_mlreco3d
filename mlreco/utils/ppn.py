@@ -408,12 +408,13 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     result = (all_batch, all_points, all_scores, all_occupancy, all_softmax, all_types,)
     if enable_classify_endpoints:
         result = result + (all_endpoints,)
+    result = np.column_stack( result )
     if len(result) == 0:
         if enable_classify_endpoints:
             return np.empty((0, 15), dtype=np.float32)
         else:
             return np.empty((0, 13), dtype=np.float32)
-    return np.column_stack( result )
+    return result
 
 
 def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,

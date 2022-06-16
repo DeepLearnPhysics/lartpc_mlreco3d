@@ -212,7 +212,6 @@ class FullChain(FullChainGNN):
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
             input[0][deghost, 4] = charges
             result.update({'input_rescaled':[input[0][deghost,:5]]})
-
         if self.enable_uresnet:
             if self.enable_charge_rescaling:
                 assert not self.uresnet_lonely.ghost
