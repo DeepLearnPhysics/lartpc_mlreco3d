@@ -69,7 +69,7 @@ def unwrap(*args, **kwargs):
     return unwrap_3d_mink(*args, **kwargs)
 
 
-def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
+def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_data'):
     """
     Break down the data_blob and outputs dictionary into events
     for sparseconvnet formatted tensors.
@@ -151,6 +151,14 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
 
     # Handle output
     result_outputs = {}
+
+    # Fix unwrap map
+    output_unwrap_map  = {}
+    for key in unwrap_map:
+        if (np.array([d.shape[0] for d in data_blob[input_key]]) == key).any():
+            output_unwrap_map[key] = unwrap_map[key]
+    unwrap_map = output_unwrap_map
+
     # b-0) Find the target keys
     target_array_keys = []
     target_list_keys  = []
@@ -181,7 +189,6 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
 
-    # print(unwrap_map)
     for target in target_array_keys:
         data = outputs[target]
         for d in data:

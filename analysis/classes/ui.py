@@ -67,12 +67,16 @@ class FullChainPredictor:
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg.get('spatial_size', 768)
-        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 10)
+        # For matching particles and interactions
+        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
+        # Idem, can be 'count' or 'iou'
+        self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
         # as primary particles
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
+        # Following 2 parameters are vertex heuristic parameters
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
@@ -1036,7 +1040,10 @@ class FullChainEvaluator(FullChainPredictor):
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to, **kwargs)
+        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to,
+                                                min_overlap=self.min_overlap_count,
+                                                overlap_mode=self.overlap_mode,
+                                                **kwargs)
         return matched_pairs
 
 
@@ -1054,7 +1061,9 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, **kwargs)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
+                                                                min_overlap=self.min_overlap_count,
+                                                                **kwargs)
 
         if match_particles:
             for interactions in matched_interactions:
@@ -1064,7 +1073,9 @@ class FullChainEvaluator(FullChainPredictor):
                 else:
                     domain_particles, codomain_particles = domain.particles, codomain.particles
                     # continue
-                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles)
+                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles,
+                                                            min_overlap=self.min_overlap_count,
+                                                            overlap_mode=self.overlap_mode)
 
         if return_counts:
             return matched_interactions, counts
