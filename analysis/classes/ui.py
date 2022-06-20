@@ -322,12 +322,7 @@ class FullChainPredictor:
         ValueError.
 
         Returns:
-            - vertex_info: tuple of length 4, with the following objects:
-                * ppn_candidates:
-                * c_candidates:
-                * vtx_candidate: (x,y,z) coordinate of predicted vertex
-                * vtx_std: standard error on the predicted vertex
-
+            - vertex_info: (x,y,z) coordinate of predicted vertex
         '''
         vertex_info = predict_vertex(inter_idx, entry,
                                      self.data_blob['input_data'],
@@ -598,8 +593,7 @@ class FullChainPredictor:
         particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(particles)
         for ia in out:
-            vertex_info = self._fit_predict_vertex_info(entry, ia.id)
-            ia.vertex = vertex_info[2]
+            ia.vertex = self._fit_predict_vertex_info(entry, ia.id)
         return out
 
 
