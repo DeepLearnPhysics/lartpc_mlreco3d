@@ -9,7 +9,25 @@ def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, batch_col 
     """
     Computes rescaled charge after deghosting
 
-    last_index: 4 + deghost_input_features
+    Note
+    ----
+    This function should work on Numpy arrays or Torch tensors.
+
+    Parameters
+    ----------
+    input_data: np.ndarray or torch.Tensor
+        Shape (N, 4+num_features) where 4 corresponds to batch_id,x,y,z
+    deghost_mask: np.ndarray or torch.Tensor
+        Shape (N,), N_deghost is the predicted deghosted voxel count
+    last_index: int, default 6
+        Indexes where hit-related features start @ 4 + deghost_input_features
+    batch_col: int, default 0
+
+    Returns
+    -------
+    np.ndarray or torch.Tensor
+        Shape (N_deghost,) contains rescaled charge array for input data.
+        Includes deghosted mask already.
     """
     if torch.is_tensor(input_data):
         unique = torch.unique
@@ -38,12 +56,50 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                       batch_column=0,
                       coords_column_range=(1, 4),
                       true_mask=None):
+    """
+    Returns new cluster labels that have the same size as the input w/ ghost points.
+    Points predicted as nonghost but that are true ghosts get the cluster label of
+    the closest cluster.
+    Points that are true ghosts and predicted as ghosts get "empty" (-1) values.
+
+    Note
+    ----
+    Uses GPU version from `torch_cluster.knn` to speed up
+    the label adaptation computation.
+
+    Parameters
+    ----------
+    result: dict
+    label_seg: list of torch.Tensor
+    label_clustering: list of torch.Tensor
+    num_classes: int, default 5
+        Semantic classes count.
+    batch_column: int, default 0
+    coords_column_range: tuple, default (1, 4)
+    true_mask: torch.Tensor, default None
+        True nonghost mask. If None, will use the intersection
+        of predicted nonghost and true nonghost. This option is
+        useful to do "cheat ghost predictions" (i.e. mimic deghosting
+        predictions using true ghost mask, to run later stages
+        of the chain independently of the deghosting stage).
+
+    Returns
+    -------
+    np.ndarray
+        shape: (input w/ ghost points, label_clusters_features)
+
+    See Also
+    --------
+    adapt_labels, adapt_labels_numpy
+    """
     complete_label_clustering = []
     c1, c2 = coords_column_range
 
     if true_mask is not None:
         assert true_mask.shape[0] == label_seg[0].shape[0]
     c3 = max(c2, batch_column+1)
+    import time
+    start = time.time()
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
@@ -59,95 +115,70 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                                                      batch_clustering.size(1)))
             if torch.cuda.is_available():
                 new_label_clustering = new_label_clustering.cuda()
-            X_train = batch_clustering[:, c1:c2]
 
             if true_mask is None:
                 nonghost_mask = (result['ghost'][i][batch_mask].argmax(dim=1) == 0)
                 # Select voxels predicted as nonghost, but true ghosts
                 mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
+                mask = torch.where(mask)[0]
+                # Now we need a special treatment for these, if there are any.
                 if batch_coords[mask].shape[0] > 0:
-                    neighbors = knn(X_train, batch_coords[mask, c1:c2], 1)
-                    _, d = neighbors[0], neighbors[1]
+                    tagged_voxels_count = 1 # to get the loop started
+                    X_true = batch_clustering
+                    X_pred = batch_coords[mask]
+                    while tagged_voxels_count > 0 and X_pred.shape[0] > 0:
+                        #print(batch_id, "while", X_true.shape, X_pred.shape, tagged_voxels_count)
+                        neighbors = knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)
+                        _, d = neighbors[0], neighbors[1]
 
-                    additional_label_clustering = torch.cat([batch_coords[mask],
-                                                            batch_clustering[d, c3:]], dim=1).float()
-                    new_label_clustering[mask] = additional_label_clustering
+                        # compute Chebyshev distance between predicted and true
+                        distances = torch.amax(torch.abs(X_true[neighbors[1], c1:c2] - X_pred[neighbors[0], c1:c2]), dim=1)
+                        #print(distances)
+                        select_mask = distances <= 1
+
+                        tagged_voxels_count = select_mask.sum()
+                        if tagged_voxels_count > 0:
+                            # We assign label of closest true nonghost voxel to those within Chebyshev distance 1
+                            additional_label_clustering = torch.cat([X_pred[select_mask],
+                                                                    X_true[d[select_mask], c3:]], dim=1).float()
+
+                            new_label_clustering[mask[select_mask]] = additional_label_clustering
+                            mask = mask[~select_mask]
+                            # Update for next iteration
+                            X_true = additional_label_clustering
+                            X_pred = X_pred[~select_mask]
             else:
                 nonghost_mask = true_mask[batch_mask]
 
+            # Include true nonghost voxels by default
             new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = batch_clustering.float()
+            # Now we save - need only to keep predicted nonghost voxels.
             label_c.append(new_label_clustering[nonghost_mask])
         label_c = torch.cat(label_c, dim=0)
         complete_label_clustering.append(label_c)
+    print("time = ", time.time() - start)
+    #assert False
     return complete_label_clustering
 
 
-def adapt_labels(result, label_seg, label_clustering,
-                 num_classes=5,
-                 batch_column=0,
-                 coords_column_range=(1, 4),
-                 true_mask=None):
+def adapt_labels(*args, **kwargs):
     """
-    Returns new cluster labels that have the same size as the input w/ ghost points.
-    Points predicted as nonghost but that are true ghosts get the cluster label of
-    the closest cluster.
-    Points that are true ghosts and predicted as ghosts get "emtpy" (-1) values.
-    Return shape: (input w/ ghost points, label_clusters_features)
+    Kept for backward compatibility, to deprecate soon.
+
+    See Also
+    --------
+    adapt_labels_knn, adapt_labels_numpy
     """
-    complete_label_clustering = []
-    c1, c2 = coords_column_range
-
-    if true_mask is not None:
-        assert true_mask.shape[0] == label_seg[0].shape[0]
-
-    c3 = max(c2, batch_column+1)
-    for i in range(len(label_seg)):
-        coords = label_seg[i][:, :c3]
-        label_c = []
-        for batch_id in coords[:, batch_column].int().unique():
-            batch_mask = coords[:, batch_column] == batch_id
-            batch_coords = coords[batch_mask]
-            batch_clustering = label_clustering[i][label_clustering[i][:, batch_column] == batch_id]
-
-            # Prepare new labels
-            new_label_clustering = -1. * torch.ones((batch_coords.size(0),
-                                                     label_clustering[i].size(1)))
-            new_label_clustering[:, :c3] = batch_coords
-
-            if torch.cuda.is_available():
-                new_label_clustering = new_label_clustering.cuda()
-
-            if true_mask is None:
-                nonghost_mask = (result['ghost'][i][batch_mask].argmax(dim=1) == 0)
-                # Select voxels predicted as nonghost, but true ghosts
-                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
-                # Assign them to closest cluster
-                if len(batch_clustering):
-                    #print(batch_coords.shape, batch_clustering.shape)
-                    d = distances(batch_coords[mask, c1:c2],
-                                batch_clustering[:, c1:c2]).argmin(dim=1)
-                    additional_label_clustering = torch.cat([batch_coords[mask],
-                                                            batch_clustering[d, c3:]], dim=1).float()
-                    new_label_clustering[mask] = additional_label_clustering
-            else:
-                nonghost_mask = true_mask[batch_mask]
-
-            if len(batch_clustering):
-                new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = batch_clustering.float()
-
-            label_c.append(new_label_clustering[nonghost_mask])
-        label_c = torch.cat(label_c, dim=0)
-        complete_label_clustering.append(label_c)
-    return complete_label_clustering
+    return adapt_labels_knn(*args, **kargs)
 
 
 def adapt_labels_numpy(result, label_seg, label_clustering, num_classes=5, batch_col=0, coords_col=(1, 4)):
     """
-    Returns new cluster labels that have the same size as the input w/ ghost points.
-    Points predicted as nonghost but that are true ghosts get the cluster label of
-    the closest cluster.
-    Points that are true ghosts and predicted as ghosts get "emtpy" (-1) values.
-    Return shape: (input w/ ghost points, label_clusters_features)
+    Numpy version of `adapt_labels`.
+
+    See Also
+    --------
+    adapt_labels, adapt_labels_knn
     """
     c1, c2 = coords_col
     complete_label_clustering = []
@@ -189,6 +220,19 @@ def deghost_labels_and_predictions(data_blob, result):
     '''
     Given dictionaries <data_blob> and <result>, apply deghosting to
     uresnet predictions and labels for use in later reconstruction stages.
+
+    Warning
+    -------
+    Modifies in place the input data and result dictionaries.
+
+    Note
+    ----
+    Used in analysis tools (decorator).
+
+    Parameters
+    ----------
+    data_blob: dict
+    result: dict
     '''
 
     result['ghost_mask'] = [
