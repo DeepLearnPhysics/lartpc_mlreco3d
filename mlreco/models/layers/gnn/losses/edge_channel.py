@@ -93,18 +93,23 @@ class EdgeChannelLoss(torch.nn.Module):
                 if not edge_pred.shape[0]:
                     continue
                 edge_index = out['edge_index'][i][j]
-                clusts = out['clusts'][i][j]
-                group_ids = get_cluster_label(labels, clusts, self.target_col)
+                clusts     = out['clusts'][i][j]
+                clust_ids  = get_cluster_label(labels, clusts, self.source_col)
+                group_ids  = get_cluster_label(labels, clusts, self.target_col)
 
-                # If high purity is requested, remove edges in groups without a primary
+                # If a cluster target is -1, none of its edges contribute to the loss
+                valid_clust_mask = group_ids > -1
+                valid_mask = np.all(valid_clust_mask[edge_index], axis = -1)
+
+                # If high purity is requested, remove edges in groups without a single primary
                 if self.high_purity:
-                    clust_ids   = get_cluster_label(labels, clusts, self.source_col)
-                    primary_ids = get_cluster_label(labels, clusts, self.primary_col)
-                    purity_mask = edge_purity_mask(edge_index, clust_ids, group_ids, primary_ids)
-                    if not purity_mask.any():
-                        continue
-                    edge_index  = edge_index[purity_mask]
-                    edge_pred   = edge_pred[np.where(purity_mask)[0]]
+                    primary_ids  = get_cluster_label(labels, clusts, self.primary_col)
+                    valid_mask  &= edge_purity_mask(edge_index, clust_ids, group_ids, primary_ids)
+
+                # Apply valid mask to edges and their predictions
+                if not valid_mask.any(): continue
+                edge_index = edge_index[valid_mask]
+                edge_pred  = edge_pred[np.where(valid_mask)[0]]
 
                 # Use group information or particle tree to determine the true edge assigment
                 if self.target == 'group':

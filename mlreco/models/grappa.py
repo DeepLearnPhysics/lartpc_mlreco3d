@@ -1,4 +1,3 @@
-from operator import xor
 import random
 import torch
 import numpy as np

@@ -197,14 +197,20 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_pred_p = out['node_pred_p'][i][j]
                     if not node_pred_p.shape[0]:
                         continue
-
                     node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
-                    loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
-                    total_loss += loss
-                    p_loss += float(loss)
 
-                    # Increment the number of nodes
-                    n_clusts_momentum += len(clusts)
+                    # Do not apply loss to nodes labeled -1 (unknown class)
+                    node_mask = torch.nonzero(node_assn_p > -1, as_tuple=True)[0]
+                    if len(node_mask):
+                        node_pred_p = node_pred_p[node_mask]
+                        node_assn_p = node_assn_p[node_mask]
+
+                        loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
+                        total_loss += loss
+                        p_loss += float(loss)
+
+                        # Increment the number of nodes
+                        n_clusts_momentum += len(clusts)
 
                 if compute_vtx:
                     node_pred_vtx = out['node_pred_vtx'][i][j]
@@ -265,7 +271,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                             pos_pred = pos_pred + anchors
 
                         vertex_labels.append(pos_label)
-                        loss1 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(pos_pred, pos_label), dim=1), 
+                        loss1 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(pos_pred, pos_label), dim=1),
                                                        max=self.max_vertex_distance**2))
 
                         # print(loss1, pos_pred)
@@ -273,7 +279,7 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                         # loss1 = torch.sum(torch.mean(self.vtx_position_loss(pos_pred, pos_label), dim=1))
                         # print(loss1, loss2)
-                        
+
                         total_loss += loss1 + loss2
 
                         vtx_position_loss += float(loss1)
@@ -674,7 +680,7 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
 
     def compute_type(self, node_pred_type, labels, clusts, iteration=None):
         '''
-        Compute particle classification type loss. 
+        Compute particle classification type loss.
         '''
         # assert False
         total_loss, n_clusts_type, type_loss = 0, 0, 0
@@ -715,14 +721,14 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         return total_loss, type_loss, n_clusts_type, type_acc
 
     def compute_vertex(self, node_pred_vtx, labels, clusts):
-        
+
         node_x_vtx = get_cluster_label(labels, clusts, column=self.vtx_col)
         node_y_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+1)
         node_z_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+2)
 
         node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
                                     dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
-        
+
         vtx_position_loss = 0
         vtx_score_loss = 0
         loss = 0
@@ -732,7 +738,7 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         vtx_score_acc = 0
 
         # Select primaries for vertex regression
-        select_primaries = get_cluster_label(labels, clusts, 
+        select_primaries = get_cluster_label(labels, clusts,
                                              column=self.vtx_positives_col)
 
         select_primaries = select_primaries.astype(bool)
@@ -780,7 +786,7 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
             good_index_vtx = torch.all((0 <= vtx_scatter_label) & (vtx_scatter_label <= 1), dim=1)
         else:
             vtx_scatter_label = node_assn_vtx
-            good_index_vtx = torch.all((0 <= vtx_scatter_label) & (vtx_scatter_label <= self.spatial_size), dim=1)   
+            good_index_vtx = torch.all((0 <= vtx_scatter_label) & (vtx_scatter_label <= self.spatial_size), dim=1)
 
         vtx_scatter = nodes_vtx_reg
 
@@ -790,10 +796,10 @@ class NodeTransformerLoss(NodeEvidentialKinematicsLoss):
         if len(vtx_scatter):
 
             # for now only sum losses, they get averaged below in results dictionary
-            loss2 = self.vtx_score_loss(node_pred_vtx[:, 3:], 
+            loss2 = self.vtx_score_loss(node_pred_vtx[:, 3:],
                                         positives)
             loss1 = torch.sum(torch.mean(
-                self.vtx_position_loss(vtx_scatter[good_index_vtx, :3], 
+                self.vtx_position_loss(vtx_scatter[good_index_vtx, :3],
                                        vtx_scatter_label[good_index_vtx]), dim=1))
 
             # print("Position Loss = ", loss1, vtx_scatter[good_index_vtx].shape)
