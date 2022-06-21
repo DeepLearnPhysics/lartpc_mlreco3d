@@ -67,12 +67,16 @@ class FullChainPredictor:
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg.get('spatial_size', 768)
-        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 10)
+        # For matching particles and interactions
+        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
+        # Idem, can be 'count' or 'iou'
+        self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
         # as primary particles
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
+        # Following 2 parameters are vertex heuristic parameters
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
@@ -94,15 +98,10 @@ class FullChainPredictor:
             - df (pd.DataFrame): pandas dataframe of ppn points, with
             x, y, z, coordinates, Score, Type, and sample index.
         '''
-        if self.deghosting:
-            # Deghosting is already applied during initialization
-            ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
-                                                  self.result,
-                                                  entry=entry, apply_deghosting=False)
-        else:
-            ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
-                                                  self.result,
-                                                  entry=entry)
+        # Deghosting is already applied during initialization
+        ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
+                                              self.result,
+                                              entry=entry, apply_deghosting=not self.deghosting)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
@@ -113,7 +112,11 @@ class FullChainPredictor:
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
             ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
 
-        ppn_candidates = np.vstack(ppn_candidates)
+        if len(ppn_candidates):
+            ppn_candidates = np.vstack(ppn_candidates)
+        else:
+            enable_classify_endpoints = 'classify_endpoints' in self.result
+            ppn_candidates = np.empty((0, 13 if not enable_classify_endpoints else 15), dtype=np.float32)
         return ppn_candidates
 
 
@@ -319,12 +322,7 @@ class FullChainPredictor:
         ValueError.
 
         Returns:
-            - vertex_info: tuple of length 4, with the following objects:
-                * ppn_candidates:
-                * c_candidates:
-                * vtx_candidate: (x,y,z) coordinate of predicted vertex
-                * vtx_std: standard error on the predicted vertex
-
+            - vertex_info: (x,y,z) coordinate of predicted vertex
         '''
         vertex_info = predict_vertex(inter_idx, entry,
                                      self.data_blob['input_data'],
@@ -488,7 +486,7 @@ class FullChainPredictor:
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particles'][entry]
         # inter_group_pred = self.result['inter_group_pred'][entry]
-
+        #print(point_cloud.shape, depositions.shape, len(particles))
         particles_seg    = self.result['particles_seg'][entry]
 
         type_logits = self.result['node_pred_type'][entry]
@@ -498,10 +496,12 @@ class FullChainPredictor:
         pids = np.argmax(type_logits, axis=1)
 
         out = []
-
+        if point_cloud.shape[0] == 0:
+            return out
         assert len(particles_seg) == len(particles)
         assert len(pids) == len(particles)
         assert len(input_node_features) == len(particles)
+        assert point_cloud.shape[0] == depositions.shape[0]
 
         node_pred_vtx = self.result['node_pred_vtx'][entry]
 
@@ -593,8 +593,7 @@ class FullChainPredictor:
         particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(particles)
         for ia in out:
-            vertex_info = self._fit_predict_vertex_info(entry, ia.id)
-            ia.vertex = vertex_info[2]
+            ia.vertex = self._fit_predict_vertex_info(entry, ia.id)
         return out
 
 
@@ -1035,7 +1034,10 @@ class FullChainEvaluator(FullChainPredictor):
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to, **kwargs)
+        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to,
+                                                min_overlap=self.min_overlap_count,
+                                                overlap_mode=self.overlap_mode,
+                                                **kwargs)
         return matched_pairs
 
 
@@ -1053,7 +1055,9 @@ class FullChainEvaluator(FullChainPredictor):
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to, **kwargs)
+        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
+                                                                min_overlap=self.min_overlap_count,
+                                                                **kwargs)
 
         if match_particles:
             for interactions in matched_interactions:
@@ -1063,7 +1067,9 @@ class FullChainEvaluator(FullChainPredictor):
                 else:
                     domain_particles, codomain_particles = domain.particles, codomain.particles
                     # continue
-                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles)
+                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles,
+                                                            min_overlap=self.min_overlap_count,
+                                                            overlap_mode=self.overlap_mode)
 
         if return_counts:
             return matched_interactions, counts

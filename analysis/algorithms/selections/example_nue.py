@@ -21,10 +21,10 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     for i, index in enumerate(image_idxs):
 
         # Process Interaction Level Information
-        matches, counts = predictor.match_interactions(i, 
-            mode='true_to_pred', 
-            match_particles=True, 
-            drop_nonprimary_particles=primaries, 
+        matches, counts = predictor.match_interactions(i,
+            mode='true_to_pred',
+            match_particles=True,
+            drop_nonprimary_particles=primaries,
             return_counts=True)
 
         for i, interaction_pair in enumerate(matches):
@@ -35,6 +35,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 pred_int_dict['true_interaction_matched'] = False
             else:
                 pred_int_dict['true_interaction_matched'] = True
+            true_int_dict['true_nu_id'] = true_int.nu_id
             pred_int_dict['interaction_match_counts'] = counts[i]
             interactions_dict = OrderedDict({'Index': index})
             interactions_dict.update(true_int_dict)
@@ -45,16 +46,16 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             pred_particles, true_particles = [], true_int.particles
             if pred_int is not None:
                 pred_particles = pred_int.particles
-            matched_particles, _, ious = match_particles_fn(true_particles, 
+            matched_particles, _, ious = match_particles_fn(true_particles,
                                                             pred_particles)
             for i, m in enumerate(matched_particles):
                 particles_dict = OrderedDict({'Index': index})
                 true_p, pred_p = m[0], m[1]
-                pred_particle_dict = get_particle_properties(pred_p, 
-                    vertex=pred_int.vertex, 
+                pred_particle_dict = get_particle_properties(pred_p,
+                    vertex=pred_int.vertex,
                     prefix='pred')
-                true_particle_dict = get_particle_properties(true_p, 
-                    vertex=true_int.vertex, 
+                true_particle_dict = get_particle_properties(true_p,
+                    vertex=true_int.vertex,
                     prefix='true')
                 if pred_p is not None:
                     pred_particle_dict['true_particle_is_matched'] = True
@@ -66,7 +67,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 particles_dict.update(true_particle_dict)
 
                 particles.append(particles_dict)
-        
+
     return [interactions, particles]
 
 
@@ -100,7 +101,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
 
             # Match true particles to predicted particles
             matched_particles, _, _ = match(true_particles, pred_particles)
-            
+
             if pred_int is None:
                 print("No predicted interaction match = ", matched_particles)
                 true_count_primary_leptons = true_int.primary_particle_counts[1] \
@@ -117,7 +118,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         'pred_particle_is_matched': False,
                         'true_particle_type': p.pid,
                         'true_particle_size': p.size,
-                        'true_particle_is_primary': False, 
+                        'true_particle_is_primary': False,
                         'true_particle_is_matched': False,
                         'pred_count_primary_leptons': 0,
                         'pred_count_primary_particles': 0,
@@ -127,7 +128,7 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         'pred_particle_E': -1,
                         'true_particle_E': p.sum_edep})
                     interactions_tp.append(update_dict)
-            
+
             else:
                 true_count_primary_leptons = true_int.primary_particle_counts[1] \
                                            + true_int.primary_particle_counts[2]
@@ -166,10 +167,10 @@ def test_selection(data_blob, res, data_idx, analysis_cfg, cfg):
                         'true_interaction_is_matched': True,
                         'pred_particle_E': -1,
                         'true_particle_E': -1})
-                    
+
                     update_dict['pred_interaction_id'] = pred_int.id
                     update_dict['true_interaction_id'] = true_int.id
-                    
+
                     p1, p2 = m
 
                     if p2 is not None:

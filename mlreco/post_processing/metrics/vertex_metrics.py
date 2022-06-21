@@ -9,7 +9,7 @@ from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
 from mlreco.utils.vertex import predict_vertex, get_vertex
 
 
-@post_processing(['vertex-metrics', 'vertex-candidates', 'vertex-true', 'vertex-distances', 'vertex-distances-others', 'vertex-distances-primaries'],
+@post_processing(['vertex-candidates', 'vertex-distances', 'vertex-distances-others', 'vertex-distances-primaries'],
                 ['input_data', 'seg_label', 'clust_data', 'particles', 'kinematics'],
                 ['node_pred_vtx', 'inter_particles', 'inter_group_pred', 'particles_seg'])
 def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
@@ -20,25 +20,25 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     vtx_col             = module_cfg.get('vtx_col', 9)
     vtx_positives_col   = module_cfg.get('vtx_positives_col', 12)
     primary_label       = module_cfg.get('primary_label', 1)
-    endpoint_label      = module_cfg.get('endpoint_label', 0)
+    # endpoint_label      = module_cfg.get('endpoint_label', 0)
     track_label         = module_cfg.get('track_label', 1)
     shower_label        = module_cfg.get('shower_label', 0)
     nu_col              = module_cfg.get('nu_col', 8)
     coords_col          = module_cfg.get('coords_col', (1, 4))
-    attaching_threshold = module_cfg.get('attaching_threshold', 2)
-    inter_threshold     = module_cfg.get('inter_threshold', 10)
-    other_primaries_threshold = module_cfg.get('other_primaries_threshold', 30)
-    other_primaries_gamma_threshold = module_cfg.get('other_primaries_gamma_threshold', -1)
-    fraction_bad_primaries = module_cfg.get('fraction_bad_primaries', 0.6)
+    attaching_threshold = module_cfg.get('attaching_threshold', 10)
+    inter_threshold     = module_cfg.get('inter_threshold', 20)
+    other_primaries_threshold = module_cfg.get('other_primaries_threshold', 10)
+    other_primaries_gamma_threshold = module_cfg.get('other_primaries_gamma_threshold', 100)
+    # fraction_bad_primaries = module_cfg.get('fraction_bad_primaries', 0.6)
     min_overlap_count = module_cfg.get('min_overlap_count', 10)
-    pca_radius = module_cfg.get('pca_radius', 21)
-    min_track_count = module_cfg.get('min_track_count', None)
-    min_voxel_count = module_cfg.get('min_voxel_count', 20)
+    pca_radius = module_cfg.get('pca_radius', 28)
+    min_track_count = module_cfg.get('min_track_count', 2)
+    min_voxel_count = module_cfg.get('min_voxel_count', 10)
 
     node_pred_vtx = node_pred_vtx[data_idx]
     original_node_pred_vtx = node_pred_vtx
     clusts = inter_particles[data_idx]
-    print(np.unique(data_blob['cluster_label'][data_idx][data_blob['cluster_label'][data_idx][:, 6] == 3, 9]))
+    # print(np.unique(data_blob['cluster_label'][data_idx][data_blob['cluster_label'][data_idx][:, 6] == 3, 9]))
     node_x_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col)
     node_y_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col+1)
     node_z_vtx = get_cluster_label(kinematics[data_idx], clusts, column=vtx_col+2)
@@ -81,13 +81,13 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         ppn_candidates, c_candidates, vtx_candidate, vtx_std, ppn_candidates_old, distances, distances_others, distances_primaries = predict_vertex(inter_idx, data_idx, input_data, res,
                                                                             coords_col=coords_col, primary_label=primary_label,
                                                                             shower_label=shower_label, track_label=track_label,
-                                                                            endpoint_label=endpoint_label,
+                                                                            #endpoint_label=endpoint_label,
                                                                             attaching_threshold=attaching_threshold,
                                                                             inter_threshold=inter_threshold,
                                                                             return_distances=True,
                                                                             other_primaries_threshold=other_primaries_threshold,
                                                                             other_primaries_gamma_threshold=other_primaries_gamma_threshold,
-                                                                            fraction_bad_primaries=fraction_bad_primaries,
+                                                                            #fraction_bad_primaries=fraction_bad_primaries,
                                                                             pca_radius=pca_radius,
                                                                             min_voxel_count=min_voxel_count)
         inter_mask = inter_group_pred[data_idx] == inter_idx
@@ -172,55 +172,7 @@ def vertex_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                                     np.amin(distances_primaries), np.amax(distances_primaries),
                                     matched_inter_idx))
 
-    row_true_names, row_true_values = [], []
-    """
-    vtx_candidates = np.array(vtx_candidates)
-    #print(vtx_candidates)
-    node_assn_vtx = np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1)
-    num_true = len(np.unique(clust_data[data_idx][:, 7]))
-    for inter_idx in np.unique(clust_data[data_idx][:, 7]):
-        if inter_idx < 0:
-            continue
-        print('True interaction ', inter_idx)
-        inter_mask = clust_data[data_idx][:, 7] == inter_idx
-        vtx = get_vertex(kinematics, clust_data, data_idx, inter_idx, vtx_col=vtx_col)
-
-        # FIXME why are there sometimes several true vtx for same interaction?
-        # using ancestor_vtx
-        vtx_candidate = [-1, -1, -1]
-        distance = -1
-        if len(vtx_candidates):
-            d = cdist([vtx], vtx_candidates).reshape((-1,))
-            vtx_candidate = vtx_candidates[np.argmin(d)]
-            distance = np.linalg.norm(vtx_candidate-vtx)
-            print(vtx, vtx_candidates)
-        is_nu = clust_data[data_idx][inter_mask][:, 8]
-        is_nu = is_nu[is_nu > -1]
-        is_nu = np.argmax(np.bincount(is_nu.astype(int))) if len(is_nu) else -1
-        #print(inter_idx, distance, is_nu)
-        row_true_names.append(("inter_idx", "vtx_true_x", "vtx_true_y", "vtx_true_z",
-                                "vtx_candidate_x", "vtx_candidate_y", "vtx_candidate_z",
-                                "vtx_resolution", "is_nu", "num_pix"))
-        row_true_values.append((inter_idx, vtx[0], vtx[1], vtx[2],
-                                vtx_candidate[0], vtx_candidate[1], vtx_candidate[2],
-                                distance, is_nu, np.count_nonzero(inter_mask)))
-
-    if len(vtx_candidates):
-        vtx_resolution /= len(vtx_candidates)
-
-    row_names = ('accuracy_score', 'num_pred_positives', 'num_true_positives',
-                'accuracy_true_positives', 'accuracy_pred_positives',
-                'accuracy_position', 'n_clusts_vtx', 'n_clusts_vtx_positives',
-                'vtx_resolution', 'num_candidates', 'num_true')
-    row_values = (accuracy_positives, np.count_nonzero(pred_positives), np.count_nonzero(positives),
-                (pred_positives == positives)[positives > 0].sum(), (pred_positives == positives)[pred_positives > 0].sum(),
-                accuracy_position, n_clusts_vtx, n_clusts_vtx_positives,
-                vtx_resolution, len(vtx_candidates), num_true)
-    """
-    row_names, row_values = (), ()
-    return [(row_names, row_values),
-            (row_candidates_names, row_candidates_values),
-            (row_true_names, row_true_values),
+    return [(row_candidates_names, row_candidates_values),
             (row_distances_names, row_distances_values),
             (row_distances_others_names, row_distances_others_values),
             (row_distances_primaries_names, row_distances_primaries_values)]

@@ -59,12 +59,12 @@ def process_config(cfg, verbose=True):
         # Set MinkowskiEngine number of threads
         os.environ['OMP_NUM_THREADS'] = '16' # default value
         # Set default concat_result
-        default_concat_result = ['input_edge_features', 'input_node_features','points',
+        default_concat_result = ['input_edge_features', 'input_node_features','points', 'coordinates',
                                  'particle_node_features', 'particle_edge_features',
                                  'track_node_features', 'shower_node_features',
                                  'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints',
-                                 'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales', 
-                                 'seediness', 'margins', 'embeddings', 'fragments', 
+                                 'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales',
+                                 'seediness', 'margins', 'embeddings', 'fragments',
                                  'fragments_seg', 'shower_fragments', 'shower_edge_index',
                                  'shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments',
                                  'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred',

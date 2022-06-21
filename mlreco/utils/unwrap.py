@@ -69,7 +69,7 @@ def unwrap(*args, **kwargs):
     return unwrap_3d_mink(*args, **kwargs)
 
 
-def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
+def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_data'):
     """
     Break down the data_blob and outputs dictionary into events
     for sparseconvnet formatted tensors.
@@ -90,6 +90,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     ASSUMES:
         the shape of data_blob and outputs as explained above
     """
+
+    batch_idx_max = 0
 
     # Handle data
     result_data = {}
@@ -128,6 +130,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 batch_map = {}
                 batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
+                batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
                 unwrap_map[d.shape[0]]=batch_map
@@ -151,6 +154,14 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
 
     # Handle output
     result_outputs = {}
+
+    # Fix unwrap map
+    output_unwrap_map  = {}
+    for key in unwrap_map:
+        if (np.array([d.shape[0] for d in data_blob[input_key]]) == key).any():
+            output_unwrap_map[key] = unwrap_map[key]
+    unwrap_map = output_unwrap_map
+
     # b-0) Find the target keys
     target_array_keys = []
     target_list_keys  = []
@@ -180,8 +191,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
     # b-1) Handle the list of ndarrays
     if target_array_keys is not None:
         target_array_keys.sort(reverse=True)
-    #print(target_array_keys)
-    # print(unwrap_map)
+
     for target in target_array_keys:
         data = outputs[target]
         for d in data:
@@ -199,6 +209,13 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                 #     assert False
                 # print(target, len(batch_idx), len(np.unique(batch_idx.astype(np.int32))))
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
+                batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
+                # We are going to assume **consecutive numbering of batch idx** starting from 0
+                # b/c problems arise if one of the targets is missing an entry (eg all voxels predicted ghost,
+                # which means a batch idx is missing from batch_idx for target = input_rescaled)
+                # then alignment across targets is lost (output[target][entry] may not correspond to batch id `entry`)
+                batch_idx = np.arange(0, int(batch_idx_max)+1, 1)
+                # print(target, batch_idx, [np.count_nonzero(d[:,batch_id_loc] == b) for b in batch_idx])
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
                 unwrap_map[d.shape[0]]=batch_map
@@ -250,7 +267,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys):
                         print(target, d.shape)
                     batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                     batch_idx = np.unique(d[:,batch_id_loc])
-                    batch_ctrs.append(int(np.max(batch_idx)+1))
+                    batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
+                    batch_ctrs.append(int(batch_idx_max+1))
                     try:
                         assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
                     except AssertionError:

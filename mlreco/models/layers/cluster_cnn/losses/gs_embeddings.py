@@ -35,7 +35,7 @@ class WeightedEdgeLoss(nn.Module):
         negatives_index = (targets < 0.5)
         negatives = float(torch.sum(negatives_index))
         positives = float(torch.sum(targets > 0.5))
-        w = positives / negatives
+        # w = positives / negatives
 
         weight[negatives_index] = 1.0
 
