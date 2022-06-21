@@ -133,47 +133,64 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             if len(batch_clustering) == 0:
                 continue
 
+            if true_mask is None:
+                nonghost_mask = argmax(result['ghost'][i][batch_mask]) == 0
+            else:
+                nonghost_mask = true_mask[batch_mask]
+
             # Prepare new labels
             new_label_clustering = -1. * ones(get_shape(batch_coords, batch_clustering))
             if (not use_numpy) and torch.cuda.is_available():
                 new_label_clustering = new_label_clustering.cuda()
             new_label_clustering[:, :c3] = batch_coords
 
-            if true_mask is None:
-                nonghost_mask = argmax(result['ghost'][i][batch_mask]) == 0
+            # Loop over predicted semantics
+            # print(result['segmentation'][i].shape, batch_mask.shape, batch_mask.sum())
+            if result['segmentation'][i].shape[0] == batch_mask.shape[0]:
+                semantic_pred = argmax(result['segmentation'][i][batch_mask])
+            else: # adapt_labels was called from analysis tools (see below deghost_labels_and_predictions)
+                # the problem in this case is that `segmentation` has already been deghosted
+                semantic_pred = argmax(result['segmentation_noghost'][i][batch_mask])
+
+            for semantic in unique(semantic_pred):
+                semantic_mask = semantic_pred == semantic
+
+                if true_mask is not None:
+                    continue
                 # Select voxels predicted as nonghost, but true ghosts
-                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
+                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
                 mask = where(mask)[0]
                 # Now we need a special treatment for these, if there are any.
-                if batch_coords[mask].shape[0] > 0:
-                    tagged_voxels_count = 1 # to get the loop started
-                    X_true = batch_clustering
-                    X_pred = batch_coords[mask]
-                    while tagged_voxels_count > 0 and X_pred.shape[0] > 0:
-                        # print(batch_id, "while", X_true.shape, X_pred.shape, tagged_voxels_count)
-                        #neighbors = knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)
-                        #_, d = neighbors[0], neighbors[1]
-                        d = compute_neighbor(X_true, X_pred)
+                if batch_coords[mask].shape[0] == 0:
+                    continue
+                tagged_voxels_count = 1 # to get the loop started
+                X_true = batch_clustering[batch_clustering[:, -1] == semantic]
+                if X_true.shape[0] == 0:
+                    continue
+                X_pred = batch_coords[mask]
+                while tagged_voxels_count > 0 and X_pred.shape[0] > 0:
+                    # print(batch_id, "while", X_true.shape, X_pred.shape, tagged_voxels_count)
+                    #neighbors = knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)
+                    #_, d = neighbors[0], neighbors[1]
+                    d = compute_neighbor(X_true, X_pred)
 
-                        # compute Chebyshev distance between predicted and true
-                        # distances = torch.amax(torch.abs(X_true[neighbors[1], c1:c2] - X_pred[neighbors[0], c1:c2]), dim=1)
-                        distances =compute_distances(X_true[d], X_pred)
-                        #print(distances)
-                        select_mask = distances <= 1
+                    # compute Chebyshev distance between predicted and true
+                    # distances = torch.amax(torch.abs(X_true[neighbors[1], c1:c2] - X_pred[neighbors[0], c1:c2]), dim=1)
+                    distances =compute_distances(X_true[d], X_pred)
+                    #print(distances)
+                    select_mask = distances <= 1
 
-                        tagged_voxels_count = select_mask.sum()
-                        if tagged_voxels_count > 0:
-                            # We assign label of closest true nonghost voxel to those within Chebyshev distance 1
-                            additional_label_clustering = concatenate0([X_pred[select_mask],
-                                                                    X_true[d[select_mask], c3:]])
+                    tagged_voxels_count = select_mask.sum()
+                    if tagged_voxels_count > 0:
+                        # We assign label of closest true nonghost voxel to those within Chebyshev distance 1
+                        additional_label_clustering = concatenate0([X_pred[select_mask],
+                                                                X_true[d[select_mask], c3:]])
 
-                            new_label_clustering[mask[select_mask]] = additional_label_clustering
-                            mask = mask[~select_mask]
-                            # Update for next iteration
-                            X_true = additional_label_clustering
-                            X_pred = X_pred[~select_mask]
-            else:
-                nonghost_mask = true_mask[batch_mask]
+                        new_label_clustering[mask[select_mask]] = additional_label_clustering
+                        mask = mask[~select_mask]
+                        # Update for next iteration
+                        X_true = additional_label_clustering
+                        X_pred = X_pred[~select_mask]
 
             # Include true nonghost voxels by default
             new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = make_float(batch_clustering)
@@ -295,6 +312,7 @@ def deghost_labels_and_predictions(data_blob, result):
 
     if 'segmentation' in result \
         and result['segmentation'] is not None:
+        result['segmentation_noghost'] = result['segmentation']
         result['segmentation'] = [
             result['segmentation'][i][result['ghost_mask'][i]] \
                 for i in range(len(result['segmentation']))]
