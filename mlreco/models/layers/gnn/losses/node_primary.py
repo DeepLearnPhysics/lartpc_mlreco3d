@@ -77,6 +77,8 @@ class NodePrimaryLoss(torch.nn.Module):
 
                 # Narrow down the label tensor and other predictions to the batch at hand
                 labels = clusters[i][batches==j]
+                if not labels.shape[0]:
+                    continue
                 node_pred = out['node_pred'][i][j]
                 if not node_pred.shape[0]:
                     continue

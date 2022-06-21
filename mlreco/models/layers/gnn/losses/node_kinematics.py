@@ -158,7 +158,8 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                 # Narrow down the tensor to the rows in the batch
                 labels = types[i][batches==j]
-
+                if not labels.shape[0]:
+                    continue
                 clusts = out['clusts'][i][j]
 
                 # Increment the type loss, balance classes if requested

@@ -87,7 +87,8 @@ class EdgeChannelLoss(torch.nn.Module):
 
                 # Narrow down the tensor to the rows in the batch
                 labels = clusters[i][batches == j]
-
+                if not labels.shape[0]:
+                    continue
                 # Get the output of the forward function
                 edge_pred = out['edge_pred'][i][j]
                 if not edge_pred.shape[0]:
