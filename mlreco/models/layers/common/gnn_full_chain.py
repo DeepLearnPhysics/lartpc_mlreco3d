@@ -691,7 +691,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             seg_label = seg_label[0]
 
         if self.enable_cnn_clust:
-            if self._enable_graph_spice:
+            # If there is no track voxel, maybe GraphSpice didn't run
+            if self._enable_graph_spice and 'graph' in out:
                 graph_spice_out = {
                     'graph': out['graph'],
                     'graph_info': out['graph_info'],
@@ -733,7 +734,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 loss += self.cnn_clust_weight * res_graph_spice['loss']
                 for key in res_graph_spice:
                     res['graph_spice_' + key] = res_graph_spice[key]
-            else:
+            elif 'embeddings' in out:
                 # Apply the CNN dense clustering loss to HE voxels only
                 he_mask = segment_label < 4
                 # sem_label = [torch.cat((cluster_label[0][he_mask,:4],cluster_label[0][he_mask,-1].view(-1,1)), dim=1)]
@@ -878,7 +879,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn:
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
-            if self.enable_cnn_clust:
+            if self.enable_cnn_clust and ('graph' in out or 'embeddings' in out):
                 if not self._enable_graph_spice:
                     print('Clustering Embedding Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
                 else:
