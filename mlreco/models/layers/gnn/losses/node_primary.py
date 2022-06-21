@@ -94,14 +94,18 @@ class NodePrimaryLoss(torch.nn.Module):
                     else:
                         raise ValueError('Group prediction algorithm not recognized: '+self.group_pred_alg)
 
+                # If a cluster target is -1, ignore the loss associated with it
+                valid_mask = primary_ids > -1
+
                 # If requested, remove groups that do not contain exactly one primary from the loss
                 if self.high_purity:
-                    purity_mask = node_purity_mask(clust_ids, group_ids, primary_ids)
-                    if not purity_mask.any():
-                        continue
-                    clusts      = clusts[purity_mask]
-                    primary_ids = primary_ids[purity_mask]
-                    node_pred   = node_pred[np.where(purity_mask)[0]]
+                    valid_mask &= node_purity_mask(clust_ids, group_ids, primary_ids)
+
+                # Apply valid mask to nodes and their predictions
+                if not valid_mask.any(): continue
+                clusts      = clusts[valid_mask]
+                primary_ids = primary_ids[valid_mask]
+                node_pred   = node_pred[np.where(valid_mask)[0]]
 
                 # If the majority cluster ID agrees with the majority group ID, assign as primary
                 node_assn = torch.tensor(primary_ids, dtype=torch.long, device=node_pred.device, requires_grad=False)
