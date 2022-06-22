@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from mlreco.models.layers.common.dbscan import distances
 from scipy.spatial.distance import cdist
+from sklearn.cluster import DBSCAN
 from torch_cluster import knn
 
 
@@ -197,6 +198,43 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             # Now we save - need only to keep predicted nonghost voxels.
             label_c.append(new_label_clustering[nonghost_mask])
         label_c = concatenate1(label_c)
+
+        # Also run DBSCAN on track true clusters
+        # We want to avoid true track clusters broken in two having the same cluster id label
+        # Note: we assume we are adapting either cluster or kinematics labels,
+        # for which cluster id and group id columns are 5 and 6 respectively.
+        cluster_id_col = 5
+        track_label = 1
+        dbscan = DBSCAN(eps=np.sqrt(3), min_samples=1)
+        track_mask = label_c[:, -1] == track_label
+        for batch_id in unique(coords[:, batch_column]):
+            batch_mask = label_c[:, batch_column] == batch_id
+            #print(batch_id, 'before', torch.unique(label_c[track_mask & batch_mask, cluster_id_col], return_counts=True))
+            # We want to select cluster ids for track-like particles
+            batch_clustering = label_clustering[i][(label_clustering[i][:, batch_column] == batch_id) & (label_clustering[i][:, -1] == track_label)]
+            if len(batch_clustering) == 0:
+                continue
+            cluster_count = 0 # Reset counter for each batch entry
+            for c in unique(batch_clustering[:, cluster_id_col]):
+                if c < 0:
+                    continue
+                cluster_mask = label_c[batch_mask, cluster_id_col] == c
+                if cluster_mask.sum() == 0:
+                    continue
+                coordinates = label_c[batch_mask][cluster_mask, c1:c2]
+                if not isinstance(label_c, np.ndarray):
+                    coordinates = coordinates.detach().cpu().numpy()
+                l = dbscan.fit(coordinates).labels_
+                # Unclustered voxels can keep the label -1
+                if not isinstance(label_c, np.ndarray):
+                    l = torch.tensor(l, device = label_c.device).float()
+                l[l > -1] = l[l > -1] + cluster_count
+                label_c[where(batch_mask)[0][cluster_mask], cluster_id_col] = l
+                label_c[where(batch_mask)[0][cluster_mask], cluster_id_col+1] = l
+                cluster_count += l.max() + 1
+                #print(batch_id, c, l.unique(), (l == -1).sum())
+            #print(batch_id, 'after', torch.unique(label_c[track_mask & batch_mask, cluster_id_col], return_counts=True))
+
         complete_label_clustering.append(label_c)
 
     return complete_label_clustering
