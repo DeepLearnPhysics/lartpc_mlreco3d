@@ -91,8 +91,8 @@ class Particle:
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.image_id, self.id,
-                         self.semantic_keys[self.semantic_type],
-                         self.pid_keys[self.pid],
+                         self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
+                         self.pid_keys[self.pid] if self.pid in self.pid_keys else "None",
                          self.is_primary,
                          self.pid_conf * 100,
                          self.interaction_id,
@@ -147,7 +147,7 @@ class ParticleFragment(Particle):
         fmt = "ParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
             " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.image_id, self.id,
-                         self.semantic_keys[self.semantic_type],
+                         self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
                          self.group_id,
                          self.is_primary,
                          self.interaction_id,
@@ -165,7 +165,7 @@ class TruthParticleFragment(ParticleFragment):
         fmt = "TruthParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
             " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.image_id, self.id,
-                         self.semantic_keys[self.semantic_type],
+                         self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
                          self.group_id,
                          self.is_primary,
                          self.interaction_id,
@@ -209,8 +209,8 @@ class TruthParticle(Particle):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
             " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} )"
         msg = fmt.format(self.image_id, self.id,
-                         self.semantic_keys[self.semantic_type],
-                         self.pid_keys[self.pid],
+                         self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
+                         self.pid_keys[self.pid] if self.pid in self.pid_keys else "None",
                          self.is_primary,
                          self.interaction_id,
                          self.points.shape[0])

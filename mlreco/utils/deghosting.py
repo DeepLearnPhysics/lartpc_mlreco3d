@@ -214,7 +214,9 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             batch_clustering = label_clustering[i][(label_clustering[i][:, batch_column] == batch_id) & (label_clustering[i][:, -1] == track_label)]
             if len(batch_clustering) == 0:
                 continue
-            cluster_count = 0 # Reset counter for each batch entry
+            # Reset counter for each batch entry
+            # we need to avoid labeling a cluster with an already existing cluster id (maybe not track)
+            cluster_count =  unique(label_clustering[i][(label_clustering[i][:, batch_column] == batch_id)][:, cluster_id_col]).max()+1
             for c in unique(batch_clustering[:, cluster_id_col]):
                 if c < 0:
                     continue
@@ -230,8 +232,9 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                     l = torch.tensor(l, device = label_c.device).float()
                 l[l > -1] = l[l > -1] + cluster_count
                 label_c[where(batch_mask)[0][cluster_mask], cluster_id_col] = l
-                label_c[where(batch_mask)[0][cluster_mask], cluster_id_col+1] = l
-                cluster_count += l.max() + 1
+                #label_c[where(batch_mask)[0][cluster_mask], cluster_id_col+1] = l
+                cluster_count += int(l.max() + 1)
+                # print(batch_id, c, (batch_clustering[:, cluster_id_col] == c).sum(), cluster_mask.sum(), unique(l))
                 #print(batch_id, c, l.unique(), (l == -1).sum())
             #print(batch_id, 'after', torch.unique(label_c[track_mask & batch_mask, cluster_id_col], return_counts=True))
 
@@ -260,39 +263,6 @@ def adapt_labels_numpy(*args, **kwargs):
     adapt_labels, adapt_labels_knn
     """
     return adapt_labels_knn(*args, **kwargs, use_numpy=True)
-    # c1, c2 = coords_col
-    # complete_label_clustering = []
-    #
-    # c3 = max(c2, batch_col+1)
-    # for i in range(len(label_seg)):
-    #     coords = label_seg[i][:, :4]
-    #     label_c = []
-    #     #print(len(coords[:, -1].unique()))
-    #     for batch_id in np.unique(coords[:, batch_col]):
-    #         batch_mask = coords[:, batch_col] == batch_id
-    #         batch_coords = coords[batch_mask]
-    #         batch_clustering = label_clustering[i][label_clustering[i][:, batch_col] == batch_id]
-    #
-    #         # Prepare new labels
-    #         new_label_clustering = -1. * np.ones((batch_coords.shape[0], label_clustering[i].shape[1]))
-    #         new_label_clustering[:, :c3] = batch_coords
-    #
-    #         nonghost_mask = (result['ghost'][i][batch_mask].argmax(axis=1) == 0)
-    #         # Select voxels predicted as nonghost, but true ghosts
-    #         mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes)
-    #         if len(batch_clustering):
-    #             # Assign them to closest cluster
-    #             d = cdist(batch_coords[mask, c1:c2], batch_clustering[:, c1:c2]).argmin(axis=1)
-    #             additional_label_clustering = np.concatenate([batch_coords[mask], batch_clustering[d, 4:]], axis=1)
-    #             new_label_clustering[mask] = additional_label_clustering
-    #
-    #         if len(batch_clustering):
-    #             new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = batch_clustering
-    #
-    #         label_c.append(new_label_clustering[nonghost_mask])
-    #     label_c = np.concatenate(label_c, axis=0)
-    #     complete_label_clustering.append(label_c)
-    # return complete_label_clustering
 
 
 def deghost_labels_and_predictions(data_blob, result):
