@@ -155,7 +155,8 @@ def adapt_labels_knn(result, label_seg, label_clustering,
 
             # Include true nonghost voxels by default when they have the right semantic prediction
             true_pred = label_seg[i][batch_mask, -1]
-            new_label_clustering[(true_pred < num_classes) & (semantic_pred == true_pred)] = make_float(batch_clustering)
+            new_label_clustering[(true_pred < num_classes)] = make_float(batch_clustering)
+            new_label_clustering[(true_pred < num_classes) & (semantic_pred != true_pred)][:, c3:] = -1.
 
             for semantic in unique(semantic_pred):
                 semantic_mask = semantic_pred == semantic
