@@ -254,11 +254,11 @@ class NodeKinematicsLoss(torch.nn.Module):
                     reshaped = out['input_node_features'][i][j][:, 19:25][good_index & positives.bool()].view(-1, 2, 3)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
-                    node_mask = good_index & positives.bool()
+                    node_mask = good_index & positives.bool() & (positives >= 0.)
                     # print(node_mask.any())
                     if node_mask.any():
                         # for now only sum losses, they get averaged below in results dictionary
-                        loss2 = self.vtx_score_loss(node_pred_vtx[good_index, 3:], positives[good_index])
+                        loss2 = self.vtx_score_loss(node_pred_vtx[good_index & (positives >= 0.), 3:], positives[good_index & (positives >= 0.)])
 
                         pos_pred = node_pred_vtx[node_mask, :3]
                         pos_label = node_assn_vtx[node_mask]
