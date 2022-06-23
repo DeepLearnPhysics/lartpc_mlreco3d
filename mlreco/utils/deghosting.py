@@ -158,8 +158,9 @@ def adapt_labels_knn(result, label_seg, label_clustering,
 
                 if true_mask is not None:
                     continue
-                # Select voxels predicted as nonghost, but true ghosts
-                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
+                # Select voxels predicted as nonghost, but true ghosts (or true nonghost, but wrong semantic prediction)
+                # mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
+                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] != semantic) & semantic_mask
                 mask = where(mask)[0]
                 # Now we need a special treatment for these, if there are any.
                 if batch_coords[mask].shape[0] == 0:
