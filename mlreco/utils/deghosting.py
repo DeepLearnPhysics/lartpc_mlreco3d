@@ -153,6 +153,10 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 # the problem in this case is that `segmentation` has already been deghosted
                 semantic_pred = argmax(result['segmentation_noghost'][i][batch_mask])
 
+            # Include true nonghost voxels by default when they have the right semantic prediction
+            true_pred = label_seg[i][batch_mask, -1]
+            new_label_clustering[(true_pred < num_classes) & (semantic_pred == true_pred)] = make_float(batch_clustering)
+
             for semantic in unique(semantic_pred):
                 semantic_mask = semantic_pred == semantic
 
@@ -160,7 +164,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                     continue
                 # Select voxels predicted as nonghost, but true ghosts (or true nonghost, but wrong semantic prediction)
                 # mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
-                mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] != semantic) & semantic_mask
+                mask = nonghost_mask & (true_pred != semantic) & semantic_mask
                 mask = where(mask)[0]
                 # Now we need a special treatment for these, if there are any.
                 if batch_coords[mask].shape[0] == 0:
@@ -194,8 +198,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                         X_true = additional_label_clustering
                         X_pred = X_pred[~select_mask]
 
-            # Include true nonghost voxels by default
-            new_label_clustering[label_seg[i][batch_mask, -1] < num_classes] = make_float(batch_clustering)
+
             # Now we save - need only to keep predicted nonghost voxels.
             label_c.append(new_label_clustering[nonghost_mask])
         label_c = concatenate1(label_c)

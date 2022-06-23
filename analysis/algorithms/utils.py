@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
+from analysis.algorithms.calorimetry import compute_track_length
 
 from pprint import pprint
 import numpy as np
@@ -57,7 +58,7 @@ def count_primary_particles(interaction: Interaction, prefix=None):
     return out
 
 
-def get_particle_properties(particle: Particle, vertex, prefix=None):
+def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=False):
 
     update_dict = OrderedDict({
         'particle_id': -1,
@@ -68,10 +69,12 @@ def get_particle_properties(particle: Particle, vertex, prefix=None):
         'particle_is_primary': False,
         'particle_has_startpoint': False,
         'particle_has_endpoints': False,
+        'particle_length': -1,
     })
 
-    node_dict = OrderedDict({'node_feat_{}'.format(i) : -1 for i in range(28)})
-    update_dict.update(node_dict)
+    if save_feats:
+        node_dict = OrderedDict({'node_feat_{}'.format(i) : -1 for i in range(28)})
+        update_dict.update(node_dict)
 
     if particle is None:
         out = attach_prefix(update_dict, prefix)
@@ -83,7 +86,8 @@ def get_particle_properties(particle: Particle, vertex, prefix=None):
         update_dict['particle_size'] = particle.size
         update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
-        
+        if particle.semantic_type == 1:
+            update_dict['particle_length'] = compute_track_length(particle.points)
         # if not isinstance(particle, TruthParticle):
         #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
         #         for i in range(particle.node_features.shape[0])})

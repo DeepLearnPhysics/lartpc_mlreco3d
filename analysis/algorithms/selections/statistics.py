@@ -2,6 +2,7 @@ from collections import OrderedDict
 from turtle import update
 from sklearn.decomposition import PCA
 
+from analysis.algorithms.calorimetry import compute_track_length
 from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
 from analysis.decorator import evaluate
 
@@ -50,19 +51,7 @@ def statistics(data_blob, res, data_idx, analysis_cfg, cfg):
 
             length = -1
             if p.semantic_type == track_label:
-                length = 0.
-                if len(p.points) >= 2:
-                    coords_pca = pca.fit_transform(p.points)[:, 0]
-                    bins = np.arange(coords_pca.min(), coords_pca.max(), bin_size)
-                    # bin_inds takes values in [1, len(bins)]
-                    bin_inds = np.digitize(coords_pca, bins)
-                    for b_i in np.unique(bin_inds):
-                        mask = bin_inds == b_i
-                        if np.count_nonzero(mask) < 2: continue
-                        # Repeat PCA locally for better measurement of dx
-                        pca_axis = pca.fit_transform(p.points[mask])
-                        dx = pca_axis[:, 0].max() - pca_axis[:, 0].min()
-                        length += dx
+                length = compute_track_length(p.points, bin_size=bin_size)
             update_dict = {
                 'index': index,
                 'id': p.id,
