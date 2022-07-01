@@ -285,7 +285,7 @@ def parse_cluster3d_full_extended(data):
         np_voxels   = np.empty(shape=(0, 3), dtype=np.float32)
         np_features = np.empty(shape=(0, 8), dtype=np.float32)
 
-    return np_voxels, np_features    
+    return np_voxels, np_features
 
 
 def parse_cluster3d_types(data):

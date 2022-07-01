@@ -70,6 +70,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.batch_col = batch_col
         self.coords_col = coords_col
 
+        self.group_col = loss_config.get('cluster_col', 6)
         self.type_col = loss_config.get('type_col', 7)
         self.momentum_col = loss_config.get('momentum_col', 8)
         self.vtx_col = loss_config.get('vtx_col', 9)
@@ -117,6 +118,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.use_anchor_points = loss_config.get('use_anchor_points', False)
         self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
         self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
+        self.type_high_purity = loss_config.get('type_high_purity', False)
 
         self.compute_momentum_switch = loss_config.get('compute_momentum', True)
 
@@ -169,13 +171,22 @@ class NodeKinematicsLoss(torch.nn.Module):
                     if not node_pred_type.shape[0]:
                         continue
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
-                    node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
-                    node_mask = torch.nonzero(node_assn_type > -1, as_tuple=True)[0]
-                    if len(node_mask):
-                        node_pred_type = node_pred_type[node_mask]
-                        node_assn_type = node_assn_type[node_mask]
+                    valid_mask = node_assn_type > -1
+
+                    # If high purity is requested, do not include broken particle in the loss
+                    if self.type_high_purity:
+                        group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
+                        _, inv, cnts = np.unique(group_ids, return_inverse=True, return_counts=True)
+                        valid_mask  &= (cnts[inv] == 1)
+                    valid_mask = np.where(valid_mask, as_tuple=True)[0]
+
+                    # Compute loss
+                    if len(valid_mask):
+                        node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
+                        node_pred_type = node_pred_type[valid_mask]
+                        node_assn_type = node_assn_type[valid_mask]
 
                         if self.balance_classes:
                             vals, counts = torch.unique(node_assn_type, return_counts=True)
@@ -190,7 +201,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                             type_loss += self.type_loss_weight * float(loss)
 
                         # Increment the number of nodes
-                        n_clusts_type += len(node_mask)
+                        n_clusts_type += len(valid_mask)
 
                 # Increment the momentum loss
                 if compute_momentum:
