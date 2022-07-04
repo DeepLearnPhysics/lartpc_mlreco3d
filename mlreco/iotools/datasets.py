@@ -1,4 +1,4 @@
-import os, glob
+mport os, glob
 import numpy as np
 from torch.utils.data import Dataset
 import mlreco.iotools.parsers
@@ -134,7 +134,7 @@ class LArCVDataset(Dataset):
         event_list = None
         if key in cfg:
             if os.path.isfile(cfg[key]):
-                event_list = [int(val) for val in open(cfg[key],'r').read().replace(',',' ').split() if val.digit()]
+                event_list = [int(val) for val in open(cfg[key],'r').read().replace(',',' ').split() if val.isdigit()]
             else:
                 try:
                     import ast
