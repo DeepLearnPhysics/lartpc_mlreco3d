@@ -2,7 +2,7 @@ from collections import OrderedDict
 from turtle import update
 from sklearn.decomposition import PCA
 
-from analysis.algorithms.calorimetry import compute_track_length
+from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
 from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
 from analysis.decorator import evaluate
 
@@ -38,16 +38,7 @@ def statistics(data_blob, res, data_idx, analysis_cfg, cfg):
 
         # Loop over predicted particles
         for p in pred_particles:
-            direction = None
-            if p.semantic_type in [track_label, shower_label] and p.startpoint[0] >= 0.:
-                d = np.sqrt(((p.points -p.startpoint)**2).sum(axis=1))
-                if (d < start_segment_radius).sum() >= 2:
-                    direction = pca.fit(p.points[d < start_segment_radius]).components_[0, :]
-            if direction is None:
-                if len(p.points) >= 2:
-                    direction = pca.fit(p.points).components_[0, :]
-                else:
-                    direction = [-1, -1, -1]
+            direction = compute_particle_direction(p, start_segment_radius=start_segment_radius)
 
             length = -1
             if p.semantic_type == track_label:

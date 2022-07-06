@@ -124,6 +124,9 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         assert true_mask.shape[0] == label_seg[0].shape[0]
     c3 = max(c2, batch_column+1)
 
+    indices = "2762  2763  2767  2769  4821  4822  4831  4832  4833  4834  4835  4844  4857  6617 12095 12096 12097".split()
+    indices = np.array([int(i) for i in indices])
+
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
@@ -156,8 +159,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             # Include true nonghost voxels by default when they have the right semantic prediction
             true_pred = label_seg[i][batch_mask, -1]
             new_label_clustering[(true_pred < num_classes)] = make_float(batch_clustering)
-            new_label_clustering[(true_pred < num_classes) & (semantic_pred != true_pred)][:, c3:] = -1.
-
+            new_label_clustering[(true_pred < num_classes) & (semantic_pred != true_pred), c3:] = -1.
             for semantic in unique(semantic_pred):
                 semantic_mask = semantic_pred == semantic
 
@@ -167,6 +169,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 # mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
                 mask = nonghost_mask & (true_pred != semantic) & semantic_mask
                 mask = where(mask)[0]
+                #print(semantic, np.intersect1d(mask.cpu().numpy(), indices))
                 # Now we need a special treatment for these, if there are any.
                 if batch_coords[mask].shape[0] == 0:
                     continue
@@ -183,8 +186,8 @@ def adapt_labels_knn(result, label_seg, label_clustering,
 
                     # compute Chebyshev distance between predicted and true
                     # distances = torch.amax(torch.abs(X_true[neighbors[1], c1:c2] - X_pred[neighbors[0], c1:c2]), dim=1)
-                    distances =compute_distances(X_true[d], X_pred)
-                    #print(distances)
+                    distances = compute_distances(X_true[d], X_pred)
+
                     select_mask = distances <= 1
 
                     tagged_voxels_count = select_mask.sum()
@@ -202,8 +205,10 @@ def adapt_labels_knn(result, label_seg, label_clustering,
 
             # Now we save - need only to keep predicted nonghost voxels.
             label_c.append(new_label_clustering[nonghost_mask])
+            #print(new_label_clustering[nonghost_mask][indices])
+            #print(new_label_clustering[indices])
         label_c = concatenate1(label_c)
-
+        print("ignored 0 ", (label_c[:, -1] == -1).sum())
         # Also run DBSCAN on track true clusters
         # We want to avoid true track clusters broken in two having the same cluster id label
         # Note: we assume we are adapting either cluster or kinematics labels,
@@ -214,7 +219,6 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         track_mask = label_c[:, -1] == track_label
         for batch_id in unique(coords[:, batch_column]):
             batch_mask = label_c[:, batch_column] == batch_id
-            #print(batch_id, 'before', torch.unique(label_c[track_mask & batch_mask, cluster_id_col], return_counts=True))
             # We want to select cluster ids for track-like particles
             batch_clustering = label_clustering[i][(label_clustering[i][:, batch_column] == batch_id) & (label_clustering[i][:, -1] == track_label)]
             if len(batch_clustering) == 0:
@@ -237,11 +241,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                     l = torch.tensor(l, device = label_c.device).float()
                 l[l > -1] = l[l > -1] + cluster_count
                 label_c[where(batch_mask)[0][cluster_mask], cluster_id_col] = l
-                #label_c[where(batch_mask)[0][cluster_mask], cluster_id_col+1] = l
-                cluster_count += int(l.max() + 1)
-                # print(batch_id, c, (batch_clustering[:, cluster_id_col] == c).sum(), cluster_mask.sum(), unique(l))
-                #print(batch_id, c, l.unique(), (l == -1).sum())
-            #print(batch_id, 'after', torch.unique(label_c[track_mask & batch_mask, cluster_id_col], return_counts=True))
+                cluster_count = int(l.max() + 1)
 
         complete_label_clustering.append(label_c)
 
