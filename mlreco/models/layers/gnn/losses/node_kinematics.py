@@ -180,7 +180,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
                         _, inv, cnts = np.unique(group_ids, return_inverse=True, return_counts=True)
                         valid_mask  &= (cnts[inv] == 1)
-                    valid_mask = np.where(valid_mask, as_tuple=True)[0]
+                    valid_mask = np.where(valid_mask)[0]
 
                     # Compute loss
                     if len(valid_mask):
