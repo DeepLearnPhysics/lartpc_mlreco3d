@@ -241,15 +241,15 @@ def cluster_gnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
                 ari, ami, sbd, pur, eff = clustering_metrics(clusts[data_idx][purity_mask], group_ids[purity_mask], node_pred[purity_mask])
             #print(ari, pur, eff)
         primary_accuracy = -1.
-        high_purity = -1
-        if node_pred_primary is not None:
+        high_purity_value = -1
+        if high_purity and node_pred_primary is not None:
             primary_accuracy = np.count_nonzero(node_pred_primary == node_true_primary) / len(node_pred_primary)
-            high_purity = purity_mask.any()
+            high_purity_value = purity_mask.any()
             #print(data_idx, "primary accuracy", primary_accuracy, high_purity)
         # Store
         row_names = ('ari', 'ami', 'sbd', 'pur', 'eff',
                     'num_fragments', 'num_pix', 'num_true_clusts', 'num_pred_clusts', 'primary_accuracy', 'high_purity')
         row_values = (ari, ami, sbd, pur, eff,
-                    n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred)), primary_accuracy, high_purity)
+                    n, num_pix, len(np.unique(group_ids)), len(np.unique(node_pred)), primary_accuracy, high_purity_value)
 
     return row_names, row_values
