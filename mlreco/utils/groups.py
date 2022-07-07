@@ -78,7 +78,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     return ret
 
 
-def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[2,1,0,3,4]):
+def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[1,2,0,3,4]):
     """
     return array that will filter out duplicate voxels
     Sort with respect to a reference and following the specified precedence order
