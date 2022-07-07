@@ -118,7 +118,8 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.use_anchor_points = loss_config.get('use_anchor_points', False)
         self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
         self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
-        self.type_high_purity = loss_config.get('type_high_purity', False)
+        self.type_high_purity = loss_config.get('type_high_purity', True)
+        self.vtx_high_purity  = loss_config.get('vtx_high_purity', True)
 
         self.compute_momentum_switch = loss_config.get('compute_momentum', True)
 
@@ -231,6 +232,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_pred_vtx = out['node_pred_vtx'][i][j]
                     if not node_pred_vtx.shape[0]:
                         continue
+                    input_node_features = out['input_node_features'][i][j]
 
                     # Predictions are shifts w.r.t the barycenter of each cluster
                     # anchors = []
@@ -242,9 +244,20 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_x_vtx = get_cluster_label(labels, clusts, column=self.vtx_col)
                     node_y_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+1)
                     node_z_vtx = get_cluster_label(labels, clusts, column=self.vtx_col+2)
+                    positives  = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
 
                     node_assn_vtx = torch.tensor(np.stack([node_x_vtx, node_y_vtx, node_z_vtx], axis=1),
                                                 dtype=torch.float, device=node_pred_vtx.device, requires_grad=False)
+
+                    # If high purity is requested, do not include broken particle in the loss
+                    if self.vtx_high_purity:
+                        group_ids     = get_cluster_label(labels, clusts, column=self.group_col)
+                        _, inv, cnts  = np.unique(group_ids, return_inverse=True, return_counts=True)
+                        valid_mask    = np.where(cnts[inv] == 1)[0]
+                        node_pred_vtx = node_pred_vtx[valid_mask]
+                        node_assn_vtx = node_assn_vtx[valid_mask]
+                        positives     = positives[valid_mask]
+                        input_node_features = input_node_features[valid_mask]
 
                     if self.normalize_vtx_label:
                         node_assn_vtx = node_assn_vtx/self.spatial_size
@@ -254,7 +267,6 @@ class NodeKinematicsLoss(torch.nn.Module):
                     else:
                         good_index = torch.all( (0 <= node_assn_vtx) & (node_assn_vtx <= self.spatial_size), dim=1)
 
-                    positives = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     # Take the max for each cluster - e.g. for a shower, the primary fragment only
                     # is marked as primary particle, so taking majority count would eliminate the shower
                     # from primary particles for vertex identification purpose.
@@ -265,7 +277,7 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                     positives = torch.tensor(positives, dtype=torch.long, device=node_pred_vtx.device, requires_grad=False)
 
-                    reshaped = out['input_node_features'][i][j][:, 19:25][good_index & positives.bool()].view(-1, 2, 3)
+                    reshaped = input_node_features[:, 19:25][good_index & positives.bool()].view(-1, 2, 3)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
                     node_mask = good_index & positives.bool() & (positives >= 0.)
