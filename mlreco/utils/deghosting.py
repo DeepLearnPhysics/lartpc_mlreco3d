@@ -208,7 +208,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             #print(new_label_clustering[nonghost_mask][indices])
             #print(new_label_clustering[indices])
         label_c = concatenate1(label_c)
-        print("ignored 0 ", (label_c[:, -1] == -1).sum())
+        #print("ignored 0 ", (label_c[:, -1] == -1).sum())
         # Also run DBSCAN on track true clusters
         # We want to avoid true track clusters broken in two having the same cluster id label
         # Note: we assume we are adapting either cluster or kinematics labels,

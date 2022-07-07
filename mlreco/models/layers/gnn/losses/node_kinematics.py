@@ -175,6 +175,9 @@ class NodeKinematicsLoss(torch.nn.Module):
                     # Do not apply loss to nodes labeled -1 (unknown class)
                     valid_mask = node_assn_type > -1
 
+                    # Do not apply loss if the logit corresponding to the true class is -inf (forbidden prediction)
+                    valid_mask &= node_pred_type[np.arange(len(node_assn_type)),node_assn_type] != -float('inf')
+
                     # If high purity is requested, do not include broken particle in the loss
                     if self.type_high_purity:
                         group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
