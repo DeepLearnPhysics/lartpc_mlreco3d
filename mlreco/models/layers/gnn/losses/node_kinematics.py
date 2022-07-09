@@ -119,6 +119,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
         self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
         self.type_high_purity = loss_config.get('type_high_purity', True)
+        self.momentum_high_purity = loss_config.get('momentum_high_purity', True)
         self.vtx_high_purity  = loss_config.get('vtx_high_purity', True)
 
         self.compute_momentum_switch = loss_config.get('compute_momentum', True)
@@ -167,30 +168,30 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                 # Increment the type loss, balance classes if requested
                 if compute_type:
-                    # Get the class labels and true momenta from the specified columns
+                    # Get the class labels and true type from the specified columns
                     node_pred_type = out['node_pred_type'][i][j]
                     if not node_pred_type.shape[0]:
                         continue
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
-                    valid_mask = node_assn_type > -1
+                    valid_mask_type = node_assn_type > -1
 
                     # Do not apply loss if the logit corresponding to the true class is -inf (forbidden prediction)
-                    valid_mask &= (node_pred_type[np.arange(len(node_assn_type)),node_assn_type] != -float('inf')).detach().cpu().numpy()
+                    valid_mask_type &= (node_pred_type[np.arange(len(node_assn_type)),node_assn_type] != -float('inf')).detach().cpu().numpy()
 
                     # If high purity is requested, do not include broken particle in the loss
                     if self.type_high_purity:
                         group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
                         _, inv, cnts = np.unique(group_ids, return_inverse=True, return_counts=True)
-                        valid_mask  &= (cnts[inv] == 1)
-                    valid_mask = np.where(valid_mask)[0]
+                        valid_mask_type  &= (cnts[inv] == 1)
+                    valid_mask_type = np.where(valid_mask_type)[0]
 
                     # Compute loss
-                    if len(valid_mask):
+                    if len(valid_mask_type):
                         node_assn_type = torch.tensor(node_assn_type, dtype=torch.long, device=node_pred_type.device, requires_grad=False)
-                        node_pred_type = node_pred_type[valid_mask]
-                        node_assn_type = node_assn_type[valid_mask]
+                        node_pred_type = node_pred_type[valid_mask_type]
+                        node_assn_type = node_assn_type[valid_mask_type]
 
                         if self.balance_classes:
                             vals, counts = torch.unique(node_assn_type, return_counts=True)
@@ -205,7 +206,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                             type_loss += self.type_loss_weight * float(loss)
 
                         # Increment the number of nodes
-                        n_clusts_type += len(valid_mask)
+                        n_clusts_type += len(valid_mask_type)
 
                 # Increment the momentum loss
                 if compute_momentum:
@@ -216,10 +217,19 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
-                    node_mask = torch.nonzero(node_assn_p > -1, as_tuple=True)[0]
-                    if len(node_mask):
-                        node_pred_p = node_pred_p[node_mask]
-                        node_assn_p = node_assn_p[node_mask]
+                    valid_mask_p = node_assn_p.detach().cpu().numpy() > -1
+
+                    # If high purity is requested, do not include broken particle in the loss
+                    if self.momentum_high_purity:
+                        group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
+                        _, inv, cnts = np.unique(group_ids, return_inverse=True, return_counts=True)
+                        valid_mask_p  &= (cnts[inv] == 1)
+                    valid_mask_p = np.where(valid_mask_p)[0]
+
+                    # Do not apply loss to nodes labeled -1 (unknown class)
+                    if len(valid_mask_p):
+                        node_pred_p = node_pred_p[valid_mask_p]
+                        node_assn_p = node_assn_p[valid_mask_p]
 
                         loss = self.reg_lossfn(node_pred_p.squeeze(), node_assn_p.float())
                         total_loss += loss
@@ -251,13 +261,13 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                     # If high purity is requested, do not include broken particle in the loss
                     if self.vtx_high_purity:
-                        group_ids     = get_cluster_label(labels, clusts, column=self.group_col)
-                        _, inv, cnts  = np.unique(group_ids, return_inverse=True, return_counts=True)
-                        valid_mask    = np.where(cnts[inv] == 1)[0]
-                        node_pred_vtx = node_pred_vtx[valid_mask]
-                        node_assn_vtx = node_assn_vtx[valid_mask]
-                        positives     = positives[valid_mask]
-                        input_node_features = input_node_features[valid_mask]
+                        group_ids      = get_cluster_label(labels, clusts, column=self.group_col)
+                        _, inv, cnts   = np.unique(group_ids, return_inverse=True, return_counts=True)
+                        valid_mask_vtx = np.where(cnts[inv] == 1)[0]
+                        node_pred_vtx  = node_pred_vtx[valid_mask_vtx]
+                        node_assn_vtx  = node_assn_vtx[valid_mask_vtx]
+                        positives      = positives[valid_mask_vtx]
+                        input_node_features = input_node_features[valid_mask_vtx]
 
                     if self.normalize_vtx_label:
                         node_assn_vtx = node_assn_vtx/self.spatial_size
@@ -318,10 +328,10 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
-                if compute_type:
+                if compute_type and len(valid_mask_type):
                     type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
 
-                if compute_momentum:
+                if compute_momentum and len(valid_mask_p):
                     p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
 
                 if compute_vtx and node_pred_vtx[good_index].shape[0]:
