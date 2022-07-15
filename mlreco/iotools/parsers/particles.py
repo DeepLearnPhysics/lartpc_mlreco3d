@@ -2,87 +2,25 @@ import numpy as np
 from larcv import larcv
 from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.groups import type_labels as TYPE_LABELS
-# Global type labels for PDG to Particle Type Label (nominal) conversion.
 
 
-def parse_particle_singlep_pdg(data):
-    """
-    Get each true particle's PDG code.
-
-    .. code-block:: yaml
-
-        schema:
-          pdg_list:
-            - parse_particle_singlep_pdg
-            - particle_pcluster
-
-    Configuration
-    ----------
-    particle_pcluster : larcv::EventParticle
-
-    Returns
-    -------
-    np.ndarray
-        List of PDG codes for each particle in TTree.
-    """
-    parts = data[0]
-    pdgs = []
-    pdg = -1
-    for p in parts.as_vector():
-        # print(p.track_id())
-        if not p.track_id() == 1: continue
-        if int(p.pdg_code()) in TYPE_LABELS.keys():
-            pdg = TYPE_LABELS[int(p.pdg_code())]
-        else: pdg = -1
-        return np.asarray([pdg])
-
-    return np.asarray([pdg])
-
-
-def parse_particle_singlep_einit(data):
-    """
-    Get each true particle's true initial energy.
-
-    .. code-block:: yaml
-
-        schema:
-          pdg_list:
-            - parse_particle_singlep_einit
-            - particle_pcluster
-
-    Configuration
-    ----------
-    particle_pcluster : larcv::EventParticle
-
-    Returns
-    -------
-    np.ndarray
-        List of true initial energy for each particle in TTree.
-    """
-    parts = data[0]
-    for p in parts.as_vector():
-        is_primary = p.track_id() == p.parent_track_id()
-        if not p.track_id() == 1: continue
-        return p.energy_init()
-    return -1
-
-
-def parse_particle_asis(data):
+def parse_particle_asis(particle_event, cluster_event):
     """
     A function to copy construct & return an array of larcv::Particle
 
     .. code-block:: yaml
 
         schema:
-          segment_label:
-            - parse_particle_asis
-            - particle_pcluster
-            - cluster3d_pcluster
+          particle_asis:
+            parser: parse_particle_asis
+            args:
+              particle_event: particle_pcluster
+              cluster_event: cluster3d_pcluster
 
     Configuration
     -------------
-    particle_pcluster: larcv::EventParticle
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
+    particle_event: larcv::EventParticle
+    cluster_event: larcv::EventClusterVoxel3D
         to translate coordinates
 
     Returns
@@ -90,16 +28,9 @@ def parse_particle_asis(data):
     list
         a python list of larcv::Particle object
     """
-    particles = data[0]
-    particles = [larcv.Particle(p) for p in data[0].as_vector()]
-
-    clusters  = data[1]
-    #assert data[0].as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
-
-    meta = clusters.meta()
-
-
-    funcs = ["first_step","last_step","position","end_position","ancestor_position"]
+    particles = [larcv.Particle(p) for p in particle_event.as_vector()]
+    meta = cluster_event.meta()
+    funcs = ['first_step', 'last_step', 'position', 'end_position', 'ancestor_position']
     for p in particles:
         for f in funcs:
             pos = getattr(p,f)()
@@ -116,17 +47,18 @@ def parse_particle_asis(data):
     return particles
 
 
-def parse_neutrino_asis(data):
+def parse_neutrino_asis(neutrino_event, cluster_event):
     """
     A function to copy construct & return an array of larcv::Neutrino
 
     .. code-block:: yaml
 
         schema:
-          segment_label:
-            - parse_neutrino_asis
-            - neutrino_mpv
-            - cluster3d_pcluster
+          neutrino_asis:
+            parser: parse_neutrino_asis
+            particle_asis:
+              neutrino_event: neutrino_mpv
+              cluster_event: cluster3d_pcluster
 
     Configuration
     -------------
@@ -139,17 +71,9 @@ def parse_neutrino_asis(data):
     list
         a python list of larcv::Neutrino object
     """
-    neutrinos = data[0]
-    neutrinos = [larcv.Neutrino(p) for p in data[0].as_vector()]
-
-    clusters  = data[1]
-    #assert data[0].as_vector().size() in [clusters.as_vector().size(),clusters.as_vector().size()-1]
-
-    meta = clusters.meta()
-
-
-    #funcs = ["first_step","last_step","position","end_position","ancestor_position"]
-    funcs = ["position"]
+    neutrinos = [larcv.Neutrino(p) for p in neutrino_event.as_vector()]
+    meta = cluster_event.meta()
+    funcs = ['position']
     for p in neutrinos:
         for f in funcs:
             pos = getattr(p,f)()
@@ -166,7 +90,55 @@ def parse_neutrino_asis(data):
     return neutrinos
 
 
-def parse_particle_coords(data):
+def parse_particle_points(sparse_event, particle_event, include_point_tagging=True):
+    """
+    A function to retrieve particles ground truth points tensor, returns
+    points coordinates, types and particle index.
+    If include_point_tagging is true, it includes start vs end point tagging.
+
+    .. code-block:: yaml
+
+        schema:
+          points:
+            parser: parse_particle_points
+            args:
+              sprase_event: sparse3d_pcluster
+              particle_event: particle_pcluster
+              include_point_tagging: True
+
+    Configuration
+    -------------
+    sparse3d_pcluster: larcv::EventSparseTensor3D
+    particle_pcluster: larcv::EventParticle
+    include_point_tagging: bool
+
+    Returns
+    -------
+    np_voxels: np.ndarray
+        a numpy array with the shape (N,3) where 3 represents (x,y,z)
+        coordinate
+    np_values: np.ndarray
+        a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
+        and the particle data index in this order. (optionally: end/start tagging)
+    """
+    particles_v = particle_event.as_vector()
+    part_info = get_ppn_info(particles_v, sparse_event.meta())
+    # For open data - to reproduce
+    # part_info = get_ppn_info(particles_v, sparse_event.meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
+    # part_info = get_ppn_info(particles_v, sparse_event.meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
+    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
+    if include_point_tagging:
+        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
+
+    if part_info.shape[0] > 0:
+        #return part_info[:, :3], part_info[:, 3][:, None]
+        return part_info[:, :3], np_values
+    else:
+        #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
+        return np.empty(shape=(0, 3), dtype=np.int32), np_values
+
+
+def parse_particle_coords(particle_event, cluster_event):
     '''
     Function that returns particle coordinates (start and end) and start time.
 
@@ -175,10 +147,11 @@ def parse_particle_coords(data):
     .. code-block:: yaml
 
         schema:
-          segment_label:
-            - parse_particle_coords
-            - particle_pcluster
-            - cluster3d_pcluster
+          coords:
+            parser: parse_particle_coords
+            args:
+              particle_event: particle_pcluster
+              cluster_event: cluster3d_pcluster
 
     Configuration
     -------------
@@ -193,7 +166,7 @@ def parse_particle_coords(data):
         last_step_x, last_step_y, last_step_z, first_step_t, shape_id]
     '''
     # Scale particle coordinates to image size
-    particles = parse_particle_asis(data)
+    particles = parse_particle_asis(particle_event, cluster_event)
 
     # Make features
     particle_feats = []
@@ -207,93 +180,21 @@ def parse_particle_coords(data):
     return particle_feats[:,:3], particle_feats[:,3:]
 
 
-def parse_particle_points(data, include_point_tagging=False):
-    """
-    A function to retrieve particles ground truth points tensor, returns
-    points coordinates, types and particle index.
-
-    .. code-block:: yaml
-
-        schema:
-          segment_label:
-            - parse_particle_points
-            - sparse3d_pcluster
-            - particle_pcluster
-
-    Configuration
-    -------------
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-    particle_pcluster: larcv::EventParticle
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    np_values: np.ndarray
-        a numpy array with the shape (N, 2) where 2 represents the class of the ground truth point
-        and the particle data index in this order. (optionally: end/start tagging)
-    """
-    particles_v = data[1].as_vector()
-    part_info = get_ppn_info(particles_v, data[0].meta())
-    # For open data - to reproduce
-    # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
-    # part_info = get_ppn_info(particles_v, data[0].meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
-    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
-    if include_point_tagging:
-        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
-
-    if part_info.shape[0] > 0:
-        #return part_info[:, :3], part_info[:, 3][:, None]
-        return part_info[:, :3], np_values
-    else:
-        #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
-        return np.empty(shape=(0, 3), dtype=np.int32), np_values
-
-
-def parse_particle_points_with_tagging(data):
-    """
-    Same as `parse_particle_points` including start vs end point tagging.
-
-    .. code-block:: yaml
-
-        schema:
-          segment_label:
-            - parse_particle_points_with_tagging
-            - sparse3d_pcluster
-            - particle_pcluster
-
-    Configuration
-    -------------
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-    particle_pcluster: larcv::EventParticle
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    np_values: np.ndarray
-        a numpy array with the shape (N, 3) where 3 represents the class of the ground truth point,
-        the particle data index and end/start tagging in this order.
-
-    See Also
-    ---------
-    parse_particle_points
-    """
-    return parse_particle_points(data, include_point_tagging=True)
-
-
-def parse_particle_graph(data):
+def parse_particle_graph(particle_event, cluster_event=None):
     """
     A function to parse larcv::EventParticle to construct edges between particles (i.e. clusters)
 
+    If cluster_event is provided, it also removes edges to clusters
+    that have a zero pixel count and patches subsequently broken parentage.
+
     .. code-block:: yaml
 
         schema:
-          segment_label:
-            - parse_particle_graph
-            - particle_pcluster
+          graph:
+            parser: parse_particle_graph
+            args:
+              particle_event: particle_pcluster
+              cluster_event: cluster3d_pcluster
 
     Configuration
     -------------
@@ -308,97 +209,126 @@ def parse_particle_graph(data):
     --------
     parse_particle_graph_corrected: in addition, remove empty clusters.
     """
-    particles = data[0]
+    particles_v   = particle_event.as_vector()
+    num_particles = particles_v.size()
+    if cluster_event is None:
+        # Fill edges (directed [parent,child] pair)
+        edges = np.empty((0,2), dtype = np.int32)
+        for cluster_id in range(num_particles):
+            p = particles_v[cluster_id]
+            if p.parent_id() != p.id():
+                edges = np.vstack((edges, [int(p.parent_id()), cluster_id]))
+            if p.parent_id() == p.id() and p.group_id() != p.id():
+                edges = np.vstack((edges, [int(p.group_id()), cluster_id]))
+    else:
+        # Check that the cluster and particle objects are consistent
+        num_clusters = cluster_event.size()
+        assert num_clusters == num_particles
 
-    # For convention, construct particle id => cluster id mapping
-    particle_to_cluster = np.zeros(shape=[particles.as_vector().size()],dtype=np.int32)
+        # Fill edges (directed [parent,child] pair)
+        zero_nodes, zero_nodes_pid = [], []
+        edges = np.empty((0,2), dtype = np.int32)
+        for cluster_id in range(num_particles):
+            cluster = cluster_event.as_vector()[cluster_id]
+            num_points = cluster.as_vector().size()
+            p = particles_v[cluster_id]
+            if p.id() != p.group_id():
+                continue
+            if p.parent_id() != p.group_id():
+                edges = np.vstack((edges, [int(p.parent_id()),p.group_id()]))
+            if num_points == 0:
+                zero_nodes.append(p.group_id())
+                zero_nodes_pid.append(cluster_id)
 
-    # Fill edges (directed, [parent,child] pair)
-    edges = np.empty((0,2), dtype = np.int32)
-    for cluster_id in range(particles.as_vector().size()):
-        p = particles.as_vector()[cluster_id]
-        #print(p.id(), p.parent_id(), p.group_id())
-        if p.parent_id() != p.id():
-            edges = np.vstack((edges, [int(p.parent_id()),cluster_id]))
-        if p.parent_id() == p.id() and p.group_id() != p.id():
-            edges = np.vstack((edges, [int(p.group_id()),cluster_id]))
+        # Remove zero pixel nodes
+        for i, zn in enumerate(zero_nodes):
+            children = np.where(edges[:, 0] == zn)[0]
+            if len(children) == 0:
+                edges = edges[edges[:, 0] != zn]
+                edges = edges[edges[:, 1] != zn]
+                continue
+            parent = np.where(edges[:, 1] == zn)[0]
+            assert len(parent) <= 1
+
+            # If zero node has a parent, then assign children to that parent
+            if len(parent) == 1:
+                parent_id = edges[parent][0][0]
+                edges[:, 0][children] = parent_id
+            else:
+                edges = edges[edges[:, 0] != zn]
+            edges = edges[edges[:, 1] != zn]
 
     return edges
 
 
-def parse_particle_graph_corrected(data):
+def parse_particle_singlep_pdg(particle_event):
     """
-    A function to parse larcv::EventParticle to construct edges between particles (i.e. clusters)
-
-    Also removes edges to clusters that have a zero pixel count.
+    Get each true particle's PDG code.
 
     .. code-block:: yaml
 
         schema:
-          segment_label:
-            - parse_particle_graph_corrected
-            - particle_pcluster
-            - cluster3d_pcluster
+          pdg_list:
+            parser: parse_particle_singlep_pdg
+            args:
+              particle_event: particle_pcluster
 
     Configuration
-    -------------
-    particle_pcluster: larcv::EventParticle
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
+    ----------
+    particle_event : larcv::EventParticle
 
     Returns
     -------
     np.ndarray
-        a numpy array of directed edges where each edge is (parent,child) batch index ID.
-
-    See Also
-    --------
-    parse_particle_graph: same parser without correcting for empty clusters.
+        List of PDG codes for each particle in TTree.
     """
-    particles = data[0]
-    cluster_event = data[1]
+    pdgs = []
+    pdg = -1
+    for p in particle_event.as_vector():
+        if not p.track_id() == 1: continue
+        if int(p.pdg_code()) in TYPE_LABELS.keys():
+            pdg = TYPE_LABELS[int(p.pdg_code())]
+        else: pdg = -1
+        return np.asarray([pdg])
 
-    # For convention, construct particle id => cluster id mapping
-    num_clusters = cluster_event.size()
-    num_particles = particles.as_vector().size()
-    assert num_clusters == num_particles
+    return np.asarray([pdg])
 
-    zero_nodes = []
-    zero_nodes_pid = []
 
-    # Fill edges (directed, [parent,child] pair)
-    edges = np.empty((0,2), dtype = np.int32)
-    for cluster_id in range(num_particles):
-        cluster = cluster_event.as_vector()[cluster_id]
-        num_points = cluster.as_vector().size()
-        p = particles.as_vector()[cluster_id]
-        #print(p.id(), p.parent_id(), p.group_id())
-        if p.id() != p.group_id():
-            continue
-        if p.parent_id() != p.group_id():
-            edges = np.vstack((edges, [int(p.parent_id()),p.group_id()]))
-        if num_points == 0:
-            zero_nodes.append(p.group_id())
-            zero_nodes_pid.append(cluster_id)
+def parse_particle_singlep_einit(particle_event):
+    """
+    Get each true particle's true initial energy.
 
-    # Remove zero pixel nodes:
-    # print('------------------------------')
-    # print(edges)
-    # print(zero_nodes)
-    for i, zn in enumerate(zero_nodes):
-        children = np.where(edges[:, 0] == zn)[0]
-        if len(children) == 0:
-            edges = edges[edges[:, 0] != zn]
-            edges = edges[edges[:, 1] != zn]
-            continue
-        parent = np.where(edges[:, 1] == zn)[0]
-        assert len(parent) <= 1
-        # If zero node has a parent, then assign children to that parent
-        if len(parent) == 1:
-            parent_id = edges[parent][0][0]
-            edges[:, 0][children] = parent_id
-        else:
-            edges = edges[edges[:, 0] != zn]
-        edges = edges[edges[:, 1] != zn]
-    # print(edges)
+    .. code-block:: yaml
 
-    return edges
+        schema:
+          einit_list:
+            parser: parse_particle_singlep_pdg
+            args:
+              particle_event: particle_pcluster
+
+    Configuration
+    ----------
+    particle_event : larcv::EventParticle
+
+    Returns
+    -------
+    np.ndarray
+        List of true initial energy for each particle in TTree.
+    """
+    for p in particle_event.as_vector():
+        is_primary = p.track_id() == p.parent_track_id()
+        if not p.track_id() == 1: continue
+        return p.energy_init()
+    return -1
+
+
+def parse_particle_points_with_tagging(sparse_event, particle_event):
+    from warnings import warn
+    warn("Deprecated: parse_particle_points_with_tagging deprecated, use parse_particle_points instead", DeprecationWarning)
+    return parse_particle_points(sparse_event, particle_event, include_point_tagging=True)
+
+
+def parse_particle_graph_corrected(particle_event, cluster_event):
+    from warnings import warn
+    warn("Deprecated: parse_particle_graph_corrected deprecated, use parse_particle_graph instead", DeprecationWarning)
+    return parse_particle_graph(particle_event, cluster_event)

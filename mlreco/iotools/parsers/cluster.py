@@ -1,13 +1,14 @@
+from collections import OrderedDict
 import numpy as np
 from larcv import larcv
-from mlreco.utils.groups import filter_duplicate_voxels, filter_duplicate_voxels_ref, filter_nonimg_voxels
-from mlreco.iotools.parsers.sparse import parse_sparse3d_scn
-from mlreco.iotools.parsers.particles import parse_particle_asis
-from mlreco.iotools.parsers.clean_data import clean_data
+from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
 from mlreco.utils.groups import type_labels as TYPE_LABELS
+from mlreco.iotools.parsers.sparse import parse_sparse3d
+from mlreco.iotools.parsers.particles import parse_particle_asis
+from mlreco.iotools.parsers.clean_data import clean_sparse_data
 
 
-def parse_cluster2d(data):
+def parse_cluster2d(cluster_event):
     """
     A function to retrieve a 2D clusters tensor
 
@@ -15,12 +16,13 @@ def parse_cluster2d(data):
 
         schema:
           cluster_label:
-            - parse_cluster2d
-            - cluster2d_pcluster
+            parser: parse_cluster2d
+            args:
+              cluster_event: cluster2d_pcluster
 
     Configuration
     -------------
-    cluster2d_pcluster: larcv::EventClusterPixel2D
+    cluster_event: larcv::EventClusterPixel2D
 
     Returns
     -------
@@ -30,7 +32,7 @@ def parse_cluster2d(data):
     np_features: np.ndarray
         a numpy array with the shape (N,2) where 2 is pixel value and cluster id, respectively
     """
-    cluster_event = data[0].as_vector().front()
+    cluster_event = cluster_event.as_vector().front()
     meta = cluster_event.meta()
     num_clusters = cluster_event.size()
     clusters_voxels, clusters_features = [], []
@@ -52,7 +54,15 @@ def parse_cluster2d(data):
     return np_voxels, np_features
 
 
-def parse_cluster3d(data):
+def parse_cluster3d(cluster_event,
+                    particle_event = None,
+                    particle_mpv_event = None,
+                    sparse_semantics_event = None,
+                    sparse_value_event = None,
+                    add_particle_info = False,
+                    add_kinematics_info = False,
+                    clean_data = True,
+                    precedence = [1,2,0,3,4]):
     """
     a function to retrieve a 3D clusters tensor
 
@@ -60,12 +70,29 @@ def parse_cluster3d(data):
 
         schema:
           cluster_label:
-            - parse_cluster3d
-            - cluster3d_pcluster
+            parser: parse_cluster3d
+            args:
+              cluster_event: cluster3d_pcluster
+              particle_event: particle_pcluster
+              particle_mpv_event: particle_mpv
+              sparse_semantics_event: sparse3d_semantics
+              sparse_value_event: sparse3d_pcluster
+              add_particle_info: true
+              add_kinematics_info: false
+              clean_data: true
+              precedence: [1,2,0,3,4]
 
     Configuration
     -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
+    cluster_event: larcv::EventClusterVoxel3D
+    particle_event: larcv::EventParticle
+    particle_mpv_event: larcv::EventParticle
+    sparse_semantics_event: larcv::EventSparseTensor3D
+    sparse_value_event: larcv::EventSparseTensor3D
+    add_particle_info: bool
+    add_kinematics_info: bool
+    clean_data: bool
+    precedence: list
 
     Returns
     -------
@@ -73,676 +100,110 @@ def parse_cluster3d(data):
         a numpy array with the shape (n,3) where 3 represents (x,y,z)
         coordinate
     np_features: np.ndarray
-        a numpy array with the shape (n,2) where 2 is voxel value and cluster id, respectively
-
-    See Also
-    --------
-    parse_cluster3d_full
+        a numpy array with the shape (n,m) where m (2-13) includes:
+        * voxel value,
+        * cluster id
+        if add_particle_info is true, it also includes
+        * group id,
+        * interaction id,
+        * nu id,
+        * particle type,
+        * primary id
+        if add_kinematics_info is true, it also includes
+        * group id,
+        * particle type,
+        * momentum,
+        * vtx (x,y,z),
+        * primary group id
+        if either add_* is true, it includes last:
+        * semantic type
     """
-    cluster_event = data[0]
+
+    # Get the cluster-wise information
     meta = cluster_event.meta()
     num_clusters = cluster_event.as_vector().size()
+    labels = OrderedDict()
+    labels['cluster'] = np.arange(num_clusters)
+    if add_particle_info or add_kinematics_info:
+        assert particle_event is not None, "Must provide particle tree if particle/kinematics information is included"
+        particles_v     = particle_event.as_vector()
+        particles_mpv_v = particle_mpv_event.as_vector() if particle_mpv_event is not None else None
+        inter_ids       = get_interaction_id(particles_v)
+        nu_ids          = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particles_mpv_v)
+
+        labels['cluster'] = np.array([p.id() for p in particles_v])
+        labels['group']   = np.array([p.group_id() for p in particles_v])
+        if add_particle_info:
+            labels['inter']   = inter_ids
+            labels['nu']      = nu_ids
+            labels['type']    = get_particle_id(particles_v, nu_ids)
+            labels['primary'] = get_primary_id(cluster_event, particles_v)
+        if add_kinematics_info:
+            particles_asis_v  = parse_particle_asis(particle_event, cluster_event)
+            labels['type']    = get_particle_id(particles_v, nu_ids)
+            labels['p']       = np.array([(p.px()**2+p.py()**2+p.pz()**2)/1e3 for p in particles_v])
+            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_asis_v])
+            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_asis_v])
+            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_asis_v])
+            labels['primary_group'] = np.array((nu_ids > 0) & np.array([p.group_id()==p.parent_id() for p in particles_v]), dtype=np.float32)
+        labels['sem'] = np.array([p.shape() for p in particles_v])
+
+    # Loop over clusters, store info
     clusters_voxels, clusters_features = [], []
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
         num_points = cluster.as_vector().size()
         if num_points > 0:
+            # Get the position and pixel value from EventSparseTensor3D, append positions
             x = np.empty(shape=(num_points,), dtype=np.int32)
             y = np.empty(shape=(num_points,), dtype=np.int32)
             z = np.empty(shape=(num_points,), dtype=np.int32)
             value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
-            cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=i, dtype=np.float32)
+            larcv.as_flat_arrays(cluster, meta, x, y, z, value)
             clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value,cluster_id]))
+
+            # Append the cluster-wise information
+            features = [value]
+            for k, l in labels.items():
+                size = cluster.as_vector().size()
+                features.append(np.full(shape=(size), fill_value=l[i], dtype=np.float32))
+            clusters_features.append(np.column_stack(features))
+
+    # If there are no non-empty clusters, return. Concatenate otherwise
+    if not len(clusters_voxels):
+        return np.empty(shape=(0, 3), dtype=np.float32), np.empty(shape=(0, len(labels)+1), dtype=np.float32)
     np_voxels   = np.concatenate(clusters_voxels, axis=0)
     np_features = np.concatenate(clusters_features, axis=0)
-    return np_voxels, np_features
 
+    # If requested, remove duplicate voxels (cluster overlaps) and account for semantics
+    if clean_data:
+        assert sparse_semantics_event is not None, 'Need to provide a semantics tensor to clean up output'
+        sem_voxels, sem_features = parse_sparse3d([sparse_semantics_event])
+        np_voxels,  np_features  = clean_sparse_data(np_voxels, np_features, sem_voxels, sem_features, meta, precedence)
+        np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor
+        np_features[sem_features[:,-1] > 3, 1:-1] = -1 # Set all cluster labels to -1 if semantic class is LE or ghost
 
-def parse_cluster3d_full(data):
-    """
-    a function to retrieve a 3D clusters tensor with full features list
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_full
-            - cluster3d_pcluster
-            - particle_mpv
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (n,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (n,8) where 8 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * interaction id,
-        * nu id,
-        * particle type,
-        * primary id,
-        * semantic type,
-    """
-    cluster_event = data[0]
-    particles_v = data[1].as_vector()
-    meta = cluster_event.meta()
-    num_clusters = cluster_event.as_vector().size()
-    clusters_voxels, clusters_features = [], []
-    particle_mpv = None
-    if len(data) > 2:
-        particle_mpv = data[2].as_vector()
-
-    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
-    group_ids =   np.array([p.group_id() for p in particles_v])
-    inter_ids =   get_interaction_id(particles_v)
-    nu_ids      = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particle_mpv)
-    pids        = get_particle_id(particles_v, nu_ids)
-    primary_ids = get_primary_id(cluster_event, particles_v)
-
-    for i in range(num_clusters):
-        cluster = cluster_event.as_vector()[i]
-        num_points = cluster.as_vector().size()
-        if num_points > 0:
-            x = np.empty(shape=(num_points,), dtype=np.int32)
-            y = np.empty(shape=(num_points,), dtype=np.int32)
-            z = np.empty(shape=(num_points,), dtype=np.int32)
-            value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
-            assert i == particles_v[i].id()
-            cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=particles_v[i].id(), dtype=np.float32)
-            group_id = np.full(shape=(cluster.as_vector().size()),
-                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
-                               fill_value=group_ids[i], dtype=np.float32)
-            inter_id = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=inter_ids[i], dtype=np.float32)
-            nu_id = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=nu_ids[i], dtype=np.float32)
-            pdg = np.full(shape=(cluster.as_vector().size()),
-                          fill_value=pids[i], dtype=np.float32)
-            primary_id = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=primary_ids[i], dtype=np.float32)
-            sem_type = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=particles_v[i].shape(), dtype=np.float32)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value,cluster_id,group_id,inter_id,nu_id,pdg,primary_id,sem_type]))
-
-    if len(clusters_voxels):
-        np_voxels   = np.concatenate(clusters_voxels, axis=0)
-        np_features = np.concatenate(clusters_features, axis=0)
-    else:
-        np_voxels   = np.empty(shape=(0, 3), dtype=np.float32)
-        np_features = np.empty(shape=(0, 8), dtype=np.float32)
+    # If a value tree is provided, override value colum
+    if sparse_value_event:
+        _, val_features  = parse_sparse3d([sparse_value_event])
+        np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features
 
 
-
-def parse_cluster3d_full_extended(data):
-    """
-    a function to retrieve a 3D clusters tensor with full features list
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_full
-            - cluster3d_pcluster
-            - particle_mpv
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (n,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (n,8) where 8 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * interaction id,
-        * nu id,
-        * particle type,
-        * primary id,
-        * semantic type,
-    """
-    cluster_event = data[0]
-    particles_v = data[1].as_vector()
-    particles_v_asis = parse_particle_asis([data[1], data[0]])
-    meta = cluster_event.meta()
-    num_clusters = cluster_event.as_vector().size()
-    clusters_voxels, clusters_features = [], []
-    particle_mpv = None
-    if len(data) > 2:
-        particle_mpv = data[2].as_vector()
-
-    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
-    group_ids =   np.array([p.group_id() for p in particles_v])
-    inter_ids =   get_interaction_id(particles_v)
-    nu_ids      = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particle_mpv)
-    pids        = get_particle_id(particles_v, nu_ids)
-    primary_ids = get_primary_id(cluster_event, particles_v)
-
-    for i in range(num_clusters):
-        cluster = cluster_event.as_vector()[i]
-        num_points = cluster.as_vector().size()
-        if num_points > 0:
-            x = np.empty(shape=(num_points,), dtype=np.int32)
-            y = np.empty(shape=(num_points,), dtype=np.int32)
-            z = np.empty(shape=(num_points,), dtype=np.int32)
-            value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
-            assert i == particles_v[i].id()
-            cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=particles_v[i].id(), dtype=np.float32)
-            group_id = np.full(shape=(cluster.as_vector().size()),
-                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
-                               fill_value=group_ids[i], dtype=np.float32)
-            inter_id = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=inter_ids[i], dtype=np.float32)
-            nu_id = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=nu_ids[i], dtype=np.float32)
-            pdg = np.full(shape=(cluster.as_vector().size()),
-                          fill_value=pids[i], dtype=np.float32)
-            is_primary = np.full(shape=(cluster.as_vector().size()),
-                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].group_id() == particles_v[i].parent_id())),
-                        dtype=np.float32)
-            vtx_x = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().x(), dtype=np.float32)
-            vtx_y = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
-            vtx_z = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
-            sem_type = np.full(shape=(cluster.as_vector().size()),
-                               fill_value=particles_v[i].shape(), dtype=np.float32)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id,
-                inter_id, nu_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary, sem_type]))
-    if len(clusters_voxels) > 0:
-        np_voxels   = np.concatenate(clusters_voxels, axis=0)
-        np_features = np.concatenate(clusters_features, axis=0)
-    else:
-        np_voxels   = np.empty(shape=(0, 3), dtype=np.float32)
-        np_features = np.empty(shape=(0, 8), dtype=np.float32)
-
-    return np_voxels, np_features
-
-
-def parse_cluster3d_types(data):
-    """
-    a function to retrieve a 3D clusters tensor and PDG information
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_types
-            - cluster3d_pcluster
-            - particle_mpv
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (n,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (n,4) where 4 is voxel value,
-        cluster id, group id, pdg, respectively
-
-    See Also
-    --------
-    parse_cluster3d_full
-    """
-    cluster_event = data[0]
-    particles_v = data[1].as_vector()
-    # print(cluster_event)
-    # assert False
-    meta = cluster_event.meta()
-    num_clusters = cluster_event.as_vector().size()
-    clusters_voxels, clusters_features = [], []
-    particle_mpv = None
-    if len(data) > 2:
-        particle_mpv = data[2].as_vector()
-
-    from mlreco.utils.groups import get_interaction_id, get_nu_id
-    group_ids = np.array([p.group_id() for p in particles_v])
-    inter_ids = get_interaction_id(particles_v)
-    nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
-
-    for i in range(num_clusters):
-        cluster = cluster_event.as_vector()[i]
-        num_points = cluster.as_vector().size()
-        if num_points > 0:
-            x = np.empty(shape=(num_points,), dtype=np.int32)
-            y = np.empty(shape=(num_points,), dtype=np.int32)
-            z = np.empty(shape=(num_points,), dtype=np.int32)
-            value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
-            assert i == particles_v[i].id()
-            cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=particles_v[i].id(), dtype=np.float32)
-            group_id = np.full(shape=(cluster.as_vector().size()),
-                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
-                               fill_value=group_ids[i], dtype=np.float32)
-            t = int(particles_v[i].pdg_code())
-            if t in TYPE_LABELS.keys():
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=TYPE_LABELS[t], dtype=np.float32)
-            else:
-                pdg = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=-1, dtype=np.float32)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg]))
-    np_voxels   = np.concatenate(clusters_voxels, axis=0)
-    np_features = np.concatenate(clusters_features, axis=0)
-    # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
-
-    # print(np_features[mask][:, [0, 1, 5, 6]])
-    return np_voxels, np_features
-
-
-def parse_cluster3d_kinematics(data):
-    """
-    a function to retrieve a 3D clusters tensor with kinematics features
-    (including vertex information and primary particle tagging).
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_kinematics
-            - cluster3d_pcluster
-            - particle_pcluster
-            - particle_mpv
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_pcluster: larcv::EventParticle
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (n,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (n,9) where 9 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * pdg,
-        * momentum,
-        * vtx_x,
-        * vtx_y,
-        * vtx_z,
-        * is_primary
-
-    See Also
-    --------
-    parse_cluster3d_full
-    parse_cluster3d_kinematics_clean
-
-    Note
-    ----
-    Likely to be merged with `parse_cluster3d_full` soon.
-    """
-    cluster_event = data[0]
-    particles_v = data[1].as_vector()
-    particles_v_asis = parse_particle_asis([data[1], data[0]])
-
-    meta = cluster_event.meta()
-    num_clusters = cluster_event.as_vector().size()
-    clusters_voxels, clusters_features = [], []
-    particle_mpv = None
-    if len(data) > 2:
-        particle_mpv = data[2].as_vector()
-
-    from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id
-    group_ids = np.array([p.group_id() for p in particles_v])
-    inter_ids = get_interaction_id(particles_v)
-    nu_ids    = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv = particle_mpv)
-    pids      = get_particle_id(particles_v, nu_ids)
-
-    for i in range(num_clusters):
-        cluster = cluster_event.as_vector()[i]
-        num_points = cluster.as_vector().size()
-        if num_points > 0:
-            x = np.empty(shape=(num_points,), dtype=np.int32)
-            y = np.empty(shape=(num_points,), dtype=np.int32)
-            z = np.empty(shape=(num_points,), dtype=np.int32)
-            value = np.empty(shape=(num_points,), dtype=np.float32)
-            larcv.as_flat_arrays(cluster,meta,x, y, z, value)
-            assert i == particles_v[i].id()
-            cluster_id = np.full(shape=(cluster.as_vector().size()),
-                                 fill_value=particles_v[i].id(), dtype=np.float32)
-            group_id = np.full(shape=(cluster.as_vector().size()),
-                               #fill_value=particles_v[i].group_id(), dtype=np.float32)
-                               fill_value=group_ids[i], dtype=np.float32)
-            px = particles_v[i].px()
-            py = particles_v[i].py()
-            pz = particles_v[i].pz()
-            p = np.sqrt(px**2 + py**2 + pz**2) / 1000.0
-            p = np.full(shape=(cluster.as_vector().size()),
-                                fill_value=p, dtype=np.float32)
-            pdg = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=pids[i], dtype=np.float32)
-            vtx_x = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().x(), dtype=np.float32)
-            vtx_y = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().y(), dtype=np.float32)
-            vtx_z = np.full(shape=(cluster.as_vector().size()),
-                            fill_value=particles_v_asis[i].ancestor_position().z(), dtype=np.float32)
-            # is_primary = np.full(shape=(cluster.as_vector().size()),
-            #             fill_value=float((nu_ids[i] > 0) and (particles_v[i].parent_id() == particles_v[i].id()) and (particles_v[i].group_id() == particles_v[i].id())),
-            #             dtype=np.float32)
-            is_primary = np.full(shape=(cluster.as_vector().size()),
-                        fill_value=float((nu_ids[i] > 0) and (particles_v[i].group_id() == particles_v[i].parent_id())),
-                        dtype=np.float32)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
-            clusters_features.append(np.column_stack([value, cluster_id, group_id, pdg, p, vtx_x, vtx_y, vtx_z, is_primary]))
-    if len(clusters_voxels) > 0:
-        np_voxels   = np.concatenate(clusters_voxels, axis=0)
-        np_features = np.concatenate(clusters_features, axis=0)
-    else:
-        np_voxels = np.empty((0, 3), dtype=np.int32)
-        np_features = np.empty((0, 9), dtype=np.float32)
-    # mask = np_features[:, 6] == np.unique(np_features[:, 6])[0]
-
-    # print(np_features[mask][:, [0, 1, 5, 6]])
-    return np_voxels, np_features
-
-
-def parse_cluster3d_kinematics_clean(data):
-    """
-    Similar to parse_cluster3d_kinematics, but removes overlap voxels.
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_kinematics_clean
-            - cluster3d_pcluster
-            - particle_pcluster
-            - particle_mpv
-            - sparse3d_pcluster
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_pcluster: larcv::EventParticle
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-        This tensor will help determine overlap voxels and final shape.
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (n,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (n, 10) where 10 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * pdg,
-        * momentum,
-        * vtx_x,
-        * vtx_y,
-        * vtx_z,
-        * is_primary,
-        * semantic type
-
-    See Also
-    --------
-    parse_cluster3d_full
-    parse_cluster3d_kinematics
-    """
-    grp_voxels, grp_data = parse_cluster3d_kinematics(data[:-1])
-    _, cluster_data = parse_cluster3d_full(data[:-1])
-    img_voxels, img_data = parse_sparse3d_scn([data[-1]])
-
-    grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
-    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-    return grp_voxels, grp_data#[:, :-1]
-
-
-def parse_cluster3d_kinematics_full_clean(data):
-    grp_voxels, grp_data = parse_cluster3d_kinematics_full(data[:-1])
-    _, cluster_data = parse_cluster3d_full(data[:-1])
-    img_voxels, img_data = parse_sparse3d_scn([data[-1]])
-
-    grp_data = np.concatenate([grp_data, cluster_data[:, -1][:, None]], axis=1)
-    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-    return grp_voxels, grp_data#[:, :-1]
-
-
-def parse_cluster3d_clean(data):
-    """
-    A function to retrieve a 3D clusters tensor.
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_clean
-            - cluster3d_pcluster
-            - particle_mpv
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-
-    Parameters
-    ----------
-    data: list
-        length 3 array of larcv::EventClusterVoxel3D, larcv::EventSparseTensor3D
-        and larcv::EventParticle
-
-    Returns
-    -------
-    np_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    np_features: np.ndarray
-        a numpy array with the shape (N,2) where 2 represents (value, cluster_id)
-
-    See Also
-    --------
-    parse_cluster3d_full
-    """
-    grp_voxels, grp_data = parse_cluster3d_full(data)
-    return grp_voxels, grp_data[:,:2]
-
-
-def parse_cluster3d_clean_full(data):
-    """
-    A function to retrieve clusters tensor.  Do the following cleaning:
-
-    1) lexicographically sort group data (images are lexicographically sorted)
-
-    2) remove voxels from group data that are not in image
-
-    3) choose only one group per voxel (by lexicographic order)
-
-    4) override semantic labels with those from sparse3d
-    and give labels -1 to all voxels of class 4 and above
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_clean_full
-            - cluster3d_pcluster
-            - particle_mpv
-            - sparse3d_pcluster
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-        Will determine final shape and overlap voxels.
-
-    Returns
-    -------
-    grp_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    grp_data: np.ndarray
-        a numpy array with the shape (n,8) where 8 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * interaction id,
-        * nu id,
-        * particle type,
-        * primary id,
-        * semantic type
-
-    See Also
-    --------
-    parse_cluster3d_full
-    """
-    grp_voxels, grp_data = parse_cluster3d_full(data[:-1])
-    img_voxels, img_data = parse_sparse3d_scn([data[-1]])
-
-    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-
-    # step 4: override semantic labels with those from sparse3d
-    # and give labels -1 to all voxels of class 4 and above
-    grp_data[:,-1] = img_data[:,-1]
-    grp_data[img_data[:,-1] > 3,1:5] = -1
-    return grp_voxels, grp_data
-
-
-def parse_cluster3d_clean_full_extended(data):
-    """
-    A function to retrieve clusters tensor.  Do the following cleaning:
-
-    1) lexicographically sort group data (images are lexicographically sorted)
-
-    2) remove voxels from group data that are not in image
-
-    3) choose only one group per voxel (by lexicographic order)
-
-    4) override semantic labels with those from sparse3d
-    and give labels -1 to all voxels of class 4 and above
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_clean_full
-            - cluster3d_pcluster
-            - particle_mpv
-            - sparse3d_pcluster
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    particle_mpv: larcv::EventParticle, optional
-        To determine neutrino vs cosmic labels
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-        Will determine final shape and overlap voxels.
-
-    Returns
-    -------
-    grp_voxels: np.ndarray
-        a numpy array with the shape (N,3) where 3 represents (x,y,z)
-        coordinate
-    grp_data: np.ndarray
-        a numpy array with the shape (n,8) where 8 is respectively
-
-        * voxel value,
-        * cluster id,
-        * group id,
-        * interaction id,
-        * nu id,
-        * particle type,
-        * primary id,
-        * semantic type
-
-    See Also
-    --------
-    parse_cluster3d_full
-    """
-    grp_voxels, grp_data = parse_cluster3d_full_extended(data[:-1])
-    img_voxels, img_data = parse_sparse3d_scn([data[-1]])
-
-    grp_voxels, grp_data = clean_data(grp_voxels, grp_data, img_voxels, img_data, data[0].meta())
-
-    # step 4: override semantic labels with those from sparse3d
-    # and give labels -1 to all voxels of class 4 and above
-    grp_data[:,-1] = img_data[:,-1]
-    grp_data[img_data[:,-1] > 3,1:5] = -1
-
-    return grp_voxels, grp_data
-
-
-def parse_cluster3d_scales(data):
-    """
-    Retrieves clusters tensors at different spatial sizes.
-
-    .. code-block:: yaml
-
-        schema:
-          cluster_label:
-            - parse_cluster3d_scales
-            - cluster3d_pcluster
-            - sparse3d_pcluster
-
-    Configuration
-    -------------
-    cluster3d_pcluster: larcv::EventClusterVoxel3D
-    sparse3d_pcluster: larcv::EventSparseTensor3D
-        Will determine final shape and overlap voxels.
-
-    Returns
-    -------
-    list of tuples
-    """
-    grp_voxels, grp_data = parse_cluster3d_clean_full(data)
-    spatial_size = data[0].meta().num_voxel_x()
-    max_depth = int(np.floor(np.log2(spatial_size))-1)
-    scales = []
-    for d in range(max_depth):
-        scale_voxels = np.floor(grp_voxels/2**d)#.astype(int)
-        scale_voxels, unique_indices = np.unique(scale_voxels, axis=0, return_index=True)
-        scale_data = grp_data[unique_indices]
-        scales.append((scale_voxels, scale_data))
-    return scales
+def parse_cluster3d_clean_full(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
+    from warnings import warn
+    warn("Deprecated: parse_cluster3d_clean_full deprecated, use parse_cluster3d instead", DeprecationWarning)
+    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
+        sparse_semantics_event = particle_mpv_event
+        particle_mpv_event = None
+    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_particle_info=True)
+
+
+def parse_cluster3d_kinematics_clean(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
+    from warnings import warn
+    warn("Deprecated: parse_cluster3d_kinematics_clean deprecated, use parse_cluster3d instead", DeprecationWarning)
+    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
+        sparse_semantics_event = particle_mpv_event
+        particle_mpv_event = None
+    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_kinematics_info=True)

@@ -105,7 +105,7 @@ def contingency_table(a, b, na=None, nb=None):
         na = np.max(a)
     if not nb:
         nb = np.max(b)
-    table = np.zeros((na, nb), dtype=np.int)
+    table = np.zeros((na, nb), dtype=int)
     for i, j in zip(a,b):
         table[i,j] += 1
     return table

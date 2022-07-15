@@ -58,7 +58,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     else:
         k = 3
     n = data.shape[0]
-    ret = np.empty(n, dtype=np.bool)
+    ret = np.empty(n, dtype=bool)
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
             # duplicate voxel
@@ -91,7 +91,7 @@ def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence
     else:
         k = 3
     n = data.shape[0]
-    ret = np.full(n, True, dtype=np.bool)
+    ret = np.full(n, True, dtype=bool)
     duplicates = {}
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
@@ -125,7 +125,7 @@ def filter_nonimg_voxels(data_grp, data_img, usebatch=True):
     nimg = data_img.shape[0]
     igrp = 0
     iimg = 0
-    ret = np.empty(ngrp, dtype=np.bool) # return array
+    ret = np.empty(ngrp, dtype=bool) # return array
     while igrp < ngrp and iimg < nimg:
         if np.all(data_grp[igrp,:k] == data_img[iimg,:k]):
             # voxel is in both data

@@ -351,7 +351,7 @@ class FullChainGNN(torch.nn.Module):
                     for c in particles[b]] ) for b in bcids]
 
         parts = [np.array([vids[c].astype(np.int64) for c in particles[b]],
-                        dtype=np.object \
+                        dtype=object \
                         if not same_length[idx] \
                         else np.int64) for idx, b in enumerate(bcids)]
 
@@ -548,7 +548,7 @@ class FullChainGNN(torch.nn.Module):
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
 
             interactions_np = [np.array([vids[c].astype(np.int64) for c in interactions[b]],
-                               dtype=np.object if not same_length[idx] else np.int64) \
+                               dtype=object if not same_length[idx] else np.int64) \
                                    for idx, b in enumerate(bcids)]
 
             inter_cosmic_pred_np = [inter_cosmic_pred[b] for idx, b in enumerate(bcids)]

@@ -1,6 +1,5 @@
-import os, time, datetime, glob, sys
+import os, time, datetime, glob, sys, yaml
 import numpy as np
-import pprint
 try:
     import MinkowskiEngine as ME
 except ImportError:
@@ -115,8 +114,9 @@ def process_config(cfg, verbose=True):
     # Report GPUs to be used (if any)
     # Report configuations
     if verbose:
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(cfg)
+        from warnings import filterwarnings
+        filterwarnings('once', message='Deprecated', category=DeprecationWarning)
+        print(yaml.dump(cfg, default_flow_style=None))
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
