@@ -455,7 +455,7 @@ class FullChainGNN(torch.nn.Module):
 
             # If requested, enforce that particle PID predictions are compatible with semantics,
             # i.e. set logits to -inf if they belong to incompatible PIDs
-            if self._inter_enforce_semantics:
+            if self._inter_enforce_semantics and 'node_pred_type' in result:
                 sem_pid_logic = -float('inf')*torch.ones(self._inter_enforce_semantics_shape, dtype=input[0].dtype, device=input[0].device)
                 sem_pid_logic[self._inter_enforce_semantics_map] = 0.
                 pid_logits = result['node_pred_type']
