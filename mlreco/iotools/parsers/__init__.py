@@ -35,8 +35,8 @@ List of existing parsers
 .. csv-table:: Miscellaneous parsers
     :header: Parser name, Description
 
-    ``parse_meta3d``, Get the meta information to translate into real world coordinates (3D)
     ``parse_meta2d``, Get the meta information to translate into real world coordinates (2D)
+    ``parse_meta3d``, Get the meta information to translate into real world coordinates (3D)
     ``parse_run_info``, Parse run info (run, subrun, event number)
 
 
