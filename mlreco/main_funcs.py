@@ -71,6 +71,7 @@ def process_config(cfg, verbose=True):
                                  'particle_edge_pred', 'particle_group_pred', 'particles',
                                  'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
                                  'inter_particles', 'node_pred_p', 'node_pred_type',
+                                 'vertex_labels', 'anchors', 'grappa_inter_vertex_labels', 'grappa_inter_anchors',
                                  'kinematics_node_pred_p', 'kinematics_node_pred_type',
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
