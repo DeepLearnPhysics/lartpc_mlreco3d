@@ -269,7 +269,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         vtx_label = torch.tensor(node_assn_vtx[valid_mask_vtx][pos_mask_vtx], dtype=node_pred_vtx.dtype, device=node_pred_vtx.device)
                         if self.normalize_vtx_label: # If requested, bring vertex labels in the range [0,1 ]
                             vtx_label = vtx_label/self.spatial_size
-                        vertex_labels.append(vtx_label)
+                        vertex_labels.append(vtx_label.detach().cpu().numpy())
 
                         vtx_pred = node_pred_vtx[pos_mask_vtx,:3]
                         if self.use_anchor_points: # If requested, predict positions with respect to anchor points (end points of particles)
@@ -278,7 +278,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                             min_dist = torch.argmin(dist_to_anchor, dim=1)
                             range_index = torch.arange(end_points.shape[0]).to(device=end_points.device).long()
                             anchors = end_points[range_index, min_dist, :]
-                            anchors_list.append(anchors)
+                            anchors_list.append(anchors.detach().cpu().numpy())
                             vtx_pred = vtx_pred + anchors
 
                         loss2 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(vtx_pred, vtx_label), dim=1),
@@ -292,6 +292,9 @@ class NodeKinematicsLoss(torch.nn.Module):
                         # Increment the number of nodes
                         n_clusts_vtx += len(valid_mask_vtx)
                         n_clusts_vtx_pos += len(pos_mask_vtx)
+                    else:
+                        vertex_labels.append(np.empty((0,3)))
+                        if self.use_anchor_points: anchors.append(np.empty((0,3)))
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
