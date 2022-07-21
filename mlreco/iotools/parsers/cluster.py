@@ -62,7 +62,8 @@ def parse_cluster3d(cluster_event,
                     add_particle_info = False,
                     add_kinematics_info = False,
                     clean_data = True,
-                    precedence = [1,2,0,3,4]):
+                    precedence = [1,2,0,3,4],
+                    type_include_mpr = False):
     """
     a function to retrieve a 3D clusters tensor
 
@@ -136,11 +137,11 @@ def parse_cluster3d(cluster_event,
         if add_particle_info:
             labels['inter']   = inter_ids
             labels['nu']      = nu_ids
-            labels['type']    = get_particle_id(particles_v, nu_ids)
+            labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
             labels['primary'] = get_primary_id(cluster_event, particles_v)
         if add_kinematics_info:
             particles_asis_v  = parse_particle_asis(particle_event, cluster_event)
-            labels['type']    = get_particle_id(particles_v, nu_ids)
+            labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
             labels['p']       = np.array([(p.px()**2+p.py()**2+p.pz()**2)/1e3 for p in particles_v])
             labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_asis_v])
             labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_asis_v])

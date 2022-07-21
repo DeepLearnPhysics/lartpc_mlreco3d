@@ -312,19 +312,23 @@ type_labels = {
 }
 
 
-def get_particle_id(particles_v, nu_ids):
+def get_particle_id(particles_v, nu_ids, include_mpr=False):
     '''
     Function that gives one of five labels to particles of
     particle species predictions. This function ensures:
-    - Particles that do not originate from an MPV are labeled -1
+    - Particles that do not originate from an MPV are labeled -1,
+      unless the include_mpr flag is set to true
     - Particles that are not a track or a shower, and their
-      daughters, are labeled -1 (Michel and Delta)
+      daughters, are labeled -1 (Michel and Delta), as their
+      particle type is already constrained (only electron)
     - Particles that are neutron daughters are labeled -1
     - All shower daughters are labeled the same as their primary. This
       makes sense as otherwise an electron primary gets overruled by
       its many photon daughters (voxel-wise majority vote). This can
       lead to problems as, if an electron daughter is not clustered with
       the primary, it is labeled electron, which is counter-intuitive.
+      This is handled downstream with the high_purity flag.
+    - Particles that are not in the list target are labeled -1
 
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
@@ -341,7 +345,7 @@ def get_particle_id(particles_v, nu_ids):
         process = particles_v[group_id].creation_process()
         shape = int(particles_v[group_id].shape())
 
-        if nu_ids[i] < 1: t = -1
+        if not include_mpr and nu_ids[i] < 1: t = -1
         if shape > 1: t = -1
         if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
 
