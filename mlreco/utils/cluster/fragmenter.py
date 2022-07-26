@@ -38,7 +38,7 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
                     for c in fragments_np[b]] ) for b in bcids]
 
     frags = [np.array([vids[c].astype(np.int64) for c in fragments_np[b]],
-                        dtype=np.object if not same_length[idx] else np.int64) \
+                        dtype=object if not same_length[idx] else np.int64) \
                         for idx, b in enumerate(bcids)]
 
     frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]

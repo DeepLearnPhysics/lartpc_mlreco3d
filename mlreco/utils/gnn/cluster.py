@@ -128,32 +128,14 @@ def get_cluster_label(data, clusts, column=5):
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
-    dtype = data[:, column].dtype
-    if len(clusts) > 0:
-        if dtype == np.int64:
-            return _get_cluster_label_int(data, clusts, column)
-        else:
-            return _get_cluster_label_float(data, clusts, column)
-    else:
-        return np.empty((0,), dtype=np.int32)
+    return _get_cluster_label(data, clusts, column)
 
 @nb.njit(cache=True)
-def _get_cluster_label_int(data: nb.float64[:,:],
-                       clusts: nb.types.List(nb.int64[:]),
-                       column: nb.int64 = 5) -> nb.int64[:]:
-
-    labels = np.empty(len(clusts), dtype=np.int64)
-    for i, c in enumerate(clusts):
-        v, cts = unique_nb(data[c, column])
-        labels[i] = v[np.argmax(np.array(cts))]
-    return labels
-
-@nb.njit(cache=True)
-def _get_cluster_label_float(data: nb.float64[:,:],
+def _get_cluster_label(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
                        column: nb.int64 = 5) -> nb.float64[:]:
 
-    labels = np.empty(len(clusts), dtype=np.float64)
+    labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
         v, cts = unique_nb(data[c, column])
         labels[i] = v[np.argmax(np.array(cts))]
@@ -364,7 +346,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
 def get_cluster_points_label(data, particles, clusts, random_order=True, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
-    Returns start point of primary shower fragment twice if shower, delta or Michel 
+    Returns start point of primary shower fragment twice if shower, delta or Michel
     and end points of tracks if track.
 
     Args:

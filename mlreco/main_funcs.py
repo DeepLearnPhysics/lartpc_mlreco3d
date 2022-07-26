@@ -1,6 +1,5 @@
-import os, time, datetime, glob, sys
+import os, time, datetime, glob, sys, yaml
 import numpy as np
-import pprint
 try:
     import MinkowskiEngine as ME
 except ImportError:
@@ -72,6 +71,7 @@ def process_config(cfg, verbose=True):
                                  'particle_edge_pred', 'particle_group_pred', 'particles',
                                  'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
                                  'inter_particles', 'node_pred_p', 'node_pred_type',
+                                 'vertex_labels', 'anchors', 'grappa_inter_vertex_labels', 'grappa_inter_anchors',
                                  'kinematics_node_pred_p', 'kinematics_node_pred_type',
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
@@ -115,8 +115,9 @@ def process_config(cfg, verbose=True):
     # Report GPUs to be used (if any)
     # Report configuations
     if verbose:
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(cfg)
+        from warnings import filterwarnings
+        filterwarnings('once', message='Deprecated', category=DeprecationWarning)
+        print(yaml.dump(cfg, default_flow_style=None))
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):

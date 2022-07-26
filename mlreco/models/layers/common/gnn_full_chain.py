@@ -33,19 +33,21 @@ class FullChainGNN(torch.nn.Module):
         if self.enable_gnn_shower:
             self.grappa_shower     = GNN(cfg, name='grappa_shower', batch_col=self.batch_col, coords_col=self.coords_col)
             grappa_shower_cfg      = cfg.get('grappa_shower', {})
-            self._shower_id        = grappa_shower_cfg.get('base', {}).get('node_type', 0)
+            self._shower_ids       = grappa_shower_cfg.get('base', {}).get('node_type', 0)
             self._shower_use_true_particles = grappa_shower_cfg.get('use_true_particles', False)
+            if not isinstance(self._shower_ids, list): self._shower_ids = [self._shower_ids]
 
         if self.enable_gnn_track:
             self.grappa_track      = GNN(cfg, name='grappa_track', batch_col=self.batch_col, coords_col=self.coords_col)
             grappa_track_cfg       = cfg.get('grappa_track', {})
-            self._track_id         = grappa_track_cfg.get('base', {}).get('node_type', 1)
-            self._track_use_true_particles =grappa_track_cfg.get('use_true_particles', False)
+            self._track_ids        = grappa_track_cfg.get('base', {}).get('node_type', 1)
+            self._track_use_true_particles = grappa_track_cfg.get('use_true_particles', False)
+            if not isinstance(self._track_ids, list): self._track_ids = [self._track_ids]
 
         if self.enable_gnn_particle:
             self.grappa_particle   = GNN(cfg, name='grappa_particle', batch_col=self.batch_col, coords_col=self.coords_col)
             grappa_particle_cfg    = cfg.get('grappa_particle', {})
-            self._particle_ids     = grappa_particle_cfg.get('base', {}).get('node_type', [0,1])
+            self._particle_ids     = grappa_particle_cfg.get('base', {}).get('node_type', [0,1,2,3])
             self._particle_use_true_particles = grappa_particle_cfg.get('use_true_particles', False)
 
         if self.enable_gnn_inter:
@@ -55,6 +57,9 @@ class FullChainGNN(torch.nn.Module):
             self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
             self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
             self._inter_use_shower_primary = grappa_inter_cfg.get('use_shower_primary', True)
+            self._inter_enforce_semantics       = grappa_inter_cfg.get('enforce_semantics', True)
+            self._inter_enforce_semantics_shape = grappa_inter_cfg.get('enforce_semantics_shape', (4,5))
+            self._inter_enforce_semantics_map   = grappa_inter_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
         if self.enable_gnn_kinematics:
             self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
@@ -187,7 +192,7 @@ class FullChainGNN(torch.nn.Module):
             # Run shower GrapPA: merges shower fragments into shower instances
             em_mask, kwargs = self.get_extra_gnn_features(fragments,
                                                           frag_seg,
-                                                          [self._shower_id],
+                                                          self._shower_ids,
                                                           input,
                                                           result,
                                                           use_ppn=self.use_ppn_in_gnn,
@@ -218,7 +223,7 @@ class FullChainGNN(torch.nn.Module):
             # Run track GrapPA: merges tracks fragments into track instances
             track_mask, kwargs = self.get_extra_gnn_features(fragments,
                                                              frag_seg,
-                                                             [self._track_id],
+                                                             self._track_ids,
                                                              input,
                                                              result,
                                                              use_ppn=self.use_ppn_in_gnn,
@@ -308,7 +313,8 @@ class FullChainGNN(torch.nn.Module):
                                             'shower_group_pred',
                                             'shower_fragments')
 
-                mask &= (frag_seg != self._shower_id)
+                for c in self._shower_ids:
+                    mask &= (frag_seg != c)
             # Append one particle per track group
             if self.enable_gnn_track:
                 self.select_particle_in_group(result, counts, b, particles,
@@ -317,7 +323,8 @@ class FullChainGNN(torch.nn.Module):
                                             'track_group_pred',
                                             'track_fragments')
 
-                mask &= (frag_seg != self._track_id)
+                for c in self._track_ids:
+                    mask &= (frag_seg != c)
 
             # Append one particle per fragment that is not already accounted for
             particles.extend(fragments[mask])
@@ -344,7 +351,7 @@ class FullChainGNN(torch.nn.Module):
                     for c in particles[b]] ) for b in bcids]
 
         parts = [np.array([vids[c].astype(np.int64) for c in particles[b]],
-                        dtype=np.object \
+                        dtype=object \
                         if not same_length[idx] \
                         else np.int64) for idx, b in enumerate(bcids)]
 
@@ -446,6 +453,16 @@ class FullChainGNN(torch.nn.Module):
                          output_keys,
                          kwargs)
 
+            # If requested, enforce that particle PID predictions are compatible with semantics,
+            # i.e. set logits to -inf if they belong to incompatible PIDs
+            if self._inter_enforce_semantics and 'node_pred_type' in result:
+                sem_pid_logic = -float('inf')*torch.ones(self._inter_enforce_semantics_shape, dtype=input[0].dtype, device=input[0].device)
+                sem_pid_logic[self._inter_enforce_semantics_map] = 0.
+                pid_logits = result['node_pred_type']
+                for i in range(len(pid_logits)):
+                    for b in range(len(pid_logits[i])):
+                        pid_logits[i][b] += sem_pid_logic[part_seg[part_batch_ids==b]]
+
         # ---
         # 4. GNN for particle flow & kinematics
         # ---
@@ -531,7 +548,7 @@ class FullChainGNN(torch.nn.Module):
             same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
 
             interactions_np = [np.array([vids[c].astype(np.int64) for c in interactions[b]],
-                               dtype=np.object if not same_length[idx] else np.int64) \
+                               dtype=object if not same_length[idx] else np.int64) \
                                    for idx, b in enumerate(bcids)]
 
             inter_cosmic_pred_np = [inter_cosmic_pred[b] for idx, b in enumerate(bcids)]
