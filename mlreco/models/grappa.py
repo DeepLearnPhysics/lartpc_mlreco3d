@@ -1,4 +1,3 @@
-from operator import xor
 import random
 import torch
 import numpy as np
@@ -347,7 +346,7 @@ class GNN(torch.nn.Module):
         # Add start point and/or start direction to node features if requested
         if self.add_start_point or points is not None:
             if points is None:
-                points = get_cluster_points_label(cluster_data, particles, clusts, self.source_col==6, coords_index=self.coords_index)
+                points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
                 dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)

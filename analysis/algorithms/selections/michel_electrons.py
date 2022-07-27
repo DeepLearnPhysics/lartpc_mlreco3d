@@ -80,6 +80,8 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
     ablation_radius    = processor_cfg.get('ablation_radius', 15)
     ablation_min_samples = processor_cfg.get('ablation_min_samples', 5)
     shower_threshold   = processor_cfg.get('shower_threshold', 10)
+    fiducial_threshold = processor_cfg.get('fiducial_threshold', 30)
+    muon_min_voxel_count = processor_cfg.get('muon_min_voxel_count', 30)
     matching_mode      = processor_cfg.get('matching_mode', 'true_to_pred')
     #
     # ====== Initialization ======
@@ -105,6 +107,7 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
 
             for tp in true_particles:
                 if tp.semantic_type != michel_label: continue
+                if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
                 p = data_blob['particles_asis'][i][tp.id]
 
                 michel_is_attached_at_edge = False
@@ -114,6 +117,7 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 for tp2 in true_particles:
                     if tp2.semantic_type != track_label: continue
                     if tp2.pid != muon_label and tp2.pid != pion_label: continue
+                    if tp2.size < muon_min_voxel_count: continue
                     d = cdist(tp.points, tp2.points).min()
                     attached_at_edge, cluster_count, old_cluster_count = is_attached_at_edge(tp.points, tp2.points,
                                                                     attached_threshold=attached_threshold,
@@ -159,11 +163,13 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
         # Loop over predicted particles
         for p in pred_particles:
             if p.semantic_type != michel_label: continue
+            if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
 
             # Check whether it is attached to the edge of a track
             michel_is_attached_at_edge = False
             for p2 in pred_particles:
                 if p2.semantic_type != track_label: continue
+                if p2.size < muon_min_voxel_count: continue
                 if not is_attached_at_edge(p.points, p2.points,
                                         attached_threshold=attached_threshold,
                                         one_pixel=one_pixel,

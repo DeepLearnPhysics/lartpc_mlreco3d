@@ -324,7 +324,7 @@ def node_purity_mask(clust_ids: nb.int64[:],
     purity_mask = np.zeros(len(clust_ids), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = group_ids == g
-        if np.sum(group_mask) > 1 and np.sum(primary_ids[group_mask]) == 1:
+        if np.sum(group_mask) > 1 and np.sum(primary_ids[group_mask] == 1) == 1:
             purity_mask[group_mask] = np.ones(np.sum(group_mask))
 
     return purity_mask

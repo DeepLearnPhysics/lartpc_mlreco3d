@@ -46,12 +46,14 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     # Avoid hardcoding labels
     muon_label       = processor_cfg.get('muon_label', 2)
     track_label      = processor_cfg.get('track_label', 1)
+    fiducial_threshold = processor_cfg.get('fiducial_threshold', 30)
+    #muon_min_voxel_count = processor_cfg.get('muon_min_voxel_count', 30)
 
     # Initialize analysis differently depending on data/MC setting
     if not data:
-        predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
     else:
-        predictor = FullChainPredictor(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainPredictor(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
 
@@ -69,7 +71,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             true_particles = predictor.get_true_particles(i, only_primaries=False)
             # Match true particles to predicted particles
             true_ids = np.array([p.id for p in true_particles])
-            matched_particles = predictor.match_particles(i, mode='true_to_pred', min_overlap=0.1)
+            matched_particles = predictor.match_particles(i, mode='true_to_pred')
 
             # Quality Metrics
             # FIXME: put into Analysis tools UI ?
@@ -81,6 +83,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             # Count true stopping muons in the event
             for tp in true_particles:
                 if tp.semantic_type != track_label: continue
+                if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
                 num_voxels = tp.size
 
                 p = data_blob['particles_asis'][i][tp.id]
@@ -136,6 +139,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
         # Loop over predicted particles
         for p in pred_particles:
             if p.semantic_type != track_label: continue
+            if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
             coords = p.points
 
             # Check for presence of Michel electron

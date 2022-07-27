@@ -58,7 +58,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     else:
         k = 3
     n = data.shape[0]
-    ret = np.empty(n, dtype=np.bool)
+    ret = np.empty(n, dtype=bool)
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
             # duplicate voxel
@@ -78,7 +78,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     return ret
 
 
-def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[2,1,0,3,4]):
+def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[1,2,0,3,4]):
     """
     return array that will filter out duplicate voxels
     Sort with respect to a reference and following the specified precedence order
@@ -91,7 +91,7 @@ def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence
     else:
         k = 3
     n = data.shape[0]
-    ret = np.full(n, True, dtype=np.bool)
+    ret = np.full(n, True, dtype=bool)
     duplicates = {}
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
@@ -125,7 +125,7 @@ def filter_nonimg_voxels(data_grp, data_img, usebatch=True):
     nimg = data_img.shape[0]
     igrp = 0
     iimg = 0
-    ret = np.empty(ngrp, dtype=np.bool) # return array
+    ret = np.empty(ngrp, dtype=bool) # return array
     while igrp < ngrp and iimg < nimg:
         if np.all(data_grp[igrp,:k] == data_img[iimg,:k]):
             # voxel is in both data
@@ -312,19 +312,23 @@ type_labels = {
 }
 
 
-def get_particle_id(particles_v, nu_ids):
+def get_particle_id(particles_v, nu_ids, include_mpr=False):
     '''
     Function that gives one of five labels to particles of
     particle species predictions. This function ensures:
-    - Particles that do not originate from an MPV are labeled -1
+    - Particles that do not originate from an MPV are labeled -1,
+      unless the include_mpr flag is set to true
     - Particles that are not a track or a shower, and their
-      daughters, are labeled -1 (Michel and Delta)
+      daughters, are labeled -1 (Michel and Delta), as their
+      particle type is already constrained (only electron)
     - Particles that are neutron daughters are labeled -1
     - All shower daughters are labeled the same as their primary. This
       makes sense as otherwise an electron primary gets overruled by
       its many photon daughters (voxel-wise majority vote). This can
       lead to problems as, if an electron daughter is not clustered with
       the primary, it is labeled electron, which is counter-intuitive.
+      This is handled downstream with the high_purity flag.
+    - Particles that are not in the list target are labeled -1
 
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
@@ -341,7 +345,7 @@ def get_particle_id(particles_v, nu_ids):
         process = particles_v[group_id].creation_process()
         shape = int(particles_v[group_id].shape())
 
-        if nu_ids[i] < 1: t = -1
+        if not include_mpr and nu_ids[i] < 1: t = -1
         if shape > 1: t = -1
         if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
 

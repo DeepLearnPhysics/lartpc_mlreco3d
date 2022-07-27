@@ -82,6 +82,23 @@ class FullChainPredictor:
 
         self.batch_mask = self.data_blob['input_data']
 
+        self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
+        if self.volume_boundaries is None:
+            # Using ICARUS Cryo 0 as a default
+            pass
+        else:
+            self.volume_boundaries = np.array(self.volume_boundaries, dtype=np.float64)
+            if 'meta' not in self.data_blob:
+                raise Exception("Cannot use volume boundaries because meta is missing from iotools config.")
+            else: # convert to voxel units
+                meta = self.data_blob['meta'][0]
+                min_x, min_y, min_z = meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = meta[6:9]
+
+                self.volume_boundaries[0, :] = (self.volume_boundaries[0, :] - min_x) / size_voxel_x
+                self.volume_boundaries[1, :] = (self.volume_boundaries[1, :] - min_y) / size_voxel_y
+                self.volume_boundaries[2, :] = (self.volume_boundaries[2, :] - min_z) / size_voxel_z
+
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(self.num_images)
         return msg
@@ -193,6 +210,37 @@ class FullChainPredictor:
             mask = labels == i
             new_labels[mask] = c
         return new_labels
+
+
+    def is_contained(self, points, threshold=30):
+        """
+        Parameters
+        ----------
+        points: np.ndarray
+            Shape (N, 3)
+        threshold: float or np.ndarray
+            Distance (in voxels) from boundaries beyond which
+            an object is contained. Can be an array if different
+            threshold must be applied in x, y and z (shape (3,)).
+
+        Returns
+        -------
+        bool
+        """
+        if not isinstance(threshold, np.ndarray):
+            threshold = threshold * np.ones((3,))
+        else:
+            assert threshold.shape[0] == 3
+            assert len(threshold.shape) == 1
+
+        if self.volume_boundaries is None:
+            raise Exception("Please define volume boundaries before using containment method.")
+
+        x_contained = (self.volume_boundaries[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.volume_boundaries[0, 1] - threshold[0])
+        y_contained = (self.volume_boundaries[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.volume_boundaries[1, 1] - threshold[1])
+        z_contained = (self.volume_boundaries[2, 0] + threshold[2] <= points[:, 0]) & (points[:, 2] <= self.volume_boundaries[2, 1] - threshold[2])
+
+        return (x_contained & y_contained & z_contained).all()
 
 
     def _fit_predict_fragments(self, entry):
@@ -335,7 +383,7 @@ class FullChainPredictor:
 
 
     def get_fragments(self, entry, only_primaries=False,
-                      min_particle_voxel_count=0,
+                      min_particle_voxel_count=-1,
                       attaching_threshold=2,
                       semantic_type=None, verbose=False, true_id=False) -> List[Particle]:
         '''
@@ -357,6 +405,9 @@ class FullChainPredictor:
         Returns:
             - out: List of <Particle> instances (see Particle class definition).
         '''
+        if min_particle_voxel_count < 0:
+            min_particle_voxel_count = self.min_particle_voxel_count
+
         point_cloud = self.data_blob['input_data'][entry][:, 1:4]
         depositions = self.result['input_rescaled'][entry][:, 4]
         fragments = self.result['fragments'][entry]
@@ -454,7 +505,7 @@ class FullChainPredictor:
 
 
     def get_particles(self, entry, only_primaries=True,
-                      min_particle_voxel_count=10,
+                      min_particle_voxel_count=-1,
                       attaching_threshold=2) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
@@ -482,6 +533,9 @@ class FullChainPredictor:
         Returns:
             - out: List of <Particle> instances (see Particle class definition).
         '''
+        if min_particle_voxel_count < 0:
+            min_particle_voxel_count = self.min_particle_voxel_count
+
         point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particles'][entry]
@@ -992,7 +1046,10 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
-                              min_particle_voxel_count=20) -> List[Interaction]:
+                              min_particle_voxel_count=-1) -> List[Interaction]:
+        if min_particle_voxel_count < 0:
+            min_particle_voxel_count = self.min_particle_voxel_count
+
         true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(true_particles,
                                                  get_nu_id=True, mode='truth')

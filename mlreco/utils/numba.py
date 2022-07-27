@@ -155,6 +155,40 @@ def argmax_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
+def min_nb(x: nb.float64[:,:],
+           axis: nb.int64) -> nb.float64[:]:
+    """
+    Numba implementation of np.max(x, axis)
+    """
+    assert axis == 0 or axis == 1
+    xmin = np.empty(x.shape[1-axis], dtype=np.int64)
+    if axis == 0:
+        for i in range(len(xmin)):
+            xmin[i] = np.min(x[:,i])
+    else:
+        for i in range(len(xmax)):
+            xmin[i] = np.min(x[i])
+    return xmin
+
+
+@nb.njit(cache=True)
+def max_nb(x: nb.float64[:,:],
+           axis: nb.int64) -> nb.float64[:]:
+    """
+    Numba implementation of np.max(x, axis)
+    """
+    assert axis == 0 or axis == 1
+    xmax = np.empty(x.shape[1-axis], dtype=np.int64)
+    if axis == 0:
+        for i in range(len(xmax)):
+            xmax[i] = np.max(x[:,i])
+    else:
+        for i in range(len(xmax)):
+            xmax[i] = np.max(x[i])
+    return xmax
+
+
+@nb.njit(cache=True)
 def all_nb(x: nb.float64[:,:],
               axis: nb.int64) -> nb.int64[:]:
     """
@@ -175,11 +209,14 @@ def all_nb(x: nb.float64[:,:],
 def softmax_nb(x: nb.float64[:,:],
                axis: nb.int64) -> nb.float64[:,:]:
     assert axis == 0 or axis == 1
-    exps = np.exp(x)
     if axis == 0:
-        return exps/np.sum(exps,axis=0)
+        xmax = max_nb(x, axis=0)
+        logsumexp = np.log(np.sum(np.exp(x-xmax), axis=0)) + xmax
+        return np.exp(x - logsumexp)
     else:
-        return exps/np.sum(exps,axis=1).reshape(-1,1)
+        xmax = max_nb(x, axis=1).reshape(-1,1)
+        logsumexp = np.log(np.sum(np.exp(x-xmax), axis=1)).reshape(-1,1) + xmax
+        return np.exp(x - logsumexp)
 
 
 @nb.njit(cache=True)
