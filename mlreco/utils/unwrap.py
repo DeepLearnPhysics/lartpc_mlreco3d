@@ -130,7 +130,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_da
                 batch_map = {}
                 batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
-                batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
+                if len(batch_idx):
+                    batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
                 for b in batch_idx:
                     batch_map[b] = d[:,batch_id_loc] == b
                 unwrap_map[d.shape[0]]=batch_map
@@ -209,7 +210,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_da
                 #     assert False
                 # print(target, len(batch_idx), len(np.unique(batch_idx.astype(np.int32))))
                 assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
-                batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
+                if len(batch_idx):
+                    batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
                 # We are going to assume **consecutive numbering of batch idx** starting from 0
                 # b/c problems arise if one of the targets is missing an entry (eg all voxels predicted ghost,
                 # which means a batch idx is missing from batch_idx for target = input_rescaled)
@@ -267,7 +269,8 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_da
                         print(target, d.shape)
                     batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                     batch_idx = np.unique(d[:,batch_id_loc])
-                    batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
+                    if len(batch_idx):
+                        batch_idx_max = max(batch_idx_max, int(batch_idx.max()))
                     batch_ctrs.append(int(batch_idx_max+1))
                     try:
                         assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
