@@ -302,6 +302,10 @@ def split_edge_index(edge_index: nb.int64[:,:],
         [np.ndarray]: (B) List of list of edges
         [np.ndarray]: (B) List of edge IDs in each batch
     """
+    # If the input is empty, simply return defaults
+    if not edge_index.shape[1]:
+        return [np.empty((2,0), dtype=np.int64) for b in batches], [np.empty(0, dtype=np.int64) for b in batches]
+
     # For each batch ID, get the list of edges that belong to it
     ebids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in batches]
 

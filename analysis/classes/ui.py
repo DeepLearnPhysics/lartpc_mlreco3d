@@ -425,7 +425,7 @@ class FullChainPredictor:
 
         temp = []
 
-        if ('inter_group_pred' in self.result) and ('particles' in self.result):
+        if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(fragments) > 0:
 
             group_labels = self._fit_predict_groups(entry)
             inter_labels = self._fit_predict_interaction_labels(entry)
@@ -561,7 +561,7 @@ class FullChainPredictor:
 
         assert node_pred_vtx.shape[0] == len(particles)
 
-        if ('inter_group_pred' in self.result) and ('particles' in self.result):
+        if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(particles) > 0:
 
             assert len(self.result['inter_group_pred'][entry]) == len(particles)
             inter_labels = self._fit_predict_interaction_labels(entry)

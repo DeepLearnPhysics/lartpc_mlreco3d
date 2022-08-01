@@ -345,10 +345,13 @@ class ClusterGraphConstructor:
             raise ValueError('Edge attributes are already set: {}'\
                 .format(self._graph_batch.edge_attr))
         else:
-            edge_attr = kernel_fn(
-                self._graph_batch.x[self._graph_batch.edge_index[0, :]],
-                self._graph_batch.x[self._graph_batch.edge_index[1, :]])
-            w = edge_attr.squeeze()
+            if self._graph_batch.edge_index.shape[1] > 0:
+                edge_attr = kernel_fn(
+                    self._graph_batch.x[self._graph_batch.edge_index[0, :]],
+                    self._graph_batch.x[self._graph_batch.edge_index[1, :]])
+                w = edge_attr.squeeze()
+            else:
+                w = torch.empty((0,), device=self._graph_batch.edge_index.device)
             self._graph_batch.edge_attr = w
             self._graph_batch.add_edge_features(w, 'edge_attr')
 
