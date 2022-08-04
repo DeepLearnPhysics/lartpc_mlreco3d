@@ -1,28 +1,33 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 import torch
-import sparseconvnet as scn
 import time
-
-# inter-cluster distance calculation: define dumb matrix (vectorized) dist calculation + jit it
-# FIXME in torch 1.3 or 1.4, cdist should be fixed (02-02-2020 the container using v1.1 has slow cdist)
-@torch.jit.script
-def local_cdist(set0, set1):
-    norm0 = set0.pow(2).sum(dim=-1, keepdim=True)
-    norm1 = set1.pow(2).sum(dim=-1, keepdim=True)
-    res = torch.addmm(norm1.transpose(-2, -1), set0, set1.transpose(-2, -1), alpha=-2).add_(norm0)
-    res = res.clamp_min_(1e-20).sqrt()
-    return res
+import torch_geometric
+import pandas as pd
+import os
 
 def to_numpy(s):
+    use_scn, use_mink = True, True
+    try:
+        import sparseconvnet as scn
+    except ImportError:
+        use_scn = False
+    try:
+        import MinkowskiEngine as ME
+    except ImportError:
+        use_mink = False
+
     if isinstance(s, np.ndarray):
         return s
     if isinstance(s, torch.Tensor):
         return s.cpu().detach().numpy()
-    elif isinstance(s, scn.SparseConvNetTensor):
+    elif use_scn and isinstance(s, scn.SparseConvNetTensor):
         return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
+    elif use_mink and isinstance(s, ME.SparseTensor):
+        return torch.cat([s.C.float(), s.F], dim=1).detach().cpu().numpy()
+    elif isinstance(s, torch_geometric.data.batch.Batch):
+        return s
+    elif isinstance(s, pd.DataFrame):
+        return s
     else:
         raise TypeError("Unknown return type %s" % type(s))
 
@@ -75,6 +80,7 @@ class stopwatch(object):
     """
     def __init__(self):
         self._watch={}
+        self._cpu_watch = {}
 
     def start(self,key):
         """
@@ -92,6 +98,18 @@ class stopwatch(object):
         """
         data = self._watch[key]
         if data[0]<0 : data[0] = time.time() - data[1]
+
+    def start_cputime(self, key):
+        self._cpu_watch[key] = [-1,time.process_time()]
+
+    def stop_cputime(self, key):
+        data = self._cpu_watch[key]
+        if data[0]<0 : data[0] = time.process_time() - data[1]
+
+    def time_cputime(self, key):
+        if not key in self._cpu_watch: return 0
+        data = self._cpu_watch[key]
+        return data[0] if data[0]>0 else time.process_time() - data[1]
 
     def time(self,key):
         """
@@ -169,3 +187,33 @@ class CSVData:
     def close(self):
         if self._str is not None:
             self._fout.close()
+
+
+class ChunkCSVData:
+
+    def __init__(self, fout, append=True, chunksize=1000):
+        self.name = fout
+        if append:
+            self.append = 'a'
+        else:
+            self.append = 'w'
+        self.chunksize = chunksize
+
+        self.header = True
+
+        if not os.path.exists(os.path.dirname(self.name)):
+            os.makedirs(os.path.dirname(self.name))
+
+        with open(self.name, 'w') as f:
+            pass
+        # df = pd.DataFrame(list())
+        # df.to_csv(self.name, mode='w')
+
+    def record(self, df, verbose=False):
+        if verbose:
+            print(df)
+        df.to_csv(self.name,
+                  mode=self.append,
+                  chunksize=self.chunksize,
+                  index=False,
+                  header=self.header)

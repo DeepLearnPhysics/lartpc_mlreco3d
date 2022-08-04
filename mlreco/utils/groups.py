@@ -58,7 +58,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     else:
         k = 3
     n = data.shape[0]
-    ret = np.empty(n, dtype=np.bool)
+    ret = np.empty(n, dtype=bool)
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
             # duplicate voxel
@@ -78,7 +78,7 @@ def filter_duplicate_voxels(data, usebatch=True):
     return ret
 
 
-def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[2,1,0,3,4]):
+def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence=[1,2,0,3,4]):
     """
     return array that will filter out duplicate voxels
     Sort with respect to a reference and following the specified precedence order
@@ -91,7 +91,7 @@ def filter_duplicate_voxels_ref(data, reference, meta, usebatch=True, precedence
     else:
         k = 3
     n = data.shape[0]
-    ret = np.full(n, True, dtype=np.bool)
+    ret = np.full(n, True, dtype=bool)
     duplicates = {}
     for i in range(1,n):
         if np.all(data[i-1,:k] == data[i,:k]):
@@ -125,7 +125,7 @@ def filter_nonimg_voxels(data_grp, data_img, usebatch=True):
     nimg = data_img.shape[0]
     igrp = 0
     iimg = 0
-    ret = np.empty(ngrp, dtype=np.bool) # return array
+    ret = np.empty(ngrp, dtype=bool) # return array
     while igrp < ngrp and iimg < nimg:
         if np.all(data_grp[igrp,:k] == data_img[iimg,:k]):
             # voxel is in both data
@@ -183,55 +183,6 @@ def process_group_data(data_grp, data_img):
     return data_grp[inds,:]
 
 
-def get_valid_group_id(cluster_event, particles_v):
-    '''
-    Function that makes sure that the particle for which id = group_id (primary)
-    is a valid group ID. This should be handled somewhere else (e.g. SUPERA)
-
-    Inputs:
-        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
-        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
-    Outputs:
-        - array: (N) list of group ids
-    '''
-    # Only shower fragments that come first in time and deposit energy can be primaries
-    num_clusters = cluster_event.as_vector().size()
-    group_ids = np.array([particles_v[i].group_id() for i in range(particles_v.size())])
-    new_group = num_clusters + 1
-    for i, gid in enumerate(np.unique(group_ids)):
-        # If the group's parent is not EM or LE, nothing to do
-        if particles_v[int(gid)].shape() != 0 and particles_v[int(gid)].shape() != 4:
-            continue
-
-        # If the group's parent is nuclear activity, Delta or Michel, make it non primary
-        process = particles_v[int(gid)].creation_process()
-        parent_pdg_code = abs(particles_v[int(gid)].parent_pdg_code())
-        idxs = np.where(group_ids == gid)[0]
-        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-        # If a group's parent fragment has size zero, make it non primary
-        parent_size = cluster_event.as_vector()[int(gid)].as_vector().size()
-        if not parent_size:
-            idxs = np.where(group_ids == gid)[0]
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-        # If a group's parent is not the first in time, make it non primary
-        idxs = np.where(group_ids == gid)[0]
-        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
-        min_id = np.argmin(clust_times)
-        if idxs[min_id] != gid :
-            group_ids[idxs] = new_group
-            new_group += 1
-            continue
-
-    return group_ids
-
-
 def get_interaction_id(particle_v, num_ancestor_loop=1):
     '''
     A function to sort out interaction ids.
@@ -251,7 +202,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
     # and the ancestor track ids
     ancestor_vtxs = []
     track_ids = []
-    ancestor_track_ids = np.empty(0, dtype=np.int)
+    ancestor_track_ids = np.empty(0, dtype=int)
     for particle in particle_v:
         ancestor_vtx = [
             particle.ancestor_x(),
@@ -268,7 +219,7 @@ def get_interaction_id(particle_v, num_ancestor_loop=1):
         axis=0,
     ).tolist()
     # loop over each cluster to assign interaction ids
-    interaction_ids = np.ones(particle_v.size(), dtype=np.int)*(-1)
+    interaction_ids = np.ones(particle_v.size(), dtype=int)*(-1)
     for clust_id in range(particle_v.size()):
         # get the interaction id from the unique list (index is the id)
         interaction_ids[clust_id] = interaction_vtx_list.index(
@@ -305,6 +256,8 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         # find the first cluster that has nonzero size
         sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
         nonzero = np.where(sizes > 0)[0]
+        if not len(nonzero):
+            return nu_id
         first_clust_id = nonzero[0]
         # the corresponding interaction id
         nu_interaction_id = interaction_ids[first_clust_id]
@@ -330,6 +283,8 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
             # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
             if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
                 is_mpv[idx] = 1.
+            # else:
+            #     print("fake cosmic", part.pdg_code(), part.shape(), part.creation_process(), part.track_id(), part.ancestor_track_id(), mpv_ids)
         is_mpv = is_mpv.astype(bool)
         nu_interaction_ids = np.unique(interaction_ids[is_mpv])
         for idx, x in enumerate(nu_interaction_ids):
@@ -344,19 +299,36 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
 
     return nu_id
 
-def get_particle_id(particles_v, nu_ids):
+
+type_labels = {
+    22: 0,  # photon
+    11: 1,  # e-
+    -11: 1, # e+
+    13: 2,  # mu-
+    -13: 2, # mu+
+    211: 3, # pi+
+    -211: 3, # pi-
+    2212: 4, # protons
+}
+
+
+def get_particle_id(particles_v, nu_ids, include_mpr=False):
     '''
     Function that gives one of five labels to particles of
     particle species predictions. This function ensures:
-    - Particles that do not originate from an MPV are labeled -1
+    - Particles that do not originate from an MPV are labeled -1,
+      unless the include_mpr flag is set to true
     - Particles that are not a track or a shower, and their
-      daughters, are labeled -1 (Michel and Delta)
+      daughters, are labeled -1 (Michel and Delta), as their
+      particle type is already constrained (only electron)
     - Particles that are neutron daughters are labeled -1
     - All shower daughters are labeled the same as their primary. This
       makes sense as otherwise an electron primary gets overruled by
       its many photon daughters (voxel-wise majority vote). This can
       lead to problems as, if an electron daughter is not clustered with
       the primary, it is labeled electron, which is counter-intuitive.
+      This is handled downstream with the high_purity flag.
+    - Particles that are not in the list target are labeled -1
 
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
@@ -364,18 +336,8 @@ def get_particle_id(particles_v, nu_ids):
     Outputs:
         - array: (N) list of group ids
     '''
-    type_labels = {
-        22: 0,  # photon
-        11: 1,  # e-
-        -11: 1, # e+
-        13: 2,  # mu-
-        -13: 2, # mu+
-        211: 3, # pi+
-        -211: 3, # pi-
-        2212: 4, # protons
-    }
-
     particle_ids = np.empty(len(nu_ids))
+    # nu_id = 0 for MPR/cosmic, nu_id = 1 for MPV/neutrino
     for i in range(len(particle_ids)):
         group_id = particles_v[i].group_id()
 
@@ -383,7 +345,7 @@ def get_particle_id(particles_v, nu_ids):
         process = particles_v[group_id].creation_process()
         shape = int(particles_v[group_id].shape())
 
-        if nu_ids[i] < 1: t = -1
+        if not include_mpr and nu_ids[i] < 1: t = -1
         if shape > 1: t = -1
         if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
 
@@ -393,3 +355,56 @@ def get_particle_id(particles_v, nu_ids):
             particle_ids[i] = -1
 
     return particle_ids
+
+
+def get_primary_id(cluster_event, particles_v):
+    '''
+    Function that assigns valid primary tags.
+    This could be handled somewhere else (e.g. SUPERA)
+
+    Inputs:
+        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    # Only shower fragments that come first in time and deposit energy can be primaries
+    group_ids    = np.array([p.group_id() for p in particles_v])
+    primary_ids  = np.empty(particles_v.size(), dtype=np.int32)
+    for i, p in enumerate(particles_v):
+        # If the particle is LE, not primary
+        if p.shape() == 4:
+            primary_ids[i] = 0
+            continue
+
+        # If the particle is not EM, use default
+        gid = int(p.group_id())
+        if p.shape() != 0:
+            primary_ids[i] = int(gid == i)
+            continue
+
+        # If the particle is nuclear activity, Delta or Michel, make it non primary
+        process = p.creation_process()
+        parent_pdg_code = abs(p.parent_pdg_code())
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
+            primary_ids[i] = 0
+            continue
+
+        # If a particle's parent fragment has size zero, make it non primary
+        parent_size = cluster_event.as_vector()[gid].as_vector().size()
+        if not parent_size:
+            primary_ids[i] = 0
+            continue
+
+        # If a particle's parent is not the first in time, make it non primary
+        idxs = np.where(group_ids == gid)[0]
+        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        min_id = np.argmin(clust_times)
+        if idxs[min_id] != gid :
+            primary_ids[i] = 0
+            continue
+
+        # Use default otherwise
+        primary_ids[i] = int(gid == i)
+
+    return primary_ids

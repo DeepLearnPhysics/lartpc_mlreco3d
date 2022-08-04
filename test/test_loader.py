@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 import os, sys, yaml, time
 import pytest
 
@@ -62,4 +59,3 @@ def test_loader(cfg_file, quiet=True, csv=False):
             print('First iter:',t0,'[s] ... Average w/o first iter:',(tsum - t0)/(MAX_BATCH_ID-1),'[s]')
     if csv: csv.close()
     return True
-

@@ -1,7 +1,6 @@
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
-
 from mlreco.post_processing import post_processing
 
 
@@ -39,6 +38,7 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     ------
     Writes to a CSV file `deghosting_metrics-*`
     """
+    import torch
     row_names, row_values = [], []
 
     deghosting_type = module_cfg.get('method', '5+2')
@@ -65,6 +65,10 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         ghost_predictions = np.argmax(res['ghost'][data_idx], axis=1)
         ghost_softmax = scipy.special.softmax(res['ghost'][data_idx], axis=1)
         mask = ghost_predictions == 0
+
+        if isinstance(label, torch.Tensor):
+            label = label.numpy()
+
         # 0 = non ghost, 1 = ghost
         # Fraction of true points predicted correctly
         ghost_acc = ((ghost_predictions == 1) == (label == 5)).sum() / float(label.shape[0])
@@ -112,6 +116,7 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         num_pred_pix_true, num_true_pix_pred = [], []
         num_true_deghost_pix, num_original_pix = [], []
         ghost_false_positives, ghost_true_positives = [], []
+        ghost2nonghost = []
         for c in range(num_classes):
             class_mask = label == c
             class_predictions = predictions[class_mask]
@@ -134,6 +139,8 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             ghost_false_positives.append(np.count_nonzero(ghost_predictions[class_mask] == 1))
             # Fraction of pixels in this class (correctly) predicted as nonghost
             ghost_true_positives.append(np.count_nonzero(ghost_predictions[class_mask] == 0))
+            # Fraction of true ghost points predicted to belong to this class
+            ghost2nonghost.append(np.count_nonzero((label == 5) & (ghost_predictions == 0) & (predictions == c)))
             # confusion matrix
             # pixels predicted as nonghost + should be in class c, but predicted as c2
             for c2 in range(num_classes):
@@ -158,6 +165,8 @@ def deghosting_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         row_values += ghost_false_positives
         row_names += ['ghost_true_positives_class%d' % c for c in range(num_classes)]
         row_values += ghost_true_positives
+        row_names += ['ghost2nonghost_class%d' % c for c in range(num_classes)]
+        row_values += ghost2nonghost
 
     elif deghosting_type == '6':
         ghost2ghost = (predictions[label == 5] == 5).sum() / float(num_ghost_points)

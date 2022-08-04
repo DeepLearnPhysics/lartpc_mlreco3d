@@ -5,6 +5,10 @@ If you want to computer event-based metrics, analysis or store informations, thi
 ## Existing scripts
 To be filled in...
 
+* `analysis` Higher level scripts that take the output of the full chain and do some physics analysis with it. For example, finding Michel electrons.
+* `metrics` Reproducible metrics scripts for various stages / models, to check and study their performance.
+* `store` If you ever need to store in a CSV raw information/predictions from an event (code may be obsolete, to double check).
+
 ## How to write your own script
 The bare minimum for a postprocessing script that feeds on the input data `seg_label` and the network output `segmentation` would look like this:
 

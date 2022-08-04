@@ -1,21 +1,26 @@
 import numpy as np
-from mlreco.utils.gnn.evaluation import edge_assignment, node_assignment, node_assignment_bipartite, clustering_metrics
-from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-from mlreco.utils.dense_cluster import gaussian_kernel, ellipsoidal_kernel, fit_predict_np, find_cluster_means
+from mlreco.utils.cluster.dense_cluster import (gaussian_kernel,
+                                                fit_predict_np,
+                                                find_cluster_means)
 from mlreco.utils.metrics import *
 from mlreco.post_processing import post_processing
+from mlreco.post_processing.common import extent
 
-
-def extent(voxels):
-    centroid = voxels[:, :3].mean(axis=0)
-    return np.linalg.norm(voxels[:, :3] - centroid, axis=1)
-
-
-@post_processing('cluster-cnn-metrics', ['seg_label', 'clust_data', 'particles'], ['segmentation', 'embeddings', 'margins', 'seediness'])
+@post_processing('cluster-cnn-metrics',
+                 ['seg_label', 'clust_data', 'particles'],
+                 ['segmentation', 'embeddings', 'margins', 'seediness'])
 def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
-                        data_idx=None, seg_label=None, clust_data=None, particles=None,
-                        embeddings=None, margins=None, seediness=None, ghost_mask=None,
-                        true_ghost_mask=None, seg_label_noghost=None, clust_data_noghost=None,
+                        data_idx=None,
+                        seg_label=None,
+                        clust_data=None,
+                        particles=None,
+                        embeddings=None,
+                        margins=None,
+                        seediness=None,
+                        ghost_mask=None,
+                        true_ghost_mask=None,
+                        seg_label_noghost=None,
+                        clust_data_noghost=None,
                         seg_prediction=None, **kwargs):
     """
     Compute metrics for SPICE stage (CNN particle instance clustering).
@@ -44,9 +49,10 @@ def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
     spatial_size = module_cfg.get('spatial_size', 768)
     enable_physics_metrics = module_cfg.get('enable_physics_metrics', False)
 
-    spice_min_voxels = cfg['model']['modules']['spice']['fragment_clustering'].get('min_voxels', 2)
+    spice_min_voxels = cfg['model']['modules']['spice']['spice_fragment_manager'].get('min_voxels', 2)
 
-    coords = seg_label[data_idx][:, :3]
+    coords_col = module_cfg.get('coords_col', (1, 4))
+    coords = seg_label[data_idx][:, coords_col[0]:coords_col[1]]
 
     # Compute total momentum and energy per interaction
     total_momentum = {}
@@ -81,7 +87,7 @@ def cluster_cnn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
             #original_semantic_mask = data_blob['segment_label'][data_idx][:, -1] == c
             coords_class = coords[semantic_mask]
             clabels = clust_data[data_idx][semantic_mask][:, 6]
-            original_coords_class = original_clust_data[:, :3]
+            original_coords_class = original_clust_data[:, coords_col[0]:coords_col[1]]
             original_clabels = original_clust_data[:, 6]
 
             #_, true_centroids = find_cluster_means(coords_class, clabels)

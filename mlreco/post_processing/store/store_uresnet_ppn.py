@@ -20,6 +20,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
     score_threshold: to filter based on score only (no NMS)
     """
     method_cfg = cfg['post_processing']['store_uresnet_ppn']
+    coords_col = method_cfg.get('coords_col', (1, 4))
 
     if (method_cfg is not None and not method_cfg.get('input_data', 'input_data') in data_blob) or (method_cfg is None and 'input_data' not in data_blob): return
     if not 'points' in res: return
@@ -28,9 +29,12 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
     input_dat   = data_blob.get('input_data' if method_cfg is None else method_cfg.get('input_data', 'input_data'), None)
     output_pts  = res.get('points',None)
     output_seg  = res.get('segmentation',None)
+    # ---
+    # TODO change ppn1 and ppn2 to use new output of ME version of PPN
+    # ---
     output_ppn1 = res.get('ppn1',None)
     output_ppn2 = res.get('ppn2',None)
-    output_mask = res.get('mask_ppn2',None)
+    output_mask = res.get('mask_ppn',None)
     output_ghost = res.get('ghost',None)
 
     ppn_score_threshold = 0.2 if method_cfg is None else method_cfg.get('ppn_score_threshold', 0.2)
@@ -138,13 +142,13 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
             keep_ppn2 = scores_ppn2[:, 1] > 0.5
             # 8 = PPN1
             for i, row in enumerate(scores_ppn1[keep_ppn1]):
-                event = output_ppn1[data_idx][keep_ppn1][i, :3]
+                event = output_ppn1[data_idx][keep_ppn1][i, coords_col[0]:coords_col[1]]
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5, event[1] + 0.5, event[2] + 0.5, 8, scores_ppn1[keep_ppn1][i, 1]))
                 fout.write()
             # 9 = PPN2
             for i, row in enumerate(scores_ppn2[keep_ppn2]):
-                event = output_ppn2[data_idx][keep_ppn2][i, :3]
+                event = output_ppn2[data_idx][keep_ppn2][i, coords_col[0]:coords_col[1]]
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
                             (tree_idx, event[0] + 0.5, event[1] + 0.5, event[2] + 0.5, 9, scores_ppn2[keep_ppn2][i, 1]))
                 fout.write()
@@ -177,7 +181,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
                 uresnet_points = uresnet_predictions == c
                 ppn_points = ppn_type_predictions == c
                 if ppn_points.shape[0] > 0 and uresnet_points.shape[0] > 0:
-                    d = scipy.spatial.distance.cdist(output_pts[data_idx][mask][ppn_points][:, :3] + input_dat[data_idx][mask][ppn_points][:, :3] + 0.5, input_dat[data_idx][mask][uresnet_points][:, :3])
+                    d = scipy.spatial.distance.cdist(output_pts[data_idx][mask][ppn_points][:, :3] + input_dat[data_idx][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, input_dat[data_idx][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
                     ppn_mask = (d < type_threshold).any(axis=1)
                     for i, row in enumerate(output_pts[data_idx][mask][ppn_points][ppn_mask]):
                         event = input_dat[data_idx][mask][ppn_points][ppn_mask][i]
@@ -202,7 +206,7 @@ def store_uresnet_ppn(cfg, data_blob, res, logdir, iteration,
             pts = uresnet_ppn_type_point_selector(data_blob['input_data'][data_idx], res, entry=data_idx, score_threshold=ppn_score_threshold, type_threshold=ppn_type_threshold)
             for i, row in enumerate(pts):
                 fout.record(('idx', 'x', 'y', 'z', 'type', 'value'),
-                            (tree_idx, row[0], row[1], row[2], 14, row[-1]))
+                            (tree_idx, row[1], row[2], row[3], 14, row[-1]))
                 fout.write()
         if not store_per_iteration:
             fout.close()

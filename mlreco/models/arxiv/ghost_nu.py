@@ -3,13 +3,13 @@ from __future__ import division
 from __future__ import print_function
 import torch
 from mlreco.models.ghost_chain import GhostChain, GhostChainLoss
-from mlreco.models.layers.dbscan import distances
+from mlreco.models.layers.common.dbscan import distances
 from mlreco.utils.deghosting import adapt_labels
 from mlreco.utils.gnn.evaluation import node_assignment_score, primary_assignment
 import numpy as np
 from .gnn import node_encoder_construct
 from mlreco.utils.gnn.cluster import get_cluster_label, get_cluster_batch
-from mlreco.models.layers.extract_feature_map import Multiply
+from mlreco.models.scn.layers.extract_feature_map import Multiply
 
 
 class GhostNuClassification(GhostChain):

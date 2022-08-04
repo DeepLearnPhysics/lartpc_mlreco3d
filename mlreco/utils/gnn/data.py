@@ -1,206 +1,76 @@
 # Defines inputs to the GNN networks
 import numpy as np
+import numba as nb
 import torch
-from mlreco.utils.gnn.cluster import get_cluster_voxels, get_cluster_features, get_cluster_features_extended, get_cluster_dirs
-from .voxels import get_voxel_features
 
-def cluster_vtx_features(data, clusts, delta=0.0, whether_adjust_direction=False):
+from typing import Tuple
+
+from mlreco.utils.numba import numba_wrapper, unique_nb
+from mlreco.utils.ppn import get_track_endpoints_geo
+
+from .cluster import get_cluster_features, get_cluster_features_extended
+from .network import get_cluster_edge_features, get_voxel_edge_features
+from .voxels  import get_voxel_features
+
+def cluster_features(data, clusts, extra=False, **kwargs):
     """
-    Function that returns the an array of 16 features for
+    Function that returns an array of 16/19 geometric features for
     each of the clusters in the provided list.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        extra (bool)         : Whether or not to include extended features
     Returns:
-        np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
+        np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
     """
-    return get_cluster_features(data, clusts, whether_adjust_direction)
+    if extra:
+        return torch.cat([get_cluster_features(data.float(), clusts, **kwargs),
+                          get_cluster_features_extended(data.float(), clusts, **kwargs)], dim=1)
+    return get_cluster_features(data.float(), clusts, **kwargs)
 
 
-def cluster_vtx_features_extended(data_values, data_sem_types, clusts):
-    return get_cluster_features_extended(data_values, data_sem_types, clusts)
-
-
-def cluster_vtx_dirs(data, cs, delta=0.0):
+def cluster_edge_features(data, clusts, edge_index, **kwargs):
     """
-    Function that returns the direction of the listed clusters,
-    expressed as its normalized covariance matrix.
-
-    Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        delta (float)          : Orientation matrix regularization
-    Returns:
-        np.ndarray: (C,9) tensor of cluster directions
-    """
-    return get_cluster_dirs(data, clusts, delta)
-
-
-def cluster_edge_dir(data, c1, c2):
-    """
-    Function that returns the edge direction between for a
-    given pair of connected clusters.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        c1 (np.ndarray)  : (M1) Array of voxel IDs associated with the first cluster
-        c2 (np.ndarray)  : (M2) Array of voxel IDs associated with the second cluster
-    Returns:
-        np.ndarray: (10) Array of edge direction (orientation, distance)
-    """
-    # Get the voxels in the clusters connected by the edge
-    x1 = get_cluster_voxels(data, c1)
-    x2 = get_cluster_voxels(data, c2)
-
-    # Find the closest set point in each cluster
-    from scipy.spatial.distance import cdist
-    d12 = cdist(x1, x2)
-    imin = np.argmin(d12)
-    i1, i2 = np.unravel_index(imin, d12.shape)
-    v1 = x1[i1,:] # closest point in c1
-    v2 = x2[i2,:] # closest point in c2
-
-    # Displacement
-    disp = v1 - v2
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([B, lend.reshape(1)])
-
-
-def cluster_edge_dirs(data, clusts, edge_index):
-    """
-    Function that returns a tensor of edge directions for each of the
-    edges in the graph.
-
-    Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (2,E) Incidence matrix
-    Returns:
-        np.ndarray: (E,10) Tensor of edge directions (orientation, distance)
-    """
-    return np.vstack([cluster_edge_dir(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
-
-
-def cluster_edge_feature(data, c1, c2):
-    """
-    Function that returns the edge features for a
-    given pair of connected clusters.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        c1 (np.ndarray)  : (M1) Array of voxel IDs associated with the first cluster
-        c2 (np.ndarray)  : (M2) Array of voxel IDs associated with the second cluster
-    Returns:
-        np.ndarray: (19) Array of edge features (point1, point2, displacement, distance, orientation)
-    """
-    # Get the voxels in the clusters connected by the edge
-    x1 = get_cluster_voxels(data, c1)
-    x2 = get_cluster_voxels(data, c2)
-
-    # Find the closest set point in each cluster
-    from scipy.spatial.distance import cdist
-    d12 = cdist(x1, x2)
-    imin = np.argmin(d12)
-    i1, i2 = np.unravel_index(imin, d12.shape)
-    v1 = x1[i1,:] # closest point in c1
-    v2 = x2[i2,:] # closest point in c2
-
-    # Displacement
-    disp = v1 - v2
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([v1, v2, disp, lend.reshape(1), B])
-
-
-def cluster_edge_features(data, clusts, edge_index):
-    """
-    Function that returns a tensor of edge features for each of the
+    Function that returns a tensor of 19 geometric edge features for each of the
     edges connecting clusters in the graph.
 
     Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        edge_index (np.ndarray): (E,2) Incidence matrix
     Returns:
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
-    return np.vstack([cluster_edge_feature(data, clusts[e[0]], clusts[e[1]]) for e in edge_index.T])
+    return get_cluster_edge_features(data.float(), clusts, edge_index, **kwargs)
 
 
-def vtx_features(data, max_dist=5.0, delta=0.0):
+def voxel_features(data, max_dist=5.0):
     """
     Function that returns the an array of 16 features for
-    each of the clusters in the provided list.
+    each of the voxels in the provided tensor.
 
     Args:
-        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        max_dist (float)     : Defines "local", max distance to look at
-        delta (float)        : Orientation matrix regularization
+        data (torch.Tensor)  : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        max_dist (float)     : Defines "local", i.e. max distance to look at
     Returns:
         np.ndarray: (N,16) tensor of voxel features (coords, local orientation, local direction, local count)
     """
-    return get_voxel_features(data, max_dist, delta)
+    return get_voxel_features(data.float(), max_dist)
 
 
-def edge_feature(data, i, j):
-    """
-    Function that returns the edge features for a
-    given pair of connected voxels.
-
-    Args:
-        data (np.ndarray): (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        i (int)            : Index of the first voxel
-        j (int)            : Index of the second voxel
-    Returns:
-        np.ndarray: (19) Array of edge features (displacement, orientation)
-    """
-
-    # Get the voxel coordinates
-    xi = data[i,:3]
-    xj = data[j,:3]
-
-    # Displacement
-    disp = xj - xi
-
-    # Distance
-    lend = np.linalg.norm(disp)
-    if lend > 0:
-        disp = disp / lend
-
-    # Outer product
-    B = np.outer(disp, disp).flatten()
-
-    return np.concatenate([xi, xj, disp, lend.reshape(1), B])
-
-
-def edge_features(data, edge_index):
+def voxel_edge_features(data, edge_index):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting voxels in the graph.
 
     Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         edge_index (np.ndarray): (2,E) Incidence matrix
     Returns:
         np.ndarray: (E,19) Tensor of edge features (displacement, orientation)
     """
-    return np.vstack([edge_feature(data, e[0], e[1]) for e in edge_index.T])
+    return get_voxel_edge_features(data.float(), edge_index)
 
 
 def form_merging_batches(batch_ids, mean_merge_size):
@@ -226,7 +96,7 @@ def form_merging_batches(batch_ids, mean_merge_size):
     return np.concatenate([np.full(n,i) for i,n in enumerate(event_cnts)])
 
 
-def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_type='cluster'):
+def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_col=0):
     """
     Merge events in same batch. For example, if batch size = 16 and merge_size = 2,
     output data has a batch size of 8 with each adjacent 2 batches in input data merged.
@@ -242,7 +112,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
         np.ndarray: (B) Relabeled tensor
     """
     # Get the batch IDs
-    batch_ids = data[:,3].unique()
+    batch_ids = data[:,batch_col].unique()
 
     # Get the list that dictates how to merge events
     batch_size = len(batch_ids)
@@ -260,12 +130,12 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
     for i in np.unique(merging_batch_id_list):
         # Find the list of voxels that belong to the new batch
         merging_batch_ids = np.where(merging_batch_id_list == i)[0]
-        data_selections = [data[:,3] == j for j in merging_batch_ids]
-        part_selections = [particles[:,3] == j for j in merging_batch_ids]
+        data_selections = [data[:,batch_col] == j for j in merging_batch_ids]
+        part_selections = [particles[:,batch_col] == j for j in merging_batch_ids]
 
         # Relabel the batch column to the new batch id
         batch_selection = torch.sum(torch.stack(data_selections), dim=0).type(torch.bool)
-        data[batch_selection,3] = int(i)
+        data[batch_selection,batch_col] = int(i)
 
         # Relabel the cluster and group IDs by offseting by the number of particles
         clust_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0
@@ -274,7 +144,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
                 data[sel & (data[:,5] > -1),5] += clust_offset
                 data[sel & (data[:,6] > -1),6] += group_offset
                 data[sel & (data[:,7] > -1),7] += int_offset
-                data[sel & (data[:,8] > -1),8] += nu_offset
+                data[sel & (data[:,8] >  0),8] += nu_offset
             clust_offset += torch.sum(part_selections[j])
             group_offset += torch.max(data[sel,6])+1
             int_offset = torch.max(data[sel,7])+1
@@ -282,6 +152,169 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, data_typ
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
-        particles[batch_selection,3] = int(i)
+        particles[batch_selection,batch_col] = int(i)
 
     return data, particles, merging_batch_id_list
+
+
+def _get_extra_gnn_features(fragments,
+                           frag_seg,
+                           classes,
+                           input,
+                           result,
+                           use_ppn=False,
+                           use_supp=False):
+    """
+    Extracting extra features to feed into the GNN particle aggregators
+
+    - PPN: Most likely PPN point for showers,
+            end points for tracks (+ direction estimate)
+    - Supplemental: Mean/RMS energy in the fragment + semantic class
+
+    Parameters
+    ==========
+    fragments: np.ndarray
+    frag_seg: np.ndarray
+    classes: list
+    input: list
+    result: dictionary
+    use_ppn: bool
+    use_supp: bool
+
+    Returns
+    =======
+    mask: np.ndarray
+        Boolean mask to select fragments belonging to one
+        of the requested classes.
+    kwargs: dictionary
+        Keys can include `points` (if `use_ppn` is `True`)
+        and `extra_feats` (if `use_supp` is True).
+    """
+    # Build a mask for the requested classes
+    mask = np.zeros(len(frag_seg), dtype=bool)
+    for c in classes:
+        mask |= (frag_seg == c)
+    mask = np.where(mask)[0]
+
+    #print("INPUT = ", input)
+
+    # If requested, extract PPN-related features
+    kwargs = {}
+    if use_ppn:
+        ppn_points = torch.empty((0,6), device=input[0].device,
+                                        dtype=torch.double)
+        points_tensor = result['points'][0].detach().double()
+        for i, f in enumerate(fragments[mask]):
+            if frag_seg[mask][i] == 1:
+                end_points = get_track_endpoints_geo(input[0], f, points_tensor)
+                ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
+            else:
+                dmask  = torch.nonzero(torch.max(
+                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
+                    as_tuple=True)[0]
+                # scores = torch.sigmoid(points_tensor[f, -1])
+                # argmax = dmask[torch.argmax(scores[dmask])] \
+                #          if len(dmask) else torch.argmax(scores)
+                scores = torch.softmax(points_tensor[f, -2:], dim=1)
+                argmax = dmask[torch.argmax(scores[dmask, -1])] \
+                            if len(dmask) else torch.argmax(scores[:, -1])
+                start  = input[0][f][argmax,1:4] + \
+                            points_tensor[f][argmax,:3] + 0.5
+                ppn_points = torch.cat((ppn_points,
+                    torch.cat([start, start]).reshape(1,-1)), dim=0)
+
+        kwargs['points'] = ppn_points
+
+    # If requested, add energy and semantic related features
+    if use_supp:
+        supp_feats = torch.empty((0,3), device=input[0].device,
+                                        dtype=torch.float)
+        for i, f in enumerate(fragments[mask]):
+            values = torch.cat((input[0][f,4].mean().reshape(1),
+                                input[0][f,4].std().reshape(1))).float()
+            if torch.isnan(values[1]): # Handle size-1 particles
+                values[1] = input[0][f,4] - input[0][f,4]
+            sem_type = torch.tensor([frag_seg[mask][i]],
+                                    dtype=torch.float,
+                                    device=input[0].device)
+            supp_feats = torch.cat((supp_feats,
+                torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
+
+        kwargs['extra_feats'] = supp_feats
+
+    return mask, kwargs
+
+
+@numba_wrapper(list_args=['clusts'])
+def split_clusts(clusts, batch_ids, batches, counts):
+    """
+    Splits a batched list of clusters into individual
+    lists of clusters, one per batch ID.
+
+    Args:
+        clusts ([np.ndarray]) : (C) List of arrays of global voxel IDs in each cluster
+        batch_ids (np.ndarray): (C) List of cluster batch ids
+        batches (np.ndarray)  : (B) List of batch ids in this batch
+        counts (np.ndarray)   : (B) Number of voxels in each batch
+    Returns:
+        [[np.ndarray]]: (B) List of list of arrays of batchwise voxels IDs in each cluster
+        [np.ndarray]  : (B) List of cluster IDs in each batch
+    """
+    clusts_split, cbids = _split_clusts(clusts, batch_ids, batches, counts)
+    
+    # Cast the list of clusters to np.array (object type)
+    same_length = [np.all([len(c) == len(bclusts[0]) for c in bclusts]) for bclusts in clusts_split]
+    return [np.array(clusts_split[b], dtype=object if not sl else np.int64) for b, sl in enumerate(same_length)], cbids
+
+@nb.njit(cache=True)
+def _split_clusts(clusts: nb.types.List(nb.int64[:]),
+                  batch_ids: nb.int64[:],
+                  batches: nb.int64[:],
+                  counts: nb.int64[:]) -> Tuple[nb.types.List(nb.types.List(nb.int64[:])), nb.types.List(nb.int64[:])]:
+
+    # Get the batchwise voxel IDs for all pixels in the clusters
+    cvids = np.empty(np.sum(counts), dtype=np.int64)
+    index = 0
+    for n in counts:
+        cvids[index:index+n] = np.arange(n, dtype=np.int64)
+        index += n
+
+    # For each batch ID, get the list of clusters that belong to it
+    cbids = [np.where(batch_ids == b)[0] for b in batches]
+
+    # Split the cluster list into a list of list, one per batch iD
+    return [[cvids[clusts[k]] for k in cids] for cids in cbids], cbids
+
+
+@nb.njit(cache=True)
+def split_edge_index(edge_index: nb.int64[:,:],
+                     batch_ids: nb.int64[:],
+                     batches: nb.int64[:]) -> Tuple[nb.types.List(nb.int64[:,:]), nb.types.List(nb.int64[:])]:
+    """
+    Splits a batched list of edges into individual
+    lists of edges, one per batch ID.
+
+    Args:
+        edge_index (np.ndarray): (E,2) List of edges
+        batch_ids (np.ndarray) : (C) List of cluster batch ids
+        batches (np.ndarray)   : (B) List of batch ids in this batch
+    Returns:
+        [np.ndarray]: (B) List of list of edges
+        [np.ndarray]: (B) List of edge IDs in each batch
+    """
+    # If the input is empty, simply return defaults
+    if not edge_index.shape[1]:
+        return [np.empty((2,0), dtype=np.int64) for b in batches], [np.empty(0, dtype=np.int64) for b in batches]
+
+    # For each batch ID, get the list of edges that belong to it
+    ebids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in batches]
+
+    # For each batch ID, find the cluster IDs within that batch
+    ecids = np.empty(len(batch_ids), dtype=np.int64)
+    index = 0
+    for n in unique_nb(batch_ids)[1]:
+        ecids[index:index+n] = np.arange(n, dtype=np.int64)
+        index += n
+
+    # Split the edge index into a list of edge indices
+    return [np.ascontiguousarray(np.vstack((ecids[edge_index[0][b]], ecids[edge_index[1][b]])).T) for b in ebids], ebids

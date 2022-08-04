@@ -1,77 +1,150 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+import numpy as np
 import torch
-from mlreco.models.uresnet_lonely import UResNet, SegmentationLoss
-from mlreco.models.ppn import PPN, PPNLoss
+import torch.nn as nn
+import time
 
+import MinkowskiEngine as ME
+import MinkowskiFunctional as MF
 
-class Chain(torch.nn.Module):
+from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
+from mlreco.models.uresnet import SegmentationLoss
+from collections import defaultdict
+from mlreco.models.uresnet import UResNet_Chain
+
+class UResNetPPN(nn.Module):
     """
-    Run UResNet and use its encoding/decoding feature maps for PPN layers
+    A model made of UResNet backbone and PPN layers. Typical configuration:
+
+    .. code-block:: yaml
+
+        model:
+          name: uresnet_ppn_chain
+          modules:
+            uresnet_lonely:
+              # Your uresnet config here
+            ppn:
+              # Your ppn config here
+
+    Configuration
+    -------------
+    data_dim: int, default 3
+    num_input: int, default 1
+    allow_bias: bool, default False
+    spatial_size: int, default 512
+    leakiness: float, default 0.33
+    activation: dict
+        For activation function, defaults to `{'name': 'lrelu', 'args': {}}`
+    norm_layer: dict
+        For normalization function, defaults to `{'name': 'batch_norm', 'args': {}}`
+
+    depth: int, default 5
+        Depth of UResNet, also corresponds to how many times we down/upsample.
+    filters: int, default 16
+        Number of filters in the first convolution of UResNet.
+        Will increase linearly with depth.
+    reps: int, default 2
+        Convolution block repetition factor
+    input_kernel: int, default 3
+        Receptive field size for very first convolution after input layer.
+
+    num_classes: int, default 5
+    score_threshold: float, default 0.5
+    classify_endpoints: bool, default False
+        Enable classification of points into start vs end points.
+    ppn_resolution: float, default 1.0
+    ghost: bool, default False
+    downsample_ghost: bool, default True
+    use_true_ghost_mask: bool, default False
+    mask_loss_name: str, default 'BCE'
+        Can be 'BCE' or 'LogDice'
+    particles_label_seg_col: int, default -2
+        Which column corresponds to particles' semantic label
+    track_label: int, default 1
+
+    See Also
+    --------
+    mlreco.models.uresnet.UResNet_Chain, mlreco.models.layers.common.ppnplus.PPN
     """
-    INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,), (3, 1)],
-        ["parse_particle_points", (int, int), (3, 2)]
-    ]
-    MODULES = ['ppn', 'uresnet_lonely']
-
-    def __init__(self, model_config):
-        super(Chain, self).__init__()
-        self.ppn            = PPN(model_config)
-        self.uresnet_lonely = UResNet(model_config)
-        self._freeze_uresnet = model_config['uresnet_lonely'].get('freeze', False)
-
-        if self._freeze_uresnet:
-            for param in self.uresnet_lonely.parameters():
-                param.requires_grad = False
-
-    def forward(self, input):
-        """
-        Assumes single GPU/CPU.
-        No multi-GPU! (We select index 0 of input['ppn1_feature_enc'])
-        """
-        point_cloud = input[0]
-        result = self.uresnet_lonely((point_cloud,))
-        if len(input) > 1:
-            result['label'] = input[1]
-        ppn_input = {}
-        ppn_input.update(result)
-        ppn_input['ppn_feature_enc'] = ppn_input['ppn_feature_enc'][0]
-        ppn_input['ppn_feature_dec'] = ppn_input['ppn_feature_dec'][0]
-        if 'ghost' in ppn_input:
-            ppn_input['ghost'] = ppn_input['ghost'][0]
-        ppn_output = self.ppn(ppn_input)
-        result.update(ppn_output)
-        return result
-
-
-class ChainLoss(torch.nn.modules.loss._Loss):
-    """
-    Loss for UResNet + PPN chain
-    """
-    INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,), (3, 1)],
-        ["parse_particle_points", (int,), (3, 1)]
-    ]
+    MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
 
     def __init__(self, cfg):
-        super(ChainLoss, self).__init__()
-        self.uresnet_loss = SegmentationLoss(cfg)
-        self.ppn_loss = PPNLoss(cfg)
+        super(UResNetPPN, self).__init__()
+        self.model_config = cfg
+        self.ghost = cfg.get('uresnet_lonely', {}).get('ghost', False)
+        assert self.ghost == cfg.get('ppn', {}).get('ghost', False)
+        self.backbone = UResNet_Chain(cfg)
+        self.ppn = PPN(cfg)
+        self.num_classes = self.backbone.num_classes
+        self.num_filters = self.backbone.F
+        self.segmentation = ME.MinkowskiLinear(
+            self.num_filters, self.num_classes)
 
-    def forward(self, result, label, particles):
-        uresnet_res = self.uresnet_loss(result, label)
-        ppn_res = self.ppn_loss(result, label, particles)
+    def forward(self, input):
 
-        result = {}
-        result.update(uresnet_res)
-        result.update(ppn_res)
+        labels = None
 
-        # Don't forget to sum all losses
-        result['uresnet_loss'] = uresnet_res['loss'].float()
-        result['uresnet_acc']  = uresnet_res['accuracy']
-        result['loss'] = ppn_res['ppn_loss'].float() + uresnet_res['loss'].float()
-        result['accuracy'] = (result['uresnet_acc'] + result['ppn_acc'])/2
+        if len(input) == 1:
+            # PPN without true ghost mask propagation
+            input_tensors = [input[0]]
+        elif len(input) == 2:
+            # PPN with true ghost mask propagation
+            input_tensors = [input[0]]
+            labels = input[1]
 
-        return result
+        out = defaultdict(list)
+
+        for igpu, x in enumerate(input_tensors):
+            # input_data = x[:, :5]
+            res = self.backbone([x])
+            out.update({'ghost': res['ghost']})
+            if self.ghost:
+                if self.ppn.use_true_ghost_mask:
+                    res_ppn = self.ppn(res['finalTensor'][igpu],
+                                    res['decoderTensors'][igpu],
+                                    ghost=res['ghost_sptensor'][igpu],
+                                    ghost_labels=labels)
+                else:
+                    res_ppn = self.ppn(res['finalTensor'][igpu],
+                                    res['decoderTensors'][igpu],
+                                    ghost=res['ghost_sptensor'][igpu])
+
+            else:
+                res_ppn = self.ppn(res['finalTensor'][igpu],
+                                   res['decoderTensors'][igpu])
+            # if self.training:
+            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
+            # else:
+            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
+            segmentation = self.segmentation(res['decoderTensors'][igpu][-1])
+            out['segmentation'].append(segmentation.F)
+            out.update(res_ppn)
+
+        return out
+
+
+class UResNetPPNLoss(nn.Module):
+    """
+    See Also
+    --------
+    mlreco.models.uresnet.SegmentationLoss, mlreco.models.layers.common.ppnplus.PPNLonelyLoss
+    """
+    def __init__(self, cfg):
+        super(UResNetPPNLoss, self).__init__()
+        self.ppn_loss = PPNLonelyLoss(cfg)
+        self.segmentation_loss = SegmentationLoss(cfg)
+
+    def forward(self, outputs, segment_label, particles_label, weights=None):
+
+        res_segmentation = self.segmentation_loss(
+            outputs, segment_label, weights=weights)
+
+        res_ppn = self.ppn_loss(
+            outputs, segment_label, particles_label)
+
+        res = {
+            'loss': res_segmentation['loss'] + res_ppn['ppn_loss'],
+            'accuracy': (res_segmentation['accuracy'] + res_ppn['ppn_acc']) / 2.0,
+            'reg_loss': res_ppn['reg_loss'],
+            'type_loss': res_ppn['type_loss']
+        }
+        return res

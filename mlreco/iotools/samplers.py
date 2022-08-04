@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 from torch.utils.data import Sampler
 
@@ -42,7 +39,7 @@ class RandomSequenceSampler(AbstractBatchSampler):
 
 class SequentialBatchSampler(AbstractBatchSampler):
     def __iter__(self):
-        starts = np.arange(0, self._data_size - self._minibatch_size, self._minibatch_size)
+        starts = np.arange(0, self._data_size+1 - self._minibatch_size, self._minibatch_size)
         return iter(np.concatenate([np.arange(start, start+self._minibatch_size) for start in starts]))
 
     @staticmethod
@@ -50,4 +47,17 @@ class SequentialBatchSampler(AbstractBatchSampler):
         return SequentialBatchSampler(len(ds), cfg['minibatch_size'])
 
 
-        
+class BootstrapBatchSampler(AbstractBatchSampler):
+    '''
+    Sampler used for bootstrap sampling of the entire dataset.
+
+    This is particularly useful for training an ensemble of networks (bagging)
+    '''
+    def __iter__(self):
+        starts = np.arange(0, self._data_size - self._minibatch_size, self._minibatch_size)
+        bootstrap_indices = np.random.choice(np.arange(self._data_size), self._data_size)
+        return iter(np.concatenate([bootstrap_indices[np.arange(start, start+self._minibatch_size)] for start in starts]))
+
+    @staticmethod
+    def create(ds, cfg):
+        return BootstrapBatchSampler(len(ds), cfg['minibatch_size'])

@@ -105,7 +105,7 @@ def contingency_table(a, b, na=None, nb=None):
         na = np.max(a)
     if not nb:
         nb = np.max(b)
-    table = np.zeros((na, nb), dtype=np.int)
+    table = np.zeros((na, nb), dtype=int)
     for i, j in zip(a,b):
         table[i,j] += 1
     return table
@@ -128,6 +128,22 @@ def purity(pred, truth, bid=None):
     return purities.mean()
 
 
+def global_purity(pred, truth, bid=None):
+    """
+    cluster purity as defined in https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-clustering-1.html:
+    intersection(pred, truth)/pred
+    number in [0,1] - 1 indicates everything in the cluster is in the same ground-truth cluster
+    """
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    return np.sum(table.max(axis=1))/len(pred)
+
+
 def efficiency(pred, truth, bid=None):
     """
     cluster efficiency:
@@ -143,6 +159,23 @@ def efficiency(pred, truth, bid=None):
     table = contingency_table(pred, truth, len(pcts), len(tcts))
     efficiencies = table.max(axis=0) / tcts
     return efficiencies.mean()
+
+
+def global_efficiency(pred, truth, bid=None):
+    """
+    cluster efficiency as defined in https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-clustering-1.html:
+    intersection(pred, truth)/truth
+    number in [0,1] - 1 indicates everything is found in cluster
+    """
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    return np.sum(table.max(axis=0))/len(pred)
+
 
 def purity_efficiency(pred, truth, bid=None, mean=True):
     """

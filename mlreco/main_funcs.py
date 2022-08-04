@@ -1,20 +1,16 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-import os
-import time
-import datetime
-import glob
-import sys
+import os, time, datetime, glob, sys, yaml
 import numpy as np
-import torch
-import pprint
-from mlreco.trainval import trainval
+try:
+    import MinkowskiEngine as ME
+except ImportError:
+    pass
+
 from mlreco.iotools.factories import loader_factory
-from mlreco.utils import utils
-#from mlreco import analysis
-#from mlreco.output_formatters import output
-import mlreco.post_processing as post_processing
+# Important: do not import here anything that might
+# trigger cuda initialization through PyTorch.
+# We need to set CUDA_VISIBLE_DEVICES first, which
+# happens in the process_config function before anything
+# else is allowed to happen.
 
 class Handlers:
     cfg          = None
@@ -37,14 +33,13 @@ def cycle(data_io):
         for x in data_io:
             yield x
 
-
-def train(cfg):
-    handlers = prepare(cfg)
+def train(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     train_loop(handlers)
 
 
-def inference(cfg):
-    handlers = prepare(cfg)
+def inference(cfg, event_list=None):
+    handlers = prepare(cfg, event_list=event_list)
     inference_loop(handlers)
 
 
@@ -60,6 +55,31 @@ def process_config(cfg, verbose=True):
             cfg['trainval']['seed'] = int(time.time())
         else:
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
+        # Set MinkowskiEngine number of threads
+        os.environ['OMP_NUM_THREADS'] = '16' # default value
+        # Set default concat_result
+        default_concat_result = ['input_edge_features', 'input_node_features','points', 'coordinates',
+                                 'particle_node_features', 'particle_edge_features',
+                                 'track_node_features', 'shower_node_features',
+                                 'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints',
+                                 'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales',
+                                 'seediness', 'margins', 'embeddings', 'fragments',
+                                 'fragments_seg', 'shower_fragments', 'shower_edge_index',
+                                 'shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments',
+                                 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred',
+                                 'particle_fragments', 'particle_edge_index', 'particle_node_pred',
+                                 'particle_edge_pred', 'particle_group_pred', 'particles',
+                                 'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
+                                 'inter_particles', 'node_pred_p', 'node_pred_type',
+                                 'vertex_labels', 'anchors', 'grappa_inter_vertex_labels', 'grappa_inter_anchors',
+                                 'kinematics_node_pred_p', 'kinematics_node_pred_type',
+                                 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
+                                 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
+                                 'node_pred_vtx', 'total_num_points', 'total_nonghost_points',
+                                 'spatial_embeddings', 'occupancy', 'hypergraph_features',
+                                 'features', 'feature_embeddings', 'covariance', 'clusts','edge_index','edge_pred','node_pred']
+        if 'concat_result' not in cfg['trainval']:
+            cfg['trainval']['concat_result'] = default_concat_result
 
     if 'iotool' in cfg:
 
@@ -95,11 +115,13 @@ def process_config(cfg, verbose=True):
     # Report GPUs to be used (if any)
     # Report configuations
     if verbose:
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(cfg)
+        from warnings import filterwarnings
+        filterwarnings('once', message='Deprecated', category=DeprecationWarning)
+        print(yaml.dump(cfg, default_flow_style=None))
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
+    from mlreco.utils import utils
     # Weight save directory
     if 'trainval' in cfg:
         if cfg['trainval']['weight_prefix']:
@@ -128,6 +150,9 @@ def prepare(cfg, event_list=None):
     OUTPUT
       - Handler instance attached with trainval/DataLoader instances (if in config)
     """
+    import torch
+    from mlreco.trainval import trainval
+
     handlers = Handlers()
     handlers.cfg = cfg
 
@@ -182,6 +207,9 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     """
     Log relevant information to CSV files and stdout.
     """
+    import torch
+    from mlreco.utils import utils
+
     report_step  = cfg['trainval']['report_step'] and \
                 ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
 
@@ -208,6 +236,8 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     t_io    = handlers.watch.time('io')
     t_save  = handlers.watch.time('save')
     t_net   = handlers.watch.time('train' if cfg['trainval']['train'] else 'forward')
+    t_forward_cpu = handlers.watch.time_cputime('forward_cpu')
+    t_backward_cpu = handlers.watch.time_cputime('backward_cpu')
 
     # Report (logger)
     if handlers.csv_logger:
@@ -218,6 +248,8 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
                                    (handlers.iteration, first_id, epoch, t_iter, tsum))
         handlers.csv_logger.record(('tio', 'tsumio'), (t_io,tsum_map['io']))
         handlers.csv_logger.record(('mem', ), (mem, ))
+        handlers.csv_logger.record(('tforwardcpu', ), (t_forward_cpu, ))
+        handlers.csv_logger.record(('tbackwardcpu', ), (t_backward_cpu, ))
 
         if cfg['trainval']['train']:
             handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),
@@ -256,6 +288,8 @@ def train_loop(handlers):
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
+    import mlreco.post_processing as post_processing
+
     cfg=handlers.cfg
     tsum = 0.
     while handlers.iteration < cfg['trainval']['iterations']:
@@ -268,10 +302,11 @@ def train_loop(handlers):
                         ((handlers.iteration+1) % cfg['trainval']['checkpoint_step'] == 0)
 
         # Train step
-        data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
-
-        # result_blob['total_num_points'] = [data_blob['input_data'][0].shape[0]]
-        # result_blob['total_nonghost_points'] = [(data_blob['segment_label'][0][:, -1] < 5).sum().item()]
+        if handlers.trainer._time_dependent:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter,
+                                                                 iteration=handlers.iteration)
+        else:
+            data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
         # Save snapshot
         if checkpt_step:
@@ -289,11 +324,6 @@ def train_loop(handlers):
 
         log(handlers, tstamp_iteration,
             tsum, result_blob, cfg, epoch, data_blob['index'][0])
-        # Log metrics/do analysis
-        #if 'analysis' in cfg['model']:
-        #    for ana_script in cfg['model']['analysis']:
-        #        f = getattr(analysis, ana_script)
-        #        f(data_blob, res, cfg, handlers.iteration)
 
         # Increment iteration counter
         handlers.iteration += 1
@@ -311,6 +341,8 @@ def inference_loop(handlers):
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
+    import mlreco.post_processing as post_processing
+
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}

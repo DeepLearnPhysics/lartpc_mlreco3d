@@ -1,43 +1,44 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""
+These factories instantiate `torch.utils.data.DataLoader`
+based on the YAML configuration that was provided.
+"""
 from torch.utils.data import DataLoader
 
 
-def loader_handmade(name, minibatch_size,
-                    shuffle=True,
-                    num_workers=1,
-                    collate_fn=None,
-                    sampler=None,
-                    **args):
-    import mlreco.iotools.collates
-    import mlreco.iotools.samplers
-    import mlreco.iotools.datasets
-    ds = getattr(mlreco.iotools.datasets,name)(**args)
-    if collate_fn is not None:
-        collate_fn = getattr(mlreco.iotools.collates,collate_fn)
-        loader = DataLoader(ds,
-                            minibatch_size  = minibatch_size,
-                            shuffle     = shuffle,
-                            sampler     = sampler,
-                            num_workers = num_workers,
-                            collate_fn  = collate_fn)
-    else:
-        loader = DataLoader(ds,
-                            minibatch_size  = minibatch_size,
-                            shuffle     = shuffle,
-                            sampler     = sampler,
-                            num_workers = num_workers)
-    return loader,ds.data_keys()
-
 def dataset_factory(cfg,event_list=None):
+    """
+    Instantiates dataset based on type specified in configuration under
+    `iotool.dataset.name`. The name must match the name of a class under
+    mlreco.iotools.datasets.
+
+    Note
+    ----
+    Currently the choice is limited to `LArCVDataset` only.
+    """
     import mlreco.iotools.datasets
     params = cfg['iotool']['dataset']
     if event_list is not None:
         params['event_list'] = str(list(event_list))
     return getattr(mlreco.iotools.datasets, params['name']).create(params)
 
+
 def loader_factory(cfg,event_list=None):
+    """
+    Instantiates a DataLoader based on configuration.
+
+    Dataset comes from `dataset_factory`.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary. Expects a field `iotool`.
+    event_list: list, optional
+        List of tree idx.
+
+    Returns
+    -------
+    loader : torch.utils.data.DataLoader
+    """
     params = cfg['iotool']
     minibatch_size = int(params['minibatch_size'])
     shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
@@ -47,7 +48,7 @@ def loader_factory(cfg,event_list=None):
     if not int(params['batch_size']) % int(params['minibatch_size']) == 0:
         print('iotools.batch_size (',params['batch_size'],'must be divisble by iotools.minibatch_size',params['minibatch_size'])
         raise ValueError
-    
+
     import mlreco.iotools.collates
     import mlreco.iotools.samplers
 

@@ -13,12 +13,13 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('./'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'lartpc_mlreco3d'
-copyright = '2021, DeepLearnPhysics collaboration'
+copyright = '2021-2022, DeepLearnPhysics collaboration'
 author = 'DeepLearnPhysics collaboration'
 
 
@@ -33,8 +34,11 @@ extensions = [
     'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    #'numpydoc',
+    #'sphinx.ext.autosummary',
     'sphinx_copybutton',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.viewcode'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -45,7 +49,26 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-autodoc_mock_imports = ["sparseconvnet", "larcv"]
+autodoc_default_options = {
+    'members': True,
+    'member-order': 'bysource',
+    'special-members': True,
+    'undoc-members': True,
+    'exclude-members': None,
+}
+autodoc_mock_imports = [
+    "sparseconvnet",
+    "larcv",
+    "numba",
+    "torch_geometric",
+    "MinkowskiEngine",
+    "MinkowskiFunctional",
+    "torch_scatter",
+    "torch_cluster",
+    "networkx",
+    "torch_sparse",
+    "MinkowskiNonlinearity"
+]
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -53,15 +76,21 @@ autodoc_mock_imports = ["sparseconvnet", "larcv"]
 # a list of builtin themes.
 #
 # html_theme = 'alabaster'
-html_theme = "sphinx_rtd_theme"
-
+# html_theme = "sphinx_rtd_theme"
+html_theme = "sphinx_book_theme"
+html_theme_options = {
+    "show_toc_level": 5
+}
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-napoleon_custom_sections = ["Shapes", ("Configuration", "Parameters")]
+napoleon_custom_sections = ["Shapes", ("Configuration", "params_style"), ("Output", "params_style")]
 napoleon_include_private_with_doc = True
 napoleon_include_special_with_doc = True
+napoleon_include_init_with_doc = True
 
 autosectionlabel_prefix_document = True
+
+master_doc = 'index'

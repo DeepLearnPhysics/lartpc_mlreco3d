@@ -29,7 +29,9 @@ def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis
                          hovertext=vfeats)
     return [trace]
 
-def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labels=[], mode='scatter', markersize=3, linewidth=2, colorscale='Inferno', cmin=None, cmax=None, **kwargs):
+def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labels=[],
+                    mode='scatter', markersize=3, linewidth=2, colorscale='Inferno',
+                    cmin=None, cmax=None, coords_col=(1, 4), **kwargs):
     """
     Network 3D topological representation
 
@@ -46,13 +48,19 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
     Returns:
         [plotly.graph_objs.Scatter3d]: (2) 3D Scatter plots of [nodes, edges]
     """
+    c1, c2 = coords_col
+    if voxels.shape[1] > 3:
+        voxels = voxels[:, c1:c2]
     # Define the arrays of node positions (barycenter of voxels in the cluster)
     pos = np.array([voxels[c].mean(0) for c in clusters])
 
     # Define the node features (label, color)
     n = len(clusters)
     if not len(clust_labels): clust_labels = np.ones(n)
-    node_labels = ['Instance ID: %d<br>Group ID: %d<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, int(clust_labels[i]), pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    if len(clust_labels) and isinstance(clust_labels[0], float):
+        node_labels = ['Instance ID: %d<br>Group ID: %0.3f<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
+    else:
+        node_labels = ['Instance ID: %d<br>Group ID: %d<br>Centroid: (%0.1f, %0.1f, %0.1f)' % (i, clust_labels[i], pos[i,0], pos[i,1], pos[i,2]) for i in range(n)]
 
     # Assert if there is edges to draw
     draw_edges = bool(len(edge_index))
@@ -217,7 +225,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                  color = get_object_color(min_label, max_label, clust_labels[i], colorscale),
                                  opacity = 0.3,
                                  text = node_labels[i],
-                                 hoverinfo = 'text', 
+                                 hoverinfo = 'text',
                                  **kwargs) for i, c in enumerate(clusters)]
 
         # Define the edges closest pixel to closest pixel
@@ -241,7 +249,7 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
         mask = np.where(cids != -1)[0]
         colors = [clust_labels[i] for i in cids[mask]]
         node_labels = [node_labels[i] for i in cids[mask]]
-        
+
         graph_data = [go.Scatter3d(x = voxels[mask][:,0],
                                    y = voxels[mask][:,1],
                                    z = voxels[mask][:,2],

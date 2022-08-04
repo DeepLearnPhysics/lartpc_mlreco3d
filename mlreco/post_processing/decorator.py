@@ -3,6 +3,8 @@ import os
 import numpy as np
 from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 
+from functools import wraps
+
 
 def post_processing(filename, data_capture, output_capture):
     """
@@ -29,12 +31,13 @@ def post_processing(filename, data_capture, output_capture):
             'clust_data': 'cluster_label',
             'seg_label': 'segment_label',
             'kinematics': 'kinematics_label',
-            'points_label': 'particles_label'
+            'points_label': 'particles_label',
+            'particles': 'particles_asis'
         }
+        @wraps(func)
         def wrapper(cfg, module_cfg, data_blob, res, logdir, iteration):
             # The config block should have the same name as the analysis function
             # module_cfg = cfg['post_processing'].get(func.__name__, {})
-
             log_name = module_cfg.get('filename', filename)
             deghosting = module_cfg.get('ghost', False)
 
@@ -55,18 +58,20 @@ def post_processing(filename, data_capture, output_capture):
             # Get the relevant data products - index is special, no need to specify it.
             kwargs['index'] = data_blob['index']
             # We need true segmentation label for deghosting masks/adapting labels
-            if deghosting and 'seg_label' not in data_capture:
+            #if deghosting and 'seg_label' not in data_capture:
+            if 'seg_label' not in data_capture:
                 data_capture.append('seg_label')
 
             for key in data_capture:
-                kwargs[key] = data_blob[module_cfg.get(key, defaultNameToIO.get(key, key))]
+                if module_cfg.get(key, defaultNameToIO.get(key, key)) in data_blob:
+                    kwargs[key] = data_blob[module_cfg.get(key, defaultNameToIO.get(key, key))]
 
             for key in output_capture:
                 if key in ['embeddings', 'margins', 'seediness']:
                     continue
                 if not len(module_cfg.get(key, key)):
                     continue
-                kwargs[key] = res[module_cfg.get(key, key)]
+                kwargs[key] = res.get(module_cfg.get(key, key), None)
                 if key == 'segmentation':
                     kwargs['segmentation'] = [res['segmentation'][i] for i in range(len(res['segmentation']))]
                     kwargs['seg_prediction'] = [res['segmentation'][i].argmax(axis=1) for i in range(len(res['segmentation']))]
@@ -75,23 +80,31 @@ def post_processing(filename, data_capture, output_capture):
                 kwargs['ghost_mask'] = [res['ghost'][i].argmax(axis=1) == 0 for i in range(len(res['ghost']))]
                 kwargs['true_ghost_mask'] = [ kwargs['seg_label'][i][:, -1] < 5 for i in range(len(kwargs['seg_label']))]
 
-                if 'clust_data' in kwargs:
+                if 'clust_data' in kwargs and kwargs['clust_data'] is not None:
                     kwargs['clust_data_noghost'] = kwargs['clust_data'] # Save the clust_data before deghosting
                     kwargs['clust_data'] = adapt_labels(res, kwargs['seg_label'], kwargs['clust_data'])
-                if 'seg_prediction' in kwargs:
+                if 'seg_prediction' in kwargs and kwargs['seg_prediction'] is not None:
                     kwargs['seg_prediction'] = [kwargs['seg_prediction'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_prediction']))]
-                if 'segmentation' in kwargs:
-                    kwargs['segmentation'] = [kwargs['segmentation'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_prediction']))]
-                if 'kinematics' in kwargs:
+                if 'segmentation' in kwargs and kwargs['segmentation'] is not None:
+                    kwargs['segmentation'] = [kwargs['segmentation'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['segmentation']))]
+                if 'kinematics' in kwargs and kwargs['kinematics'] is not None:
                     kwargs['kinematics'] = adapt_labels(res, kwargs['seg_label'], kwargs['kinematics'])
                 # This needs to come last - in adapt_labels seg_label is the original one
-                if 'seg_label' in kwargs:
+                if 'seg_label' in kwargs and kwargs['seg_label'] is not None:
                     kwargs['seg_label_noghost'] = kwargs['seg_label']
                     kwargs['seg_label'] = [kwargs['seg_label'][i][kwargs['ghost_mask'][i]] for i in range(len(kwargs['seg_label']))]
 
             batch_ids = []
             for data_idx, _ in enumerate(kwargs['index']):
-                batch_ids.append(np.ones((kwargs['seg_label'][data_idx].shape[0],)) * data_idx)
+                if 'seg_label' in kwargs:
+                    n = kwargs['seg_label'][data_idx].shape[0]
+                elif 'kinematics' in kwargs:
+                    n = kwargs['kinematics'][data_idx].shape[0]
+                elif 'clust_data' in kwargs:
+                    n = kwargs['clust_data'][data_idx].shape[0]
+                else:
+                    raise Exception('Need some labels to run postprocessing')
+                batch_ids.append(np.ones((n,)) * data_idx)
             batch_ids = np.hstack(batch_ids)
             kwargs['batch_ids'] = batch_ids
 
@@ -105,10 +118,14 @@ def post_processing(filename, data_capture, output_capture):
                     for name in log_name:
                         fout.append(CSVData(os.path.join(logdir, '%s-event-%07d.csv' % (name, tree_idx))))
 
-                if np.isin(output_capture, ['embeddings', 'margins', 'seediness']).any():
-                    kwargs['embeddings'] = np.array(res['embeddings'])[batch_ids == data_idx]
-                    kwargs['margins'] = np.array(res['margins'])[batch_ids == data_idx]
-                    kwargs['seediness'] = np.array(res['seediness'])[batch_ids == data_idx]
+                for key in ['embeddings', 'margins', 'seediness']: # add points?
+                    if key in output_capture:
+                        kwargs[key] = np.array(res[key])[batch_ids == data_idx]
+
+                # if np.isin(output_capture, ['embeddings', 'margins', 'seediness']).any():
+                #     kwargs['embeddings'] = np.array(res['embeddings'])[batch_ids == data_idx]
+                #     kwargs['margins'] = np.array(res['margins'])[batch_ids == data_idx]
+                #     kwargs['seediness'] = np.array(res['seediness'])[batch_ids == data_idx]
 
                 out = func(cfg, module_cfg, data_blob, res, logdir, iteration, **kwargs)
                 if isinstance(out, tuple):
@@ -130,7 +147,7 @@ def post_processing(filename, data_capture, output_capture):
 
                             fout[out_idx].record(row_names, row_values)
                             fout[out_idx].write()
-                    counter += 1 if len(out_names[0]) else 0
+                    counter += 1 if len(out_names) and len(out_names[0]) else 0
 
                 if store_per_event:
                     for f in fout:

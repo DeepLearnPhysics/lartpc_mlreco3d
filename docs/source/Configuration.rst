@@ -12,33 +12,45 @@ documentation.
 
 There are up to four top-level sections in a config file:
 
-- `iotool`
-- `model`
-- `trainval`
-- `post_processing` (optional)
+- ``iotool``
+- ``model``
+- ``trainval``
+- ``post_processing`` (optional)
 
 ``iotool`` section
 ------------------
 
+..  rubric:: ``batch_size`` (default: 1)
 
-..  rubric:: batch_size (default: 1)
+How many images the network will see at once
+during an iteration.
 
-..  rubric:: shuffle (default: True)
+..  rubric:: ``shuffle`` (default: True)
 
 Whether to randomize the dataset sampling.
 
-..  rubric:: num_workers (default: 1)
+..  rubric:: ``num_workers`` (default: 1)
 
 How many workers should be processing the
 dataset in parallel.
 
-..  rubric:: collate_fn (default: None)
+.. tip::
+
+    If you increase your
+    batch size significantly, you may want to
+    increase the number of workers. Conversely
+    if your batch size is small but you have
+    too many workers, the overhead time of
+    starting each worker will slow down the
+    start of your training/inference.
+
+..  rubric:: ``collate_fn`` (default: None)
 
 How to collate data from different events
 into a single batch.
 Can be `None`, `CollateSparse`, `CollateDense`.
 
-..  rubric:: sampler (batch_size, name)
+..  rubric:: ``sampler`` (batch_size, name)
 
 The sampler defines how events are picked in
 the dataset. For training it is better to use
@@ -58,9 +70,20 @@ An example of sampler config looks like this:
 
 .. note:: The batch size should match the one specified above.
 
-..  rubric:: dataset
+..  rubric:: ``dataset``
 
-An example of `dataset` config looks like this:
+Specifies where to find the dataset. It needs several pieces of
+information:
+
+- ``name`` should be ``LArCVDataset`` (only available option at this time)
+- ``data_keys`` is a list of paths where the dataset files live.
+    It accepts a wild card like ``*`` (uses ``glob`` to find files).
+- ``limit_num_files`` is how many files to process from all files listed
+    in ``data_keys``.
+- ``schema`` defines how you want to read your file. More on this in
+    :any:`mlreco.iotools`.
+
+An example of ``dataset`` config looks like this:
 
 ..  code-block:: yaml
     :linenos:
@@ -69,7 +92,6 @@ An example of `dataset` config looks like this:
         name: LArCVDataset
         data_keys:
           - /gpfs/slac/staas/fs1/g/neutrino/kterao/data/wire_mpvmpr_2020_04/train_*.root
-          #- /gpfs/slac/staas/fs1/g/neutrino/kvtsang/data/pdune/mpvmpr/train/larcv*.root
         limit_num_files: 10
         schema:
           input_data:
@@ -79,15 +101,15 @@ An example of `dataset` config looks like this:
 ``model`` section
 -----------------
 
-..  rubric:: name
+..  rubric:: ``name``
 
 Name of the model that you want to run
-(typically one of the models under `mlreco/models`).
+(typically one of the models under ``mlreco/models``).
 
-..  rubric:: modules
+..  rubric:: ``modules``
 
-An example of `modules` looks like this for the model
-`full_chain`:
+An example of ``modules`` looks like this for the model
+``full_chain``:
 
 ..  code-block:: yaml
 
@@ -107,31 +129,38 @@ An example of `modules` looks like this for the model
       some_module:
         ... config of the module ...
 
-..  rubric:: network_input
+..  rubric:: ``network_input``
 
-..  rubric:: loss_input
+This is a list of quantities from the input dataset
+that should be fed to the network as input.
+The names in the list refer to the names specified
+in ``iotools.dataset.schema``.
 
+..  rubric:: ``loss_input``
+
+This is a list of quantities from the input dataset
+that should be fed to the loss function as input.
+The names in the list refer to the names specified
+in ``iotools.dataset.schema``.
 
 ``trainval`` section
 --------------------
 
-..  rubric:: seed
+..  rubric:: ``seed`` (``int``)
 
 Integer to use as random seed.
 
-..  rubric:: unwrapper
+..  rubric:: ``unwrapper`` (default: ``unwrap``, optional)
 
-Can be `unwrap_3d_scn` or `unwrap_2d_scn`.
+For now, can only be ``unwrap``.
 
-.. rubric:: concat_result
+.. rubric:: concat_result (optional, ``list``)
 
-Typically looks like this:
+List of strings. Each string is a key in the output dictionary.
+All outputs listed in ``concat_result`` will NOT undergo the
+standard unwrapping process.
 
-.. code-block:: yaml
-
-    concat_result: ['seediness', 'margins', 'embeddings', 'fragments', 'fragments_seg', 'shower_fragments', 'shower_edge_index','shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments', 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred', 'particle_fragments', 'particle_edge_index', 'particle_node_pred', 'particle_edge_pred', 'particle_group_pred', 'particles','inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'node_pred_p', 'node_pred_type', 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index', 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred', 'node_pred_vtx', 'total_num_points', 'total_nonghost_points']
-
-.. rubric:: gpus
+.. rubric:: gpus (``string``)
 
 If empty string, use CPU. Otherwise string
 containing one or more GPU ids.
@@ -143,27 +172,35 @@ Includes the weights file prefix, e.g.
 `/path/to/snapshot-` for weights that will be
 named `snapshot-0000.ckpt`, etc.
 
-..  rubric:: iterations
+..  rubric:: iterations (``int``)
 
-..  rubric:: report_step
+How many iterations to run for.
 
-How often to print in the console log.
+..  rubric:: report_step (``int``)
 
-.. rubric:: checkpoint_step
+How often (in iterations) to print in the console log.
 
-How often to save the weights in a
+.. rubric:: checkpoint_step (``int``)
+
+How often (in iterations) to save the weights in a
 checkpoint file.
 
-.. rubric:: model_path
+.. rubric:: model_path (``str``)
 
 Can be empty string. Otherwise, path to a
 checkpoint file to load for the whole model.
 
-.. rubric:: log_dir
+.. note::
+
+    This can use wildcards such as ``*`` to load several
+    checkpoint files. Not to be used for training time,
+    but for inference time (e.g. for validation purpose).
+
+.. rubric:: log_dir (``str``)
 
 Path to a folder where logs will be stored.
 
-..  rubric:: train
+..  rubric:: train (``bool``)
 
 Boolean, whether to use train or inference mode.
 
@@ -184,4 +221,7 @@ Can look like this:
 
 ``post_processing`` section
 ---------------------------
+Post-processing scripts allow use to measure the performance
+of each stage of the chain.
+
 Coming soon.
