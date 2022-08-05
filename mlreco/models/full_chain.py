@@ -213,7 +213,7 @@ class FullChain(FullChainGNN):
             input[0][deghost, 4] = charges
             result.update({'input_rescaled':[input[0][deghost,:5]]})
         if self.enable_uresnet:
-            if self.enable_charge_rescaling:
+            if self.enable_charge_rescaling and deghost.sum() > 0:
                 assert not self.uresnet_lonely.ghost
                 result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
             else:
@@ -232,7 +232,7 @@ class FullChain(FullChainGNN):
                                       ppn_input['decoderTensors'][0])
             result.update(ppn_output)
 
-        if self.enable_charge_rescaling:
+        if self.enable_charge_rescaling and deghost.sum() > 0:
             # Reshape output tensors of UResNet and PPN to be of the original shape
             for key in ['segmentation', 'points', 'classify_endpoints', 'mask_ppn', 'ppn_coords', 'ppn_layers']:
                 res = result[key][0] if isinstance(result[key][0], torch.Tensor) else result[key][0][-1]
