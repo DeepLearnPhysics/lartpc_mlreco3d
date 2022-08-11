@@ -235,6 +235,7 @@ class FullChain(FullChainGNN):
         if self.enable_charge_rescaling and deghost.sum() > 0:
             # Reshape output tensors of UResNet and PPN to be of the original shape
             for key in ['segmentation', 'points', 'classify_endpoints', 'mask_ppn', 'ppn_coords', 'ppn_layers']:
+                if key not in result: continue
                 res = result[key][0] if isinstance(result[key][0], torch.Tensor) else result[key][0][-1]
                 tensor = torch.zeros((input[0].shape[0], res.shape[1]), dtype=res.dtype, device=res.device)
                 tensor[deghost] = res
@@ -242,7 +243,8 @@ class FullChain(FullChainGNN):
                     result[key][0]     = tensor
                 else:
                     result[key][0][-1] = tensor
-            result['ppn_output_coordinates'][0] = input[0][:,:4].type(result['ppn_output_coordinates'][0].dtype)
+            if 'ppn_output_coordinates' in result:
+                result['ppn_output_coordinates'][0] = input[0][:,:4].type(result['ppn_output_coordinates'][0].dtype)
 
         # The rest of the chain only needs 1 input feature
         if self.input_features > 1:
