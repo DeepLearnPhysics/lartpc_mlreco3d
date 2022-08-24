@@ -146,7 +146,7 @@ def parse_cluster3d(cluster_event,
             labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_asis_v])
             labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_asis_v])
             labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_asis_v])
-            labels['primary_group'] = np.array((nu_ids > 0) & np.array([p.group_id()==p.parent_id() for p in particles_v]), dtype=np.float32)
+            labels['primary_group'] = np.array((nu_ids > 0) & np.array([p.group_id()==p.parent_id() for p in particles_v], dtype=bool), dtype=np.float32)
         labels['sem'] = np.array([p.shape() for p in particles_v])
 
     # Loop over clusters, store info
