@@ -209,15 +209,13 @@ def _get_extra_gnn_features(fragments,
                 end_points = get_track_endpoints_geo(input[0], f, points_tensor)
                 ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
             else:
-                dmask  = torch.nonzero(torch.max(
-                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
-                    as_tuple=True)[0]
+                scores = torch.softmax(points_tensor[f, -2:], dim=1)[:,-1]
                 # scores = torch.sigmoid(points_tensor[f, -1])
-                # argmax = dmask[torch.argmax(scores[dmask])] \
-                #          if len(dmask) else torch.argmax(scores)
-                scores = torch.softmax(points_tensor[f, -2:], dim=1)
-                argmax = dmask[torch.argmax(scores[dmask, -1])] \
-                            if len(dmask) else torch.argmax(scores[:, -1])
+                dmask  = torch.nonzero((scores > 0.5) & (torch.max(
+                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.),
+                    as_tuple=True)[0]
+                argmax = dmask[torch.argmax(scores[dmask])] \
+                            if len(dmask) else torch.argmax(scores)
                 start  = input[0][f][argmax,1:4] + \
                             points_tensor[f][argmax,:3] + 0.5
                 ppn_points = torch.cat((ppn_points,
@@ -261,7 +259,7 @@ def split_clusts(clusts, batch_ids, batches, counts):
         [np.ndarray]  : (B) List of cluster IDs in each batch
     """
     clusts_split, cbids = _split_clusts(clusts, batch_ids, batches, counts)
-    
+
     # Cast the list of clusters to np.array (object type)
     same_length = [np.all([len(c) == len(bclusts[0]) for c in bclusts]) for bclusts in clusts_split]
     return [np.array(clusts_split[b], dtype=object if not sl else np.int64) for b, sl in enumerate(same_length)], cbids
