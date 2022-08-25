@@ -172,16 +172,8 @@ class EdgeChannelLoss(torch.nn.Module):
                 # Increment the number of edges
                 n_edges += len(edge_pred)
 
-        # Handle the case where no cluster/edge were found
-        if not n_edges:
-            return {
-                'accuracy': 0.,
-                'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device),
-                'n_edges': n_edges
-            }
-
         return {
-            'accuracy': total_acc/n_edges,
-            'loss': total_loss/n_edges,
+            'accuracy': total_acc/n_edges if n_edges else 1.,
+            'loss': total_loss/n_edges if n_edges else torch.tensor(0., requires_grad=True, device=clusters[0].device),
             'n_edges': n_edges
         }
