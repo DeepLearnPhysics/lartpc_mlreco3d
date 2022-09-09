@@ -658,7 +658,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             else:
                 res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][deghost]]}, [seg_label[0][deghost]])
             for key in res_seg:
-                res['uresnet_' + key] = res_seg[key]
+                res['segmentation_' + key] = res_seg[key]
             accuracy += res_seg['accuracy']
             loss += self.segmentation_weight*res_seg['loss']
             #print('uresnet ', self.segmentation_weight, res_seg['loss'], loss)
