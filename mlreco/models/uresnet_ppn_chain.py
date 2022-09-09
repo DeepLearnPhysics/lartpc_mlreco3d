@@ -142,9 +142,11 @@ class UResNetPPNLoss(nn.Module):
             outputs, segment_label, particles_label)
 
         res = {
-            'loss': res_segmentation['loss'] + res_ppn['ppn_loss'],
-            'accuracy': (res_segmentation['accuracy'] + res_ppn['ppn_acc']) / 2.0,
-            'reg_loss': res_ppn['reg_loss'],
-            'type_loss': res_ppn['type_loss']
+            'loss': res_segmentation['loss'] + res_ppn['loss'],
+            'accuracy': (res_segmentation['accuracy'] + res_ppn['accuracy'])/2
         }
+
+        res.update({'segmentation_'+k:v for k, v in res_segmentation.items()})
+        res.update({'ppn_'+k:v for k, v in res_ppn.items()})
+
         return res
