@@ -199,7 +199,7 @@ def grouping_loss(pred_mat: nb.float32[:],
 @nb.njit(cache=True)
 def edge_assignment_score(edge_index: nb.int64[:,:],
                           edge_scores: nb.float32[:,:],
-                          n: nb.int64) -> (nb.int64[:,:], nb.float32):
+                          n: nb.int64) -> (nb.int64[:,:], nb.int64[:], nb.float32):
     """
     Function that finds the graph that produces the lowest
     grouping score iteratively adding the most likely edges,
@@ -208,11 +208,16 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
     Args:
         edge_index (np.ndarray) : (E,2) Incidence matrix
         edge_scores (np.ndarray): (E,2) Two-channel edge score
-        n (int)                : Total number of clusters C
+        n (int)                 : Total number of clusters C
     Returns:
         np.ndarray: (E',2) Optimal incidence matrix
+        np.ndarray: (C) Optimal group ID for each node
         float     : Score for the optimal incidence matrix
     """
+    # If there is no edge, do not bother
+    if not len(edge_index):
+        return np.empty((0,2), dtype=np.int64), np.zeros(n, dtype=np.int64), 0.
+
     # Build an input adjacency matrix to constrain the edge selection to the input graph
     adj_mat = adjacency_matrix(edge_index, n)
 

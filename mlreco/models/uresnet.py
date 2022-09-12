@@ -282,19 +282,19 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
 
         if self._ghost:
             results = {
-                'accuracy': uresnet_acc/count,
-                'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count,
-                'ghost_mask_acc': mask_acc / count,
-                'ghost_mask_loss': self._beta * mask_loss / count,
-                'uresnet_loss': self._alpha * uresnet_loss / count,
-                'uresnet_acc': uresnet_acc / count,
-                'ghost2ghost': ghost2ghost / count,
-                'nonghost2nonghost': nonghost2nonghost / count
+                'accuracy': uresnet_acc/count if count else 0.,
+                'loss': (self._alpha * uresnet_loss + self._beta * mask_loss)/count if count else (self._alpha * uresnet_loss + self._beta * mask_loss),
+                'ghost_mask_acc': mask_acc / count if count else 0.,
+                'ghost_mask_loss': self._beta * mask_loss / count if count else self._beta * mask_los,
+                'uresnet_loss': self._alpha * uresnet_loss / count if count else self._alpha * uresnet_loss,
+                'uresnet_acc': uresnet_acc / count if count else 0.,
+                'ghost2ghost': ghost2ghost / count if count else 0.,
+                'nonghost2nonghost': nonghost2nonghost / count if count else 0.
             }
         else:
             results = {
-                'accuracy': uresnet_acc/count,
-                'loss': uresnet_loss/count
+                'accuracy': uresnet_acc/count if count else 0.,
+                'loss': uresnet_loss/count if count else uresnet_loss
             }
         for c in range(self._num_classes):
             if count_class[c] > 0:

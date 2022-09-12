@@ -436,7 +436,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'mask_loss': 0.,
             'type_loss': 0.,
             'classify_endpoints_loss': 0.,
-            'classify_endpoints_acc': 0.
+            'classify_endpoints_accuracy': 0.
         }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
@@ -560,7 +560,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                     acc_classify_endpoints = acc_point_class / point_class_count
                                     #total_loss += loss_classify_endpoints.float()
                             res['classify_endpoints_loss'] += float(loss_classify_endpoints) / num_batches
-                            res['classify_endpoints_acc'] += float(acc_classify_endpoints) / num_batches
+                            res['classify_endpoints_accuracy'] += float(acc_classify_endpoints) / num_batches
                         # --- end of Endpoint classification
 
                         # Distance Loss
@@ -579,6 +579,6 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             total_loss += loss_gpu
 
         total_acc /= num_batches
-        res['ppn_loss'] = total_loss
-        res['ppn_acc'] = float(total_acc)
+        res['loss'] = total_loss
+        res['accuracy'] = float(total_acc)
         return res

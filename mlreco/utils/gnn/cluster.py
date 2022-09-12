@@ -373,12 +373,12 @@ def _get_cluster_points_label(data: nb.float64[:,:],
     # Get start and end points (one and the same for all but track class)
     batch_ids = _get_cluster_batch(data, clusts)
     points = np.empty((len(clusts), 6), dtype=data.dtype)
-    for i, c in enumerate(clusts): # Here clusters are groups
+    for i, c in enumerate(clusts):
         batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
         clust_ids  = np.unique(data[c, 5]).astype(np.int64)
         minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
-        order = np.array([0, 1, 2, 4, 5, 6]) if (np.random.choice(2) or not random_order) else np.array([4, 5, 6, 0, 1, 2])
-        points[i] = particles[batch_mask][clust_ids[minid]][order]
+        order = np.arange(6) if (np.random.choice(2) or not random_order) else np.array([3, 4, 5, 0, 1, 2])
+        points[i] = particles[batch_mask][clust_ids[minid]][order+1] # The first column is the batch ID
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):

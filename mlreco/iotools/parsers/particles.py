@@ -56,7 +56,7 @@ def parse_neutrino_asis(neutrino_event, cluster_event):
         schema:
           neutrino_asis:
             parser: parse_neutrino_asis
-            particle_asis:
+            args:
               neutrino_event: neutrino_mpv
               cluster_event: cluster3d_pcluster
 
