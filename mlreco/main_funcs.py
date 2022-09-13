@@ -12,6 +12,7 @@ from mlreco.iotools.factories import loader_factory
 # happens in the process_config function before anything
 # else is allowed to happen.
 
+
 class Handlers:
     cfg          = None
     data_io      = None
@@ -45,18 +46,21 @@ def inference(cfg, event_list=None):
 
 def process_config(cfg, verbose=True):
 
-    # Set GPUS to be used
     if 'trainval' in cfg:
+        # Set GPUs to be used
         os.environ['CUDA_VISIBLE_DEVICES'] = cfg['trainval']['gpus']
         cfg['trainval']['gpus'] = list(range(len([int(a) for a in cfg['trainval']['gpus'].split(',') if a.isdigit()])))
+
         # Update seed
         if cfg['trainval']['seed'] < 0:
             import time
             cfg['trainval']['seed'] = int(time.time())
         else:
             cfg['trainval']['seed'] = int(cfg['trainval']['seed'])
+
         # Set MinkowskiEngine number of threads
         os.environ['OMP_NUM_THREADS'] = '16' # default value
+
         # Set default concat_result
         default_concat_result = ['input_edge_features', 'input_node_features','points', 'coordinates',
                                  'particle_node_features', 'particle_edge_features',
@@ -71,7 +75,7 @@ def process_config(cfg, verbose=True):
                                  'particle_edge_pred', 'particle_group_pred', 'particles',
                                  'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
                                  'inter_particles', 'node_pred_p', 'node_pred_type',
-                                 'vertex_labels', 'anchors', 'grappa_inter_vertex_labels', 'grappa_inter_anchors',
+                                 'vtx_labels', 'vtx_anchors', 'grappa_inter_vtx_labels', 'grappa_inter_vtx_anchors',
                                  'kinematics_node_pred_p', 'kinematics_node_pred_type',
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
