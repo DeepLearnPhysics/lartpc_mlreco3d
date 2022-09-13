@@ -166,11 +166,9 @@ class NodeKinematicsLoss(torch.nn.Module):
                 clusts = out['clusts'][i][j]
 
                 # Increment the type loss, balance classes if requested
-                if compute_type:
+                if compute_type and out['node_pred_type'][i][j].shape:
                     # Get the type predictions and true types from the specified columns
                     node_pred_type = out['node_pred_type'][i][j]
-                    if not node_pred_type.shape[0]:
-                        continue
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
@@ -207,11 +205,9 @@ class NodeKinematicsLoss(torch.nn.Module):
                         n_clusts_type += len(valid_mask_type)
 
                 # Increment the momentum loss
-                if compute_momentum:
+                if compute_momentum and out['node_pred_p'][i][j].shape:
                     # Get the momentum predictions and true momenta from the specified columns
                     node_pred_p = out['node_pred_p'][i][j]
-                    if not node_pred_p.shape[0]:
-                        continue
                     node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
@@ -236,12 +232,10 @@ class NodeKinematicsLoss(torch.nn.Module):
                         # Increment the number of nodes
                         n_clusts_momentum += len(clusts)
 
-                if compute_vtx:
+                if compute_vtx and out['node_pred_vtx'][i][j].shape:
                     # Get the vertex predictions, node features and true vertices from the specified columns
                     node_pred_vtx = out['node_pred_vtx'][i][j]
                     input_node_features = out['input_node_features'][i][j]
-                    if not node_pred_vtx.shape[0]:
-                        continue
                     node_assn_vtx     = np.stack([get_cluster_label(labels, clusts, column=c) for c in range(self.vtx_col, self.vtx_col+3)], axis=1)
                     node_assn_vtx_pos = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
 
@@ -330,13 +324,13 @@ class NodeKinematicsLoss(torch.nn.Module):
             })
         if compute_vtx:
             result.update({
-                'vtx_anchors': vtx_anchors,
                 'vtx_labels': vtx_labels,
                 'vtx_score_loss': vtx_score_loss/n_clusts_vtx if n_clusts_vtx else 0.,
                 'vtx_score_acc': vtx_score_acc/n_clusts_vtx if n_clusts_vtx else 1.,
                 'vtx_position_loss': vtx_position_loss/n_clusts_vtx_pos if n_clusts_vtx_pos else 0.,
                 'vtx_position_acc': vtx_position_acc/n_clusts_vtx_pos if n_clusts_vtx_pos else 1.
             })
+            if self.use_anchor_points: result['vtx_anchors'] = vtx_anchors
 
         return result
 
