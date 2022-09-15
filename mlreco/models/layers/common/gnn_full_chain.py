@@ -582,7 +582,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
