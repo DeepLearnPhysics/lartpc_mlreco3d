@@ -210,14 +210,13 @@ class FullChain(FullChainGNN):
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
-            input[0][deghost, 4] = charges
-            result.update({'input_rescaled':[input[0][deghost,:5]]})
+            full_n  = len(input[0])
+            input[0] = input[0][deghost]
+            input[0][:, 4] = charges
+            result.update({'input_rescaled':[input[0][:,:5]]})
+
         if self.enable_uresnet:
-            if self.enable_charge_rescaling and deghost.sum() > 0:
-                assert not self.uresnet_lonely.ghost
-                result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
-            else:
-                result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
+            result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
 
         if self.enable_ppn:
             ppn_input = {}
@@ -232,27 +231,13 @@ class FullChain(FullChainGNN):
                                       ppn_input['decoderTensors'][0])
             result.update(ppn_output)
 
-        if self.enable_charge_rescaling and deghost.sum() > 0:
-            # Reshape output tensors of UResNet and PPN to be of the original shape
-            for key in ['segmentation', 'points', 'classify_endpoints', 'mask_ppn', 'ppn_coords', 'ppn_layers']:
-                if key not in result: continue
-                res = result[key][0] if isinstance(result[key][0], torch.Tensor) else result[key][0][-1]
-                tensor = torch.zeros((input[0].shape[0], res.shape[1]), dtype=res.dtype, device=res.device)
-                tensor[deghost] = res
-                if isinstance(result[key][0], torch.Tensor):
-                    result[key][0]     = tensor
-                else:
-                    result[key][0][-1] = tensor
-            if 'ppn_output_coordinates' in result:
-                result['ppn_output_coordinates'][0] = input[0][:,:4].type(result['ppn_output_coordinates'][0].dtype)
-
         # The rest of the chain only needs 1 input feature
         if self.input_features > 1:
             input[0] = input[0][:, :-self.input_features+1]
 
         cnn_result = {}
 
-        if self.enable_ghost:
+        if self.enable_ghost and not self.enable_charge_rescaling:
 
             # Update input based on deghosting results
             # if self.cheat_ghost:
@@ -315,8 +300,7 @@ class FullChain(FullChainGNN):
         if self._gspice_use_true_labels:
             semantic_labels = label_seg[0][:, -1]
         else:
-            semantic_labels = torch.argmax(cnn_result['segmentation'][0],
-                                           dim=1).flatten()
+            semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten()
 
         if self.enable_cnn_clust:
             if label_clustering is None and self.training:
@@ -390,7 +374,7 @@ class FullChain(FullChainGNN):
         #     cnn_result['true_points'] = coords
 
         def return_to_original(result):
-            if self.enable_ghost:
+            if self.enable_ghost and not self.enable_charge_rescaling:
                 result['segmentation'][0] = segmentation
             return result
 

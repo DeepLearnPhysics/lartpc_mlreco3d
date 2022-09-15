@@ -650,12 +650,17 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 res['deghost_' + key] = res_deghost[key]
             accuracy += res_deghost['accuracy']
             loss += self.deghost_weight*res_deghost['loss']
-            deghost = (seg_label[0][:,-1] < 5) & (out['ghost'][0][:,0] > out['ghost'][0][:,1]) # Only non-ghost (both true and pred) can go in semseg eval
+            deghost = out['ghost'][0][:,0] > out['ghost'][0][:,1]
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
                 res_seg = self.uresnet_loss(out, seg_label)
             else:
+                seg = out['segmentation'][0]
+                full_seg = torch.zeros((seg_label[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device)
+                full_seg[deghost] = seg 
+                out['segmentation'][0] = full_seg
+                deghost &= seg_label[0][:,-1] < 5 # Only apply loss to true non-ghosts
                 res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][deghost]]}, [seg_label[0][deghost]])
             for key in res_seg:
                 res['segmentation_' + key] = res_seg[key]
@@ -672,7 +677,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['accuracy']
             loss += self.ppn_weight*res_ppn['loss']
 
-        if self.enable_ghost and (self.enable_cnn_clust or \
+        if self.enable_ghost and not self.enable_charge_rescaling and \
+                                 (self.enable_cnn_clust or \
                                   self.enable_gnn_track or \
                                   self.enable_gnn_shower or \
                                   self.enable_gnn_inter or \
@@ -726,7 +732,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
                 segmentation_pred = out['segmentation'][0]
 
-                if self.enable_ghost:
+                if self.enable_ghost and not self.enable_charge_rescaling:
                     segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
                     gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
