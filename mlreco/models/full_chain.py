@@ -210,13 +210,18 @@ class FullChain(FullChainGNN):
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
-            full_n  = len(input[0])
-            input[0] = input[0][deghost]
-            input[0][:, 4] = charges
-            result.update({'input_rescaled':[input[0][:,:5]]})
+            input[0][deghost, 4] = charges
+            result.update({'input_rescaled':[input[0][deghost,:5]]})
 
         if self.enable_uresnet:
-            result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
+            if not self.enable_charge_rescaling:
+                result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
+            else:
+                result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
+                seg = result['segmentation'][0]
+                full_seg = torch.zeros((input[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device) 
+                full_seg[deghost] = seg
+                result['segmentation'][0] = full_seg
 
         if self.enable_ppn:
             ppn_input = {}
@@ -237,7 +242,7 @@ class FullChain(FullChainGNN):
 
         cnn_result = {}
 
-        if self.enable_ghost and not self.enable_charge_rescaling:
+        if self.enable_ghost:
 
             # Update input based on deghosting results
             # if self.cheat_ghost:
@@ -268,7 +273,7 @@ class FullChain(FullChainGNN):
             deghost_result.update(result)
             deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
-            if self.enable_ppn:
+            if self.enable_ppn and not self.enable_charge_rescaling:
                 deghost_result['points']            = [result['points'][0][deghost]]
                 if 'classify_endpoints' in deghost_result:
                     deghost_result['classify_endpoints'] = [result['classify_endpoints'][0][deghost]]
@@ -374,7 +379,7 @@ class FullChain(FullChainGNN):
         #     cnn_result['true_points'] = coords
 
         def return_to_original(result):
-            if self.enable_ghost and not self.enable_charge_rescaling:
+            if self.enable_ghost:
                 result['segmentation'][0] = segmentation
             return result
 

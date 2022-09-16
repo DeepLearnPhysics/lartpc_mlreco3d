@@ -166,7 +166,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 clusts = out['clusts'][i][j]
 
                 # Increment the type loss, balance classes if requested
-                if compute_type and out['node_pred_type'][i][j].shape:
+                if compute_type and out['node_pred_type'][i][j].shape[0]:
                     # Get the type predictions and true types from the specified columns
                     node_pred_type = out['node_pred_type'][i][j]
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
@@ -205,7 +205,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         n_clusts_type += len(valid_mask_type)
 
                 # Increment the momentum loss
-                if compute_momentum and out['node_pred_p'][i][j].shape:
+                if compute_momentum and out['node_pred_p'][i][j].shape[0]:
                     # Get the momentum predictions and true momenta from the specified columns
                     node_pred_p = out['node_pred_p'][i][j]
                     node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
@@ -232,7 +232,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                         # Increment the number of nodes
                         n_clusts_momentum += len(clusts)
 
-                if compute_vtx and out['node_pred_vtx'][i][j].shape:
+                if compute_vtx and out['node_pred_vtx'][i][j].shape[0]:
                     # Get the vertex predictions, node features and true vertices from the specified columns
                     node_pred_vtx = out['node_pred_vtx'][i][j]
                     input_node_features = out['input_node_features'][i][j]
@@ -291,13 +291,13 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
                 # and the accuracy of momentum estimation (RMS relative residual)
-                if compute_type and len(valid_mask_type):
+                if compute_type and out['node_pred_type'][i][j].shape[0] and len(valid_mask_type):
                     type_acc += float(torch.sum(torch.argmax(node_pred_type, dim=1) == node_assn_type))
 
-                if compute_momentum and len(valid_mask_p):
+                if compute_momentum and out['node_pred_p'][i][j].shape[0] and len(valid_mask_p):
                     p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
 
-                if compute_vtx and len(pos_mask_vtx):
+                if compute_vtx and out['node_pred_vtx'][i][j].shape[0] and len(pos_mask_vtx):
                     vtx_position_acc += float(torch.sum(1. - torch.abs(vtx_pred - vtx_label)/(torch.abs(vtx_pred) + torch.abs(vtx_label))))/3.
                     vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[:,3:], dim=1) == node_assn_vtx_pos))
 
