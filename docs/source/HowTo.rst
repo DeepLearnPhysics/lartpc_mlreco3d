@@ -48,24 +48,24 @@ data blob:
 
 How to get true particle information
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-You need to use the parser ``particles_asis``. For example:
+You need to use the parser ``parse_particles``. For example:
 
 .. code-block:: yaml
 
     iotool:
       dataset:
         schema:
-          particles_asis:
-            - parse_particle_asis
+          particles:
+            - parse_particles
             - particle_pcluster
             - cluster3d_pcluster
 
-Then you will be able to access ``data['particles_asis'][entry]``
+Then you will be able to access ``data['particles'][entry]``
 which is a list of objects of type ``larcv::Particle``.
 
 .. code-block:: python
 
-    for p in data['particles_asis'][entry]:
+    for p in data['particles'][entry]:
         mom = np.array([p.px(), p.py(), p.pz()])
         print(p.id(), p.num_voxels(), mom/np.linalg.norm(mom))
 
@@ -107,7 +107,7 @@ How to get true neutrino information
 
 Assuming you are either using a Singularity container that has the right
 larcv2 compiled or you followed the note above explaining how to get it
-by yourself, you can use the ``parse_neutrino_asis`` parser of ``lartpc_mlreco3d``.
+by yourself, you can use the ``parse_neutrinos`` parser of ``lartpc_mlreco3d``.
 
 
 .. code-block:: yaml
@@ -116,7 +116,7 @@ by yourself, you can use the ``parse_neutrino_asis`` parser of ``lartpc_mlreco3d
       dataset:
         schema:
           neutrinos:
-            - parse_neutrino_asis
+            - parse_neutrinos
             - neutrino_mpv
             - cluster3d_pcluster
 

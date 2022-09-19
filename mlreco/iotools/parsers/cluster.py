@@ -4,7 +4,7 @@ from larcv import larcv
 from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.iotools.parsers.sparse import parse_sparse3d
-from mlreco.iotools.parsers.particles import parse_particle_asis
+from mlreco.iotools.parsers.particles import parse_particles
 from mlreco.iotools.parsers.clean_data import clean_sparse_data
 
 
@@ -140,12 +140,12 @@ def parse_cluster3d(cluster_event,
             labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
             labels['primary'] = get_primary_id(cluster_event, particles_v)
         if add_kinematics_info:
-            particles_asis_v  = parse_particle_asis(particle_event, cluster_event)
+            particles_v       = parse_particles(particle_event, cluster_event)
             labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
             labels['p']       = np.array([(p.px()**2+p.py()**2+p.pz()**2)/1e3 for p in particles_v])
-            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_asis_v])
-            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_asis_v])
-            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_asis_v])
+            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
+            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
+            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
             labels['primary_group'] = np.array([p.group_id()==p.parent_id() for p in particles_v], dtype=np.float32)
         labels['sem'] = np.array([p.shape() for p in particles_v])
 
