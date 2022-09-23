@@ -308,9 +308,29 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
 
     all_voxels = input_data[data_idx]
     if 'ghost' in res and apply_deghosting:
-        mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
-        all_voxels = input_data[data_idx][mask_ghost]
+        if 'input_rescaled' not in res:
+            mask_ghost = np.argmax(res['ghost'][data_idx], axis=1) == 0
+            all_voxels = input_data[data_idx][mask_ghost]
+        else:
+            all_voxels = res['input_rescaled'][data_idx]
 
+    # Handle the case where only a single primary is available
+    if len(ppn_candidates) == 1:
+        particle_seg = res['particles_seg'][data_idx][inter_mask][c_indices[0]]
+        end_points = res['particle_node_features'][data_idx][inter_mask][primary_particles][c_indices[0], -9:-3].reshape(-1,3)
+        if particle_seg != 1:
+            # If there's a single shower object, pick the shower start point
+            return end_points[0]
+        else:
+            # If there's a single track, pick the end point with the lowest local charge density
+            voxels = all_voxels[c_candidates[0], coords_col[0]:coords_col[1]]
+            dist_mat = scipy.spatial.distance.cdist(end_points, voxels)
+            mask = dist_mat < 5
+            charges = all_voxels[c_candidates[0],4]
+            locald = [np.sum(charges[mask[0]]), np.sum(charges[mask[1]])]
+            return end_points[np.argmin(locald)]
+
+    # Handle all other cases
     ppn_candidates2 = []
     directions = []
     distances_others, distances_primaries = [], []
