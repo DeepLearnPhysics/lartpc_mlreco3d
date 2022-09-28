@@ -6,7 +6,7 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb
+from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb, mean_nb
 
 
 @nb.njit(cache=True)
@@ -421,7 +421,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
 
 
 @numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
-def inter_cluster_distance(voxels, clsuts, batch_ids):
+def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
     """
     Finds the inter-cluster distance between every pair of clusters within
     each batch, returned as a block-diagonal matrix.
@@ -430,24 +430,45 @@ def inter_cluster_distance(voxels, clsuts, batch_ids):
         voxels (torch.tensor) : (N,3) Tensor of voxel coordinates
         clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
         batch_ids (np.ndarray): (C) List of cluster batch IDs
+        mode (str)            : Eiher use closest voxel distance (`voxel`) or centroid distance (`centroid`)
     Returns:
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
     """
+    # If there is no batch_ids provided, assign 0 to all clusters
+    if batch_ids is None:
+        batch_ids = np.zeros(len(clusts), dtype=np.int64) 
+
     return _inter_cluster_distance(voxels, clusts, batch_ids, mode)
 
-@nb.njit(parallel=True, cache=True)
+@nb.njit(parallel=True)
 def _inter_cluster_distance(voxels: nb.float64[:,:],
                             clusts: nb.types.List(nb.int64[:]),
-                            batch_ids: nb.int64[:]) -> nb.float64[:,:]:
+                            batch_ids: nb.int64[:],
+                            mode: str = 'voxel') -> nb.float64[:,:]:
 
+    assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
-    for i in nb.prange(len(batch_ids)):
-        for j in range(len(batch_ids)):
-            if batch_ids[i] == batch_ids[j]:
-                if i < j:
-                    dist_mat[i,j] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
-                elif i > j:
-                    dist_mat[i,j] = dist_mat[j,i]
+    if mode == 'voxel':
+        for i in nb.prange(len(batch_ids)):
+            for j in range(len(batch_ids)):
+                if batch_ids[i] == batch_ids[j]:
+                    if i < j:
+                        dist_mat[i,j] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
+                    elif i > j:
+                        dist_mat[i,j] = dist_mat[j,i]
+    elif mode == 'centroid':
+        centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
+        for i in nb.prange(len(batch_ids)):
+            centroids[i] = mean_nb(voxels[clusts[i]], axis=0)
+        for i in nb.prange(len(batch_ids)):
+            for j in range(len(batch_ids)):
+                if batch_ids[i] == batch_ids[j]:
+                    if i < j:
+                        dist_mat[i,j] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
+                    else:
+                        dist_mat[i,j] = dist_mat[j,i]
+    else:
+        raise ValueError('Inter-cluster distance mode not supported')
 
     return dist_mat
 
