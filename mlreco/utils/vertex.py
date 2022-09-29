@@ -316,7 +316,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
 
     # Handle the case where only a single primary is available
     if len(ppn_candidates) == 1:
-        particle_seg = res['particles_seg'][data_idx][inter_mask][c_indices[0]]
+        particle_seg = res['particles_seg'][data_idx][inter_mask][primary_particles][c_indices[0]]
         end_points = res['particle_node_features'][data_idx][inter_mask][primary_particles][c_indices[0], -9:-3].reshape(-1,3)
         if particle_seg != 1:
             # If there's a single shower object, pick the shower start point
