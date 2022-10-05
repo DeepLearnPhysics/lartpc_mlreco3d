@@ -582,7 +582,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
@@ -650,7 +650,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 res['deghost_' + key] = res_deghost[key]
             accuracy += res_deghost['accuracy']
             loss += self.deghost_weight*res_deghost['loss']
-            deghost = (seg_label[0][:,-1] < 5) & (out['ghost'][0][:,0] > out['ghost'][0][:,1]) # Only non-ghost (both true and pred) can go in semseg eval
+            deghost = (out['ghost'][0][:,0] > out['ghost'][0][:,1]) & (seg_label[0][:,-1] < 5) # Only apply loss to reco/true non-ghosts
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -726,7 +726,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
                 segmentation_pred = out['segmentation'][0]
 
-                if self.enable_ghost:
+                if self.enable_ghost and not self.enable_charge_rescaling:
                     segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
                     gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)

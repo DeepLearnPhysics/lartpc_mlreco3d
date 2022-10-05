@@ -752,7 +752,7 @@ class FullChainEvaluator(FullChainPredictor):
                 - particle_corrected
                 - cluster3d_pcluster
             particles_asis:
-                - parse_particle_asis
+                - parse_particles
                 - particle_pcluster
                 - cluster3d_pcluster
 

@@ -302,15 +302,15 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     # If 'points' is specified in `concat_result`,
     # then it won't be unwrapped.
     if len(points) == len(ppn_coords[-1]):
-        #pass
+        pass
         # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
-        points = points[ppn_coords[-1][:, 0] == entry, :]
+        #points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
         points = out['points'][entry]
 
     enable_classify_endpoints = 'classify_endpoints' in out
     if enable_classify_endpoints:
-        classify_endpoints = out['classify_endpoints'][0][ppn_coords[-1][:, 0] == entry, :]#[entry]
+        classify_endpoints = out['classify_endpoints'][0]
 
     mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
@@ -349,7 +349,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         batch_index = batch_ids == b
         batch_index2 = ppn_coords[-1][:, 0] == b
         # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
-        mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index][:, 1] > score_threshold)
+        mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index2][:, 1] > score_threshold)
         # If we want to restrict the postprocessing to specific voxels
         # (e.g. within a particle cluster, not the full event)
         # then use the argument `selection`.
@@ -362,26 +362,26 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
             new_mask[indices] = mask[indices]
             mask = new_mask
 
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
-        ppn_type_softmax = scipy.special.softmax(points[batch_index][mask][:, type_col[0]:type_col[1]], axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
+        ppn_type_softmax = scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1)
         if enable_classify_endpoints:
-            ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index][mask], axis=1)
+            ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index2][mask], axis=1)
         if enforce_type:
             for c in range(num_classes):
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
-                    d = scipy.spatial.distance.cdist(points[batch_index][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
+                    d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
                     ppn_mask = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
-                    final_scores.append(scores[batch_index][mask][ppn_points][ppn_mask])
+                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
+                    final_scores.append(scores[batch_index2][mask][ppn_points][ppn_mask])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
                     if enable_classify_endpoints:
                         final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
         else:
-            final_points = [points[batch_index][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
-            final_scores = [scores[batch_index][mask]]
+            final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
+            final_scores = [scores[batch_index2][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]
             if enable_classify_endpoints:

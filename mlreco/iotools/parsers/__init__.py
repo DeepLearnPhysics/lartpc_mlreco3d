@@ -24,8 +24,8 @@ List of existing parsers
 .. csv-table:: Particle parsers
     :header: Parser name, Description
 
-    ``parse_particle_asis``, Retrieve array of larcv::Particle
-    ``parse_neutrino_asis``, Retrieve array of larcv::Neutrino
+    ``parse_particles``, Retrieve array of larcv::Particle
+    ``parse_neutrinos``, Retrieve array of larcv::Neutrino
     ``parse_particle_points``, Retrieve array of larcv::Particle ground truth points tensor
     ``parse_particle_coords``, Retrieve array of larcv::Particle coordinates (start and end) and start time
     ``parse_particle_graph``, Construct edges between particles (i.e. clusters) from larcv::EventParticle
@@ -87,13 +87,15 @@ from mlreco.iotools.parsers.cluster import (
 )
 
 from mlreco.iotools.parsers.particles import (
-    parse_particle_asis,
-    parse_neutrino_asis,
+    parse_particles,
+    parse_neutrinos,
     parse_particle_points,
     parse_particle_coords,
     parse_particle_graph,
     parse_particle_singlep_pdg,
     parse_particle_singlep_einit,
+    parse_particle_asis, # Deprecated
+    parse_neutrino_asis, # Deprecated
     parse_particle_points_with_tagging, # Deprecated
     parse_particle_graph_corrected # Deprecated
 )

@@ -261,7 +261,7 @@ def test_parse_semantics():
 def test_parse_weights():
     pass
 
-def test_parse_particle_asis():
+def test_parse_particles():
     pass
 
 @pytest.mark.parametrize("event_cluster3d", [3], indirect=True)
