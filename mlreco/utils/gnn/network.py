@@ -440,7 +440,7 @@ def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
 
     return _inter_cluster_distance(voxels, clusts, batch_ids, mode)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _inter_cluster_distance(voxels: nb.float64[:,:],
                             clusts: nb.types.List(nb.int64[:]),
                             batch_ids: nb.int64[:],
@@ -448,25 +448,20 @@ def _inter_cluster_distance(voxels: nb.float64[:,:],
 
     assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
+    indxi, indxj = np.triu_indices(len(batch_ids), 1)
     if mode == 'voxel':
-        for i in nb.prange(len(batch_ids)):
-            for j in range(len(batch_ids)):
-                if batch_ids[i] == batch_ids[j]:
-                    if i < j:
-                        dist_mat[i,j] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
-                    elif i > j:
-                        dist_mat[i,j] = dist_mat[j,i]
+        for k in nb.prange(len(indxi)):
+            i, j = indxi[k], indxj[k]
+            if batch_ids[i] == batch_ids[j]:
+                dist_mat[i,j] = dist_mat[j,i] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
     elif mode == 'centroid':
         centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
         for i in nb.prange(len(batch_ids)):
             centroids[i] = mean_nb(voxels[clusts[i]], axis=0)
-        for i in nb.prange(len(batch_ids)):
-            for j in range(len(batch_ids)):
-                if batch_ids[i] == batch_ids[j]:
-                    if i < j:
-                        dist_mat[i,j] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
-                    else:
-                        dist_mat[i,j] = dist_mat[j,i]
+        for k in nb.prange(len(indxi)):
+            i, j = indxi[k], indxj[k]
+            if batch_ids[i] == batch_ids[j]:
+                dist_mat[i,j] = dist_mat[j,i] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
     else:
         raise ValueError('Inter-cluster distance mode not supported')
 
