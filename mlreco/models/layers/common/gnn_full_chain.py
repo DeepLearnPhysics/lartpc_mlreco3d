@@ -726,7 +726,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
                 segmentation_pred = out['segmentation'][0]
 
-                if self.enable_ghost and not self.enable_charge_rescaling:
+                if self.enable_ghost: #and not self.enable_charge_rescaling:
                     segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
                     gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
