@@ -148,7 +148,7 @@ def get_validation_df(log_dir, keys, prefix='inference'):
 def draw_training_curves(log_dir, models, metrics,
                          limits={}, model_names={}, metric_names={},
                          max_iter=-1, step=1, smoothing=1, print_min=False, print_max=False,
-                         plotly=True, same_plot=True, paper=False, leg_ncols=1,
+                         interactive=True, same_plot=True, paper=False, leg_ncols=1,
                          figure_name='', train_prefix='train', val_prefix='inference'):
     """
     Finds all training and validation log files inside the specified 
@@ -159,22 +159,22 @@ def draw_training_curves(log_dir, models, metrics,
         models (list)      : List of model (folder) names under the main directory
         metrics (list)     : List of quantities to draw
         limits (list/dict) : List of y boundaries for the plot (or dictionary of y boundaries, one per metric)
-        model_names (dict) : Dictionary which maps raw model names to model labels (default: empty dict)
-        metric_names (dict): Dictionary which maps raw metric names to metric labels (default: empty dict)
-        max_iter (int)     : Maximum number of interation to include in the plot (default: -1)
-        step (int)         : Step between two successive iterations that are represented (default: 1)
-        smoothing (int)    : Number of iteration over which to average the metric value (default: 1)
-        plotly (bool)      : Use plotly to draw (interactive)
-        same_plot (bool)   : Draw all model/metric pairs on a single plot (default: True)
-        paper (bool)       : Format plot for paper (use latex)
-        leg_ncols (int)    : Number of columns in the legend (default: 3)
-        figure_name (str)  : Name of the figure. If specified, figure is saved (default: '')
+        model_names (dict) : Dictionary which maps raw model names to model labels (default: `{}`)
+        metric_names (dict): Dictionary which maps raw metric names to metric labels (default: `{}`)
+        max_iter (int)     : Maximum number of interation to include in the plot (default: `-1`)
+        step (int)         : Step between two successive iterations that are represented (default: `1`)
+        smoothing (int)    : Number of iteration over which to average the metric value (default: `1`)
+        interactive (bool) : Use plotly to draw (default: `True`)
+        same_plot (bool)   : Draw all model/metric pairs on a single plot (default: `True`)
+        paper (bool)       : Format plot for paper, using latex (default: `False`)
+        leg_ncols (int)    : Number of columns in the legend (default: `1`)
+        figure_name (str)  : Name of the figure. If specified, figure is saved (default: `''`)
         train_prefix (str) : Prefix shared between training file names (default: `train`)
         val_prefix (str)   : Prefix shared between validation file names (default: `inference`)
     """
     # Set the style
     plotly_colors = pcolors.convert_colors_to_same_type(pcolors.DEFAULT_PLOTLY_COLORS, 'tuple')[0]
-    if not plotly:
+    if not interactive:
         cr_char = '\n'
         if paper:
             apply_latex_style()
@@ -201,7 +201,7 @@ def draw_training_curves(log_dir, models, metrics,
  
     # If there is >1 subplot, prepare the canvas
     if not same_plot:
-        if not plotly:
+        if not interactive:
             fig, axes = plt.subplots(len(metrics), sharex=True)
             fig.subplots_adjust(hspace=0)
             for axis in axes:
@@ -218,10 +218,11 @@ def draw_training_curves(log_dir, models, metrics,
                     layout[f'yaxis{i+1}']['range'] = limits[metrics[i]]
 
             fig.update_layout(layout)
- 
-    elif plotly:
+    elif interactive:
         if isinstance(limits, list) and len(limits) == 2:
             layout['yaxis']['range'] = limits
+        if len(metrics) == 1:
+            layout['yaxis']['title']['text'] = metric_names[metrics[0]] if metrics[0] in metric_names else metrics[0]
         fig = go.Figure(layout=layout)
 
     # Get the DataFrames for the requested models/metrics
@@ -254,6 +255,8 @@ def draw_training_curves(log_dir, models, metrics,
             else:
                 if len(models) == 1:
                     label = metric_names[metric_name] if metric_name in metric_names else metric_name
+                elif len(metrics) == 1:
+                    label = model_names[key] if key in model_names else key
                 else:
                     label = f'{metric_names[metric_name] if metric_name in metric_names else metric_name} ({model_names[key] if key in model_names else key})'
                 if print_min and draw_val:
@@ -263,7 +266,7 @@ def draw_training_curves(log_dir, models, metrics,
 
             # Prepare the relevant plots
             color = colors[key] if not same_plot else plotly_colors[i*len(models)+j]
-            if not plotly:
+            if not interactive:
                 axis = plt if same_plot else axes[i]
                 axis.plot(epoch_train, metric_train, label=label, color=color, alpha=0.5, linewidth=linewidth)
                 if draw_val:
@@ -275,7 +278,7 @@ def draw_training_curves(log_dir, models, metrics,
                     # hovertext = [f'(Iteration: {iter_val[i]:d}, Epoch: {epoch_val[i]:0.3f}, Metric: {metricm_val[i]:0.3f})' for i in range(len(iter_val))]
                     graphs += [go.Scatter(x=epoch_val, y=metricm_val, error_y_array=metrice_val, mode='markers', hovertext=hovertext, marker=dict(color=color), showlegend=False)]
 
-    if not plotly:
+    if not interactive:
         if not same_plot:
             for i, metric in enumerate(metrics):
                 metric_name = metric.split(':')[0]
@@ -286,7 +289,9 @@ def draw_training_curves(log_dir, models, metrics,
             axes[0].legend(ncol=leg_ncols)
         else:
             plt.xlabel('Epochs')
-            plt.ylabel('Metric')
+            ylabel = metric_names[metrics[0]] if metrics[0] in metric_names else metrics[0]
+            print(ylabel)
+            plt.ylabel(ylabel if len(metrics) == 1 else 'Metric')
             plt.gca().set_ylim(limits)
             legend_title = model_names[models[0]] if models[0] in model_names else models[0]
             plt.legend(ncol=leg_ncols, title=legend_title if len(models)==1 else None)
