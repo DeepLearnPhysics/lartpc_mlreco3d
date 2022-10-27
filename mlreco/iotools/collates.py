@@ -7,7 +7,124 @@ input data.
 import numpy as np
 
 
-def CollateSparse(batch):
+class VolumeBoundaries:
+    """
+    VolumeBoundaries is a helper class to deal with multiple detector volumes. Assume you have N
+    volumes that you want to process independently, but your input data file does not separate
+    between them (maybe it is hard to make the separation at simulation level, e.g. in Supera).
+    You can specify in the configuration of the collate function where the volume boundaries are
+    and this helper class will take care of the following:
+
+    1. Relabel batch ids: this will introduce "virtual" batch ids to account for each volume in
+    each batch.
+
+    2. Shift coordinates: voxel coordinates are shifted such that the origin is always the bottom
+    left corner of a volume. In other words, it ensures the voxel coordinate phase space is the
+    same regardless of which volume we are processing. That way you can train on a single volume
+    (subpart of the detector, e.g. cryostat or TPC) and process later however many volumes make up
+    your detector.
+
+    3. Sort coordinates: there is no guarantee that concatenating coordinates of N volumes vs the
+    stored coordinates for label tensors which cover all volumes already by default will yield the
+    same ordering. Hence we do a np.lexsort on coordinates after 1. and 2. have happened. We sort
+    by: batch id, z, y, x in this order.
+
+    An example of configuration would be :
+
+    ```yaml
+    collate:
+      collate_fn: Collatesparse
+      boundaries: [[1376.3], None, None]
+    ```
+
+    `boundaries` is what defines the different volumes. It has a length equal to the spatial dimension.
+    For each spatial dimension, `None` means that there is no boundary along that axis.
+    A list of floating numbers specifies the volume boundaries along that axis in voxel units.
+    The list of volumes will be inferred from this list of boundaries ("meshgrid" style, taking
+    all possible combinations of the boundaries to generate all the volumes).
+    """
+    def __init__(self, definitions):
+        """
+        See explanation of `boundaries` above.
+
+        Parameters
+        ==========
+        definitions: list
+        """
+        self.dim = len(definitions)
+        self.boundaries = definitions
+
+        # Quick sanity check
+        for i in range(self.dim):
+            assert self.boundaries[i] == 'None' or (isinstance(self.boundaries[i], list) and len(self.boundaries[i]) > 0)
+            if self.boundaries[i] == 'None':
+                self.boundaries[i] = None
+                continue
+            self.boundaries[i].sort() # Ascending order
+
+
+    def split(self, voxels):
+        """
+        Parameters
+        ==========
+        voxels: np.array, shape (N, 4)
+            It should contain (batch id, x, y, z) coordinates in this order (as an example if you are working in 3D).
+
+        Returns
+        =======
+        new_voxels: np.array, shape (N, 4)
+            The array contains voxels with shifted coordinates + virtual batch ids. This array is not yet permuted
+            to obey the lexsort.
+        perm: np.array, shape (N,)
+            This is a permutation mask which can be used to apply the lexsort to both the new voxels and the features
+            or data tensor (which is not passed to this function).
+        """
+        coords = voxels[:, 1:]
+        assert len(coords.shape) == 2
+        assert self.dim == coords.shape[1]
+
+        all_boundaries, shifts = [], []
+        n_boundaries =[]
+        for n in range(self.dim):
+            if self.boundaries[n] is None: 
+                all_boundaries.append([np.ones((coords.shape[0],), dtype=bool)])
+                shifts.append([0.])
+                n_boundaries.append(0)
+                continue
+            dim_boundaries = [] 
+            dim_shifts = []
+            for i in range(len(self.boundaries[n])):
+                dim_boundaries.append( coords[:, n] < self.boundaries[n][i] )
+                dim_shifts.append(self.boundaries[n][i-1] if i > 0 else 0.)
+            dim_boundaries.append( coords[:, n] >= self.boundaries[n][-1] )
+            dim_shifts.append(self.boundaries[n][-1])
+            all_boundaries.append(dim_boundaries)
+            shifts.append(dim_shifts)
+            n_boundaries.append(len(self.boundaries[n]))
+
+        #n_volumes = np.prod([len(x) for x in all_boundaries])
+        # Generate indices
+        all_index = []
+        for n in range(self.dim):
+            all_index.append(np.arange(n_boundaries[n]+1))
+        combo = np.array(np.meshgrid(*tuple(all_index))).T.reshape(-1, self.dim)
+
+        virtual_batch_ids = np.zeros((coords.shape[0],), dtype=np.int32)
+        new_coords = coords.copy()
+        for idx, c in enumerate(combo):
+            m = all_boundaries[0][c[0]]
+            for n in range(1, self.dim):
+                m = np.logical_and(m, all_boundaries[n][c[n]])
+            virtual_batch_ids[m] = idx
+            for n in range(self.dim):
+                new_coords[m, n] -= int(shifts[n][c[n]])
+
+        new_voxels = np.concatenate([virtual_batch_ids[:, None], new_coords], axis=1)
+        perm = np.lexsort(new_voxels.T[list(range(1, self.dim+1)) + [0], :])
+        return new_voxels, perm
+
+
+def CollateSparse(batch, **kwargs):
     '''
     Collate sparse input.
 
@@ -15,6 +132,9 @@ def CollateSparse(batch):
     ----------
     batch : a list of dictionary
         Each list element (single dictionary) is a minibatch data = key-value pairs where a value is a parser function return.
+    boundaries: list, optional, default is None
+        This contains a list of volume boundaries if you want to process distinct volumes independently. See VolumeBoundaries
+        documentation for more details and explanations.
 
     Returns
     -------
@@ -29,6 +149,10 @@ def CollateSparse(batch):
     - The dictionaries in the input batch tuple are assumed to have identical list of keys.
     '''
     import MinkowskiEngine as ME
+
+    split_boundaries = 'boundaries' in kwargs
+    vb = VolumeBoundaries(kwargs['boundaries']) if split_boundaries else None
+
     result = {}
     concat = np.concatenate
     for key in batch[0].keys():
@@ -54,7 +178,11 @@ def CollateSparse(batch):
                 coords_minibatch.append(batched_coords)
 
             #coords = torch.Tensor(concat(coords_minibatch, axis=0))
+            dim = coords[0].shape[1]
             coords = concat(coords_minibatch, axis=0)
+            if split_boundaries:
+                coords[:, :dim+1], perm = vb.split(coords[:, :dim+1])
+                coords = coords[perm]
 
             result[key] = coords
         else:
@@ -89,6 +217,12 @@ def CollateSparse(batch):
                                            axis=1 ) for batch_id, sample in enumerate(batch) ],
                                  axis = 0)
                 data = concat([sample[key][1] for sample in batch], axis=0)
+
+                if split_boundaries:
+                    voxels, perm = vb.split(voxels)
+                    voxels = voxels[perm]
+                    data = data[perm]
+
                 result[key] = concat([voxels, data], axis=1)
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:

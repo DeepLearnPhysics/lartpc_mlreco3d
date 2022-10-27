@@ -257,9 +257,6 @@ class FullChain(FullChainGNN):
             input = [input[0][deghost]]
 
             if label_seg is not None and label_clustering is not None:
-
-                #print(label_seg[0].shape, label_clustering[0].shape)
-
                 # ME uses 0 for batch column, so need to compensate
                 label_clustering = adapt_labels(result,
                                                 label_seg,

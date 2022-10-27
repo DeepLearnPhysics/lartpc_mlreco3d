@@ -44,6 +44,13 @@ def loader_factory(cfg,event_list=None):
     shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
     num_workers  = 1    if not 'num_workers' in params else int (params['num_workers'])
     collate_fn   = None if not 'collate_fn' in params  else str (params['collate_fn' ])
+    collate_kwargs = {}
+
+    if collate_fn is None:
+        collate_params = params.get('collate', {})
+        collate_fn = None if not 'collate_fn' in collate_params else str(collate_params['collate_fn'])
+        collate_params.pop('collate_fn', None)
+        collate_kwargs = collate_params
 
     if not int(params['batch_size']) % int(params['minibatch_size']) == 0:
         print('iotools.batch_size (',params['batch_size'],'must be divisble by iotools.minibatch_size',params['minibatch_size'])
@@ -51,6 +58,7 @@ def loader_factory(cfg,event_list=None):
 
     import mlreco.iotools.collates
     import mlreco.iotools.samplers
+    from functools import partial
 
     ds = dataset_factory(cfg,event_list)
     sampler = None
@@ -59,7 +67,7 @@ def loader_factory(cfg,event_list=None):
         sam_cfg['minibatch_size']=cfg['iotool']['minibatch_size']
         sampler = getattr(mlreco.iotools.samplers,sam_cfg['name']).create(ds,sam_cfg)
     if collate_fn is not None:
-        collate_fn = getattr(mlreco.iotools.collates,collate_fn)
+        collate_fn = partial(getattr(mlreco.iotools.collates,collate_fn), **collate_kwargs)
         loader = DataLoader(ds,
                             batch_size  = minibatch_size,
                             shuffle     = shuffle,

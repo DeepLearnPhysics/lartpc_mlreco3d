@@ -124,9 +124,6 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         assert true_mask.shape[0] == label_seg[0].shape[0]
     c3 = max(c2, batch_column+1)
 
-    indices = "2762  2763  2767  2769  4821  4822  4831  4832  4833  4834  4835  4844  4857  6617 12095 12096 12097".split()
-    indices = np.array([int(i) for i in indices])
-
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
