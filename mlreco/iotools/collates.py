@@ -62,6 +62,73 @@ class VolumeBoundaries:
                 continue
             self.boundaries[i].sort() # Ascending order
 
+        n_boundaries = [len(self.boundaries[n]) if self.boundaries[n] is not None else 0 for n in range(self.dim)]
+        # Generate indices that describe all volumes
+        all_index = []
+        for n in range(self.dim):
+            all_index.append(np.arange(n_boundaries[n]+1))
+        self.combo = np.array(np.meshgrid(*tuple(all_index))).T.reshape(-1, self.dim)
+
+        # Generate coordinate shifts for each volume
+        # List of list (1st dim is spatial dimension, 2nd is volume splits in a given spatial dimension)
+        shifts = []
+        for n in range(self.dim):
+            if self.boundaries[n] is None:
+                shifts.append([0.])
+                continue
+            dim_shifts = []
+            for i in range(len(self.boundaries[n])):
+                dim_shifts.append(self.boundaries[n][i-1] if i > 0 else 0.)
+            dim_shifts.append(self.boundaries[n][-1])
+            shifts.append(dim_shifts)
+        self.shifts = shifts
+
+    def num_volumes(self):
+        """
+        Returns
+        =======
+        int
+        """
+        return len(self.combo)
+
+    def virtual_batch_ids(self, entry=0):
+        """
+        Parameters
+        ==========
+        entry: int, optional
+            Which entry of the dataset you are trying to access.
+
+        Returns
+        =======
+        list
+            List of virtual batch ids that correspond to this entry.
+        """
+        return np.arange(len(self.combo)) + entry * self.num_volumes()
+
+    def translate(self, voxels, volume):
+        """
+        Meant to reverse what the split method does: for voxels coordinates initially in the range of volume 0,
+        translate to the range of a specific volume given in argument.
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Expected shape is (D_0, ..., D_N, self.dim) with N >=0. In other words, voxels can be a list of
+            coordinate or a single coordinate with shape (d,).
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Translated voxels array, using internally computed shifts.
+        """
+        assert volume >= 0 and volume < self.num_volumes()
+        assert voxels.shape[-1] == self.dim
+
+        new_voxels = voxels.copy()
+        for n in range(self.dim):
+            new_voxels[..., n] += int(self.shifts[n][self.combo[volume][n]])
+        return new_voxels
 
     def split(self, voxels):
         """
@@ -79,45 +146,35 @@ class VolumeBoundaries:
             This is a permutation mask which can be used to apply the lexsort to both the new voxels and the features
             or data tensor (which is not passed to this function).
         """
+        assert len(voxels.shape) == 2
+        batch_ids = voxels[:, 0]
         coords = voxels[:, 1:]
-        assert len(coords.shape) == 2
         assert self.dim == coords.shape[1]
 
-        all_boundaries, shifts = [], []
-        n_boundaries =[]
+        # This will contain the list of boolean masks corresponding to each boundary
+        # in each spatial dimension (so, list of list)
+        all_boundaries = []
         for n in range(self.dim):
             if self.boundaries[n] is None: 
                 all_boundaries.append([np.ones((coords.shape[0],), dtype=bool)])
-                shifts.append([0.])
-                n_boundaries.append(0)
                 continue
             dim_boundaries = [] 
-            dim_shifts = []
             for i in range(len(self.boundaries[n])):
                 dim_boundaries.append( coords[:, n] < self.boundaries[n][i] )
-                dim_shifts.append(self.boundaries[n][i-1] if i > 0 else 0.)
             dim_boundaries.append( coords[:, n] >= self.boundaries[n][-1] )
-            dim_shifts.append(self.boundaries[n][-1])
             all_boundaries.append(dim_boundaries)
-            shifts.append(dim_shifts)
-            n_boundaries.append(len(self.boundaries[n]))
-
-        #n_volumes = np.prod([len(x) for x in all_boundaries])
-        # Generate indices
-        all_index = []
-        for n in range(self.dim):
-            all_index.append(np.arange(n_boundaries[n]+1))
-        combo = np.array(np.meshgrid(*tuple(all_index))).T.reshape(-1, self.dim)
 
         virtual_batch_ids = np.zeros((coords.shape[0],), dtype=np.int32)
         new_coords = coords.copy()
-        for idx, c in enumerate(combo):
-            m = all_boundaries[0][c[0]]
+        for idx, c in enumerate(self.combo): # Looping over volumes
+            m = all_boundaries[0][c[0]] # Building a boolean mask for this volume
             for n in range(1, self.dim):
                 m = np.logical_and(m, all_boundaries[n][c[n]])
-            virtual_batch_ids[m] = idx
+            # Now defining virtual batch id
+            # We need to take into account original batch id
+            virtual_batch_ids[m] = idx + batch_ids[m] * self.num_volumes()
             for n in range(self.dim):
-                new_coords[m, n] -= int(shifts[n][c[n]])
+                new_coords[m, n] -= int(self.shifts[n][c[n]])
 
         new_voxels = np.concatenate([virtual_batch_ids[:, None], new_coords], axis=1)
         perm = np.lexsort(new_voxels.T[list(range(1, self.dim+1)) + [0], :])

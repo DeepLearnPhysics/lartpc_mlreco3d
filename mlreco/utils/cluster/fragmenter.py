@@ -23,6 +23,7 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
                             dtype=object if not same_length else np.int64)
     frag_batch_ids_np = np.array(frag_batch_ids)
     frag_seg_np = np.array(frag_seg)
+    print('format fragments', np.unique(frag_batch_ids_np, return_counts=True), np.unique(frag_seg_np, return_counts=True))
 
     batches, counts = torch.unique(batch_column, return_counts=True)
     # In case one of the events is "missing" and len(counts) < batch_size

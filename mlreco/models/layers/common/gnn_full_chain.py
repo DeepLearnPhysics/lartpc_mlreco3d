@@ -186,6 +186,7 @@ class FullChainGNN(torch.nn.Module):
         frag_dict = self.get_all_fragments(result, input)
         fragments = frag_dict['frags']
         frag_seg = frag_dict['frag_seg']
+        print('run fragment gnns', np.unique(frag_seg, return_counts=True), len(fragments))
 
         if self.enable_gnn_shower:
 
@@ -217,6 +218,7 @@ class FullChainGNN(torch.nn.Module):
                          fragments[em_mask],
                          output_keys,
                          kwargs)
+            print('run fragment gnns', len(result['shower_fragments'][0][0]), len(fragments[em_mask]), len(fragments))
 
         if self.enable_gnn_track:
 
