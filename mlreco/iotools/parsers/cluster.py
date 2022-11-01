@@ -192,6 +192,27 @@ def parse_cluster3d(cluster_event,
     return np_voxels, np_features
 
 
+def parse_cluster3d_charge_rescaled(cluster_event,
+                                    particle_event = None,
+                                    particle_mpv_event = None,
+                                    sparse_semantics_event = None,
+                                    sparse_value_event_list = None,
+                                    add_particle_info = False,
+                                    add_kinematics_info = False,
+                                    clean_data = True,
+                                    precedence = [1,2,0,3,4],
+                                    type_include_mpr = False):
+    # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
+    np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
+                                             add_particle_info, add_kinematics_info, clean_data, precedence, type_include_mpr)
+
+    from .sparse import parse_sparse3d_charge_rescaled
+    _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
+    np_features[:,0] = val_features[:,-1]
+
+    return np_voxels, np_features
+
+
 def parse_cluster3d_clean_full(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
     from warnings import warn
     warn("Deprecated: parse_cluster3d_clean_full deprecated, use parse_cluster3d instead", DeprecationWarning)
