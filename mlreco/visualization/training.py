@@ -197,7 +197,6 @@ def draw_training_curves(log_dir, models, metrics,
                            legend=dict(font=dict(size=20)))
         if len(models) == 1 and same_plot:
             layout['legend']['title'] = model_names[models[0]] if models[0] in model_names else models[0]
-
  
     # If there is >1 subplot, prepare the canvas
     if not same_plot:
@@ -233,13 +232,13 @@ def draw_training_curves(log_dir, models, metrics,
         val_dfs[key] = get_validation_df(log_subdir, metrics, val_prefix)
         colors[key] = plotly_colors[i]
 
-    # Draw the requested metrics
+    # Loop over the requested metrics
     for i, metric_list in enumerate(metrics):
-        # Draw the training curves
-        metric, metric_name = find_key(dfs[key], metric_list)
+        # Get a graph per training campaign
         for j, key in enumerate(dfs.keys()):
             # Get the necessary data
             epoch_train  = dfs[key]['epoch'][:max_iter:step]
+            metric, metric_name = find_key(dfs[key], metric_list)
             metric_train = dfs[key][metric][:max_iter:step] if smoothing == 1 else dfs[key][metric][:max_iter].rolling(smoothing, min_periods=1, center=True).mean()[::step]
             draw_val     = bool(len(val_dfs[key]['iter']))
             if draw_val:
@@ -290,7 +289,6 @@ def draw_training_curves(log_dir, models, metrics,
         else:
             plt.xlabel('Epochs')
             ylabel = metric_names[metrics[0]] if metrics[0] in metric_names else metrics[0]
-            print(ylabel)
             plt.ylabel(ylabel if len(metrics) == 1 else 'Metric')
             plt.gca().set_ylim(limits)
             legend_title = model_names[models[0]] if models[0] in model_names else models[0]
