@@ -208,7 +208,6 @@ def _get_extra_gnn_features(fragments,
     for c in classes:
         mask |= (frag_seg == c)
     mask = np.where(mask)[0]
-    print('mask', np.unique(frag_seg, return_counts=True), frag_seg.shape, len(mask), classes)
 
     #print("INPUT = ", input)
 

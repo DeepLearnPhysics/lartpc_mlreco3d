@@ -56,10 +56,11 @@ class VolumeBoundaries:
 
         # Quick sanity check
         for i in range(self.dim):
-            assert self.boundaries[i] == 'None' or (isinstance(self.boundaries[i], list) and len(self.boundaries[i]) > 0)
+            assert self.boundaries[i] == 'None' or self.boundaries[i] is None or (isinstance(self.boundaries[i], list) and len(self.boundaries[i]) > 0)
             if self.boundaries[i] == 'None':
                 self.boundaries[i] = None
                 continue
+            if self.boundaries[i] is None: continue
             self.boundaries[i].sort() # Ascending order
 
         n_boundaries = [len(self.boundaries[n]) if self.boundaries[n] is not None else 0 for n in range(self.dim)]
