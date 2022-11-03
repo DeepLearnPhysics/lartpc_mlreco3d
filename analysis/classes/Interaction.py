@@ -35,10 +35,17 @@ class Interaction:
         # Voxel indices of an interaction is defined by the union of
         # constituent particle voxel indices
         self.voxel_indices = []
+        self.points = []
+        self.depositions = []
         for p in self.particles:
             self.voxel_indices.append(p.voxel_indices)
+            self.points.append(p.points)
+            self.depositions.append(p.depositions)
             assert p.interaction_id == interaction_id
         self.voxel_indices = np.hstack(self.voxel_indices)
+        self.points = np.concatenate(self.points, axis=0)
+        self.depositions = np.hstack(self.depositions)
+
         self.size = self.voxel_indices.shape[0]
         self.num_particles = len(self.particles)
 
