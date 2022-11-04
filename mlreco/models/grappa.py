@@ -8,8 +8,8 @@ from mlreco.models.experimental.transformers.transformer import TransformerEncod
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_primary_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph, restrict_graph
 
 class GNN(torch.nn.Module):
     """
@@ -150,8 +150,17 @@ class GNN(torch.nn.Module):
         # Choose what type of network to use
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
-        self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
+        self.edge_dist_metric = base_config.get('edge_dist_metric', 'voxel')
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
+
+        # Turn the edge_max_dist value into a matrix
+        if not isinstance(self.edge_max_dist, list): self.edge_max_dist = [self.edge_max_dist]
+        mat_size = int((np.sqrt(8*len(self.edge_max_dist)+1)-1)/2)
+        max_dist_mat = np.zeros((mat_size, mat_size), dtype=float)
+        max_dist_mat[np.triu_indices(mat_size)] = self.edge_max_dist
+        max_dist_mat += max_dist_mat.T - np.diag(np.diag(max_dist_mat))
+        self.edge_max_dist = max_dist_mat
+        print('edge_max_dist matrix', self.edge_max_dist)
 
         # If requested, merge images together within the batch
         self.merge_batch = base_config.get('merge_batch', False)
@@ -300,26 +309,25 @@ class GNN(torch.nn.Module):
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
-        if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]], clusts, batch_ids, self.edge_dist_metric)
+        if np.any(self.edge_max_dist > -1) or self.network == 'mst' or self.network == 'knn':
+            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
             edge_index = np.empty((2,0), dtype=np.int64)
         elif self.network == 'complete':
-            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = complete_graph(batch_ids)
         elif self.network == 'delaunay':
             import numba as nb
-            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist,
-                                        batch_col=self.batch_index, coords_col=self.coords_index)
+            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, self.batch_index, self.coords_index)
         elif self.network == 'mst':
-            edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = mst_graph(batch_ids, dist_mat)
         elif self.network == 'knn':
             edge_index = knn_graph(batch_ids, self.edge_knn_k, dist_mat)
         elif self.network == 'bipartite':
             clust_ids = get_cluster_label(cluster_data, clusts, self.source_col)
             group_ids = get_cluster_label(cluster_data, clusts, self.target_col)
-            edge_index = bipartite_graph(batch_ids, clust_ids==group_ids, dist_mat, self.edge_max_dist)
+            edge_index = bipartite_graph(batch_ids, clust_ids==group_ids, dist_mat)
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
@@ -327,6 +335,15 @@ class GNN(torch.nn.Module):
         if groups is not None:
             mask = groups[edge_index[0]] == groups[edge_index[1]]
             edge_index = edge_index[:,mask]
+
+        # Restrict the input graph based on edge distance, if requested
+        if np.any(self.edge_max_dist > -1):
+            if self.edge_max_dist.shape[0] == 1:
+                edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist)
+            else:
+                # Here get_cluster_primary_label is used to ensure that Michel/Delta showers are given the appropriate semantic label
+                classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_primary_label(cluster_data, clusts, -1).astype(int)
+                edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist, classes)
 
         # Update result with a list of edges for each batch id
         edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
@@ -346,11 +363,15 @@ class GNN(torch.nn.Module):
                 points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
             if self.add_start_dir:
-                dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
-                x = torch.cat([x, dirs.float()], dim=1)
+                dirs_start = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
+                dirs_end   = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,3:6], clusts, self.start_dir_max_dist, self.start_dir_opt)
+                #x = torch.cat([x, dirs_start.float(), dirs_end.float()], dim=1)
+                x = torch.cat([x, dirs_start.float()], dim=1)
             if self.add_start_dedx:
-                dedxs = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.start_dir_max_dist)
-                x = torch.cat([x, dedxs.reshape(-1,1).float()], dim=1)
+                dedxs_start = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.start_dir_max_dist)
+                dedxs_end   = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,3:6], clusts, self.start_dir_max_dist)
+                #x = torch.cat([x, dedxs_start.reshape(-1,1).float(), dedxs_end.reshape(-1,1).float()], dim=1)
+                x = torch.cat([x, dedxs_start.reshape(-1,1).float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)

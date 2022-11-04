@@ -10,8 +10,10 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     to make the relevant conversions to numpy where necessary.
 
     Args:
-        type_arg (str)    : Argument name which determines the data type and device location
-        list_args ([str]) : List of arguments which need to be cast to a numba list
+        cast_args ([str]): List of arguments to be cast to numpy
+        list_args ([str]): List of arguments which need to be cast to a numba typed list
+        keep_torch (bool): Make the output a torch object, if the reference argument is one
+        ref_arg (str)    : Reference argument used to assign a type and device to the torch output
     Returns:
         Function
     '''
@@ -63,7 +65,7 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
 
 
 @nb.njit(cache=True)
-def unique_nb(x: nb.int64[:]) -> (nb.int64[:], nb.int64[:]):
+def unique_nb(x: nb.int32[:]) -> (nb.int32[:], nb.int32[:]):
     b = np.sort(x.flatten())
     unique = list(b[:1])
     counts = [1 for _ in unique]
@@ -77,9 +79,9 @@ def unique_nb(x: nb.int64[:]) -> (nb.int64[:], nb.int64[:]):
 
 
 @nb.njit(cache=True)
-def submatrix_nb(x:nb.float64[:,:],
-                 index1: nb.int64[:],
-                 index2: nb.int64[:]) -> nb.float64[:,:]:
+def submatrix_nb(x:nb.float32[:,:],
+                 index1: nb.int32[:],
+                 index2: nb.int32[:]) -> nb.float32[:,:]:
     """
     Numba implementation of matrix subsampling
     """
@@ -91,8 +93,8 @@ def submatrix_nb(x:nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def cdist_nb(x1: nb.float64[:,:],
-             x2: nb.float64[:,:]) -> nb.float64[:,:]:
+def cdist_nb(x1: nb.float32[:,:],
+             x2: nb.float32[:,:]) -> nb.float32[:,:]:
     """
     Numba implementation of Eucleadian cdist in 3D.
     """
@@ -104,8 +106,8 @@ def cdist_nb(x1: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def mean_nb(x: nb.float64[:,:],
-            axis: nb.int64) -> nb.float64[:]:
+def mean_nb(x: nb.float32[:,:],
+            axis: nb.int32) -> nb.float32[:]:
     """
     Numba implementation of np.mean(x, axis)
     """
@@ -121,13 +123,13 @@ def mean_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def argmin_nb(x: nb.float64[:,:],
-              axis: nb.int64) -> nb.int64[:]:
+def argmin_nb(x: nb.float32[:,:],
+              axis: nb.int32) -> nb.int32[:]:
     """
     Numba implementation of np.argmin(x, axis)
     """
     assert axis == 0 or axis == 1
-    argmin = np.empty(x.shape[1-axis], dtype=np.int64)
+    argmin = np.empty(x.shape[1-axis], dtype=np.int32)
     if axis == 0:
         for i in range(len(argmin)):
             argmin[i] = np.argmin(x[:,i])
@@ -138,13 +140,13 @@ def argmin_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def argmax_nb(x: nb.float64[:,:],
-              axis: nb.int64) -> nb.int64[:]:
+def argmax_nb(x: nb.float32[:,:],
+              axis: nb.int32) -> nb.int32[:]:
     """
     Numba implementation of np.argmax(x, axis)
     """
     assert axis == 0 or axis == 1
-    argmax = np.empty(x.shape[1-axis], dtype=np.int64)
+    argmax = np.empty(x.shape[1-axis], dtype=np.int32)
     if axis == 0:
         for i in range(len(argmax)):
             argmax[i] = np.argmax(x[:,i])
@@ -155,13 +157,13 @@ def argmax_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def min_nb(x: nb.float64[:,:],
-           axis: nb.int64) -> nb.float64[:]:
+def min_nb(x: nb.float32[:,:],
+           axis: nb.int32) -> nb.float32[:]:
     """
     Numba implementation of np.max(x, axis)
     """
     assert axis == 0 or axis == 1
-    xmin = np.empty(x.shape[1-axis], dtype=np.int64)
+    xmin = np.empty(x.shape[1-axis], dtype=np.int32)
     if axis == 0:
         for i in range(len(xmin)):
             xmin[i] = np.min(x[:,i])
@@ -172,13 +174,13 @@ def min_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def max_nb(x: nb.float64[:,:],
-           axis: nb.int64) -> nb.float64[:]:
+def max_nb(x: nb.float32[:,:],
+           axis: nb.int32) -> nb.float32[:]:
     """
     Numba implementation of np.max(x, axis)
     """
     assert axis == 0 or axis == 1
-    xmax = np.empty(x.shape[1-axis], dtype=np.int64)
+    xmax = np.empty(x.shape[1-axis], dtype=np.int32)
     if axis == 0:
         for i in range(len(xmax)):
             xmax[i] = np.max(x[:,i])
@@ -189,8 +191,8 @@ def max_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def all_nb(x: nb.float64[:,:],
-              axis: nb.int64) -> nb.int64[:]:
+def all_nb(x: nb.float32[:,:],
+              axis: nb.int32) -> nb.int32[:]:
     """
     Numba implementation of np.all(x, axis)
     """
@@ -206,8 +208,8 @@ def all_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def softmax_nb(x: nb.float64[:,:],
-               axis: nb.int64) -> nb.float64[:,:]:
+def softmax_nb(x: nb.float32[:,:],
+               axis: nb.int32) -> nb.float32[:,:]:
     assert axis == 0 or axis == 1
     if axis == 0:
         xmax = max_nb(x, axis=0)
@@ -220,7 +222,7 @@ def softmax_nb(x: nb.float64[:,:],
 
 
 @nb.njit(cache=True)
-def log_loss_nb(x1: nb.boolean[:], x2: nb.float64[:]) -> nb.float64:
+def log_loss_nb(x1: nb.boolean[:], x2: nb.float32[:]) -> nb.float32:
     if len(x1) > 0:
         return -(np.sum(np.log(x2[x1])) + np.sum(np.log(1.-x2[~x1])))/len(x1)
     else:

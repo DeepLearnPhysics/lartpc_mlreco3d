@@ -123,10 +123,9 @@ def get_cluster_label(data, clusts, column=5):
     Args:
         data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        column (int)         : Column which specifies the cluster ID
-        dtype (dtype)
+        column (int)         : Column which specifies the cluster label
     Returns:
-        np.ndarray: (C) List of cluster IDs
+        np.ndarray: (C) List of cluster labels
     """
     return _get_cluster_label(data, clusts, column)
 
@@ -140,6 +139,47 @@ def _get_cluster_label(data: nb.float64[:,:],
         v, cts = unique_nb(data[c, column])
         labels[i] = v[np.argmax(np.array(cts))]
     return labels
+
+
+@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+def get_cluster_primary_label(data, clusts, column, cluster_column=5, group_column=6):
+    """
+    Function that returns the majority label of the primary component
+    of a cluster, as specified in the requested data column.
+
+    The primary component is identified by picking the set of label
+    voxels that have a cluster_id identical to the cluster group_id.
+
+    Args:
+        data (np.ndarray)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        column (int)         : Column which specifies the cluster label
+        cluster_column (int) : Column which specifies the cluster ID
+        group_column (int)   : Column which specifies the cluster group ID
+    Returns:
+        np.ndarray: (C) List of cluster primary labels
+    """
+    return _get_cluster_primary_label(data, clusts, column, cluster_column, group_column)
+
+@nb.njit(cache=True)
+def _get_cluster_primary_label(data: nb.float64[:,:],
+                               clusts: nb.types.List(nb.int64[:]),
+                               column: nb.int64,
+                               cluster_column: nb.int64 = 5,
+                               group_column: nb.int64 = 6) -> nb.float64[:]:
+    labels = np.empty(len(clusts), dtype=data.dtype)
+    group_ids = _get_cluster_label(data, clusts, group_column)
+    for i in range(len(clusts)):
+        cluster_ids  = data[clusts[i], cluster_column]
+        primary_mask = cluster_ids == group_ids[i]
+        if len(data[clusts[i][primary_mask]]):
+            v, cts = unique_nb(data[clusts[i][primary_mask], column])
+        else: # If the primary is empty, use group
+            v, cts = unique_nb(data[clusts[i], column])
+        labels[i] = v[np.argmax(np.array(cts))]
+
+    return labels
+
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_momenta_label(data, clusts, column=8):
@@ -350,13 +390,13 @@ def get_cluster_points_label(data, particles, clusts, random_order=True, batch_c
     and end points of tracks if track.
 
     Args:
-        data (torch.tensor)     : (N,6) Voxel coordinates [x, y, z, batch_id, value, clust_id, group_id]
-        particles (torch.tensor): (N,9) Point coordinates [start_x, start_y, start_z, batch_id, last_x, last_y, last_z, start_t, shape_id]
+        data (torch.tensor)     : (N,X) Voxel coordinates [batch_id, x, y, z, ...]
+        particles (torch.tensor): (N,9) Point coordinates [batch_id, start_x, start_y, start_z, last_x, last_y, last_z, start_t, shape_id]
                                 (obtained with parse_particle_coords)
         clusts ([np.ndarray])   : (C) List of arrays of voxel IDs in each cluster
         random_order (bool)     : Whether or not to shuffle the start and end points randomly
     Returns:
-        np.ndarray: (N,3/6) particle wise start (and end points in RANDOMIZED ORDER)
+        np.ndarray: (N,6) cluster-wise start and end points (in RANDOMIZED ORDER by default)
     """
     return _get_cluster_points_label(data, particles, clusts, random_order,
                                     batch_col=batch_col,
@@ -528,7 +568,7 @@ def cluster_direction(voxels: nb.float64[:,:],
 
     Args:
         voxels (torch.tensor): (N,3) Voxel coordinates [x, y, z]
-        starts (torch.tensor): (C,3) Coordinates of the start points
+        start (torch.tensor) : (C,3) Coordinates of the start point
         max_dist (float)     : Max distance between start voxel and other voxels
         optimize (bool)      : Optimizes the number of points involved in the estimate
     Returns:
