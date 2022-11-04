@@ -1,6 +1,7 @@
 from typing import Callable, Tuple, List
 import numpy as np
 import pandas as pd
+import os, sys
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
@@ -9,7 +10,7 @@ from collections import defaultdict
 
 from scipy.special import softmax
 from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction
+        TruthParticle, Interaction, TruthInteraction, FlashManager
 from analysis.classes.particle import matrix_counts, matrix_iou, \
         match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
@@ -54,7 +55,8 @@ class FullChainPredictor:
 
     4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False):
+    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False,
+            enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
         self.module_config = cfg['model']['modules']
         self.cfg = cfg
 
@@ -114,11 +116,58 @@ class FullChainPredictor:
             self.vb = None
             self._num_volumes = 1
 
+        # Prepare flash matching if requested
+        self.enable_flash_matching = enable_flash_matching
+        self.fm = None
+        if enable_flash_matching:
+            if 'meta' not in self.data_blob:
+                raise Exception('Meta unspecified in data_blob. Please add it to your I/O schema.')
+            #if 'FMATCH_BASEDIR' not in os.environ:
+            #    raise Exception('FMATCH_BASEDIR undefined. Please source `OpT0Finder/configure.sh` or define it manually.')
+            assert os.path.exists(flash_matching_cfg)
+            assert len(opflash_keys) == self._num_volumes
+
+            self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0])
+            self.opflash_keys = opflash_keys
+
+            self.flash_matches = {} # key is volume, value is tuple (tpc_v, pmt_v, list of matches)
+            # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
+            
+
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
 
+    def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None):
+        if volume not in self.flash_matches:
+            self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume)
 
+        tpc_v, pmt_v, matches = self.flash_matches[volume]
+        return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
+
+    def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None):
+        if use_true_tpc_objects:
+            if not hasattr(self, 'get_true_interactions'):
+                raise Exception('This Predictor does not know about truth info.')
+
+            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+        else:
+            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+
+        input_tpc_v = self.fm.make_qcluster(tpc_v)
+        
+        selected_opflash_keys = self.opflash_keys
+        if volume is not None:
+            assert isinstance(volume, int)
+            selected_opflash_keys = [self.opflash_keys[volume]]
+        pmt_v = []
+        for key in selected_opflash_keys:
+            pmt_v.extend(self.data_blob[key][entry])
+        input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
+
+        matches = self.fm.run_flash_matching()
+        self.flash_matches[volume] = (tpc_v, pmt_v, matches)
+        
     def _fit_predict_ppn(self, entry):
         '''
         Method for predicting ppn predictions.
