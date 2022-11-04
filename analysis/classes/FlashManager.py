@@ -2,7 +2,32 @@ import os, sys
 
 
 class FlashManager:
+    """
+    Meant as an interface to OpT0finder, likelihood-based flash matching.
+
+    See https://github.com/drinkingkazu/OpT0Finder for more details about it.
+    """
     def __init__(self, cfg, cfg_fmatch, meta=None, detector_specs=None):
+        """
+        Expects that the environment variable `FMATCH_BASEDIR` is set.
+        You can either set it by hand (to the path where one can find
+        OpT0Finder) or you can source `OpT0Finder/configure.sh` if you
+        are running code from a command line.
+
+        Parameters
+        ==========
+        cfg: dict
+            The full chain config.
+        cfg_fmatch: str
+            Path to config for OpT0Finder.
+        meta: np.ndarray, optional, default is None
+            Used to shift coordinates of interactions to "real" detector
+            coordinates for QCluster_t.
+        detector_specs: str, optional
+            Path to `detector_specs.cfg` file which defines some geometry
+            information about the detector PMT system. By default will look
+            into `OpT0Finder/dat/detector_specs.cfg`.
+        """
 
         # Setup OpT0finder
         basedir = os.getenv('FMATCH_BASEDIR') 
@@ -80,6 +105,23 @@ class FlashManager:
         raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
 
     def make_qcluster(self, interactions):
+        """
+        Make flashmatch::QCluster_t objects from list of interactions.
+
+        Note that coordinates of `interactions` are in voxel coordinates,
+        but inside this function we shift back to real detector coordinates
+        using meta information. flashmatch::QCluster_t objects are in 
+        real cm coordinates.
+
+        Parameters
+        ==========
+        interactions: list of Interaction/TruthInteraction
+            (Predicted or true) interaction objects.
+
+        Returns
+        =======
+        list of flashmatch::QCluster_t
+        """
         from flashmatch import flashmatch
 
         if self.min_x is None:
@@ -177,6 +219,17 @@ class FlashManager:
         return self.all_matches
 
     def get_match(self, idx, matches=None):
+        """
+        Parameters
+        ==========
+        idx: int
+            Index of TPC object for which we want to retrieve a match.
+        matches: list of flashmatch::FlashMatch_t, optional, default is None
+
+        Returns
+        =======
+        flashmatch::FlashMatch_t
+        """
         if matches is None:
             if self.all_matches is None:
                 raise Exception("Need to run flash matching first with run_flash_matching.")
@@ -189,6 +242,17 @@ class FlashManager:
         return None
 
     def get_matched_flash(self, idx, matches=None):
+        """
+        Parameters
+        ==========
+        idx: int
+            Index of TPC object for which we want to retrieve a match.
+        matches: list of flashmatch::FlashMatch_t, optional, default is None
+
+        Returns
+        =======
+        flashmatch::Flash_t
+        """
         m = self.get_match(idx, matches=matches)
         if m is None: return None
 
@@ -202,5 +266,17 @@ class FlashManager:
         
 
     def get_t0(self, idx, matches=None):
+        """
+        Parameters
+        ==========
+        idx: int
+            Index of TPC object for which we want to retrieve a match.
+        matches: list of flashmatch::FlashMatch_t, optional, default is None
+
+        Returns
+        =======
+        float
+            Time in us with respect to simulation time reference.
+        """
         flash = self.get_matched_flash(idx, matches=matches)
         return None if flash is None else flash.time

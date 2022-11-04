@@ -139,6 +139,22 @@ class FullChainPredictor:
         return msg
 
     def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None):
+        """
+        If flash matches has not yet been computed for this volume, then it will
+        be run as part of this function. Otherwise, flash matching results are
+        cached in `self.flash_matches` per volume.
+
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+
+        Returns
+        =======
+        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
+        """
         if volume not in self.flash_matches:
             self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume)
 
@@ -146,6 +162,14 @@ class FullChainPredictor:
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
     def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None):
+        """
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+        """
         if use_true_tpc_objects:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
