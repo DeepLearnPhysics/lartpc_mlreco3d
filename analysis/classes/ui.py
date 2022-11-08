@@ -158,7 +158,7 @@ class FullChainPredictor:
         if (volume, use_true_tpc_objects) not in self.flash_matches:
             self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume)
 
-        tpc_v, pmt_v, matches = self.flash_matches[volume]
+        tpc_v, pmt_v, matches = self.flash_matches[(volume, use_true_tpc_objects)]
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
     def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None):
