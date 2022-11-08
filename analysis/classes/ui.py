@@ -130,7 +130,7 @@ class FullChainPredictor:
             self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0])
             self.opflash_keys = opflash_keys
 
-            self.flash_matches = {} # key is volume, value is tuple (tpc_v, pmt_v, list of matches)
+            self.flash_matches = {} # key is (volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
             
 
@@ -155,7 +155,7 @@ class FullChainPredictor:
         =======
         list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
         """
-        if volume not in self.flash_matches:
+        if (volume, use_true_tpc_objects) not in self.flash_matches:
             self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume)
 
         tpc_v, pmt_v, matches = self.flash_matches[volume]
@@ -190,7 +190,7 @@ class FullChainPredictor:
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
         matches = self.fm.run_flash_matching()
-        self.flash_matches[volume] = (tpc_v, pmt_v, matches)
+        self.flash_matches[(volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
         
     def _fit_predict_ppn(self, entry):
         '''

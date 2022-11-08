@@ -19,7 +19,14 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
 
     predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg)
     image_idxs = data_blob['index']
+    print(data_blob['index'], data_blob['run_info'])
     for idx, index in enumerate(image_idxs):
+        index_dict = {
+            'Index': index,
+            'run': data_blob['run_info'][idx][0],
+            'subrun': data_blob['run_info'][idx][1],
+            'event': data_blob['run_info'][idx][2]
+        }
 
         # Process Interaction Level Information
         matches, counts = predictor.match_interactions(idx,
@@ -75,7 +82,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 true_int_dict['true_nu_energy'] = nu.energy_init()
 
             pred_int_dict['interaction_match_counts'] = counts[i]
-            interactions_dict = OrderedDict({'Index': index})
+            interactions_dict = OrderedDict(index_dict.copy())
             interactions_dict.update(true_int_dict)
             interactions_dict.update(pred_int_dict)
             interactions.append(interactions_dict)
@@ -89,7 +96,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             matched_particles, _, ious = match_particles_fn(true_particles,
                                                             pred_particles)
             for i, m in enumerate(matched_particles):
-                particles_dict = OrderedDict({'Index': index})
+                particles_dict = OrderedDict(index_dict.copy())
                 true_p, pred_p = m[0], m[1]
                 pred_particle_dict = get_particle_properties(pred_p,
                     vertex=pred_int.vertex,
