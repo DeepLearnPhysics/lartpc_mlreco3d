@@ -79,7 +79,7 @@ def find_key(df, key_list, separator=':'):
     return key, key_name
 
 
-def get_training_df(log_dir, prefix='train'):
+def get_training_df(log_dir, keys, prefix='train'):
     """
     Finds all training log files inside the specified directory
     and concatenates them. If the range of iterations overlap, keep only
@@ -90,6 +90,7 @@ def get_training_df(log_dir, prefix='train'):
  
     Args:
         log_dir (str): Path to the directory that contains the training log files
+        keys (list)  : List of quantities of interest
         prefix (str) : Prefix shared between training file names (default: `train`)
     Returns:
         pandas.DataFrame: Combined training log data
@@ -98,7 +99,15 @@ def get_training_df(log_dir, prefix='train'):
     end_points = np.array([int(f.split('-')[-1].split('.csv')[0]) for f in log_files])
     order      = np.argsort(end_points)
     end_points = np.append(end_points[order], 1e12)
-    return pd.concat([pd.read_csv(f, nrows=end_points[i+1]-end_points[i]) for i, f in enumerate(log_files[order])], sort=True) 
+    log_dfs    = []
+    for i, f in enumerate(log_files[order]):
+        df = pd.read_csv(f, nrows=end_points[i+1]-end_points[i])
+        for key_list in keys:
+            key, key_name = find_key(df, key_list)
+            df[key_name] = df[key]
+        log_dfs.append(df)
+
+    return pd.concat(log_dfs, sort=True) 
 
 
 def get_validation_df(log_dir, keys, prefix='inference'):
@@ -228,7 +237,7 @@ def draw_training_curves(log_dir, models, metrics,
     dfs, val_dfs, colors = {}, {}, {}
     for i, key in enumerate(models):
         log_subdir = log_dir+key
-        dfs[key] = get_training_df(log_subdir, train_prefix)
+        dfs[key] = get_training_df(log_subdir, metrics, train_prefix)
         val_dfs[key] = get_validation_df(log_subdir, metrics, val_prefix)
         colors[key] = plotly_colors[i]
 
