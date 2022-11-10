@@ -327,9 +327,9 @@ class NodeKinematicsLoss(torch.nn.Module):
             result.update({
                 'vtx_labels': vtx_labels,
                 'vtx_score_loss': vtx_score_loss/n_clusts_vtx if n_clusts_vtx else 0.,
-                'vtx_score_acc': vtx_score_acc/n_clusts_vtx if n_clusts_vtx else 1.,
+                'vtx_score_accuracy': vtx_score_acc/n_clusts_vtx if n_clusts_vtx else 1.,
                 'vtx_position_loss': vtx_position_loss/n_clusts_vtx_pos if n_clusts_vtx_pos else 0.,
-                'vtx_position_acc': vtx_position_acc/n_clusts_vtx_pos if n_clusts_vtx_pos else 1.
+                'vtx_position_accuracy': vtx_position_acc/n_clusts_vtx_pos if n_clusts_vtx_pos else 1.
             })
             if self.use_anchor_points: result['vtx_anchors'] = vtx_anchors
 
@@ -602,8 +602,8 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
                 result.update({
                     'vtx_position_loss': 0.,
                     'vtx_score_loss': 0.,
-                    'vtx_position_acc': 0.,
-                    'vtx_score_acc': 0.,
+                    'vtx_position_accurary': 0.,
+                    'vtx_score_accuracy': 0.,
                 })
             return result
 
@@ -629,9 +629,9 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
         if compute_vtx:
             result.update({
                 'vtx_score_loss': 0. if not n_clusts_vtx else vtx_score_loss/n_clusts_vtx,
-                'vtx_score_acc': 0. if not n_clusts_vtx else vtx_score_acc/n_clusts_vtx,
+                'vtx_score_accurary': 0. if not n_clusts_vtx else vtx_score_acc/n_clusts_vtx,
                 'vtx_position_loss': 0. if not n_clusts_vtx_positives else vtx_position_loss/n_clusts_vtx_positives,
-                'vtx_position_acc': 0. if not n_clusts_vtx_positives else vtx_position_acc/n_clusts_vtx_positives,
+                'vtx_position_accuray': 0. if not n_clusts_vtx_positives else vtx_position_acc/n_clusts_vtx_positives,
             })
 
         return result

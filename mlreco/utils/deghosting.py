@@ -212,7 +212,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         # for which cluster id and group id columns are 5 and 6 respectively.
         cluster_id_col = 5
         track_label = 1
-        dbscan = DBSCAN(eps=np.sqrt(3), min_samples=1)
+        dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
         track_mask = label_c[:, -1] == track_label
         for batch_id in unique(coords[:, batch_column]):
             batch_mask = label_c[:, batch_column] == batch_id
