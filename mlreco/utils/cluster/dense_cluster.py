@@ -1,22 +1,14 @@
 import numpy as np
 import pandas as pd
-import sys
 import os, re
 import torch
 import yaml
 import time
-from scipy.spatial.distance import cdist
 from sklearn.metrics import adjusted_rand_score as ari
-import argparse
-
-current_directory = os.path.dirname(os.path.abspath(__file__))
-current_directory = os.path.dirname(current_directory)
-sys.path.insert(0, current_directory)
 
 from mlreco.utils.metrics import *
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
-from sklearn.cluster import DBSCAN
 from pprint import pprint
 
 

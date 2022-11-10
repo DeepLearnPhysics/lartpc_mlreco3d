@@ -156,6 +156,22 @@ def parse_sparse3d_ghost(sparse_event_semantics):
     return np_voxels, (np_data==5).astype(np.float32)
 
 
+def parse_sparse3d_charge_rescaled(sparse_event_list):
+    # Produces sparse3d_reco_rescaled on the fly on datasets that do not have it
+    np_voxels, output = parse_sparse3d(sparse_event_list)
+
+    deghost      = output[:, -1] < 5
+    hit_charges  = output[deghost,  :3]
+    hit_ids      = output[deghost, 3:6]
+    pmask        = hit_ids > -1
+
+    _, inverse, counts = np.unique(hit_ids, return_inverse=True, return_counts=True)
+    multiplicity = counts[inverse].reshape(-1,3)
+    charges = np.sum((hit_charges*pmask)/multiplicity, axis=1)/np.sum(pmask, axis=1)
+
+    return np_voxels[deghost], charges.reshape(-1,1)
+
+
 def parse_sparse2d_scn(sparse_event_list):
     from warnings import warn
     warn("Deprecated: parse_sparse2d_scn deprecated, use parse_sparse2d instead", DeprecationWarning)
