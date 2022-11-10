@@ -12,6 +12,10 @@ class TruthInteraction(Interaction):
         super(TruthInteraction, self).__init__(*args, **kwargs)
         self.match = []
         self._match_counts = {}
+        self.depositions_MeV = []
+        for p in self.particles:
+            self.depositions_MeV.append(p.depositions_MeV)
+        self.depositions_MeV = np.hstack(self.depositions_MeV)
 
     def check_validity(self):
         for p in self.particles:

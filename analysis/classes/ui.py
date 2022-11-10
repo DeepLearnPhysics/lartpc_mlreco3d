@@ -130,7 +130,7 @@ class FullChainPredictor:
             self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0])
             self.opflash_keys = opflash_keys
 
-            self.flash_matches = {} # key is (volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
+            self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
             
 
@@ -138,7 +138,9 @@ class FullChainPredictor:
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
 
-    def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None):
+    def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.):
         """
         If flash matches has not yet been computed for this volume, then it will
         be run as part of this function. Otherwise, flash matching results are
@@ -155,13 +157,16 @@ class FullChainPredictor:
         =======
         list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
         """
-        if (volume, use_true_tpc_objects) not in self.flash_matches:
-            self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume)
+        if (entry, volume, use_true_tpc_objects) not in self.flash_matches:
+            self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
+                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
 
-        tpc_v, pmt_v, matches = self.flash_matches[(volume, use_true_tpc_objects)]
+        tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
-    def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None):
+    def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.):
         """
         Parameters
         ==========
@@ -178,7 +183,7 @@ class FullChainPredictor:
         else:
             tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume)
 
-        input_tpc_v = self.fm.make_qcluster(tpc_v)
+        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
         
         selected_opflash_keys = self.opflash_keys
         if volume is not None:
@@ -190,7 +195,7 @@ class FullChainPredictor:
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
         matches = self.fm.run_flash_matching()
-        self.flash_matches[(volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
+        self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
         
     def _fit_predict_ppn(self, entry):
         '''

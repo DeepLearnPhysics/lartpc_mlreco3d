@@ -59,6 +59,8 @@ class FlashManager:
             self.size_voxel_x = meta[6]
             self.size_voxel_y = meta[7]
             self.size_voxel_z = meta[8]
+            #print('Meta min = ', self.min_x, self.min_y, self.min_z)
+            #print('Meta size = ', self.size_voxel_x, self.size_voxel_y, self.size_voxel_z)
 
         # Setup flash matching
         print('Setting up OpT0Finder for flash matching...')
@@ -104,7 +106,7 @@ class FlashManager:
 
         raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
 
-    def make_qcluster(self, interactions):
+    def make_qcluster(self, interactions, use_depositions_MeV=False, ADC_to_MeV=1.):
         """
         Make flashmatch::QCluster_t objects from list of interactions.
 
@@ -138,7 +140,7 @@ class FlashManager:
                     p.points[i, 0] * self.size_voxel_x + self.min_x,
                     p.points[i, 1] * self.size_voxel_y + self.min_y,
                     p.points[i, 2] * self.size_voxel_z + self.min_z,
-                    p.depositions[i])
+                    p.depositions[i]*ADC_to_MeV*self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
                 # Add it to geoalgo::QCluster_t
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)
@@ -188,12 +190,12 @@ class FlashManager:
         self.pmt_v = pmt_v
         return pmt_v
 
-    def run_flash_matching(self, flashes=None, interactions=None):
+    def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
         if self.tpc_v is None:
             if interactions is None:
                 raise Exception('You need to specify `interactions`, or to run make_qcluster.')
         if interactions is not None:
-            self.make_qcluster(interactions)
+            self.make_qcluster(interactions, **kwargs)
         
 
         if self.pmt_v is None:
