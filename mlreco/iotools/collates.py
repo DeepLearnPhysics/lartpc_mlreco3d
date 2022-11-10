@@ -131,6 +131,31 @@ class VolumeBoundaries:
             new_voxels[..., n] += int(self.shifts[n][self.combo[volume][n]])
         return new_voxels
 
+    def untranslate(self, voxels, volume):
+        """
+        Meant to reverse what the translate method does: for voxels coordinates initially in the range of full detector,
+        translate to the range of 1 volume for a specific volume given in argument.
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Expected shape is (D_0, ..., D_N, self.dim) with N >=0. In other words, voxels can be a list of
+            coordinate or a single coordinate with shape (d,).
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Translated voxels array, using internally computed shifts.
+        """
+        assert volume >= 0 and volume < self.num_volumes()
+        assert voxels.shape[-1] == self.dim
+
+        new_voxels = voxels.copy()
+        for n in range(self.dim):
+            new_voxels[..., n] -= int(self.shifts[n][self.combo[volume][n]])
+        return new_voxels
+
     def split(self, voxels):
         """
         Parameters

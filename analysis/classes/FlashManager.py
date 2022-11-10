@@ -145,8 +145,8 @@ class FlashManager:
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)
 
-        if self.tpc_v is not None:
-            print("Warning: overwriting internal list of particles.")
+        #if self.tpc_v is not None:
+        #    print("Warning: overwriting internal list of particles.")
         self.tpc_v = tpc_v
         return tpc_v
 
@@ -185,8 +185,8 @@ class FlashManager:
                 flash.pe_v.push_back(f.PEPerOpDet()[i + offset])
                 flash.pe_err_v.push_back(0.)
             pmt_v.append(flash)
-        if self.pmt_v is not None:
-            print("Warning: overwriting internal list of flashes.")
+        #if self.pmt_v is not None:
+        #    print("Warning: overwriting internal list of flashes.")
         self.pmt_v = pmt_v
         return pmt_v
 

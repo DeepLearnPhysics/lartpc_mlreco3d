@@ -183,8 +183,18 @@ class FullChainPredictor:
         else:
             tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume)
 
+        # If we are not running flash matching over the entire volume at once,
+        # then we need to shift the coordinates that will be used for flash matching
+        # back to the reference of the first volume.
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._untranslate(tpc_object.points, volume)
         input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._translate(tpc_object.points, volume)
         
+        # Now making Flash_t objects
         selected_opflash_keys = self.opflash_keys
         if volume is not None:
             assert isinstance(volume, int)
@@ -194,6 +204,7 @@ class FullChainPredictor:
             pmt_v.extend(self.data_blob[key][entry])
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
+        # Running flash matching and caching the results
         matches = self.fm.run_flash_matching()
         self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
         
@@ -517,10 +528,44 @@ class FullChainPredictor:
             assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
 
     def _translate(self, voxels, volume):
-        if self.vb is None:
+        """
+        Go from 1-volume-only back to full volume coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
             return voxels
         else:
             return self.vb.translate(voxels, volume)
+
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
@@ -565,7 +610,7 @@ class FullChainPredictor:
 
         out_fragment_list = []
         for entry in entries:
-            volume = entry % self._num_volumes
+            volume = entry % self._num_volumes if volume is not None else volume
 
             point_cloud = self.data_blob['input_data'][entry][:, 1:4]
             depositions = self.result['input_rescaled'][entry][:, 4]
@@ -714,7 +759,7 @@ class FullChainPredictor:
 
         out_particle_list = []
         for entry in entries:
-            volume = entry % self._num_volumes
+            volume = entry % self._num_volumes if volume is not None else volume
 
             point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
             depositions      = self.result['input_rescaled'][entry][:, 4]
@@ -833,7 +878,7 @@ class FullChainPredictor:
 
         out_interaction_list = []
         for e in entries:
-            volume = e % self._num_volumes
+            volume = e % self._num_volumes if volume is not None else volume
             particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
@@ -1073,7 +1118,7 @@ class FullChainEvaluator(FullChainPredictor):
 
         out_fragments_list = []
         for entry in entries:
-            volume = entry % self._num_volumes
+            volume = entry % self._num_volumes if volume is not None else volume
 
             # Both are "adapted" labels
             labels = self.data_blob['cluster_label'][entry]
@@ -1185,7 +1230,7 @@ class FullChainEvaluator(FullChainPredictor):
         out_particles_list = []
         global_entry = entry
         for entry in entries:
-            volume = entry % self._num_volumes
+            volume = entry % self._num_volumes if volume is not None else volume
 
             labels = self.data_blob['cluster_label'][entry]
             if self.deghosting:
@@ -1328,7 +1373,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         out_interactions_list = []
         for e in entries:
-            volume = e % self._num_volumes
+            volume = e % self._num_volumes if volume is not None else volume
             true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(true_particles,
                                                      get_nu_id=True, mode='truth')
@@ -1359,7 +1404,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         out = {}
         for entry in entries:
-            volume = entry % self._num_volumes
+            volume = entry % self._num_volumes if volume is not None else volume
             inter_idxs = np.unique(
                 self.data_blob['cluster_label'][entry][:, 7].astype(int))
             for inter_idx in inter_idxs:
@@ -1394,7 +1439,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         all_matches = []
         for e in entries:
-            volume = e % self._num_volumes
+            volume = e % self._num_volumes if volume is not None else volume
             if mode == 'pred_to_true':
                 # Match each pred to one in true
                 particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
@@ -1440,7 +1485,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         all_matches, all_counts = [], []
         for e in entries:
-            volume = e % self._num_volumes
+            volume = e % self._num_volumes if volume is not None else volume
             if mode == 'pred_to_true':
                 ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
                 ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
