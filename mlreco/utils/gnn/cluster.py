@@ -575,7 +575,7 @@ def cluster_direction(voxels: nb.float64[:,:],
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
-    if max_dist > 0 and not optimize:
+    if not optimize and max_dist > 0:
         dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
