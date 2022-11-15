@@ -156,7 +156,8 @@ def get_validation_df(log_dir, keys, prefix='inference'):
 
 def draw_training_curves(log_dir, models, metrics,
                          limits={}, model_names={}, metric_names={},
-                         max_iter=-1, step=1, smoothing=1, print_min=False, print_max=False,
+                         max_iter=-1, step=1, smoothing=1, iter_per_epoch=-1,
+                         print_min=False, print_max=False,
                          interactive=True, same_plot=True, paper=False, leg_ncols=1,
                          figure_name='', train_prefix='train', val_prefix='inference'):
     """
@@ -164,22 +165,23 @@ def draw_training_curves(log_dir, models, metrics,
     directory and draws an evolution plot of the request quantities.
 
     Args:
-        log_dir (str)      : Path to the directory that contains the folder with log files
-        models (list)      : List of model (folder) names under the main directory
-        metrics (list)     : List of quantities to draw
-        limits (list/dict) : List of y boundaries for the plot (or dictionary of y boundaries, one per metric)
-        model_names (dict) : Dictionary which maps raw model names to model labels (default: `{}`)
-        metric_names (dict): Dictionary which maps raw metric names to metric labels (default: `{}`)
-        max_iter (int)     : Maximum number of interation to include in the plot (default: `-1`)
-        step (int)         : Step between two successive iterations that are represented (default: `1`)
-        smoothing (int)    : Number of iteration over which to average the metric value (default: `1`)
-        interactive (bool) : Use plotly to draw (default: `True`)
-        same_plot (bool)   : Draw all model/metric pairs on a single plot (default: `True`)
-        paper (bool)       : Format plot for paper, using latex (default: `False`)
-        leg_ncols (int)    : Number of columns in the legend (default: `1`)
-        figure_name (str)  : Name of the figure. If specified, figure is saved (default: `''`)
-        train_prefix (str) : Prefix shared between training file names (default: `train`)
-        val_prefix (str)   : Prefix shared between validation file names (default: `inference`)
+        log_dir (str)       : Path to the directory that contains the folder with log files
+        models (list)       : List of model (folder) names under the main directory
+        metrics (list)      : List of quantities to draw
+        limits (list/dict)  : List of y boundaries for the plot (or dictionary of y boundaries, one per metric)
+        model_names (dict)  : Dictionary which maps raw model names to model labels (default: `{}`)
+        metric_names (dict) : Dictionary which maps raw metric names to metric labels (default: `{}`)
+        max_iter (int)      : Maximum number of interation to include in the plot (default: `-1`)
+        step (int)          : Step between two successive iterations that are represented (default: `1`)
+        smoothing (int)     : Number of iteration over which to average the metric value (default: `1`)
+        iter_per_epoch (float): Number of iterations to complete an epoch (default: `-1`, figures it out from train log)
+        interactive (bool)  : Use plotly to draw (default: `True`)
+        same_plot (bool)    : Draw all model/metric pairs on a single plot (default: `True`)
+        paper (bool)        : Format plot for paper, using latex (default: `False`)
+        leg_ncols (int)     : Number of columns in the legend (default: `1`)
+        figure_name (str)   : Name of the figure. If specified, figure is saved (default: `''`)
+        train_prefix (str)  : Prefix shared between training file names (default: `train`)
+        val_prefix (str)    : Prefix shared between validation file names (default: `inference`)
     """
     # Set the style
     plotly_colors = pcolors.convert_colors_to_same_type(pcolors.DEFAULT_PLOTLY_COLORS, 'tuple')[0]
@@ -251,11 +253,18 @@ def draw_training_curves(log_dir, models, metrics,
             metric_train = dfs[key][metric][:max_iter:step] if smoothing == 1 else dfs[key][metric][:max_iter].rolling(smoothing, min_periods=1, center=True).mean()[::step]
             draw_val     = bool(len(val_dfs[key]['iter']))
             if draw_val:
-                mask_val     = val_dfs[key]['iter'] < max_iter if max_iter > -1 else val_dfs[key]['iter'] < 1e12
-                iter_val     = val_dfs[key]['iter'][mask_val]
-                epoch_val    = [float(dfs[key]['epoch'][dfs[key]['iter'] == it]) for it in iter_val]
-                metricm_val  = val_dfs[key][metric_name+'_mean'][mask_val]
-                metrice_val  = val_dfs[key][metric_name+'_err'][mask_val]
+                mask_val    = val_dfs[key]['iter'] < max_iter if max_iter > -1 else val_dfs[key]['iter'] < 1e12
+                iter_val    = val_dfs[key]['iter'][mask_val]
+                if iter_per_epoch < 0:
+                    epoch_val   = [dfs[key]['epoch'][dfs[key]['iter'] == it] for it in iter_val]
+                    epoch_val   = np.array([float(e) if len(e)==1 else -1 for e in epoch_val])
+                    mask_val   &= epoch_val > -1
+                    iter_val    = iter_val[epoch_val > -1]
+                    epoch_val   = epoch_val[epoch_val > -1]
+                else:
+                    epoch_val = iter_val/iter_per_epoch
+                metricm_val = val_dfs[key][metric_name+'_mean'][mask_val]
+                metrice_val = val_dfs[key][metric_name+'_err'][mask_val]
  
             # Pick a label for this specific model/metric pair
             if not same_plot:
