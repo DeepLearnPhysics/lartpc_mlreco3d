@@ -1,4 +1,5 @@
 import os, sys
+import numpy as np
 
 
 class FlashManager:
@@ -7,7 +8,7 @@ class FlashManager:
 
     See https://github.com/drinkingkazu/OpT0Finder for more details about it.
     """
-    def __init__(self, cfg, cfg_fmatch, meta=None, detector_specs=None):
+    def __init__(self, cfg, cfg_fmatch, meta=None, detector_specs=None, reflash_merging_window=None):
         """
         Expects that the environment variable `FMATCH_BASEDIR` is set.
         You can either set it by hand (to the path where one can find
@@ -79,6 +80,8 @@ class FlashManager:
 
         self.all_matches = None
         self.pmt_v, self.tpc_v = None, None
+
+        self.reflash_merging_window = reflash_merging_window
 
     def get_flash(self, flash_id, array=False):
         from flashmatch import flashmatch
@@ -166,12 +169,13 @@ class FlashManager:
         for branch in larcv_flashes:
             flashes.extend(branch)
 
-        pmt_v = []
+        pmt_v, times = [], []
         for idx, f in enumerate(flashes):
             # f is an object of type larcv::Flash
             flash = flashmatch.Flash_t()
             flash.idx = f.id()  # Assign a unique index
             flash.time = f.time()  # Flash timing, a candidate T0
+            times.append(flash.time)
 
             # Assign the flash position and error on this position
             flash.x, flash.y, flash.z = 0, 0, 0
@@ -187,8 +191,49 @@ class FlashManager:
             pmt_v.append(flash)
         #if self.pmt_v is not None:
         #    print("Warning: overwriting internal list of flashes.")
+        if self.reflash_merging_window is not None:
+            # then proceed to merging close flashes
+            perm = np.argsort(times)
+            pmt_v = np.array(pmt_v)[perm]
+            final_pmt_v = [pmt_v[0]]
+            is_merging = False
+            for idx, flash in enumerate(pmt_v[1:]):
+                if flash.time - final_pmt_v[-1].time < self.reflash_merging_window:
+                    new_flash = self.merge_flashes(flash, final_pmt_v[-1])
+                    final_pmt_v[-1] = new_flash
+                else:
+                    final_pmt_v.append(flash)
+            pmt_v = final_pmt_v
+
         self.pmt_v = pmt_v
         return pmt_v
+
+    def merge_flashes(self, a, b):
+        """
+        Util to merge 2 flashmatch::Flash_t objects on the fly.
+
+        Final time is minimum of both times. Final PE count per
+        photodetectors is the sum between the 2 flashes.
+
+        Parameters
+        ==========
+        a: flashmatch::Flash_t
+        b: flashmatch::Flash_t
+
+        Returns
+        =======
+        flashmatch::Flash_t
+        """
+        from flashmatch import flashmatch
+        flash = flashmatch.Flash_t()
+        flash.idx = min(a.idx, b.idx)
+        flash.time = min(a.time, b.time)
+        flash.x, flash.y, flash.z = min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)
+        flash.x_err, flash.y_err, flash.z_err = min(a.x_err, b.x_err), min(a.y_err, b.y_err), min(a.z_err, b.z_err)
+        for i in range(180):
+            flash.pe_v.push_back(a.pe_v[i] + b.pe_v[i])
+            flash.pe_err_v.push_back(a.pe_err_v[i] + b.pe_err_v[i])
+        return flash
 
     def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
         if self.tpc_v is None:

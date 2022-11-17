@@ -73,7 +73,7 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        self.spatial_size             = predictor_cfg.get('spatial_size', 768)
+        # self.spatial_size             = predictor_cfg.get('spatial_size', 768)
         # For matching particles and interactions
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
@@ -89,6 +89,8 @@ class FullChainPredictor:
 
         self.batch_mask = self.data_blob['input_data']
 
+        # This is used to apply fiducial volume cuts.
+        # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
         if self.volume_boundaries is None:
             # Using ICARUS Cryo 0 as a default
@@ -108,6 +110,8 @@ class FullChainPredictor:
 
         # Determine whether we need to account for several distinct volumes
         # split over "virtual" batch ids
+        # Note this is different from "self.volume_boundaries" above
+        # FIXME rename one or the other to be clearer
         boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
         if boundaries is not None:
             self.vb = VolumeBoundaries(boundaries)
@@ -120,6 +124,8 @@ class FullChainPredictor:
         self.enable_flash_matching = enable_flash_matching
         self.fm = None
         if enable_flash_matching:
+            reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
+
             if 'meta' not in self.data_blob:
                 raise Exception('Meta unspecified in data_blob. Please add it to your I/O schema.')
             #if 'FMATCH_BASEDIR' not in os.environ:
@@ -127,7 +133,7 @@ class FullChainPredictor:
             assert os.path.exists(flash_matching_cfg)
             assert len(opflash_keys) == self._num_volumes
 
-            self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0])
+            self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0], reflash_merging_window=reflash_merging_window)
             self.opflash_keys = opflash_keys
 
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
@@ -610,7 +616,7 @@ class FullChainPredictor:
 
         out_fragment_list = []
         for entry in entries:
-            volume = entry % self._num_volumes if volume is not None else volume
+            volume = entry % self._num_volumes
 
             point_cloud = self.data_blob['input_data'][entry][:, 1:4]
             depositions = self.result['input_rescaled'][entry][:, 4]
@@ -759,7 +765,7 @@ class FullChainPredictor:
 
         out_particle_list = []
         for entry in entries:
-            volume = entry % self._num_volumes if volume is not None else volume
+            volume = entry % self._num_volumes
 
             point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
             depositions      = self.result['input_rescaled'][entry][:, 4]
@@ -878,7 +884,7 @@ class FullChainPredictor:
 
         out_interaction_list = []
         for e in entries:
-            volume = e % self._num_volumes if volume is not None else volume
+            volume = e % self._num_volumes if self.vb is not None else volume
             particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
@@ -1118,7 +1124,7 @@ class FullChainEvaluator(FullChainPredictor):
 
         out_fragments_list = []
         for entry in entries:
-            volume = entry % self._num_volumes if volume is not None else volume
+            volume = entry % self._num_volumes
 
             # Both are "adapted" labels
             labels = self.data_blob['cluster_label'][entry]
@@ -1230,7 +1236,7 @@ class FullChainEvaluator(FullChainPredictor):
         out_particles_list = []
         global_entry = entry
         for entry in entries:
-            volume = entry % self._num_volumes if volume is not None else volume
+            volume = entry % self._num_volumes
 
             labels = self.data_blob['cluster_label'][entry]
             if self.deghosting:
@@ -1373,7 +1379,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         out_interactions_list = []
         for e in entries:
-            volume = e % self._num_volumes if volume is not None else volume
+            volume = e % self._num_volumes if self.vb is not None else volume
             true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(true_particles,
                                                      get_nu_id=True, mode='truth')
@@ -1404,7 +1410,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         out = {}
         for entry in entries:
-            volume = entry % self._num_volumes if volume is not None else volume
+            volume = entry % self._num_volumes if self.vb is not None else volume
             inter_idxs = np.unique(
                 self.data_blob['cluster_label'][entry][:, 7].astype(int))
             for inter_idx in inter_idxs:
@@ -1439,7 +1445,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         all_matches = []
         for e in entries:
-            volume = e % self._num_volumes if volume is not None else volume
+            volume = e % self._num_volumes if self.vb is not None else volume
             if mode == 'pred_to_true':
                 # Match each pred to one in true
                 particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
@@ -1451,10 +1457,9 @@ class FullChainEvaluator(FullChainPredictor):
             else:
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+            all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
             matched_pairs, _, _ = match_particles_fn(particles_from, particles_to,
-                                                    min_overlap=self.min_overlap_count,
-                                                    overlap_mode=self.overlap_mode,
-                                                    **kwargs)
+                                                    **all_kwargs)
             all_matches.extend(matched_pairs)
         return all_matches
 
@@ -1485,7 +1490,7 @@ class FullChainEvaluator(FullChainPredictor):
         entries = self._get_entries(entry, volume)
         all_matches, all_counts = [], []
         for e in entries:
-            volume = e % self._num_volumes if volume is not None else volume
+            volume = e % self._num_volumes if self.vb is not None else volume
             if mode == 'pred_to_true':
                 ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
                 ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
@@ -1496,9 +1501,9 @@ class FullChainEvaluator(FullChainPredictor):
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
 
+            all_kwargs = {"min_overlap": self.min_overlap_count, **kwargs}
             matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
-                                                                    min_overlap=self.min_overlap_count,
-                                                                    **kwargs)
+                                                                    **all_kwargs)
 
             if match_particles:
                 for interactions in matched_interactions:
