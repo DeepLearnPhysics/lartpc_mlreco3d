@@ -333,6 +333,7 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False):
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
         - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+        - include_mpr: include MPR (cosmic-like) particles to PID target
     Outputs:
         - array: (N) list of group ids
     '''
@@ -410,19 +411,26 @@ def get_shower_primary_id(cluster_event, particles_v):
     return primary_ids
 
 
-def get_group_primary_id(particles_v):
+def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
     '''
     Function that assigns valid primary tags to particle groups.
     This could be handled somewhere else (e.g. SUPERA)
 
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+        - include_mpr: include MPR (cosmic-like) particles to primary target
     Outputs:
         - array: (N) list of group ids
     '''
     # Loop over the list of particles
     primary_ids = np.empty(particles_v.size(), dtype=np.int32)
     for i, p in enumerate(particles_v):
+        # If MPR particles are not included and the nu_id < 1, assign invalid
+        if not include_mpr and nu_ids[i] < 1:
+            primary_ids[i] = -1
+            continue
+
         # If the particle is not a shower or a track, it is not a primary
         if p.shape() != 0 and p.shape() != 1:
             primary_ids[i] = 0
