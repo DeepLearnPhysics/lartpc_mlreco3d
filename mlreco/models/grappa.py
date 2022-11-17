@@ -142,6 +142,7 @@ class GNN(torch.nn.Module):
         self.opt_dir_max_dist = self.dir_max_dist == 'optimize'
         self.add_local_dedxs  = base_config.get('add_local_dedxs', False)
         self.dedx_max_dist    = base_config.get('dedx_max_dist', 5)
+        self.break_clusters   = base_config.get('break_clusters', False)
         self.shuffle_clusters = base_config.get('shuffle_clusters', False)
 
         # *Deprecated* but kept for backward compatibility:
@@ -283,6 +284,15 @@ class GNN(torch.nn.Module):
                                        self.node_min_size,
                                        self.source_col,
                                        cluster_classes=self.node_type)
+                if self.break_clusters:
+                    from sklearn.cluster import DBSCAN
+                    dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
+                    broken_clusts = []
+                    for c in clusts:
+                        labels = dbscan.fit(cluster_data[c, self.coords_index[0]:self.coords_index[1]].detach().cpu().numpy()).labels_
+                        for l in np.unique(labels):
+                            broken_clusts.append(c[labels==l])
+                    clusts = broken_clusts
 
         # If requested, shuffle the order in which the clusters are listed (used for debugging)
         if self.shuffle_clusters:
@@ -311,7 +321,6 @@ class GNN(torch.nn.Module):
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
-        result['clusts'] = [clusts_split]
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
@@ -348,12 +357,12 @@ class GNN(torch.nn.Module):
                 edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist)
             else:
                 # Here get_cluster_primary_label is used to ensure that Michel/Delta showers are given the appropriate semantic label
-                classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_primary_label(cluster_data, clusts, -1).astype(int)
+                if self.source_col == 5: classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_label(cluster_data, clusts, -1).astype(int)
+                if self.source_col == 6: classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_primary_label(cluster_data, clusts, -1).astype(int)
                 edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist, classes)
 
         # Update result with a list of edges for each batch id
         edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
-        result['edge_index'] = [edge_index_split]
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
@@ -376,9 +385,9 @@ class GNN(torch.nn.Module):
                 else:
                     x = torch.cat([x, dirs_start.float()], dim=1)
             if self.add_local_dedxs:
-                dedxs_start = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.dedx_max_dir)
+                dedxs_start = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.dedx_max_dist)
                 if self.add_local_dedxs != 'start':
-                    dedxs_end = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,3:6], clusts, self.dedx_max_dir)
+                    dedxs_end = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,3:6], clusts, self.dedx_max_dist)
                     x = torch.cat([x, dedxs_start.reshape(-1,1).float(), dedxs_end.reshape(-1,1).float()], dim=1)
                 else:
                     x = torch.cat([x, dedxs_start.reshape(-1,1).float()], dim=1)
