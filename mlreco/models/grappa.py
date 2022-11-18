@@ -160,6 +160,7 @@ class GNN(torch.nn.Module):
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'voxel')
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
+        self.edge_max_count = base_config.get('edge_max_count', 2e6)
 
         # Turn the edge_max_dist value into a matrix
         if not isinstance(self.edge_max_dist, list): self.edge_max_dist = [self.edge_max_dist]
@@ -321,6 +322,11 @@ class GNN(torch.nn.Module):
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
+        result['clusts'] = [clusts_split]
+        if self.edge_max_count > -1:
+            _, cnts = np.unique(batch_ids, return_counts=True)
+            if np.sum([c*(c-1) for c in cnts]) > 2*self.edge_max_count:
+                return result
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
@@ -363,6 +369,9 @@ class GNN(torch.nn.Module):
 
         # Update result with a list of edges for each batch id
         edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
+        result['edge_index'] = [edge_index_split]
+        if edge_index.shape[1] > self.edge_max_count:
+            return result
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
