@@ -1,10 +1,10 @@
 from collections import OrderedDict
 import numpy as np
 from larcv import larcv
-from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_primary_id
+from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.iotools.parsers.sparse import parse_sparse3d
-from mlreco.iotools.parsers.particles import parse_particle_asis
+from mlreco.iotools.parsers.particles import parse_particles
 from mlreco.iotools.parsers.clean_data import clean_sparse_data
 
 
@@ -63,7 +63,8 @@ def parse_cluster3d(cluster_event,
                     add_kinematics_info = False,
                     clean_data = True,
                     precedence = [1,2,0,3,4],
-                    type_include_mpr = False):
+                    type_include_mpr = False,
+                    primary_include_mpr = True):
     """
     a function to retrieve a 3D clusters tensor
 
@@ -82,6 +83,8 @@ def parse_cluster3d(cluster_event,
               add_kinematics_info: false
               clean_data: true
               precedence: [1,2,0,3,4]
+              type_include_mpr: false
+              primary_include_mpr: true
 
     Configuration
     -------------
@@ -94,6 +97,8 @@ def parse_cluster3d(cluster_event,
     add_kinematics_info: bool
     clean_data: bool
     precedence: list
+    type_include_mpr: bool
+    primary_include_mpr: bool
 
     Returns
     -------
@@ -138,15 +143,16 @@ def parse_cluster3d(cluster_event,
             labels['inter']   = inter_ids
             labels['nu']      = nu_ids
             labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
-            labels['primary'] = get_primary_id(cluster_event, particles_v)
+            labels['primary_shower'] = get_shower_primary_id(cluster_event, particles_v)
         if add_kinematics_info:
-            particles_asis_v  = parse_particle_asis(particle_event, cluster_event)
+            primary_ids       = get_group_primary_id(particles_v, nu_ids, include_mpr=primary_include_mpr)
+            particles_v       = parse_particles(particle_event, cluster_event)
             labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
-            labels['p']       = np.array([(p.px()**2+p.py()**2+p.pz()**2)/1e3 for p in particles_v])
-            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_asis_v])
-            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_asis_v])
-            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_asis_v])
-            labels['primary_group'] = np.array((nu_ids > 0) & np.array([p.group_id()==p.parent_id() for p in particles_v]), dtype=np.float32)
+            labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
+            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
+            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
+            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
+            labels['primary_group'] = primary_ids
         labels['sem'] = np.array([p.shape() for p in particles_v])
 
     # Loop over clusters, store info
@@ -188,6 +194,28 @@ def parse_cluster3d(cluster_event,
     if sparse_value_event:
         _, val_features  = parse_sparse3d([sparse_value_event])
         np_features[:,0] = val_features[:,-1]
+
+    return np_voxels, np_features
+
+
+def parse_cluster3d_charge_rescaled(cluster_event,
+                                    particle_event = None,
+                                    particle_mpv_event = None,
+                                    sparse_semantics_event = None,
+                                    sparse_value_event_list = None,
+                                    add_particle_info = False,
+                                    add_kinematics_info = False,
+                                    clean_data = True,
+                                    precedence = [1,2,0,3,4],
+                                    type_include_mpr = False,
+                                    primary_include_mpr = False):
+    # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
+    np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
+                                             add_particle_info, add_kinematics_info, clean_data, precedence, type_include_mpr, primary_include_mpr)
+
+    from .sparse import parse_sparse3d_charge_rescaled
+    _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
+    np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features
 

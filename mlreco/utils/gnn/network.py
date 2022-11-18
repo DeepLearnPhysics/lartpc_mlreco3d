@@ -6,7 +6,7 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb
+from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb, mean_nb
 
 
 @nb.njit(cache=True)
@@ -30,16 +30,14 @@ def loop_graph(n: nb.int64) -> nb.int64[:,:]:
 
 @nb.njit(cache=True)
 def complete_graph(batch_ids: nb.int64[:],
-                   dist_mat: nb.float64[:,:] = None,
-                   max_dist: nb.float64 = -1.) -> nb.int64[:,:]:
+                   directed: bool = False) -> nb.int64[:,:]:
     """
     Function that returns an incidence matrix of a complete graph
     that connects every node with ever other node.
 
     Args:
         batch_ids (np.ndarray): (C) List of batch ids
-        dist_mat (np.ndarray) : (C,C) Tensor of pair-wise cluster distances
-        max_dist (double)     : Maximal edge length
+        directed (bool)       : If directed, only keep edges [i,j] for which j>=i
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
@@ -60,16 +58,9 @@ def complete_graph(batch_ids: nb.int64[:],
                 ret[k] = [i,j]
                 k += 1
 
-    # If requested, remove the edges above a certain length threshold
-    if max_dist > -1:
-        assert dist_mat is not None
-        dists = np.empty(len(ret), dtype=dist_mat.dtype)
-        for k, e in enumerate(ret):
-            dists[k] = dist_mat[e[0],e[1]]
-        ret = ret[dists < max_dist]
-
-    # Add the reciprocal edges as to create an undirected graph
-    ret = np.vstack((ret, ret[:,::-1]))
+    # Add the reciprocal edges as to create an undirected graph, if requested
+    if not directed:
+        ret = np.vstack((ret, ret[:,::-1]))
 
     return ret.T
 
@@ -77,8 +68,7 @@ def complete_graph(batch_ids: nb.int64[:],
 def delaunay_graph(data: nb.float64[:,:],
                    clusts: nb.types.List(nb.int64[:]),
                    batch_ids: nb.int64[:],
-                   dist_mat: nb.float64[:,:] = None,
-                   max_dist: nb.float64 = -1.,
+                   directed: bool = False,
                    batch_col: nb.int64 = 0,
                    coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.int64[:,:]:
     """
@@ -89,8 +79,7 @@ def delaunay_graph(data: nb.float64[:,:],
         data (np.ndarray)     : (N,4) [x, y, z, batchid]
         clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
         batch_ids (np.ndarray): (C) List of batch ids
-        dist_mat (np.ndarray) : (C,C) Tensor of pair-wise cluster distances
-        max_dist (double)     : Maximal edge length
+        directed (bool)       : If directed, only keep edges [i,j] for which j>=i
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
@@ -115,24 +104,17 @@ def delaunay_graph(data: nb.float64[:,:],
         edges = np.vstack((clust_ids[edges[0]],clust_ids[edges[1]])).T
         ret   = np.vstack((ret, edges))
 
-    # If requested, remove the edges above a certain length threshold
-    if max_dist > -1:
-        assert dist_mat is not None
-        dists = np.empty(len(ret), dtype=dist_mat.dtype)
-        for k, e in enumerate(ret):
-            dists[k] = dist_mat[e[0],e[1]]
-        ret = ret[dists < max_dist]
-
-    # Add the reciprocal edges as to create an undirected graph
-    ret = np.vstack((ret, ret[:,::-1]))
+    # Add the reciprocal edges as to create an undirected graph, if requested
+    if not directed:
+        ret = np.vstack((ret, ret[:,::-1]))
 
     return ret.T
 
 
 @nb.njit(cache=True)
 def mst_graph(batch_ids: nb.int64[:],
-              dist_mat: nb.float64[:,:] = None,
-              max_dist: nb.float64 = -1.) -> nb.int64[:,:]:
+              dist_mat: nb.float64[:,:],
+              directed: bool = False) -> nb.int64[:,:]:
     """
     Function that returns an incidence matrix that connects nodes
     that share an edge in their corresponding Euclidean Minimum Spanning Tree (MST).
@@ -140,7 +122,7 @@ def mst_graph(batch_ids: nb.int64[:],
     Args:
         batch_ids (np.ndarray): (C) List of batch ids
         dist_mat (np.ndarray) : (C,C) Tensor of pair-wise cluster distances
-        max_dist (double)     : Maximal edge length
+        directed (bool)       : If directed, only keep edges [i,j] for which j>=i
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
@@ -156,16 +138,9 @@ def mst_graph(batch_ids: nb.int64[:],
             edges = np.vstack((clust_ids[edges[0]],clust_ids[edges[1]])).T
             ret   = np.vstack((ret, edges))
 
-    # If requested, remove the edges above a certain length threshold
-    if max_dist > -1:
-        assert dist_mat is not None
-        dists = np.empty(len(ret), dtype=dist_mat.dtype)
-        for k, e in enumerate(ret):
-            dists[k] = dist_mat[e[0],e[1]]
-        ret = ret[dists < max_dist]
-
-    # Add the reciprocal edges as to create an undirected graph
-    ret = np.vstack((ret, ret[:,::-1]))
+    # Add the reciprocal edges as to create an undirected graph, if requested
+    if not directed:
+        ret = np.vstack((ret, ret[:,::-1]))
 
     return ret.T
 
@@ -173,7 +148,8 @@ def mst_graph(batch_ids: nb.int64[:],
 @nb.njit(cache=True)
 def knn_graph(batch_ids: nb.int64[:],
               k: nb.int64,
-              dist_mat: nb.float64[:,:] = None) -> nb.int64[:,:]:
+              dist_mat: nb.float64[:,:],
+              directed: bool = False) -> nb.int64[:,:]:
     """
     Function that returns an incidence matrix that connects nodes
     that are k nearest neighbors. Sorts the distance matrix.
@@ -182,6 +158,7 @@ def knn_graph(batch_ids: nb.int64[:],
         batch_ids (np.ndarray): (C) List of batch ids
         k (int)               : Number of connected neighbors for each node
         dist_mat (np.ndarray) : (C,C) Tensor of pair-wise cluster distances
+        directed (bool)       : If directed, only keep edges [i,j] for which j>=i
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
@@ -200,8 +177,9 @@ def knn_graph(batch_ids: nb.int64[:],
                 if len(edges):
                     ret = np.vstack((ret, edges))
 
-    # Add the reciprocal edges as to create an undirected graph
-    ret = np.vstack((ret, ret[:,::-1]))
+    # Add the reciprocal edges as to create an undirected graph, if requested
+    if not directed:
+        ret = np.vstack((ret, ret[:,::-1]))
 
     return ret.T
 
@@ -209,8 +187,6 @@ def knn_graph(batch_ids: nb.int64[:],
 @nb.njit(cache=True)
 def bipartite_graph(batch_ids: nb.int64[:],
                     primaries: nb.boolean[:],
-                    dist_mat: nb.float64[:,:] = None,
-                    max_dist: nb.float64 = -1,
                     directed: nb.boolean = True,
                     directed_to: str = 'secondary') -> nb.int64[:,:]:
     """
@@ -220,8 +196,8 @@ def bipartite_graph(batch_ids: nb.int64[:],
     Args:
         batch_ids (np.ndarray): (C) List of batch ids
         primaries (np.ndarray): (C) Primary mask (True if primary)
-        dist_mat (np.ndarray) : (C,C) Tensor of pair-wise cluster distances
-        max_dist (double)     : Maximal edge length
+        directed (bool)       : True if edges only exist in one direction
+        directed_to (str)     : Whether to point the edges to the primaries or the secondaries
     Returns:
         np.ndarray: (2,E) Tensor of edges
     """
@@ -231,14 +207,6 @@ def bipartite_graph(batch_ids: nb.int64[:],
         for j in np.where(~primaries)[0]:
             if batch_ids[i] ==  batch_ids[j]:
                 ret = np.vstack((ret, np.array([[i,j]])))
-
-    # If requested, remove the edges above a certain length threshold
-    if max_dist > -1:
-        assert dist_mat is not None
-        dists = np.empty(len(ret), dtype=dist_mat.dtype)
-        for k, e in enumerate(ret):
-            dists[k] = dist_mat[e[0],e[1]]
-        ret = ret[dists < max_dist]
 
     # Handle directedness, by default graph is directed towards secondaries
     if directed:
@@ -250,6 +218,44 @@ def bipartite_graph(batch_ids: nb.int64[:],
         ret = np.vstack((ret, ret[:,::-1]))
 
     return ret.T
+
+
+@nb.njit(cache=True)
+def restrict_graph(edge_index: nb.int64[:,:],
+                   dist_mat: nb.float64[:,:],
+                   max_dist: nb.float64[:,:],
+                   classes: nb.int64[:] = None) -> nb.int64[:,:]:
+    """
+    Function that restricts an incidence matrix of a graph
+    to the edges below a certain length.
+
+    If `classes` are specified, the maximum edge length must be provided
+    for each possible combination of node classes.
+
+    Args:
+        edge_index (np.ndarray): (2,E) Tensor of edges
+        dist_mat (np.ndarray)  : (C,C) Tensor of pair-wise cluster distances
+        max_dist (np.ndarray)  : (N_c, N_c) Maximum edge length for each class type
+        classes (np.ndarray)   : (C) List of class for each cluster in the graph
+    Returns:
+        np.ndarray: (2,E) Restricted tensor of edges
+    """
+    if classes is None:
+        assert max_dist.shape[0] == max_dist.shape[1] == 1
+        max_dist = max_dist[0][0]
+        edge_dists = np.empty(edge_index.shape[1], dtype=dist_mat.dtype)
+        for k in range(edge_index.shape[1]):
+            i, j = edge_index[0,k], edge_index[1,k]
+            edge_dists[k] = dist_mat[i, j]
+        return edge_index[:, edge_dists < max_dist]
+    else:
+        edge_max_dists = np.empty(edge_index.shape[1], dtype=dist_mat.dtype)
+        edge_dists = np.empty(edge_index.shape[1], dtype=dist_mat.dtype)
+        for k in range(edge_index.shape[1]):
+            i, j = edge_index[0,k], edge_index[1,k]
+            edge_max_dists[k] = max_dist[classes[i], classes[j]]
+            edge_dists[k] = dist_mat[i, j]
+        return edge_index[:, edge_dists < edge_max_dists]
 
 
 @numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
@@ -312,7 +318,7 @@ def _get_cluster_edge_features_vec(data: nb.float32[:,:],
                                    coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float32[:,:]:
 
     # Get the closest points of approach IDs for each edge
-    lend, idxs1, idxs2 = _get_edge_distances(data[:,:3], clusts, edge_index)
+    lend, idxs1, idxs2 = _get_edge_distances(data[:,coords_col[0]:coords_col[1]], clusts, edge_index)
 
     # Get the points that correspond to the first voxels
     v1 = data[idxs1, coords_col[0]:coords_col[1]]
@@ -380,7 +386,7 @@ def _get_voxel_edge_features(data: nb.float32[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['voxels'], list_args='clusts')
+@numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
 def get_edge_distances(voxels, clusts, edge_index):
     """
     For each edge, finds the closest points of approach (CPAs) between the
@@ -421,7 +427,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
 
 
 @numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
-def inter_cluster_distance(voxels, clsuts, batch_ids):
+def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
     """
     Finds the inter-cluster distance between every pair of clusters within
     each batch, returned as a block-diagonal matrix.
@@ -430,24 +436,38 @@ def inter_cluster_distance(voxels, clsuts, batch_ids):
         voxels (torch.tensor) : (N,3) Tensor of voxel coordinates
         clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
         batch_ids (np.ndarray): (C) List of cluster batch IDs
+        mode (str)            : Eiher use closest voxel distance (`voxel`) or centroid distance (`centroid`)
     Returns:
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
     """
+    # If there is no batch_ids provided, assign 0 to all clusters
+    if batch_ids is None:
+        batch_ids = np.zeros(len(clusts), dtype=np.int64) 
+
     return _inter_cluster_distance(voxels, clusts, batch_ids, mode)
 
 @nb.njit(parallel=True, cache=True)
-def _inter_cluster_distance(voxels: nb.float64[:,:],
+def _inter_cluster_distance(voxels: nb.float32[:,:],
                             clusts: nb.types.List(nb.int64[:]),
-                            batch_ids: nb.int64[:]) -> nb.float64[:,:]:
+                            batch_ids: nb.int64[:],
+                            mode: str = 'voxel') -> nb.float64[:,:]:
 
+    assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
-    for i in nb.prange(len(batch_ids)):
-        for j in range(len(batch_ids)):
-            if batch_ids[i] == batch_ids[j]:
-                if i < j:
-                    dist_mat[i,j] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
-                elif i > j:
-                    dist_mat[i,j] = dist_mat[j,i]
+    indxi, indxj = complete_graph(batch_ids, directed=True)
+    if mode == 'voxel':
+        for k in nb.prange(len(indxi)):
+            i, j = indxi[k], indxj[k]
+            dist_mat[i,j] = dist_mat[j,i] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
+    elif mode == 'centroid':
+        centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
+        for i in nb.prange(len(batch_ids)):
+            centroids[i] = mean_nb(voxels[clusts[i]], axis=0)
+        for k in nb.prange(len(indxi)):
+            i, j = indxi[k], indxj[k]
+            dist_mat[i,j] = dist_mat[j,i] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
+    else:
+        raise ValueError('Inter-cluster distance mode not supported')
 
     return dist_mat
 

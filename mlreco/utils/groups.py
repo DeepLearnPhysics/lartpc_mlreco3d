@@ -275,13 +275,19 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         # if there is nu interaction
         if num_primary > 1:
             nu_id[inds] = 1
-    else:
+    elif len(particle_mpv) > 0:
         # Find mpv particles
         is_mpv = np.zeros((len(particle_v),))
-        mpv_ids = [p.id() for p in particle_mpv]
+        # mpv_ids = [p.id() for p in particle_mpv]
+        mpv_pdg = np.array([p.pdg_code() for p in particle_mpv]).reshape((-1,))
+        mpv_energy = np.array([p.energy_init() for p in particle_mpv]).reshape((-1,))
         for idx, part in enumerate(particle_v):
             # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
-            if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
+            # if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
+            # FIXME the above was wrong I think.
+            close = np.isclose(part.energy_init()*1e-3, mpv_energy)
+            pdg = part.pdg_code() == mpv_pdg
+            if (close & pdg).any():
                 is_mpv[idx] = 1.
             # else:
             #     print("fake cosmic", part.pdg_code(), part.shape(), part.creation_process(), part.track_id(), part.ancestor_track_id(), mpv_ids)
@@ -333,6 +339,7 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False):
     Inputs:
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
         - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+        - include_mpr: include MPR (cosmic-like) particles to PID target
     Outputs:
         - array: (N) list of group ids
     '''
@@ -357,9 +364,9 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False):
     return particle_ids
 
 
-def get_primary_id(cluster_event, particles_v):
+def get_shower_primary_id(cluster_event, particles_v):
     '''
-    Function that assigns valid primary tags.
+    Function that assigns valid primary tags to shower fragments.
     This could be handled somewhere else (e.g. SUPERA)
 
     Inputs:
@@ -368,35 +375,35 @@ def get_primary_id(cluster_event, particles_v):
     Outputs:
         - array: (N) list of group ids
     '''
-    # Only shower fragments that come first in time and deposit energy can be primaries
-    group_ids    = np.array([p.group_id() for p in particles_v])
-    primary_ids  = np.empty(particles_v.size(), dtype=np.int32)
+    # Loop over the list of particles
+    group_ids   = np.array([p.group_id() for p in particles_v])
+    primary_ids = np.empty(particles_v.size(), dtype=np.int32)
     for i, p in enumerate(particles_v):
-        # If the particle is LE, not primary
-        if p.shape() == 4:
+        # If the particle is a track or a low energy cluster, it is not a primary shower fragment
+        if p.shape() == 1 or p.shape() == 4:
             primary_ids[i] = 0
             continue
 
-        # If the particle is not EM, use default
-        gid = int(p.group_id())
-        if p.shape() != 0:
-            primary_ids[i] = int(gid == i)
+        # If a particle is a Delta or a Michel, it is a primary shower fragment
+        if p.shape() == 2 or p.shape() == 3:
+            primary_ids[i] = 1
             continue
 
-        # If the particle is nuclear activity, Delta or Michel, make it non primary
+        # If the shower fragment originates from nuclear activity, it is not a primary
         process = p.creation_process()
         parent_pdg_code = abs(p.parent_pdg_code())
-        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 13:
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 2112:
             primary_ids[i] = 0
             continue
 
-        # If a particle's parent fragment has size zero, make it non primary
+        # If a shower group's parent fragment has size zero, there is no valid primary in the group
+        gid = int(p.group_id())
         parent_size = cluster_event.as_vector()[gid].as_vector().size()
         if not parent_size:
             primary_ids[i] = 0
             continue
 
-        # If a particle's parent is not the first in time, make it non primary
+        # If a shower group's parent fragment is not the first in time, there is no valid primary in the group
         idxs = np.where(group_ids == gid)[0]
         clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
         min_id = np.argmin(clust_times)
@@ -404,7 +411,52 @@ def get_primary_id(cluster_event, particles_v):
             primary_ids[i] = 0
             continue
 
-        # Use default otherwise
+        # If all conditions are met, label shower fragments which have identical ID and group ID as primary
         primary_ids[i] = int(gid == i)
+
+    return primary_ids
+
+
+def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
+    '''
+    Function that assigns valid primary tags to particle groups.
+    This could be handled somewhere else (e.g. SUPERA)
+
+    Inputs:
+        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
+        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
+        - include_mpr: include MPR (cosmic-like) particles to primary target
+    Outputs:
+        - array: (N) list of group ids
+    '''
+    # Loop over the list of particles
+    primary_ids = np.empty(particles_v.size(), dtype=np.int32)
+    for i, p in enumerate(particles_v):
+        # If MPR particles are not included and the nu_id < 1, assign invalid
+        if not include_mpr and nu_ids[i] < 1:
+            primary_ids[i] = -1
+            continue
+
+        # If the particle is not a shower or a track, it is not a primary
+        if p.shape() != 0 and p.shape() != 1:
+            primary_ids[i] = 0
+            continue
+
+        # If the particle group originates from nuclear activity, it is not a primary
+        gid = int(p.group_id())
+        process = particles_v[gid].creation_process()
+        parent_pdg_code = abs(particles_v[gid].parent_pdg_code())
+        ancestor_pdg_code = abs(particles_v[gid].ancestor_pdg_code())
+        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 2112 or ancestor_pdg_code == 2112:
+            primary_ids[i] = 0
+            continue
+
+        # If the parent is a pi0, make sure that it is a primary pi0 (pi0s are not stored in particle list)
+        if parent_pdg_code == 111 and ancestor_pdg_code != 111:
+            primary_ids[i] = 0
+            continue
+
+        # If the parent ID of the primary particle in the group is the same as the group ID, it is a primary
+        primary_ids[i] = int(particles_v[gid].parent_id() == gid)
 
     return primary_ids

@@ -163,13 +163,24 @@ def _get_extra_gnn_features(fragments,
                            input,
                            result,
                            use_ppn=False,
-                           use_supp=False):
+                           use_supp=False,
+                           enhance=False,
+                           allow_outside=False,
+                           coords_col=(1, 4)):
     """
     Extracting extra features to feed into the GNN particle aggregators
 
     - PPN: Most likely PPN point for showers,
             end points for tracks (+ direction estimate)
     - Supplemental: Mean/RMS energy in the fragment + semantic class
+
+    If the `enhance` parameter is `True`, tracks leverage PPN predictions
+    to provide a more accurate estimate of the end points. This needs to be 
+    avoided for track fragments, as PPN is not trained to find end points for them.
+    If set to `False`, the two voxels furthest away from each other are picked.
+
+    If the `allow_outside` parameter is `True`, the end point estimates
+    are *not* brought back to the closest fragment voxel.
 
     Parameters
     ==========
@@ -180,6 +191,8 @@ def _get_extra_gnn_features(fragments,
     result: dictionary
     use_ppn: bool
     use_supp: bool
+    enhance: bool
+    allow_outside: bool
 
     Returns
     =======
@@ -205,23 +218,26 @@ def _get_extra_gnn_features(fragments,
                                         dtype=torch.double)
         points_tensor = result['points'][0].detach().double()
         for i, f in enumerate(fragments[mask]):
+            fragment_voxels = input[0][f][:,coords_col[0]:coords_col[1]]
             if frag_seg[mask][i] == 1:
-                end_points = get_track_endpoints_geo(input[0], f, points_tensor)
-                ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
+                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None)
             else:
-                dmask  = torch.nonzero(torch.max(
-                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.,
-                    as_tuple=True)[0]
+                scores = torch.softmax(points_tensor[f, -2:], dim=1)[:,-1]
                 # scores = torch.sigmoid(points_tensor[f, -1])
-                # argmax = dmask[torch.argmax(scores[dmask])] \
-                #          if len(dmask) else torch.argmax(scores)
-                scores = torch.softmax(points_tensor[f, -2:], dim=1)
-                argmax = dmask[torch.argmax(scores[dmask, -1])] \
-                            if len(dmask) else torch.argmax(scores[:, -1])
-                start  = input[0][f][argmax,1:4] + \
-                            points_tensor[f][argmax,:3] + 0.5
-                ppn_points = torch.cat((ppn_points,
-                    torch.cat([start, start]).reshape(1,-1)), dim=0)
+                dmask  = torch.nonzero((scores > 0.5) & (torch.max(
+                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.),
+                    as_tuple=True)[0]
+                argmax = dmask[torch.argmax(scores[dmask])] \
+                            if len(dmask) else torch.argmax(scores)
+                start  = fragment_voxels[argmax] + points_tensor[f][argmax,:3] + 0.5
+                end_points = torch.cat([start, start])
+
+            if not allow_outside and (frag_seg[mask][i] != 1 or (frag_seg[mask][i] == 1 and enhance)):
+                dist_mat   = torch.cdist(end_points.reshape(-1,3), fragment_voxels)
+                argmins    = torch.argmin(dist_mat, dim=1)
+                end_points = torch.cat([fragment_voxels[argmins[0]], fragment_voxels[argmins[1]]])
+
+            ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
 
         kwargs['points'] = ppn_points
 
@@ -261,7 +277,7 @@ def split_clusts(clusts, batch_ids, batches, counts):
         [np.ndarray]  : (B) List of cluster IDs in each batch
     """
     clusts_split, cbids = _split_clusts(clusts, batch_ids, batches, counts)
-    
+
     # Cast the list of clusters to np.array (object type)
     same_length = [np.all([len(c) == len(bclusts[0]) for c in bclusts]) for bclusts in clusts_split]
     return [np.array(clusts_split[b], dtype=object if not sl else np.int64) for b, sl in enumerate(same_length)], cbids
@@ -304,7 +320,7 @@ def split_edge_index(edge_index: nb.int64[:,:],
     """
     # If the input is empty, simply return defaults
     if not edge_index.shape[1]:
-        return [np.empty((2,0), dtype=np.int64) for b in batches], [np.empty(0, dtype=np.int64) for b in batches]
+        return [np.empty((0,2), dtype=np.int64) for b in batches], [np.empty(0, dtype=np.int64) for b in batches]
 
     # For each batch ID, get the list of edges that belong to it
     ebids = [np.where(batch_ids[edge_index[0]] == b)[0] for b in batches]

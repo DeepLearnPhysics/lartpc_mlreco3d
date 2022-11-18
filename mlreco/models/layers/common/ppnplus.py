@@ -436,7 +436,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'mask_loss': 0.,
             'type_loss': 0.,
             'classify_endpoints_loss': 0.,
-            'classify_endpoints_acc': 0.
+            'classify_endpoints_accuracy': 0.
         }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
@@ -560,25 +560,25 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                     acc_classify_endpoints = acc_point_class / point_class_count
                                     #total_loss += loss_classify_endpoints.float()
                             res['classify_endpoints_loss'] += float(loss_classify_endpoints) / num_batches
-                            res['classify_endpoints_acc'] += float(acc_classify_endpoints) / num_batches
+                            res['classify_endpoints_accuracy'] += float(acc_classify_endpoints) / num_batches
                         # --- end of Endpoint classification
 
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)
                         reg_loss = d2.mean()
-                        res['reg_loss'] += float(reg_loss) / num_batches
-                        res['type_loss'] += float(type_loss) / num_batches
-                        res['mask_loss'] += float(mask_loss_final) / num_batches
-                        total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches
+                        res['reg_loss'] += float(reg_loss) / num_batches if num_batches else float(reg_loss)
+                        res['type_loss'] += float(type_loss) / num_batches if num_batches else float(type_loss)
+                        res['mask_loss'] += float(mask_loss_final) / num_batches if num_batches else float(mask_loss_final)
+                        total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches if num_batches else reg_loss + type_loss + mask_loss_final
                         if self._classify_endpoints:
-                            total_loss += loss_classify_endpoints / num_batches
+                            total_loss += loss_classify_endpoints / num_batches if num_batches else loss_classify_endpoints
 
-                loss_layer /= num_batches
+                loss_layer /= max(1, num_batches)
                 loss_gpu += loss_layer
             loss_gpu /= len(ppn_layers)
             total_loss += loss_gpu
 
-        total_acc /= num_batches
-        res['ppn_loss'] = total_loss
-        res['ppn_acc'] = float(total_acc)
+        total_acc = total_acc / num_batches if num_batches else 1.
+        res['loss'] = total_loss
+        res['accuracy'] = float(total_acc)
         return res

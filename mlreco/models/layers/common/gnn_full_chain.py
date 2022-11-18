@@ -582,7 +582,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
@@ -650,7 +650,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 res['deghost_' + key] = res_deghost[key]
             accuracy += res_deghost['accuracy']
             loss += self.deghost_weight*res_deghost['loss']
-            deghost = (seg_label[0][:,-1] < 5) & (out['ghost'][0][:,0] > out['ghost'][0][:,1]) # Only non-ghost (both true and pred) can go in semseg eval
+            deghost = (out['ghost'][0][:,0] > out['ghost'][0][:,1]) & (seg_label[0][:,-1] < 5) # Only apply loss to reco/true non-ghosts
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -658,7 +658,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             else:
                 res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][deghost]]}, [seg_label[0][deghost]])
             for key in res_seg:
-                res['uresnet_' + key] = res_seg[key]
+                res['segmentation_' + key] = res_seg[key]
             accuracy += res_seg['accuracy']
             loss += self.segmentation_weight*res_seg['loss']
             #print('uresnet ', self.segmentation_weight, res_seg['loss'], loss)
@@ -669,8 +669,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             for key in res_ppn:
                 res['ppn_' + key] = res_ppn[key]
 
-            accuracy += res_ppn['ppn_acc']
-            loss += self.ppn_weight*res_ppn['ppn_loss']
+            accuracy += res_ppn['accuracy']
+            loss += self.ppn_weight*res_ppn['loss']
 
         if self.enable_ghost and (self.enable_cnn_clust or \
                                   self.enable_gnn_track or \
@@ -895,7 +895,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if self.enable_uresnet:
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn:
-                print('PPN Accuracy: {:.4f}'.format(res_ppn['ppn_acc']))
+                print('PPN Accuracy: {:.4f}'.format(res_ppn['accuracy']))
             if self.enable_cnn_clust and ('graph' in out or 'embeddings' in out):
                 if not self._enable_graph_spice:
                     print('Clustering Embedding Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))

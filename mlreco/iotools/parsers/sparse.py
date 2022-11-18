@@ -57,7 +57,7 @@ def parse_sparse2d(sparse_event_list):
     return np_voxels, np.concatenate(output, axis=-1)
 
 
-def parse_sparse3d(sparse_event_list):
+def parse_sparse3d(sparse_event_list, features=None):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
 
@@ -78,6 +78,15 @@ def parse_sparse3d(sparse_event_list):
     -------------
     sparse_event_list: list of larcv::EventSparseTensor3D
         Can be repeated to load more features (one per feature).
+    features: int, optional
+        Default is None (ignored). If a positive integer is specified,
+        the sparse_event_list will be split in equal lists of length
+        `features`. Each list will be concatenated along the feature
+        dimension separately. Then all lists are concatenated along the 
+        first dimension (voxels). For example, this lets you work with
+        distinct detector volumes whose input data is stored in separate
+        TTrees.`features` is required to be a divider of the `sparse_event_list`
+        length.
 
     Returns
     -------
@@ -86,21 +95,37 @@ def parse_sparse3d(sparse_event_list):
     data: numpy array(float32) with shape (N,C)
         Pixel values/channels, as many channels as specified larcv::EventSparseTensor3D.
     """
-    meta = None
-    output = []
-    np_voxels = None
-    for sparse_event in sparse_event_list:
-        num_point = sparse_event.as_vector().size()
-        if meta is None:
-            meta = sparse_event.meta()
-            np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
-            larcv.fill_3d_voxels(sparse_event, np_voxels)
-        else:
-            assert meta == sparse_event.meta()
-        np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
-        larcv.fill_3d_pcloud(sparse_event, np_data)
-        output.append(np_data)
-    return np_voxels, np.concatenate(output, axis=-1)
+    split_sparse_event_list = [sparse_event_list]
+    if features is not None and features > 0:
+        if len(sparse_event_list) % features > 0:
+            raise Exception("features number in parse_sparse3d should be a divider of the sparse_event_list length.")
+        split_sparse_event_list = np.split(np.array(sparse_event_list), len(sparse_event_list) / features)
+    
+    voxels, features = [], []
+    features_count = None
+    for sparse_event_list in split_sparse_event_list:
+        if features_count is None:
+            features_count = len(sparse_event_list)
+        assert len(sparse_event_list) == features_count
+
+        meta = None
+        output = []
+        np_voxels = None
+        for sparse_event in sparse_event_list:
+            num_point = sparse_event.as_vector().size()
+            if meta is None:
+                meta = sparse_event.meta()
+                np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
+                larcv.fill_3d_voxels(sparse_event, np_voxels)
+            else:
+                assert meta == sparse_event.meta()
+            np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
+            larcv.fill_3d_pcloud(sparse_event, np_data)
+            output.append(np_data)
+        voxels.append(np_voxels)
+        features.append(np.concatenate(output, axis=-1))
+
+    return np.concatenate(voxels, axis=0), np.concatenate(features, axis=0)
 
 
 def parse_sparse3d_ghost(sparse_event_semantics):
@@ -129,6 +154,22 @@ def parse_sparse3d_ghost(sparse_event_semantics):
     """
     np_voxels, np_data = parse_sparse3d([sparse_event_semantics])
     return np_voxels, (np_data==5).astype(np.float32)
+
+
+def parse_sparse3d_charge_rescaled(sparse_event_list):
+    # Produces sparse3d_reco_rescaled on the fly on datasets that do not have it
+    np_voxels, output = parse_sparse3d(sparse_event_list)
+
+    deghost      = output[:, -1] < 5
+    hit_charges  = output[deghost,  :3]
+    hit_ids      = output[deghost, 3:6]
+    pmask        = hit_ids > -1
+
+    _, inverse, counts = np.unique(hit_ids, return_inverse=True, return_counts=True)
+    multiplicity = counts[inverse].reshape(-1,3)
+    charges = np.sum((hit_charges*pmask)/multiplicity, axis=1)/np.sum(pmask, axis=1)
+
+    return np_voxels[deghost], charges.reshape(-1,1)
 
 
 def parse_sparse2d_scn(sparse_event_list):
