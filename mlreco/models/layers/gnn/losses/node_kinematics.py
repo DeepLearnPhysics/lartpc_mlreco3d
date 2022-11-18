@@ -175,6 +175,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     valid_mask_type = node_assn_type > -1
 
                     # Do not apply loss if the logit corresponding to the true class is -inf (forbidden prediction)
+                    # Not a problem is node_assn_type is -1, as these rows will already be excluded by previous mask
                     valid_mask_type &= (node_pred_type[np.arange(len(node_assn_type)),node_assn_type] != -float('inf')).detach().cpu().numpy()
 
                     # If high purity is requested, do not include broken particle in the loss

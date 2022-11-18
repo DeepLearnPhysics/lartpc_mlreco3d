@@ -122,3 +122,25 @@ def parse_run_info(sparse_event):
          (run, subrun, event)
     """
     return sparse_event.run(), sparse_event.subrun(), sparse_event.event()
+
+
+def parse_opflash(opflash_event):
+    """
+    Copy construct OpFlash and return an array of larcv::Flash.
+
+    .. code-block:: yaml
+        schema:
+          opflash_cryoE:
+            parser:parse_opflash
+            opflash_event: opflash_cryoE
+
+    Configuration
+    -------------
+    opflash_event: larcv::EventFlash
+
+    Returns
+    -------
+    list
+    """
+    opflashes = [larcv.Flash(f) for f in opflash_event.as_vector()]
+    return opflashes
