@@ -57,7 +57,7 @@ def parse_sparse2d(sparse_event_list):
     return np_voxels, np.concatenate(output, axis=-1)
 
 
-def parse_sparse3d(sparse_event_list):
+def parse_sparse3d(sparse_event_list, features=None):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
 
@@ -78,6 +78,15 @@ def parse_sparse3d(sparse_event_list):
     -------------
     sparse_event_list: list of larcv::EventSparseTensor3D
         Can be repeated to load more features (one per feature).
+    features: int, optional
+        Default is None (ignored). If a positive integer is specified,
+        the sparse_event_list will be split in equal lists of length
+        `features`. Each list will be concatenated along the feature
+        dimension separately. Then all lists are concatenated along the 
+        first dimension (voxels). For example, this lets you work with
+        distinct detector volumes whose input data is stored in separate
+        TTrees.`features` is required to be a divider of the `sparse_event_list`
+        length.
 
     Returns
     -------
@@ -86,21 +95,37 @@ def parse_sparse3d(sparse_event_list):
     data: numpy array(float32) with shape (N,C)
         Pixel values/channels, as many channels as specified larcv::EventSparseTensor3D.
     """
-    meta = None
-    output = []
-    np_voxels = None
-    for sparse_event in sparse_event_list:
-        num_point = sparse_event.as_vector().size()
-        if meta is None:
-            meta = sparse_event.meta()
-            np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
-            larcv.fill_3d_voxels(sparse_event, np_voxels)
-        else:
-            assert meta == sparse_event.meta()
-        np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
-        larcv.fill_3d_pcloud(sparse_event, np_data)
-        output.append(np_data)
-    return np_voxels, np.concatenate(output, axis=-1)
+    split_sparse_event_list = [sparse_event_list]
+    if features is not None and features > 0:
+        if len(sparse_event_list) % features > 0:
+            raise Exception("features number in parse_sparse3d should be a divider of the sparse_event_list length.")
+        split_sparse_event_list = np.split(np.array(sparse_event_list), len(sparse_event_list) / features)
+    
+    voxels, features = [], []
+    features_count = None
+    for sparse_event_list in split_sparse_event_list:
+        if features_count is None:
+            features_count = len(sparse_event_list)
+        assert len(sparse_event_list) == features_count
+
+        meta = None
+        output = []
+        np_voxels = None
+        for sparse_event in sparse_event_list:
+            num_point = sparse_event.as_vector().size()
+            if meta is None:
+                meta = sparse_event.meta()
+                np_voxels = np.empty(shape=(num_point, 3), dtype=np.int32)
+                larcv.fill_3d_voxels(sparse_event, np_voxels)
+            else:
+                assert meta == sparse_event.meta()
+            np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
+            larcv.fill_3d_pcloud(sparse_event, np_data)
+            output.append(np_data)
+        voxels.append(np_voxels)
+        features.append(np.concatenate(output, axis=-1))
+
+    return np.concatenate(voxels, axis=0), np.concatenate(features, axis=0)
 
 
 def parse_sparse3d_ghost(sparse_event_semantics):

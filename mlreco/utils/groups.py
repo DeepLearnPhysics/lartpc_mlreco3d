@@ -275,13 +275,19 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
         # if there is nu interaction
         if num_primary > 1:
             nu_id[inds] = 1
-    else:
+    elif len(particle_mpv) > 0:
         # Find mpv particles
         is_mpv = np.zeros((len(particle_v),))
-        mpv_ids = [p.id() for p in particle_mpv]
+        # mpv_ids = [p.id() for p in particle_mpv]
+        mpv_pdg = np.array([p.pdg_code() for p in particle_mpv]).reshape((-1,))
+        mpv_energy = np.array([p.energy_init() for p in particle_mpv]).reshape((-1,))
         for idx, part in enumerate(particle_v):
             # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
-            if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
+            # if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
+            # FIXME the above was wrong I think.
+            close = np.isclose(part.energy_init()*1e-3, mpv_energy)
+            pdg = part.pdg_code() == mpv_pdg
+            if (close & pdg).any():
                 is_mpv[idx] = 1.
             # else:
             #     print("fake cosmic", part.pdg_code(), part.shape(), part.creation_process(), part.track_id(), part.ancestor_track_id(), mpv_ids)

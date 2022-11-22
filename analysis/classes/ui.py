@@ -1,6 +1,7 @@
 from typing import Callable, Tuple, List
 import numpy as np
 import pandas as pd
+import os, sys
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
@@ -8,7 +9,10 @@ from mlreco.utils.metrics import unique_label
 from collections import defaultdict
 
 from scipy.special import softmax
-from analysis.classes.particle import *
+from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
+        TruthParticle, Interaction, TruthInteraction, FlashManager
+from analysis.classes.particle import matrix_counts, matrix_iou, \
+        match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
@@ -16,6 +20,7 @@ from mlreco.utils.vertex import get_vertex, predict_vertex
 from mlreco.utils.deghosting import deghost_labels_and_predictions, compute_rescaled_charge
 
 from mlreco.utils.gnn.cluster import get_cluster_label
+from mlreco.iotools.collates import VolumeBoundaries
 
 
 class FullChainPredictor:
@@ -50,8 +55,10 @@ class FullChainPredictor:
 
     4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False):
+    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False,
+            enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
         self.module_config = cfg['model']['modules']
+        self.cfg = cfg
 
         # Handle deghosting before anything and save deghosting specific
         # quantities separately from data_blob and result
@@ -66,7 +73,7 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        self.spatial_size             = predictor_cfg.get('spatial_size', 768)
+        # self.spatial_size             = predictor_cfg.get('spatial_size', 768)
         # For matching particles and interactions
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
@@ -82,6 +89,8 @@ class FullChainPredictor:
 
         self.batch_mask = self.data_blob['input_data']
 
+        # This is used to apply fiducial volume cuts.
+        # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
         if self.volume_boundaries is None:
             # Using ICARUS Cryo 0 as a default
@@ -99,11 +108,112 @@ class FullChainPredictor:
                 self.volume_boundaries[1, :] = (self.volume_boundaries[1, :] - min_y) / size_voxel_y
                 self.volume_boundaries[2, :] = (self.volume_boundaries[2, :] - min_z) / size_voxel_z
 
+        # Determine whether we need to account for several distinct volumes
+        # split over "virtual" batch ids
+        # Note this is different from "self.volume_boundaries" above
+        # FIXME rename one or the other to be clearer
+        boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
+        if boundaries is not None:
+            self.vb = VolumeBoundaries(boundaries)
+            self._num_volumes = self.vb.num_volumes()
+        else:
+            self.vb = None
+            self._num_volumes = 1
+
+        # Prepare flash matching if requested
+        self.enable_flash_matching = enable_flash_matching
+        self.fm = None
+        if enable_flash_matching:
+            reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
+
+            if 'meta' not in self.data_blob:
+                raise Exception('Meta unspecified in data_blob. Please add it to your I/O schema.')
+            #if 'FMATCH_BASEDIR' not in os.environ:
+            #    raise Exception('FMATCH_BASEDIR undefined. Please source `OpT0Finder/configure.sh` or define it manually.')
+            assert os.path.exists(flash_matching_cfg)
+            assert len(opflash_keys) == self._num_volumes
+
+            self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0], reflash_merging_window=reflash_merging_window)
+            self.opflash_keys = opflash_keys
+
+            self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
+            # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
+            
+
     def __repr__(self):
-        msg = "FullChainEvaluator(num_images={})".format(self.num_images)
+        msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
 
+    def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.):
+        """
+        If flash matches has not yet been computed for this volume, then it will
+        be run as part of this function. Otherwise, flash matching results are
+        cached in `self.flash_matches` per volume.
 
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+
+        Returns
+        =======
+        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
+        """
+        if (entry, volume, use_true_tpc_objects) not in self.flash_matches:
+            self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
+                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+
+        tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+        return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
+
+    def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.):
+        """
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+        """
+        if use_true_tpc_objects:
+            if not hasattr(self, 'get_true_interactions'):
+                raise Exception('This Predictor does not know about truth info.')
+
+            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+        else:
+            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+
+        # If we are not running flash matching over the entire volume at once,
+        # then we need to shift the coordinates that will be used for flash matching
+        # back to the reference of the first volume.
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._untranslate(tpc_object.points, volume)
+        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._translate(tpc_object.points, volume)
+        
+        # Now making Flash_t objects
+        selected_opflash_keys = self.opflash_keys
+        if volume is not None:
+            assert isinstance(volume, int)
+            selected_opflash_keys = [self.opflash_keys[volume]]
+        pmt_v = []
+        for key in selected_opflash_keys:
+            pmt_v.extend(self.data_blob[key][entry])
+        input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
+
+        # Running flash matching and caching the results
+        matches = self.fm.run_flash_matching()
+        self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
+        
     def _fit_predict_ppn(self, entry):
         '''
         Method for predicting ppn predictions.
@@ -381,11 +491,93 @@ class FullChainPredictor:
 
         return vertex_info
 
+    def _get_entries(self, entry, volume):
+        """
+        Make a list of actual entries in the batch ids. This accounts for potential
+        virtual batch ids in case we used volume boundaries to process several volumes
+        separately.
+
+        Parameters
+        ==========
+        entry: int
+            Which entry of the original dataset you want to access.
+        volume: int or None
+            Which volume you want to access. None means all of them.
+
+        Returns
+        =======
+        list
+            List of integers = actual batch ids in the tensors (potentially virtual batch ids).
+        """
+        entries = [entry] # default behavior
+        if self.vb is not None: # in case we defined virtual batch ids (volume boundaries)
+            entries = self.vb.virtual_batch_ids(entry) # these are ALL the virtual batch ids corresponding to this entry
+            if volume is not None: # maybe we wanted to select a specific volume
+                entries = [entries[volume]]
+        return entries
+
+    def _check_volume(self, volume):
+        """
+        Basic sanity check that the volume given makes sense given the config.
+
+        Parameters
+        ==========
+        volume: int or None
+
+        Returns
+        =======
+        Nothing
+        """
+        if volume is not None and self.vb is None:
+            raise Exception("You need to specify volume boundaries in your I/O config (collate section).")
+        if volume is not None:
+            assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
+
+    def _translate(self, voxels, volume):
+        """
+        Go from 1-volume-only back to full volume coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.translate(voxels, volume)
+
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
                       attaching_threshold=2,
-                      semantic_type=None, verbose=False, true_id=False) -> List[Particle]:
+                      semantic_type=None, verbose=False,
+                      true_id=False, volume=None) -> List[Particle]:
         '''
         Method for retriving fragment list for given batch index.
 
@@ -394,119 +586,141 @@ class FullChainPredictor:
 
         Method also performs startpoint prediction for shower fragments.
 
-        Inputs:
-            - entry: Batch number to retrieve example.
-            - semantic_type (optional): if True, only ppn candiates with the
+        Parameters
+        ==========
+        entry: int
+            Batch number to retrieve example.
+        only_primaries: bool, default False
+        min_particle_voxel_count: int, default -1
+        attaching_threshold: float, default 2
+            threshold distance to attach ppn point to particle.
+        semantic_type: int, default None
+            If True, only ppn candiates with the
             same predicted semantic type will be matched to its corresponding
             particle.
-            - threshold (float, optional): threshold distance to attach
-            ppn point to particle.
+        verbose: bool, default False
+        true_id: bool, default False
+        volume: int, default None
 
-        Returns:
-            - out: List of <Particle> instances (see Particle class definition).
+        Returns
+        =======
+        list
+            List of <Particle> instances (see Particle class definition).
         '''
+        self._check_volume(volume)
+
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
-        point_cloud = self.data_blob['input_data'][entry][:, 1:4]
-        depositions = self.result['input_rescaled'][entry][:, 4]
-        fragments = self.result['fragments'][entry]
-        fragments_seg = self.result['fragments_seg'][entry]
+        entries = self._get_entries(entry, volume)
 
-        shower_mask = fragments_seg == 0
-        shower_frag_primary = np.argmax(self.result['shower_node_pred'][entry], axis=1)
+        out_fragment_list = []
+        for entry in entries:
+            volume = entry % self._num_volumes
 
-        if 'shower_node_features' in self.result:
-            shower_node_features = self.result['shower_node_features'][entry]
-        if 'track_node_features' in self.result:
-            track_node_features = self.result['track_node_features'][entry]
+            point_cloud = self.data_blob['input_data'][entry][:, 1:4]
+            depositions = self.result['input_rescaled'][entry][:, 4]
+            fragments = self.result['fragments'][entry]
+            fragments_seg = self.result['fragments_seg'][entry]
 
-        assert len(fragments_seg) == len(fragments)
+            shower_mask = np.isin(fragments_seg, self.module_config['grappa_shower']['base']['node_type'])
+            shower_frag_primary = np.argmax(self.result['shower_node_pred'][entry], axis=1)
 
-        temp = []
+            if 'shower_node_features' in self.result:
+                shower_node_features = self.result['shower_node_features'][entry]
+            if 'track_node_features' in self.result:
+                track_node_features = self.result['track_node_features'][entry]
 
-        if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(fragments) > 0:
+            assert len(fragments_seg) == len(fragments)
 
-            group_labels = self._fit_predict_groups(entry)
-            inter_labels = self._fit_predict_interaction_labels(entry)
-            group_ids = get_cluster_label(group_labels.reshape(-1, 1), fragments, column=0)
-            inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), fragments, column=0)
+            temp = []
 
-        else:
-            group_ids = np.ones(len(fragments)).astype(int) * -1
-            inter_ids = np.ones(len(fragments)).astype(int) * -1
+            if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(fragments) > 0:
 
-        if true_id:
-            true_fragment_labels = self.data_blob['cluster_label'][entry][:, 5]
+                group_labels = self._fit_predict_groups(entry)
+                inter_labels = self._fit_predict_interaction_labels(entry)
+                group_ids = get_cluster_label(group_labels.reshape(-1, 1), fragments, column=0)
+                inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), fragments, column=0)
 
+            else:
+                group_ids = np.ones(len(fragments)).astype(int) * -1
+                inter_ids = np.ones(len(fragments)).astype(int) * -1
 
-        for i, p in enumerate(fragments):
-            voxels = point_cloud[p]
-            seg_label = fragments_seg[i]
-            part = ParticleFragment(voxels, i, seg_label,
-                            interaction_id=inter_ids[i],
-                            group_id=group_ids[i],
-                            image_id=entry,
-                            voxel_indices=p,
-                            depositions=depositions[p],
-                            is_primary=False,
-                            pid_conf=-1,
-                            alias='Fragment')
-            temp.append(part)
             if true_id:
-                fid = true_fragment_labels[p]
-                fids, counts = np.unique(fid.astype(int), return_counts=True)
-                part.true_ids = fids
-                part.true_counts = counts
+                true_fragment_labels = self.data_blob['cluster_label'][entry][:, 5]
 
-        # Label shower fragments as primaries and attach startpoint
-        shower_counter = 0
-        for p in temp:
-            if p.semantic_type == 0:
+
+            for i, p in enumerate(fragments):
+                voxels = point_cloud[p]
+                seg_label = fragments_seg[i]
+                part = ParticleFragment(self._translate(voxels, volume),
+                                i, seg_label,
+                                interaction_id=inter_ids[i],
+                                group_id=group_ids[i],
+                                image_id=entry,
+                                voxel_indices=p,
+                                depositions=depositions[p],
+                                is_primary=False,
+                                pid_conf=-1,
+                                alias='Fragment',
+                                volume=volume)
+                temp.append(part)
+                if true_id:
+                    fid = true_fragment_labels[p]
+                    fids, counts = np.unique(fid.astype(int), return_counts=True)
+                    part.true_ids = fids
+                    part.true_counts = counts
+
+            # Label shower fragments as primaries and attach startpoint
+            shower_counter = 0
+            for p in np.array(temp)[shower_mask]:
                 is_primary = shower_frag_primary[shower_counter]
                 p.is_primary = bool(is_primary)
                 p.startpoint = shower_node_features[shower_counter][19:22]
                 # p.group_id = int(shower_group_pred[shower_counter])
                 shower_counter += 1
-        assert shower_counter == shower_frag_primary.shape[0]
+            assert shower_counter == shower_frag_primary.shape[0]
 
-        # Attach endpoint to track fragments
-        track_counter = 0
-        for p in temp:
-            if p.semantic_type == 1:
-                # p.group_id = int(track_group_pred[track_counter])
-                p.startpoint = track_node_features[track_counter][19:22]
-                p.endpoint = track_node_features[track_counter][22:25]
-                track_counter += 1
-        # assert track_counter == track_group_pred.shape[0]
+            # Attach endpoint to track fragments
+            track_counter = 0
+            for p in temp:
+                if p.semantic_type == 1:
+                    # p.group_id = int(track_group_pred[track_counter])
+                    p.startpoint = track_node_features[track_counter][19:22]
+                    p.endpoint = track_node_features[track_counter][22:25]
+                    track_counter += 1
+            # assert track_counter == track_group_pred.shape[0]
 
-        # Apply fragment voxel cut
-        out = []
-        for p in temp:
-            if p.points.shape[0] < min_particle_voxel_count:
-                continue
-            out.append(p)
+            # Apply fragment voxel cut
+            out = []
+            for p in temp:
+                if p.points.shape[0] < min_particle_voxel_count:
+                    continue
+                out.append(p)
 
-        # Check primaries and assign ppn points
-        if only_primaries:
-            out = [p for p in out if p.is_primary]
+            # Check primaries and assign ppn points
+            if only_primaries:
+                out = [p for p in out if p.is_primary]
 
-        if semantic_type is not None:
-            out = [p for p in out if p.semantic_type == semantic_type]
+            if semantic_type is not None:
+                out = [p for p in out if p.semantic_type == semantic_type]
 
-        if len(out) == 0:
-            return out
+            if len(out) == 0:
+                return out
 
-        ppn_results = self._fit_predict_ppn(entry)
-        match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=attaching_threshold)
+            ppn_results = self._fit_predict_ppn(entry)
+            match_points_to_particles(ppn_results, out,
+                ppn_distance_threshold=attaching_threshold)
 
-        return out
+            out_fragment_list.extend(out)
+
+        return out_fragment_list
 
 
     def get_particles(self, entry, only_primaries=True,
                       min_particle_voxel_count=-1,
-                      attaching_threshold=2) -> List[Particle]:
+                      attaching_threshold=2,
+                      volume=None) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -527,104 +741,124 @@ class FullChainPredictor:
         with the closest Hausdorff distance to the particle point cloud
         (smallest point-to-set distance)
 
-        Inputs:
-            - entry: Batch number to retrieve example.
-            - primaries: If set to True, only retrieve predicted primaries.
-        Returns:
-            - out: List of <Particle> instances (see Particle class definition).
+        Parameters
+        ==========
+        entry: int
+            Batch number to retrieve example.
+        only_primaries: bool, default True
+            If set to True, only retrieve predicted primaries.
+        min_particle_voxel_count: int, default -1
+        attaching_threshold: int, default 2
+        volume: int, default None
+
+        Returns
+        =======
+        list
+            List of <Particle> instances (see Particle class definition).
         '''
+        self._check_volume(volume)
+
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
-        point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
-        depositions      = self.result['input_rescaled'][entry][:, 4]
-        particles        = self.result['particles'][entry]
-        # inter_group_pred = self.result['inter_group_pred'][entry]
-        #print(point_cloud.shape, depositions.shape, len(particles))
-        particles_seg    = self.result['particles_seg'][entry]
+        entries = self._get_entries(entry, volume)
 
-        type_logits = self.result['node_pred_type'][entry]
-        input_node_features = [None] * type_logits.shape[0]
-        if 'particle_node_features' in self.result:
-            input_node_features = self.result['particle_node_features'][entry]
-        pids = np.argmax(type_logits, axis=1)
+        out_particle_list = []
+        for entry in entries:
+            volume = entry % self._num_volumes
 
-        out = []
-        if point_cloud.shape[0] == 0:
-            return out
-        assert len(particles_seg) == len(particles)
-        assert len(pids) == len(particles)
-        assert len(input_node_features) == len(particles)
-        assert point_cloud.shape[0] == depositions.shape[0]
+            point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
+            depositions      = self.result['input_rescaled'][entry][:, 4]
+            particles        = self.result['particles'][entry]
+            # inter_group_pred = self.result['inter_group_pred'][entry]
+            #print(point_cloud.shape, depositions.shape, len(particles))
+            particles_seg    = self.result['particles_seg'][entry]
 
-        node_pred_vtx = self.result['node_pred_vtx'][entry]
+            type_logits = self.result['node_pred_type'][entry]
+            input_node_features = [None] * type_logits.shape[0]
+            if 'particle_node_features' in self.result:
+                input_node_features = self.result['particle_node_features'][entry]
+            pids = np.argmax(type_logits, axis=1)
 
-        assert node_pred_vtx.shape[0] == len(particles)
+            out = []
+            if point_cloud.shape[0] == 0:
+                return out
+            assert len(particles_seg) == len(particles)
+            assert len(pids) == len(particles)
+            assert len(input_node_features) == len(particles)
+            assert point_cloud.shape[0] == depositions.shape[0]
 
-        if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(particles) > 0:
+            node_pred_vtx = self.result['node_pred_vtx'][entry]
 
-            assert len(self.result['inter_group_pred'][entry]) == len(particles)
-            inter_labels = self._fit_predict_interaction_labels(entry)
-            inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), particles, column=0)
+            assert node_pred_vtx.shape[0] == len(particles)
 
-        else:
-            inter_ids = np.ones(len(particles)).astype(int) * -1
+            if ('inter_group_pred' in self.result) and ('particles' in self.result) and len(particles) > 0:
 
-        for i, p in enumerate(particles):
-            voxels = point_cloud[p]
-            if voxels.shape[0] < min_particle_voxel_count:
-                continue
-            seg_label = particles_seg[i]
-            pid = pids[i]
-            if seg_label == 2 or seg_label == 3:
-                pid = 1
-            interaction_id = inter_ids[i]
-            is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
-            part = Particle(voxels, i, seg_label, interaction_id,
-                            pid,
-                            batch_id=entry,
-                            voxel_indices=p,
-                            depositions=depositions[p],
-                            is_primary=is_primary,
-                            pid_conf=softmax(type_logits[i])[pids[i]])
+                assert len(self.result['inter_group_pred'][entry]) == len(particles)
+                inter_labels = self._fit_predict_interaction_labels(entry)
+                inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), particles, column=0)
 
-            part._node_features = input_node_features[i]
-            out.append(part)
-
-        if only_primaries:
-            out = [p for p in out if p.is_primary]
-
-        if len(out) == 0:
-            return out
-
-        ppn_results = self._fit_predict_ppn(entry)
-
-        # Get ppn candidates for particle
-        match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=attaching_threshold)
-
-        # Attach startpoint and endpoint
-        # as done in full chain geometric encoder
-        for p in out:
-            if p.size < min_particle_voxel_count:
-                continue
-            if p.semantic_type == 0:
-                pt = p._node_features[19:22]
-                # Check startpoint is replicated
-                assert(np.sum(
-                    np.abs(pt - p._node_features[22:25])) < 1e-12)
-                p.startpoint = pt
-            elif p.semantic_type == 1:
-                startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
-                p.startpoint = startpoint
-                p.endpoint = endpoint
             else:
-                continue
+                inter_ids = np.ones(len(particles)).astype(int) * -1
 
-        return out
+            for i, p in enumerate(particles):
+                voxels = point_cloud[p]
+                if voxels.shape[0] < min_particle_voxel_count:
+                    continue
+                seg_label = particles_seg[i]
+                pid = pids[i]
+                if seg_label == 2 or seg_label == 3:
+                    pid = 1
+                interaction_id = inter_ids[i]
+                is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
+                part = Particle(self._translate(voxels, volume),
+                                i, seg_label, interaction_id,
+                                pid,
+                                batch_id=entry,
+                                voxel_indices=p,
+                                depositions=depositions[p],
+                                is_primary=is_primary,
+                                pid_conf=softmax(type_logits[i])[pids[i]],
+                                volume=volume)
+
+                part._node_features = input_node_features[i]
+                out.append(part)
+
+            if only_primaries:
+                out = [p for p in out if p.is_primary]
+
+            if len(out) == 0:
+                return out
+
+            ppn_results = self._fit_predict_ppn(entry)
+
+            # Get ppn candidates for particle
+            match_points_to_particles(ppn_results, out,
+                ppn_distance_threshold=attaching_threshold)
+
+            # Attach startpoint and endpoint
+            # as done in full chain geometric encoder
+            for p in out:
+                if p.size < min_particle_voxel_count:
+                    continue
+                if p.semantic_type == 0:
+                    pt = p._node_features[19:22]
+                    # Check startpoint is replicated
+                    assert(np.sum(
+                        np.abs(pt - p._node_features[22:25])) < 1e-12)
+                    p.startpoint = pt
+                elif p.semantic_type == 1:
+                    startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
+                    p.startpoint = startpoint
+                    p.endpoint = endpoint
+                else:
+                    continue
+            out_particle_list.extend(out)
+
+        return out_particle_list
 
 
-    def get_interactions(self, entry, drop_nonprimary_particles=True) -> List[Interaction]:
+    def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -644,36 +878,63 @@ class FullChainPredictor:
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-        particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles)
-        out = group_particles_to_interactions_fn(particles)
-        for ia in out:
-            ia.vertex = self._fit_predict_vertex_info(entry, ia.id)
-        return out
+        self._check_volume(volume)
+
+        entries = self._get_entries(entry, volume)
+
+        out_interaction_list = []
+        for e in entries:
+            volume = e % self._num_volumes if self.vb is not None else volume
+            particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
+            out = group_particles_to_interactions_fn(particles)
+            for ia in out:
+                ia.vertex = self._fit_predict_vertex_info(e, ia.id)
+                ia.volume = volume
+            out_interaction_list.extend(out)
+
+        return out_interaction_list
 
 
-    def fit_predict_labels(self, entry):
+    def fit_predict_labels(self, entry, volume=None):
         '''
         Predict all labels of a given batch index <entry>.
 
         We define <labels> to be 1d tensors that annotate voxels.
         '''
-        pred_seg = self._fit_predict_semantics(entry)
-        pred_fragments = self._fit_predict_fragments(entry)
-        pred_groups = self._fit_predict_groups(entry)
-        pred_interaction_labels = self._fit_predict_interaction_labels(entry)
-        pred_pids = self._fit_predict_pids(entry)
+        self._check_volume(volume)
+        entries = self._get_entries(entry, volume)
 
-        pred = {
-            'segment': pred_seg,
-            'fragment': pred_fragments,
-            'group': pred_groups,
-            'interaction': pred_interaction_labels,
-            'pdg': pred_pids
+        all_pred = {
+            'segment': [],
+            'fragment': [],
+            'group': [],
+            'interaction': [],
+            'pdg': []
         }
+        for entry in entries:
+            pred_seg = self._fit_predict_semantics(entry)
+            pred_fragments = self._fit_predict_fragments(entry)
+            pred_groups = self._fit_predict_groups(entry)
+            pred_interaction_labels = self._fit_predict_interaction_labels(entry)
+            pred_pids = self._fit_predict_pids(entry)
 
-        self._pred = pred
+            pred = {
+                'segment': pred_seg,
+                'fragment': pred_fragments,
+                'group': pred_groups,
+                'interaction': pred_interaction_labels,
+                'pdg': pred_pids
+            }
 
-        return pred
+            for key in pred:
+                if len(all_pred[key]) == 0:
+                    all_pred[key] = pred[key]
+                else:
+                    all_pred[key] = np.concatenate([all_pred[key], pred[key]], axis=0)
+
+        self._pred = all_pred
+
+        return all_pred
 
 
     def fit_predict(self, **kwargs):
@@ -693,7 +954,7 @@ class FullChainPredictor:
         labels = []
         list_particles, list_interactions = [], []
 
-        for entry in range(self.num_images):
+        for entry in range(int(self.num_images / self._num_volumes)):
 
             pred_dict = self.fit_predict_labels(entry)
             labels.append(pred_dict)
@@ -778,17 +1039,56 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
         self.michel_primary_ionization_only = processor_cfg.get('michel_primary_ionization_only', False)
 
-    def get_true_label(self, entry, name, schema='cluster_label'):
+    def get_true_label(self, entry, name, schema='cluster_label', volume=None):
+        """
+        Retrieve tensor in data blob, labelled with `schema`.
+
+        Parameters
+        ==========
+        entry: int
+        name: str
+            Must be a predefined name within `['segment', 'fragment', 'group',
+            'interaction', 'pdg', 'nu']`.
+        schema: str
+            Key for dataset schema to retrieve the info from.
+        volume: int, default None
+
+        Returns
+        =======
+        np.array
+        """
         if name not in self.LABEL_TO_COLUMN:
             raise KeyError("Invalid label identifier name: {}. "\
                 "Available column names = {}".format(
                     name, str(list(self.LABEL_TO_COLUMN.keys()))))
         column_idx = self.LABEL_TO_COLUMN[name]
-        return self.data_blob[schema][entry][:, column_idx]
+
+        self._check_volume(volume)
+
+        entries = self._get_entries(entry, volume)
+        out = []
+        for entry in entries:
+            out.append(self.data_blob[schema][entry][:, column_idx])
+        return np.concatenate(out, axis=0)
 
 
-    def get_predicted_label(self, entry, name):
-        pred = self.fit_predict_labels(entry)
+    def get_predicted_label(self, entry, name, volume=None):
+        """
+        Returns predicted quantities to label a plot.
+
+        Parameters
+        ==========
+        entry: int
+        name: str
+            Must be a predefined name within `['segment', 'fragment', 'group',
+            'interaction', 'pdg', 'nu']`.
+        volume: int, default None
+
+        Returns
+        =======
+        np.array
+        """
+        pred = self.fit_predict_labels(entry, volume=volume)
         return pred[name]
 
 
@@ -814,93 +1114,104 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-    def get_true_fragments(self, entry, verbose=False) -> List[TruthParticleFragment]:
+    def get_true_fragments(self, entry, verbose=False, volume=None) -> List[TruthParticleFragment]:
         '''
         Get list of <TruthParticleFragment> instances for given <entry> batch id.
         '''
-        # Both are "adapted" labels
-        labels = self.data_blob['cluster_label'][entry]
-        segment_label = self.data_blob['segment_label'][entry][:, -1]
-        rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
+        self._check_volume(volume)
 
-        fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
-        fragments = []
+        entries = self._get_entries(entry, volume)
 
-        for fid in fragment_ids:
-            mask = labels[:, 5] == fid
+        out_fragments_list = []
+        for entry in entries:
+            volume = entry % self._num_volumes
 
-            semantic_type, counts = np.unique(labels[:, -1][mask], return_counts=True)
-            if semantic_type.shape[0] > 1:
-                if verbose:
-                    print("Semantic Type of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(semantic_type),
-                                                str(counts)))
-                perm = counts.argmax()
-                semantic_type = semantic_type[perm]
-            else:
-                semantic_type = semantic_type[0]
+            # Both are "adapted" labels
+            labels = self.data_blob['cluster_label'][entry]
+            segment_label = self.data_blob['segment_label'][entry][:, -1]
+            rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
-            points = labels[mask][:, 1:4]
-            size = points.shape[0]
-            depositions = rescaled_input_charge[mask]
-            depositions_MeV = labels[mask][:, 4]
-            voxel_indices = np.where(mask)[0]
+            fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
+            fragments = []
 
-            group_id, counts = np.unique(labels[:, 6][mask].astype(int), return_counts=True)
-            if group_id.shape[0] > 1:
-                if verbose:
-                    print("Group ID of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(group_id),
-                                                str(counts)))
-                perm = counts.argmax()
-                group_id = group_id[perm]
-            else:
-                group_id = group_id[0]
+            for fid in fragment_ids:
+                mask = labels[:, 5] == fid
 
-            interaction_id, counts = np.unique(labels[:, 7][mask].astype(int), return_counts=True)
-            if interaction_id.shape[0] > 1:
-                if verbose:
-                    print("Interaction ID of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(interaction_id),
-                                                str(counts)))
-                perm = counts.argmax()
-                interaction_id = interaction_id[perm]
-            else:
-                interaction_id = interaction_id[0]
+                semantic_type, counts = np.unique(labels[:, -1][mask], return_counts=True)
+                if semantic_type.shape[0] > 1:
+                    if verbose:
+                        print("Semantic Type of Fragment {} is not "\
+                            "unique: {}, {}".format(fid,
+                                                    str(semantic_type),
+                                                    str(counts)))
+                    perm = counts.argmax()
+                    semantic_type = semantic_type[perm]
+                else:
+                    semantic_type = semantic_type[0]
+
+                points = labels[mask][:, 1:4]
+                size = points.shape[0]
+                depositions = rescaled_input_charge[mask]
+                depositions_MeV = labels[mask][:, 4]
+                voxel_indices = np.where(mask)[0]
+
+                group_id, counts = np.unique(labels[:, 6][mask].astype(int), return_counts=True)
+                if group_id.shape[0] > 1:
+                    if verbose:
+                        print("Group ID of Fragment {} is not "\
+                            "unique: {}, {}".format(fid,
+                                                    str(group_id),
+                                                    str(counts)))
+                    perm = counts.argmax()
+                    group_id = group_id[perm]
+                else:
+                    group_id = group_id[0]
+
+                interaction_id, counts = np.unique(labels[:, 7][mask].astype(int), return_counts=True)
+                if interaction_id.shape[0] > 1:
+                    if verbose:
+                        print("Interaction ID of Fragment {} is not "\
+                            "unique: {}, {}".format(fid,
+                                                    str(interaction_id),
+                                                    str(counts)))
+                    perm = counts.argmax()
+                    interaction_id = interaction_id[perm]
+                else:
+                    interaction_id = interaction_id[0]
 
 
-            is_primary, counts = np.unique(labels[:, -2][mask].astype(bool), return_counts=True)
-            if is_primary.shape[0] > 1:
-                if verbose:
-                    print("Primary label of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(is_primary),
-                                                str(counts)))
-                perm = counts.argmax()
-                is_primary = is_primary[perm]
-            else:
-                is_primary = is_primary[0]
+                is_primary, counts = np.unique(labels[:, -2][mask].astype(bool), return_counts=True)
+                if is_primary.shape[0] > 1:
+                    if verbose:
+                        print("Primary label of Fragment {} is not "\
+                            "unique: {}, {}".format(fid,
+                                                    str(is_primary),
+                                                    str(counts)))
+                    perm = counts.argmax()
+                    is_primary = is_primary[perm]
+                else:
+                    is_primary = is_primary[0]
 
-            part = TruthParticleFragment(points, fid, semantic_type,
-                            interaction_id=interaction_id,
-                            group_id=group_id,
-                            image_id=entry,
-                            voxel_indices=voxel_indices,
-                            depositions=depositions,
-                            depositions_MeV=depositions_MeV,
-                            is_primary=is_primary,
-                            alias='Fragment')
+                part = TruthParticleFragment(self._translate(points, volume),
+                                fid, semantic_type,
+                                interaction_id=interaction_id,
+                                group_id=group_id,
+                                image_id=entry,
+                                voxel_indices=voxel_indices,
+                                depositions=depositions,
+                                depositions_MeV=depositions_MeV,
+                                is_primary=is_primary,
+                                alias='Fragment',
+                                volume=volume)
 
-            fragments.append(part)
+                fragments.append(part)
+            out_fragments_list.extend(fragments)
 
-        return fragments
+        return out_fragments_list
 
 
     def get_true_particles(self, entry, only_primaries=True,
-                           verbose=False) -> List[TruthParticle]:
+                           verbose=False, volume=None) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id.
 
@@ -918,217 +1229,297 @@ class FullChainEvaluator(FullChainPredictor):
                 id number
             p: true momentum vector
         '''
-        labels = self.data_blob['cluster_label'][entry]
-        if self.deghosting:
-            labels_noghost = self.data_blob['cluster_label_noghost'][entry]
-        segment_label = self.data_blob['segment_label'][entry][:, -1]
-        particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
-        rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
+        self._check_volume(volume)
 
-        particles = []
-        exclude_ids = set([])
+        entries = self._get_entries(entry, volume)
 
-        for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
-            pid = int(p.id())
-            # 1. Check if current pid is one of the existing group ids
-            if pid not in particle_ids:
-                # print("PID {} not in particle_ids".format(pid))
-                continue
-            is_primary = p.group_id() == p.parent_id()
-            if p.pdg_code() not in TYPE_LABELS:
-                # print("PID {} not in TYPE LABELS".format(pid))
-                continue
-            # For deghosting inputs, perform voxel cut with true nonghost coords.
+        out_particles_list = []
+        global_entry = entry
+        for entry in entries:
+            volume = entry % self._num_volumes
+
+            labels = self.data_blob['cluster_label'][entry]
             if self.deghosting:
-                exclude_ids = self._apply_true_voxel_cut(entry)
-                if pid in exclude_ids:
-                    # Skip this particle if its below the voxel minimum requirement
-                    # print("PID {} was excluded from the list of particles due"\
-                    #     " to true nonghost voxel cut. Exclude IDS = {}".format(
-                    #         p.id(), str(exclude_ids)
-                    #     ))
+                labels_noghost = self.data_blob['cluster_label_noghost'][entry]
+            segment_label = self.data_blob['segment_label'][entry][:, -1]
+            particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
+            rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
+
+            particles = []
+            exclude_ids = set([])
+
+            for idx, p in enumerate(self.data_blob['particles_asis'][global_entry]):
+                pid = int(p.id())
+                # 1. Check if current pid is one of the existing group ids
+                if pid not in particle_ids:
+                    # print("PID {} not in particle_ids".format(pid))
                     continue
-
-            pdg = TYPE_LABELS[p.pdg_code()]
-            mask = labels[:, 6].astype(int) == pid
-            if self.deghosting:
-                mask_noghost = labels_noghost[:, 6].astype(int) == pid
-            # If particle is Michel electron, we have the option to
-            # only consider the primary ionization.
-            # Semantic labels only label the primary ionization as Michel.
-            # Cluster labels will have the entire Michel together.
-            if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
-                mask = mask & (labels[:, -1].astype(int) == 2)
+                is_primary = p.group_id() == p.parent_id()
+                if p.pdg_code() not in TYPE_LABELS:
+                    # print("PID {} not in TYPE LABELS".format(pid))
+                    continue
+                # For deghosting inputs, perform voxel cut with true nonghost coords.
                 if self.deghosting:
-                    mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
+                    exclude_ids = self._apply_true_voxel_cut(global_entry)
+                    if pid in exclude_ids:
+                        # Skip this particle if its below the voxel minimum requirement
+                        # print("PID {} was excluded from the list of particles due"\
+                        #     " to true nonghost voxel cut. Exclude IDS = {}".format(
+                        #         p.id(), str(exclude_ids)
+                        #     ))
+                        continue
 
-            # Check semantics
-            semantic_type, sem_counts = np.unique(
-                labels[mask][:, -1].astype(int), return_counts=True)
+                pdg = TYPE_LABELS[p.pdg_code()]
+                mask = labels[:, 6].astype(int) == pid
+                if self.deghosting:
+                    mask_noghost = labels_noghost[:, 6].astype(int) == pid
+                # If particle is Michel electron, we have the option to
+                # only consider the primary ionization.
+                # Semantic labels only label the primary ionization as Michel.
+                # Cluster labels will have the entire Michel together.
+                if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
+                    mask = mask & (labels[:, -1].astype(int) == 2)
+                    if self.deghosting:
+                        mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
-            if semantic_type.shape[0] > 1:
-                if verbose:
-                    print("Semantic Type of Particle {} is not "\
-                        "unique: {}, {}".format(pid,
-                                                str(semantic_type),
-                                                str(sem_counts)))
-                perm = sem_counts.argmax()
-                semantic_type = semantic_type[perm]
-            else:
-                semantic_type = semantic_type[0]
+                # Check semantics
+                semantic_type, sem_counts = np.unique(
+                    labels[mask][:, -1].astype(int), return_counts=True)
+
+                if semantic_type.shape[0] > 1:
+                    if verbose:
+                        print("Semantic Type of Particle {} is not "\
+                            "unique: {}, {}".format(pid,
+                                                    str(semantic_type),
+                                                    str(sem_counts)))
+                    perm = sem_counts.argmax()
+                    semantic_type = semantic_type[perm]
+                else:
+                    semantic_type = semantic_type[0]
 
 
 
-            coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+                coords = self.data_blob['input_data'][entry][mask][:, 1:4]
 
-            interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
-                                                   return_counts=True)
-            if interaction_id.shape[0] > 1:
-                if verbose:
-                    print("Interaction ID of Particle {} is not "\
-                        "unique: {}".format(pid, str(interaction_id)))
-                perm = int_counts.argmax()
-                interaction_id = interaction_id[perm]
-            else:
-                interaction_id = interaction_id[0]
+                interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
+                                                       return_counts=True)
+                if interaction_id.shape[0] > 1:
+                    if verbose:
+                        print("Interaction ID of Particle {} is not "\
+                            "unique: {}".format(pid, str(interaction_id)))
+                    perm = int_counts.argmax()
+                    interaction_id = interaction_id[perm]
+                else:
+                    interaction_id = interaction_id[0]
 
-            nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
-                                         return_counts=True)
-            if nu_id.shape[0] > 1:
-                if verbose:
-                    print("Neutrino ID of Particle {} is not "\
-                        "unique: {}".format(pid, str(nu_id)))
-                perm = nu_counts.argmax()
-                nu_id = nu_id[perm]
-            else:
-                nu_id = nu_id[0]
+                nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
+                                             return_counts=True)
+                if nu_id.shape[0] > 1:
+                    if verbose:
+                        print("Neutrino ID of Particle {} is not "\
+                            "unique: {}".format(pid, str(nu_id)))
+                    perm = nu_counts.argmax()
+                    nu_id = nu_id[perm]
+                else:
+                    nu_id = nu_id[0]
 
-            fragments = np.unique(labels[mask][:, 5].astype(int))
-            depositions_MeV = labels[mask][:, 4]
-            depositions = rescaled_input_charge[mask] # Will be in ADC
-            coords_noghost, depositions_noghost = None, None
-            if self.deghosting:
-                coords_noghost = labels_noghost[mask_noghost][:, 1:4]
-                depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+                fragments = np.unique(labels[mask][:, 5].astype(int))
+                depositions_MeV = labels[mask][:, 4]
+                depositions = rescaled_input_charge[mask] # Will be in ADC
+                coords_noghost, depositions_noghost = None, None
+                if self.deghosting:
+                    coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+                    depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
 
-            particle = TruthParticle(coords, pid,
-                semantic_type, interaction_id, pdg,
-                particle_asis=p,
-                batch_id=entry,
-                depositions=depositions,
-                is_primary=is_primary,
-                coords_noghost=coords_noghost,
-                depositions_noghost=depositions_noghost,
-                depositions_MeV=depositions_MeV)
+                particle = TruthParticle(self._translate(coords, volume),
+                    pid,
+                    semantic_type, interaction_id, pdg,
+                    particle_asis=p,
+                    batch_id=entry,
+                    depositions=depositions,
+                    is_primary=is_primary,
+                    coords_noghost=coords_noghost,
+                    depositions_noghost=depositions_noghost,
+                    depositions_MeV=depositions_MeV,
+                    volume=entry % self._num_volumes)
 
-            particle.p = np.array([p.px(), p.py(), p.pz()])
-            particle.fragments = fragments
-            particle.particle_asis = p
-            particle.nu_id = nu_id
-            particle.voxel_indices = np.where(mask)[0]
+                particle.p = np.array([p.px(), p.py(), p.pz()])
+                particle.fragments = fragments
+                particle.particle_asis = p
+                particle.nu_id = nu_id
+                particle.voxel_indices = np.where(mask)[0]
 
-            particle.startpoint = np.array([p.first_step().x(),
-                                            p.first_step().y(),
-                                            p.first_step().z()])
+                particle.startpoint = np.array([p.first_step().x(),
+                                                p.first_step().y(),
+                                                p.first_step().z()])
 
-            if semantic_type == 1:
-                particle.endpoint = np.array([p.last_step().x(),
-                                              p.last_step().y(),
-                                              p.last_step().z()])
+                if semantic_type == 1:
+                    particle.endpoint = np.array([p.last_step().x(),
+                                                  p.last_step().y(),
+                                                  p.last_step().z()])
 
-            if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
-                particles.append(particle)
+                if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
+                    particles.append(particle)
+
+            out_particles_list.extend(particles)
 
         if only_primaries:
-            particles = [p for p in particles if p.is_primary]
+            out_particles_list = [p for p in out_particles_list if p.is_primary]
 
-        return particles
+        return out_particles_list
 
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
-                              min_particle_voxel_count=-1) -> List[Interaction]:
+                              min_particle_voxel_count=-1,
+                              volume=None) -> List[Interaction]:
+        self._check_volume(volume)
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
-        true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
-        out = group_particles_to_interactions_fn(true_particles,
-                                                 get_nu_id=True, mode='truth')
-        vertices = self.get_true_vertices(entry)
-        for ia in out:
-            ia.vertex = vertices[ia.id]
-        return out
+        entries = self._get_entries(entry, volume)
+        out_interactions_list = []
+        for e in entries:
+            volume = e % self._num_volumes if self.vb is not None else volume
+            true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
+            out = group_particles_to_interactions_fn(true_particles,
+                                                     get_nu_id=True, mode='truth')
+            vertices = self.get_true_vertices(entry, volume=volume)
+            for ia in out:
+                ia.vertex = vertices[ia.id]
+                ia.volume = volume
+            out_interactions_list.extend(out)
+
+        return out_interactions_list
 
 
-    def get_true_vertices(self, entry):
-        inter_idxs = np.unique(
-            self.data_blob['cluster_label'][entry][:, 7].astype(int))
+    def get_true_vertices(self, entry, volume=None):
+        """
+        Parameters
+        ==========
+        entry: int
+        volume: int, default None
+
+        Returns
+        =======
+        dict
+            Keys are true interactions ids, values are np.array of shape (N, 3)
+            with true vertices coordinates.
+        """
+        self._check_volume(volume)
+
+        entries = self._get_entries(entry, volume)
         out = {}
-        for inter_idx in inter_idxs:
-            if inter_idx < 0:
-                continue
-            vtx = get_vertex(self.data_blob['kinematics_label'],
-                            self.data_blob['cluster_label'],
-                            data_idx=entry,
-                            inter_idx=inter_idx)
-            out[inter_idx] = vtx
+        for entry in entries:
+            volume = entry % self._num_volumes if self.vb is not None else volume
+            inter_idxs = np.unique(
+                self.data_blob['cluster_label'][entry][:, 7].astype(int))
+            for inter_idx in inter_idxs:
+                if inter_idx < 0:
+                    continue
+                vtx = get_vertex(self.data_blob['kinematics_label'],
+                                self.data_blob['cluster_label'],
+                                data_idx=entry,
+                                inter_idx=inter_idx)
+                out[inter_idx] = self._translate(vtx, volume)
+
         return out
 
 
     def match_particles(self, entry,
                         only_primaries=False,
-                        mode='pred_to_true', **kwargs):
+                        mode='pred_to_true',
+                        volume=None, **kwargs):
         '''
         Returns (<Particle>, None) if no match was found
+
+        Parameters
+        ==========
+        entry: int
+        only_primaries: bool, default False
+        mode: str, default 'pred_to_true'
+            Must be either 'pred_to_true' or 'true_to_pred'
+        volume: int, default None
         '''
-        if mode == 'pred_to_true':
-            # Match each pred to one in true
-            particles_from = self.get_particles(entry, only_primaries=only_primaries)
-            particles_to = self.get_true_particles(entry, only_primaries=only_primaries)
-        elif mode == 'true_to_pred':
-            # Match each true to one in pred
-            particles_to = self.get_particles(entry, only_primaries=only_primaries)
-            particles_from = self.get_true_particles(entry, only_primaries=only_primaries)
-        else:
-            raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-        matched_pairs, _, _ = match_particles_fn(particles_from, particles_to,
-                                                min_overlap=self.min_overlap_count,
-                                                overlap_mode=self.overlap_mode,
-                                                **kwargs)
-        return matched_pairs
+        self._check_volume(volume)
+
+        entries = self._get_entries(entry, volume)
+        all_matches = []
+        for e in entries:
+            volume = e % self._num_volumes if self.vb is not None else volume
+            if mode == 'pred_to_true':
+                # Match each pred to one in true
+                particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
+                particles_to = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
+            elif mode == 'true_to_pred':
+                # Match each true to one in pred
+                particles_to = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
+                particles_from = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
+            else:
+                raise ValueError("Mode {} is not valid. For matching each"\
+                    " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+            all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
+            matched_pairs, _, _ = match_particles_fn(particles_from, particles_to,
+                                                    **all_kwargs)
+            all_matches.extend(matched_pairs)
+        return all_matches
 
 
     def match_interactions(self, entry, mode='pred_to_true',
                            drop_nonprimary_particles=True,
                            match_particles=True,
-                           return_counts=False, **kwargs):
-        if mode == 'pred_to_true':
-            ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
-            ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
-        elif mode == 'true_to_pred':
-            ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
-            ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles)
-        else:
-            raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+                           return_counts=False,
+                           volume=None, **kwargs):
+        """
+        Parameters
+        ==========
+        entry: int
+        mode: str, default 'pred_to_true'
+            Must be either 'pred_to_true' or 'true_to_pred'.
+        drop_nonprimary_particles: bool, default True
+        match_particles: bool, default True
+        return_counts: bool, default False
+        volume: int, default None
 
-        matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
+        Returns
+        =======
+        List[Tuple[Interaction, Interaction]]
+            List of tuples, indicating the matched interactions.
+        """
+        self._check_volume(volume)
+
+        entries = self._get_entries(entry, volume)
+        all_matches, all_counts = [], []
+        for e in entries:
+            volume = e % self._num_volumes if self.vb is not None else volume
+            if mode == 'pred_to_true':
+                ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+                ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+            elif mode == 'true_to_pred':
+                ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+                ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+            else:
+                raise ValueError("Mode {} is not valid. For matching each"\
+                    " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+
+            all_kwargs = {"min_overlap": self.min_overlap_count, **kwargs}
+            matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
+                                                                    **all_kwargs)
+
+            if match_particles:
+                for interactions in matched_interactions:
+                    domain, codomain = interactions
+                    if codomain is None:
+                        domain_particles, codomain_particles = domain.particles, []
+                    else:
+                        domain_particles, codomain_particles = domain.particles, codomain.particles
+                        # continue
+                    matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles,
                                                                 min_overlap=self.min_overlap_count,
-                                                                **kwargs)
-
-        if match_particles:
-            for interactions in matched_interactions:
-                domain, codomain = interactions
-                if codomain is None:
-                    domain_particles, codomain_particles = domain.particles, []
-                else:
-                    domain_particles, codomain_particles = domain.particles, codomain.particles
-                    # continue
-                matched_particles, _, _ = match_particles_fn(domain_particles, codomain_particles,
-                                                            min_overlap=self.min_overlap_count,
-                                                            overlap_mode=self.overlap_mode)
+                                                                overlap_mode=self.overlap_mode)
+            all_matches.extend(matched_interactions)
+            all_counts.extend(counts)
 
         if return_counts:
-            return matched_interactions, counts
+            return all_matches, all_counts
         else:
-            return matched_interactions
+            return all_matches

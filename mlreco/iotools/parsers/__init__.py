@@ -105,5 +105,6 @@ from mlreco.iotools.parsers.particles import (
 from mlreco.iotools.parsers.misc import (
     parse_meta2d,
     parse_meta3d,
-    parse_run_info
+    parse_run_info,
+    parse_opflash
 )

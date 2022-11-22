@@ -9,6 +9,12 @@ from pprint import pprint
 import time
 import numpy as np
 
+# Setup OpT0finder
+import os, sys
+sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
+import flashmatch
+from flashmatch import flashmatch, geoalgo
+
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
@@ -16,10 +22,33 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     interactions, particles = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
     primaries = analysis_cfg['analysis']['match_primaries']
+    enable_flash_matching = analysis_cfg['analysis'].get('enable_flash_matching', False)
+    ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
 
-    predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg)
+    processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
+    if enable_flash_matching:
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
+                deghosting=deghosting,
+                enable_flash_matching=True,
+                flash_matching_cfg=os.path.join(os.environ['FMATCH_BASEDIR'], "dat/flashmatch_112022.cfg"),
+                opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
+    else:
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg)
+
     image_idxs = data_blob['index']
+    print(data_blob['index'], data_blob['run_info'])
     for idx, index in enumerate(image_idxs):
+        index_dict = {
+            'Index': index,
+            'run': data_blob['run_info'][idx][0],
+            'subrun': data_blob['run_info'][idx][1],
+            'event': data_blob['run_info'][idx][2]
+        }
+        if enable_flash_matching:
+            flash_matches_cryoE = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=0,
+                    use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
+            flash_matches_cryoW = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=1,
+                    use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
 
         # Process Interaction Level Information
         matches, counts = predictor.match_interactions(idx,
@@ -75,7 +104,24 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 true_int_dict['true_nu_energy'] = nu.energy_init()
 
             pred_int_dict['interaction_match_counts'] = counts[i]
-            interactions_dict = OrderedDict({'Index': index})
+
+            if enable_flash_matching:
+                volume = true_int.volume if true_int is not None else pred_int.volume
+                flash_matches = flash_matches_cryoW if volume == 1 else flash_matches_cryoE
+                pred_int_dict['fmatched'] = False
+                pred_int_dict['fmatch_time'] = None
+                pred_int_dict['fmatch_total_pe'] = None
+                pred_int_dict['fmatch_id'] = None
+                if pred_int is not None:
+                    for interaction, flash, match in flash_matches:
+                        if interaction.id != pred_int.id: continue
+                        pred_int_dict['fmatched'] = True
+                        pred_int_dict['fmatch_time'] = flash.time()
+                        pred_int_dict['fmatch_total_pe'] = flash.TotalPE()
+                        pred_int_dict['fmatch_id'] = flash.id()
+                        break
+
+            interactions_dict = OrderedDict(index_dict.copy())
             interactions_dict.update(true_int_dict)
             interactions_dict.update(pred_int_dict)
             interactions.append(interactions_dict)
@@ -89,7 +135,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             matched_particles, _, ious = match_particles_fn(true_particles,
                                                             pred_particles)
             for i, m in enumerate(matched_particles):
-                particles_dict = OrderedDict({'Index': index})
+                particles_dict = OrderedDict(index_dict.copy())
                 true_p, pred_p = m[0], m[1]
                 pred_particle_dict = get_particle_properties(pred_p,
                     vertex=pred_int.vertex,

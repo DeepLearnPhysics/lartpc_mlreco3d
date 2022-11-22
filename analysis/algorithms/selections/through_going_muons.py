@@ -123,9 +123,9 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     #
     # Initialize analysis differently depending on data/MC setting
     if not data:
-        predictor = FullChainEvaluator(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
     else:
-        predictor = FullChainPredictor(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+        predictor = FullChainPredictor(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
 
