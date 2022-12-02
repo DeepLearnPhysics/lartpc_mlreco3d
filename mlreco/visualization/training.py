@@ -316,7 +316,9 @@ def draw_training_curves(log_dir, models, metrics,
         plt.show()
     else:
         if not same_plot:
-            fig.add_traces(graphs, rows=list(np.arange(len(metrics), step=1./(2*len(models))).astype(int)+1), cols=list(np.ones(2*len(models)*len(metrics), dtype=int)))
+            rows = list(np.arange(len(metrics), step=1./(2**draw_val*len(models))).astype(int)+1)
+            cols = list(np.ones(2**draw_val*len(models)*len(metrics), dtype=int))
+            fig.add_traces(graphs, rows=rows, cols=cols)
         else:
             fig.add_traces(graphs)
         iplot(fig)
