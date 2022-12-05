@@ -210,9 +210,28 @@ class FullChainPredictor:
             pmt_v.extend(self.data_blob[key][entry])
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
+        # input_pmt_v might be a filtered version of pmt_v,
+        # and we want to store larcv::Flash objects not
+        # flashmatch::Flash_t objects in self.flash_matches
+        from larcv import larcv
+        new_pmt_v = []
+        for flash in input_pmt_v:
+            new_flash = larcv.Flash()
+            new_flash.time(flash.time)
+            new_flash.timeWidth(flash.time_width)
+            new_flash.xCenter(flash.x)
+            new_flash.yCenter(flash.y)
+            new_flash.zCenter(flash.z)
+            new_flash.xWidth(flash.x_err)
+            new_flash.yWidth(flash.y_err)
+            new_flash.zWidth(flash.z_err)
+            new_flash.PEPerOpDet(flash.pe_v)
+            new_flash.id(flash.idx)
+            new_pmt_v.append(new_flash)
+
         # Running flash matching and caching the results
         matches = self.fm.run_flash_matching()
-        self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
+        self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
         
     def _fit_predict_ppn(self, entry):
         '''

@@ -74,6 +74,9 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
         }
         meta = data_blob['meta'][idx]
 
+        opflash_cryoE = predictor.fm.make_flash([data_blob['opflash_cryoE'][idx]]) 
+        opflash_cryoW = predictor.fm.make_flash([data_blob['opflash_cryoW'][idx]])
+
         all_times_cryoE, all_times_cryoW = [], []
         for flash in data_blob['opflash_cryoE'][idx]:
             all_times_cryoE.append(flash.time())

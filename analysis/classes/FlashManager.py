@@ -196,13 +196,14 @@ class FlashManager:
             perm = np.argsort(times)
             pmt_v = np.array(pmt_v)[perm]
             final_pmt_v = [pmt_v[0]]
-            is_merging = False
             for idx, flash in enumerate(pmt_v[1:]):
                 if flash.time - final_pmt_v[-1].time < self.reflash_merging_window:
                     new_flash = self.merge_flashes(flash, final_pmt_v[-1])
+                    # print("Merged reflash", final_pmt_v[-1].time, new_flash.time, flash.time, np.sum(final_pmt_v[-1].pe_v), np.sum(new_flash.pe_v), np.sum(flash.pe_v))
                     final_pmt_v[-1] = new_flash
                 else:
                     final_pmt_v.append(flash)
+            print("Merged", len(final_pmt_v), len(pmt_v))
             pmt_v = final_pmt_v
 
         self.pmt_v = pmt_v
@@ -260,8 +261,8 @@ class FlashManager:
             self.mgr.Add(x)
             
         # Run the matching
-        if self.all_matches is not None:
-            print("Warning: overwriting internal list of matches.")
+        #if self.all_matches is not None:
+        #    print("Warning: overwriting internal list of matches.")
         self.all_matches = self.mgr.Match()
         return self.all_matches
 
