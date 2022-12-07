@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import numpy as np
 from larcv import larcv
+from sklearn.cluster import DBSCAN
 from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.iotools.parsers.sparse import parse_sparse3d
@@ -64,7 +65,8 @@ def parse_cluster3d(cluster_event,
                     clean_data = True,
                     precedence = [1,2,0,3,4],
                     type_include_mpr = False,
-                    primary_include_mpr = True):
+                    primary_include_mpr = True,
+                    break_clusters = False):
     """
     a function to retrieve a 3D clusters tensor
 
@@ -85,6 +87,7 @@ def parse_cluster3d(cluster_event,
               precedence: [1,2,0,3,4]
               type_include_mpr: false
               primary_include_mpr: true
+              break_clusters: True
 
     Configuration
     -------------
@@ -99,6 +102,7 @@ def parse_cluster3d(cluster_event,
     precedence: list
     type_include_mpr: bool
     primary_include_mpr: bool
+    break_clusters: bool
 
     Returns
     -------
@@ -157,6 +161,7 @@ def parse_cluster3d(cluster_event,
 
     # Loop over clusters, store info
     clusters_voxels, clusters_features = [], []
+    id_offset = 0
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
         num_points = cluster.as_vector().size()
@@ -167,13 +172,22 @@ def parse_cluster3d(cluster_event,
             z = np.empty(shape=(num_points,), dtype=np.int32)
             value = np.empty(shape=(num_points,), dtype=np.float32)
             larcv.as_flat_arrays(cluster, meta, x, y, z, value)
-            clusters_voxels.append(np.stack([x, y, z], axis=1))
+            voxels = np.stack([x, y, z], axis=1)
+            clusters_voxels.append(voxels)
 
             # Append the cluster-wise information
             features = [value]
             for k, l in labels.items():
                 size = cluster.as_vector().size()
                 features.append(np.full(shape=(size), fill_value=l[i], dtype=np.float32))
+
+            # If requested, break cluster into pieces that do not touch each other
+            if break_clusters:
+                dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
+                frag_labels = np.unique(dbscan.fit(voxels).labels_, return_inverse=True)[-1]
+                features[1] = id_offset + frag_labels
+                id_offset += max(frag_labels) + 1
+
             clusters_features.append(np.column_stack(features))
 
     # If there are no non-empty clusters, return. Concatenate otherwise
@@ -190,10 +204,10 @@ def parse_cluster3d(cluster_event,
         np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor
         np_features[sem_features[:,-1] > 3, 1:-1] = -1 # Set all cluster labels to -1 if semantic class is LE or ghost
 
-    # If a value tree is provided, override value colum
-    if sparse_value_event:
-        _, val_features  = parse_sparse3d([sparse_value_event])
-        np_features[:,0] = val_features[:,-1]
+        # If a value tree is provided, override value colum
+        if sparse_value_event:
+            _, val_features  = parse_sparse3d([sparse_value_event])
+            np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features
 
@@ -208,10 +222,11 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     clean_data = True,
                                     precedence = [1,2,0,3,4],
                                     type_include_mpr = False,
-                                    primary_include_mpr = True):
+                                    primary_include_mpr = True,
+                                    break_clusters = False):
     # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
     np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
-                                             add_particle_info, add_kinematics_info, clean_data, precedence, type_include_mpr, primary_include_mpr)
+                                             add_particle_info, add_kinematics_info, clean_data, precedence, type_include_mpr, primary_include_mpr, break_clusters)
 
     from .sparse import parse_sparse3d_charge_rescaled
     _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
