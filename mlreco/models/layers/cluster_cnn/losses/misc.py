@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from torch_geometric.nn import fps, knn
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
-from mlreco.models.layers.common.dbscan import distances
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
@@ -238,7 +237,7 @@ def inter_cluster_loss(cluster_means, margin=0.2):
         return 0.0
     else:
         indices = torch.triu_indices(cluster_means.shape[0], cluster_means.shape[0], 1)
-        dist = distances(cluster_means, cluster_means)
+        dist = torch.cdist(cluster_means, cluster_means)
         return torch.pow(torch.clamp(2.0 * margin - dist[indices[0, :], \
             indices[1, :]], min=0), 2).mean()
 

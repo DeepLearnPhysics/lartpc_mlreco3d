@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-from mlreco.models.layers.common.dbscan import distances
 from mlreco.models.layers.cluster_cnn.losses.lovasz import lovasz_hinge_flat
 from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 from collections import defaultdict
@@ -71,7 +70,7 @@ class EmbeddingLoss(nn.Module):
         else:
             indices = torch.triu_indices(cluster_means.shape[0],
                                          cluster_means.shape[0], 1)
-            dist = distances(cluster_means, cluster_means)
+            dist = torch.cdist(cluster_means, cluster_means)
             return torch.pow(torch.clamp(2.0 * margin - dist[indices[0, :], \
                 indices[1, :]], min=0), 2).mean()
 
