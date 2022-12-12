@@ -65,6 +65,7 @@ def parse_cluster3d(cluster_event,
                     clean_data = True,
                     precedence = [1,2,0,3,4],
                     type_include_mpr = False,
+                    type_include_secondary = False,
                     primary_include_mpr = True,
                     break_clusters = False):
     """
@@ -86,6 +87,7 @@ def parse_cluster3d(cluster_event,
               clean_data: true
               precedence: [1,2,0,3,4]
               type_include_mpr: false
+              type_include_secondary: false
               primary_include_mpr: true
               break_clusters: True
 
@@ -101,6 +103,7 @@ def parse_cluster3d(cluster_event,
     clean_data: bool
     precedence: list
     type_include_mpr: bool
+    type_include_secondary: bool
     primary_include_mpr: bool
     break_clusters: bool
 
@@ -146,13 +149,13 @@ def parse_cluster3d(cluster_event,
         if add_particle_info:
             labels['inter']   = inter_ids
             labels['nu']      = nu_ids
-            labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
+            labels['type']    = get_particle_id(particles_v, nu_ids, type_include_mpr, type_include_secondary)
             labels['primary_shower'] = get_shower_primary_id(cluster_event, particles_v)
         if add_kinematics_info:
-            primary_ids       = get_group_primary_id(particles_v, nu_ids, include_mpr=primary_include_mpr)
-            particles_v       = parse_particles(particle_event, cluster_event)
-            labels['type']    = get_particle_id(particles_v, nu_ids, include_mpr=type_include_mpr)
+            primary_ids       = get_group_primary_id(particles_v, nu_ids, primary_include_mpr)
+            labels['type']    = get_particle_id(particles_v, nu_ids, type_include_mpr, type_include_secondary)
             labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
+            particles_v       = parse_particles(particle_event, cluster_event)
             labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
             labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
             labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
@@ -222,11 +225,13 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     clean_data = True,
                                     precedence = [1,2,0,3,4],
                                     type_include_mpr = False,
+                                    type_include_secondary = False,
                                     primary_include_mpr = True,
                                     break_clusters = False):
     # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
     np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
-                                             add_particle_info, add_kinematics_info, clean_data, precedence, type_include_mpr, primary_include_mpr, break_clusters)
+                                             add_particle_info, add_kinematics_info, clean_data, precedence, 
+                                             type_include_mpr, type_include_secondary, primary_include_mpr, break_clusters)
 
     from .sparse import parse_sparse3d_charge_rescaled
     _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
