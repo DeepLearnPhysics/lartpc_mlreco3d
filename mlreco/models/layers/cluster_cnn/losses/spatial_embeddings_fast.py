@@ -109,9 +109,8 @@ class SPICELoss(nn.Module):
         loss = defaultdict(list)
         accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
-        #print(semantic_classes)
         for sc in semantic_classes:
-            if int(sc) == 4:
+            if int(sc) == 4: # Skip low energy deposits
                 continue
             index = (slabels == sc)
             clabels_unique, _ = unique_label_torch(clabels[index])
@@ -161,12 +160,13 @@ class SPICELoss(nn.Module):
                 loss_class, acc_class = self.combine_multiclass(
                     embedding_batch, margins_batch,
                     seed_batch, slabels_batch, clabels_batch)
-                for key, val in loss_class.items():
-                    loss[key].append(sum(val) / len(val))
-                for s, acc in acc_class.items():
-                    accuracy[s].append(acc)
-                acc = sum(acc_class.values()) / len(acc_class.values())
-                accuracy['accuracy'].append(acc)
+                if len(acc_class.values()):
+                    for key, val in loss_class.items():
+                        loss[key].append(sum(val) / len(val))
+                    for s, acc in acc_class.items():
+                        accuracy[s].append(acc)
+                    acc = sum(acc_class.values()) / len(acc_class.values())
+                    accuracy['accuracy'].append(acc)
 
         loss_avg = {}
         acc_avg = defaultdict(float)
@@ -229,7 +229,7 @@ class SPICEInterLoss(SPICELoss):
         n = labels.shape[0]
         centroids = self.find_cluster_means(embeddings, labels)
         sigma = self.find_cluster_means(margins, labels).view(-1, 1)
-        smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.view(-1).detach(), labels, margin=0)
+        smoothing_loss = margin_smoothing_loss(margins.view(-1), sigma.view(-1).detach(), labels, margin=0)
 
         num_clusters = labels.unique().shape[0]
         inter_loss = self.inter_cluster_loss(centroids, margin=self.inter_margin)
