@@ -20,7 +20,7 @@ class SPICELoss(nn.Module):
 
         self.mask_loss_fn = self.loss_config.get('mask_loss_fn', 'BCE')
         self.seed_loss_fn = self.loss_config.get('seed_loss_fn', 'L1')
-        self.batch_loc = self.loss_config.get('batch_loc', 3)
+        self.batch_loc = self.loss_config.get('batch_loc', 0)
 
         if self.mask_loss_fn == 'BCE':
             self.mask_loss = nn.BCEWithLogitsLoss(reduction='none')
