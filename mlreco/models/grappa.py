@@ -8,8 +8,8 @@ from mlreco.models.experimental.transformers.transformer import TransformerEncod
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
 from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
-from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
-from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_primary_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
+from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph, restrict_graph
 
 class GNN(torch.nn.Module):
     """
@@ -36,27 +36,27 @@ class GNN(torch.nn.Module):
         .. code-block:: yaml
 
           base:
-            node_type         : <semantic class to group (all classes if -1, default 0, i.e. EM)>
-            node_min_size     : <minimum number of voxels inside a cluster to be considered (default -1)>
-            source_col        : <column in the input data that specifies the source node ids of each voxel (default 5)>
-            target_col        : <column in the input data that specifies the target instance ids of each voxel (default 6)>
-            use_dbscan        : <use DBSCAN to cluster the input instances of the class specified by node_type (default False)>
-            add_start_point   : <add label start point to the node features (default False)>
-            add_start_dir     : <add predicted start direction to the node features (default False)>
-            start_dir_max_dist: <maximium distance between start point and cluster voxels to be used to estimate direction (default -1, i.e no limit)>
-            start_dir_opt     : <optimize start direction by minimizing relative transverse spread of neighborhood (slow, default: False)>
-            add_start_dedx    : <add predicted start dedx to the node features (default False)>
-            network           : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
-            edge_max_dist     : <maximal edge Euclidean length (default -1)>
-            edge_dist_method  : <edge length evaluation method: 'centroid' or 'set' (default 'set')>
-            merge_batch       : <flag for whether to merge batches (default False)>
-            merge_batch_mode  : <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
-            merge_batch_size  : <size of batch merging (default 2)>
-            shuffle_clusters  : <randomize cluster order (default False)>
-            kinematics_mlp    : <applies type and momentum MLPs on the node features (default False)>
+            source_col      : <column in the input data that specifies the source node ids of each voxel (default 5)>
+            target_col      : <column in the input data that specifies the target instance ids of each voxel (default 6)>
+            node_type       : <semantic class to aggregate (all classes if -1, default -1)>
+            node_min_size   : <minimum number of voxels inside a cluster to be included in the aggregation (default -1, i.e. no threshold)>
+            add_points      : <add label point(s) to the node features: False (none) or True (both) (default False)>
+            add_local_dirs  : <add reconstructed local direction(s) to the node features: False (none), True (both) or 'start' (default False)>
+            dir_max_dist    : <maximium distance between start point and cluster voxels to be used to estimate direction: support value or 'optimize' (default 5 voxels)>
+            add_local_dedxs : <add reconstructed local dedx(s) to the node features: False (none), True (both) or 'start' (default False)>
+            dedx_max_dist   : <maximium distance between start point and cluster voxels to be used to estimate dedx (default 5 voxels)>
+            network         : <type of network: 'complete', 'delaunay', 'mst', 'knn' or 'bipartite' (default 'complete')>
+            edge_max_dist   : <maximal edge Euclidean length (default -1)>
+            edge_dist_method: <edge length evaluation method: 'centroid' or 'voxel' (default 'voxel')>
+            merge_batch     : <flag for whether to merge batches (default False)>
+            merge_batch_mode: <mode of batch merging, 'const' or 'fluc'; 'const' use a fixed size of batch for merging, 'fluc' takes the input size a mean and sample based on it (default 'const')>
+            merge_batch_size: <size of batch merging (default 2)>
+            shuffle_clusters: <randomize cluster order (default False)>
 
     dbscan: dict
+
         dictionary of dbscan parameters
+
     node_encoder: dict
 
         .. code-block:: yaml
@@ -128,21 +128,29 @@ class GNN(torch.nn.Module):
         # Get the chain input parameters
         base_config = cfg[name].get('base', {})
         self.name = name
-
-        # Choose what type of node to use
-        self.node_type = base_config.get('node_type', 0)
-        self.node_min_size = base_config.get('node_min_size', -1)
-        self.source_col = base_config.get('source_col', 5)
-        self.target_col = base_config.get('target_col', 6)
-        self.add_start_point = base_config.get('add_start_point', False)
-        self.add_start_dir = base_config.get('add_start_dir', False)
-        self.start_dir_max_dist = base_config.get('start_dir_max_dist', -1)
-        self.start_dir_opt = base_config.get('start_dir_opt', False)
-        self.add_start_dedx = base_config.get('add_start_dedx', False)
-        self.shuffle_clusters = base_config.get('shuffle_clusters', False)
-
         self.batch_index = batch_col
         self.coords_index = coords_col
+
+        # Choose what type of node to use
+        self.source_col       = base_config.get('source_col', 5)
+        self.target_col       = base_config.get('target_col', 6)
+        self.node_type        = base_config.get('node_type', -1)
+        self.node_min_size    = base_config.get('node_min_size', -1)
+        self.add_points       = base_config.get('add_points', False)
+        self.add_local_dirs   = base_config.get('add_local_dirs', False)
+        self.dir_max_dist     = base_config.get('dir_max_dist', 5)
+        self.opt_dir_max_dist = self.dir_max_dist == 'optimize'
+        self.add_local_dedxs  = base_config.get('add_local_dedxs', False)
+        self.dedx_max_dist    = base_config.get('dedx_max_dist', 5)
+        self.break_clusters   = base_config.get('break_clusters', False)
+        self.shuffle_clusters = base_config.get('shuffle_clusters', False)
+
+        # *Deprecated* but kept for backward compatibility:
+        if 'add_start_point'    in base_config: self.add_points = base_config['add_start_point']
+        if 'add_start_dir'      in base_config: self.add_local_dirs = 'start' if base_config['add_start_dir'] else False
+        if 'add_start_dedx'     in base_config: self.add_local_dedxs = 'start' if base_config['add_start_dedx'] else False
+        if 'start_dir_max_dist' in base_config: self.dir_max_dist = self.dedx_max_dist = base_config['start_dir_max_dist']
+        if 'start_dir_opt'      in base_config: self.opt_dir_max_dist = base_config['start_dir_opt']
 
         # Interpret node type as list of classes to cluster, -1 means all classes
         if isinstance(self.node_type, int): self.node_type = [self.node_type]
@@ -150,8 +158,17 @@ class GNN(torch.nn.Module):
         # Choose what type of network to use
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
-        self.edge_dist_metric = base_config.get('edge_dist_metric', 'set')
+        self.edge_dist_metric = base_config.get('edge_dist_metric', 'voxel')
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
+        self.edge_max_count = base_config.get('edge_max_count', 2e6)
+
+        # Turn the edge_max_dist value into a matrix
+        if not isinstance(self.edge_max_dist, list): self.edge_max_dist = [self.edge_max_dist]
+        mat_size = int((np.sqrt(8*len(self.edge_max_dist)+1)-1)/2)
+        max_dist_mat = np.zeros((mat_size, mat_size), dtype=float)
+        max_dist_mat[np.triu_indices(mat_size)] = self.edge_max_dist
+        max_dist_mat += max_dist_mat.T - np.diag(np.diag(max_dist_mat))
+        self.edge_max_dist = max_dist_mat
 
         # If requested, merge images together within the batch
         self.merge_batch = base_config.get('merge_batch', False)
@@ -268,6 +285,15 @@ class GNN(torch.nn.Module):
                                        self.node_min_size,
                                        self.source_col,
                                        cluster_classes=self.node_type)
+                if self.break_clusters:
+                    from sklearn.cluster import DBSCAN
+                    dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
+                    broken_clusts = []
+                    for c in clusts:
+                        labels = dbscan.fit(cluster_data[c, self.coords_index[0]:self.coords_index[1]].detach().cpu().numpy()).labels_
+                        for l in np.unique(labels):
+                            broken_clusts.append(c[labels==l])
+                    clusts = broken_clusts
 
         # If requested, shuffle the order in which the clusters are listed (used for debugging)
         if self.shuffle_clusters:
@@ -297,29 +323,32 @@ class GNN(torch.nn.Module):
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
         result['clusts'] = [clusts_split]
+        if self.edge_max_count > -1:
+            _, cnts = np.unique(batch_ids, return_counts=True)
+            if np.sum([c*(c-1) for c in cnts]) > 2*self.edge_max_count:
+                return result
 
         # If necessary, compute the cluster distance matrix
         dist_mat = None
-        if self.edge_max_dist > 0 or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]], clusts, batch_ids, self.edge_dist_metric)
+        if np.any(self.edge_max_dist > -1) or self.network == 'mst' or self.network == 'knn':
+            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric)
 
         # Form the requested network
         if len(clusts) == 1:
             edge_index = np.empty((2,0), dtype=np.int64)
         elif self.network == 'complete':
-            edge_index = complete_graph(batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = complete_graph(batch_ids)
         elif self.network == 'delaunay':
             import numba as nb
-            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, dist_mat, self.edge_max_dist,
-                                        batch_col=self.batch_index, coords_col=self.coords_index)
+            edge_index = delaunay_graph(cluster_data.cpu().numpy(), nb.typed.List(clusts), batch_ids, self.batch_index, self.coords_index)
         elif self.network == 'mst':
-            edge_index = mst_graph(batch_ids, dist_mat, self.edge_max_dist)
+            edge_index = mst_graph(batch_ids, dist_mat)
         elif self.network == 'knn':
             edge_index = knn_graph(batch_ids, self.edge_knn_k, dist_mat)
         elif self.network == 'bipartite':
             clust_ids = get_cluster_label(cluster_data, clusts, self.source_col)
             group_ids = get_cluster_label(cluster_data, clusts, self.target_col)
-            edge_index = bipartite_graph(batch_ids, clust_ids==group_ids, dist_mat, self.edge_max_dist)
+            edge_index = bipartite_graph(batch_ids, clust_ids==group_ids, dist_mat)
         else:
             raise ValueError('Network type not recognized: '+self.network)
 
@@ -328,9 +357,21 @@ class GNN(torch.nn.Module):
             mask = groups[edge_index[0]] == groups[edge_index[1]]
             edge_index = edge_index[:,mask]
 
+        # Restrict the input graph based on edge distance, if requested
+        if np.any(self.edge_max_dist > -1):
+            if self.edge_max_dist.shape[0] == 1:
+                edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist)
+            else:
+                # Here get_cluster_primary_label is used to ensure that Michel/Delta showers are given the appropriate semantic label
+                if self.source_col == 5: classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_label(cluster_data, clusts, -1).astype(int)
+                if self.source_col == 6: classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_primary_label(cluster_data, clusts, -1).astype(int)
+                edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist, classes)
+
         # Update result with a list of edges for each batch id
         edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
         result['edge_index'] = [edge_index_split]
+        if edge_index.shape[1] > self.edge_max_count:
+            return result
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
@@ -340,17 +381,25 @@ class GNN(torch.nn.Module):
         if extra_feats is not None:
             x = torch.cat([x, extra_feats.float()], dim=1)
 
-        # Add start point and/or start direction to node features if requested
-        if self.add_start_point or points is not None:
+        # Add end points and/or local directions to node features, if requested
+        if self.add_points or points is not None:
             if points is None:
                 points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
-            if self.add_start_dir:
-                dirs = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.start_dir_max_dist, self.start_dir_opt)
-                x = torch.cat([x, dirs.float()], dim=1)
-            if self.add_start_dedx:
-                dedxs = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.start_dir_max_dist)
-                x = torch.cat([x, dedxs.reshape(-1,1).float()], dim=1)
+            if self.add_local_dirs:
+                dirs_start = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.dir_max_dist, self.opt_dir_max_dist)
+                if self.add_local_dirs != 'start':
+                    dirs_end = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,3:6], clusts, self.dir_max_dist, self.opt_dir_max_dist)
+                    x = torch.cat([x, dirs_start.float(), dirs_end.float()], dim=1)
+                else:
+                    x = torch.cat([x, dirs_start.float()], dim=1)
+            if self.add_local_dedxs:
+                dedxs_start = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,:3], clusts, self.dedx_max_dist)
+                if self.add_local_dedxs != 'start':
+                    dedxs_end = get_cluster_dedxs(cluster_data[:, self.coords_index[0]:self.coords_index[1]], cluster_data[:,4], points[:,3:6], clusts, self.dedx_max_dist)
+                    x = torch.cat([x, dedxs_start.reshape(-1,1).float(), dedxs_end.reshape(-1,1).float()], dim=1)
+                else:
+                    x = torch.cat([x, dedxs_start.reshape(-1,1).float()], dim=1)
 
         # Bring edge_index and batch_ids to device
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)

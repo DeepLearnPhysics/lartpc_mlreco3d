@@ -28,7 +28,7 @@ def statistics(data_blob, res, data_idx, analysis_cfg, cfg):
     bin_size             = processor_cfg.get('bin_size', 17) # 5cm
 
     # Initialize analysis differently depending on data/MC setting
-    predictor = FullChainPredictor(data_blob, res, cfg, analysis_cfg, deghosting=deghosting)
+    predictor = FullChainPredictor(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
     pca = PCA(n_components=2)

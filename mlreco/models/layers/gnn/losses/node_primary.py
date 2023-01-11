@@ -127,16 +127,8 @@ class NodePrimaryLoss(torch.nn.Module):
                 # Increment the number of nodes
                 n_clusts += len(clusts)
 
-        # Handle the case where no cluster/edge were found
-        if not n_clusts:
-            return {
-                'accuracy': 0.,
-                'loss': torch.tensor(0., requires_grad=True, device=clusters[0].device),
-                'n_clusts': n_clusts
-            }
-
         return {
-            'accuracy': total_acc/n_clusts,
-            'loss': total_loss/n_clusts,
+            'accuracy': total_acc/n_clusts if n_clusts else 1.,
+            'loss': total_loss/n_clusts if n_clusts else torch.tensor(0., requires_grad=True, device=clusters[0].device),
             'n_clusts': n_clusts
         }

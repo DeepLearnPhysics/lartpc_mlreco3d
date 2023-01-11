@@ -124,9 +124,6 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         assert true_mask.shape[0] == label_seg[0].shape[0]
     c3 = max(c2, batch_column+1)
 
-    indices = "2762  2763  2767  2769  4821  4822  4831  4832  4833  4834  4835  4844  4857  6617 12095 12096 12097".split()
-    indices = np.array([int(i) for i in indices])
-
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
@@ -215,7 +212,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         # for which cluster id and group id columns are 5 and 6 respectively.
         cluster_id_col = 5
         track_label = 1
-        dbscan = DBSCAN(eps=np.sqrt(3), min_samples=1)
+        dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
         track_mask = label_c[:, -1] == track_label
         for batch_id in unique(coords[:, batch_column]):
             batch_mask = label_c[:, batch_column] == batch_id
