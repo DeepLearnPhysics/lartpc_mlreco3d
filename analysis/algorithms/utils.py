@@ -1,10 +1,11 @@
 from collections import OrderedDict
 from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
-from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
+from analysis.algorithms.calorimetry import *
 
 from pprint import pprint
 import numpy as np
+import ROOT
 
 
 def attach_prefix(update_dict, prefix):
@@ -17,6 +18,37 @@ def attach_prefix(update_dict, prefix):
         out[new_key] = val
 
     return out
+
+def load_range_reco(particle_type='muon', kinetic_energy=True):
+    """
+    Return a function maps the residual range of a track to the kinetic
+    energy of the track. The mapping is based on the Bethe-Bloch formula
+    and stored per particle type in TGraph objects. The TGraph::Eval
+    function is used to perform the interpolation.
+
+    Parameters
+    ----------
+    particle_type: A string with the particle name.
+    kinetic_energy: If true (false), return the kinetic energy (momentum)
+    
+    Returns
+    -------
+    The kinetic energy or momentum according to Bethe-Bloch.
+    """
+    output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
+    if particle_type in ['muon', 'pion', 'kaon', 'proton']:
+        input_file = ROOT.TFile.Open('RRInput.root', 'read')
+        graph = input_file.Get(f'{particle_type}{output_var}')
+        return np.vectorize(graph.Eval)
+    else:
+        print(f'Range-based reconstruction for particle "{particle_type}" not available.')
+
+
+def make_range_based_momentum_fns():
+    f_muon = load_range_reco('muon')
+    f_pion = load_range_reco('pion')
+    f_proton = load_range_reco('proton')
+    return [f_muon, f_pion, f_proton]
 
 
 def count_primary_particles(interaction: Interaction, prefix=None):
@@ -77,7 +109,8 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_length': -1,
         'particle_dir_x': -1,
         'particle_dir_y': -1,
-        'particle_dir_z': -1
+        'particle_dir_z': -1,
+        'particle_mcs_E': -1
     })
 
     if save_feats:
@@ -101,6 +134,9 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
             update_dict['particle_dir_x'] = direction[0]
             update_dict['particle_dir_y'] = direction[1]
             update_dict['particle_dir_z'] = direction[2]
+            if particle.pid == 2:
+                mcs_E = compute_mcs_muon_energy(particle)
+                update_dict['particle_mcs_E'] = mcs_E
         # if not isinstance(particle, TruthParticle):
         #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
         #         for i in range(particle.node_features.shape[0])})
