@@ -11,10 +11,8 @@ class MinkSPICE(SPICE):
     def __init__(self, cfg):
         super(MinkSPICE, self).__init__(cfg)
 
-        print('Total Number of Trainable Parameters = {}'.format(
-                    sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        print(self)
-
+        # print('Total Number of Trainable Parameters = {}'.format(
+        #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
 class SPICELoss(nn.Module):
     '''

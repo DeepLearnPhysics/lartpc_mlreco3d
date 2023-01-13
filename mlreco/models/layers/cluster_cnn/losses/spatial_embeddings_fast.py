@@ -303,3 +303,48 @@ class SPICEInterLoss(SPICELoss):
             accuracy['accuracy_{}'.format(int(sc))] = acc
 
         return loss, accuracy
+
+
+class SPICEAttractorLoss(SPICEInterLoss):
+
+    def __init__(self, cfg, name='spice_loss'):
+        super(SPICEAttractorLoss, self).__init__(cfg, name)
+        self.inter_weight = self.loss_config.get('inter_weight', 1.0)
+        self.inter_margin = self.loss_config.get('inter_margin', 0.2)
+        self.norm = 2
+        self._min_voxels = self.loss_config.get('min_voxels', 2)
+
+    def sample_attractors(self, embeddings, labels, n=10):
+        pass
+
+    def get_per_class_probabilities(self, embeddings, margins, labels, eps=1e-6):
+        '''
+        Computes binary foreground/background loss.
+        '''
+        device = embeddings.device
+        n = labels.shape[0]
+        centroids = self.find_cluster_means(embeddings, labels)
+        sigma = self.find_cluster_means(margins, labels).view(-1, 1)
+        smoothing_loss = margin_smoothing_loss(margins.squeeze(), sigma.view(-1).detach(), labels, margin=0)
+
+        num_clusters = labels.unique().shape[0]
+        inter_loss = self.inter_cluster_loss(centroids, margin=self.inter_margin)
+
+        # Compute spatial term
+        em = embeddings[:, None, :]
+        centroids = centroids[None, :, :]
+        cov = torch.clamp(sigma[:, 0][None, :], min=eps)
+        sqdists = ((em - centroids)**2).sum(-1) / (2.0 * cov**2)
+
+        pvec = torch.exp(-sqdists)
+        logits = logit_fn(pvec, eps=eps)
+        # print(logits)
+        eye = torch.eye(len(labels.unique()), dtype=torch.float32, device=device)
+        targets = eye[labels]
+        loss = self.mask_loss(logits, targets).mean()
+        # loss = loss_tensor
+        with torch.no_grad():
+            acc = iou_batch(logits > 0, targets.bool())
+        p = torch.gather(pvec, 1, labels.view(-1, 1))
+        loss += inter_loss
+        return loss, smoothing_loss, float(inter_loss), p.squeeze(), acc
