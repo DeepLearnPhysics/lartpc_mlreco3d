@@ -172,7 +172,8 @@ class ClusterGraphConstructor:
         # print("Edge Threshold Probability Score = ", self.ths)
         self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
         # Radius within which orphans get assigned to neighbor cluster
-        self._orphans_radius = constructor_cfg.get('orphans_radius', 1.0)
+        self._orphans_radius = constructor_cfg.get('orphans_radius', 1.9)
+        self._orphans_iterate = constructor_cfg.get('orphans_iterate', True)
         self.use_cluster_labels = constructor_cfg.get('use_cluster_labels', True)
 
         # GraphBatch containing graphs per semantic class.
@@ -443,14 +444,19 @@ class ClusterGraphConstructor:
         # Assign orphans
         G.pos = subgraph.pos.cpu().numpy()
         orphan_mask = pred < 0
-        if orphan_mask.any():
-            orphans = G.pos[orphan_mask]
-            if not orphan_mask.all():
-                assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask], pred[~orphan_mask].astype(int),
-                                                radius=self._orphans_radius,
-                                                outlier_label=-1)
+        if not orphan_mask.all():
+            n_orphans = 0
+            while orphan_mask.any() and (n_orphans != np.sum(orphan_mask)):
+                orphans = G.pos[orphan_mask]
+                n_orphans = len(orphans)
+                assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask],
+                                                   pred[~orphan_mask].astype(int),
+                                                   radius=self._orphans_radius,
+                                                   outlier_label=-1)
                 orphan_labels = assigner.assign_orphans(orphans)
                 pred[orphan_mask] = orphan_labels
+                orphan_mask = pred < 0
+                if not self._orphans_iterate: break
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels

@@ -462,6 +462,7 @@ class FullChainGNN(torch.nn.Module):
                 for i in range(len(pid_logits)):
                     for b in range(len(pid_logits[i])):
                         pid_logits[i][b] += sem_pid_logic[part_seg[part_batch_ids==b]]
+                result['node_pred_type'] = pid_logits
 
         # ---
         # 4. GNN for particle flow & kinematics
