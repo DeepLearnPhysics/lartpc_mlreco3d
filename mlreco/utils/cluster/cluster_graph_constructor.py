@@ -444,20 +444,19 @@ class ClusterGraphConstructor:
         # Assign orphans
         G.pos = subgraph.pos.cpu().numpy()
         orphan_mask = pred < 0
-        if orphan_mask.any():
-            if not orphan_mask.all():
-                n_orphans = 0
-                while n_orphans != np.sum(orphan_mask):
-                    orphans = G.pos[orphan_mask]
-                    n_orphans = len(orphans)
-                    assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask],
-                                                       pred[~orphan_mask].astype(int),
-                                                       radius=self._orphans_radius,
-                                                       outlier_label=-1)
-                    orphan_labels = assigner.assign_orphans(orphans)
-                    pred[orphan_mask] = orphan_labels
-                    orphan_mask = pred < 0
-                    if not self._orphans_iterate: break
+        if not orphan_mask.all():
+            n_orphans = 0
+            while orphan_mask.any() and (n_orphans != np.sum(orphan_mask)):
+                orphans = G.pos[orphan_mask]
+                n_orphans = len(orphans)
+                assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask],
+                                                   pred[~orphan_mask].astype(int),
+                                                   radius=self._orphans_radius,
+                                                   outlier_label=-1)
+                orphan_labels = assigner.assign_orphans(orphans)
+                pred[orphan_mask] = orphan_labels
+                orphan_mask = pred < 0
+                if not self._orphans_iterate: break
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels
