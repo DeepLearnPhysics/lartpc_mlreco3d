@@ -174,6 +174,7 @@ class ClusterGraphConstructor:
         # Radius within which orphans get assigned to neighbor cluster
         self._orphans_radius = constructor_cfg.get('orphans_radius', 1.9)
         self._orphans_iterate = constructor_cfg.get('orphans_iterate', True)
+        self._orphans_cluster_all = constructor_cfg.get('orphans_cluster_all', True)
         self.use_cluster_labels = constructor_cfg.get('use_cluster_labels', True)
 
         # GraphBatch containing graphs per semantic class.
@@ -433,17 +434,15 @@ class ClusterGraphConstructor:
         pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
         G.add_weighted_edges_from(pos_edges)
         pred = -np.ones(num_nodes, dtype=np.int32)
-        orphans = []
+        orphan_mask = np.zeros(num_nodes, dtype=bool)
         for i, comp in enumerate(nx.connected_components(G)):
-            if len(comp) < min_points:
-                orphans.append(comp)
-                continue
             x = np.asarray(list(comp))
             pred[x] = i
+            if len(comp) < min_points:
+                orphan_mask[x] = True
 
         # Assign orphans
         G.pos = subgraph.pos.cpu().numpy()
-        orphan_mask = pred < 0
         if not orphan_mask.all():
             n_orphans = 0
             while orphan_mask.any() and (n_orphans != np.sum(orphan_mask)):
@@ -454,9 +453,14 @@ class ClusterGraphConstructor:
                                                    radius=self._orphans_radius,
                                                    outlier_label=-1)
                 orphan_labels = assigner.assign_orphans(orphans)
-                pred[orphan_mask] = orphan_labels
-                orphan_mask = pred < 0
+                valid_labels  = orphan_labels > 0
+                new_labels = pred[orphan_mask]
+                new_labels[valid_labels] = orphan_labels[valid_labels]
+                pred[orphan_mask] = new_labels
+                orphan_mask[orphan_mask] = ~valid_labels
                 if not self._orphans_iterate: break
+        if not self._orphans_cluster_all:
+            pred[orphan_mask] = -1
 
         new_labels, _ = unique_label(pred[pred >= 0])
         pred[pred >= 0] = new_labels
