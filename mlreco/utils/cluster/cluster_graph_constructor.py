@@ -457,7 +457,6 @@ class ClusterGraphConstructor:
                     orphan_labels = assigner.assign_orphans(orphans)
                     pred[orphan_mask] = orphan_labels
                     orphan_mask = pred < 0
-                    print(n_orphans, np.sum(orphan_mask))
                     if not self._orphans_iterate: break
 
         new_labels, _ = unique_label(pred[pred >= 0])
