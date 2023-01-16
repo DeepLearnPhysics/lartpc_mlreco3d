@@ -583,7 +583,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if len(input[0]) and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and 'segmentation' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
@@ -928,10 +928,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 elif 'grappa_kinematics_p_accuracy' in res:
                     print('Momentum accuracy: {:.4f}'.format(res['grappa_kinematics_p_accuracy']))
             if 'node_pred_vtx' in out:
-                if 'grappa_inter_vtx_score_acc' in res:
-                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_inter_vtx_score_acc']))
-                elif 'grappa_kinematics_vtx_score_acc' in res:
-                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_kinematics_vtx_score_acc']))
+                if 'grappa_inter_vtx_score_accuracy' in res:
+                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_inter_vtx_score_accuracy']))
+                elif 'grappa_kinematics_vtx_score_accuracy' in res:
+                    print('Primary particle score accuracy: {:.4f}'.format(res['grappa_kinematics_vtx_score_accuracy']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
         return res
