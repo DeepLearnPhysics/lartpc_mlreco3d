@@ -453,11 +453,11 @@ class ClusterGraphConstructor:
                                                    radius=self._orphans_radius,
                                                    outlier_label=-1)
                 orphan_labels = assigner.assign_orphans(orphans)
-                valid_labels  = orphan_labels > 0
+                valid_mask  = orphan_labels > -1
                 new_labels = pred[orphan_mask]
-                new_labels[valid_labels] = orphan_labels[valid_labels]
+                new_labels[valid_mask] = orphan_labels[valid_mask]
                 pred[orphan_mask] = new_labels
-                orphan_mask[orphan_mask] = ~valid_labels
+                orphan_mask[orphan_mask] = ~valid_mask
                 if not self._orphans_iterate: break
         if not self._orphans_cluster_all:
             pred[orphan_mask] = -1
