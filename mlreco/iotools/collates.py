@@ -328,7 +328,7 @@ def CollateSparse(batch, **kwargs):
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
 
-            elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+            elif isinstance(batch[0][key], list) and len(batch[0][key]) and isinstance(batch[0][key][0], tuple):
                 # For multi-scale labels (probably deprecated)
                 result[key] = [
                     concat([

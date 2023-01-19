@@ -1,27 +1,18 @@
 import torch
 import numpy as np
 import sklearn
+from larcv import larcv
 from mlreco.utils.track_clustering import track_clustering
-
-# def distances(v1, v2):
-#     #print(v1.shape, v2.shape)
-#     v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-#     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-#     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
-
-def distances(v1, v2, eps=1e-6):
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.sqrt(torch.clamp(torch.pow(v2_2 - v1_2, 2).sum(2), min=eps))
 
 
 class DBSCANFragmenter(torch.nn.Module):
     """
     DBSCAN Layer that uses sklearn's DBSCAN implementation
     to fragment each of the particle classes into dense instances.
-    - Runs pure DBSCAN for showers, Michel and Delta
-    - Runs DBSCAN on PPN-masked voxels for tracks, associates leftovers based on proximity.
-      Alternatively, uses a graph-based method to cluster tracks based on PPN vertices
+    Runs DBSCAN on each requested class separately, in one of three ways:
+    - Run pure DBSCAN on all the voxels in that class
+    - Runs DBSCAN on PPN point-masked voxels, associates leftovers based on proximity
+    - Use a graph-based method to cluster tracks based on PPN vertices (track only)
 
     Args:
         data ([np.array]): (N,5) [x, y, z, batchid, sem_type]
@@ -47,11 +38,9 @@ class DBSCANFragmenter(torch.nn.Module):
         self.num_classes     = model_cfg.get('num_classes', 4)
         self.cluster_classes = model_cfg.get('cluster_classes', list(np.arange(self.num_classes)))
 
-        # Track breaking parameters
-        self.break_tracks             = model_cfg.get('break_tracks', True)
-        self.track_label              = model_cfg.get('track_label', 1)
-        self.michel_label             = model_cfg.get('michel_label', 2)
-        self.delta_label              = model_cfg.get('delta_label', 3)
+        # Instance breaking parameters
+        self.break_classes            = model_cfg.get('break_classes', [1])
+        self.track_include_delta      = model_cfg.get('track_include_delta', False)
         self.track_clustering_method  = model_cfg.get('track_clustering_method', 'masked_dbscan')
         self.ppn_score_threshold      = model_cfg.get('ppn_score_threshold', 0.5)
         self.ppn_type_threshold       = model_cfg.get('ppn_type_threshold', 1.999)
@@ -59,6 +48,9 @@ class DBSCANFragmenter(torch.nn.Module):
         self.ppn_mask_radius          = model_cfg.get('ppn_mask_radius', 5)
 
         # Assert consistency between parameter sizes
+        if 'break_tracks' in model_cfg: # Deprecated, only kept for backward compatibility
+            assert 'break_classes' not in model_cfg, 'break_tracks is deprecated, only specify break_classes'
+            self.break_classes = model_cfg['break_tracks']*[1]
         if not isinstance(self.cluster_classes, list):
             self.cluster_classes = [self.cluster_classes]
         if not isinstance(self.eps, list):
@@ -67,31 +59,36 @@ class DBSCANFragmenter(torch.nn.Module):
             self.min_samples = [self.min_samples for _ in self.cluster_classes]
         if not isinstance(self.min_size, list):
             self.min_size = [self.min_size for _ in self.cluster_classes]
+        if not isinstance(self.break_classes, list):
+            self.break_classes = [self.break_classes]
 
         assert len(self.eps) == len(self.min_samples) == len(self.min_size) == len(self.cluster_classes)
 
 
-    def get_clusts(self, data, bids, segmentation, track_points=None):
+    def get_clusts(self, data, bids, segmentation, break_points=None):
         # Loop over batch and semantic classes
         clusts = []
         for bid in bids:
+            # Batch mask
             batch_mask = data[:, self.batch_col] == bid
             for k, s in enumerate(self.cluster_classes):
-                # Run DBSCAN
+                # Batch and segmentation mask
                 mask = batch_mask & (segmentation == s)
-                if self.break_tracks and s == self.track_label:
-                    mask = batch_mask & ((segmentation == s) | (segmentation == self.delta_label))
+                if self.track_include_delta and s == larcv.kShapeTrack and s in self.break_classes:
+                    mask = batch_mask & ((segmentation == s) | (segmentation == larcv.kShapeDelta))
                 selection = np.where(mask)[0]
                 if not len(selection):
                     continue
 
+                # Restrict voxel set, run clustering
                 voxels = data[selection, self.coords_col[0]:self.coords_col[1]]
-                if self.break_tracks and s == self.track_label:
-                    assert track_points is not None
+                if s in self.break_classes:
+                    assert break_points is not None
+                    points_mask = break_points[:, self.batch_col] == bid
+                    breaking_method = self.track_clustering_method if s==larcv.kShapeTrack else 'masked_dbscan'
                     labels = track_clustering(voxels      = voxels,
-                                              points      = track_points[track_points[:, self.batch_col] == bid,
-                                                                         self.coords_col[0]:self.coords_col[1]],
-                                              method      = self.track_clustering_method,
+                                              points      = break_points[points_mask, self.coords_col[0]:self.coords_col[1]],
+                                              method      = breaking_method,
                                               eps         = self.eps[k],
                                               min_samples = self.min_samples[k],
                                               metric      = self.metric,
@@ -102,8 +99,8 @@ class DBSCANFragmenter(torch.nn.Module):
                                                     metric=self.metric).fit(voxels).labels_
 
                 # Build clusters for this class
-                if self.break_tracks and s == self.track_label:
-                    labels[segmentation[selection] == self.delta_label] = -1
+                if self.track_include_delta and s == larcv.kShapeTrack and s in self.break_classes:
+                    labels[segmentation[selection] == larcv.kShapeDelta] = -1
                 cls_idx = [selection[np.where(labels == i)[0]] \
                     for i in np.unique(labels) \
                     if (i > -1 and np.sum(labels == i) >= self.min_size[k])]
@@ -117,20 +114,18 @@ class DBSCANFragmenter(torch.nn.Module):
 
     def forward(self, data, output=None, points=None):
 
-        from mlreco.utils.ppn import uresnet_ppn_type_point_selector
-
-        # If tracks are clustered, get the track points from the PPN output
+        # If instances are to be broken up, either provide a set of points or get them from the PPN output
+        break_points = None
         if isinstance(data, torch.Tensor): data = data.detach().cpu().numpy()
         if points is not None and isinstance(points, torch.Tensor): points = points.detach().cpu().numpy()
-        track_points = None
-        if self.break_tracks and self.track_label in self.cluster_classes:
+        if len(self.break_classes):
             assert output is not None or points is not None
             if points is None:
+                from mlreco.utils.ppn import uresnet_ppn_type_point_selector
                 numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
                                 'points'      : [output['points'][0].detach().cpu().numpy()],
                                 'mask_ppn'    : [x.detach().cpu().numpy() for x in output['mask_ppn'][0]],
                                 'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
-                                #'ppn_score'   : [output['ppn_score'][0].detach().cpu().numpy()]}
 
                 points =  uresnet_ppn_type_point_selector(data, numpy_output,
                                             score_threshold      = self.ppn_score_threshold,
@@ -139,14 +134,12 @@ class DBSCANFragmenter(torch.nn.Module):
                 point_labels = points[:, 12]
             else:
                 point_labels = points[:, -1]
-            # track_points = points[(point_labels == self.track_label) | \
-            #                       (point_labels == self.michel_label),:self.dim+1]
-            track_points = points[point_labels != self.delta_label, :self.dim+1]
+            break_points = points[point_labels != larcv.kShapeDelta, :self.dim+1] # Do not include delta points
 
         # Break down the input data to its components
         bids = np.unique(data[:, self.batch_col].astype(int))
         segmentation = data[:,-1]
         data = data[:,:-1]
 
-        clusts = self.get_clusts(data, bids, segmentation, track_points)
+        clusts = self.get_clusts(data, bids, segmentation, break_points)
         return clusts

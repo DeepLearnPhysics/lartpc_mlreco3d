@@ -207,6 +207,8 @@ class FullChain(FullChainGNN):
             result.update(self.uresnet_deghost([input[0][:,:last_index]]))
             result['ghost'] = result['segmentation']
             deghost = result['ghost'][0].argmax(dim=1) == 0
+            del result['segmentation']
+            if not torch.sum(deghost): return result, input, lambda x: x
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)

@@ -57,20 +57,19 @@ class SPICE(torch.nn.Module):
         setup_cnn_configuration(self, cfg, name)
 
         self.model_config = cfg.get(name, {})
-        self.encoder = UResNetEncoder(cfg, name='uresnet_encoder')
-        self.embedding_decoder = UResNetDecoder(cfg, name='embedding_decoder')
-        self.seed_decoder = UResNetDecoder(cfg, name='seediness_decoder')
+        self.encoder = UResNetEncoder(self.model_config, name='uresnet_encoder')
+        self.embedding_decoder = UResNetDecoder(self.model_config, name='embedding_decoder')
+        self.seed_decoder = UResNetDecoder(self.model_config, name='seediness_decoder')
 
-        self.num_filters = self.model_config.get('num_filters', 16)
-        self.seedDim     = self.model_config.get('seediness_dim', 1)
-        self.coordConv   = self.model_config.get('coordConv', False)
-        self.sigmaDim    = self.model_config.get('sigma_dim', 1)
-        self.seed_freeze = self.model_config.get('seed_freeze', False)
-        self.coordConv   = self.model_config.get('coordConv', True)
+        self.skip_classes = self.model_config.get('skip_classes', [2, 3, 4])
+        self.num_filters  = self.model_config.get('num_filters', 16)
+        self.seedDim      = self.model_config.get('seediness_dim', 1)
+        self.sigmaDim     = self.model_config.get('sigma_dim', 1)
+        self.seed_freeze  = self.model_config.get('seed_freeze', False)
+        self.coordConv    = self.model_config.get('coordConv', True)
 
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
-
 
         self.outputEmbeddings = nn.Sequential(
             ME.MinkowskiBatchNorm(self.num_filters, **self.norm_args),
@@ -90,11 +89,20 @@ class SPICE(torch.nn.Module):
             for p in self.outputSeediness.parameters():
                 p.requires_grad = False
 
+    def filter_class(self, input):
+        '''
+        Filter classes according to segmentation label.
+        '''
+        point_cloud, label = input
+        mask = torch.ones(len(label), dtype=bool, device=point_cloud.device)
+        for c in self.skip_classes:
+            mask &= label[:,-1] != c
 
+        return [point_cloud[mask], label[mask]]
 
     def forward(self, input):
 
-        point_cloud, = input
+        point_cloud, _ = self.filter_class(input)
         device = point_cloud.device
 
         coords = point_cloud[:, 0:self.D+1].to(device).int()
@@ -102,10 +110,9 @@ class SPICE(torch.nn.Module):
 
         normalized_coords = (coords[:, 1:self.D+1] - float(self.spatial_size) / 2) \
                           / (float(self.spatial_size) / 2)
-        normalized_coords = normalized_coords.float().cuda()
+        normalized_coords = normalized_coords.float()#.cuda()
         if self.coordConv:
             features = torch.cat([normalized_coords, features], dim=1)
-
 
         x = ME.SparseTensor(features, coordinates=coords)
 
