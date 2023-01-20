@@ -7,7 +7,6 @@ from torch_geometric.nn import fps, knn
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
 from torch_scatter import scatter_mean
 
-
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
 def logit_fn(input, eps=1e-6):
@@ -209,6 +208,13 @@ def find_cluster_means(features, labels):
 
 
 def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
+    '''
+    Computes the intra-cluster loss between an embedding point cloud and
+    a set of attractor points.
+
+    <labels> must range between 0 to the number of <cluster_means>, otherwise
+    the loss will be underestimated as <scatter_mean> zero value placeholders.
+    '''
     from torch_scatter import scatter_mean
     x = features[:, None, :]
     mu = cluster_means[None, :, :]
