@@ -11,6 +11,15 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 
+def get_bounding_box(points):
+    return {
+            "points_min_x": points[:, 0].min(),
+            "points_max_x": points[:, 0].max(),
+            "points_min_y": points[:, 1].min(),
+            "points_max_y": points[:, 1].max(),
+            "points_min_z": points[:, 2].min(),
+            "points_max_z": points[:, 2].max()
+    }
 
 def is_attached_at_edge(points1, points2, attached_threshold=5,
                         one_pixel=5, ablation_radius=15, ablation_min_samples=5,
@@ -40,6 +49,55 @@ def is_attached_at_edge(points1, points2, attached_threshold=5,
 
     return is_attached and is_edge
 
+def find_cosmic_angle(muon, michel, endpoint, radius=30):
+    """
+    Parameters
+    ==========
+    muon: Particle
+    michel: Particle
+    """
+    # Find muon end direction
+    pca = PCA(n_components=2)
+    neighborhood = (cdist(muon.points, [endpoint]) < radius).reshape((-1,))
+    if neighborhood.sum() == 0:
+        return -1 * np.ones((3,)), -1. * np.ones((3,))
+    coords = pca.fit_transform(muon.points[neighborhood])
+    muon_dir = pca.components_[0, :]
+    # Make sure muon direction is in the right sense
+    far_point = muon.points[neighborhood][cdist(muon.points[neighborhood], [endpoint]).argmax()]
+    vec = endpoint - far_point
+    if np.dot(vec, muon_dir) < 0:
+        muon_dir *= -1
+    # Find Michel start direction
+    pca = PCA(n_components=2)
+    neighborhood = (cdist(michel.points, [endpoint]) < radius).reshape((-1,))
+    if neighborhood.sum() == 0:
+        return -1 * np.ones((3,)), -1. * np.ones((3,))
+    coords = pca.fit_transform(michel.points[neighborhood])
+    michel_dir = pca.components_[0, :]
+    # Make sure Michel direction is in the right sense
+    far_point = michel.points[neighborhood][cdist(michel.points[neighborhood], [endpoint]).argmax()]
+    vec = far_point - endpoint
+    if np.dot(vec, michel_dir) < 0:
+        michel_dir *= -1
+
+    return muon_dir, michel_dir
+
+def find_true_cosmic_angle(muon, michel, particles_asis_voxels, radius=30):
+    #true_michel, true_muon = None, None
+    #for p in particles_asis_voxels:
+    #    if p.id() == muon.id:
+    #        true_muon = p
+    #    if p.id() == michel.id:
+    #        true_michel = p
+    if michel is None or muon is None:
+        return -1 * np.ones((3,)), -1 * np.ones((3,))
+    #endpoint = [true_michel.x(), true_michel.y(), true_michel.z()]
+    #endpoint = [true_muon.end_position().x(), true_muon.end_position().y(), true_muon.end_position().z()]
+    endpoint_id = cdist(michel.points, muon.points).argmin()
+    michel_id, muon_id = np.unravel_index(endpoint_id, (len(michel.points), len(muon.points)))
+    endpoint = muon.points[muon_id]
+    return find_cosmic_angle(muon, michel, endpoint, radius=radius)
 
 @evaluate(['michels_pred', 'michels_true'], mode='per_batch')
 def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
@@ -87,15 +145,23 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
     # ====== Initialization ======
     #
     # Initialize analysis differently depending on data/MC setting
+    start = time.time()
     if not data:
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
     else:
         predictor = FullChainPredictor(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
-
+    print("Evaluator took %d s" % (time.time() - start))
     image_idxs = data_blob['index']
 
 
+    start = time.time()
     for i, index in enumerate(image_idxs):
+        index_dict = {
+            'Index': index,
+            'run': data_blob['run_info'][i][0],
+            'subrun': data_blob['run_info'][i][1],
+            'event': data_blob['run_info'][i][2]
+        }
         pred_particles = predictor.get_particles(i, only_primaries=False)
 
         # Match with true particles if available
@@ -107,7 +173,7 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
 
             for tp in true_particles:
                 if tp.semantic_type != michel_label: continue
-                if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
+                #if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
                 p = data_blob['particles_asis'][i][tp.id]
 
                 michel_is_attached_at_edge = False
@@ -137,14 +203,13 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 is_matched = False
                 for mp in matched_particles: # matching is done true to pred
                     true_idx = 0 if matching_mode == 'true_to_pred' else 1
-                    if mp[true_idx] is None or mp[true_idx].id != tp.id: continue
+                    if mp[true_idx] is None or mp[true_idx].id != tp.id or mp[true_idx].volume != tp.volume: continue
                     is_matched = True
                     break
 
                 # DBSCAN evaluation
                 dbscan = DBSCAN(eps=one_pixel, min_samples=ablation_min_samples)
                 michel_clusters = dbscan.fit(tp.points).labels_
-                print(np.unique(michel_clusters, return_counts=True))
                 # Record true Michel
                 true_michels.append(OrderedDict({
                     'index': index,
@@ -158,15 +223,20 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'energy_deposit': p.energy_deposit(),
                     'num_voxels': p.num_voxels(),
                     'distance_to_muon': distance_to_muon,
-                    'michel_cluster_count': len(np.unique(michel_clusters[michel_clusters>-1]))
+                    'michel_cluster_count': len(np.unique(michel_clusters[michel_clusters>-1])),
+                    'volume': tp.volume
                 }))
+                true_michels[-1].update(get_bounding_box(tp.points))
+                true_michels[-1].update(index_dict)
+
         # Loop over predicted particles
         for p in pred_particles:
             if p.semantic_type != michel_label: continue
-            if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
-
+            print("Found a predicted Michel particle!")
+            #if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
             # Check whether it is attached to the edge of a track
             michel_is_attached_at_edge = False
+            muon = None
             for p2 in pred_particles:
                 if p2.semantic_type != track_label: continue
                 if p2.size < muon_min_voxel_count: continue
@@ -176,27 +246,49 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                                         ablation_radius=ablation_radius,
                                         ablation_min_samples=ablation_min_samples): continue
                 michel_is_attached_at_edge = True
+                muon = p2
                 break
 
             # Require that the Michel is attached at the edge of a track
             if not michel_is_attached_at_edge: continue
+            print('... is attached at edge of a muon')
 
             # Look for shower-like particles nearby
             daughter_showers = []
             distance_to_closest_shower = np.infty
             if shower_threshold > -1:
                 for p2 in pred_particles:
-                    if p2.semantic_type != shower_label: continue
+                    if p2.id == p.id: continue
+                    if p2.semantic_type != shower_label and p2.semantic_type != michel_label: continue
                     distance_to_closest_shower = min(distance_to_closest_shower, cdist(p.points, p2.points).min())
                     if distance_to_closest_shower >= shower_threshold: continue
                     daughter_showers.append(p2)
             daughter_num_pix = np.sum([daugher.size for daugher in daughter_showers])
             daughter_sum_pix = np.sum([daughter.depositions.sum() for daughter in daughter_showers])
 
+            # Record muon endpoint
+            endpoint = np.array([-1, -1, -1])
+            if cdist(p.points, [muon.startpoint]).min() > cdist(p.points, [muon.endpoint]).min():
+                if (muon.endpoint != np.array([-1, -1, -1])).any():
+                    endpoint = muon.endpoint
+            else:
+                if (muon.startpoint != np.array([-1, -1, -1])).any():
+                    endpoint = muon.startpoint
+            #if (endpoint == np.array([-1, -1, -1])).all():
+            endpoint_id = cdist(p.points, muon.points).argmin()
+            michel_id, muon_id = np.unravel_index(endpoint_id, (len(p.points), len(muon.points)))
+            endpoint = muon.points[muon_id]
+
+            # Find angle between Michel and muon
+            muon_dir, michel_dir = find_cosmic_angle(muon, p, endpoint)
+
             # Record candidate Michel
             update_dict = {
                 'index': index,
                 'particle_id': p.id,
+                'muon_id': muon.id,
+                'volume': p.volume,
+                'muon_size': muon.size,
                 'daughter_num_pix': daughter_num_pix,
                 'daughter_sum_pix': daughter_sum_pix,
                 'distance_to_closest_shower': distance_to_closest_shower,
@@ -204,10 +296,13 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'pred_sum_pix': p.depositions.sum(),
                 'true_num_pix': -1,
                 'true_sum_pix': -1,
+                'true_primary_num_pix': -1,
+                'true_primary_sum_pix': -1,
                 'pred_num_pix_true': -1,
                 'pred_sum_pix_true': -1,
                 'michel_true_energy_init': -1,
                 'michel_true_energy_deposit': -1,
+                'michel_true_num_voxels': -1,
                 'cluster_purity': -1,
                 'cluster_efficiency': -1,
                 'matched': False,
@@ -217,31 +312,87 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'true_noghost_num_pix': -1,
                 'true_noghost_sum_pix': -1,
                 'true_noghost_primary_num_pix': -1,
-                'true_noghost_primary_sum_pix': -1
+                'true_noghost_primary_sum_pix': -1,
+                'endpoint_x': endpoint[0],
+                'endpoint_y': endpoint[1],
+                'endpoint_z': endpoint[2],
+                'true_particle_track_id': -1,
+                'true_particle_pdg': -1,
+                'true_particle_parent_pdg': -1,
+                'true_particle_energy_init': -1,
+                'true_particle_energy_deposit': -1,
+                'true_particle_px': -1,
+                'true_particle_py': -1,
+                'true_particle_pz': -1,
+                'true_particle_t': -1,
+                'true_particle_parent_t': -1,
+                'muon_dir_x': muon_dir[0],
+                'muon_dir_y': muon_dir[1],
+                'muon_dir_z': muon_dir[2],
+                'michel_dir_x': michel_dir[0],
+                'michel_dir_y': michel_dir[1],
+                'michel_dir_z': michel_dir[2],
+                'muon_true_dir_x': -1,
+                'muon_true_dir_y': -1,
+                'muon_true_dir_z': -1,
+                'michel_true_dir_x': -1,
+                'michel_true_dir_y': -1,
+                'michel_true_dir_z': -1
             }
+            update_dict.update(index_dict)
 
             if not data:
                 for mp in matched_particles: # matching is done true2pred
                     true_idx = 0 if matching_mode == 'true_to_pred' else 1
                     pred_idx = 1 - true_idx
-                    if mp[pred_idx] is None or mp[pred_idx].id != p.id: continue
+                    if mp[pred_idx] is None or mp[pred_idx].id != p.id or mp[pred_idx].volume != p.volume: continue
                     if mp[true_idx] is None: continue
+                    if mp[true_idx].volume != p.volume: continue
                     m = mp[true_idx]
                     pe = m.purity_efficiency(p)
                     overlap_indices, mindices, _ = np.intersect1d(m.voxel_indices, p.voxel_indices, return_indices=True)
                     truep = data_blob['particles_asis'][i][m.id]
+                    truemuon = None
+                    if truep.parent_id() in true_ids:
+                        truemuon = true_particles[np.where(true_ids == truep.parent_id())[0][0]]
 
-                    truecluster = data_blob['cluster_label_noghost'][i][:, 6] == m.id
-                    trueprimary = (data_blob['cluster_label_noghost'][i][:, 6] == m.id) & (data_blob['cluster_label_noghost'][i][:, -1] == michel_label)
+                    cluster_label_noghost = predictor.get_true_label(i, "group", schema="cluster_label_noghost", volume=p.volume)
+                    segment_label_noghost = predictor.get_true_label(i, "segment", schema="cluster_label_noghost", volume=p.volume)
+                    charge_label_noghost = predictor.get_true_label(i, "charge", schema="cluster_label_noghost", volume=p.volume)
+
+                    truecluster = cluster_label_noghost == m.id
+                    trueprimary = (cluster_label_noghost == m.id) & (segment_label_noghost == michel_label)
+                    muon_true_dir, michel_true_dir = find_true_cosmic_angle(truemuon, m, data_blob['particles_asis_voxels'][i])
+
+                    cluster_label_pred_noghost = predictor.get_true_label(i, "group", schema="cluster_label", volume=p.volume)
+                    segment_label_pred_noghost = predictor.get_true_label(i, "segment", schema="cluster_label", volume=p.volume)
+                    charge_label_pred_noghost = predictor.get_true_label(i, "charge", schema="cluster_label", volume=p.volume)
+                    truecluster_pred = cluster_label_pred_noghost == m.id
+                    trueprimary_pred = truecluster_pred & (segment_label_pred_noghost == michel_label)
                     update_dict.update({
                         'matched': True,
                         'true_id': m.id,
                         'true_pdg': m.pid,
+                        'true_particle_track_id': m.asis.track_id(),
+                        'true_particle_pdg': m.asis.pdg_code(),
+                        'true_particle_parent_pdg': m.asis.parent_pdg_code(),
+                        'true_particle_energy_init': m.asis.energy_init(),
+                        'true_particle_energy_deposit': m.asis.energy_deposit(),
+                        'true_particle_px': m.asis.px(),
+                        'true_particle_py': m.asis.py(),
+                        'true_particle_pz': m.asis.pz(),
+                        'true_particle_t': m.asis.t(),
+                        'true_particle_parent_t': m.asis.parent_t(),
                         'true_semantic_type': m.semantic_type,
                         'cluster_purity': pe['purity'],
                         'cluster_efficiency': pe['efficiency'],
+                        # true_* uses the entire Michel if michel_primary_ionization_only if False
+                        # but otherwise, only primary ionization
+                        # using predicted deghosting mask
                         'true_num_pix': m.size,
                         'true_sum_pix': m.depositions.sum(),
+                        'true_primary_num_pix': trueprimary_pred.sum(),
+                        'true_primary_sum_pix': charge_label_pred_noghost[trueprimary_pred].sum(),
                         'pred_num_pix_true': len(overlap_indices),
                         'pred_sum_pix_true': m.depositions[mindices].sum(),
                         'michel_true_energy_init': truep.energy_init(),
@@ -250,12 +401,22 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                         # cluster_label includes radiative photon in Michel true particle
                         # so using segmentation labels to find primary ionization as well
                         # voxel sum will be in MeV here.
+                        # true_noghost_* is using the true deghosting mask.
                         'true_noghost_num_pix': np.count_nonzero(truecluster),
-                        'true_noghost_sum_pix': data_blob['cluster_label_noghost'][i][truecluster, 4].sum(),
+                        'true_noghost_sum_pix': charge_label_noghost[truecluster].sum(),
                         'true_noghost_primary_num_pix': np.count_nonzero(trueprimary),
-                        'true_noghost_primary_sum_pix': data_blob['cluster_label_noghost'][i][trueprimary, 4].sum()
+                        'true_noghost_primary_sum_pix': charge_label_noghost[trueprimary].sum(),
+                        'muon_true_dir_x': muon_true_dir[0],
+                        'muon_true_dir_y': muon_true_dir[1],
+                        'muon_true_dir_z': muon_true_dir[2],
+                        'michel_true_dir_x': michel_true_dir[0],
+                        'michel_true_dir_y': michel_true_dir[1],
+                        'michel_true_dir_z': michel_true_dir[2]
                     })
+                    break
 
+            update_dict.update(get_bounding_box(p.points))
             michels.append(OrderedDict(update_dict))
+    print("Loop took %d s" % (time.time() - start))
 
     return [michels, true_michels]

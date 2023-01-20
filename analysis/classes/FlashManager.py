@@ -1,6 +1,14 @@
 import os, sys
 import numpy as np
 
+def modified_box_model(x, constant_calib):
+    W_ion = 23.6 * 1e-6 # MeV/electron, work function of argon
+    E = 0.5 # kV/cm, drift electric field
+
+    beta = 0.212 # kV/cm g/cm^2 /MeV
+    alpha = 0.93
+    rho = 1.39295 # g.cm^-3
+    return (np.exp(x/constant_calib * beta * W_ion / (rho * E)) - alpha) / (beta / (rho * E)) # MeV/cm
 
 class FlashManager:
     """
@@ -31,7 +39,7 @@ class FlashManager:
         """
 
         # Setup OpT0finder
-        basedir = os.getenv('FMATCH_BASEDIR') 
+        basedir = os.getenv('FMATCH_BASEDIR')
         if basedir is None:
             raise Exception("You need to source OpT0Finder configure.sh first, or set the FMATCH_BASEDIR environment variable.")
 
@@ -115,7 +123,7 @@ class FlashManager:
 
         Note that coordinates of `interactions` are in voxel coordinates,
         but inside this function we shift back to real detector coordinates
-        using meta information. flashmatch::QCluster_t objects are in 
+        using meta information. flashmatch::QCluster_t objects are in
         real cm coordinates.
 
         Parameters
@@ -144,6 +152,8 @@ class FlashManager:
                     p.points[i, 1] * self.size_voxel_y + self.min_y,
                     p.points[i, 2] * self.size_voxel_z + self.min_z,
                     p.depositions[i]*ADC_to_MeV*self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
+                    #modified_box_model(p.depositions[i], ADC_to_MeV) * self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
+                #print("make_qcluster ", p.depositions[i] * ADC_to_MeV, p.depositions_MeV[i], p.depositions[i] * 0.00285714)
                 # Add it to geoalgo::QCluster_t
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)
@@ -151,6 +161,7 @@ class FlashManager:
         #if self.tpc_v is not None:
         #    print("Warning: overwriting internal list of particles.")
         self.tpc_v = tpc_v
+        print('Made list of %d QCluster_t' % len(tpc_v))
         return tpc_v
 
     def make_flash(self, larcv_flashes):
@@ -175,6 +186,7 @@ class FlashManager:
             flash = flashmatch.Flash_t()
             flash.idx = f.id()  # Assign a unique index
             flash.time = f.time()  # Flash timing, a candidate T0
+            flash.time_true = f.absTime() # Hijacking this field to store absolute time
             times.append(flash.time)
 
             # Assign the flash position and error on this position
@@ -191,18 +203,19 @@ class FlashManager:
             pmt_v.append(flash)
         #if self.pmt_v is not None:
         #    print("Warning: overwriting internal list of flashes.")
-        if self.reflash_merging_window is not None:
+        if self.reflash_merging_window is not None and len(pmt_v) > 0:
             # then proceed to merging close flashes
             perm = np.argsort(times)
             pmt_v = np.array(pmt_v)[perm]
             final_pmt_v = [pmt_v[0]]
-            is_merging = False
             for idx, flash in enumerate(pmt_v[1:]):
                 if flash.time - final_pmt_v[-1].time < self.reflash_merging_window:
                     new_flash = self.merge_flashes(flash, final_pmt_v[-1])
+                    # print("Merged reflash", final_pmt_v[-1].time, new_flash.time, flash.time, np.sum(final_pmt_v[-1].pe_v), np.sum(new_flash.pe_v), np.sum(flash.pe_v))
                     final_pmt_v[-1] = new_flash
                 else:
                     final_pmt_v.append(flash)
+            print("Merged", len(final_pmt_v), len(pmt_v))
             pmt_v = final_pmt_v
 
         self.pmt_v = pmt_v
@@ -228,6 +241,7 @@ class FlashManager:
         flash = flashmatch.Flash_t()
         flash.idx = min(a.idx, b.idx)
         flash.time = min(a.time, b.time)
+        flash.time_true = min(a.time_true, b.time_true)
         flash.x, flash.y, flash.z = min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)
         flash.x_err, flash.y_err, flash.z_err = min(a.x_err, b.x_err), min(a.y_err, b.y_err), min(a.z_err, b.z_err)
         for i in range(180):
@@ -241,7 +255,7 @@ class FlashManager:
                 raise Exception('You need to specify `interactions`, or to run make_qcluster.')
         if interactions is not None:
             self.make_qcluster(interactions, **kwargs)
-        
+
 
         if self.pmt_v is None:
             if flashes is None:
@@ -258,10 +272,10 @@ class FlashManager:
             self.mgr.Add(x)
         for x in self.pmt_v:
             self.mgr.Add(x)
-            
+
         # Run the matching
-        if self.all_matches is not None:
-            print("Warning: overwriting internal list of matches.")
+        #if self.all_matches is not None:
+        #    print("Warning: overwriting internal list of matches.")
         self.all_matches = self.mgr.Match()
         return self.all_matches
 
@@ -310,7 +324,7 @@ class FlashManager:
             raise Exception("Could not find flash id %d in self.pmt_v" % flash_id)
 
         return self.pmt_v[flash_id]
-        
+
 
     def get_t0(self, idx, matches=None):
         """

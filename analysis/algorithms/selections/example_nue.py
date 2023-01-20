@@ -9,15 +9,12 @@ from pprint import pprint
 import time
 import numpy as np
 
-# Setup OpT0finder
-import os, sys
-sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
-import flashmatch
-from flashmatch import flashmatch, geoalgo
-
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
+    """
+    Example of analysis script for nue analysis.
+    """
 
     interactions, particles = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
