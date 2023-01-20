@@ -181,10 +181,10 @@ class VolumeBoundaries:
         # in each spatial dimension (so, list of list)
         all_boundaries = []
         for n in range(self.dim):
-            if self.boundaries[n] is None: 
+            if self.boundaries[n] is None:
                 all_boundaries.append([np.ones((coords.shape[0],), dtype=bool)])
                 continue
-            dim_boundaries = [] 
+            dim_boundaries = []
             for i in range(len(self.boundaries[n])):
                 dim_boundaries.append( coords[:, n] < self.boundaries[n][i] )
             dim_boundaries.append( coords[:, n] >= self.boundaries[n][-1] )
@@ -328,7 +328,7 @@ def CollateSparse(batch, **kwargs):
                                                 axis=1 ) for batch_id,sample in enumerate(batch) ],
                                     axis=0)
 
-            elif isinstance(batch[0][key], list) and isinstance(batch[0][key][0], tuple):
+            elif isinstance(batch[0][key], list) and len(batch[0][key]) >= 1 and isinstance(batch[0][key][0], tuple):
                 # For multi-scale labels (probably deprecated)
                 result[key] = [
                     concat([

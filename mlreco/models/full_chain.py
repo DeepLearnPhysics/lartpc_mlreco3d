@@ -219,7 +219,7 @@ class FullChain(FullChainGNN):
             else:
                 result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
                 seg = result['segmentation'][0]
-                full_seg = torch.zeros((input[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device) 
+                full_seg = torch.zeros((input[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device)
                 full_seg[deghost] = seg
                 result['segmentation'][0] = full_seg
 

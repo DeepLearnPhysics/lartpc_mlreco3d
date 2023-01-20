@@ -64,6 +64,14 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     pca = PCA(n_components=2)
 
     for i, index in enumerate(image_idxs):
+        index_dict = {
+            'Index': index,
+            'run': data_blob['run_info'][i][0],
+            'subrun': data_blob['run_info'][i][1],
+            'event': data_blob['run_info'][i][2]
+        }
+        print(index_dict)
+
         pred_particles = predictor.get_particles(i, only_primaries=False)
 
         # Match with true particles if available
@@ -83,16 +91,17 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
             # Count true stopping muons in the event
             for tp in true_particles:
                 if tp.semantic_type != track_label: continue
-                if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
+                #if not predictor.is_contained(tp.points, threshold=fiducial_threshold): continue
                 num_voxels = tp.size
 
-                p = data_blob['particles_asis'][i][tp.id]
+                p = data_blob['particles_asis_voxels'][i][tp.id]
                 if p.pdg_code() not in [13, -13]: continue
                 endpoint = p.end_position()
-                is_stopping = endpoint.x() >= 0 and endpoint.x() < spatial_size \
-                            and endpoint.y() >= 0 and endpoint.y() < spatial_size \
-                            and endpoint.z() >= 0 and endpoint.z() < spatial_size
-                if not is_stopping: continue
+                #is_stopping = endpoint.x() >= 0 and endpoint.x() < spatial_size \
+                #            and endpoint.y() >= 0 and endpoint.y() < spatial_size \
+                #            and endpoint.z() >= 0 and endpoint.z() < spatial_size
+                #is_stopping = predictor.is_contained(np.array([[endpoint.x(), endpoint.y(), endpoint.z()]]), threshold=fiducial_threshold)
+                #if not is_stopping: continue
                 # Determine whether attached to Michel or not
                 attached_to_Michel = False
                 Michel_size = -1
@@ -133,13 +142,18 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'is_matched': is_matched,
                     'overall_purity': pur,
                     'overall_efficiency': eff,
-                    'overall_ari': ari
+                    'overall_ari': ari,
+                    'volume': tp.volume,
+                    'endpoint_x': endpoint.x(),
+                    'endpoint_y': endpoint.y(),
+                    'endpoint_z': endpoint.z()
                 }))
+                true_muons[-1].update(index_dict)
 
         # Loop over predicted particles
         for p in pred_particles:
             if p.semantic_type != track_label: continue
-            if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
+            #if not predictor.is_contained(p.points, threshold=fiducial_threshold): continue
             coords = p.points
 
             # Check for presence of Michel electron
@@ -173,6 +187,9 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 #'projected_x_length': projected_x_length,
                 'theta_yz': np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min())),
                 'theta_xz': np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min())),
+                'delta_x': coords[:, x].max() - coords[:, x].min(),
+                'delta_y': coords[:, y].max() - coords[:, y].min(),
+                'delta_z': coords[:, z].max() - coords[:, z].min(),
                 'matched': False,
                 'pca_length': coords_pca.max() - coords_pca.min(),
                 #'t0': t0,
@@ -180,7 +197,11 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'true_size': -1,
                 'cluster_purity': -1,
                 'cluster_efficiency': -1,
-                'distance_endpoint_to_michel': np.sqrt(np.min(distances_endpoints))
+                'distance_endpoint_to_michel': np.sqrt(np.min(distances_endpoints)),
+                'volume': p.volume,
+                'endpoint_x': coords[closest_point, 0],
+                'endpoint_y': coords[closest_point, 1],
+                'endpoint_z': coords[closest_point, 2]
                 }
             if not data:
                 for mp in matched_particles: # matching is done true2pred
@@ -196,6 +217,7 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                         'cluster_efficiency': pe['efficiency']
                     })
 
+            update_dict.update(index_dict)
             muons.append(OrderedDict(update_dict))
             track_dict= update_dict
 
@@ -224,9 +246,20 @@ def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'cell_dx': dx,
                     'cell_bin': i,
                     'cell_residual_range': (i - 0.5) * bin_size,
-                    'nbins': len(bins)
+                    'nbins': len(bins),
+                    'volume': p.volume,
+                    'cell_delta_x': p.points[mask, x].max() - p.points[mask, x].min(),
+                    'cell_delta_y': p.points[mask, y].max() - p.points[mask, y].min(),
+                    'cell_delta_z': p.points[mask, z].max() - p.points[mask, z].min(),
+                    'cell_min_x': p.points[mask, x].min(),
+                    'cell_min_y': p.points[mask, y].min(),
+                    'cell_min_z': p.points[mask, z].min(),
+                    'cell_max_x': p.points[mask, x].max(),
+                    'cell_max_y': p.points[mask, y].max(),
+                    'cell_max_z': p.points[mask, z].max(),
                 })
                 update_dict.update(track_dict)
+                update_dict.update(index_dict)
                 muon_cells.append(update_dict)
 
     return [muon_cells, muons, true_muons]

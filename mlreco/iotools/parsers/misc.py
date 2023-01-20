@@ -136,11 +136,18 @@ def parse_opflash(opflash_event):
 
     Configuration
     -------------
-    opflash_event: larcv::EventFlash
+    opflash_event: larcv::EventFlash or list of larcv::EventFlash
 
     Returns
     -------
     list
     """
-    opflashes = [larcv.Flash(f) for f in opflash_event.as_vector()]
+    if not isinstance(opflash_event, list):
+        opflash_event = [opflash_event]
+
+    opflash_list = []
+    for x in opflash_event:
+        opflash_list.extend(x.as_vector())
+
+    opflashes = [larcv.Flash(f) for f in opflash_list]
     return opflashes
