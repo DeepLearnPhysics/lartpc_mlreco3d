@@ -45,6 +45,9 @@ def pid_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
 
     node_true_type = get_cluster_label(kinematics[data_idx], pred_particles, column=7) # pdg label
     node_true_cluster_id = get_cluster_label(kinematics[data_idx], pred_particles, column=6) # cluster id
+    node_true_nu_id = get_cluster_label(kinematics[data_idx], pred_particles, column=8)
+    print("true nu id", node_true_nu_id)
+    print(kinematics[data_idx][:5])
 
     #clust_ids = get_cluster_label(clust_data[data_idx], pred_particles, 5) # or 6 ?
     #print(kinematics[data_idx].shape, pred_particles)
@@ -63,11 +66,13 @@ def pid_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         tuple_names = ('true_cluster_id', 'true_type', 'pred_type', 'distance_to_boundary',
                         'pred_num_voxels', 'pred_sum_voxels',
                         'true_num_voxels', 'true_sum_voxels',
-                        'true_spatial_extent', 'true_spatial_std', 'pred_spatial_extent', 'pred_spatial_std',)
+                        'true_spatial_extent', 'true_spatial_std', 'pred_spatial_extent', 'pred_spatial_std',
+                        'true_nu_id',)
         tuple_values = (true_cluster_id, node_true_type[i], node_pred_type[i].argmax(), boundaries,
                         len(pred_voxels), pred_voxels[:, 4].sum(),
                         len(true_voxels), true_voxels[:, 4].sum(),
-                        true_d.max(), true_d.std(), pred_d.max(), pred_d.std(),)
+                        true_d.max(), true_d.std(), pred_d.max(), pred_d.std(),
+                        node_true_nu_id[i],)
 
 
         row_names.append(tuple_names)

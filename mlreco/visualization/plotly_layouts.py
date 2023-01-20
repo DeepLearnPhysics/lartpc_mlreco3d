@@ -69,10 +69,10 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
     return fig
 
 
-def trace_particles(particles, color='id', size=1, 
-                    scatter_points=False, 
-                    scatter_ppn=False, 
-                    highlight_primaries=False, 
+def trace_particles(particles, color='id', size=1,
+                    scatter_points=False,
+                    scatter_ppn=False,
+                    highlight_primaries=False,
                     colorscale='rainbow'):
     '''
     Get Scatter3d traces for a list of <Particle> instances.
@@ -115,8 +115,8 @@ def trace_particles(particles, color='id', size=1,
         traces.append(plot)
         if scatter_points:
             if hasattr(p, 'startpoint'):
-                plot = go.Scatter3d(x=np.array([p.startpoint[0]]), 
-                    y=np.array([p.startpoint[1]]), 
+                plot = go.Scatter3d(x=np.array([p.startpoint[0]]),
+                    y=np.array([p.startpoint[1]]),
                     z=np.array([p.startpoint[2]]),
                     mode='markers',
                     marker=dict(
@@ -128,8 +128,8 @@ def trace_particles(particles, color='id', size=1,
                     name='Startpoint {}'.format(p.id))
                 traces.append(plot)
             if hasattr(p, 'endpoint'):
-                plot = go.Scatter3d(x=np.array([p.endpoint[0]]), 
-                    y=np.array([p.endpoint[1]]), 
+                plot = go.Scatter3d(x=np.array([p.endpoint[0]]),
+                    y=np.array([p.endpoint[1]]),
                     z=np.array([p.endpoint[2]]),
                     mode='markers',
                     marker=dict(
@@ -143,8 +143,8 @@ def trace_particles(particles, color='id', size=1,
                     name='Endpoint {}'.format(p.id))
                 traces.append(plot)
         elif scatter_ppn:
-            plot = go.Scatter3d(x=p.ppn_candidates[:, 0], 
-                    y=p.ppn_candidates[:, 1], 
+            plot = go.Scatter3d(x=p.ppn_candidates[:, 0],
+                    y=p.ppn_candidates[:, 1],
                     z=p.ppn_candidates[:, 2],
                     mode='markers',
                     marker=dict(
@@ -158,7 +158,7 @@ def trace_particles(particles, color='id', size=1,
     return traces
 
 
-def trace_interactions(interactions, color='id'):
+def trace_interactions(interactions, color='id', colorscale="rainbow"):
     '''
     Get Scatter3d traces for a list of <Interaction> instances.
     Each <Interaction> will be drawn with the color specified
@@ -170,8 +170,13 @@ def trace_interactions(interactions, color='id'):
     Returns:
         - traces: List[go.Scatter3d]
     '''
-    traces = []
+    traces, colors = [], []
     for inter in interactions:
+        colors.append(getattr(inter, color))
+    colors = np.array(colors)
+    cmin, cmax = int(colors.min()), int(colors.max())
+
+    for idx, inter in enumerate(interactions):
         particles = inter.particles
         voxels = []
         # Merge all particles' voxels into one tensor
@@ -184,8 +189,9 @@ def trace_interactions(interactions, color='id'):
                             mode='markers',
                             marker=dict(
                                 size=2,
-                                color=getattr(inter, color),
-                                colorscale="rainbow",
+                                color=int(getattr(inter, color)) * np.ones(voxels.shape[0]),
+                                colorscale=colorscale,
+                                cmin=cmin, cmax=cmax,
                                 reversescale=True,
                                 opacity=1),
                                hovertext=int(getattr(inter, color)),

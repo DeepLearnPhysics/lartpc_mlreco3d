@@ -10,6 +10,7 @@
 
 import numpy as np
 import torch
+from larcv import larcv
 
 def get_group_types(particle_v, meta, point_type="3d"):
     """
@@ -17,7 +18,6 @@ def get_group_types(particle_v, meta, point_type="3d"):
     """
     if point_type not in ["3d", "xy", "yz", "zx"]:
         raise Exception("Point type not supported in PPN I/O.")
-    # from larcv import larcv
     gt_types = []
     for particle in particle_v:
         pdg_code = abs(particle.pdg_code())
@@ -318,16 +318,14 @@ type_labels = {
 }
 
 
-def get_particle_id(particles_v, nu_ids, include_mpr=False):
+def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=False):
     '''
     Function that gives one of five labels to particles of
     particle species predictions. This function ensures:
     - Particles that do not originate from an MPV are labeled -1,
       unless the include_mpr flag is set to true
-    - Particles that are not a track or a shower, and their
-      daughters, are labeled -1 (Michel and Delta), as their
-      particle type is already constrained (only electron)
-    - Particles that are neutron daughters are labeled -1
+    - Secondary particles (includes Michel/delta and neutron activity) are
+      labeled -1, unless the include_secondary flag is true
     - All shower daughters are labeled the same as their primary. This
       makes sense as otherwise an electron primary gets overruled by
       its many photon daughters (voxel-wise majority vote). This can
@@ -340,22 +338,26 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False):
         - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
         - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
         - include_mpr: include MPR (cosmic-like) particles to PID target
+        - include_secondary: include secondary particles into the PID target
     Outputs:
         - array: (N) list of group ids
     '''
     particle_ids = np.empty(len(nu_ids))
-    # nu_id = 0 for MPR/cosmic, nu_id = 1 for MPV/neutrino
+    primary_ids  = get_group_primary_id(particles_v, nu_ids, include_mpr)
     for i in range(len(particle_ids)):
-        group_id = particles_v[i].group_id()
+        # If the primary ID is invalid, assign invalid
+        if primary_ids[i] < 0:
+            particle_ids[i] = -1
+            continue
 
+        # If secondary particles are not included and primary_id < 1, assign invalid
+        if not include_secondary and primary_ids[i] < 1:
+            particle_ids[i] = -1
+            continue
+
+        # If the particle type exists in the predefined list, assign
+        group_id = int(particles_v[i].group_id())
         t = int(particles_v[group_id].pdg_code())
-        process = particles_v[group_id].creation_process()
-        shape = int(particles_v[group_id].shape())
-
-        if not include_mpr and nu_ids[i] < 1: t = -1
-        if shape > 1: t = -1
-        if (t == 22 or t == 2212) and ('Inelastic' in process or 'Capture' in process): t = -1
-
         if t in type_labels.keys():
             particle_ids[i] = type_labels[t]
         else:
@@ -437,8 +439,13 @@ def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
             primary_ids[i] = -1
             continue
 
+        # If the ancestor particle is unknown (no creation process), assign invalid (TODO: fix in supera)
+        if not p.ancestor_creation_process():
+            primary_ids[i] = -1
+            continue
+
         # If the particle is not a shower or a track, it is not a primary
-        if p.shape() != 0 and p.shape() != 1:
+        if p.shape() != larcv.kShapeShower and p.shape() != larcv.kShapeTrack:
             primary_ids[i] = 0
             continue
 

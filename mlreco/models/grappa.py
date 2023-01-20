@@ -227,12 +227,14 @@ class GNN(torch.nn.Module):
 
         self.vertex_mlp = base_config.get('vertex_mlp', False)
         if self.vertex_mlp:
-            node_output_feats = cfg[name]['gnn_model'].get('node_output_feats', 64)
+            node_feats = cfg[name]['gnn_model'].get('node_feats')
+            node_output_feats = cfg[name]['gnn_model'].get('node_output_feats')
             vertex_config = cfg[name].get('vertex_net', {'name': 'momentum_net'})
             self.use_vtx_input_features = vertex_config.get('use_vtx_input_features', False)
+            self.add_vtx_input_features = vertex_config.get('add_vtx_input_features', False)
             vertex_net_name = vertex_config.get('name', 'momentum_net')
             if vertex_net_name == 'momentum_net':
-                self.vertex_net = VertexNet(node_output_feats,
+                self.vertex_net = VertexNet(node_output_feats+node_feats*self.add_vtx_input_features,
                                               num_output=5,
                                               num_hidden=vertex_config.get('num_hidden', 64)) # Enforce positive outputs
             elif vertex_net_name == 'attention_net':
@@ -435,6 +437,8 @@ class GNN(torch.nn.Module):
         if self.vertex_mlp:
             if self.use_vtx_input_features:
                 node_pred_vtx = self.vertex_net(x)
+            elif self.add_vtx_input_features:
+                node_pred_vtx = self.vertex_net(torch.cat([x, out['node_features'][0]], dim=1))
             else:
                 node_pred_vtx = self.vertex_net(out['node_features'][0])
             result['node_pred_vtx'] = [[node_pred_vtx[b] for b in cbids]]

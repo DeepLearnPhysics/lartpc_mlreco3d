@@ -4,11 +4,20 @@ from sklearn.decomposition import PCA
 
 from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
 from analysis.decorator import evaluate
+from analysis.algorithms.selections.flash_matching import find_true_time, find_true_x
 
 from pprint import pprint
 import time
 import numpy as np
 from scipy.spatial.distance import cdist
+
+
+def must_invert(x, invert_regions):
+    for r in invert_regions:
+        if x >= r[0] and x <= r[1]:
+            return True
+    return False
+
 
 
 @evaluate(['acpt_muons_cells', 'acpt_muons'], mode='per_batch')
@@ -117,6 +126,8 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     # Avoid hardcoding labels
     muon_label       = processor_cfg.get('muon_label', 2)
     track_label      = processor_cfg.get('track_label', 1)
+    # To correct x coordinates - one cathode per cryostat, in same order as volumes
+    cathode_x        = processor_cfg.get('cathode_x', [675.5, 2077])
 
     #
     # ====== Initialization ======
@@ -137,6 +148,13 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     pca = PCA(n_components=2)
 
     for i, index in enumerate(image_idxs):
+        index_dict = {
+            'Index': index,
+            'run': data_blob['run_info'][i][0],
+            'subrun': data_blob['run_info'][i][1],
+            'event': data_blob['run_info'][i][2]
+        }
+        print(index_dict)
         pred_particles = predictor.get_particles(i, only_primaries=False)
 
         # Match with true particles if available
@@ -159,7 +177,7 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
 
             # decide whether this track is worth keeping depending on mode
             keep = {'ac': False, 'a': False, 'c': False}
-            keep['ac'] = (projected_x_length > (drift_length/voxel_size if data else spatial_size) - selection_threshold)
+            keep['ac'] = (projected_x_length > (drift_length/voxel_size) - selection_threshold)
             piercing_x = -1
             if (touching_top ^ touching_bottom ^ touching_back ^ touching_front):
                 # Assuming downward going
@@ -216,14 +234,24 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                 # for the records keeping
 
                 # T0 correction, assuming T0 is minimal drift coordinate
+                # keep in mind vdrift is in cm / us, so t0 is in us
+                inverted = False
                 if keep['ac']:
-                    t0 = coords[:, x].min() / vdrift
-                elif keep['a']:
-                    t0 = piercing_x / vdrift
-                elif keep['c']:
-                    t0 = piercing_x / vdrift - drift_length/vdrift
+                    inverted = must_invert(coords[:, x].min(), invert_regions)
+                    if inverted:
+                        piercing_x = coords[:, x].min()
+                        #t0 = piercing_x * voxel_size / vdrift
+                    else:
+                        piercing_x = coords[:, x].max()
+                        #t0 = - piercing_x * voxel_size / vdrift
+                    t0 = -1
+                elif keep['a']: # FIXME account for invert_regions
+                    t0 = piercing_x * voxel_size / vdrift
+                elif keep['c']: # FIXME account for invert_regions
+                    t0 = piercing_x * voxel_size / vdrift - drift_length/vdrift
 
-                coords[:, x] = coords[:, x] - t0 * vdrift
+                # don't forget coords are in voxel units
+                coords[:, x] = coords[:, x] + (cathode_x[p.volume] - piercing_x)
                 theta_yz = np.arctan2((coords[:, y].max() - coords[:, y].min()),(coords[:, z].max()-coords[:, z].min()))
                 theta_xz = np.arctan2((coords[:, x].max() - coords[:, x].min()),(coords[:, z].max()-coords[:, z].min()))
                 update_dict = {
@@ -234,12 +262,18 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                     'projected_x_length': projected_x_length,
                     'theta_yz': theta_yz,
                     'theta_xz': theta_xz,
+                    'coords_min_x': coords[:, x].min(),
+                    'coords_max_x': coords[:, x].max(),
+                    'piercing_x': piercing_x,
+                    'must_invert': inverted,
                     'matched': len(p.match),
                     't0': t0,
                     'true_pdg': -1,
                     'true_size': -1,
+                    'volume': p.volume
                     }
                 update_dict.update(keep) # Record what kind of piercing track it was
+                update_dict.update(index_dict)
                 if not data and len(p.match)>0:
                     m = np.array(true_particles)[true_ids == p.match[0]][0]
                     update_dict.update({
@@ -270,9 +304,11 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                                 'cell_ybin': y_idx,
                                 'cell_zbin': z_idx,
                                 'cell_xbin': x_idx,
+                                'volume': p.volume,
                             })
                             # Include parent track information
                             update_dict.update(track_dict)
+                            update_dict.update(index_dict)
                             muon_cells.append(update_dict)
 
     return [muon_cells, muons]
