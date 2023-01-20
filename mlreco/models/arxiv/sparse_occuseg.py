@@ -5,17 +5,8 @@ import numpy as np
 import sparseconvnet as scn
 from collections import defaultdict
 
-<<<<<<< HEAD:mlreco/models/arxiv/sparse_occuseg.py
 from mlreco.models.scn.layers.uresnet import UResNet
 from mlreco.models.layers.cluster_cnn.losses.occuseg import OccuSegLoss
-=======
-from mlreco.models.layers.uresnet import UResNet
-from mlreco.models.cluster_cnn.losses.occuseg import OccuSegLoss
-from mlreco.utils.occuseg import *
-from mlreco.models.cluster_cnn.losses.lovasz import StableBCELoss
-from torch_cluster import knn_graph, radius_graph
-from functools import partial
->>>>>>> 36637149f2385b7f3a5a16faf6ae497c0d87be21:mlreco/models/sparse_occuseg.py
 
 from pprint import pprint
 
