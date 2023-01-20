@@ -151,3 +151,25 @@ def parse_opflash(opflash_event):
 
     opflashes = [larcv.Flash(f) for f in opflash_list]
     return opflashes
+
+
+def parse_crthits(crthit_event):
+    """
+    Copy construct CRTHit and return an array of larcv::CRTHit.
+
+    .. code-block:: yaml
+        schema:
+          crthits:
+            parser:parse_crthit
+            crthit_event: crthit_crthit
+
+    Configuration
+    -------------
+    crthit_event: larcv::CRTHit
+
+    Returns
+    -------
+    list
+    """
+    crthits = [larcv.CRTHit(c) for c in crthit_event.as_vector()]
+    return crthits
