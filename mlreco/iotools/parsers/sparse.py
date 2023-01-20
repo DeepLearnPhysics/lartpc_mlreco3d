@@ -57,7 +57,7 @@ def parse_sparse2d(sparse_event_list):
     return np_voxels, np.concatenate(output, axis=-1)
 
 
-def parse_sparse3d(sparse_event_list, features=None):
+def parse_sparse3d(sparse_event_list, features=None, hit_keys=[], nhits_idx=None):
     """
     A function to retrieve sparse tensor input from larcv::EventSparseTensor3D object
 
@@ -82,11 +82,17 @@ def parse_sparse3d(sparse_event_list, features=None):
         Default is None (ignored). If a positive integer is specified,
         the sparse_event_list will be split in equal lists of length
         `features`. Each list will be concatenated along the feature
-        dimension separately. Then all lists are concatenated along the 
+        dimension separately. Then all lists are concatenated along the
         first dimension (voxels). For example, this lets you work with
         distinct detector volumes whose input data is stored in separate
         TTrees.`features` is required to be a divider of the `sparse_event_list`
         length.
+    hit_keys: list of int, optional
+        Indices among the input features of the _hit_key_ TTrees that can be
+        used to infer the _nhits_ quantity (doublet vs triplet point).
+    nhits_idx: int, optional
+        Index among the input features where the _nhits_ feature (doublet vs triplet)
+        should be inserted.
 
     Returns
     -------
@@ -100,9 +106,13 @@ def parse_sparse3d(sparse_event_list, features=None):
         if len(sparse_event_list) % features > 0:
             raise Exception("features number in parse_sparse3d should be a divider of the sparse_event_list length.")
         split_sparse_event_list = np.split(np.array(sparse_event_list), len(sparse_event_list) / features)
-    
+
     voxels, features = [], []
     features_count = None
+    compute_nhits = len(hit_keys) > 0
+    if compute_nhits and nhits_idx is None:
+        raise Exception("nhits_idx needs to be specified if you want to compute the _nhits_ feature.")
+
     for sparse_event_list in split_sparse_event_list:
         if features_count is None:
             features_count = len(sparse_event_list)
@@ -111,7 +121,8 @@ def parse_sparse3d(sparse_event_list, features=None):
         meta = None
         output = []
         np_voxels = None
-        for sparse_event in sparse_event_list:
+        hit_key_array = []
+        for idx, sparse_event in enumerate(sparse_event_list):
             num_point = sparse_event.as_vector().size()
             if meta is None:
                 meta = sparse_event.meta()
@@ -122,8 +133,24 @@ def parse_sparse3d(sparse_event_list, features=None):
             np_data = np.empty(shape=(num_point, 1), dtype=np.float32)
             larcv.fill_3d_pcloud(sparse_event, np_data)
             output.append(np_data)
+
+            if compute_nhits:
+                if idx in hit_keys:
+                    hit_key_array.append(np_data)
+
         voxels.append(np_voxels)
-        features.append(np.concatenate(output, axis=-1))
+        features_array = np.concatenate(output, axis=-1)
+
+        if compute_nhits:
+            hit_key_array = np.concatenate(hit_key_array, axis=-1)
+            doublets = (hit_key_array < 0).any(axis=1)
+            nhits = 3. * np.ones((np_voxels.shape[0],), dtype=np.float32)
+            nhits[doublets] = 2.
+            if nhits_idx < 0 or nhits_idx > features_array.shape[1]:
+                raise Exception("nhits_idx is out of range")
+            features_array = np.concatenate([features_array[..., :nhits_idx], nhits[:, None], features_array[..., nhits_idx:]], axis=-1)
+
+        features.append(features_array)
 
     return np.concatenate(voxels, axis=0), np.concatenate(features, axis=0)
 

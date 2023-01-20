@@ -1,7 +1,9 @@
 import numpy as np
+#from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import Sampler
 
 
+#class AbstractBatchSampler(DistributedSampler):
 class AbstractBatchSampler(Sampler):
     """
     Samplers that inherit from this class should work out of the box.
@@ -29,7 +31,7 @@ class AbstractBatchSampler(Sampler):
 
 class RandomSequenceSampler(AbstractBatchSampler):
     def __iter__(self):
-        starts = self._random.randint(low=0, high=self._data_size - self._minibatch_size, size=(len(self),))
+        starts = self._random.randint(low=0, high=self._data_size+1 - self._minibatch_size, size=(len(self),))
         return iter(np.concatenate([np.arange(start, start+self._minibatch_size) for start in starts]))
 
     @staticmethod
@@ -54,7 +56,7 @@ class BootstrapBatchSampler(AbstractBatchSampler):
     This is particularly useful for training an ensemble of networks (bagging)
     '''
     def __iter__(self):
-        starts = np.arange(0, self._data_size - self._minibatch_size, self._minibatch_size)
+        starts = np.arange(0, self._data_size+1 - self._minibatch_size, self._minibatch_size)
         bootstrap_indices = np.random.choice(np.arange(self._data_size), self._data_size)
         return iter(np.concatenate([bootstrap_indices[np.arange(start, start+self._minibatch_size)] for start in starts]))
 
