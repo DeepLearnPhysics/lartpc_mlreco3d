@@ -4,6 +4,14 @@ import os, sys
 import numpy as np
 import copy
 
+# Setup OpT0Finder for flash matching as needed
+if os.getenv('FMATCH_BASEDIR') is not None:
+    print('Setting up OpT0Finder...')
+    sys.path.append(os.path.join(os.getenv('FMATCH_BASEDIR'), 'python'))
+    import flashmatch
+    from flashmatch import flashmatch, geoalgo
+    print('... done.')
+
 current_directory = os.path.dirname(os.path.abspath(__file__))
 current_directory = os.path.dirname(current_directory)
 sys.path.insert(0, current_directory)
@@ -54,11 +62,6 @@ def main(analysis_cfg_path, model_cfg_path):
             return outs
     else:
         raise Exception('You need to specify either `name` or `scripts` under `analysis` section.')
-    # Setup OpT0Finder for flash matching as needed
-    if os.getenv('FMATCH_BASEDIR') is not None:
-        sys.path.append(os.path.join(os.getenv('FMATCH_BASEDIR'), 'python'))
-        import flashmatch
-        from flashmatch import flashmatch, geoalgo
 
     # Run Algorithm
     process_func(config, analysis_config)
