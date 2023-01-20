@@ -121,7 +121,7 @@ def purity(pred, truth, bid=None):
         pred, pcts = unique_with_batch(pred, bid)
         truth, tcts = unique_with_batch(truth, bid)
     else:
-        pred, pcts = unique_label(pred)
+        pred, pcts = (pred)
         truth, tcts = unique_label(truth)
     table = contingency_table(pred, truth, len(pcts), len(tcts))
     purities = table.max(axis=1) / pcts
