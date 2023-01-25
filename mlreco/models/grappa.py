@@ -197,17 +197,18 @@ class GNN(torch.nn.Module):
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
                 type_net_mode = type_config.get('mode', 'standard')
-                if type_net_mode == 'standard':
+                if type_net_mode == 'linear':
+                    self.type_net = torch.nn.Linear(node_output_feats, 5)
+                elif type_net_mode == 'standard':
                     self.type_net = MomentumNet(node_output_feats,
                                                 num_output=5,
                                                 num_hidden=type_config.get('num_hidden', 128),
-                                                positive_outputs=False)
+                                                positive_outputs=type_config.get('positive_outputs', False))
                 elif type_net_mode == 'edl':
                     self.type_net = MomentumNet(node_output_feats,
                                                 num_output=5,
                                                 num_hidden=type_config.get('num_hidden', 128),
-                                                positive_outputs=True)
-                    self.edge_softplus = torch.nn.Softplus()
+                                                positive_outputs=type_config.get('positive_outputs', True))
                 else:
                     raise ValueError('Unrecognized Particle ID Type Net Mode: ', type_net_mode)
             if self.kinematics_momentum:
@@ -230,20 +231,25 @@ class GNN(torch.nn.Module):
             node_feats = cfg[name]['gnn_model'].get('node_feats')
             node_output_feats = cfg[name]['gnn_model'].get('node_output_feats')
             vertex_config = cfg[name].get('vertex_net', {'name': 'momentum_net'})
+            self.pred_vtx_positions = vertex_config.get('pred_vtx_positions', True)
             self.use_vtx_input_features = vertex_config.get('use_vtx_input_features', False)
             self.add_vtx_input_features = vertex_config.get('add_vtx_input_features', False)
+            num_input  = node_output_feats + node_feats * self.add_vtx_input_features 
+            num_output = 2 + 3 * self.pred_vtx_positions
             vertex_net_name = vertex_config.get('name', 'momentum_net')
-            if vertex_net_name == 'momentum_net':
-                self.vertex_net = VertexNet(node_output_feats+node_feats*self.add_vtx_input_features,
-                                              num_output=5,
-                                              num_hidden=vertex_config.get('num_hidden', 64)) # Enforce positive outputs
+            if vertex_net_name == 'linear':
+                self.vertex_net = torch.nn.Linear(num_input, num_output)
+            elif vertex_net_name == 'momentum_net':
+                self.vertex_net = VertexNet(num_input, num_output,
+                                            num_hidden=vertex_config.get('num_hidden', 64),
+                                            positive_outputs=vertex_config.get('positive_outputs',False))
             elif vertex_net_name == 'attention_net':
-                self.vertex_net = TransformerEncoderLayer(node_output_feats, 3, **vertex_config)
+                self.vertex_net = TransformerEncoderLayer(num_input, num_output, **vertex_config)
             elif vertex_net_name == 'deep_vertex_net':
-                self.vertex_net = DeepVertexNet(node_output_feats,
-                                                  num_output=5,
-                                                  num_hidden=vertex_config.get('num_hidden', 64),
-                                                  num_layers=vertex_config.get('num_layers', 5)) # Enforce positive outputs
+                self.vertex_net = DeepVertexNet(num_input, num_output,
+                                                num_hidden=vertex_config.get('num_hidden', 64),
+                                                num_layers=vertex_config.get('num_layers', 5),
+                                                positive_outputs=vertex_config.get('positive_outputs',False))
             else:
                 raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 

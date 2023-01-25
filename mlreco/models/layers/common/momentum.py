@@ -45,6 +45,7 @@ class VertexNet(MomentumNet):
     '''
     def __init__(self, num_input, num_output=1, num_hidden=128, positive_outputs=False, batch_norm=False):
         super(VertexNet, self).__init__(num_input, num_output, num_hidden, positive_outputs)
+        self.num_output = num_output
         self.batch_norm = batch_norm
 
     def forward(self, x):
@@ -57,9 +58,12 @@ class VertexNet(MomentumNet):
         x = self.linear2(x)
         x = self.lrelu(x)
         x = self.linear3(x)
-        vtx_pred = self.final(x[:, :3])
-        out = torch.cat([vtx_pred, x[:, 3:]], dim=1)
-        return out
+        if self.num_output == 5:
+            vtx_pred = self.final(x[:, :3])
+            out = torch.cat([vtx_pred, x[:, 3:]], dim=1)
+            return out
+        else:
+            return x
 
 
 class DeepVertexNet(nn.Module):
@@ -74,6 +78,7 @@ class DeepVertexNet(nn.Module):
     '''
     def __init__(self, num_input, num_output=1, num_hidden=512, num_layers=5, positive_outputs=False):
         super(DeepVertexNet, self).__init__()
+        self.num_output = num_output
         self.linear = nn.ModuleList()
         self.norm = nn.ModuleList()
         self.num_layers = num_layers
@@ -96,9 +101,12 @@ class DeepVertexNet(nn.Module):
             x = self.norm[i](x)
             x = self.lrelu(x)
             x = self.linear[i](x)
-        vtx_pred = self.final(x[:, :3])
-        out = torch.cat([vtx_pred, x[:, 3:]], dim=1)
-        return out
+        if self.num_output == 5:
+            vtx_pred = self.final(x[:, :3])
+            out = torch.cat([vtx_pred, x[:, 3:]], dim=1)
+            return out
+        else:
+            return x
 
 
 class EvidentialMomentumNet(nn.Module):
