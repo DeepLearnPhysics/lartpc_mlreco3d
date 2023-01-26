@@ -208,7 +208,6 @@ class FullChain(FullChainGNN):
             result['ghost'] = result['segmentation']
             deghost = result['ghost'][0].argmax(dim=1) == 0
             del result['segmentation']
-            if not torch.sum(deghost): return result, input, lambda x: x
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
@@ -219,11 +218,16 @@ class FullChain(FullChainGNN):
             if not self.enable_charge_rescaling:
                 result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
             else:
-                result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
-                seg = result['segmentation'][0]
-                full_seg = torch.zeros((input[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device) 
-                full_seg[deghost] = seg
-                result['segmentation'][0] = full_seg
+                full_seg = input[0][:,:5].detach().clone().float()
+                full_seg[:, 4] = 5
+                if torch.sum(deghost):
+                    result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
+                    seg = result['segmentation'][0]
+                    full_seg[deghost] = seg
+                    result['segmentation'][0] = full_seg
+                else:
+                    result['segmentation'] = [full_seg]
+                    return result, input, lambda x: x
 
         if self.enable_ppn:
             ppn_input = {}
