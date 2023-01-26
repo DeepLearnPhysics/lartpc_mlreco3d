@@ -412,8 +412,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     @staticmethod
     def pairwise_distances(v1, v2):
-        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
+        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
         return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
@@ -551,7 +551,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                         pred = result['classify_endpoints'][igpu][batch_index_layer][point_class_positives]
                                         tracks = event_types_label[point_class_index] == self._track_label
                                         if tracks.sum().item():
-                                            loss_point_class += torch.mean(self.segloss(pred[tracks].double(), true[tracks].long()))
+                                            loss_point_class += torch.mean(self.segloss(pred[tracks], true[tracks].long()))
                                             acc_point_class += (torch.argmax(pred[tracks], dim=-1) == true[tracks]).sum().item() / float(true[tracks].nelement())
                                             point_class_count += 1
 

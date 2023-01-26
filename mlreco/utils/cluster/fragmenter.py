@@ -121,7 +121,7 @@ class DBSCANFragmentManager(FragmentManager):
         if self._use_segmentation_prediction:
             assert semantic_labels is None
             semantic_labels = torch.argmax(cnn_result['segmentation'][0],
-                                           dim=1).flatten().double()
+                                           dim=1).flatten()
 
         semantic_data = torch.cat([input[:, :4],
                                    semantic_labels.reshape(-1, 1)], dim=1)
@@ -170,7 +170,7 @@ class SPICEFragmentManager(FragmentManager):
         if self._use_segmentation_prediction:
             assert semantic_labels is None
             semantic_labels = torch.argmax(cnn_result['segmentation'][0],
-                                           dim=1).flatten().double()
+                                           dim=1).flatten()
 
         batch_labels = input[:, self._batch_column]
         fragments, frag_batch_ids = [], []

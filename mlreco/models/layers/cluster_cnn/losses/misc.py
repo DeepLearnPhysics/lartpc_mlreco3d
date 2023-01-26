@@ -301,18 +301,12 @@ def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
 
 
 
-def squared_distances(v1, v2):
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.pow(v2_2 - v1_2, 2).sum(2)
-
-
 def bhattacharyya_distance_matrix(v1, v2, eps=1e-8):
     x1, s1 = v1[:, :3], v1[:, 3].view(-1)
     x2, s2 = v2[:, :3], v1[:, 3].view(-1)
     g1 = torch.ger(s1**2, 1.0 / (s2**2 + eps))
     g2 = g1.t()
-    dist = squared_distances(x1.contiguous(), x2.contiguous())
+    dist = torch.cdist(x1.contiguous(), x2.contiguous())
     denom = 1.0 / (eps + s1.unsqueeze(1)**2 + s2**2)
     out = 0.25 * torch.log(0.25 * (g1 + g2 + 2)) + 0.25 * dist / denom
     return out
@@ -323,7 +317,7 @@ def bhattacharyya_coeff_matrix(v1, v2, eps=1e-6):
     x2, s2 = v2[:, :3], v1[:, 3].view(-1)
     g1 = torch.ger(s1**2, 1.0 / (s2**2 + eps))
     g2 = g1.t()
-    dist = squared_distances(x1.contiguous(), x2.contiguous())
+    dist = torch.cidst(x1.contiguous(), x2.contiguous())
     denom = 1.0 / (eps + s1.unsqueeze(1)**2 + s2**2)
     out = 0.25 * torch.log(0.25 * (g1 + g2 + 2)) + 0.25 * dist / denom
     out = torch.exp(-out)
