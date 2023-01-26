@@ -339,7 +339,6 @@ class SPICEAttractorLoss(SPICEInterLoss):
                 perm = torch.randperm(count)[:self.n_attractors]
                 att = em[perm]
                 dist = torch.cdist(em, att)
-                dist = torch.randn(dist.shape).cuda()
                 _, inds = torch.min(dist, dim=1)
                 inds += inds_start
                 attractors.append(att)
@@ -373,7 +372,7 @@ class SPICEAttractorLoss(SPICEInterLoss):
                                                   attractor_labels, 
                                                   margin=self.attractor_margin)
 
-        print(attractor_inter_loss, attractor_intra_loss)
+        print(attractor_intra_loss, attractor_inter_loss)
 
         attractor_loss = attractor_intra_loss + attractor_inter_loss
 

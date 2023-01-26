@@ -310,8 +310,8 @@ class FullChain(FullChainGNN):
             if label_clustering is None and self.training:
                 raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time for training.")
 
-            filtered_semantic = ~(semantic_labels[..., None].cpu() == \
-                                    torch.Tensor(self._gspice_skip_classes)).any(-1)
+            skip_classes = torch.Tensor(self._gspice_skip_classes).to(device=device)
+            filtered_semantic = ~((semantic_labels[..., None] == skip_classes).any(-1))
 
             # If there are voxels to process in the given semantic classes
             if torch.count_nonzero(filtered_semantic) > 0:

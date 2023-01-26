@@ -79,6 +79,10 @@ class FullChainPredictor:
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
         self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
+        if self.overlap_mode == 'iou':
+            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
+        if self.overlap_mode == 'counts':
+            assert self.min_overlap_count >= 0
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
@@ -1576,7 +1580,8 @@ class FullChainEvaluator(FullChainPredictor):
             all_kwargs = {"min_overlap": self.min_overlap_count, **kwargs}
             matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
                                                                     **all_kwargs)
-
+            if len(matched_interactions) == 0:
+                continue
             if match_particles:
                 for interactions in matched_interactions:
                     domain, codomain = interactions

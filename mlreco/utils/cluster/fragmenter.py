@@ -218,10 +218,7 @@ class GraphSPICEFragmentManager(FragmentManager):
     def process(self, filtered_input, n, filtered_semantic, offset=0):
         fragments = form_clusters(filtered_input, column=-1, batch_index=self._batch_column)
         fragments = [f.int().detach().cpu().numpy() for f in fragments]
-        # for i, f in enumerate(fragments):
-        #     print(torch.unique(filtered_input[f, self._batch_column], return_counts=True))
 
-        #print(torch.unique(filtered_input[:, self._batch_column]))
         if len(fragments) > 0:
             frag_batch_ids = get_cluster_batch(filtered_input.detach().cpu().numpy(), \
                                             fragments, batch_index=self._batch_column)
@@ -267,7 +264,7 @@ class GraphSPICEFragmentManager(FragmentManager):
             # of n, as this will fail if a batch is missing
             # from the original data (eg no track in that batch).
             offset = torch.nonzero(original_mask).min().item()
-            fragments, frag_batch_ids, fragments_seg = self.process(filtered_input[mask], n.item(), filtered_semantic[original_mask], offset=offset)
+            fragments, frag_batch_ids, fragments_seg = self.process(filtered_input[mask], n.item(), filtered_semantic[original_mask].cpu(), offset=offset)
             all_fragments.extend(fragments)
             all_frag_batch_ids.extend(frag_batch_ids)
             all_fragments_seg.extend(fragments_seg)
