@@ -87,7 +87,8 @@ class FlashManager:
         print('...done.')
 
         self.all_matches = None
-        self.pmt_v, self.tpc_v = None, None
+        self.crt_matches = None
+        self.pmt_v, self.tpc_v, self.crt_v = None, None, None
 
         self.reflash_merging_window = reflash_merging_window
 
@@ -112,6 +113,19 @@ class FlashManager:
 
         for tpc in self.tpc_v:
             if tpc.idx != tpc_id: continue
+            if array: return flashmatch.as_ndarray(tpc)
+            else: return tpc
+
+        raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
+
+    def get_crthit(self, crt_id, array=False):
+        from flashmatch import flashmatch
+
+        if self.tpc_v is None:
+            raise Exception("self.tpc_v is None")
+
+        for crt in self.crt_v:
+            if crt.idx != crt_id: continue
             if array: return flashmatch.as_ndarray(tpc)
             else: return tpc
 
@@ -263,7 +277,13 @@ class FlashManager:
         if flashes is not None:
             self.make_flash(flashes)
 
-        assert self.tpc_v is not None and self.pmt_v is not None
+        if self.crt_v is None:
+            if crthit is None:
+                raise Exception("CRT objects need to be defined. Either specify `crthit`, or run make_crthit.")
+        if flashes is not None:
+            self.make_crt_hit(crthit)
+
+        assert self.tpc_v is not None and self.pmt_v is not None and self.crt_v is not None
 
         self.mgr.Reset()
 
@@ -272,6 +292,8 @@ class FlashManager:
             self.mgr.Add(x)
         for x in self.pmt_v:
             self.mgr.Add(x)
+        for x in self.crt_v:
+            self.mgr.Add(x)
 
         # Run the matching
         #if self.all_matches is not None:
@@ -279,6 +301,7 @@ class FlashManager:
         self.all_matches = self.mgr.Match()
         return self.all_matches
 
+    # TODO Modify this or add a separate method for CRT matching
     def get_match(self, idx, matches=None):
         """
         Parameters
@@ -313,6 +336,30 @@ class FlashManager:
         Returns
         =======
         flashmatch::Flash_t
+        """
+        m = self.get_match(idx, matches=matches)
+        if m is None: return None
+
+        flash_id = m.flash_id
+        if flash_id is None: return None
+
+        if flash_id > len(self.pmt_v):
+            raise Exception("Could not find flash id %d in self.pmt_v" % flash_id)
+
+        return self.pmt_v[flash_id]
+
+    # TODO Fill this in when classes n junk are in place
+    def get_matched_crthit(self, idx, matches=None):
+        """
+        Parameters
+        ==========
+        idx: int
+            Index of TPC object for which we want to retrieve a match.
+        matches: list of flashmatch::FlashMatch_t, optional, default is None
+
+        Returns
+        =======
+        flashmatch::CRTHit_t
         """
         m = self.get_match(idx, matches=matches)
         if m is None: return None
