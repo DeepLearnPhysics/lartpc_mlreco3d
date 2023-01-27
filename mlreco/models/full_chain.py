@@ -218,8 +218,7 @@ class FullChain(FullChainGNN):
             if not self.enable_charge_rescaling:
                 result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
             else:
-                full_seg = input[0][:,:5].detach().clone().float()
-                full_seg[:, 4] = 5
+                full_seg = torch.zeros((input[0][:,:5].shape[0], 5), device=input[0].device, dtype=input[0].dtype)
                 if torch.sum(deghost):
                     result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
                     seg = result['segmentation'][0]
