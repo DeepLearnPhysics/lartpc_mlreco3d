@@ -44,7 +44,10 @@ def compute_track_length(points, bin_size=17):
     return length
 
 
-def compute_particle_direction(p: Particle, start_segment_radius=17, vertex=None):
+def compute_particle_direction(p: Particle, 
+                               start_segment_radius=17, 
+                               vertex=None,
+                               return_explained_variance=False):
     """
     Given a Particle, compute the start direction. Within `start_segment_radius`
     of the start point, find PCA axis and measure direction.
@@ -79,7 +82,11 @@ def compute_particle_direction(p: Particle, start_segment_radius=17, vertex=None
             direction = pca.fit(p.points).components_[0, :]
         else:
             direction = np.array([-1, -1, -1])
-    return direction
+    if not return_explained_variance:
+        return direction
+    else:
+        return direction, pca.explained_variance_ratio_
+
 
 def load_range_reco(particle_type='muon', kinetic_energy=True):
     """

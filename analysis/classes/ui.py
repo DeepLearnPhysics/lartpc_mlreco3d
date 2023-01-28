@@ -17,7 +17,7 @@ from analysis.classes.particle import matrix_counts, matrix_iou, \
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.vertex import get_vertex, predict_vertex
+from mlreco.utils.vertex import get_vertex, predict_vertex, compute_vertex_matrix_inversion
 from mlreco.utils.deghosting import deghost_labels_and_predictions, compute_rescaled_charge
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -67,6 +67,12 @@ class FullChainPredictor:
         self.deghosting = self.module_config['chain']['enable_ghost']
         self.data_blob = data_blob
         self.result = result
+
+        # Check data_blob lengths
+        # if len(self.data_blob['segment_label']) != len(self.data_blob['cluster_label']):
+        #     for key in self.data_blob:
+        #         print(key, len(self.data_blob[key]))
+        #     raise AssertionError
 
         if self.deghosting:
             deghost_labels_and_predictions(self.data_blob, self.result)
@@ -538,14 +544,17 @@ class FullChainPredictor:
         Returns:
             - vertex_info: (x,y,z) coordinate of predicted vertex
         '''
-        vertex_info = predict_vertex(inter_idx, entry,
-                                     self.data_blob['input_data'],
-                                     self.result,
-                                     attaching_threshold=self.attaching_threshold,
-                                     inter_threshold=self.inter_threshold,
-                                     apply_deghosting=False)
+        # Currently deprecated due to speed issues.
+        # vertex_info = predict_vertex(inter_idx, entry,
+        #                              self.data_blob['input_data'],
+        #                              self.result,
+        #                              attaching_threshold=self.attaching_threshold,
+        #                              inter_threshold=self.inter_threshold,
+        #                              apply_deghosting=False)
+        vertex_info = compute_vertex_matrix_inversion()
 
         return vertex_info
+
 
     def _get_entries(self, entry, volume):
         """
@@ -957,7 +966,7 @@ class FullChainPredictor:
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
                 if compute_vertex:
-                    ia.vertex = self._fit_predict_vertex_info(e, ia.id)
+                    ia.vertex = compute_vertex_matrix_inversion(ia.particles, weight=True)
                 ia.volume = volume
             out_interaction_list.extend(out)
 
