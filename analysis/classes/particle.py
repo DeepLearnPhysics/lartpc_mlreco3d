@@ -173,7 +173,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
 
 def match_interactions_fn(ints_from : List[Interaction],
                           ints_to : List[Interaction],
-                          min_overlap=0, verbose=False):
+                          min_overlap=0, verbose=False, overlap_mode="iou"):
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
@@ -184,7 +184,12 @@ def match_interactions_fn(ints_from : List[Interaction],
             print("No particles/interactions to match.")
         return [], 0, 0
 
-    overlap_matrix = matrix_iou(ints_x, ints_y)
+    if overlap_mode == 'counts':
+        overlap_matrix = matrix_counts(ints_x, ints_y)
+    elif overlap_mode == 'iou':
+        overlap_matrix = matrix_iou(ints_x, ints_y)
+    else:
+        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 

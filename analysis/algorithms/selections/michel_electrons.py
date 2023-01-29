@@ -59,7 +59,7 @@ def find_cosmic_angle(muon, michel, endpoint, radius=30):
     # Find muon end direction
     pca = PCA(n_components=2)
     neighborhood = (cdist(muon.points, [endpoint]) < radius).reshape((-1,))
-    if neighborhood.sum() == 0:
+    if neighborhood.sum() < 3:
         return -1 * np.ones((3,)), -1. * np.ones((3,))
     coords = pca.fit_transform(muon.points[neighborhood])
     muon_dir = pca.components_[0, :]
@@ -71,7 +71,7 @@ def find_cosmic_angle(muon, michel, endpoint, radius=30):
     # Find Michel start direction
     pca = PCA(n_components=2)
     neighborhood = (cdist(michel.points, [endpoint]) < radius).reshape((-1,))
-    if neighborhood.sum() == 0:
+    if neighborhood.sum() < 3:
         return -1 * np.ones((3,)), -1. * np.ones((3,))
     coords = pca.fit_transform(michel.points[neighborhood])
     michel_dir = pca.components_[0, :]
@@ -282,6 +282,12 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
             # Find angle between Michel and muon
             muon_dir, michel_dir = find_cosmic_angle(muon, p, endpoint)
 
+            # Heuristic to isolate primary ionization
+            dbscan = DBSCAN(eps=one_pixel, min_samples=ablation_min_samples)
+            clabels = dbscan.fit(p.points).labels_
+            pionization = clabels[michel_id] # cluster label of Michel point closest to the muon
+            primary_ionization = clabels == pionization
+
             # Record candidate Michel
             update_dict = {
                 'index': index,
@@ -337,9 +343,14 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'muon_true_dir_z': -1,
                 'michel_true_dir_x': -1,
                 'michel_true_dir_y': -1,
-                'michel_true_dir_z': -1
+                'michel_true_dir_z': -1,
+                'pred_primary_num_pix': primary_ionization.sum(),
+                'pred_primary_sum_pix': p.depositions[primary_ionization].sum(),
+                'true_primary_sum_pix_ADC': -1,
+                'true_sum_pix_MeV': -1
             }
             update_dict.update(index_dict)
+            #print("Heuristic primary ", update_dict['pred_num_pix'], update_dict['pred_primary_num_pix'])
 
             if not data:
                 for mp in matched_particles: # matching is done true2pred
@@ -364,6 +375,8 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                     trueprimary = (cluster_label_noghost == m.id) & (segment_label_noghost == michel_label)
                     muon_true_dir, michel_true_dir = find_true_cosmic_angle(truemuon, m, data_blob['particles_asis_voxels'][i])
 
+                    #input_data = predictor.get_true_label(i, "charge", schema="input_data_rescaled", volume=p.volume)
+                    input_data = res['input_rescaled'][i*2+p.volume][:, 4]
                     cluster_label_pred_noghost = predictor.get_true_label(i, "group", schema="cluster_label", volume=p.volume)
                     segment_label_pred_noghost = predictor.get_true_label(i, "segment", schema="cluster_label", volume=p.volume)
                     charge_label_pred_noghost = predictor.get_true_label(i, "charge", schema="cluster_label", volume=p.volume)
@@ -390,9 +403,11 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                         # but otherwise, only primary ionization
                         # using predicted deghosting mask
                         'true_num_pix': m.size,
-                        'true_sum_pix': m.depositions.sum(),
+                        'true_sum_pix': m.depositions.sum(), # in ADC
+                        'true_sum_pix_MeV': charge_label_pred_noghost[truecluster_pred].sum(), # in MeV
                         'true_primary_num_pix': trueprimary_pred.sum(),
-                        'true_primary_sum_pix': charge_label_pred_noghost[trueprimary_pred].sum(),
+                        'true_primary_sum_pix': charge_label_pred_noghost[trueprimary_pred].sum(), # will be in MeV
+                        'true_primary_sum_pix_ADC': input_data[trueprimary_pred].sum(), # in ADC
                         'pred_num_pix_true': len(overlap_indices),
                         'pred_sum_pix_true': m.depositions[mindices].sum(),
                         'michel_true_energy_init': truep.energy_init(),
@@ -403,9 +418,9 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                         # voxel sum will be in MeV here.
                         # true_noghost_* is using the true deghosting mask.
                         'true_noghost_num_pix': np.count_nonzero(truecluster),
-                        'true_noghost_sum_pix': charge_label_noghost[truecluster].sum(),
+                        'true_noghost_sum_pix': charge_label_noghost[truecluster].sum(), # in MeV
                         'true_noghost_primary_num_pix': np.count_nonzero(trueprimary),
-                        'true_noghost_primary_sum_pix': charge_label_noghost[trueprimary].sum(),
+                        'true_noghost_primary_sum_pix': charge_label_noghost[trueprimary].sum(), # in MeV
                         'muon_true_dir_x': muon_true_dir[0],
                         'muon_true_dir_y': muon_true_dir[1],
                         'muon_true_dir_z': muon_true_dir[2],
