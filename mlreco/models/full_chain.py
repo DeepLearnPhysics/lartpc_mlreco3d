@@ -374,7 +374,7 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({ 'semantic_labels': [semantic_labels] })
             if label_clustering is not None:
-                cnn_result.update({ 'label_clustering': [label_clustering] })
+                cnn_result.update({ 'label_clustering': label_clustering })
 
         # if self.use_true_fragments and coords is not None:
         #     print('adding true points info')
