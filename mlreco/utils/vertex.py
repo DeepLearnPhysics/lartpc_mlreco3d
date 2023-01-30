@@ -529,12 +529,7 @@ def compute_vertex_matrix_inversion(particles,
         w = 1.0
         if weight:
             w = np.exp(-(var[0] - 1)**2 / (2.0 * var_sigma)**2)
-            print(var[0] ,w)
         S += w * (np.outer(vec, vec) - np.eye(dim))
-        try:
-            C += w * (np.outer(vec, vec) - np.eye(dim)) @ p.startpoint
-        except:
-            print(p)
-            raise ValueError
+        C += w * (np.outer(vec, vec) - np.eye(dim)) @ p.startpoint
     # print(S, C)
     return np.linalg.pinv(S) @ C

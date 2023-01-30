@@ -37,9 +37,9 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     for idx, index in enumerate(image_idxs):
         index_dict = {
             'Index': index,
-            'run': data_blob['run_info'][idx][0],
-            'subrun': data_blob['run_info'][idx][1],
-            'event': data_blob['run_info'][idx][2]
+            # 'run': data_blob['run_info'][idx][0],
+            # 'subrun': data_blob['run_info'][idx][1],
+            # 'event': data_blob['run_info'][idx][2]
         }
         if enable_flash_matching:
             flash_matches_cryoE = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=0,
@@ -53,7 +53,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             match_particles=True,
             drop_nonprimary_particles=primaries,
             return_counts=True,
-            compute_vertex=False,
+            compute_vertex=True,
             overlap_mode=predictor.overlap_mode)
 
         if len(matches) == 0:
