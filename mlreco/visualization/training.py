@@ -250,7 +250,7 @@ def draw_training_curves(log_dir, models, metrics,
             # Get the necessary data
             epoch_train  = dfs[key]['epoch'][:max_iter:step]
             metric, metric_name = find_key(dfs[key], metric_list)
-            metric_train = dfs[key][metric][:max_iter:step] if smoothing == 1 else dfs[key][metric][:max_iter].rolling(smoothing, min_periods=1, center=True).mean()[::step]
+            metric_train = dfs[key][metric][:max_iter:step] if smoothing < 2 else dfs[key][metric][:max_iter].rolling(smoothing, min_periods=1, center=True).mean()[::step]
             draw_val     = bool(len(val_dfs[key]['iter']))
             if draw_val:
                 mask_val    = val_dfs[key]['iter'] < max_iter if max_iter > -1 else val_dfs[key]['iter'] < 1e12

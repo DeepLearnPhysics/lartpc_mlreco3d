@@ -215,8 +215,8 @@ def _get_extra_gnn_features(fragments,
     kwargs = {}
     if use_ppn:
         ppn_points = torch.empty((0,6), device=input[0].device,
-                                        dtype=torch.double)
-        points_tensor = result['points'][0].detach().double()
+                                        dtype=torch.float)
+        points_tensor = result['points'][0].detach()
         for i, f in enumerate(fragments[mask]):
             fragment_voxels = input[0][f][:,coords_col[0]:coords_col[1]]
             if frag_seg[mask][i] == 1:

@@ -8,12 +8,6 @@ from mlreco.utils.dbscan import dbscan_points
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
 
-def pairwise_distances(v1, v2):
-    import torch
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
-
 @post_processing(['ppn-metrics-gt', 'ppn-metrics-pred'],
                 ['seg_label', 'points_label', 'clust_data', 'particles'],
                 ['segmentation', 'points', 'mask_ppn', 'ppn_layers', 'ppn_coords'])
@@ -83,14 +77,14 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
         closest_x, closest_y, closest_z = pred_to_closest_true_coords[i][1:4]
         segmentation_voxels = clabels[:, 1:4][pred_seg == pred_point_type]
         if segmentation_voxels.shape[0] > 0:
-            d_same_type = pairwise_distances(
+            d_same_type = torch.cdist(
                 torch.Tensor(pred_point).view(1, -1),
                 torch.Tensor(segmentation_voxels)).numpy()
             d_same_type_closest = d_same_type.min(axis=1)[0]
         else:
             d_same_type_closest = -1
         if true_mip_voxels.shape[0] > 0:
-            d_mip = pairwise_distances(
+            d_mip = torch.cdist(
                 torch.Tensor(pred_point).view(1, -1),
                 torch.Tensor(true_mip_voxels[:, 1:4])).numpy()
             d_closest_mip = d_mip.min(axis=1)[0]
