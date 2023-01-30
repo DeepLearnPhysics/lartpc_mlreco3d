@@ -1,17 +1,13 @@
-from mlreco.utils import unwrap
-import warnings
+import os, re, warnings
 import torch
-import os
-import mlreco.utils as utils
 
 from mlreco.models import construct
 from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
 
+import mlreco.utils as utils
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.utils.utils import to_numpy
-import re
 from mlreco.utils.adabound import AdaBound, AdaBoundW
-from pprint import pprint
 
 
 class trainval(object):
@@ -162,9 +158,9 @@ class trainval(object):
                     target = data_blob[key][gpu]
                     if isinstance(target,list):
                         #data = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key][gpu]]
-                        data = [torch.as_tensor(scale).cuda() if len(self._gpus) else torch.as_tensor(scale) for scale in target]
+                        data = [torch.as_tensor(scale, dtype=torch.float).cuda() if len(self._gpus) else torch.as_tensor(scale, torch.float) for scale in target]
                     else:
-                        data = torch.as_tensor(target).cuda() if len(self._gpus) else torch.as_tensor(target)
+                        data = torch.as_tensor(target, dtype=torch.float).cuda() if len(self._gpus) else torch.as_tensor(target, dtype=torch.float)
                     if key in self._input_keys:
                         train_data.append(data)
                     if key in self._loss_keys:
