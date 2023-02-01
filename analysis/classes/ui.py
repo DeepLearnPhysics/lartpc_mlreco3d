@@ -1,7 +1,6 @@
 from typing import Callable, Tuple, List
 import numpy as np
-import pandas as pd
-import os, sys
+import os
 import time
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
@@ -17,8 +16,9 @@ from analysis.classes.particle import matrix_counts, matrix_iou, \
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.vertex import get_vertex, predict_vertex, compute_vertex_matrix_inversion
-from mlreco.utils.deghosting import deghost_labels_and_predictions, compute_rescaled_charge
+from mlreco.utils.vertex import get_vertex
+from analysis.algorithms.vertex import estimate_vertex
+from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.iotools.collates import VolumeBoundaries
@@ -527,33 +527,33 @@ class FullChainPredictor:
         return pred_pids
 
 
-    def _fit_predict_vertex_info(self, entry, inter_idx):
-        '''
-        Method for obtaining interaction vertex information given
-        entry number and interaction ID number.
+    # def _fit_predict_vertex_info(self, entry, inter_idx):
+    #     '''
+    #     Method for obtaining interaction vertex information given
+    #     entry number and interaction ID number.
 
-        Inputs:
-            - entry: Batch number to retrieve example.
+    #     Inputs:
+    #         - entry: Batch number to retrieve example.
 
-            - inter_idx: Interaction ID number.
+    #         - inter_idx: Interaction ID number.
 
-        If the interaction specified by <inter_idx> does not exist
-        in the sample numbered by <entry>, function will raise a
-        ValueError.
+    #     If the interaction specified by <inter_idx> does not exist
+    #     in the sample numbered by <entry>, function will raise a
+    #     ValueError.
 
-        Returns:
-            - vertex_info: (x,y,z) coordinate of predicted vertex
-        '''
-        # Currently deprecated due to speed issues.
-        # vertex_info = predict_vertex(inter_idx, entry,
-        #                              self.data_blob['input_data'],
-        #                              self.result,
-        #                              attaching_threshold=self.attaching_threshold,
-        #                              inter_threshold=self.inter_threshold,
-        #                              apply_deghosting=False)
-        vertex_info = compute_vertex_matrix_inversion()
+    #     Returns:
+    #         - vertex_info: (x,y,z) coordinate of predicted vertex
+    #     '''
+    #     # Currently deprecated due to speed issues.
+    #     # vertex_info = predict_vertex(inter_idx, entry,
+    #     #                              self.data_blob['input_data'],
+    #     #                              self.result,
+    #     #                              attaching_threshold=self.attaching_threshold,
+    #     #                              inter_threshold=self.inter_threshold,
+    #     #                              apply_deghosting=False)
+    #     vertex_info = compute_vertex_matrix_inversion()
 
-        return vertex_info
+    #     return vertex_info
 
 
     def _get_entries(self, entry, volume):
@@ -966,7 +966,7 @@ class FullChainPredictor:
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
                 if compute_vertex:
-                    ia.vertex = compute_vertex_matrix_inversion(ia.particles, weight=True)
+                    ia.vertex = estimate_vertex(ia.particles, use_primaries=True)
                 ia.volume = volume
             out_interaction_list.extend(out)
 

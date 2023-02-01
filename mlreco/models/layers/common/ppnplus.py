@@ -453,6 +453,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         ppn_output_coordinates = result['ppn_output_coordinates']
         batch_ids = [result['ppn_coords'][0][-1][:, 0]]
         num_batches = len(batch_ids[0].unique())
+        num_layers = len(result['ppn_layers'][0])
         total_loss = 0
         total_acc = 0
         device = segment_label[0].device
@@ -463,6 +464,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'type_loss': 0.,
             'classify_endpoints_loss': 0.,
             'classify_endpoints_accuracy': 0.,
+            'type_accuracy': 0.,
+            'mask_accuracy': 0.,
+            'mask_final_accuracy': 0.,
+            'regression_accuracy': 0.
         }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
@@ -482,6 +487,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                 ppn_score_layer = ppn_layers[layer]
                 coords_layer = ppn_coords[layer]
                 loss_layer = 0.0
+
+                acc_layer = 0.0
 
                 for b in batch_ids[igpu].int().unique():
 
@@ -507,6 +514,11 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                              weight=weight_ppn,
                                              reduction='mean')
 
+                    with torch.no_grad():
+                        acc = ((scores_event > 0).long() == d_positives.long()).sum() \
+                                                          / float(scores_event.shape[0])
+                        acc_layer += float(acc) / num_batches
+
                     loss_layer += loss_batch
                     if layer == len(ppn_layers)-1:
 
@@ -529,6 +541,11 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                                       weight=weight_ppn,
                                                       reduction='mean')
 
+                        with torch.no_grad():
+                            mask_final_acc = ((pixel_score > 0).long() == positives.long()).sum()\
+                                        / float(pixel_score.shape[0])
+                            res['mask_final_accuracy'] += float(mask_final_acc) / float(num_batches)
+
                         # Type Segmentation Loss
                         # d = torch.cdist(points_label, pixel_pred)
                         # positives = (d < self.resolution).any(dim=0)
@@ -548,6 +565,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         type_loss = self.segloss(pixel_logits[positives],
                                                  positive_labels.long(),
                                                  weight=w.to(device))
+                        with torch.no_grad():
+                            pred_type_labels = torch.argmax(pixel_logits[positives], dim=1)
+                            type_acc = float(torch.sum(pred_type_labels.long() == positive_labels.long()) / float(pred_type_labels.shape[0]))
+                            res['type_accuracy'] += type_acc / float(num_batches)
 
                         # --- Endpoint classification loss
                         if self._classify_endpoints:
@@ -594,6 +615,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                 loss_layer /= max(1, num_batches)
                 loss_gpu += loss_layer
+
             loss_gpu /= len(ppn_layers)
             total_loss += loss_gpu
 

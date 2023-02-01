@@ -38,13 +38,7 @@ if __name__ == '__main__':
     parser.add_argument("--detect_anomaly",
                         help="Turns on autograd.detect_anomaly for debugging",
                         action='store_true')
-    parser.add_argument("--seed",
-                        nargs='?',
-                        help="Set torch random seed for reproducibility testing")
     args = parser.parse_args()
     if args.detect_anomaly:
         torch.autograd.set_detect_anomaly(True)
-    if args.seed is not None:
-        print("Setting manual seed {} for torch.".format(args.seed))
-        torch.manual_seed(args.seed)
     main(args.config)

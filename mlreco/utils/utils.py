@@ -32,6 +32,16 @@ def to_numpy(s):
         raise TypeError("Unknown return type %s" % type(s))
 
 
+def func_timer(func):
+    def wrap_func(*args, **kwargs):
+        t1 = time.time()
+        result = func(*args, **kwargs)
+        t2 = time.time()
+        print(f'Function {func.__name__!r} executed in {(t2-t1):.4f}s')
+        return result
+    return wrap_func
+
+
 def round_decimals(val, digits):
     factor = float(np.power(10, digits))
     return int(val * factor+0.5) / factor

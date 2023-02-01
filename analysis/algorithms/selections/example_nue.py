@@ -21,6 +21,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     primaries = analysis_cfg['analysis']['match_primaries']
     enable_flash_matching = analysis_cfg['analysis'].get('enable_flash_matching', False)
     ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
+    compute_vertex = analysis_cfg['analysis']['compute_vertex']
 
     processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
     if enable_flash_matching:
@@ -53,7 +54,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             match_particles=True,
             drop_nonprimary_particles=primaries,
             return_counts=True,
-            compute_vertex=True,
+            compute_vertex=compute_vertex,
             overlap_mode=predictor.overlap_mode)
 
         if len(matches) == 0:
@@ -65,7 +66,9 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             if pred_int is not None:
                 matched_pred_indices.append(pred_int.id)
 
-        pred_interactions = predictor.get_interactions(idx, drop_nonprimary_particles=primaries)
+        pred_interactions = predictor.get_interactions(idx, 
+                                                       drop_nonprimary_particles=primaries,
+                                                       compute_vertex=compute_vertex)
         for int in pred_interactions:
             if int.id not in matched_pred_indices:
                 matches.append((None, int))
