@@ -2,6 +2,7 @@ import os, time, datetime, glob, sys, yaml
 import numpy as np
 try:
     import MinkowskiEngine as ME
+    import torch
 except ImportError:
     pass
 
