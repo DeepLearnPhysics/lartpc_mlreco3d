@@ -58,7 +58,7 @@ class LArCVDataset(Dataset):
         self._data_parsers = []
         self._trees = {}
         for key, value in data_schema.items():
-            # If the schema is a list, make it a dictionary, warn of deprecation
+            # Check that the schema is a dictionary
             if not isinstance(value, dict):
                 raise ValueError('A data schema must be expressed as a dictionary')
 

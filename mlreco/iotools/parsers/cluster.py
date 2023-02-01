@@ -238,21 +238,3 @@ def parse_cluster3d_charge_rescaled(cluster_event,
     np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features
-
-
-def parse_cluster3d_clean_full(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
-    from warnings import warn
-    warn("Deprecated: parse_cluster3d_clean_full deprecated, use parse_cluster3d instead", DeprecationWarning)
-    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
-        sparse_semantics_event = particle_mpv_event
-        particle_mpv_event = None
-    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_particle_info=True)
-
-
-def parse_cluster3d_kinematics_clean(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
-    from warnings import warn
-    warn("Deprecated: parse_cluster3d_kinematics_clean deprecated, use parse_cluster3d instead", DeprecationWarning)
-    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
-        sparse_semantics_event = particle_mpv_event
-        particle_mpv_event = None
-    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_kinematics_info=True)
