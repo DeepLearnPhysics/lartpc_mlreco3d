@@ -334,27 +334,3 @@ def parse_particle_singlep_einit(particle_event):
         if not p.track_id() == 1: continue
         return p.energy_init()
     return -1
-
-
-def parse_particle_asis(particle_event, cluster_event):
-    from warnings import warn
-    warn("Deprecated: parse_particle_asis is deprecated, use parse_particles with voxel_coordinates set to False", DeprecationWarning)
-    return parse_particles(particle_event, cluster_event, voxel_coordinates=False)
-
-
-def parse_neutrino_asis(neutrino_event, cluster_event):
-    from warnings import warn
-    warn("Deprecated: parse_neutrino_asis is deprecated, use parse_neutrinos with voxel_coordinates set to False", DeprecationWarning)
-    return parse_neutrinos(neutrino_event, cluster_event, voxel_coordinates=False)
-
-
-def parse_particle_points_with_tagging(sparse_event, particle_event):
-    from warnings import warn
-    warn("Deprecated: parse_particle_points_with_tagging deprecated, use parse_particle_points instead", DeprecationWarning)
-    return parse_particle_points(sparse_event, particle_event, include_point_tagging=True)
-
-
-def parse_particle_graph_corrected(particle_event, cluster_event):
-    from warnings import warn
-    warn("Deprecated: parse_particle_graph_corrected deprecated, use parse_particle_graph instead", DeprecationWarning)
-    return parse_particle_graph(particle_event, cluster_event)

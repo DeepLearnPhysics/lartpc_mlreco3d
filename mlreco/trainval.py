@@ -368,6 +368,10 @@ class trainval(object):
                 model_name = config.get('model_name', module)
                 model_path = config.get('model_path', None)
 
+                # Make sure BN and DO layers are set to eval mode
+                getattr(self._model, model_name).eval()
+
+                # Freeze all weights
                 count = 0
                 # with open(model_path, 'rb') as f:
                 #     checkpoint = torch.load(f, map_location='cpu')
@@ -488,9 +492,6 @@ class trainval(object):
 
         self._model = model(module_config)
 
-        # module-by-module weights loading + param freezing
-        self.freeze_weights(module_config)
-
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
@@ -498,6 +499,10 @@ class trainval(object):
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval().cpu()
 
+        # Module-by-module weights loading + param freezing
+        self.freeze_weights(module_config)
+
+        # Optimizer
         if self._optim == 'AdaBound':
             self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
         elif self._optim == 'AdaBoundW':
@@ -506,7 +511,7 @@ class trainval(object):
             optim_class = eval('torch.optim.' + self._optim)
             self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
 
-        # learning rate scheduler
+        # Learning rate scheduler
         if self._lr_scheduler is not None:
             scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
             self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)

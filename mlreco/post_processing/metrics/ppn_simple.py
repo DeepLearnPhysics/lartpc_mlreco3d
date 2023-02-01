@@ -3,7 +3,7 @@ from scipy.spatial.distance import cdist
 import scipy
 import os
 from mlreco.post_processing import post_processing
-from mlreco.utils import CSVData
+from mlreco.utils import local_cdist, CSVData
 from mlreco.utils.dbscan import dbscan_points
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
@@ -77,14 +77,14 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
         closest_x, closest_y, closest_z = pred_to_closest_true_coords[i][1:4]
         segmentation_voxels = clabels[:, 1:4][pred_seg == pred_point_type]
         if segmentation_voxels.shape[0] > 0:
-            d_same_type = torch.cdist(
+            d_same_type = local_cdist(
                 torch.Tensor(pred_point).view(1, -1),
                 torch.Tensor(segmentation_voxels)).numpy()
             d_same_type_closest = d_same_type.min(axis=1)[0]
         else:
             d_same_type_closest = -1
         if true_mip_voxels.shape[0] > 0:
-            d_mip = torch.cdist(
+            d_mip = local_cdist(
                 torch.Tensor(pred_point).view(1, -1),
                 torch.Tensor(true_mip_voxels[:, 1:4])).numpy()
             d_closest_mip = d_mip.min(axis=1)[0]

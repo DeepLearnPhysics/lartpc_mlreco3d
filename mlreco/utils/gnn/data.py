@@ -5,6 +5,7 @@ import torch
 
 from typing import Tuple
 
+from mlreco.utils import local_cdist
 from mlreco.utils.numba import numba_wrapper, unique_nb
 from mlreco.utils.ppn import get_track_endpoints_geo
 
@@ -233,7 +234,7 @@ def _get_extra_gnn_features(fragments,
                 end_points = torch.cat([start, start])
 
             if not allow_outside and (frag_seg[mask][i] != 1 or (frag_seg[mask][i] == 1 and enhance)):
-                dist_mat   = torch.cdist(end_points.reshape(-1,3), fragment_voxels)
+                dist_mat   = local_cdist(end_points.reshape(-1,3), fragment_voxels)
                 argmins    = torch.argmin(dist_mat, dim=1)
                 end_points = torch.cat([fragment_voxels[argmins[0]], fragment_voxels[argmins[1]]])
 

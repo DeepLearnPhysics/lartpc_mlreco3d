@@ -58,34 +58,24 @@ class LArCVDataset(Dataset):
         self._data_parsers = []
         self._trees = {}
         for key, value in data_schema.items():
-            # If the schema is a list, make it a dictionary, warn of deprecation
-            if isinstance(value, list):
-                from warnings import warn
-                warn('Deprecated: Using a list to specify a schema is deprected, move to using dictionaries', DeprecationWarning)
-                if len(value) < 2:
-                    print(f'iotools.datasets.schema contains a key %s with list length < 2!' % key)
-                    raise ValueError
-                value = {'parser':value[0], 'args':value[1:]}
+            # Check that the schema is a dictionary
+            if not isinstance(value, dict):
+                raise ValueError('A data schema must be expressed as a dictionary')
 
-            # Identify the parser and its parameter names, convert args list to kwargs, if needed
+            # Identify the parser and its parameter names
             assert 'parser' in value, 'A parser needs to be specified for %s' % key
             if not hasattr(mlreco.iotools.parsers, value['parser']):
                 print('The specified parser name %s does not exist!' % value['parser'])
             assert 'args' in value, 'Parser arguments must be provided for %s' % key
             fn = getattr(mlreco.iotools.parsers, value['parser'])
             keys = list(inspect.signature(fn).parameters.keys())
-            if isinstance(value['args'], list):
-                if len(keys) == 1 and 'event_list' in keys[0]:
-                    value['args'] = {keys[0]: value['args']} # Don't unroll if a list is expected
-                else:
-                    value['args'] = {keys[i]: value['args'][i] for i in range(len(value['args']))}
             assert isinstance(value['args'], dict), 'Parser arguments must be a list or dictionary for %s' % key
             for k in value['args'].keys():
                 assert k in keys, 'Argument %s does not exist in parser %s' % (k, value['parser'])
 
             # Append data key and parsers
             self._data_keys.append(key)
-            self._data_parsers.append((getattr(mlreco.iotools.parsers,value['parser']), value['args']))
+            self._data_parsers.append((getattr(mlreco.iotools.parsers, value['parser']), value['args']))
             for arg_name, data_key in value['args'].items():
                 if 'event' not in arg_name: continue
                 if 'event_list' not in arg_name: data_key = [data_key]
