@@ -2,6 +2,7 @@ from typing import Callable, Tuple, List
 import numpy as np
 import pandas as pd
 import os, sys
+import time
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
@@ -138,19 +139,24 @@ class FullChainPredictor:
 
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
-            
+
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
 
-    def get_flash_matches(self, entry, use_true_tpc_objects=False, volume=None,
+    def get_flash_matches(self, entry,
+            use_true_tpc_objects=False,
+            volume=None,
             use_depositions_MeV=False,
-            ADC_to_MeV=1.):
+            ADC_to_MeV=1.,
+            interaction_list=[]):
         """
         If flash matches has not yet been computed for this volume, then it will
         be run as part of this function. Otherwise, flash matching results are
         cached in `self.flash_matches` per volume.
+
+        If `interaction_list` is specified, no caching is done.
 
         Parameters
         ==========
@@ -158,21 +164,36 @@ class FullChainPredictor:
         use_true_tpc_objects: bool, default is False
             Whether to use true or predicted interactions.
         volume: int, default is None
+        use_depositions_MeV: bool, default is False
+            If using true interactions, whether to use true MeV depositions or reconstructed charge.
+        ADC_to_MEV: double, default is 1.
+            If using reconstructed interactions, this defines the conversion in OpT0Finder.
+            OpT0Finder computes the hypothesis flash using light yield and deposited charge in MeV.
+        interaction_list: list, default is []
+           If specified, the interactions to match will be whittle down to this subset of interactions.
+           Provide list of interaction ids.
 
         Returns
         =======
         list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
         """
-        if (entry, volume, use_true_tpc_objects) not in self.flash_matches:
-            self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
-                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+        # No caching done if matching a subset of interactions
+        if (entry, volume, use_true_tpc_objects) not in self.flash_matches or len(interaction_list):
+            out = self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
+                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV, interaction_list=interaction_list)
 
-        tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+        if len(interaction_list) == 0:
+            tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+        else: # it wasn't cached, we just computed it
+            tpc_v, pmt_v, matches = out
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
-    def _run_flash_matching(self, entry, use_true_tpc_objects=False, volume=None,
+    def _run_flash_matching(self, entry,
+            use_true_tpc_objects=False,
+            volume=None,
             use_depositions_MeV=False,
-            ADC_to_MeV=1.):
+            ADC_to_MeV=1.,
+            interaction_list=[]):
         """
         Parameters
         ==========
@@ -185,9 +206,16 @@ class FullChainPredictor:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
 
-            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
         else:
-            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume)
+            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
+
+        if len(interaction_list) > 0: # by default, use all interactions
+            tpc_v_select = []
+            for interaction in tpc_v:
+                if interaction.id in interaction_list:
+                    tpc_v_select.append(interaction)
+            tpc_v = tpc_v_select
 
         # If we are not running flash matching over the entire volume at once,
         # then we need to shift the coordinates that will be used for flash matching
@@ -199,7 +227,7 @@ class FullChainPredictor:
         if volume is not None:
             for tpc_object in tpc_v:
                 tpc_object.points = self._translate(tpc_object.points, volume)
-        
+
         # Now making Flash_t objects
         selected_opflash_keys = self.opflash_keys
         if volume is not None:
@@ -210,10 +238,34 @@ class FullChainPredictor:
             pmt_v.extend(self.data_blob[key][entry])
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
+        # input_pmt_v might be a filtered version of pmt_v,
+        # and we want to store larcv::Flash objects not
+        # flashmatch::Flash_t objects in self.flash_matches
+        from larcv import larcv
+        new_pmt_v = []
+        for flash in input_pmt_v:
+            new_flash = larcv.Flash()
+            new_flash.time(flash.time)
+            new_flash.absTime(flash.time_true) # Hijacking this field
+            new_flash.timeWidth(flash.time_width)
+            new_flash.xCenter(flash.x)
+            new_flash.yCenter(flash.y)
+            new_flash.zCenter(flash.z)
+            new_flash.xWidth(flash.x_err)
+            new_flash.yWidth(flash.y_err)
+            new_flash.zWidth(flash.z_err)
+            new_flash.PEPerOpDet(flash.pe_v)
+            new_flash.id(flash.idx)
+            new_pmt_v.append(new_flash)
+
         # Running flash matching and caching the results
+        start = time.time()
         matches = self.fm.run_flash_matching()
-        self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, pmt_v, matches)
-        
+        print('Actual flash matching took %d s' % (time.time() - start))
+        if len(interaction_list) == 0:
+            self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
+        return tpc_v, new_pmt_v, matches
+
     def _fit_predict_ppn(self, entry):
         '''
         Method for predicting ppn predictions.
@@ -327,7 +379,7 @@ class FullChainPredictor:
         Parameters
         ----------
         points: np.ndarray
-            Shape (N, 3)
+            Shape (N, 3). Coordinates in voxel units.
         threshold: float or np.ndarray
             Distance (in voxels) from boundaries beyond which
             an object is contained. Can be an array if different
@@ -348,7 +400,7 @@ class FullChainPredictor:
 
         x_contained = (self.volume_boundaries[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.volume_boundaries[0, 1] - threshold[0])
         y_contained = (self.volume_boundaries[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.volume_boundaries[1, 1] - threshold[1])
-        z_contained = (self.volume_boundaries[2, 0] + threshold[2] <= points[:, 0]) & (points[:, 2] <= self.volume_boundaries[2, 1] - threshold[2])
+        z_contained = (self.volume_boundaries[2, 0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= self.volume_boundaries[2, 1] - threshold[2])
 
         return (x_contained & y_contained & z_contained).all()
 
@@ -741,6 +793,10 @@ class FullChainPredictor:
         with the closest Hausdorff distance to the particle point cloud
         (smallest point-to-set distance)
 
+        Note
+        ====
+        Particle id is unique only within volume.
+
         Parameters
         ==========
         entry: int
@@ -812,7 +868,8 @@ class FullChainPredictor:
                 interaction_id = inter_ids[i]
                 is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
                 part = Particle(self._translate(voxels, volume),
-                                i, seg_label, interaction_id,
+                                i,
+                                seg_label, interaction_id,
                                 pid,
                                 batch_id=entry,
                                 voxel_indices=p,
@@ -858,7 +915,8 @@ class FullChainPredictor:
         return out_particle_list
 
 
-    def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None) -> List[Interaction]:
+    def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None,
+                        compute_vertex=True) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -867,6 +925,10 @@ class FullChainPredictor:
 
         Method also performs vertex prediction for each interaction.
 
+        Note
+        ----
+        Interaction ids are only unique within a volume.
+
         Parameters
         ----------
         entry: int
@@ -874,6 +936,8 @@ class FullChainPredictor:
         drop_nonprimary_particles: bool (optional)
             If True, all non-primary particles will not be included in
             the output interactions' .particle attribute.
+        volume: int
+        compute_vertex: bool, default True
 
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
@@ -888,7 +952,8 @@ class FullChainPredictor:
             particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
-                ia.vertex = self._fit_predict_vertex_info(e, ia.id)
+                if compute_vertex:
+                    ia.vertex = self._fit_predict_vertex_info(e, ia.id)
                 ia.volume = volume
             out_interaction_list.extend(out)
 
@@ -1027,6 +1092,7 @@ class FullChainEvaluator(FullChainPredictor):
     '''
     LABEL_TO_COLUMN = {
         'segment': -1,
+        'charge': 4,
         'fragment': 5,
         'group': 6,
         'interaction': 7,
@@ -1048,7 +1114,7 @@ class FullChainEvaluator(FullChainPredictor):
         entry: int
         name: str
             Must be a predefined name within `['segment', 'fragment', 'group',
-            'interaction', 'pdg', 'nu']`.
+            'interaction', 'pdg', 'nu', 'charge']`.
         schema: str
             Key for dataset schema to retrieve the info from.
         volume: int, default None
@@ -1371,7 +1437,8 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=-1,
-                              volume=None) -> List[Interaction]:
+                              volume=None,
+                              compute_vertex=True) -> List[Interaction]:
         self._check_volume(volume)
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
@@ -1383,9 +1450,11 @@ class FullChainEvaluator(FullChainPredictor):
             true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
             out = group_particles_to_interactions_fn(true_particles,
                                                      get_nu_id=True, mode='truth')
-            vertices = self.get_true_vertices(entry, volume=volume)
+            if compute_vertex:
+                vertices = self.get_true_vertices(entry, volume=volume)
             for ia in out:
-                ia.vertex = vertices[ia.id]
+                if compute_vertex:
+                    ia.vertex = vertices[ia.id]
                 ia.volume = volume
             out_interactions_list.extend(out)
 
@@ -1446,6 +1515,7 @@ class FullChainEvaluator(FullChainPredictor):
         all_matches = []
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
+            print('matching', entries, volume)
             if mode == 'pred_to_true':
                 # Match each pred to one in true
                 particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
@@ -1468,7 +1538,9 @@ class FullChainEvaluator(FullChainPredictor):
                            drop_nonprimary_particles=True,
                            match_particles=True,
                            return_counts=False,
-                           volume=None, **kwargs):
+                           volume=None,
+                           compute_vertex=True,
+                           **kwargs):
         """
         Parameters
         ==========
@@ -1492,11 +1564,11 @@ class FullChainEvaluator(FullChainPredictor):
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
             if mode == 'pred_to_true':
-                ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
-                ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+                ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
             elif mode == 'true_to_pred':
-                ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
-                ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume)
+                ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
             else:
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))

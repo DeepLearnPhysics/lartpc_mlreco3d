@@ -10,11 +10,6 @@ import time
 import numpy as np
 import os, sys
 
-# Setup OpT0finder
-sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
-import flashmatch
-from flashmatch import flashmatch, geoalgo
-
 
 def find_true_time(interaction):
     """
@@ -28,6 +23,7 @@ def find_true_time(interaction):
         time = 1e-3 * p.asis.ancestor_t() if time is None else min(time, 1e-3 * p.particle_asis.ancestor_t())
     return time
 
+
 def find_true_x(interaction):
     """
     Returns
@@ -37,7 +33,9 @@ def find_true_x(interaction):
     x = []
     for p in interaction.particles:
         if not p.is_primary: continue
-        x.append(p.asis.x())
+        #x.append(p.asis.x())
+        #x.append(p.asis.ancestor_position().x())
+        x.append(p.asis.first_step().x())
     if len(x) == 0:
         return None
     values, counts = np.unique(x, return_counts=True)
@@ -48,6 +46,10 @@ def find_true_x(interaction):
 
 @evaluate(['interactions', 'flashes', 'matches'], mode='per_batch')
 def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
+    # Setup OpT0finder
+    #sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
+    #import flashmatch
+    #from flashmatch import flashmatch, geoalgo
 
     interactions, flashes, matches = [], [], []
     deghosting = analysis_cfg['analysis']['deghosting']
@@ -55,12 +57,13 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
     use_true_tpc_objects = analysis_cfg['analysis'].get('use_true_tpc_objects', False)
     use_depositions_MeV = analysis_cfg['analysis'].get('use_depositions_MeV', False)
     ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
+    flashmatch_cfg = analysis_cfg['analysis'].get('flashmatch_cfg', 'flashmatch_112022.cfg')
 
     processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
     predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
             deghosting=deghosting,
             enable_flash_matching=True,
-            flash_matching_cfg=os.path.join(os.environ['FMATCH_BASEDIR'], "dat/flashmatch_112022.cfg"),
+            flash_matching_cfg=os.path.join(os.environ['FMATCH_BASEDIR'], "dat/%s" % flashmatch_cfg),
             opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
 
     image_idxs = data_blob['index']
@@ -74,12 +77,15 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
         }
         meta = data_blob['meta'][idx]
 
+        opflash_cryoE = predictor.fm.make_flash([data_blob['opflash_cryoE'][idx]])
+        opflash_cryoW = predictor.fm.make_flash([data_blob['opflash_cryoW'][idx]])
+
         all_times_cryoE, all_times_cryoW = [], []
         for flash in data_blob['opflash_cryoE'][idx]:
             all_times_cryoE.append(flash.time())
         for flash in data_blob['opflash_cryoW'][idx]:
             all_times_cryoW.append(flash.time())
-        ordered_flashes_cryoE = np.array(data_blob['opflash_cryoE'][idx])[np.argsort(all_times_cryoE)] 
+        ordered_flashes_cryoE = np.array(data_blob['opflash_cryoE'][idx])[np.argsort(all_times_cryoE)]
         ordered_flashes_cryoW = np.array(data_blob['opflash_cryoW'][idx])[np.argsort(all_times_cryoW)]
 
         prev_flash_time, next_flash_time = {}, {}
@@ -101,7 +107,7 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
                 next_flash_time[(1, flash.id())] = ordered_flashes_cryoW[flash_idx+1].time()
             else:
                 next_flash_time[(1, flash.id())] = None
-        
+
         flash_matches_cryoE = predictor.get_flash_matches(idx, use_true_tpc_objects=use_true_tpc_objects, volume=0,
                 use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
         flash_matches_cryoW = predictor.get_flash_matches(idx, use_true_tpc_objects=use_true_tpc_objects, volume=1,
@@ -110,7 +116,7 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
         matched_interactions = None
         if not use_true_tpc_objects:
             matched_interactions = predictor.match_interactions(idx,
-                    mode='pred_to_true', drop_nonprimary_particles=primaries, match_particles=True)
+                    mode='pred_to_true', drop_nonprimary_particles=primaries, match_particles=True, compute_vertex=False)
 
         interaction_ids, flash_ids = [], []
         for interaction, flash, match in flash_matches_cryoE + flash_matches_cryoW:
@@ -149,7 +155,7 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
                 interaction_dict['interaction_edep_MeV'] = interaction.depositions_MeV.sum()
 
             flash_dict = OrderedDict(index_dict.copy())
-            
+
             flash_dict['flash_id'] = flash.id()
             flash_dict['time'] = flash.time()
             flash_dict['total_pe'] = flash.TotalPE()
@@ -168,12 +174,28 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
             # Convert from absolute cm to voxel coordinates
             match_dict['fmatch_x'] = (match.tpc_point.x - meta[0]) / meta[6]
             match_dict['hypothesis_total_pe'] = np.sum(match.hypothesis)
+            match_dict['tpc_point_x'] = match.tpc_point.x
+            match_dict['tpc_point_y'] = match.tpc_point.y
+            match_dict['tpc_point_z'] = match.tpc_point.z
+            match_dict['tpc_point_error_x'] = match.tpc_point_err.x
+            match_dict['tpc_point_error_y'] = match.tpc_point_err.y
+            match_dict['tpc_point_error_z'] = match.tpc_point_err.z
+            match_dict['touch_match'] = match.touch_match # 0 = NoTouchMatch, 1 = AnodeCrossing, 2 = CathodeCrossing, 3 = AnodeCathodeCrossing
+            match_dict['touch_match_score'] = match.touch_score
+            match_dict['touch_point_x'] = match.touch_point.x
+            match_dict['touch_point_y'] = match.touch_point.y
+            match_dict['touch_point_z'] = match.touch_point.z
+            match_dict['duration'] = match.duration
+            match_dict['num_steps'] = match.num_steps
+            match_dict['minimizer_min_x'] = match.minimizer_min_x
+            match_dict['minimizer_max_x'] = match.minimizer_max_x
+
             matches.append(match_dict)
-        
+
         if use_true_tpc_objects:
-            all_interactions = predictor.get_true_interactions(idx, drop_nonprimary_particles=primaries)
+            all_interactions = predictor.get_true_interactions(idx, drop_nonprimary_particles=primaries, compute_vertex=False)
         else:
-            all_interactions = predictor.get_interactions(idx, drop_nonprimary_particles=primaries)
+            all_interactions = predictor.get_interactions(idx, drop_nonprimary_particles=primaries, compute_vertex=False)
 
         for interaction in all_interactions:
             if interaction.id in interaction_ids: continue
@@ -213,7 +235,7 @@ def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
         for flash_idx, flash in enumerate(data_blob['opflash_cryoE'][idx] + data_blob['opflash_cryoW'][idx]):
             if flash.id() in flash_ids: continue
             flash_dict = OrderedDict(index_dict.copy())
-            
+
             flash_dict['flash_id'] = flash.id()
             flash_dict['time'] = flash.time()
             flash_dict['total_pe'] = flash.TotalPE()

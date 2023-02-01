@@ -4,6 +4,8 @@ import os
 from tabnanny import verbose
 import pandas as pd
 from pprint import pprint
+import torch
+import time
 
 from mlreco.main_funcs import cycle
 from mlreco.trainval import trainval
@@ -42,7 +44,7 @@ def evaluate(filenames, mode='per_image'):
     def decorate(func):
 
         @wraps(func)
-        def process_dataset(cfg, analysis_config):
+        def process_dataset(cfg, analysis_config, profile=False):
 
             io_cfg = cfg['iotool']
 
@@ -60,6 +62,9 @@ def evaluate(filenames, mode='per_image'):
             dataset = iter(cycle(loader))
             Trainer = trainval(cfg)
             loaded_iteration = Trainer.initialize()
+            max_iteration = analysis_config['analysis']['iteration']
+            if max_iteration == -1:
+                max_iteration = len(loader.dataset)
 
             iteration = 0
 
@@ -75,8 +80,12 @@ def evaluate(filenames, mode='per_image'):
                 output_logs.append(ChunkCSVData(fout, append=append, chunksize=chunksize))
                 header_recorded.append(False)
 
-            while iteration < analysis_config['analysis']['iteration']:
+            while iteration < max_iteration:
+                if profile:
+                    start = time.time()
                 data_blob, res = Trainer.forward(dataset)
+                if profile:
+                    print("Forward took %d s" % (time.time() - start))
                 img_indices = data_blob['index']
                 fname_to_update_list = defaultdict(list)
                 if mode == 'per_batch':
@@ -99,6 +108,12 @@ def evaluate(filenames, mode='per_image'):
                     # disable pandas from appending additional header lines
                     if header_recorded[i]: output_logs[i].header = False
                 iteration += 1
+                if profile:
+                    end = time.time()
+                    print("Iteration %d (total %d s)" % (iteration, end - start))
+                torch.cuda.empty_cache()
 
+        process_dataset._filenames = filenames
+        process_dataset._mode = mode
         return process_dataset
     return decorate

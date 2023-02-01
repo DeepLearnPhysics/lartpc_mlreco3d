@@ -135,11 +135,40 @@ def parse_opflash(opflash_event):
 
     Configuration
     -------------
-    opflash_event: larcv::EventFlash
+    opflash_event: larcv::EventFlash or list of larcv::EventFlash
 
     Returns
     -------
     list
     """
-    opflashes = [larcv.Flash(f) for f in opflash_event.as_vector()]
+    if not isinstance(opflash_event, list):
+        opflash_event = [opflash_event]
+
+    opflash_list = []
+    for x in opflash_event:
+        opflash_list.extend(x.as_vector())
+
+    opflashes = [larcv.Flash(f) for f in opflash_list]
     return opflashes
+
+
+def parse_crthits(crthit_event):
+    """
+    Copy construct CRTHit and return an array of larcv::CRTHit.
+
+    .. code-block:: yaml
+        schema:
+          crthits:
+            parser:parse_crthit
+            crthit_event: crthit_crthit
+
+    Configuration
+    -------------
+    crthit_event: larcv::CRTHit
+
+    Returns
+    -------
+    list
+    """
+    crthits = [larcv.CRTHit(c) for c in crthit_event.as_vector()]
+    return crthits

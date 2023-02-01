@@ -4,3 +4,5 @@ from .michel_electrons import michel_electrons
 from .example_nue import debug_pid
 from .statistics import statistics
 from .flash_matching import flash_matching
+from .muon_decay import muon_decay
+from .benchmark import benchmark

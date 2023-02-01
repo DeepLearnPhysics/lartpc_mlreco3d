@@ -181,10 +181,10 @@ class VolumeBoundaries:
         # in each spatial dimension (so, list of list)
         all_boundaries = []
         for n in range(self.dim):
-            if self.boundaries[n] is None: 
+            if self.boundaries[n] is None:
                 all_boundaries.append([np.ones((coords.shape[0],), dtype=bool)])
                 continue
-            dim_boundaries = [] 
+            dim_boundaries = []
             for i in range(len(self.boundaries[n])):
                 dim_boundaries.append( coords[:, n] < self.boundaries[n][i] )
             dim_boundaries.append( coords[:, n] >= self.boundaries[n][-1] )
