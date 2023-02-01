@@ -2,7 +2,6 @@ import os, time, datetime, glob, sys, yaml
 import numpy as np
 try:
     if os.environ.get('OMP_NUM_THREADS') is None:
-        #os.system('export OMP_NUM_THREADS=16')
         os.environ['OMP_NUM_THREADS'] = '16'
     import MinkowskiEngine as ME
 except ImportError:
