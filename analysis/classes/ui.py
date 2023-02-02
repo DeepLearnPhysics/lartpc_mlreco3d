@@ -65,6 +65,7 @@ class FullChainPredictor:
         # quantities separately from data_blob and result
 
         self.deghosting = self.module_config['chain']['enable_ghost']
+        self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net']['pred_vtx_positions']
         self.data_blob = data_blob
         self.result = result
 
@@ -294,18 +295,28 @@ class FullChainPredictor:
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
+        if 'classify_endpoints' in self.result:
+            ppn_endpoint = ppn[:, 13:]
+            assert ppn_endpoint.shape[1] == 2
 
         ppn_candidates = []
         for i, pred_point in enumerate(ppn_voxels):
             pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
+            if 'classify_endpoints' in self.result:
+                ppn_candidates.append(np.array([x, y, z, 
+                                                pred_point_score, 
+                                                pred_point_type, 
+                                                ppn_endpoint[i][0],
+                                                ppn_endpoint[i][1]]))
+            else:
+                ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
 
         if len(ppn_candidates):
             ppn_candidates = np.vstack(ppn_candidates)
         else:
             enable_classify_endpoints = 'classify_endpoints' in self.result
-            ppn_candidates = np.empty((0, 13 if not enable_classify_endpoints else 15), dtype=np.float32)
+            ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 6), dtype=np.float32)
         return ppn_candidates
 
 
@@ -879,7 +890,10 @@ class FullChainPredictor:
                 if seg_label == 2 or seg_label == 3:
                     pid = 1
                 interaction_id = inter_ids[i]
-                is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
+                if self.pred_vtx_positions:
+                    is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
+                else:
+                    is_primary = bool(np.argmax(node_pred_vtx[i]))
                 part = Particle(self._translate(voxels, volume),
                                 i,
                                 seg_label, interaction_id,

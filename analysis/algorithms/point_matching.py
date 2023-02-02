@@ -35,7 +35,7 @@ def match_points_to_particles(ppn_points : np.ndarray,
         None (operation is in-place)
     """
     if semantic_type is not None:
-        ppn_points_type = ppn_points[ppn_points[:, -1] == semantic_type]
+        ppn_points_type = ppn_points[ppn_points[:, 5] == semantic_type]
     else:
         ppn_points_type = ppn_points
         # TODO: Fix semantic type ppn selection

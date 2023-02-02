@@ -110,7 +110,14 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_dir_x': -1,
         'particle_dir_y': -1,
         'particle_dir_z': -1,
-        'particle_mcs_E': -1
+        'particle_mcs_E': -1,
+        'particle_startpoint_x': -1,
+        'particle_startpoint_y': -1,
+        'particle_startpoint_z': -1,
+        'particle_endpoint_x': -1,
+        'particle_endpoint_y': -1,
+        'particle_endpoint_z': -1,
+
     })
 
     if save_feats:
@@ -127,6 +134,16 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         update_dict['particle_size'] = particle.size
         update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
+        if particle.startpoint is not None:
+            update_dict['particle_has_startpoint'] = True
+            update_dict['particle_startpoint_x'] = particle.startpoint[0]
+            update_dict['particle_startpoint_y'] = particle.startpoint[1]
+            update_dict['particle_startpoint_z'] = particle.startpoint[2]
+        if particle.endpoint is not None:
+            update_dict['particle_has_endpoint'] = True
+            update_dict['particle_endpoint_x'] = particle.endpoint[0]
+            update_dict['particle_endpoint_y'] = particle.endpoint[1]
+            update_dict['particle_endpoint_z'] = particle.endpoint[2]
         if particle.semantic_type == 1:
             update_dict['particle_length'] = compute_track_length(particle.points)
             direction = compute_particle_direction(particle, vertex=vertex)
@@ -134,9 +151,9 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
             update_dict['particle_dir_x'] = direction[0]
             update_dict['particle_dir_y'] = direction[1]
             update_dict['particle_dir_z'] = direction[2]
-            if particle.pid == 2:
-                mcs_E = compute_mcs_muon_energy(particle)
-                update_dict['particle_mcs_E'] = mcs_E
+            # if particle.pid == 2:
+            #     mcs_E = compute_mcs_muon_energy(particle)
+            #     update_dict['particle_mcs_E'] = mcs_E
         # if not isinstance(particle, TruthParticle):
         #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
         #         for i in range(particle.node_features.shape[0])})

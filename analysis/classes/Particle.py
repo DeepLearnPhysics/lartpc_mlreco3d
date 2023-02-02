@@ -79,6 +79,8 @@ class Particle:
 
         self.sum_edep = np.sum(self.depositions)
         self.volume = volume
+        self.startpoint = None
+        self.endpoint = None
 
     def __str__(self):
         return self.__repr__()
