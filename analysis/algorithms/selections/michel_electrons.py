@@ -4,12 +4,54 @@ from sklearn.decomposition import PCA
 
 from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
 from analysis.decorator import evaluate
+from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
 
 from pprint import pprint
 import time
 import numpy as np
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
+import pandas as pd
+
+
+def yz_calibrations(yz_calib, points, edep, bin_size=10, voxel_size=0.3, spatial_size=6144):
+    """
+    Apply YZ calibration factors from CSV file.
+
+    Parameters
+    ==========
+    yz_calib: pd.DataFrame
+    points: (N, 3) np.ndarray
+    edep: (N,) np.ndarray
+    bin_size: float, in cm
+    voxel_size: float, in cm
+    spatial_size: int, in voxels
+
+    Returns
+    =======
+    float
+        calibrated sum of edep
+    """
+    if yz_calib is None:
+        return edep.sum()
+
+    xbins = np.arange(0, spatial_size, bin_size/voxel_size)
+    ybins = np.arange(0, spatial_size, bin_size/voxel_size)
+    zbins = np.arange(0, spatial_size, bin_size/voxel_size)
+    xidx = np.digitize(points[:, 0], xbins)
+    yidx = np.digitize(points[:, 1], ybins)
+    zidx = np.digitize(points[:, 2], zbins)
+    df = pd.DataFrame({'x': points[:, 0], 'y': points[:, 1], 'z': points[:, 2], 'edep': edep})
+    df['xbin'] = xidx
+    df['ybin'] = yidx
+    df['zbin'] = zidx
+    df['tpc'] = 'EE'
+    df.loc[(df['xbin'] > 40) & (df['xbin'] <= 83), 'tpc'] = 'EW'
+    df.loc[(df['xbin'] > 83) & (df['xbin'] <= 125), 'tpc'] = 'WE'
+    df.loc[df['xbin'] > 125, 'tpc'] = 'WW'
+    df = pd.merge(df, yz_calib, on=['tpc', 'ybin', 'zbin'], how='left')
+    df.loc[np.isnan(df['scale']), 'scale'] = 1.
+    return (df['edep'] * df['scale']).sum()
 
 def get_bounding_box(points):
     return {
@@ -114,6 +156,12 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
     Output
     ======
     """
+    try:
+        yz_calib = pd.read_csv("/sdf/group/neutrino/ldomine/ICARUS_Calibrations/v09_62_00/tpc_yz_correction_data.csv")
+    except Exception as e:
+        print("Unable to load YZ calibration csv.")
+        print(e)
+        yz_calib = None
     #
     # ====== Configuration ======
     #
@@ -288,6 +336,14 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
             pionization = clabels[michel_id] # cluster label of Michel point closest to the muon
             primary_ionization = clabels == pionization
 
+            # Record distance to muon
+            michel_to_muon_distance = cdist(p.points, muon.points).min()
+
+            # Record calibrated depositions sum
+            pred_sum_pix_calib = yz_calibrations(yz_calib, p.points, p.depositions)
+            pred_primary_sum_pix_calib = yz_calibrations(yz_calib, p.points[primary_ionization], p.depositions[primary_ionization])
+            print("caibrating ", p.depositions.sum(), pred_sum_pix_calib)
+
             # Record candidate Michel
             update_dict = {
                 'index': index,
@@ -347,7 +403,13 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                 'pred_primary_num_pix': primary_ionization.sum(),
                 'pred_primary_sum_pix': p.depositions[primary_ionization].sum(),
                 'true_primary_sum_pix_ADC': -1,
-                'true_sum_pix_MeV': -1
+                'true_sum_pix_MeV': -1,
+                'distance_to_muon': michel_to_muon_distance,
+                'muon_length': compute_track_length(muon.points),
+                'pred_sum_pix_calib': pred_sum_pix_calib,
+                'true_sum_pix_calib': -1,
+                'pred_primary_sum_pix_calib': pred_primary_sum_pix_calib,
+                'true_primary_sum_pix_calib': -1
             }
             update_dict.update(index_dict)
             #print("Heuristic primary ", update_dict['pred_num_pix'], update_dict['pred_primary_num_pix'])
@@ -382,6 +444,10 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                     charge_label_pred_noghost = predictor.get_true_label(i, "charge", schema="cluster_label", volume=p.volume)
                     truecluster_pred = cluster_label_pred_noghost == m.id
                     trueprimary_pred = truecluster_pred & (segment_label_pred_noghost == michel_label)
+
+                    # Calibrate too
+                    true_sum_pix_calib = yz_calibrations(yz_calib, m.points, m.depositions)
+                    true_primary_sum_pix_calib = yz_calibrations(yz_calib, res['input_rescaled'][i*2+p.volume][trueprimary_pred, 1:4], input_data[trueprimary_pred])
                     update_dict.update({
                         'matched': True,
                         'true_id': m.id,
@@ -426,7 +492,9 @@ def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
                         'muon_true_dir_z': muon_true_dir[2],
                         'michel_true_dir_x': michel_true_dir[0],
                         'michel_true_dir_y': michel_true_dir[1],
-                        'michel_true_dir_z': michel_true_dir[2]
+                        'michel_true_dir_z': michel_true_dir[2],
+                        'true_sum_pix_calib': true_sum_pix_calib,
+                        'true_primary_sum_pix_calib': true_primary_sum_pix_calib
                     })
                     break
 
