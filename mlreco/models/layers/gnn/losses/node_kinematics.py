@@ -250,42 +250,48 @@ class NodeKinematicsLoss(torch.nn.Module):
                         valid_mask_vtx &= cnts[inv] == 1
                     valid_mask_vtx = np.where(valid_mask_vtx)[0]
 
-                    # Compute the losses only if there is at least > 1 positive node 
+                    # Compute the losses only if there is at least > 1 true positive node 
                     pos_mask_vtx = np.where(node_assn_vtx_pos[valid_mask_vtx])[0]
                     if len(pos_mask_vtx):
                         # Compute the primary score loss on all valid nodes
+                        compute_vtx_pos   = node_pred_vtx.shape[-1] == 5
                         node_pred_vtx     = node_pred_vtx[valid_mask_vtx]
                         node_assn_vtx_pos = torch.tensor(node_assn_vtx_pos[valid_mask_vtx], dtype=torch.long, device=node_pred_vtx.device)
+                        if not compute_vtx_pos:
+                            loss1 = self.vtx_score_loss(node_pred_vtx, node_assn_vtx_pos)
+                            vtx_score_loss += float(loss1)
+                            total_loss += loss1
+                            n_clusts_vtx += len(valid_mask_vtx)
+                        else:
+                            loss1 = self.vtx_score_loss(node_pred_vtx[:, 3:], node_assn_vtx_pos)
 
-                        loss1 = self.vtx_score_loss(node_pred_vtx[:, 3:], node_assn_vtx_pos)
+                            # Compute the vertex position loss on positive nodes only
+                            vtx_label = torch.tensor(node_assn_vtx[valid_mask_vtx][pos_mask_vtx], dtype=node_pred_vtx.dtype, device=node_pred_vtx.device)
+                            if self.normalize_vtx_label: # If requested, bring vertex labels in the range [0,1 ]
+                                vtx_label = vtx_label/self.spatial_size
+                            vtx_labels.append(vtx_label.detach().cpu().numpy())
 
-                        # Compute the vertex position loss on positive nodes only
-                        vtx_label = torch.tensor(node_assn_vtx[valid_mask_vtx][pos_mask_vtx], dtype=node_pred_vtx.dtype, device=node_pred_vtx.device)
-                        if self.normalize_vtx_label: # If requested, bring vertex labels in the range [0,1 ]
-                            vtx_label = vtx_label/self.spatial_size
-                        vtx_labels.append(vtx_label.detach().cpu().numpy())
+                            vtx_pred = node_pred_vtx[pos_mask_vtx,:3]
+                            if self.use_anchor_points: # If requested, predict positions with respect to anchor points (end points of particles)
+                                end_points = input_node_features[valid_mask_vtx,19:25][pos_mask_vtx].view(-1, 2, 3)
+                                dist_to_anchor = torch.norm(vtx_pred.view(-1, 1, 3) - end_points, dim=2).view(-1, 2)
+                                min_dist = torch.argmin(dist_to_anchor, dim=1)
+                                range_index = torch.arange(end_points.shape[0]).to(device=end_points.device).long()
+                                anchors = end_points[range_index, min_dist, :]
+                                vtx_anchors.append(anchors.detach().cpu().numpy())
+                                vtx_pred = vtx_pred + anchors
 
-                        vtx_pred = node_pred_vtx[pos_mask_vtx,:3]
-                        if self.use_anchor_points: # If requested, predict positions with respect to anchor points (end points of particles)
-                            end_points = input_node_features[valid_mask_vtx,19:25][pos_mask_vtx].view(-1, 2, 3)
-                            dist_to_anchor = torch.norm(vtx_pred.view(-1, 1, 3) - end_points, dim=2).view(-1, 2)
-                            min_dist = torch.argmin(dist_to_anchor, dim=1)
-                            range_index = torch.arange(end_points.shape[0]).to(device=end_points.device).long()
-                            anchors = end_points[range_index, min_dist, :]
-                            vtx_anchors.append(anchors.detach().cpu().numpy())
-                            vtx_pred = vtx_pred + anchors
+                            loss2 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(vtx_pred, vtx_label), dim=1),
+                                                           max=self.max_vertex_distance**2))
 
-                        loss2 = torch.mean(torch.clamp(torch.sum(self.vtx_position_loss(vtx_pred, vtx_label), dim=1),
-                                                       max=self.max_vertex_distance**2))
+                            # Combine losses
+                            total_loss += loss1 + loss2
+                            vtx_score_loss += float(loss1)
+                            vtx_position_loss += float(loss2)
 
-                        # Combine losses
-                        total_loss += loss1 + loss2
-                        vtx_score_loss += float(loss1)
-                        vtx_position_loss += float(loss2)
-
-                        # Increment the number of nodes
-                        n_clusts_vtx += len(valid_mask_vtx)
-                        n_clusts_vtx_pos += len(pos_mask_vtx)
+                            # Increment the number of nodes
+                            n_clusts_vtx += len(valid_mask_vtx)
+                            n_clusts_vtx_pos += len(pos_mask_vtx)
                     else:
                         vtx_labels.append(np.empty((0,3)))
                         if self.use_anchor_points: anchors.append(np.empty((0,3)))
@@ -299,8 +305,12 @@ class NodeKinematicsLoss(torch.nn.Module):
                     p_acc += float(torch.sum(1.- torch.abs(node_pred_p.squeeze()-node_assn_p)/node_assn_p)) # 1-MAPE
 
                 if compute_vtx and out['node_pred_vtx'][i][j].shape[0] and len(pos_mask_vtx):
-                    vtx_position_acc += float(torch.sum(1. - torch.abs(vtx_pred - vtx_label)/(torch.abs(vtx_pred) + torch.abs(vtx_label))))/3.
-                    vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[:,3:], dim=1) == node_assn_vtx_pos))
+                    compute_vtx_pos = node_pred_vtx.shape[-1] == 5
+                    if not compute_vtx_pos:
+                        vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx, dim=1) == node_assn_vtx_pos))
+                    else:
+                        vtx_score_acc += float(torch.sum(torch.argmax(node_pred_vtx[:,3:], dim=1) == node_assn_vtx_pos))
+                        vtx_position_acc += float(torch.sum(1. - torch.abs(vtx_pred - vtx_label)/(torch.abs(vtx_pred) + torch.abs(vtx_label))))/3.
 
         n_clusts = n_clusts_type + n_clusts_momentum + n_clusts_vtx + n_clusts_vtx_pos
 
@@ -325,7 +335,7 @@ class NodeKinematicsLoss(torch.nn.Module):
             })
         if compute_vtx:
             result.update({
-                'vtx_labels': vtx_labels,
+                'vtx_labels': vtx_labels if n_clusts_vtx_pos else [],
                 'vtx_score_loss': vtx_score_loss/n_clusts_vtx if n_clusts_vtx else 0.,
                 'vtx_score_accuracy': vtx_score_acc/n_clusts_vtx if n_clusts_vtx else 1.,
                 'vtx_position_loss': vtx_position_loss/n_clusts_vtx_pos if n_clusts_vtx_pos else 0.,

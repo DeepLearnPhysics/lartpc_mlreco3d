@@ -197,15 +197,3 @@ def parse_sparse3d_charge_rescaled(sparse_event_list):
     charges = np.sum((hit_charges*pmask)/multiplicity, axis=1)/np.sum(pmask, axis=1)
 
     return np_voxels[deghost], charges.reshape(-1,1)
-
-
-def parse_sparse2d_scn(sparse_event_list):
-    from warnings import warn
-    warn("Deprecated: parse_sparse2d_scn deprecated, use parse_sparse2d instead", DeprecationWarning)
-    return parse_sparse2d(sparse_event_list)
-
-
-def parse_sparse3d_scn(sparse_event_list):
-    from warnings import warn
-    warn("Deprecated: parse_sparse3d_scn deprecated, use parse_sparse3d instead", DeprecationWarning)
-    return parse_sparse3d(sparse_event_list)

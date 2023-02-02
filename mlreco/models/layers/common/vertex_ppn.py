@@ -5,6 +5,7 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
+from mlreco.utils import local_cdist
 from mlreco.models.layers.common.blocks import ResNetBlock
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
@@ -196,13 +197,7 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
         self.regloss = torch.nn.MSELoss()
         self.use_numpy = self.loss_config.get('use_numpy', False)
 
-    @staticmethod
-    def pairwise_distances(v1, v2):
-        v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-        return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
-    
     def get_vertices(self, kinematics_label):
         
         data =  kinematics_label[0].cpu().numpy()
@@ -290,7 +285,7 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
                                                    vertices_batch, 
                                                    primaries_batch)
 
-            #         d_true = self.pairwise_distances(
+            #         d_true = pairwise_distances(
             #             points_label,
             #             points_event[:, 1:4].float().to(device))
 
@@ -321,7 +316,7 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
             #             pixel_logits = points[batch_particle_index][:, 3:8]
             #             pixel_pred = points[batch_particle_index][:, :3] + anchors
 
-            #             d = self.pairwise_distances(points_label, pixel_pred)
+            #             d = pairwise_distances(points_label, pixel_pred)
             #             positives = (d < self.resolution).any(dim=0)
             #             if (torch.sum(positives) < 1):
             #                 continue

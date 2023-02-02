@@ -1,8 +1,9 @@
 import numpy as np
 import scipy
-from mlreco.utils.dbscan import dbscan_types, dbscan_points
 import torch
 
+from mlreco.utils import local_cdist
+from mlreco.utils.dbscan import dbscan_types, dbscan_points
 
 def contains(meta, point, point_type="3d"):
     """
@@ -505,7 +506,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False):
         sigmoid = scipy.special.expit
         cat = lambda x: np.stack(x, axis=0)
     else:
-        cdist = torch.cdist
+        cdist = local_cdist
         argmax = torch.argmax
         sigmoid = torch.sigmoid
         cat = torch.cat
