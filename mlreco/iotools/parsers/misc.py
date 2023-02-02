@@ -1,7 +1,6 @@
 import numpy as np
 from larcv import larcv
 from mlreco.utils.dbscan import dbscan_types
-from mlreco.iotools.parsers.sparse import parse_sparse3d_scn
 
 
 def parse_meta2d(sparse_event, projection_id = 0):

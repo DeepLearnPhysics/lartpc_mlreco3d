@@ -583,7 +583,7 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if len(input[0]) and 'segmentation' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and 'frags' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
 
         result = revert_func(result)
@@ -607,7 +607,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         super(FullChainLoss, self).__init__()
 
         # Configure the chain first
-        setup_chain_cfg(self, cfg)
+        setup_chain_cfg(self, cfg, False)
 
         if self.enable_gnn_shower:
             self.shower_gnn_loss         = GNNLoss(cfg, 'grappa_shower_loss', batch_col=self.batch_col, coords_col=self.coords_col)
@@ -938,7 +938,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
         return res
 
 
-def setup_chain_cfg(self, cfg):
+def setup_chain_cfg(self, cfg, print_info=True):
     """
     Prepare both FullChain and FullChainLoss
 
@@ -976,7 +976,7 @@ def setup_chain_cfg(self, cfg):
     self.enable_gnn_kinematics = chain_cfg.get('enable_gnn_kinematics', False)
     self.enable_cosmic         = chain_cfg.get('enable_cosmic', False)
 
-    if self.verbose:
+    if self.verbose and print_info:
         print("Shower GNN: {}".format(self.enable_gnn_shower))
         print("Track GNN: {}".format(self.enable_gnn_track))
         print("Particle GNN: {}".format(self.enable_gnn_particle))
@@ -989,14 +989,14 @@ def setup_chain_cfg(self, cfg):
         self.enable_gnn_particle or \
         self.enable_gnn_inter or \
         self.enable_gnn_kinematics or self.enable_cosmic):
-        if self.verbose:
+        if self.verbose and print_info:
             msg = """
             Since one of the GNNs are turned on, process_fragments is turned ON.
             """
             print(msg)
         self.process_fragments = True
 
-    if self.process_fragments and self.verbose:
+    if self.process_fragments and self.verbose and print_info:
         msg = """
         Fragment processing is turned ON. When training CNN models from
          scratch, we recommend turning fragment processing OFF as without

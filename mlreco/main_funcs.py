@@ -1,6 +1,8 @@
 import os, time, datetime, glob, sys, yaml
 import numpy as np
 try:
+    if os.environ.get('OMP_NUM_THREADS') is None:
+        os.environ['OMP_NUM_THREADS'] = '16'
     import MinkowskiEngine as ME
 except ImportError:
     pass
@@ -125,9 +127,9 @@ def process_config(cfg, verbose=True):
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
-    from mlreco.utils import utils
-    # Weight save directory
+    from mlreco.utils import CSVData
     if 'trainval' in cfg:
+        # Weight save directory
         if cfg['trainval']['weight_prefix']:
             save_dir = cfg['trainval']['weight_prefix'][0:cfg['trainval']['weight_prefix'].rfind('/')]
             if save_dir and not os.path.isdir(save_dir):
@@ -143,7 +145,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
             if handlers is not None:
                 if hasattr(handlers,'csv_logger') and handlers.csv_logger:
                     handlers.csv_logger.close()
-                handlers.csv_logger = utils.CSVData(logname)
+                handlers.csv_logger = CSVData(logname)
 
 
 def prepare(cfg, event_list=None):

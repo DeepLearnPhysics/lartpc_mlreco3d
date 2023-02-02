@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from analysis.algorithms.utils import count_primary_particles, get_particle_properties
 from analysis.classes.ui import FullChainPredictor, FullChainEvaluator
+from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
 
 from analysis.decorator import evaluate
 from analysis.classes.particle import match_particles_fn, matrix_iou
@@ -73,6 +74,16 @@ def muon_decay(data_blob, res, data_idx, analysis_cfg, cfg):
 
         #opflash_cryoE = predictor.fm.make_flash([data_blob['opflash_cryoE'][idx]])
         #opflash_cryoW = predictor.fm.make_flash([data_blob['opflash_cryoW'][idx]])
+        opflash_cryoE = data_blob['opflash_cryoE'][idx]
+        opflash_cryoW = data_blob['opflash_cryoW'][idx]
+        min_time_cryoE, min_time_cryoW = np.inf, np.inf
+        for flash in opflash_cryoE:
+            if flash.absTime() < min_time_cryoE:
+                min_time_cryoE = flash.absTime()
+        for flash in opflash_cryoW:
+            if flash.absTime() < min_time_cryoW:
+                min_time_cryoW = flash.absTime()
+        print('min times ', min_time_cryoE, min_time_cryoW)
 
 
         ohmflash_cryoE = data_blob['ohmflash_cryoE'][idx]
@@ -184,6 +195,9 @@ def muon_decay(data_blob, res, data_idx, analysis_cfg, cfg):
             else:
                 endpoint = muons[0].startpoint
 
+            # Record distance
+            michel_to_muon_distance = cdist(michels[0].points, muons[0].points).min()
+
             #muon_time = flash.time() + 1500 # FIXME why is absTime always 0.0 here (not in ROOT file) ?
             muon_time = flash.absTime()
             if use_ohmflash_muon:
@@ -217,6 +231,7 @@ def muon_decay(data_blob, res, data_idx, analysis_cfg, cfg):
             d['muon_true_time'] = -1
             d['michel_true_time'] = -1
             d['opflash_time'] = flash.absTime()
+            d['opflash_pe_sum'] = flash.TotalPE()
             d['volume'] = michels[0].volume
             d['endpoint_x'] = endpoint[0]
             d['endpoint_y'] = endpoint[1]
@@ -232,6 +247,10 @@ def muon_decay(data_blob, res, data_idx, analysis_cfg, cfg):
             d['michel_true_py'] = -1
             d['michel_true_pz'] = -1
             d['michel_true_semantic'] = -1
+            d['distance_to_muon'] = michel_to_muon_distance
+            d['muon_length'] = compute_track_length(muons[0].points)
+            d['min_time_cryoE'] = min_time_cryoE
+            d['min_time_cryoW'] = min_time_cryoW
 
             d.update(get_bounding_box(michels[0].points))
 

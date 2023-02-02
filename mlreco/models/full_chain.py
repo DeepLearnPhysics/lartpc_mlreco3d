@@ -208,7 +208,6 @@ class FullChain(FullChainGNN):
             result['ghost'] = result['segmentation']
             deghost = result['ghost'][0].argmax(dim=1) == 0
             del result['segmentation']
-            if not torch.sum(deghost): return result, input, lambda x: x
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
@@ -219,11 +218,15 @@ class FullChain(FullChainGNN):
             if not self.enable_charge_rescaling:
                 result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
             else:
-                result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
-                seg = result['segmentation'][0]
-                full_seg = torch.zeros((input[0].shape[0], seg.shape[1]), dtype=seg.dtype, device=seg.device)
-                full_seg[deghost] = seg
-                result['segmentation'][0] = full_seg
+                full_seg = torch.zeros((input[0][:,:5].shape[0], 5), device=input[0].device, dtype=input[0].dtype)
+                if torch.sum(deghost):
+                    result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
+                    seg = result['segmentation'][0]
+                    full_seg[deghost] = seg
+                    result['segmentation'][0] = full_seg
+                else:
+                    result['segmentation'] = [full_seg]
+                    return result, input, lambda x: x
 
         if self.enable_ppn:
             ppn_input = {}
@@ -310,8 +313,8 @@ class FullChain(FullChainGNN):
             if label_clustering is None and self.training:
                 raise Exception("Cluster labels from parse_cluster3d_clean_full are needed at this time for training.")
 
-            filtered_semantic = ~(semantic_labels[..., None].cpu() == \
-                                    torch.Tensor(self._gspice_skip_classes)).any(-1)
+            filtered_semantic = ~(semantic_labels[..., None] == \
+                                    torch.tensor(self._gspice_skip_classes, device=device)).any(-1)
 
             # If there are voxels to process in the given semantic classes
             if torch.count_nonzero(filtered_semantic) > 0:
@@ -371,7 +374,7 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({ 'semantic_labels': [semantic_labels] })
             if label_clustering is not None:
-                cnn_result.update({ 'label_clustering': [label_clustering] })
+                cnn_result.update({ 'label_clustering': label_clustering })
 
         # if self.use_true_fragments and coords is not None:
         #     print('adding true points info')

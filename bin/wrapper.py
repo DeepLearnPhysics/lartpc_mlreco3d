@@ -43,7 +43,8 @@ if job_id is None:
 job_id = int(job_id)
 job_out_dir = os.path.join(out_dir, '%d_%d' % (job_id, task_id))
 if not os.path.isdir(job_out_dir):
-    os.mkdir(job_out_dir)
+    #os.mkdir(job_out_dir)
+    os.makedirs(job_out_dir)
 
 # Make skip entries list based on voxel count
 print("Scanning input files to exclude entries with voxel count > %d..." % voxel_count_threshold)
