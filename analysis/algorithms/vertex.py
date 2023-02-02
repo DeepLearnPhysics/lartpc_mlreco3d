@@ -122,7 +122,7 @@ def compute_vertex_matrix_inversion(particles,
     pseudovtx = np.zeros((dim, ))
 
     if use_primaries:
-        particles = [p for p in particles if (p.is_primary and hasattr(p, 'startpoint'))]
+        particles = [p for p in particles if (p.is_primary and p.startpoint is not None)]
         
     if len(particles) < 2:
         return np.array([-1, -1, -1])
@@ -161,7 +161,7 @@ def compute_vertex_candidates(particles,
     if len(valid_particles) == 0:
         return [], None
     elif len(valid_particles) == 1:
-        startpoint = p.startpoint if hasattr(p, 'startpoint') else -np.ones(3)
+        startpoint = p.startpoint if p.startpoint is not None else -np.ones(3)
         return [startpoint], None
     else:
         # 1. Select two startpoints within dist r1
@@ -207,7 +207,7 @@ def estimate_vertex(particles,
     if len(valid_particles) == 0:
         candidates = []
     elif len(valid_particles) == 1:
-        startpoint = p.startpoint if hasattr(p, 'startpoint') else -np.ones(3)
+        startpoint = p.startpoint if p.startpoint is not None else -np.ones(3)
         candidates = [startpoint]
     else:
         if mode == 'adj':

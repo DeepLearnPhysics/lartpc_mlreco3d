@@ -1629,7 +1629,7 @@ class FullChainEvaluator(FullChainPredictor):
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
 
-            all_kwargs = {"min_overlap": self.min_overlap_count, **kwargs}
+            all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
             matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
                                                                     **all_kwargs)
             if len(matched_interactions) == 0:

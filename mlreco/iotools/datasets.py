@@ -59,6 +59,7 @@ class LArCVDataset(Dataset):
         self._trees = {}
         for key, value in data_schema.items():
             # Check that the schema is a dictionary
+            print(value)
             if not isinstance(value, dict):
                 raise ValueError('A data schema must be expressed as a dictionary')
 

@@ -66,9 +66,9 @@ def compute_particle_direction(p: Particle,
     """
     pca = PCA(n_components=2)
     direction = None
-    if hasattr(p, "startpoint") and p.startpoint[0] >= 0.:
+    if p.startpoint is not None and p.startpoint[0] >= 0.:
         startpoint = p.startpoint
-        if hasattr(p, "endpoint") and vertex is not None: # make sure we pick the one closest to vertex
+        if p.endpoint is not None and vertex is not None: # make sure we pick the one closest to vertex
             use_end = np.argmin([
                 np.sqrt(((vertex-p.startpoint)**2).sum()),
                 np.sqrt(((vertex-p.endpoint)**2).sum())
