@@ -18,6 +18,7 @@ from analysis.algorithms.point_matching import *
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex
 from analysis.algorithms.vertex import estimate_vertex
+from analysis.algorithms.utils import correct_track_points
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -100,6 +101,10 @@ class FullChainPredictor:
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
         self.batch_mask = self.data_blob['input_data']
+
+        # Vertex estimation modes
+        self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
+        self.prune_vertex = predictor_cfg.get('prune_vertex', True)
 
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
@@ -935,6 +940,7 @@ class FullChainPredictor:
                     startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
                     p.startpoint = startpoint
                     p.endpoint = endpoint
+                    correct_track_points(p)
                 else:
                     continue
             out_particle_list.extend(out)
@@ -943,7 +949,7 @@ class FullChainPredictor:
 
 
     def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None,
-                        compute_vertex=True) -> List[Interaction]:
+                         compute_vertex=True, vertex_mode=None) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -973,14 +979,22 @@ class FullChainPredictor:
 
         entries = self._get_entries(entry, volume)
 
+        if vertex_mode == None:
+            vertex_mode = self.vertex_mode
+
         out_interaction_list = []
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
-            particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
+            particles = self.get_particles(entry, 
+                only_primaries=drop_nonprimary_particles, 
+                volume=volume)
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
                 if compute_vertex:
-                    ia.vertex = estimate_vertex(ia.particles, use_primaries=True)
+                    ia.vertex = estimate_vertex(ia.particles, 
+                        use_primaries=True, 
+                        mode=vertex_mode,
+                        prune_candidates=self.prune_vertex)
                 ia.volume = volume
             out_interaction_list.extend(out)
 
@@ -1560,13 +1574,14 @@ class FullChainEvaluator(FullChainPredictor):
             all_matches.extend(matched_pairs)
         return all_matches
 
-
+    
     def match_interactions(self, entry, mode='pred_to_true',
                            drop_nonprimary_particles=True,
                            match_particles=True,
                            return_counts=False,
                            volume=None,
                            compute_vertex=True,
+                           vertex_mode='all',
                            **kwargs):
         """
         Parameters
@@ -1591,11 +1606,25 @@ class FullChainEvaluator(FullChainPredictor):
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
             if mode == 'pred_to_true':
-                ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
-                ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_from = self.get_interactions(entry, 
+                                                  drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                  volume=volume, 
+                                                  compute_vertex=compute_vertex,
+                                                  vertex_mode=vertex_mode)
+                ints_to = self.get_true_interactions(entry, 
+                                                     drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                     volume=volume, 
+                                                     compute_vertex=compute_vertex)
             elif mode == 'true_to_pred':
-                ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
-                ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_to = self.get_interactions(entry, 
+                                                drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                volume=volume, 
+                                                compute_vertex=compute_vertex,
+                                                vertex_mode=vertex_mode)
+                ints_from = self.get_true_interactions(entry, 
+                                                       drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                       volume=volume, 
+                                                       compute_vertex=compute_vertex)
             else:
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))

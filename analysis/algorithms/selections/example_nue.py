@@ -9,19 +9,21 @@ from pprint import pprint
 import time
 import numpy as np
 
+from mlreco.utils import func_timer
+
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Example of analysis script for nue analysis.
     """
-
     interactions, particles = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
     primaries = analysis_cfg['analysis']['match_primaries']
     enable_flash_matching = analysis_cfg['analysis'].get('enable_flash_matching', False)
     ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
     compute_vertex = analysis_cfg['analysis']['compute_vertex']
+    vertex_mode = analysis_cfg['analysis']['vertex_mode']
 
     processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
     if enable_flash_matching:
@@ -49,12 +51,14 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                     use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
 
         # Process Interaction Level Information
+        start = time.time()
         matches, counts = predictor.match_interactions(idx,
             mode='true_to_pred',
             match_particles=True,
             drop_nonprimary_particles=primaries,
             return_counts=True,
             compute_vertex=compute_vertex,
+            vertex_mode=vertex_mode,
             overlap_mode=predictor.overlap_mode)
 
         if len(matches) == 0:
@@ -68,7 +72,9 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
 
         pred_interactions = predictor.get_interactions(idx, 
                                                        drop_nonprimary_particles=primaries,
-                                                       compute_vertex=compute_vertex)
+                                                       compute_vertex=compute_vertex,
+                                                       vertex_mode=vertex_mode)
+
         for int in pred_interactions:
             if int.id not in matched_pred_indices:
                 matches.append((None, int))
@@ -178,5 +184,6 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 particles_dict.update(true_particle_dict)
 
                 particles.append(particles_dict)
+                # print(len(particles_dict))
 
     return [interactions, particles]

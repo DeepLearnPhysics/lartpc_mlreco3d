@@ -194,18 +194,43 @@ def estimate_vertex(particles,
                     use_primaries=True, 
                     r_adj=10, 
                     r_poca=10, 
-                    r_pvtx=30):
-    candidates, pseudovtx = compute_vertex_candidates(particles, 
-                                                      use_primaries=use_primaries, 
-                                                      r1=r_adj, 
-                                                      r2=r_poca)
+                    r_pvtx=30,
+                    prune_candidates=False, mode='all'):
+
+    # Exclude unwanted particles
+    valid_particles = []
+    for p in particles:
+        check = p.is_primary or (not use_primaries)
+        if check and (p.semantic_type in [0,1]):
+            valid_particles.append(p)
+            
+    if len(valid_particles) == 0:
+        candidates = []
+    elif len(valid_particles) == 1:
+        startpoint = p.startpoint if hasattr(p, 'startpoint') else -np.ones(3)
+        candidates = [startpoint]
+    else:
+        if mode == 'adj':
+            candidates = get_centroid_adj_pairs(valid_particles, r1=r_adj)
+        elif mode == 'track_shower_pair':
+            candidates = get_track_shower_poca(valid_particles, r2=r_poca)
+        elif mode == 'all':
+            candidates, pseudovtx = compute_vertex_candidates(valid_particles, 
+                                                            use_primaries=use_primaries, 
+                                                            r1=r_adj, 
+                                                            r2=r_poca)
+        else:
+            raise ValueError("Mode {} for vertex selection not supported!".format(mode))
     if len(candidates) == 0:
         return np.array([-1, -1, -1])
     elif len(candidates) == 1:
         return candidates[0]
     else:
         candidates = np.vstack(candidates)
-        pruned = prune_vertex_candidates(candidates, pseudovtx, r=r_pvtx)
+        if mode == 'all' and prune_candidates:
+            pruned = prune_vertex_candidates(candidates, pseudovtx, r=r_pvtx)
+        else:
+            pruned = candidates
         if pruned.shape[0] > 0:
             return pruned.mean(axis=0)
         else:

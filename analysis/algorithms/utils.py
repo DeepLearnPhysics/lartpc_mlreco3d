@@ -4,6 +4,7 @@ from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
 from pprint import pprint
+from scipy.spatial.distance import cdist
 import numpy as np
 import ROOT
 
@@ -18,6 +19,46 @@ def attach_prefix(update_dict, prefix):
         out[new_key] = val
 
     return out
+
+
+def correct_track_points(particle):
+    '''
+    Correct track startpoint and endpoint using PPN's
+    <classify_endpoints> prediction.
+
+    Warning: only meant for tracks, operation is in-place.
+    '''
+    assert particle.semantic_type == 1
+    num_candidates = particle.ppn_candidates.shape[0]
+
+    x = np.vstack([particle.startpoint, particle.endpoint])
+
+    if num_candidates == 0:
+        pass
+    elif num_candidates == 1:
+        # Get closest candidate and place candidate's label
+        # print(x.shape, particle.ppn_candidates[0, :3])
+        dist = cdist(x, particle.ppn_candidates[:, :3]).squeeze()
+        label = np.argmax(particle.ppn_candidates[0, 5:])
+        x1, x2 = np.argmin(dist), np.argmax(dist)
+        if label == 0:
+            # Closest point x1 is adj to a startpoint
+            particle.startpoint = x[x1]
+            particle.endpoint = x[x2]
+        elif label == 1:
+            # Closest point x2 is adj to an endpoint
+            particle.endpoint = x[x1]
+            particle.startpoint = x[x2]
+        else:
+            raise ValueError("Track endpoint label should be either 0 or 1, \
+                got {}, which should not happen!".format(label))
+    else:
+        dist = cdist(x, particle.ppn_candidates[:, :3])
+        # Classify endpoint scores associated with x
+        scores = particle.ppn_candidates[dist.argmin(axis=1)][:, 5:]
+        particle.startpoint = x[scores[:, 0].argmax()]
+        particle.endpoint = x[scores[:, 1].argmax()]
+
 
 def load_range_reco(particle_type='muon', kinetic_energy=True):
     """
@@ -105,7 +146,7 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_E': -1,
         'particle_is_primary': False,
         'particle_has_startpoint': False,
-        'particle_has_endpoints': False,
+        'particle_has_endpoint': False,
         'particle_length': -1,
         'particle_dir_x': -1,
         'particle_dir_y': -1,
@@ -117,6 +158,11 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_endpoint_x': -1,
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
+        'particle_startpoint_is_touching': True
+        # 'particle_match_counts': -1,
+        # 'true_interaction_id': -1,
+        # 'pred_interaction_id': -1,
+
 
     })
 
@@ -144,13 +190,19 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
             update_dict['particle_endpoint_x'] = particle.endpoint[0]
             update_dict['particle_endpoint_y'] = particle.endpoint[1]
             update_dict['particle_endpoint_z'] = particle.endpoint[2]
-        if particle.semantic_type == 1:
-            update_dict['particle_length'] = compute_track_length(particle.points)
-            direction = compute_particle_direction(particle, vertex=vertex)
-            assert len(direction) == 3
-            update_dict['particle_dir_x'] = direction[0]
-            update_dict['particle_dir_y'] = direction[1]
-            update_dict['particle_dir_z'] = direction[2]
+
+        if isinstance(particle, TruthParticle):
+            dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
+            min_dist = np.min(dists)
+            if min_dist > 5.0:
+                update_dict['particle_startpoint_is_touching'] = False
+        # if particle.semantic_type == 1:
+        #     update_dict['particle_length'] = compute_track_length(particle.points)
+        #     direction = compute_particle_direction(particle, vertex=vertex)
+        #     assert len(direction) == 3
+        #     update_dict['particle_dir_x'] = direction[0]
+        #     update_dict['particle_dir_y'] = direction[1]
+        #     update_dict['particle_dir_z'] = direction[2]
             # if particle.pid == 2:
             #     mcs_E = compute_mcs_muon_energy(particle)
             #     update_dict['particle_mcs_E'] = mcs_E
