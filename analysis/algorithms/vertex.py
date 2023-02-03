@@ -176,7 +176,7 @@ def compute_vertex_candidates(particles,
         # 3. Select POCA of all primary tracks and showers
         pseudovtx = compute_vertex_matrix_inversion(valid_particles, 
                                                   dim=3, 
-                                                  use_primaries=use_primaries, 
+                                                  use_primaries=True, 
                                                   weight=True)
         # if not (pseudovtx < 0).all():
         #     candidates.append(pseudovtx)
@@ -216,7 +216,7 @@ def estimate_vertex(particles,
             candidates = get_track_shower_poca(valid_particles, r2=r_poca)
         elif mode == 'all':
             candidates, pseudovtx = compute_vertex_candidates(valid_particles, 
-                                                            use_primaries=use_primaries, 
+                                                            use_primaries=True, 
                                                             r1=r_adj, 
                                                             r2=r_poca)
         else:

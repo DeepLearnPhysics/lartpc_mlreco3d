@@ -198,6 +198,19 @@ def trace_interactions(interactions, color='id', colorscale="rainbow"):
                        name='Interaction {}'.format(getattr(inter, color))
                               )
         traces.append(plot)
+        if inter.vertex is not None and (inter.vertex > -1).all():
+            plot = go.Scatter3d(x=np.array([inter.vertex[0]]),
+                y=np.array([inter.vertex[1]]),
+                z=np.array([inter.vertex[2]]),
+                mode='markers',
+                marker=dict(
+                    size=5,
+                    color='red',
+                    # colorscale=colorscale,
+                    opacity=0.6),
+                    # hovertext=p.ppn_candidates[:, 4],
+                name='Vertex {}'.format(inter.id))
+            traces.append(plot)
     return traces
 
 
