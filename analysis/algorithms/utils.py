@@ -92,7 +92,7 @@ def make_range_based_momentum_fns():
     return [f_muon, f_pion, f_proton]
 
 
-def count_primary_particles(interaction: Interaction, prefix=None):
+def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
 
     update_dict = OrderedDict({
         'interaction_id': -1,
@@ -102,6 +102,7 @@ def count_primary_particles(interaction: Interaction, prefix=None):
         'vertex_y': -1,
         'vertex_z': -1,
         'has_vertex': False,
+        'vertex_valid': 'NULL',
         'count_primary_protons': -1
     })
 
@@ -125,12 +126,24 @@ def count_primary_particles(interaction: Interaction, prefix=None):
         update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
-        if (np.array(interaction.vertex) > 0).all():
+
+        within_volume = np.all(interaction.vertex <= spatial_size) and np.all(interaction.vertex >= 0)
+
+        if within_volume:
             update_dict['has_vertex'] = True
             update_dict['vertex_x'] = interaction.vertex[0]
             update_dict['vertex_y'] = interaction.vertex[1]
-            update_dict['vertex_z'] = interaction.vertex[1]
-
+            update_dict['vertex_z'] = interaction.vertex[2]
+            update_dict['vertex_valid'] = 'Valid'
+        else:
+            if ((np.abs(np.array(interaction.vertex)) > 1e6).any()):
+                update_dict['vertex_valid'] = 'Invalid Magnitude'
+            else:
+                update_dict['vertex_valid'] = 'Outside Volume'
+                update_dict['has_vertex'] = True
+                update_dict['vertex_x'] = interaction.vertex[0]
+                update_dict['vertex_y'] = interaction.vertex[1]
+                update_dict['vertex_z'] = interaction.vertex[2]
         out = attach_prefix(update_dict, prefix)
 
     return out

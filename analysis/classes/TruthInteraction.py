@@ -13,8 +13,10 @@ class TruthInteraction(Interaction):
         self.match = []
         self._match_counts = {}
         self.depositions_MeV = []
+        self.num_primaries = 0
         for p in self.particles:
             self.depositions_MeV.append(p.depositions_MeV)
+            if p.is_primary: self.num_primaries += 1
         self.depositions_MeV = np.hstack(self.depositions_MeV)
 
     def check_validity(self):

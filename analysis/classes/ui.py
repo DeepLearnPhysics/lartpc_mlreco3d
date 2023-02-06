@@ -82,7 +82,7 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        # self.spatial_size             = predictor_cfg.get('spatial_size', 768)
+        self.spatial_size             = predictor_cfg['spatial_size']
         # For matching particles and interactions
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
