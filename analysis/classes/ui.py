@@ -1,7 +1,6 @@
 from typing import Callable, Tuple, List
 import numpy as np
-import pandas as pd
-import os, sys
+import os
 import time
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
@@ -17,8 +16,10 @@ from analysis.classes.particle import matrix_counts, matrix_iou, \
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.vertex import get_vertex, predict_vertex
-from mlreco.utils.deghosting import deghost_labels_and_predictions, compute_rescaled_charge
+from mlreco.utils.vertex import get_vertex
+from analysis.algorithms.vertex import estimate_vertex
+from analysis.algorithms.utils import correct_track_points
+from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.iotools.collates import VolumeBoundaries
@@ -65,8 +66,15 @@ class FullChainPredictor:
         # quantities separately from data_blob and result
 
         self.deghosting = self.module_config['chain']['enable_ghost']
+        self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net']['pred_vtx_positions']
         self.data_blob = data_blob
         self.result = result
+
+        # Check data_blob lengths
+        # if len(self.data_blob['segment_label']) != len(self.data_blob['cluster_label']):
+        #     for key in self.data_blob:
+        #         print(key, len(self.data_blob[key]))
+        #     raise AssertionError
 
         if self.deghosting:
             deghost_labels_and_predictions(self.data_blob, self.result)
@@ -79,6 +87,10 @@ class FullChainPredictor:
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
         self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
+        if self.overlap_mode == 'iou':
+            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
+        if self.overlap_mode == 'counts':
+            assert self.min_overlap_count >= 0
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
@@ -89,6 +101,10 @@ class FullChainPredictor:
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
         self.batch_mask = self.data_blob['input_data']
+
+        # Vertex estimation modes
+        self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
+        self.prune_vertex = predictor_cfg.get('prune_vertex', True)
 
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
@@ -284,18 +300,28 @@ class FullChainPredictor:
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
+        if 'classify_endpoints' in self.result:
+            ppn_endpoint = ppn[:, 13:]
+            assert ppn_endpoint.shape[1] == 2
 
         ppn_candidates = []
         for i, pred_point in enumerate(ppn_voxels):
             pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
+            if 'classify_endpoints' in self.result:
+                ppn_candidates.append(np.array([x, y, z, 
+                                                pred_point_score, 
+                                                pred_point_type, 
+                                                ppn_endpoint[i][0],
+                                                ppn_endpoint[i][1]]))
+            else:
+                ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
 
         if len(ppn_candidates):
             ppn_candidates = np.vstack(ppn_candidates)
         else:
             enable_classify_endpoints = 'classify_endpoints' in self.result
-            ppn_candidates = np.empty((0, 13 if not enable_classify_endpoints else 15), dtype=np.float32)
+            ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 6), dtype=np.float32)
         return ppn_candidates
 
 
@@ -517,31 +543,34 @@ class FullChainPredictor:
         return pred_pids
 
 
-    def _fit_predict_vertex_info(self, entry, inter_idx):
-        '''
-        Method for obtaining interaction vertex information given
-        entry number and interaction ID number.
+    # def _fit_predict_vertex_info(self, entry, inter_idx):
+    #     '''
+    #     Method for obtaining interaction vertex information given
+    #     entry number and interaction ID number.
 
-        Inputs:
-            - entry: Batch number to retrieve example.
+    #     Inputs:
+    #         - entry: Batch number to retrieve example.
 
-            - inter_idx: Interaction ID number.
+    #         - inter_idx: Interaction ID number.
 
-        If the interaction specified by <inter_idx> does not exist
-        in the sample numbered by <entry>, function will raise a
-        ValueError.
+    #     If the interaction specified by <inter_idx> does not exist
+    #     in the sample numbered by <entry>, function will raise a
+    #     ValueError.
 
-        Returns:
-            - vertex_info: (x,y,z) coordinate of predicted vertex
-        '''
-        vertex_info = predict_vertex(inter_idx, entry,
-                                     self.data_blob['input_data'],
-                                     self.result,
-                                     attaching_threshold=self.attaching_threshold,
-                                     inter_threshold=self.inter_threshold,
-                                     apply_deghosting=False)
+    #     Returns:
+    #         - vertex_info: (x,y,z) coordinate of predicted vertex
+    #     '''
+    #     # Currently deprecated due to speed issues.
+    #     # vertex_info = predict_vertex(inter_idx, entry,
+    #     #                              self.data_blob['input_data'],
+    #     #                              self.result,
+    #     #                              attaching_threshold=self.attaching_threshold,
+    #     #                              inter_threshold=self.inter_threshold,
+    #     #                              apply_deghosting=False)
+    #     vertex_info = compute_vertex_matrix_inversion()
 
-        return vertex_info
+    #     return vertex_info
+
 
     def _get_entries(self, entry, volume):
         """
@@ -866,7 +895,10 @@ class FullChainPredictor:
                 if seg_label == 2 or seg_label == 3:
                     pid = 1
                 interaction_id = inter_ids[i]
-                is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
+                if self.pred_vtx_positions:
+                    is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
+                else:
+                    is_primary = bool(np.argmax(node_pred_vtx[i]))
                 part = Particle(self._translate(voxels, volume),
                                 i,
                                 seg_label, interaction_id,
@@ -908,6 +940,7 @@ class FullChainPredictor:
                     startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
                     p.startpoint = startpoint
                     p.endpoint = endpoint
+                    correct_track_points(p)
                 else:
                     continue
             out_particle_list.extend(out)
@@ -916,7 +949,7 @@ class FullChainPredictor:
 
 
     def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None,
-                        compute_vertex=True) -> List[Interaction]:
+                         compute_vertex=True, vertex_mode=None) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -946,14 +979,22 @@ class FullChainPredictor:
 
         entries = self._get_entries(entry, volume)
 
+        if vertex_mode == None:
+            vertex_mode = self.vertex_mode
+
         out_interaction_list = []
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
-            particles = self.get_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
+            particles = self.get_particles(entry, 
+                only_primaries=drop_nonprimary_particles, 
+                volume=volume)
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
                 if compute_vertex:
-                    ia.vertex = self._fit_predict_vertex_info(e, ia.id)
+                    ia.vertex = estimate_vertex(ia.particles, 
+                        use_primaries=True, 
+                        mode=vertex_mode,
+                        prune_candidates=self.prune_vertex)
                 ia.volume = volume
             out_interaction_list.extend(out)
 
@@ -1533,13 +1574,14 @@ class FullChainEvaluator(FullChainPredictor):
             all_matches.extend(matched_pairs)
         return all_matches
 
-
+    
     def match_interactions(self, entry, mode='pred_to_true',
                            drop_nonprimary_particles=True,
                            match_particles=True,
                            return_counts=False,
                            volume=None,
                            compute_vertex=True,
+                           vertex_mode='all',
                            **kwargs):
         """
         Parameters
@@ -1564,11 +1606,25 @@ class FullChainEvaluator(FullChainPredictor):
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
             if mode == 'pred_to_true':
-                ints_from = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
-                ints_to = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_from = self.get_interactions(entry, 
+                                                  drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                  volume=volume, 
+                                                  compute_vertex=compute_vertex,
+                                                  vertex_mode=vertex_mode)
+                ints_to = self.get_true_interactions(entry, 
+                                                     drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                     volume=volume, 
+                                                     compute_vertex=compute_vertex)
             elif mode == 'true_to_pred':
-                ints_to = self.get_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
-                ints_from = self.get_true_interactions(entry, drop_nonprimary_particles=drop_nonprimary_particles, volume=volume, compute_vertex=compute_vertex)
+                ints_to = self.get_interactions(entry, 
+                                                drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                volume=volume, 
+                                                compute_vertex=compute_vertex,
+                                                vertex_mode=vertex_mode)
+                ints_from = self.get_true_interactions(entry, 
+                                                       drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                       volume=volume, 
+                                                       compute_vertex=compute_vertex)
             else:
                 raise ValueError("Mode {} is not valid. For matching each"\
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
@@ -1576,7 +1632,8 @@ class FullChainEvaluator(FullChainPredictor):
             all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
             matched_interactions, _, counts = match_interactions_fn(ints_from, ints_to,
                                                                     **all_kwargs)
-
+            if len(matched_interactions) == 0:
+                continue
             if match_particles:
                 for interactions in matched_interactions:
                     domain, codomain = interactions

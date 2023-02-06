@@ -314,6 +314,8 @@ class trainval(object):
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
+                # elif isinstance(result[key][0], Batch):
+                #     res[key] = result[key]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
 

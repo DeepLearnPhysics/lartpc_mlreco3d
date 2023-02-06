@@ -114,31 +114,31 @@ def trace_particles(particles, color='id', size=1,
                               )
         traces.append(plot)
         if scatter_points:
-            if hasattr(p, 'startpoint'):
+            if p.startpoint is not None:
                 plot = go.Scatter3d(x=np.array([p.startpoint[0]]),
                     y=np.array([p.startpoint[1]]),
                     z=np.array([p.startpoint[2]]),
                     mode='markers',
                     marker=dict(
-                        size=3,
+                        size=5,
                         color='red',
                         # colorscale=colorscale,
-                        opacity=1),
+                        opacity=0.6),
                         # hovertext=p.ppn_candidates[:, 4],
                     name='Startpoint {}'.format(p.id))
                 traces.append(plot)
-            if hasattr(p, 'endpoint'):
+            if p.endpoint is not None:
                 plot = go.Scatter3d(x=np.array([p.endpoint[0]]),
                     y=np.array([p.endpoint[1]]),
                     z=np.array([p.endpoint[2]]),
                     mode='markers',
                     marker=dict(
-                        size=3,
-                        color='red',
+                        size=5,
+                        color='cyan',
                         # line=dict(width=2, color='red'),
                         # cmin=cmin, cmax=cmax,
                         # colorscale=colorscale,
-                        opacity=1),
+                        opacity=0.6),
                         # hovertext=p.ppn_candidates[:, 4],
                     name='Endpoint {}'.format(p.id))
                 traces.append(plot)
@@ -198,6 +198,19 @@ def trace_interactions(interactions, color='id', colorscale="rainbow"):
                        name='Interaction {}'.format(getattr(inter, color))
                               )
         traces.append(plot)
+        if inter.vertex is not None and (inter.vertex > -1).all():
+            plot = go.Scatter3d(x=np.array([inter.vertex[0]]),
+                y=np.array([inter.vertex[1]]),
+                z=np.array([inter.vertex[2]]),
+                mode='markers',
+                marker=dict(
+                    size=5,
+                    color='red',
+                    # colorscale=colorscale,
+                    opacity=0.6),
+                    # hovertext=p.ppn_candidates[:, 4],
+                name='Vertex {}'.format(inter.id))
+            traces.append(plot)
     return traces
 
 

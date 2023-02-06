@@ -94,15 +94,20 @@ class ExpandAs(nn.Module):
     def __init__(self):
         super(ExpandAs, self).__init__()
 
-    def forward(self, x, shape, labels=None):
+    def forward(self, x, shape, labels=None, propagate_all=False):
         '''
             x: feature tensor of input sparse tensor (N x F)
             labels: N x 0 tensor of labels
+            propagate_all: If True, PPN will not perform masking at each layer.
 
         '''
         device = x.F.device
         features = x.F
-        features[labels] = 1.0
+        if labels is not None:
+            assert labels.shape[0] == x.F.shape[0]
+            features[labels] = 1.0
+        if propagate_all:
+            features[None] = 1.0
         features = features.expand(*shape)
         # if labels is not None:
         #     features_expand = features.expand(*shape).clone()
@@ -114,6 +119,33 @@ class ExpandAs(nn.Module):
             coordinate_map_key=x.coordinate_map_key,
             coordinate_manager=x.coordinate_manager)
         return output
+
+
+def get_ppn_weights(d_positives, mode='const', eps=1e-3):
+
+    device = d_positives.device
+
+    num_positives = d_positives.sum()
+    num_negatives = d_positives.nelement() - num_positives
+
+    w = num_positives.float() / \
+        (num_positives + num_negatives).float()
+
+    weight_ppn = torch.ones(d_positives.shape[0]).to(device)
+
+    if mode == 'const':
+        weight_ppn[d_positives] = 1-w
+        weight_ppn[~d_positives] = w
+    elif mode == 'log':
+        weight_ppn[d_positives] = -torch.log(w + eps)
+        weight_ppn[~d_positives] = -torch.log(1-w + eps)
+    elif mode == 'sqrt':
+        weight_ppn[d_positives] = torch.sqrt(w + eps)
+        weight_ppn[~d_positives] = torch.sqrt(1-w + eps)
+    else:
+        raise ValueError("Weight mode {} not supported!".format(mode))
+
+    return weight_ppn
 
 
 class PPN(torch.nn.Module):
@@ -223,6 +255,7 @@ class PPN(torch.nn.Module):
 
         self.sigmoid = ME.MinkowskiSigmoid()
         self.expand_as = ExpandAs()
+        self.propagate_all = self.model_cfg.get('propagate_all', False)
 
         self.final_block = ResNetBlock(self.nPlanes[0],
                                        self.nPlanes[0],
@@ -327,11 +360,10 @@ class PPN(torch.nn.Module):
             scores = self.ppn_pred[i](x)
             tmp.append(scores.F)
             ppn_coords.append(scores.C)
-            scores = self.sigmoid(scores)
-
-            s_expanded = self.expand_as(scores, x.F.shape)
-
-            mask_ppn.append((scores.F > self.ppn_score_threshold))
+            mask = self.sigmoid(scores)
+            s_expanded = self.expand_as(mask, x.F.shape, 
+                                        propagate_all=self.propagate_all)
+            mask_ppn.append((mask.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
 
         # Note that we skipped ghost masking for the final sparse tensor,
@@ -340,6 +372,7 @@ class PPN(torch.nn.Module):
 
         device = x.F.device
         ppn_output_coordinates = x.C
+        # print(x.tensor_stride, x.shape, "ppn_score_threshold = ", self.ppn_score_threshold)
         for p in tmp:
             a = p.to(dtype=torch.float32, device=device)
             ppn_layers.append(a)
@@ -404,6 +437,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.particles_label_seg_col = self.loss_config.get(
             'particles_label_seg_col', -2)
 
+        self.ppn_weighing_mode = self.loss_config.get('ppn_weighing_mode', 'const')
+
         # Endpoint classification (optional)
         self._classify_endpoints = self.loss_config.get('classify_endpoints', False)
         self._track_label = self.loss_config.get('track_label', 1)
@@ -417,11 +452,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         assert len(particles_label) == len(segment_label)
 
         ppn_output_coordinates = result['ppn_output_coordinates']
-        # print("PPN Output Coordinates = ", ppn_output_coordinates[0].shape)
-        # assert False
-        # print(result['ppn_coords'][0][-1])
         batch_ids = [result['ppn_coords'][0][-1][:, 0]]
         num_batches = len(batch_ids[0].unique())
+        num_layers = len(result['ppn_layers'][0])
         total_loss = 0
         total_acc = 0
         device = segment_label[0].device
@@ -431,7 +464,11 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'mask_loss': 0.,
             'type_loss': 0.,
             'classify_endpoints_loss': 0.,
-            'classify_endpoints_accuracy': 0.
+            'classify_endpoints_accuracy': 0.,
+            'type_accuracy': 0.,
+            'mask_accuracy': 0.,
+            'mask_final_accuracy': 0.,
+            'regression_accuracy': 0.
         }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
@@ -451,6 +488,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                 ppn_score_layer = ppn_layers[layer]
                 coords_layer = ppn_coords[layer]
                 loss_layer = 0.0
+
+                acc_layer = 0.0
+
                 for b in batch_ids[igpu].int().unique():
 
                     batch_index_layer = coords_layer[:, 0].int() == b
@@ -468,20 +508,17 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     d_positives = (d_true < self.resolution * \
                                    2**(len(ppn_layers) - layer)).any(dim=0)
 
-                    num_positives = d_positives.sum()
-                    num_negatives = d_positives.nelement() - num_positives
-
-                    w = num_positives.float() / \
-                        (num_positives + num_negatives).float()
-
-                    weight_ppn = torch.zeros(d_positives.shape[0]).to(device)
-                    weight_ppn[d_positives] = 1 - w
-                    weight_ppn[~d_positives] = w
+                    weight_ppn = get_ppn_weights(d_positives, self.ppn_weighing_mode)
 
                     loss_batch = self.lossfn(scores_event,
                                              d_positives.float(),
                                              weight=weight_ppn,
                                              reduction='mean')
+
+                    with torch.no_grad():
+                        acc = ((scores_event > 0).long() == d_positives.long()).sum() \
+                                                          / float(scores_event.shape[0])
+                        acc_layer += float(acc) / num_batches
 
                     loss_layer += loss_batch
                     if layer == len(ppn_layers)-1:
@@ -505,6 +542,11 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                                       weight=weight_ppn,
                                                       reduction='mean')
 
+                        with torch.no_grad():
+                            mask_final_acc = ((pixel_score > 0).long() == positives.long()).sum()\
+                                        / float(pixel_score.shape[0])
+                            res['mask_final_accuracy'] += float(mask_final_acc) / float(num_batches)
+
                         # Type Segmentation Loss
                         # d = local_cdist(points_label, pixel_pred)
                         # positives = (d < self.resolution).any(dim=0)
@@ -524,6 +566,10 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         type_loss = self.segloss(pixel_logits[positives],
                                                  positive_labels.long(),
                                                  weight=w.to(device))
+                        with torch.no_grad():
+                            pred_type_labels = torch.argmax(pixel_logits[positives], dim=1)
+                            type_acc = float(torch.sum(pred_type_labels.long() == positive_labels.long()) / float(pred_type_labels.shape[0]))
+                            res['type_accuracy'] += type_acc / float(num_batches)
 
                         # --- Endpoint classification loss
                         if self._classify_endpoints:
@@ -570,8 +616,12 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                 loss_layer /= max(1, num_batches)
                 loss_gpu += loss_layer
+
             loss_gpu /= len(ppn_layers)
             total_loss += loss_gpu
+
+        # We have to add the mask loss from each layers.
+        res['mask_loss'] += float(loss_gpu)
 
         total_acc = total_acc / num_batches if num_batches else 1.
         res['loss'] = total_loss

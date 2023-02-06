@@ -9,37 +9,40 @@ from pprint import pprint
 import time, os
 import numpy as np
 
+from mlreco.utils import func_timer
+
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Example of analysis script for nue analysis.
     """
-
     interactions, particles = [], []
     deghosting = analysis_cfg['analysis']['deghosting']
     primaries = analysis_cfg['analysis']['match_primaries']
     enable_flash_matching = analysis_cfg['analysis'].get('enable_flash_matching', False)
     ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
+    compute_vertex = analysis_cfg['analysis']['compute_vertex']
+    vertex_mode = analysis_cfg['analysis']['vertex_mode']
 
     processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
     if enable_flash_matching:
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
                 deghosting=deghosting,
-                enable_flash_matching=True,
+                enable_flash_matching=enable_flash_matching,
                 flash_matching_cfg=os.path.join(os.environ['FMATCH_BASEDIR'], "dat/flashmatch_112022.cfg"),
                 opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
     else:
-        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg)
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
-    print(data_blob['index'], data_blob['run_info'])
+
     for idx, index in enumerate(image_idxs):
         index_dict = {
             'Index': index,
-            'run': data_blob['run_info'][idx][0],
-            'subrun': data_blob['run_info'][idx][1],
-            'event': data_blob['run_info'][idx][2]
+            # 'run': data_blob['run_info'][idx][0],
+            # 'subrun': data_blob['run_info'][idx][1],
+            # 'event': data_blob['run_info'][idx][2]
         }
         if enable_flash_matching:
             flash_matches_cryoE = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=0,
@@ -48,11 +51,18 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                     use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
 
         # Process Interaction Level Information
+        start = time.time()
         matches, counts = predictor.match_interactions(idx,
             mode='true_to_pred',
             match_particles=True,
             drop_nonprimary_particles=primaries,
-            return_counts=True)
+            return_counts=True,
+            compute_vertex=compute_vertex,
+            vertex_mode=vertex_mode,
+            overlap_mode=predictor.overlap_mode)
+
+        if len(matches) == 0:
+            continue
 
         matched_pred_indices = []
         for i, interaction_pair in enumerate(matches):
@@ -60,7 +70,11 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             if pred_int is not None:
                 matched_pred_indices.append(pred_int.id)
 
-        pred_interactions = predictor.get_interactions(idx, drop_nonprimary_particles=primaries)
+        pred_interactions = predictor.get_interactions(idx, 
+                                                       drop_nonprimary_particles=primaries,
+                                                       compute_vertex=compute_vertex,
+                                                       vertex_mode=vertex_mode)
+
         for int in pred_interactions:
             if int.id not in matched_pred_indices:
                 matches.append((None, int))
@@ -124,6 +138,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
             interactions.append(interactions_dict)
 
             # Process particle level information
+            # print(pred_int, true_int)
             pred_particles, true_particles = [], []
             if pred_int is not None:
                 pred_particles = pred_int.particles
@@ -152,12 +167,14 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 true_particle_dict['true_particle_energy_init'] = -1
                 true_particle_dict['true_particle_energy_deposit'] = -1
                 true_particle_dict['true_particle_children_count'] = -1
+                true_particle_dict['true_particle_creation_process'] = -1
                 if 'particles_asis' in data_blob:
                     particles_asis = data_blob['particles_asis'][idx]
                     if len(particles_asis) > true_p.id:
                         true_part = particles_asis[true_p.id]
                         true_particle_dict['true_particle_energy_init'] = true_part.energy_init()
                         true_particle_dict['true_particle_energy_deposit'] = true_part.energy_deposit()
+                        true_particle_dict['true_particle_creation_process'] = true_part.creation_process()
                         # If no children other than itself: particle is stopping.
                         children = true_part.children_id()
                         children = [x for x in children if x != true_part.id()]
@@ -167,5 +184,6 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 particles_dict.update(true_particle_dict)
 
                 particles.append(particles_dict)
+                # print(len(particles_dict))
 
     return [interactions, particles]

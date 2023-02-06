@@ -4,6 +4,7 @@ try:
     if os.environ.get('OMP_NUM_THREADS') is None:
         os.environ['OMP_NUM_THREADS'] = '16'
     import MinkowskiEngine as ME
+    import torch
 except ImportError:
     pass
 
@@ -183,6 +184,9 @@ def prepare(cfg, event_list=None):
         # set the shared clock
         handlers.watch = handlers.trainer._watch
 
+        # Clear cache
+        handlers.empty_cuda_cache = cfg['trainval'].get('empty_cuda_cache', False)
+
         # Restore weights if necessary
         loaded_iteration = handlers.trainer.initialize()
         if cfg['trainval']['train']:
@@ -330,6 +334,11 @@ def train_loop(handlers):
 
         log(handlers, tstamp_iteration,
             tsum, result_blob, cfg, epoch, data_blob['index'][0])
+
+        # Clear GPU memory cache if necessary
+        if handlers.empty_cuda_cache:
+            assert torch.cuda.is_available()
+            torch.cuda.empty_cache()
 
         # Increment iteration counter
         handlers.iteration += 1

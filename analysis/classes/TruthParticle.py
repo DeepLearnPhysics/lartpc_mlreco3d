@@ -36,6 +36,8 @@ class TruthParticle(Particle):
         self.coords_noghost = coords_noghost
         self.depositions_noghost = depositions_noghost
         self.depositions_MeV = depositions_MeV
+        self.startpoint = None
+        self.endpoint = None
 
     def __repr__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
