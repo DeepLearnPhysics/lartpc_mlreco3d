@@ -1,4 +1,4 @@
-from analysis.classes.ui import FullChainEvaluator
+from analysis.classes.evaluator import FullChainEvaluator
 
 from analysis.decorator import evaluate
 

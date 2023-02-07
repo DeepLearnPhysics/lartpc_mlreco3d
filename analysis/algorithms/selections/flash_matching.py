@@ -1,9 +1,7 @@
 from collections import OrderedDict
-from analysis.algorithms.utils import count_primary_particles, get_particle_properties
-from analysis.classes.ui import FullChainEvaluator
+from analysis.classes.evaluator import FullChainEvaluator
 
 from analysis.decorator import evaluate
-from analysis.classes.particle import match_particles_fn, matrix_iou
 
 from pprint import pprint
 import time

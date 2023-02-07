@@ -149,7 +149,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
     return out
 
 
-def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=False):
+def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
 
     update_dict = OrderedDict({
         'particle_id': -1,
@@ -164,7 +164,6 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_dir_x': -1,
         'particle_dir_y': -1,
         'particle_dir_z': -1,
-        'particle_mcs_E': -1,
         'particle_startpoint_x': -1,
         'particle_startpoint_y': -1,
         'particle_startpoint_z': -1,
@@ -172,11 +171,6 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
         'particle_startpoint_is_touching': True
-        # 'particle_match_counts': -1,
-        # 'true_interaction_id': -1,
-        # 'pred_interaction_id': -1,
-
-
     })
 
     if save_feats:
@@ -228,3 +222,42 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
     out = attach_prefix(update_dict, prefix)
 
     return out
+
+
+def get_mparticles_from_minteractions(int_matches):
+    '''
+    Given list of Tuple[(Truth)Interaction, (Truth)Interaction], 
+    return list of particle matches Tuple[TruthParticle, Particle]. 
+
+    If no match, (Truth)Particle is replaced with None.
+    '''
+
+    matched_particles, match_counts = [], []
+
+    for m in int_matches:
+        ia1, ia2 = m[0], m[1]
+        num_parts_1, num_parts_2 = -1, -1
+        if m[0] is not None:
+            num_parts_1 = len(m[0].particles)
+        if m[1] is not None:
+            num_parts_2 = len(m[1].particles)
+        if num_parts_1 <= num_parts_2:
+            ia1, ia2 = m[0], m[1]
+        else:
+            ia1, ia2 = m[1], m[0]
+            
+        for p in ia2.particles:
+            if len(p.match) == 0:
+                if type(p) is Particle:
+                    matched_particles.append((None, p))
+                    match_counts.append(-1)
+                else:
+                    matched_particles.append((p, None))
+                    match_counts.append(-1)
+            for match_id in p.match:
+                if type(p) is Particle:
+                    matched_particles.append((ia1[match_id], p))
+                else:
+                    matched_particles.append((p, ia1[match_id]))
+                match_counts.append(p._match_counts[match_id])
+    return matched_particles, np.array(match_counts)

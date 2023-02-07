@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 
 from typing import Counter, List, Union
-from collections import defaultdict, Counter
+from collections import defaultdict, OrderedDict
 from functools import partial
 import re
+
+from scipy.optimize import linear_sum_assignment
 
 from pprint import pprint
 
@@ -144,15 +146,10 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 
-    # idx[intersections < min_overlap] = -1
-    # intersections[intersections < min_overlap_count] = -1
-
     matches = []
-    # print(thresholds)
 
     for j, px in enumerate(particles_x):
         select_idx = idx[j]
-        # print(px.semantic_type, px.id, particles_y[select_idx].semantic_type, particles_y[select_idx].id, intersections[j])
         if intersections[j] <= thresholds[px.pid]:
             # If no truth could be matched, assign None
             matched_truth = None
@@ -168,7 +165,71 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
         p.match = sorted(p.match, key=lambda x: p._match_counts[x],
                                   reverse=True)
 
-    return matches, idx, intersections
+    return matches, intersections
+
+
+def match_particles_optimal(particles_from : Union[List[Particle], List[TruthParticle]],
+                            particles_to   : Union[List[Particle], List[TruthParticle]],
+                            min_overlap=0, num_classes=5, verbose=False, overlap_mode='iou'):
+    '''
+    Match particles so that the final resulting sum of the overlap matrix
+    is optimal. 
+
+    The number of matches will be equal to length of the longer list.
+    '''
+    if len(particles_from) <= len(particles_to):
+        particles_x, particles_y = particles_from, particles_to
+    else:
+        particles_y, particles_x = particles_from, particles_to
+
+    if isinstance(min_overlap, float) or isinstance(min_overlap, int):
+        thresholds = {key : min_overlap for key in np.arange(num_classes)}
+    else:
+        assert len(min_overlap) == num_classes
+        thresholds = {key : val for key, val in zip(np.arange(num_classes), min_overlap)}
+
+    if len(particles_y) == 0 or len(particles_x) == 0:
+        if verbose:
+            print("No particles to match.")
+        return [], 0
+
+    if overlap_mode == 'counts':
+        overlap_matrix = matrix_counts(particles_y, particles_x)
+    elif overlap_mode == 'iou':
+        overlap_matrix = matrix_iou(particles_y, particles_x)
+    else:
+        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
+
+    matches, intersections = [], []
+
+    ix, iy = linear_sum_assignment(overlap_matrix, maximize=True)
+    
+    mapping = dict(zip(iy, ix)) # iy is the index over the larger dimension
+
+    for j in np.arange(overlap_matrix.shape[1]):
+        i = mapping.get(j, None)
+        match = (None, None)
+        if i is None:
+            match = (None, particles_y[j])
+        else:
+            overlap = overlap_matrix[i, j]
+            intersections.append(overlap)
+            particles_y[j].match.append(particles_x[i].id)
+            particles_x[i].match.append(particles_y[j].id)
+            particles_y[j]._match_counts[particles_x[i].id] = overlap
+            particles_x[i]._match_counts[particles_y[j].id] = overlap
+            match = (particles_x[i], particles_y[j])
+
+        # Always place TruthParticle at front, for consistentcy with
+        # selection scripts
+        if (type(match[0]) is Particle) or (type(match[1]) is TruthParticle):
+            p1, p2 = match[1], match[0]
+            match = (p1, p2)
+        matches.append(match)
+
+    intersections = np.array(intersections)
+
+    return matches, intersections
 
 
 def match_interactions_fn(ints_from : List[Interaction],
@@ -213,7 +274,60 @@ def match_interactions_fn(ints_from : List[Interaction],
                                    key=lambda x: interaction._match_counts[x],
                                    reverse=True)
 
-    return matches, idx, intersections
+    return matches, intersections
+
+
+def match_interactions_optimal(ints_from : List[Interaction],
+                               ints_to : List[Interaction],
+                               min_overlap=0, verbose=False, overlap_mode="iou"):
+    
+    if len(ints_from) <= len(ints_to):
+        ints_x, ints_y = ints_from, ints_to
+    else:
+        ints_y, ints_x = ints_from, ints_to
+
+    if len(ints_y) == 0 or len(ints_x) == 0:
+        if verbose:
+            print("No particles/interactions to match.")
+        return [], 0, 0
+
+    if overlap_mode == 'counts':
+        overlap_matrix = matrix_counts(ints_y, ints_x)
+    elif overlap_mode == 'iou':
+        overlap_matrix = matrix_iou(ints_y, ints_x)
+    else:
+        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
+
+    matches, intersections = [], []
+
+    ix, iy = linear_sum_assignment(overlap_matrix, maximize=True)
+    mapping = dict(zip(iy, ix)) # iy is the index over the larger dimension
+
+    for j in np.arange(overlap_matrix.shape[1]):
+        i = mapping.get(j, None)
+        match = (None, None)
+        if i is None:
+            match = (None, ints_y[j])
+            intersections.append(-1)
+        else:
+            overlap = overlap_matrix[i, j]
+            intersections.append(overlap)
+            ints_y[j].match.append(ints_x[i].id)
+            ints_x[i].match.append(ints_y[j].id)
+            ints_y[j]._match_counts[ints_x[i].id] = overlap
+            ints_x[i]._match_counts[ints_y[j].id] = overlap
+            match = (ints_x[i], ints_y[j])
+
+        # Always place TruthParticle at front, for consistentcy with
+        # selection scripts
+        if (type(match[0]) is Interaction) or (type(match[1]) is TruthInteraction):
+            p1, p2 = match[1], match[0]
+            match = (p1, p2)
+        matches.append(match)
+
+    intersections = np.array(intersections)
+
+    return matches, intersections
 
 
 def group_particles_to_interactions_fn(particles : List[Particle],
@@ -249,10 +363,11 @@ def group_particles_to_interactions_fn(particles : List[Particle],
                 nu_id = nu_id[0]
             else:
                 nu_id = nu_id[0]
+        particles_dict = OrderedDict({p.id : p for p in particles})
         if mode == 'pred':
-            interactions[int_id] = Interaction(int_id, particles, nu_id=nu_id)
+            interactions[int_id] = Interaction(int_id, particles_dict, nu_id=nu_id)
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction(int_id, particles, nu_id=nu_id)
+            interactions[int_id] = TruthInteraction(int_id, particles_dict, nu_id=nu_id)
         else:
             raise ValueError
 

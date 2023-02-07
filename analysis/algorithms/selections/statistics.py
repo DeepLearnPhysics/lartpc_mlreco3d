@@ -3,7 +3,8 @@ from turtle import update
 from sklearn.decomposition import PCA
 
 from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
-from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
+from analysis.classes.predictor import FullChainPredictor
+from analysis.classes.evaluator import FullChainEvaluator
 from analysis.decorator import evaluate
 
 import numpy as np

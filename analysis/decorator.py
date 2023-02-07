@@ -13,26 +13,6 @@ from mlreco.iotools.factories import loader_factory
 
 from mlreco.utils.utils import ChunkCSVData
 
-def recursive_merge(analysis_config, mlreco_config,
-                    block=['schema', 'model', 'trainval'],
-                    verbose=True):
-    # Do not allow certain changes
-    for fieldname in block:
-        assert fieldname not in analysis_config
-    for key in analysis_config:
-        if key in mlreco_config:
-            if isinstance(analysis_config[key], dict) and isinstance(mlreco_config[key], dict):
-                recursive_merge(analysis_config[key], mlreco_config[key], block=block, verbose=verbose)
-            else:
-                assert type(analysis_config[key]) == type(mlreco_config[key])
-                if verbose:
-                    print("Override {} : {} -> {} : {}".format(
-                        key, mlreco_config[key], key, analysis_config[key]))
-                mlreco_config[key] = analysis_config[key]
-        else:
-            pass
-    return mlreco_config
-
 
 def evaluate(filenames, mode='per_image'):
     '''
@@ -49,8 +29,6 @@ def evaluate(filenames, mode='per_image'):
             io_cfg = cfg['iotool']
 
             module_config = cfg['model']['modules']
-            # # Override paths
-            # cfg = recursive_merge(analysis_config, cfg)
             event_list = cfg['iotool']['dataset'].get('event_list', None)
             if event_list is not None:
                 event_list = eval(event_list)
