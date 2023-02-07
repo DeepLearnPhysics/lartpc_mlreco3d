@@ -102,7 +102,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         'vertex_y': -1,
         'vertex_z': -1,
         'has_vertex': False,
-        'vertex_valid': 'NULL',
+        'vertex_valid': 'Default Invalid',
         'count_primary_protons': -1
     })
 
