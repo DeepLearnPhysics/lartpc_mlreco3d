@@ -233,7 +233,7 @@ class GraphSPICEFragmentManager(FragmentManager):
         #              for clust in fragments]
         # We want the indices to refer to the unfiltered, original input
         #filtered_semantic = filtered_semantic.detach().cpu().numpy()
-        fragments = [np.arange(n)[filtered_semantic][clust]+offset \
+        fragments = [np.arange(n)[filtered_semantic.detach().cpu().numpy()][clust]+offset \
                      for clust in fragments]
         return fragments, frag_batch_ids, fragments_seg
 
