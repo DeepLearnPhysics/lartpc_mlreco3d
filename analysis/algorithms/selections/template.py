@@ -94,7 +94,9 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             pred_int_dict = get_interaction_properties(pred_int, spatial_size, prefix='pred')
             
             if true_int is not None:
-                true_int_dict['true_interaction_matched'] = True
+                # This means there is a true interaction corresponding to
+                # this predicted interaction. Hence:
+                pred_int_dict['pred_interaction_matched'] = True
                 true_int_dict['true_nu_id'] = true_int.nu_id
                 if 'neutrino_asis' in data_blob and true_int.nu_id > 0:
                     # assert 'particles_asis' in data_blob
@@ -113,7 +115,8 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                     true_int_dict['true_nu_current_type'] = nu.current_type()
                     true_int_dict['true_nu_energy'] = nu.energy_init()
             if pred_int is not None:
-                pred_int_dict['pred_interaction_matched'] = True
+                # Similarly:
+                true_int_dict['true_interaction_matched'] = True
 
             if enable_flash_matching:
                 volume = true_int.volume if true_int is not None else pred_int.volume
@@ -162,7 +165,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                 prefix='true')
 
             if true_p is not None:
-                true_particle_dict['true_particle_is_matched'] = True
+                pred_particle_dict['pred_particle_is_matched'] = True
                 true_particle_dict['true_particle_interaction_id'] = true_p.interaction_id
                 if 'particles_asis' in data_blob:
                     particles_asis = data_blob['particles_asis'][idx]
@@ -177,7 +180,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                         true_particle_dict['true_particle_children_count'] = len(children)
 
             if pred_p is not None:
-                pred_particle_dict['pred_particle_is_matched'] = True
+                true_particle_dict['true_particle_is_matched'] = True
                 pred_particle_dict['pred_particle_interaction_id'] = pred_p.interaction_id
 
 

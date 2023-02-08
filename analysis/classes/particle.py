@@ -134,7 +134,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
             print("No particles to match.")
-        return [], 0, 0
+        return [], 0
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(particles_x, particles_y)
@@ -243,7 +243,7 @@ def match_interactions_fn(ints_from : List[Interaction],
     if len(ints_y) == 0 or len(ints_x) == 0:
         if verbose:
             print("No particles/interactions to match.")
-        return [], 0, 0
+        return [], 0
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(ints_x, ints_y)
@@ -289,7 +289,7 @@ def match_interactions_optimal(ints_from : List[Interaction],
     if len(ints_y) == 0 or len(ints_x) == 0:
         if verbose:
             print("No particles/interactions to match.")
-        return [], 0, 0
+        return [], 0
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(ints_y, ints_x)
