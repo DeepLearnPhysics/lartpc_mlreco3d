@@ -82,6 +82,10 @@ def compute_particle_direction(p: Particle,
             direction = pca.fit(p.points).components_[0, :]
         else:
             direction = np.array([-1, -1, -1])
+            if not return_explained_variance:
+                return direction
+            else:
+                return direction, np.array([-1, -1])
     if not return_explained_variance:
         return direction
     else:
