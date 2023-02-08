@@ -289,7 +289,7 @@ def match_interactions_optimal(ints_from : List[Interaction],
     if len(ints_y) == 0 or len(ints_x) == 0:
         if verbose:
             print("No particles/interactions to match.")
-        return [], 0, 0
+        return [], 0
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(ints_y, ints_x)
