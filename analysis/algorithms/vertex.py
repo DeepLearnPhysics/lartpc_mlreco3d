@@ -195,7 +195,9 @@ def estimate_vertex(particles,
                     r_adj=10, 
                     r_poca=10, 
                     r_pvtx=30,
-                    prune_candidates=False, mode='all'):
+                    prune_candidates=False, 
+                    return_candidate_count=False,
+                    mode='all'):
 
     # Exclude unwanted particles
     valid_particles = []
@@ -221,10 +223,13 @@ def estimate_vertex(particles,
                                                             r2=r_poca)
         else:
             raise ValueError("Mode {} for vertex selection not supported!".format(mode))
+
+    out = np.array([-1, -1, -1])
+
     if len(candidates) == 0:
-        return np.array([-1, -1, -1])
+        out = np.array([-1, -1, -1])
     elif len(candidates) == 1:
-        return candidates[0]
+        out = candidates[0]
     else:
         candidates = np.vstack(candidates)
         if mode == 'all' and prune_candidates:
@@ -232,6 +237,11 @@ def estimate_vertex(particles,
         else:
             pruned = candidates
         if pruned.shape[0] > 0:
-            return pruned.mean(axis=0)
+            out = pruned.mean(axis=0)
         else:
-            return candidates.mean(axis=0)
+            out = candidates.mean(axis=0)
+    
+    if return_candidate_count:
+        return out, len(candidates)
+    else:
+        return out
