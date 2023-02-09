@@ -121,15 +121,15 @@ class FlashManager:
     def get_crthit(self, crt_id, array=False):
         from flashmatch import flashmatch
 
-        if self.tpc_v is None:
-            raise Exception("self.tpc_v is None")
+        if self.crt_v is None:
+            raise Exception("self.crt_v is None")
 
         for crt in self.crt_v:
             if crt.idx != crt_id: continue
-            if array: return flashmatch.as_ndarray(tpc)
-            else: return tpc
+            if array: return flashmatch.as_ndarray(crt)
+            else: return crt
 
-        raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
+        raise Exception("CRT object %d does not exist in self.tpc_v" % crt_id)
 
     def make_qcluster(self, interactions, use_depositions_MeV=False, ADC_to_MeV=1.):
         """
@@ -150,6 +150,8 @@ class FlashManager:
         list of flashmatch::QCluster_t
         """
         from flashmatch import flashmatch
+
+        print('***** IN MAKE_QCLUSTER *******')
 
         if self.min_x is None:
             raise Exception('min_x is None')
@@ -235,6 +237,52 @@ class FlashManager:
         self.pmt_v = pmt_v
         return pmt_v
 
+    def make_crthit(self, larcv_crthits):
+        """
+        Parameters
+        ==========
+        larcv_flashes: list of list of larcv::Flash
+
+        Returns
+        =======
+        list of flashmatch::CRTHit_t
+        """
+        from flashmatch import flashmatch
+
+        crthits = []
+        # TODO larcv::CRTHit exists, but is this what's loaded?
+        for branch in larcv_crthits:
+            crthits.extend(branch)
+
+        crt_v = []
+        for idx, larcv_crthit in enumerate(crthits):
+            print('idx', idx)
+            print('type(larcv_crthit', type(larcv_crthit))
+            # f is an object of type larcv::Flash
+            crthit = flashmatch.CRTHit_t()
+            crthit.idx  = larcv_crthit.id()  # Assign a unique index
+            print('Assigned id', crthit.idx)
+            crthit.time = larcv_crthit.t0()  # crthit timing, a candidate T0
+            print('Time', crthit.t0)
+
+        for idx, f in enumerate(flashes):
+            # f is an object of type larcv::Flash
+            flash = flashmatch.Flash_t()
+            flash.idx = f.id()  # Assign a unique index
+            flash.time = f.time()  # Flash timing, a candidate T0
+            flash.time_true = f.absTime() # Hijacking this field to store absolute time
+            times.append(flash.time)
+
+            # Assign the flash position and error on this position
+            crthit.x, crthit.y, crthit.z = 0, 0, 0
+            crthit.x_err, crthit.y_err, crthit.z_err = 0, 0, 0
+
+            # TODO Fill the rest of the CRTHit_t fields
+            crt_v.append(crthit)
+
+        self.crt_v = crt_v
+        return crt_v
+
     def merge_flashes(self, a, b):
         """
         Util to merge 2 flashmatch::Flash_t objects on the fly.
@@ -263,11 +311,12 @@ class FlashManager:
             flash.pe_err_v.push_back(a.pe_err_v[i] + b.pe_err_v[i])
         return flash
 
-    def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
+    def run_flash_matching(self, flashes=None, interactions=None, crthits=None, **kwargs):
         if self.tpc_v is None:
             if interactions is None:
                 raise Exception('You need to specify `interactions`, or to run make_qcluster.')
         if interactions is not None:
+            print('Interactions is not None')
             self.make_qcluster(interactions, **kwargs)
 
 
@@ -275,13 +324,14 @@ class FlashManager:
             if flashes is None:
                 raise Exception("PMT objects need to be defined. Either specify `flashes`, or run make_flash.")
         if flashes is not None:
+            print('Flashes is not None')
             self.make_flash(flashes)
 
         if self.crt_v is None:
-            if crthit is None:
-                raise Exception("CRT objects need to be defined. Either specify `crthit`, or run make_crthit.")
+            if crthits is None:
+                raise Exception("CRT objects need to be defined. Either specify `crthits`, or run make_crthit.")
         if flashes is not None:
-            self.make_crt_hit(crthit)
+            self.make_crt_hit(crthits)
 
         assert self.tpc_v is not None and self.pmt_v is not None and self.crt_v is not None
 
@@ -301,7 +351,6 @@ class FlashManager:
         self.all_matches = self.mgr.Match()
         return self.all_matches
 
-    # TODO Modify this or add a separate method for CRT matching
     def get_match(self, idx, matches=None):
         """
         Parameters
@@ -354,7 +403,7 @@ class FlashManager:
         Parameters
         ==========
         idx: int
-            Index of TPC object for which we want to retrieve a match.
+            Index of CRT hit object for which we want to retrieve a match.
         matches: list of flashmatch::FlashMatch_t, optional, default is None
 
         Returns
