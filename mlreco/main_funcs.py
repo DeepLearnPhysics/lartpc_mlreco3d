@@ -83,7 +83,7 @@ def process_config(cfg, verbose=True):
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
                                  'node_pred_vtx', 'total_num_points', 'total_nonghost_points',
-                                 'spatial_embeddings', 'occupancy', 'hypergraph_features',
+                                 'spatial_embeddings', 'occupancy', 'hypergraph_features', 'logits',
                                  'features', 'feature_embeddings', 'covariance', 'clusts','edge_index','edge_pred','node_pred']
         if 'concat_result' not in cfg['trainval']:
             cfg['trainval']['concat_result'] = default_concat_result
