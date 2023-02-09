@@ -58,6 +58,7 @@ class Interaction:
         self.get_particles_summary()
 
         self.vertex = vertex
+        self.vertex_candidate_count = -1
         if self.vertex is None:
             self.vertex = np.array([-1, -1, -1])
 

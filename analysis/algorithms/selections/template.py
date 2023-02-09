@@ -116,6 +116,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                     true_int_dict['true_nu_energy'] = nu.energy_init()
             if pred_int is not None:
                 # Similarly:
+                pred_int_dict['pred_vertex_candidate_count'] = pred_int.vertex_candidate_count
                 true_int_dict['true_interaction_matched'] = True
 
             if enable_flash_matching:

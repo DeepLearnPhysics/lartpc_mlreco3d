@@ -994,10 +994,12 @@ class FullChainPredictor:
             out = group_particles_to_interactions_fn(particles)
             for ia in out:
                 if compute_vertex:
-                    ia.vertex = estimate_vertex(ia.particles, 
+                    ia.vertex, ia.vertex_candidate_count = estimate_vertex(
+                        ia.particles, 
                         use_primaries=True, 
                         mode=vertex_mode,
-                        prune_candidates=self.prune_vertex)
+                        prune_candidates=self.prune_vertex,
+                        return_candidate_count=True)
                 ia.volume = volume
             out_interaction_list.extend(out)
 
