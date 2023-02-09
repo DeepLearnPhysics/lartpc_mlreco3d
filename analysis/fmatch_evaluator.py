@@ -7,11 +7,13 @@ from collections import OrderedDict
 from analysis.classes.ui import FullChainEvaluator
 import argparse
 import yaml
-from my_configs import fmatch_config, model_config_crt
+from mlreco.main_funcs import process_config
 
 def main(model_config_path, analysis_config_path):
     model_config    = yaml.load(open(model_config_path   , 'r'), Loader=yaml.Loader)
     analysis_config = yaml.load(open(analysis_config_path, 'r'), Loader=yaml.Loader)
+
+    process_config(model_config, verbose=False)
 
     process_func = eval(analysis_config['analysis']['name'])
     process_func(model_config, analysis_config)
@@ -19,23 +21,30 @@ def main(model_config_path, analysis_config_path):
 @evaluate(['fmatch'], mode='per_batch')
 def fmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
     print('In fmatch_evaluator')
-    fields = OrderedDict(ana_cfg['flash_matches']['fields'])
+    flash_fields = OrderedDict(ana_cfg['flash_matches']['fields'])
+    crt_fields   = OrderedDict(ana_cfg['crthit']['fields'])
     rows = list()
     image_id = data['index']
+    print('Run FullChainEvaluator...')
     predictor = FullChainEvaluator(data, res, mod_cfg, ana_cfg,
                                    deghosting=True,
                                    enable_flash_matching=True,
                                    flash_matching_cfg=ana_cfg['fmatch_cfg'],
                                    opflash_keys=ana_cfg['opflash_keys'])
+    print('FullChainEvaluator done')
 
     for i, index in enumerate(image_id):
+        print('----Image', i, '-----')
         fmatches = predictor.get_flash_matches(i, use_true_tpc_objects=True,
                                                volume=1, ADC_to_MeV=0.00285714285)
+        print('Got flash matches')
         for (interaction, flash, match) in fmatches:
-            entry = OrderedDict(fields)
+            entry = OrderedDict(flash_fields)
+            print('Starting populate_entry...')
             populate_entry(entry, index, data['meta'][i],
                            data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
                            interaction, flash, match)
+            print('Done with populate_entry')
             rows.append(entry)
 
         # Loop over CRT hits.
