@@ -66,29 +66,29 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
         if clusts is None:
             clusts = form_clusters(point_cloud_cpu, column=self.split_col)
+        if not len(clusts):
+            return point_cloud, [np.array([]) for _ in batches], []
 
-        point_cloud[:, self.batch_col] = -1
+        split_point_cloud = point_cloud.clone()
+        split_point_cloud[:, self.batch_col] = -1
         for i, c in enumerate(clusts):
-            point_cloud[c, self.batch_col] = i
-
+            split_point_cloud[c, self.batch_col] = i
+        
         batch_ids = get_cluster_label(point_cloud_cpu, clusts, column=self.batch_col)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
 
-        return point_cloud[point_cloud[:,self.batch_col] > -1], clusts_split, cbids
-
-    def split_output(self, res, cbids):
-        res['logits'] = [[res['logits'][0][b] for b in cbids]]
-        return res
+        return split_point_cloud[split_point_cloud[:,self.batch_col] > -1], clusts_split, cbids
 
     def forward(self, input, clusts=None):
         res = {}
         point_cloud, = input
         point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
         res['clusts'] = [clusts_split]
+
         out = self.encoder(point_cloud)
         out = self.final_layer(out)
-        res.update({'logits': [out]})
-        res = self.split_output(res, cbids)
+        res['logits'] = [[out[b] for b in cbids]]
+
         return res
 
 class DUQParticleClassifier(ParticleImageClassifier):
@@ -336,7 +336,7 @@ class ParticleTypeLoss(nn.Module):
 
         for c in range(self.num_classes):
             mask = labels == c
-            res['accuracy_class_{}'.format(int(c))] = \
+            res[f'accuracy_class_{c}'] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
                 if torch.sum(mask) else 1.
 
@@ -349,13 +349,23 @@ class MultiParticleTypeLoss(nn.Module):
         super(MultiParticleTypeLoss, self).__init__()
         self.xentropy = nn.CrossEntropyLoss(ignore_index=-1)
         self.num_classes = cfg.get(name, {}).get('num_classes', 5)
-        self.target_col = cfg.get(name, {}).get('target_col', 9)
+        self.batch_col   = cfg.get(name, {}).get('batch_col',   0)
+        self.target_col  = cfg.get(name, {}).get('target_col', 9)
 
     def forward(self, out, type_labels):
-        # print(type_labels)
         logits = out['logits'][0]
         clusts = out['clusts'][0]
-        labels = [get_cluster_label(type_labels[0], clusts[b], self.target_col) for b in range(len(clusts))]
+        labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
+				    clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
+        if not len(labels):
+            res = {
+                'loss': torch.tensor(0., requires_grad=True, device=type_labels[0].device),
+                'accuracy': 1.
+            }
+            for c in range(self.num_classes):
+                res[f'accuracy_class_{c}'] = 1.
+            return res
+
         labels = torch.tensor(np.concatenate(labels), dtype=torch.long, device=type_labels[0].device)
         logits = torch.cat(logits, axis=0)
 
@@ -371,7 +381,7 @@ class MultiParticleTypeLoss(nn.Module):
 
         for c in range(self.num_classes):
             mask = labels == c
-            res['accuracy_class_{}'.format(int(c))] = \
+            res[f'accuracy_class_{c}'] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
                 if torch.sum(mask) else 1.
 
