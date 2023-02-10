@@ -347,13 +347,15 @@ class MultiParticleTypeLoss(nn.Module):
 
     def __init__(self, cfg, name='particle_type_loss'):
         super(MultiParticleTypeLoss, self).__init__()
-        self.xentropy = nn.CrossEntropyLoss(ignore_index=-1)
 
         loss_cfg = cfg.get(name, {})
         self.num_classes = loss_cfg.get('num_classes', 5)
         self.batch_col   = loss_cfg.get('batch_col',   0)
         self.target_col  = loss_cfg.get('target_col', 9)
         self.balance_classes = loss_cfg.get('balance_classes', False)
+
+        reduction = 'mean' if not self.balance_classes else 'sum'
+        self.xentropy = nn.CrossEntropyLoss(ignore_index=-1, reduction=reduction)
 
     def forward(self, out, type_labels):
         logits = out['logits'][0]
@@ -382,7 +384,7 @@ class MultiParticleTypeLoss(nn.Module):
             loss = 0.
             for i, c in enumerate(classes):
                 class_mask = labels == c
-                loss += weights[i] * self.xentropy(logits[class_mask], labels[class_mask])
+                loss += weights[i] * self.xentropy(logits[class_mask], labels[class_mask]) / torch.sum(counts)
 
         pred   = torch.argmax(logits, dim=1)
         accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
