@@ -24,7 +24,7 @@ def evaluate(filenames, mode='per_image'):
     def decorate(func):
 
         @wraps(func)
-        def process_dataset(cfg, analysis_config, profile=False):
+        def process_dataset(cfg, analysis_config, profile=True):
 
             io_cfg = cfg['iotool']
 
