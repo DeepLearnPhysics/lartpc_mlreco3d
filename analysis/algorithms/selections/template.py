@@ -1,5 +1,9 @@
 from collections import OrderedDict
-import os, copy
+import os, copy, sys
+
+# Flash Matching
+sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
+
 
 from analysis.decorator import evaluate
 from analysis.classes.evaluator import FullChainEvaluator
@@ -39,7 +43,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
                 deghosting=deghosting,
                 enable_flash_matching=enable_flash_matching,
-                flash_matching_cfg=os.path.join(os.environ['FMATCH_BASEDIR'], "dat/flashmatch_112022.cfg"),
+                flash_matching_cfg="/sdf/group/neutrino/koh0207/logs/nu_selection/flash_matching/config/flashmatch.cfg",
                 opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
     else:
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
@@ -92,6 +96,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
 
             true_int_dict = get_interaction_properties(true_int, spatial_size, prefix='true')
             pred_int_dict = get_interaction_properties(pred_int, spatial_size, prefix='pred')
+            fmatch_dict = {}
             
             if true_int is not None:
                 # This means there is a true interaction corresponding to
@@ -122,17 +127,13 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             if enable_flash_matching:
                 volume = true_int.volume if true_int is not None else pred_int.volume
                 flash_matches = flash_matches_cryoW if volume == 1 else flash_matches_cryoE
-                pred_int_dict['fmatched'] = False
-                pred_int_dict['fmatch_time'] = None
-                pred_int_dict['fmatch_total_pe'] = None
-                pred_int_dict['fmatch_id'] = None
                 if pred_int is not None:
                     for interaction, flash, match in flash_matches:
                         if interaction.id != pred_int.id: continue
-                        pred_int_dict['fmatched'] = True
-                        pred_int_dict['fmatch_time'] = flash.time()
-                        pred_int_dict['fmatch_total_pe'] = flash.TotalPE()
-                        pred_int_dict['fmatch_id'] = flash.id()
+                        fmatch_dict['fmatched'] = True
+                        fmatch_dict['fmatch_time'] = flash.time()
+                        fmatch_dict['fmatch_total_pe'] = flash.TotalPE()
+                        fmatch_dict['fmatch_id'] = flash.id()
                         break
 
             for k1, v1 in true_int_dict.items():
@@ -145,6 +146,10 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                     int_dict[k2] = v2
                 else:
                     raise ValueError("{} not in pre-defined fieldnames.".format(k2))
+            if enable_flash_matching:
+                for k3, v3 in fmatch_dict.items():
+                    if k3 in int_dict:
+                        int_dict[k3] = v3
             interactions.append(int_dict)
 
 

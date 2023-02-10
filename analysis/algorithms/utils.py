@@ -96,6 +96,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
 
     update_dict = OrderedDict({
         'interaction_id': -1,
+        'interaction_size': -1,
         'count_primary_leptons': -1,
         'count_primary_particles': -1,
         'vertex_x': -1,
@@ -123,6 +124,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
                     count_primary_protons[p.id] = True
 
         update_dict['interaction_id'] = interaction.id
+        update_dict['interaction_size'] = interaction.size
         update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
