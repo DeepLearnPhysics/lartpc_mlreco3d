@@ -61,10 +61,11 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         self.batch_col = model_cfg.get('batch_col', 0)
         self.split_col = model_cfg.get('split_col', 6)
 
-    def split_input(self, point_cloud):
+    def split_input(self, point_cloud, clusts=None):
         point_cloud_cpu  = point_cloud.detach().cpu().numpy()
         batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
-        clusts = form_clusters(point_cloud_cpu, column=self.split_col)
+        if clusts is None:
+            clusts = form_clusters(point_cloud_cpu, column=self.split_col)
 
         point_cloud[:, self.batch_col] = -1
         for i, c in enumerate(clusts):
@@ -79,10 +80,10 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         res['logits'] = [[res['logits'][0][b] for b in cbids]]
         return res
 
-    def forward(self, input):
+    def forward(self, input, clusts=None):
         res = {}
         point_cloud, = input
-        point_cloud, clusts_split, cbids = self.split_input(point_cloud)
+        point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
         res['clusts'] = [clusts_split]
         out = self.encoder(point_cloud)
         out = self.final_layer(out)
@@ -326,7 +327,7 @@ class ParticleTypeLoss(nn.Module):
         loss = self.xentropy(logits, labels)
 
         pred   = torch.argmax(logits, dim=1)
-        accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
+        accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
 
         res = {
             'loss': loss,
@@ -335,7 +336,7 @@ class ParticleTypeLoss(nn.Module):
 
         for c in range(self.num_classes):
             mask = labels == c
-            res['accuracy_{}'.format(int(c))] = \
+            res['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
                 if torch.sum(mask) else 1.
 
@@ -361,7 +362,7 @@ class MultiParticleTypeLoss(nn.Module):
         loss = self.xentropy(logits, labels)
 
         pred   = torch.argmax(logits, dim=1)
-        accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
+        accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
 
         res = {
             'loss': loss,
@@ -370,7 +371,7 @@ class MultiParticleTypeLoss(nn.Module):
 
         for c in range(self.num_classes):
             mask = labels == c
-            res['accuracy_{}'.format(int(c))] = \
+            res['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
                 if torch.sum(mask) else 1.
 
@@ -447,7 +448,7 @@ class MultiLabelCrossEntropy(nn.Module):
         acc_types = {}
         for c in labels.unique():
             mask = labels == c
-            acc_types['accuracy_{}'.format(int(c))] = \
+            acc_types['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
         return res
 
@@ -486,7 +487,7 @@ class EvidentialLearningLoss(nn.Module):
         acc_types = {}
         for c in labels.unique():
             mask = labels == c
-            acc_types['accuracy_{}'.format(int(c))] = \
+            acc_types['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
 
         return res
