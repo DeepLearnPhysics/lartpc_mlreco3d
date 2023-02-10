@@ -943,6 +943,7 @@ class FullChainPredictor:
                     startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
                     p.startpoint = startpoint
                     p.endpoint = endpoint
+                    assert np.linalg.norm(p.startpoint - p.endpoint) > 1e-6
                     correct_track_points(p)
                 else:
                     continue
