@@ -348,18 +348,23 @@ class MultiParticleTypeLoss(nn.Module):
     def __init__(self, cfg, name='particle_type_loss'):
         super(MultiParticleTypeLoss, self).__init__()
         self.xentropy = nn.CrossEntropyLoss(ignore_index=-1)
-        self.num_classes = cfg.get(name, {}).get('num_classes', 5)
-        self.batch_col   = cfg.get(name, {}).get('batch_col',   0)
-        self.target_col  = cfg.get(name, {}).get('target_col', 9)
+
+        loss_cfg = cfg.get(name, {})
+        self.num_classes = loss_cfg.get('num_classes', 5)
+        self.batch_col   = loss_cfg.get('batch_col',   0)
+        self.target_col  = loss_cfg.get('target_col', 9)
+        self.balance_classes = loss_cfg.get('balance_classes', False)
 
     def forward(self, out, type_labels):
         logits = out['logits'][0]
         clusts = out['clusts'][0]
         labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
 				    clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
+
+        loss   = torch.tensor(0., requires_grad=True, device=type_labels[0].device)
         if not len(labels):
             res = {
-                'loss': torch.tensor(0., requires_grad=True, device=type_labels[0].device),
+                'loss': loss,
                 'accuracy': 1.
             }
             for c in range(self.num_classes):
@@ -369,7 +374,15 @@ class MultiParticleTypeLoss(nn.Module):
         labels = torch.tensor(np.concatenate(labels), dtype=torch.long, device=type_labels[0].device)
         logits = torch.cat(logits, axis=0)
 
-        loss = self.xentropy(logits, labels)
+        if not self.balance_classes:
+            loss += self.xentropy(logits, labels)
+        else:
+            classes, counts = labels[labels>-1].unique(return_counts = True)
+            weights = torch.sum(counts)/counts/self.num_classes
+            loss = 0.
+            for i, c in enumerate(classes):
+                class_mask = labels == c
+                loss += weights[i] * self.xentropy(logits[class_mask], labels[class_mask])
 
         pred   = torch.argmax(logits, dim=1)
         accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
