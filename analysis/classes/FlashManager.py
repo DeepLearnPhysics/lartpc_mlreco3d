@@ -235,6 +235,7 @@ class FlashManager:
             pmt_v = final_pmt_v
 
         self.pmt_v = pmt_v
+        print('Made list of %d Flash_t' % len(pmt_v))
         return pmt_v
 
     def make_crthit(self, larcv_crthits):
@@ -312,6 +313,7 @@ class FlashManager:
         return flash
 
     def run_flash_matching(self, flashes=None, interactions=None, crthits=None, **kwargs):
+        print('Run flash matching')
         if self.tpc_v is None:
             if interactions is None:
                 raise Exception('You need to specify `interactions`, or to run make_qcluster.')
@@ -330,7 +332,7 @@ class FlashManager:
         if self.crt_v is None:
             if crthits is None:
                 raise Exception("CRT objects need to be defined. Either specify `crthits`, or run make_crthit.")
-        if flashes is not None:
+        if crthits is not None:
             self.make_crt_hit(crthits)
 
         assert self.tpc_v is not None and self.pmt_v is not None and self.crt_v is not None

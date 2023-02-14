@@ -177,15 +177,21 @@ class FullChainPredictor:
         =======
         list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
         """
+
         # No caching done if matching a subset of interactions
+        print('Interaction list:\n')
+        print(interaction_list)
         if (entry, volume, use_true_tpc_objects) not in self.flash_matches or len(interaction_list):
+            print('No caching done')
             out = self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
                     use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV, interaction_list=interaction_list)
 
         if len(interaction_list) == 0:
+            print('len(interaction_list) is 0')
             tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
-            tpc_v, pmt_v, matches = out
+            print('Else')
+            tpc_v, pmt_v, crt_v, matches = out
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
     def _run_flash_matching(self, entry,
@@ -201,7 +207,15 @@ class FullChainPredictor:
         use_true_tpc_objects: bool, default is False
             Whether to use true or predicted interactions.
         volume: int, default is None
+
+        Returns
+        =======
+        tpc_v: list of interactions
+        new_pmt_v: list of filtered larcv::Flash objects
+        crt_v: list of larcv::CRTHit objects
+        matches: list of OpT0Finder::flashmatch::FlashMatch_t
         """
+        print('*** Running Flash Matching ***')
         if use_true_tpc_objects:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
@@ -210,6 +224,7 @@ class FullChainPredictor:
         else:
             tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
 
+        print('len(interaction_list):', len(interaction_list))
         if len(interaction_list) > 0: # by default, use all interactions
             tpc_v_select = []
             for interaction in tpc_v:
@@ -260,11 +275,17 @@ class FullChainPredictor:
 
         # Running flash matching and caching the results
         start = time.time()
+        print('[UI] Starting self.fm.run_flash_matching()...')
         matches = self.fm.run_flash_matching()
         print('Actual flash matching took %d s' % (time.time() - start))
+        
+        # Now make CRTHit_t objects
+        crt_v = []
+
         if len(interaction_list) == 0:
             self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
-        return tpc_v, new_pmt_v, matches
+        #return tpc_v, new_pmt_v, crt_v, matches
+        return tpc_v, new_pmt_v, crt_v, matches
 
     def _fit_predict_ppn(self, entry):
         '''
