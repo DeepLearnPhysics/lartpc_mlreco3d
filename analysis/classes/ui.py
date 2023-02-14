@@ -140,6 +140,9 @@ class FullChainPredictor:
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
 
+            self.crt_tpc_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, crt_v, list of matches)
+            # type is (list of Interaction/TruthInteraction, list of larcv::CRTHit, list of matcha::Match)
+
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
@@ -191,7 +194,7 @@ class FullChainPredictor:
             tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
             print('Else')
-            tpc_v, pmt_v, crt_v, matches = out
+            tpc_v, pmt_v, matches = out
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
     def _run_flash_matching(self, entry,
@@ -212,7 +215,6 @@ class FullChainPredictor:
         =======
         tpc_v: list of interactions
         new_pmt_v: list of filtered larcv::Flash objects
-        crt_v: list of larcv::CRTHit objects
         matches: list of OpT0Finder::flashmatch::FlashMatch_t
         """
         print('*** Running Flash Matching ***')
@@ -279,13 +281,76 @@ class FullChainPredictor:
         matches = self.fm.run_flash_matching()
         print('Actual flash matching took %d s' % (time.time() - start))
         
-        # Now make CRTHit_t objects
-        crt_v = []
-
         if len(interaction_list) == 0:
             self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
-        #return tpc_v, new_pmt_v, crt_v, matches
-        return tpc_v, new_pmt_v, crt_v, matches
+        return tpc_v, new_pmt_v, matches
+
+    def get_crt_tpc_matches(self, entry,
+            use_true_tpc_objects=False,
+            volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.,
+            interaction_list=[]):
+
+        # No caching done if matching a subset of interactions
+        print('[CRTTPC] Interaction list:\n')
+        print(interaction_list)
+        if (entry, volume, use_true_tpc_objects) not in self.crt_tpc_matches or len(interaction_list):
+            print('[CRTTPC] No caching done')
+            out = self._run_crt_tpc_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
+                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV, interaction_list=interaction_list)
+
+        if len(interaction_list) == 0:
+            print('[CRTTPC] len(interaction_list) is 0')
+            tpc_v, crt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+        else: # it wasn't cached, we just computed it
+            print('[CRTTPC] Not chached')
+            tpc_v, crt_v, matches = out
+        return [(tpc_v[m.tpc_id], crt_v[m.flash_id], m) for m in matches]
+
+    def _run_crt_tpc_matching(self, entry,
+            use_true_tpc_objects=False,
+            volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.,
+            interaction_list=[]):
+        
+        # TODO How much of this can we skip, assuming interaction_list is calculated in
+        # _run_flash_matching()?
+        print('*** Running CRT-TPC Matching ***')
+        if use_true_tpc_objects:
+            if not hasattr(self, 'get_true_interactions'):
+                raise Exception('This Predictor does not know about truth info.')
+
+            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
+        else:
+            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
+
+        print('len(interaction_list):', len(interaction_list))
+        if len(interaction_list) > 0: # by default, use all interactions
+            tpc_v_select = []
+            for interaction in tpc_v:
+                if interaction.id in interaction_list:
+                    tpc_v_select.append(interaction)
+            tpc_v = tpc_v_select
+
+        # If we are not running flash matching over the entire volume at once,
+        # then we need to shift the coordinates that will be used for flash matching
+        # back to the reference of the first volume.
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._untranslate(tpc_object.points, volume)
+        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._translate(tpc_object.points, volume)
+
+        crt_v = self.fm.make_crthit(self.data_blob['crthits'][entry])
+
+        # TODO Placeholder
+        matches = []
+
+        return tpc_v, crt_v, matches
 
     def _fit_predict_ppn(self, entry):
         '''
