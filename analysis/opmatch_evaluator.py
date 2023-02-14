@@ -19,8 +19,10 @@ def main(model_config_path, analysis_config_path):
     process_func(model_config, analysis_config)
 
 @evaluate(['fmatch'], mode='per_batch')
-def fmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
-    print('In fmatch_evaluator')
+def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
+    print('In opmatch_evaluator')
+    print('data type:', type(data))
+    print('data:\n', data)
     flash_fields = OrderedDict(ana_cfg['flash_matches']['fields'])
     crt_fields   = OrderedDict(ana_cfg['crthit']['fields'])
     rows = list()
@@ -47,7 +49,9 @@ def fmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
             print('Done with populate_entry')
             rows.append(entry)
 
+        print('Starting crt-tpc matching...')
         crt_tpc_matches = predictor.get_crt_tpc_matches(i)
+        print('Done')
 
         # Loop over CRT hits.
         #crthits = data['crthits'][i]
