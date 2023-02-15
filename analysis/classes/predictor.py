@@ -943,7 +943,10 @@ class FullChainPredictor:
                     startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
                     p.startpoint = startpoint
                     p.endpoint = endpoint
-                    assert np.linalg.norm(p.startpoint - p.endpoint) > 1e-6
+                    if np.linalg.norm(p.startpoint - p.endpoint) < 1e-6:
+                        startpoint, endpoint = get_track_endpoints_max_dist(p)
+                        p.startpoint = startpoint
+                        p.endpoint = endpoint
                     correct_track_points(p)
                 else:
                     continue
@@ -952,8 +955,12 @@ class FullChainPredictor:
         return out_particle_list
 
 
-    def get_interactions(self, entry, drop_nonprimary_particles=True, volume=None,
-                         compute_vertex=True, vertex_mode=None) -> List[Interaction]:
+    def get_interactions(self, entry, 
+                         drop_nonprimary_particles=True, 
+                         volume=None,
+                         compute_vertex=True, 
+                         use_primaries_for_vertex=True, 
+                         vertex_mode=None) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -997,7 +1004,7 @@ class FullChainPredictor:
                 if compute_vertex:
                     ia.vertex, ia.vertex_candidate_count = estimate_vertex(
                         ia.particles, 
-                        use_primaries=True, 
+                        use_primaries=use_primaries_for_vertex, 
                         mode=vertex_mode,
                         prune_candidates=self.prune_vertex,
                         return_candidate_count=True)

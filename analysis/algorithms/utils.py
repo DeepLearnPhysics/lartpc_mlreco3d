@@ -157,6 +157,7 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_id': -1,
         'particle_interaction_id': -1,
         'particle_type': -1,
+        'particle_semantic_type': -1,
         'particle_size': -1,
         'particle_E': -1,
         'particle_is_primary': False,
@@ -172,7 +173,8 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_endpoint_x': -1,
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
-        'particle_startpoint_is_touching': True
+        'particle_startpoint_is_touching': True,
+        # 'particle_is_contained': False
     })
 
     if save_feats:
@@ -186,9 +188,11 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         update_dict['particle_id'] = particle.id
         update_dict['particle_interaction_id'] = particle.interaction_id
         update_dict['particle_type'] = particle.pid
+        update_dict['particle_semantic_type'] = particle.semantic_type
         update_dict['particle_size'] = particle.size
         update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
+        # update_dict['particle_is_contained'] = particle.is_contained
         if particle.startpoint is not None:
             update_dict['particle_has_startpoint'] = True
             update_dict['particle_startpoint_x'] = particle.startpoint[0]
