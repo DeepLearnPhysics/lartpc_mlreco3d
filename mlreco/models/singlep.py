@@ -363,10 +363,9 @@ class MultiParticleTypeLoss(nn.Module):
         labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
 				    clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
 
-        loss   = torch.tensor(0., requires_grad=True, device=type_labels[0].device)
         if not len(labels):
             res = {
-                'loss': loss,
+                'loss': torch.tensor(0., requires_grad=True, device=type_labels[0].device),
                 'accuracy': 1.
             }
             for c in range(self.num_classes):
@@ -377,7 +376,7 @@ class MultiParticleTypeLoss(nn.Module):
         logits = torch.cat(logits, axis=0)
 
         if not self.balance_classes:
-            loss += self.xentropy(logits, labels)
+            loss = self.xentropy(logits, labels)
         else:
             classes, counts = labels[labels>-1].unique(return_counts = True)
             weights = torch.sum(counts)/counts/self.num_classes
