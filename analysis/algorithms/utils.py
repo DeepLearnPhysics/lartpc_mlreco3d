@@ -3,7 +3,6 @@ from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
-from pprint import pprint
 from scipy.spatial.distance import cdist
 import numpy as np
 import ROOT
