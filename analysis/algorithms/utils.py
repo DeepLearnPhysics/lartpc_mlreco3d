@@ -98,6 +98,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         'interaction_id': -1,
         'interaction_size': -1,
         'count_primary_leptons': -1,
+        'count_primary_electrons': -1,
         'count_primary_particles': -1,
         'vertex_x': -1,
         'vertex_y': -1,
@@ -114,10 +115,13 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         count_primary_leptons = {}
         count_primary_particles = {}
         count_primary_protons = {}
+        count_primary_electrons = {}
 
         for p in interaction.particles:
             if p.is_primary:
                 count_primary_particles[p.id] = True
+                if p.pid == 1:
+                    count_primary_electrons[p.id] = True
                 if (p.pid == 1 or p.pid == 2):
                     count_primary_leptons[p.id] = True
                 elif p.pid == 4:
@@ -128,6 +132,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
+        update_dict['count_primary_electrons'] = sum(count_primary_electrons.values())
 
         within_volume = np.all(interaction.vertex <= spatial_size) and np.all(interaction.vertex >= 0)
 

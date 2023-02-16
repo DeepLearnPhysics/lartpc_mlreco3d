@@ -74,7 +74,6 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             drop_nonprimary_particles=primaries,
             return_counts=True,
             compute_vertex=compute_vertex,
-            use_primaries_for_vertex=use_primaries_for_vertex,
             vertex_mode=vertex_mode,
             overlap_mode=predictor.overlap_mode,
             matching_mode='optimal')
