@@ -3,6 +3,7 @@ import numba as nb
 from scipy.spatial.distance import cdist
 from analysis.algorithms.calorimetry import compute_particle_direction
 from mlreco.utils.utils import func_timer
+from analysis.classes.Interaction import Interaction
 
 
 @nb.njit(cache=True)
@@ -245,3 +246,24 @@ def estimate_vertex(particles,
         return out, len(candidates)
     else:
         return out
+
+def correct_primary_with_vertex(ia, r_adj=10, r_bt=10, start_segment_radius=10):
+    assert type(ia) is Interaction
+    if ia.vertex is not None and (ia.vertex > 0).all():
+        for p in ia.particles:
+            if p.semantic_type == 1:
+                dist = np.linalg.norm(p.startpoint - ia.vertex)
+                print(p.id, p.is_primary, p.semantic_type, dist)
+                if dist < r_adj:
+                    p.is_primary = True
+                else:
+                    p.is_primary = False
+            if p.semantic_type == 0:
+                vec = compute_particle_direction(p, start_segment_radius=start_segment_radius)
+                dist = point_to_line_distance_(ia.vertex, p.startpoint, vec)
+                if np.linalg.norm(p.startpoint - ia.vertex) < r_adj:
+                    p.is_primary = True
+                elif dist < r_bt:
+                    p.is_primary = True
+                else:
+                    p.is_primary = False
