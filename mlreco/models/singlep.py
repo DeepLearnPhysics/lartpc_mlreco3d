@@ -61,6 +61,10 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         self.batch_col = model_cfg.get('batch_col', 0)
         self.split_col = model_cfg.get('split_col', 6)
 
+        self.skip_invalid = model_cfg.get('skip_invalid', True)
+        self.target_col   = model_cfg.get('target_col', 9)
+        self.invalid_id   = model_cfg.get('invalid_id', -1)
+
     def split_input(self, point_cloud, clusts=None):
         point_cloud_cpu  = point_cloud.detach().cpu().numpy()
         batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
@@ -68,6 +72,12 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
             clusts = form_clusters(point_cloud_cpu, column=self.split_col)
         if not len(clusts):
             return point_cloud, [np.array([]) for _ in batches], []
+
+        if self.skip_invalid:
+            target_ids = get_cluster_label(point_cloud_cpu, clusts, column=self.target_col)
+            clusts = [c for i, c in enumerate(clusts) if target_ids[i] != self.invalid_id]
+            if not len(clusts):
+                return point_cloud, [np.array([]) for _ in batches], []
 
         split_point_cloud = point_cloud.clone()
         split_point_cloud[:, self.batch_col] = -1
