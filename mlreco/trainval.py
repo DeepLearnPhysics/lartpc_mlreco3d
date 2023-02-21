@@ -223,10 +223,10 @@ class trainval(object):
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
-            unwrapper = self._trainval_config.get('unwrapper', 'unwrap')
-            if unwrapper is not None:
+            unwrapper = self._trainval_config.get('unwrapper', None)
+            if unwrapper:
                 try:
-                    unwrapper = getattr(utils.unwrap,unwrapper)
+                    unwrapper = getattr(utils.unwrap, unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % self._trainval_config['unwrapper'])
@@ -314,6 +314,8 @@ class trainval(object):
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
+                # elif isinstance(result[key][0], Batch):
+                #     res[key] = result[key]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
 

@@ -49,8 +49,7 @@ def loader_factory(cfg,event_list=None):
     if collate_fn is None:
         collate_params = params.get('collate', {})
         collate_fn = None if not 'collate_fn' in collate_params else str(collate_params['collate_fn'])
-        collate_params.pop('collate_fn', None)
-        collate_kwargs = collate_params
+        collate_kwargs = {k:v for k, v in collate_params.items() if k != 'collate_fn'}
 
     if not int(params['batch_size']) % int(params['minibatch_size']) == 0:
         print('iotools.batch_size (',params['batch_size'],'must be divisble by iotools.minibatch_size',params['minibatch_size'])

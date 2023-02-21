@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import fps, knn
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
+from torch_scatter import scatter_mean
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
@@ -202,18 +203,18 @@ def find_cluster_means(features, labels):
         distinct instances. Each row is a (1,d) vector corresponding to
         the coordinates of the i-th centroid.
     '''
-    device = features.device
-    bincount = torch.bincount(labels)
-    zero_bins = bincount > 0
-    bincount[bincount == 0] = 1.0
-    numerator = torch.zeros(bincount.shape[0], features.shape[1]).to(device)
-    numerator = numerator.index_add(0, labels, features)
-    centroids = numerator / bincount.view(-1, 1)
-    centroids = centroids[zero_bins]
+    centroids = scatter_mean(features, labels, dim=0)
     return centroids
 
 
 def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
+    '''
+    Computes the intra-cluster loss between an embedding point cloud and
+    a set of attractor points.
+
+    <labels> must range between 0 to the number of <cluster_means>, otherwise
+    the loss will be underestimated as <scatter_mean> zero value placeholders.
+    '''
     from torch_scatter import scatter_mean
     x = features[:, None, :]
     mu = cluster_means[None, :, :]

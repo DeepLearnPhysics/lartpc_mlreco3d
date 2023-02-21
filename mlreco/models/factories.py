@@ -32,6 +32,8 @@ def model_dict():
         'uresnet_ppn_chain': (uresnet_ppn_chain.UResNetPPN, uresnet_ppn_chain.UResNetPPNLoss),
         # Single Particle Classifier
         "singlep": (singlep.ParticleImageClassifier, singlep.ParticleTypeLoss),
+        # Multi Particle Classifier
+        "multip": (singlep.MultiParticleImageClassifier, singlep.MultiParticleTypeLoss),
         # SPICE
         "spice": (spice.MinkSPICE, spice.SPICELoss),
         # Graph neural network Particle Aggregation (GrapPA)

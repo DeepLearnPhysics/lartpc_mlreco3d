@@ -307,20 +307,20 @@ def CollateSparse(batch, **kwargs):
                     data = data[perm]
 
                 result[key] = concat([voxels, data], axis=1)
+
             elif isinstance(batch[0][key],np.ndarray) and \
                  len(batch[0][key].shape) == 1:
-                 #
-                result[key] = concat( [ concat( [np.expand_dims(sample[key],1),
-                                                 np.full(shape=[len(sample[key]),1],
+                #
+                result[key] = concat( [ concat( [np.full(shape=[len(sample[key]),1],
                                                  fill_value=batch_id,
-                                                 dtype=np.float32)],
+                                                 dtype=np.float32),
+                                                 np.expand_dims(sample[key],1)],
                                                  axis=1 ) \
                     for batch_id,sample in enumerate(batch) ], axis=0)
 
             elif isinstance(batch[0][key],np.ndarray) and len(batch[0][key].shape)==2:
                 # for tensors that does not come with a coordinate tensor
                 # ex. particle_graph
-
                 result[key] =  concat( [ concat( [np.full(shape=[len(sample[key]),1],
                                                           fill_value=batch_id,
                                                           dtype=np.float32),
