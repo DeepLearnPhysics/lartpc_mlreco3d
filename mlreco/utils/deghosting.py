@@ -150,7 +150,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 semantic_pred = argmax(result['segmentation'][i][batch_mask])
             else: # adapt_labels was called from analysis tools (see below deghost_labels_and_predictions)
                 # the problem in this case is that `segmentation` has already been deghosted
-                semantic_pred = argmax(result['segmentation_noghost'][i][batch_mask])
+                semantic_pred = argmax(result['segmentation_true_nonghost'][i][batch_mask])
 
             # Include true nonghost voxels by default when they have the right semantic prediction
             true_pred = label_seg[i][batch_mask, -1]
@@ -294,10 +294,10 @@ def deghost_labels_and_predictions(data_blob, result):
             data_blob['segment_label'][i][:, -1] < 5 \
                 for i in range(len(data_blob['segment_label']))]
 
-    data_blob['input_data_noghost'] = data_blob['input_data']
+    data_blob['input_data_pre_deghost'] = data_blob['input_data']
 
     if 'segment_label' in data_blob:
-        data_blob['input_data_trueghost'] = [data_blob['input_data'][i][mask] \
+        data_blob['input_data_true_nonghost'] = [data_blob['input_data'][i][mask] \
             for i, mask in enumerate(data_blob['true_ghost_mask'])]
 
     data_blob['input_data'] = [data_blob['input_data'][i][mask] \
@@ -307,7 +307,7 @@ def deghost_labels_and_predictions(data_blob, result):
     if 'cluster_label' in data_blob \
         and data_blob['cluster_label'] is not None:
         # Save the clust_data before deghosting
-        data_blob['cluster_label_noghost'] = data_blob['cluster_label']
+        data_blob['cluster_label_true_nonghost'] = data_blob['cluster_label']
         data_blob['cluster_label'] = adapt_labels_numpy(
             result,
             data_blob['segment_label'],
@@ -321,13 +321,14 @@ def deghost_labels_and_predictions(data_blob, result):
 
     if 'segmentation' in result \
         and result['segmentation'] is not None:
-        result['segmentation_noghost'] = result['segmentation']
+        result['segmentation_true_nonghost'] = result['segmentation']
         result['segmentation'] = [
             result['segmentation'][i][result['ghost_mask'][i]] \
                 for i in range(len(result['segmentation']))]
 
     if 'kinematics_label' in data_blob \
         and data_blob['kinematics_label'] is not None:
+        data_blob['kinematics_label_true_nonghost'] = data_blob['kinematics_label']
         data_blob['kinematics_label'] = adapt_labels_numpy(
             result,
             data_blob['segment_label'],
@@ -336,7 +337,7 @@ def deghost_labels_and_predictions(data_blob, result):
     # This needs to come last - in adapt_labels seg_label is the original one
     if 'segment_label' in data_blob \
         and data_blob['segment_label'] is not None:
-        data_blob['segment_label_noghost'] = data_blob['segment_label']
+        data_blob['segment_label_true_nonghost'] = data_blob['segment_label']
         data_blob['segment_label'] = [
             data_blob['segment_label'][i][result['ghost_mask'][i]] \
                 for i in range(len(data_blob['segment_label']))]

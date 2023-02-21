@@ -1,6 +1,6 @@
 from collections import OrderedDict
-from analysis.algorithms.utils import count_primary_particles, get_particle_properties
-from analysis.classes.ui import FullChainPredictor, FullChainEvaluator
+from analysis.classes.predictor import FullChainPredictor
+from analysis.classes.evaluator import FullChainEvaluator
 from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
 
 from analysis.decorator import evaluate

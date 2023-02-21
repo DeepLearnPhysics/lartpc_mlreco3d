@@ -1,15 +1,13 @@
 from collections import OrderedDict
-from analysis.algorithms.utils import count_primary_particles, get_particle_properties
-from analysis.classes.ui import FullChainEvaluator
+from analysis.algorithms.utils import get_interaction_properties, get_particle_properties
+from analysis.classes.evaluator import FullChainEvaluator
 
 from analysis.decorator import evaluate
-from analysis.classes.particle import match_particles_fn, matrix_iou
+from analysis.classes.particle import match_particles_fn, matrix_iou, match_particles_optimal
 
 from pprint import pprint
 import time, os
 import numpy as np
-
-from mlreco.utils import func_timer
 
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
@@ -24,6 +22,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     ADC_to_MeV = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
     compute_vertex = analysis_cfg['analysis']['compute_vertex']
     vertex_mode = analysis_cfg['analysis']['vertex_mode']
+    matching_mode = analysis_cfg['analysis']['matching_mode']
 
     processor_cfg       = analysis_cfg['analysis'].get('processor_cfg', {})
     if enable_flash_matching:
@@ -36,6 +35,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
 
     image_idxs = data_blob['index']
+    spatial_size = predictor.spatial_size
 
     for idx, index in enumerate(image_idxs):
         index_dict = {
@@ -84,8 +84,8 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
 
         for i, interaction_pair in enumerate(matches):
             true_int, pred_int = interaction_pair[0], interaction_pair[1]
-            true_int_dict = count_primary_particles(true_int, prefix='true')
-            pred_int_dict = count_primary_particles(pred_int, prefix='pred')
+            true_int_dict = get_interaction_properties(true_int, spatial_size, prefix='true')
+            pred_int_dict = get_interaction_properties(pred_int, spatial_size, prefix='pred')
             pred_int_dict['true_interaction_matched'] = False
             if true_int is not None and pred_int is not None:
                     pred_int_dict['true_interaction_matched'] = True
@@ -144,8 +144,14 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 pred_particles = pred_int.particles
             if true_int is not None:
                 true_particles = true_int.particles
-            matched_particles, _, ious = match_particles_fn(true_particles,
+            if matching_mode == 'one_way':
+                matched_particles, ious = match_particles_fn(true_particles,
                                                             pred_particles)
+            elif matching_mode == 'optimal':
+                matched_particles, ious = match_particles_optimal(true_particles,
+                                                                  pred_particles)
+            else:
+                raise ValueError
             for i, m in enumerate(matched_particles):
                 particles_dict = OrderedDict(index_dict.copy())
                 true_p, pred_p = m[0], m[1]

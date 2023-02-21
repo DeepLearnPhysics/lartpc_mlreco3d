@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from typing import Counter, List, Union
-from collections import defaultdict, Counter
+from collections import OrderedDict, Counter
 from . import Particle
 
 
@@ -26,12 +26,18 @@ class Interaction:
     num_particles: int
         total number of particles in this interaction.
     """
-    def __init__(self, interaction_id, particles, vertex=None, nu_id=-1, volume=0):
+    def __init__(self, interaction_id: int, particles : OrderedDict, vertex=None, nu_id=-1, volume=0):
         self.id = interaction_id
+        self.pid_keys = {
+            0: 'Photon',
+            1: 'Electron',
+            2: 'Muon',
+            3: 'Pion',
+            4: 'Proton'
+        }
         self.particles = particles
         self.match = []
         self._match_counts = {}
-        self.check_validity()
         # Voxel indices of an interaction is defined by the union of
         # constituent particle voxel indices
         self.voxel_indices = []
@@ -49,50 +55,65 @@ class Interaction:
         self.size = self.voxel_indices.shape[0]
         self.num_particles = len(self.particles)
 
-        self.pid_keys = {
-            0: 'Photon',
-            1: 'Electron',
-            2: 'Muon',
-            3: 'Pion',
-            4: 'Proton'
-        }
-
         self.get_particles_summary()
 
         self.vertex = vertex
+        self.vertex_candidate_count = -1
         if self.vertex is None:
             self.vertex = np.array([-1, -1, -1])
 
         self.nu_id = nu_id
         self.volume = volume
 
-        self.particle_ids = [p.id for p in self.particles]
+
+    @property
+    def particles(self):
+        return list(self._particles.values())
+
+    def check_particle_input(self, x):
+        assert isinstance(x, Particle)
+        assert x.interaction_id == self.id
+
+    def update_info(self):
+        self.particle_ids = list(self._particles.keys())
         self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
-        self.particle_counts.update([self.pid_keys[p.pid] for p in self.particles])
+        self.particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values()])
 
         self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
-        self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self.particles if p.is_primary])
-
-        if sum(self.primary_particle_counts.values()) == 0:
-            # print("Interaction {} has no primary particles!".format(self.id))
-            self.is_valid = False
-        else:
+        self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values() if p.is_primary])
+        if sum(self.primary_particle_counts.values()) > 0:
             self.is_valid = True
+        else:
+            self.is_valid = False
 
-    def check_validity(self):
-        for p in self.particles:
-            assert isinstance(p, Particle)
+
+    @particles.setter
+    def particles(self, value):
+        assert isinstance(value, OrderedDict)
+        parts = {}
+        for p in value.values():
+            self.check_particle_input(p)
+            # Clear match information since Interaction is rebuilt
+            p.match = []
+            p._match_counts = {}
+            parts[p.id] = p
+        self._particles = OrderedDict(sorted(parts.items(), key=lambda t: t[0]))
+        self.update_info()
+
 
     def get_particles_summary(self):
         self.particles_summary = ""
-        self.particles = sorted(self.particles, key=lambda x: x.id)
         for p in self.particles:
             pmsg = "    - Particle {}: PID = {}, Size = {}, Match = {} \n".format(
                 p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
             self.particles_summary += pmsg
 
 
-    def __repr__(self):
+    def __getitem__(self, key):
+        return self._particles[key]
+
+
+    def __str__(self):
 
         self.get_particles_summary()
         msg = "Interaction {}, Valid: {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
@@ -100,7 +121,7 @@ class Interaction:
             self.id, self.is_valid, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
 
-    def __str__(self):
+    def __repr__(self):
         return "Interaction(id={}, vertex={}, nu_id={}, Particles={})".format(
             self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
 

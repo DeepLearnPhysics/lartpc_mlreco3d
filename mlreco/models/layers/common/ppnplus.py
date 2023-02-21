@@ -94,7 +94,9 @@ class ExpandAs(nn.Module):
     def __init__(self):
         super(ExpandAs, self).__init__()
 
-    def forward(self, x, shape, labels=None, propagate_all=False):
+    def forward(self, x, shape, labels=None, 
+                propagate_all=False,
+                use_binary_mask=False):
         '''
             x: feature tensor of input sparse tensor (N x F)
             labels: N x 0 tensor of labels
@@ -108,7 +110,10 @@ class ExpandAs(nn.Module):
             features[labels] = 1.0
         if propagate_all:
             features[None] = 1.0
-        features = features.expand(*shape)
+        if use_binary_mask:
+            features = (features > 0.5).float().expand(*shape)
+        else:
+            features = features.expand(*shape)
         # if labels is not None:
         #     features_expand = features.expand(*shape).clone()
         #     features_expand[labels] = 1.0
@@ -256,6 +261,7 @@ class PPN(torch.nn.Module):
         self.sigmoid = ME.MinkowskiSigmoid()
         self.expand_as = ExpandAs()
         self.propagate_all = self.model_cfg.get('propagate_all', False)
+        self.use_binary_mask_ppn = self.model_cfg.get('use_binary_mask_ppn', False)
 
         self.final_block = ResNetBlock(self.nPlanes[0],
                                        self.nPlanes[0],
@@ -362,7 +368,8 @@ class PPN(torch.nn.Module):
             ppn_coords.append(scores.C)
             mask = self.sigmoid(scores)
             s_expanded = self.expand_as(mask, x.F.shape, 
-                                        propagate_all=self.propagate_all)
+                                        propagate_all=self.propagate_all,
+                                        use_binary_mask=self.use_binary_mask_ppn)
             mask_ppn.append((mask.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
 
@@ -446,6 +453,13 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         # Restrict the label points to specific classes (pass a list if needed)
         self._point_classes = self.loss_config.get('point_classes', [])
 
+        self.mask_loss_weight = self.loss_config.get('mask_loss_weight', 1.0)
+        self.reg_loss_weight = self.loss_config.get('reg_loss_weight', 1.0)
+        self.point_type_loss_weight = self.loss_config.get('point_type_loss_weight', 1.0)
+        self.classify_endpoints_loss_weight = self.loss_config.get('classify_endpoints_loss_weight', 1.0)
+
+        print("Mask Loss Weight = ", self.mask_loss_weight)
+
 
     def forward(self, result, segment_label, particles_label):
         # TODO Add weighting
@@ -468,7 +482,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'type_accuracy': 0.,
             'mask_accuracy': 0.,
             'mask_final_accuracy': 0.,
-            'regression_accuracy': 0.
+            'regression_accuracy': 0.,
+            'num_positives': 0.,
+            'num_voxels': 0.
         }
         # Semantic Segmentation Loss
         for igpu in range(len(segment_label)):
@@ -546,6 +562,8 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                             mask_final_acc = ((pixel_score > 0).long() == positives.long()).sum()\
                                         / float(pixel_score.shape[0])
                             res['mask_final_accuracy'] += float(mask_final_acc) / float(num_batches)
+                            res['num_positives'] += float(torch.sum(positives)) / float(num_batches)
+                            res['num_voxels'] += float(pixel_pred.shape[0]) / float(num_batches)
 
                         # Type Segmentation Loss
                         # d = local_cdist(points_label, pixel_pred)
@@ -600,22 +618,32 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                                     loss_classify_endpoints = loss_point_class / point_class_count
                                     acc_classify_endpoints = acc_point_class / point_class_count
                                     #total_loss += loss_classify_endpoints.float()
-                            res['classify_endpoints_loss'] += float(loss_classify_endpoints) / num_batches
+                            res['classify_endpoints_loss'] += self.classify_endpoints_loss_weight * float(loss_classify_endpoints) / num_batches
                             res['classify_endpoints_accuracy'] += float(acc_classify_endpoints) / num_batches
                         # --- end of Endpoint classification
 
                         # Distance Loss
                         d2, _ = torch.min(distance_positives, dim=0)
                         reg_loss = d2.mean()
-                        res['reg_loss'] += float(reg_loss) / num_batches if num_batches else float(reg_loss)
-                        res['type_loss'] += float(type_loss) / num_batches if num_batches else float(type_loss)
-                        res['mask_loss'] += float(mask_loss_final) / num_batches if num_batches else float(mask_loss_final)
-                        total_loss += (reg_loss + type_loss + mask_loss_final) / num_batches if num_batches else reg_loss + type_loss + mask_loss_final
+                        res['reg_loss'] += float(self.reg_loss_weight * reg_loss) / num_batches if num_batches else float(self.reg_loss_weight * reg_loss)
+                        res['type_loss'] += float(self.point_type_loss_weight * type_loss) / num_batches if num_batches else float(self.point_type_loss_weight * type_loss)
+                        res['mask_loss'] += float(self.mask_loss_weight * mask_loss_final) / num_batches if num_batches else float(self.mask_loss_weight * mask_loss_final)
+                        if num_batches:
+                            total_loss += (self.reg_loss_weight * reg_loss \
+                                        + self.point_type_loss_weight * type_loss \
+                                        + self.mask_loss_weight * mask_loss_final) / num_batches 
+                        else:
+                            total_loss += (self.reg_loss_weight * reg_loss \
+                                        + self.point_type_loss_weight * type_loss \
+                                        + self.mask_loss_weight * mask_loss_final)
                         if self._classify_endpoints:
-                            total_loss += loss_classify_endpoints / num_batches if num_batches else loss_classify_endpoints
+                            if num_batches:
+                                total_loss += self.classify_endpoints_loss_weight * loss_classify_endpoints / num_batches
+                            else:
+                                total_loss += self.classify_endpoints_loss_weight * loss_classify_endpoints
 
                 loss_layer /= max(1, num_batches)
-                loss_gpu += loss_layer
+                loss_gpu += self.mask_loss_weight * loss_layer
 
             loss_gpu /= len(ppn_layers)
             total_loss += loss_gpu

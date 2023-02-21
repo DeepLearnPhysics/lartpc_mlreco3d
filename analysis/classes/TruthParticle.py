@@ -39,7 +39,13 @@ class TruthParticle(Particle):
         self.startpoint = None
         self.endpoint = None
 
+
     def __repr__(self):
+        msg = "TruthParticle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self.pid, self.size)
+        return msg
+
+
+    def __str__(self):
         fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
                 " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,

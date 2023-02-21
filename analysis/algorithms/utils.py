@@ -3,7 +3,6 @@ from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
-from pprint import pprint
 from scipy.spatial.distance import cdist
 import numpy as np
 import ROOT
@@ -92,16 +91,19 @@ def make_range_based_momentum_fns():
     return [f_muon, f_pion, f_proton]
 
 
-def count_primary_particles(interaction: Interaction, prefix=None):
+def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
 
     update_dict = OrderedDict({
         'interaction_id': -1,
+        'interaction_size': -1,
         'count_primary_leptons': -1,
+        'count_primary_electrons': -1,
         'count_primary_particles': -1,
         'vertex_x': -1,
         'vertex_y': -1,
         'vertex_z': -1,
         'has_vertex': False,
+        'vertex_valid': 'Default Invalid',
         'count_primary_protons': -1
     })
 
@@ -112,36 +114,54 @@ def count_primary_particles(interaction: Interaction, prefix=None):
         count_primary_leptons = {}
         count_primary_particles = {}
         count_primary_protons = {}
+        count_primary_electrons = {}
 
         for p in interaction.particles:
             if p.is_primary:
                 count_primary_particles[p.id] = True
+                if p.pid == 1:
+                    count_primary_electrons[p.id] = True
                 if (p.pid == 1 or p.pid == 2):
                     count_primary_leptons[p.id] = True
                 elif p.pid == 4:
                     count_primary_protons[p.id] = True
 
         update_dict['interaction_id'] = interaction.id
+        update_dict['interaction_size'] = interaction.size
         update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
-        if (np.array(interaction.vertex) > 0).all():
+        update_dict['count_primary_electrons'] = sum(count_primary_electrons.values())
+
+        within_volume = np.all(interaction.vertex <= spatial_size) and np.all(interaction.vertex >= 0)
+
+        if within_volume:
             update_dict['has_vertex'] = True
             update_dict['vertex_x'] = interaction.vertex[0]
             update_dict['vertex_y'] = interaction.vertex[1]
-            update_dict['vertex_z'] = interaction.vertex[1]
-
+            update_dict['vertex_z'] = interaction.vertex[2]
+            update_dict['vertex_valid'] = 'Valid'
+        else:
+            if ((np.abs(np.array(interaction.vertex)) > 1e6).any()):
+                update_dict['vertex_valid'] = 'Invalid Magnitude'
+            else:
+                update_dict['vertex_valid'] = 'Outside Volume'
+                update_dict['has_vertex'] = True
+                update_dict['vertex_x'] = interaction.vertex[0]
+                update_dict['vertex_y'] = interaction.vertex[1]
+                update_dict['vertex_z'] = interaction.vertex[2]
         out = attach_prefix(update_dict, prefix)
 
     return out
 
 
-def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=False):
+def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
 
     update_dict = OrderedDict({
         'particle_id': -1,
         'particle_interaction_id': -1,
         'particle_type': -1,
+        'particle_semantic_type': -1,
         'particle_size': -1,
         'particle_E': -1,
         'particle_is_primary': False,
@@ -151,19 +171,14 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         'particle_dir_x': -1,
         'particle_dir_y': -1,
         'particle_dir_z': -1,
-        'particle_mcs_E': -1,
         'particle_startpoint_x': -1,
         'particle_startpoint_y': -1,
         'particle_startpoint_z': -1,
         'particle_endpoint_x': -1,
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
-        'particle_startpoint_is_touching': True
-        # 'particle_match_counts': -1,
-        # 'true_interaction_id': -1,
-        # 'pred_interaction_id': -1,
-
-
+        'particle_startpoint_is_touching': True,
+        # 'particle_is_contained': False
     })
 
     if save_feats:
@@ -177,9 +192,11 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
         update_dict['particle_id'] = particle.id
         update_dict['particle_interaction_id'] = particle.interaction_id
         update_dict['particle_type'] = particle.pid
+        update_dict['particle_semantic_type'] = particle.semantic_type
         update_dict['particle_size'] = particle.size
         update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
+        # update_dict['particle_is_contained'] = particle.is_contained
         if particle.startpoint is not None:
             update_dict['particle_has_startpoint'] = True
             update_dict['particle_startpoint_x'] = particle.startpoint[0]
@@ -215,3 +232,42 @@ def get_particle_properties(particle: Particle, vertex, prefix=None, save_feats=
     out = attach_prefix(update_dict, prefix)
 
     return out
+
+
+def get_mparticles_from_minteractions(int_matches):
+    '''
+    Given list of Tuple[(Truth)Interaction, (Truth)Interaction], 
+    return list of particle matches Tuple[TruthParticle, Particle]. 
+
+    If no match, (Truth)Particle is replaced with None.
+    '''
+
+    matched_particles, match_counts = [], []
+
+    for m in int_matches:
+        ia1, ia2 = m[0], m[1]
+        num_parts_1, num_parts_2 = -1, -1
+        if m[0] is not None:
+            num_parts_1 = len(m[0].particles)
+        if m[1] is not None:
+            num_parts_2 = len(m[1].particles)
+        if num_parts_1 <= num_parts_2:
+            ia1, ia2 = m[0], m[1]
+        else:
+            ia1, ia2 = m[1], m[0]
+            
+        for p in ia2.particles:
+            if len(p.match) == 0:
+                if type(p) is Particle:
+                    matched_particles.append((None, p))
+                    match_counts.append(-1)
+                else:
+                    matched_particles.append((p, None))
+                    match_counts.append(-1)
+            for match_id in p.match:
+                if type(p) is Particle:
+                    matched_particles.append((ia1[match_id], p))
+                else:
+                    matched_particles.append((p, ia1[match_id]))
+                match_counts.append(p._match_counts[match_id])
+    return matched_particles, np.array(match_counts)

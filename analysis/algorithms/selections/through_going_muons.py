@@ -2,7 +2,8 @@ from collections import OrderedDict
 from turtle import update
 from sklearn.decomposition import PCA
 
-from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
+from analysis.classes.predictor import FullChainPredictor
+from analysis.classes.evaluator import FullChainEvaluator
 from analysis.decorator import evaluate
 from analysis.algorithms.selections.flash_matching import find_true_time, find_true_x
 

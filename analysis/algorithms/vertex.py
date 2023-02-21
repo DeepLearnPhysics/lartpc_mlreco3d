@@ -3,6 +3,7 @@ import numba as nb
 from scipy.spatial.distance import cdist
 from analysis.algorithms.calorimetry import compute_particle_direction
 from mlreco.utils.utils import func_timer
+from analysis.classes.Interaction import Interaction
 
 
 @nb.njit(cache=True)
@@ -195,7 +196,9 @@ def estimate_vertex(particles,
                     r_adj=10, 
                     r_poca=10, 
                     r_pvtx=30,
-                    prune_candidates=False, mode='all'):
+                    prune_candidates=False, 
+                    return_candidate_count=False,
+                    mode='all'):
 
     # Exclude unwanted particles
     valid_particles = []
@@ -221,10 +224,13 @@ def estimate_vertex(particles,
                                                             r2=r_poca)
         else:
             raise ValueError("Mode {} for vertex selection not supported!".format(mode))
+
+    out = np.array([-1, -1, -1])
+
     if len(candidates) == 0:
-        return np.array([-1, -1, -1])
+        out = np.array([-1, -1, -1])
     elif len(candidates) == 1:
-        return candidates[0]
+        out = candidates[0]
     else:
         candidates = np.vstack(candidates)
         if mode == 'all' and prune_candidates:
@@ -232,6 +238,32 @@ def estimate_vertex(particles,
         else:
             pruned = candidates
         if pruned.shape[0] > 0:
-            return pruned.mean(axis=0)
+            out = pruned.mean(axis=0)
         else:
-            return candidates.mean(axis=0)
+            out = candidates.mean(axis=0)
+    
+    if return_candidate_count:
+        return out, len(candidates)
+    else:
+        return out
+
+def correct_primary_with_vertex(ia, r_adj=10, r_bt=10, start_segment_radius=10):
+    assert type(ia) is Interaction
+    if ia.vertex is not None and (ia.vertex > 0).all():
+        for p in ia.particles:
+            if p.semantic_type == 1:
+                dist = np.linalg.norm(p.startpoint - ia.vertex)
+                print(p.id, p.is_primary, p.semantic_type, dist)
+                if dist < r_adj:
+                    p.is_primary = True
+                else:
+                    p.is_primary = False
+            if p.semantic_type == 0:
+                vec = compute_particle_direction(p, start_segment_radius=start_segment_radius)
+                dist = point_to_line_distance_(ia.vertex, p.startpoint, vec)
+                if np.linalg.norm(p.startpoint - ia.vertex) < r_adj:
+                    p.is_primary = True
+                elif dist < r_bt:
+                    p.is_primary = True
+                else:
+                    p.is_primary = False
