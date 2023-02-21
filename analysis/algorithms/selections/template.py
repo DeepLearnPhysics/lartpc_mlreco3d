@@ -38,7 +38,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     interaction_dict      = analysis_cfg['analysis'].get('interaction_dict', {})
     particle_dict         = analysis_cfg['analysis'].get('particle_dict', {})
 
-    use_primaries_for_vertex = analysis_cfg['analysis']['use_primaries_for_vertex']
+    use_primaries_for_vertex = analysis_cfg['analysis'].get('use_primaries_for_vertex', True)
 
     # Load data into evaluator
     if enable_flash_matching:

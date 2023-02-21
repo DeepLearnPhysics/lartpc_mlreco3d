@@ -4,6 +4,7 @@ from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
 from scipy.spatial.distance import cdist
+from analysis.algorithms.point_matching import get_track_endpoints_max_dist
 import numpy as np
 import ROOT
 
@@ -59,6 +60,54 @@ def correct_track_points(particle):
         particle.endpoint = x[scores[:, 1].argmax()]
 
 
+def get_track_points_default(p):
+    pts = np.vstack([p._node_features[19:22], p._node_features[22:25]])
+    correct_track_endpoints_closest(p, pts=pts)
+
+
+def correct_track_endpoints_closest(p, pts=None):
+    assert p.semantic_type == 1
+    if pts is None:
+        pts = np.vstack(get_track_endpoints_max_dist(p))
+    else:
+        assert pts.shape == (2, 3)
+
+    if p.ppn_candidates.shape[0] == 0:
+        p.startpoint = pts[0]
+        p.endpoint = pts[1]
+    
+    else:
+        dist1 = cdist(np.atleast_2d(p.ppn_candidates[:, :3]), np.atleast_2d(pts[0])).reshape(-1)
+        dist2 = cdist(np.atleast_2d(p.ppn_candidates[:, :3]), np.atleast_2d(pts[1])).reshape(-1)
+        
+        pt1_score = p.ppn_candidates[dist1.argmin()][5:]
+        pt2_score = p.ppn_candidates[dist2.argmin()][5:]
+        
+        labels = np.array([pt1_score.argmax(), pt2_score.argmax()])
+        
+        if labels[0] == 0 and labels[1] == 1:
+            p.startpoint = pts[0]
+            p.endpoint = pts[1]
+        elif labels[0] == 1 and labels[1] == 0:
+            p.startpoint = pts[1]
+            p.endpoint = pts[0]
+        elif labels[0] == 0 and labels[1] == 0:
+            # print("Particle {} has no endpoint".format(p.id))
+            # Select point with larger score as startpoint
+            ix = np.argmax(labels)
+            iy = np.argmin(labels)
+            p.startpoint = pts[ix]
+            p.endpoint = pts[iy]
+        elif labels[0] == 1 and labels[1] == 1:
+            # print("Particle {} has no startpoint".format(p.id))
+            ix = np.argmax(labels)
+            iy = np.argmin(labels)
+            p.startpoint = pts[iy]
+            p.endpoint = pts[ix]
+        else:
+            raise ValueError("Classify endpoints feature dimension must be 2, got something else!")
+
+
 def load_range_reco(particle_type='muon', kinetic_energy=True):
     """
     Return a function maps the residual range of a track to the kinetic
@@ -104,7 +153,8 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         'vertex_z': -1,
         'has_vertex': False,
         'vertex_valid': 'Default Invalid',
-        'count_primary_protons': -1
+        'count_primary_protons': -1,
+        'nu_reco_energy': -1
     })
 
     if interaction is None:
@@ -178,6 +228,8 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
         'particle_startpoint_is_touching': True,
+        'particle_creation_process': "Default Invalid",
+        'particle_num_ppn_candidates': -1,
         # 'particle_is_contained': False
     })
 
@@ -208,11 +260,17 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
             update_dict['particle_endpoint_y'] = particle.endpoint[1]
             update_dict['particle_endpoint_z'] = particle.endpoint[2]
 
+        if hasattr(particle, 'ppn_candidates'):
+            assert particle.ppn_candidates.shape[1] == 7
+            update_dict['particle_num_ppn_candidates'] = len(particle.ppn_candidates)
+
         if isinstance(particle, TruthParticle):
             dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
             min_dist = np.min(dists)
             if min_dist > 5.0:
                 update_dict['particle_startpoint_is_touching'] = False
+            creation_process = particle.particle_asis.creation_process()
+            update_dict['particle_creation_process'] = creation_process
         # if particle.semantic_type == 1:
         #     update_dict['particle_length'] = compute_track_length(particle.points)
         #     direction = compute_particle_direction(particle, vertex=vertex)

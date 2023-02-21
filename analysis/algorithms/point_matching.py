@@ -44,7 +44,7 @@ def match_points_to_particles(ppn_points : np.ndarray,
     for particle in particles:
         dist = cdist(ppn_coords, particle.points)
         matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
-        particle.ppn_candidates = matches
+        particle.ppn_candidates = matches.reshape(-1, 7)
 
 # Deprecated
 def get_track_endpoints(particle : Particle, verbose=False):

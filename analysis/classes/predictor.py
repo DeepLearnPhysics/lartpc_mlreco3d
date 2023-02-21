@@ -11,14 +11,13 @@ from collections import defaultdict
 from scipy.special import softmax
 from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
         TruthParticle, Interaction, TruthInteraction, FlashManager
-from analysis.classes.particle import matrix_counts, matrix_iou, \
-        match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn
+from analysis.classes.particle import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.vertex import get_vertex
 from analysis.algorithms.vertex import estimate_vertex
-from analysis.algorithms.utils import correct_track_points
+from analysis.algorithms.utils import correct_track_endpoints_closest, \
+                                      get_track_points_default
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -105,6 +104,8 @@ class FullChainPredictor:
         # Vertex estimation modes
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
         self.prune_vertex = predictor_cfg.get('prune_vertex', True)
+        self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
+        print(self.track_endpoints_mode)
 
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
@@ -940,14 +941,13 @@ class FullChainPredictor:
                         np.abs(pt - p._node_features[22:25])) < 1e-12)
                     p.startpoint = pt
                 elif p.semantic_type == 1:
-                    startpoint, endpoint = p._node_features[19:22], p._node_features[22:25]
-                    p.startpoint = startpoint
-                    p.endpoint = endpoint
-                    if np.linalg.norm(p.startpoint - p.endpoint) < 1e-6:
-                        startpoint, endpoint = get_track_endpoints_max_dist(p)
-                        p.startpoint = startpoint
-                        p.endpoint = endpoint
-                    correct_track_points(p)
+                    if self.track_endpoints_mode == 'node_features':
+                        get_track_points_default(p)
+                    elif self.track_endpoints_mode == 'max_dist':
+                        correct_track_endpoints_closest(p)
+                    else:
+                        raise ValueError("Track endpoint attachment mode {}\
+                             not supported!".format(self.track_endpoints_mode))
                 else:
                     continue
             out_particle_list.extend(out)
