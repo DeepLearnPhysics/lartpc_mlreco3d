@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,22 +12,31 @@ from mlreco.models.experimental.bayes.encoder import MCDropoutEncoder
 from mlreco.models.experimental.bayes.evidential import EVDLoss
 from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 
+from mlreco.utils.gnn.data import split_clusts
+from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label
+
 class ParticleImageClassifier(nn.Module):
 
     MODULES = ['particle_image_classifier', 'network_base', 'mink_encoder']
 
     def __init__(self, cfg, name='particle_image_classifier'):
         super(ParticleImageClassifier, self).__init__()
-        self.encoder_type = cfg.get(name, {}).get('encoder_type', 'standard')
+
+        # Get the config
+        model_cfg = cfg.get(name, {})
+
+        # Initialize encoder
+        self.encoder_type = model_cfg.get('encoder_type', 'standard')
         if self.encoder_type == 'dropout':
             self.encoder = MCDropoutEncoder(cfg)
         elif self.encoder_type == 'standard':
             self.encoder = SparseResidualEncoder(cfg)
         else:
             raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
-        self.num_classes = cfg.get(name, {}).get('num_classes', 5)
-        self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
 
+        # Initialize final layer
+        self.num_classes = model_cfg.get('num_classes', 5)
+        self.final_layer = nn.Linear(self.encoder.latent_size, self.num_classes)
         print('Total Number of Trainable Parameters = {}'.format(
                     sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
@@ -37,6 +47,58 @@ class ParticleImageClassifier(nn.Module):
         res = {
             'logits': [out]
         }
+        return res
+
+
+class MultiParticleImageClassifier(ParticleImageClassifier):
+
+    MODULES = ['particle_image_classifier', 'network_base', 'mink_encoder']
+
+    def __init__(self, cfg, name='particle_image_classifier'):
+        super(MultiParticleImageClassifier, self).__init__(cfg, name)
+
+        model_cfg = cfg.get(name, {})
+        self.batch_col = model_cfg.get('batch_col', 0)
+        self.split_col = model_cfg.get('split_col', 6)
+
+        self.skip_invalid = model_cfg.get('skip_invalid', True)
+        self.target_col   = model_cfg.get('target_col', 9)
+        self.invalid_id   = model_cfg.get('invalid_id', -1)
+
+    def split_input(self, point_cloud, clusts=None):
+        point_cloud_cpu  = point_cloud.detach().cpu().numpy()
+        batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
+        if clusts is None:
+            clusts = form_clusters(point_cloud_cpu, column=self.split_col)
+        if not len(clusts):
+            return point_cloud, [np.array([]) for _ in batches], []
+
+        if self.skip_invalid:
+            target_ids = get_cluster_label(point_cloud_cpu, clusts, column=self.target_col)
+            clusts = [c for i, c in enumerate(clusts) if target_ids[i] != self.invalid_id]
+            if not len(clusts):
+                return point_cloud, [np.array([]) for _ in batches], []
+
+        split_point_cloud = point_cloud.clone()
+        split_point_cloud[:, self.batch_col] = -1
+        for i, c in enumerate(clusts):
+            split_point_cloud[c, self.batch_col] = i
+        
+        batch_ids = get_cluster_label(point_cloud_cpu, clusts, column=self.batch_col)
+        clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
+
+        return split_point_cloud[split_point_cloud[:,self.batch_col] > -1], clusts_split, cbids
+
+    def forward(self, input, clusts=None):
+        res = {}
+        point_cloud, = input
+        point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
+        res['clusts'] = [clusts_split]
+
+        out = self.encoder(point_cloud)
+        out = self.final_layer(out)
+        res['logits'] = [[out[b] for b in cbids]]
+
         return res
 
 class DUQParticleClassifier(ParticleImageClassifier):
@@ -111,7 +173,6 @@ class DUQParticleClassifier(ParticleImageClassifier):
             # compute sum of embeddings on class by class basis
             features_sum = torch.einsum('ijk,ik->jk', self.z, self.y_pred)
             self.m = self.gamma * self.m + (1 - self.gamma) * features_sum
-
 
 
 class EvidentialParticleClassifier(ParticleImageClassifier):
@@ -266,26 +327,88 @@ class ParticleTypeLoss(nn.Module):
     def __init__(self, cfg, name='particle_type_loss'):
         super(ParticleTypeLoss, self).__init__()
         self.xentropy = nn.CrossEntropyLoss(ignore_index=-1)
+        self.num_classes = cfg.get(name, {}).get('num_classes', 5)
 
     def forward(self, out, type_labels):
         # print(type_labels)
         logits = out['logits'][0]
-        labels = type_labels[0][:, 0].to(dtype=torch.long)
-        loss = self.xentropy(logits, labels)
-        pred = torch.argmax(logits, dim=1)
+        labels = type_labels[0][:, -1].to(dtype=torch.long)
 
-        accuracy = float(torch.sum(pred == labels)) / float(labels.shape[0])
+        loss = self.xentropy(logits, labels)
+
+        pred   = torch.argmax(logits, dim=1)
+        accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
 
         res = {
             'loss': loss,
             'accuracy': accuracy
         }
 
-        acc_types = {}
-        for c in labels.unique():
+        for c in range(self.num_classes):
             mask = labels == c
-            acc_types['accuracy_{}'.format(int(c))] = \
-                float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
+            res[f'accuracy_class_{c}'] = \
+                float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
+                if torch.sum(mask) else 1.
+
+        return res
+
+
+class MultiParticleTypeLoss(nn.Module):
+
+    def __init__(self, cfg, name='particle_type_loss'):
+        super(MultiParticleTypeLoss, self).__init__()
+
+        loss_cfg = cfg.get(name, {})
+        self.num_classes = loss_cfg.get('num_classes', 5)
+        self.batch_col   = loss_cfg.get('batch_col',   0)
+        self.target_col  = loss_cfg.get('target_col', 9)
+        self.balance_classes = loss_cfg.get('balance_classes', False)
+
+        reduction = 'mean' if not self.balance_classes else 'sum'
+        self.xentropy = nn.CrossEntropyLoss(ignore_index=-1, reduction=reduction)
+
+    def forward(self, out, type_labels):
+        logits = out['logits'][0]
+        clusts = out['clusts'][0]
+        labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
+				    clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
+
+        if not len(labels):
+            res = {
+                'loss': torch.tensor(0., requires_grad=True, device=type_labels[0].device),
+                'accuracy': 1.
+            }
+            for c in range(self.num_classes):
+                res[f'accuracy_class_{c}'] = 1.
+            return res
+
+        labels = torch.tensor(np.concatenate(labels), dtype=torch.long, device=type_labels[0].device)
+        logits = torch.cat(logits, axis=0)
+
+        if not self.balance_classes:
+            loss = self.xentropy(logits, labels)
+        else:
+            classes, counts = labels[labels>-1].unique(return_counts = True)
+            weights = torch.sum(counts)/counts/self.num_classes
+            loss = 0.
+            for i, c in enumerate(classes):
+                class_mask = labels == c
+                loss += weights[i] * self.xentropy(logits[class_mask], labels[class_mask]) / torch.sum(counts)
+
+        pred   = torch.argmax(logits, dim=1)
+        accuracy = float(torch.sum(pred[labels > -1] == labels[labels > -1])) / float(labels[labels > -1].shape[0])
+
+        res = {
+            'loss': loss,
+            'accuracy': accuracy
+        }
+
+        for c in range(self.num_classes):
+            mask = labels == c
+            res[f'accuracy_class_{c}'] = \
+                float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask)) \
+                if torch.sum(mask) else 1.
+
         return res
 
 
@@ -359,7 +482,7 @@ class MultiLabelCrossEntropy(nn.Module):
         acc_types = {}
         for c in labels.unique():
             mask = labels == c
-            acc_types['accuracy_{}'.format(int(c))] = \
+            acc_types['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
         return res
 
@@ -398,7 +521,7 @@ class EvidentialLearningLoss(nn.Module):
         acc_types = {}
         for c in labels.unique():
             mask = labels == c
-            acc_types['accuracy_{}'.format(int(c))] = \
+            acc_types['accuracy_class_{}'.format(int(c))] = \
                 float(torch.sum(pred[mask] == labels[mask])) / float(torch.sum(mask))
 
         return res

@@ -115,9 +115,9 @@ class NodePrimaryLoss(torch.nn.Module):
                 # Increment the loss, balance classes if requested
                 if self.balance_classes:
                     vals, counts = torch.unique(node_assn, return_counts=True)
-                    weights = np.array([float(counts[k])/len(node_assn) for k in range(len(vals))])
+                    weights = len(node_assn)/len(counts)/counts
                     for k, v in enumerate(vals):
-                        total_loss += (1./weights[k])*self.lossfn(node_pred[node_assn==v], node_assn[node_assn==v])
+                        total_loss += weights[k] * self.lossfn(node_pred[node_assn==v], node_assn[node_assn==v])
                 else:
                     total_loss += self.lossfn(node_pred, node_assn)
 

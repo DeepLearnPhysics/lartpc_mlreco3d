@@ -33,26 +33,30 @@ def _form_clusters(data: nb.float64[:,:],
                    shape_index: nb.int64 = -1) -> nb.types.List(nb.int64[:]):
 
     # Create a mask which restricts the voxels to those with shape in cluster_classes
+    restrict = False
     if cluster_classes[0] != -1:
         mask = np.zeros(len(data), dtype=np.bool_)
         for s in cluster_classes:
             mask |= (data[:, shape_index] == s)
         mask = np.where(mask)[0]
-    else:
-        mask = np.arange(len(data), dtype=np.int64)
+        restrict = True
+    subdata = data[mask] if restrict else data
 
-    subdata = data[mask]
     # Loop over batches and cluster IDs, append cluster voxel lists
     clusts = []
-    for b in np.unique(subdata[:, batch_index]):
-        binds = np.where(subdata[:, batch_index] == b)[0]
-        for c in np.unique(subdata[binds, column]):
+    batch_ids = subdata[:, batch_index]
+    for b in np.unique(batch_ids):
+        binds = np.where(batch_ids == b)[0]
+        clust_ids = subdata[binds, column]
+        if restrict:
+            binds = mask[binds]
+        for c in np.unique(clust_ids):
             if c < 0:
                 continue
-            clust = np.where(subdata[binds, column] == c)[0]
+            clust = np.where(clust_ids == c)[0]
             if len(clust) < min_size:
                 continue
-            clusts.append(mask[binds[clust]])
+            clusts.append(binds[clust])
 
     return clusts
 

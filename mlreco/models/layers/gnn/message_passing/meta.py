@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d, LeakyReLU
 import torch.nn.functional as F
+from torch_geometric.utils import softmax
 from mlreco.models.layers.gnn.normalizations import BatchNorm, InstanceNorm
 
 class MetaLayerModel(nn.Module):
@@ -22,6 +23,7 @@ class MetaLayerModel(nn.Module):
         self.edge_output    = self.model_config.get('edge_output_feats', self.edge_input)
         self.global_output  = self.model_config.get('global_output_feats', 32)
         self.aggr           = self.model_config.get('aggr', 'mean')
+        self.attn           = self.model_config.get('attn', False)
         self.leakiness      = self.model_config.get('leakiness', 0.1)
 
         self.edge_updates = torch.nn.ModuleList()
@@ -49,7 +51,7 @@ class MetaLayerModel(nn.Module):
                 MetaLayer(edge_model=EdgeLayer(node_input, edge_input, edge_output,
                                     leakiness=self.leakiness),
                           node_model=NodeLayer(node_input, node_output, edge_output,
-                                                leakiness=self.leakiness, reduction=self.aggr)
+                                                leakiness=self.leakiness, reduction=self.aggr, attention=self.attn)
                           #global_model=GlobalModel(node_output, 1, 32)
                          )
             )
@@ -176,7 +178,7 @@ class NodeLayer(nn.Module):
 
         - output: [C, F_o] Tensor with F_o output node feature
     '''
-    def __init__(self, node_in, node_out, edge_in, leakiness=0.0, reduction='mean'):
+    def __init__(self, node_in, node_out, edge_in, leakiness=0.0, reduction='mean', attention=False):
         super(NodeLayer, self).__init__()
 
         self.node_mlp_1 = nn.Sequential(
@@ -203,11 +205,18 @@ class NodeLayer(nn.Module):
             nn.Linear(node_out, node_out)
         )
 
+        self.attention = attention
+        if self.attention:
+            self.gate = nn.Linear(node_out, 1)
+
     def forward(self, x, edge_index, edge_attr, u, batch):
         from torch_scatter import scatter
         row, col = edge_index
         out = torch.cat([x[row], edge_attr], dim=1)
         out = self.node_mlp_1(out)
+        if self.attention:
+            weights = softmax(self.gate(out), index=col)
+            out = weights*out 
         out = scatter(out, col, dim=0, dim_size=x.size(0), reduce=self.reduction)
         out = torch.cat([x, out], dim=1)
         return self.node_mlp_2(out)

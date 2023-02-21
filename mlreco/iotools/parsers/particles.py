@@ -4,7 +4,7 @@ from mlreco.utils.ppn import get_ppn_info
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 
 
-def parse_particles(particle_event, cluster_event, voxel_coordinates=True):
+def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     """
     A function to copy construct & return an array of larcv::Particle.
 
@@ -35,6 +35,7 @@ def parse_particles(particle_event, cluster_event, voxel_coordinates=True):
     """
     particles = [larcv.Particle(p) for p in particle_event.as_vector()]
     if voxel_coordinates:
+        assert cluster_event is not None
         meta = cluster_event.meta()
         funcs = ['first_step', 'last_step', 'position', 'end_position', 'ancestor_position']
         for p in particles:
@@ -54,7 +55,7 @@ def parse_particles(particle_event, cluster_event, voxel_coordinates=True):
     return particles
 
 
-def parse_neutrinos(neutrino_event, cluster_event, voxel_coordinates=True):
+def parse_neutrinos(neutrino_event, cluster_event=None, voxel_coordinates=True):
     """
     A function to copy construct & return an array of larcv::Neutrino.
 
@@ -85,6 +86,7 @@ def parse_neutrinos(neutrino_event, cluster_event, voxel_coordinates=True):
     """
     neutrinos = [larcv.Neutrino(p) for p in neutrino_event.as_vector()]
     if voxel_coordinates:
+        assert cluster_event is not None
         meta = cluster_event.meta()
         funcs = ['position']
         for p in neutrinos:
