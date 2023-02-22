@@ -149,8 +149,8 @@ class UResNetPPNLoss(nn.Module):
         res.update({'segmentation_'+k:v for k, v in res_segmentation.items()})
         res.update({'ppn_'+k:v for k, v in res_ppn.items()})
 
-        for key, val in res.items():
-            if 'ppn' in key:
-                print('{}: {}'.format(key, val))
+        #for key, val in res.items():
+        #    if 'ppn' in key:
+        #        print('{}: {}'.format(key, val))
 
         return res

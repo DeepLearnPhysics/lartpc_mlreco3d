@@ -458,7 +458,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.point_type_loss_weight = self.loss_config.get('point_type_loss_weight', 1.0)
         self.classify_endpoints_loss_weight = self.loss_config.get('classify_endpoints_loss_weight', 1.0)
 
-        print("Mask Loss Weight = ", self.mask_loss_weight)
+        #print("Mask Loss Weight = ", self.mask_loss_weight)
 
 
     def forward(self, result, segment_label, particles_label):
