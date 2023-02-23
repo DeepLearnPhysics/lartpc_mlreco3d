@@ -180,7 +180,11 @@ class FlashManager:
         from flashmatch import flashmatch
 
         flashes = []
+        print('type larcv_flahes', type(larcv_flashes))
+        print('len larcv_flahes', len(larcv_flashes))
         for branch in larcv_flashes:
+            print('Type flash branch', type(branch))
+            print('flash branch', branch)
             flashes.extend(branch)
 
         pmt_v, times = [], []
@@ -238,22 +242,37 @@ class FlashManager:
         from flashmatch import flashmatch
         from matcha import crthit
 
+        print('[MAKE CRTHITS] type larcv_crthits:', type(larcv_crthits))
+        print('len larcv_crthits:', len(larcv_crthits))
         crthits = []
+        print('type crthits:', type(crthits))
         # TODO larcv::CRTHit exists, but is this what's loaded?
         for branch in larcv_crthits:
-            crthits.extend(branch)
+            print('branch', branch)
+            print('type branch', type(branch))
+            # TODO To extend or append? That is the question
+            # Seems like make_flash uses extend because there can be separate lists 
+            # of flashes for each cryostat. I don't think this matters for CRT hits...right?
+            #crthits.extend(branch)
+            crthits.append(branch)
 
         crt_v = []
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
-            print('idx', idx)
-            print('type(larcv_crthit', type(larcv_crthit))
+            print('----CRTHit loop iteration', idx, '-----')
             # f is an object of type larcv::CRTHit
-            crthit = crthit.CRTHit()
-            crthit.idx  = larcv_crthit.id()  # Assign a unique index
-            print('Assigned id', crthit.idx)
-            crthit.time = larcv_crthit.t0()  # crthit timing, a candidate T0
-            print('Time', crthit.t0)
+            this_crthit = crthit.CRTHit()
+            this_crthit.id  = larcv_crthit.id()  # Assign a unique index
+            print('Assigned CRTHit id', this_crthit.id)
+            this_crthit.feb_id = larcv_crthit.feb_id()
+            this_crthit.pesmap = larcv_crthit.pesmap()
+            this_crthit.t0 = larcv_crthit.ts0_ns()  # crthit timing, a candidate T0
+            print('CRTHit t0', this_crthit.t0)
+            this_crthit.t1 = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
+            print('CRTHit t1', this_crthit.t1)
+            this_crthit.total_pe = larcv_crthit.peshit()
+            this_crthit.x_position = larcv_crthit.x_pos()
+            this_crthit.x_error = larcv_crthit.x_err()
             # TODO Fill these from the larcv information
             #self.id = id
             #self.t0 = t0
@@ -263,16 +282,35 @@ class FlashManager:
             #self.plane = plane
             #self.tagger = tagger
 
-        for idx, f in enumerate(flashes):
-            # f is an object of type larcv::Flash
-            flash = flashmatch.Flash_t()
-            flash.idx = f.id()  # Assign a unique index
-            flash.time = f.time()  # Flash timing, a candidate T0
-            flash.time_true = f.absTime() # Hijacking this field to store absolute time
-            times.append(flash.time)
+            ################### Available larcv::CRTHit fields: ######################
 
-            crthit.x, crthit.y, crthit.z = 0, 0, 0
-            crthit.x_err, crthit.y_err, crthit.z_err = 0, 0, 0
+            #InstanceID_t _id; ///< "ID" of this CRTHit in CRTHit collection
+            #std::vector<uint8_t> _feb_id; ///< FEB address
+            #std::map<uint8_t, std::vector<std::pair<int, float>>> _pesmap; ///< Saves signal hit information (FEB, local-channel and PE) .)
+            #float _peshit; ///< Total photo-electron (PE) in a crt hit.)
+
+            #uint64_t _ts0_s; ///< Second-only part of timestamp T0.
+            #double _ts0_s_corr; ///< [Honestly, not sure at this point, it was there since long time (BB)])]
+
+            #double _ts0_ns; ///< Timestamp T0 (from White Rabbit), in UTC absolute time scale in nanoseconds from the Epoch.)
+            #double _ts0_ns_corr; ///< [Honestly, not sure at this point, it was there since long time (BB)])]
+            #double _ts1_ns; ///< timestamp T1 ([signal time w.r.t. Trigger time]), in UTC absolute time scale in nanoseconds from the Epoch.])
+
+            #int _plane; ///< Name of the CRT wall (in the form of numbers)
+
+            #float _x_pos; ///< position in x-direction (cm)
+            #float _x_err; ///< position uncertainty in x-direction (cm)
+            #float _y_pos; ///< position in y-direction (cm)
+            #float _y_err; ///< position uncertainty in y-direction (cm)
+            #float _z_pos; ///< position in z-direction (cm)
+            #float _z_err; ///< position uncertainty in z-direction (cm)
+
+            #std::string _tagger; ///< Name of the CRT wall (in the form of strings)
+            ###############################################################################
+
+
+            #crthit.x, crthit.y, crthit.z = 0, 0, 0
+            #crthit.x_err, crthit.y_err, crthit.z_err = 0, 0, 0
 
             # TODO Fill the rest of the CRTHit_t fields
             crt_v.append(crthit)
