@@ -4,7 +4,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch_geometric.data import Batch, Data
+
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
+from mlreco.models.experimental.layers.pointnet import PointNetEncoder
+from mlreco.models.experimental.layers.pointmlp import PointMLPEncoder
+
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
@@ -31,6 +36,10 @@ class ParticleImageClassifier(nn.Module):
             self.encoder = MCDropoutEncoder(cfg)
         elif self.encoder_type == 'standard':
             self.encoder = SparseResidualEncoder(cfg)
+        elif self.encoder_type == 'pointnet':
+            self.encoder = PointNetEncoder(cfg)
+        elif self.encoder_type == 'pointmlp':
+            self.encoder = PointMLPEncoder(cfg)
         else:
             raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
 
@@ -65,6 +74,33 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         self.target_col   = model_cfg.get('target_col', 9)
         self.invalid_id   = model_cfg.get('invalid_id', -1)
 
+        self.split_input_mode = model_cfg.get('split_input_as_tg_batch', False)
+
+    def split_input_as_tg_batch(self, point_cloud, clusts=None):
+        point_cloud_cpu  = point_cloud.detach().cpu().numpy()
+        batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
+        if clusts is None:
+            clusts = form_clusters(point_cloud_cpu, column=self.split_col)
+        if not len(clusts):
+            return Batch()
+        
+        if self.skip_invalid:
+            target_ids = get_cluster_label(point_cloud_cpu, clusts, column=self.target_col)
+            clusts = [c for i, c in enumerate(clusts) if target_ids[i] != self.invalid_id]
+            if not len(clusts):
+                return Batch()
+        
+        data_list = []
+        for i, c in enumerate(clusts):
+            x = point_cloud[c, 4].view(-1, 1)
+            pos = point_cloud[c, 1:4]
+            data = Data(x=x, pos=pos)
+            data_list.append(data)
+        
+        split_data = Batch.from_data_list(data_list)
+        return split_data, clusts   
+
+
     def split_input(self, point_cloud, clusts=None):
         point_cloud_cpu  = point_cloud.detach().cpu().numpy()
         batches, bcounts = np.unique(point_cloud_cpu[:,self.batch_col], return_counts=True)
@@ -89,17 +125,26 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
 
         return split_point_cloud[split_point_cloud[:,self.batch_col] > -1], clusts_split, cbids
 
+
     def forward(self, input, clusts=None):
         res = {}
         point_cloud, = input
-        point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
-        res['clusts'] = [clusts_split]
+        if self.split_input_mode:
+            batch, clusts = self.split_input_as_tg_batch(point_cloud, clusts)
+            out = self.encoder(batch)
+            out = self.final_layer(out)
+            res['clusts'] = [clusts]
+            res['logits'] = [out]
+        else:
+            point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
+            res['clusts'] = [clusts_split]
 
-        out = self.encoder(point_cloud)
-        out = self.final_layer(out)
-        res['logits'] = [[out[b] for b in cbids]]
+            out = self.encoder(point_cloud)
+            out = self.final_layer(out)
+            res['logits'] = [[out[b] for b in cbids]]
 
         return res
+
 
 class DUQParticleClassifier(ParticleImageClassifier):
     """
@@ -367,11 +412,27 @@ class MultiParticleTypeLoss(nn.Module):
         reduction = 'mean' if not self.balance_classes else 'sum'
         self.xentropy = nn.CrossEntropyLoss(ignore_index=-1, reduction=reduction)
 
-    def forward(self, out, type_labels):
+        self.split_input_mode = loss_cfg.get('split_input_as_tg_batch', False)
+
+    def forward_tg(self, out, type_labels):
+
         logits = out['logits'][0]
         clusts = out['clusts'][0]
-        labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
-				    clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
+
+        labels = get_cluster_label(type_labels[0], clusts, self.target_col)
+        return [logits], [labels]
+
+
+    def forward(self, out, type_labels):
+
+        if self.split_input_mode:
+            logits, labels = self.forward_tg(out, type_labels)
+
+        else:
+            logits = out['logits'][0]
+            clusts = out['clusts'][0]
+            labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
+                        clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
 
         if not len(labels):
             res = {

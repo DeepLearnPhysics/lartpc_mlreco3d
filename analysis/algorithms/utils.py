@@ -108,6 +108,22 @@ def correct_track_endpoints_closest(p, pts=None):
             raise ValueError("Classify endpoints feature dimension must be 2, got something else!")
 
 
+def local_density_correction(p, r=5):
+    assert p.semantic_type == 1
+    dist_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
+    if not dist_st.all():
+        return
+    local_d_start = p.depositions[dist_st].sum() / sum(dist_st)
+    dist_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
+    if not dist_end.all():
+        return
+    local_d_end = p.depositions[dist_end].sum() / sum(dist_end)
+    if local_d_start < local_d_end:
+        p1, p2 = p.startpoint, p.endpoint
+        p.startpoint = p2
+        p.endpoint = p1
+
+
 def load_range_reco(particle_type='muon', kinetic_energy=True):
     """
     Return a function maps the residual range of a track to the kinetic

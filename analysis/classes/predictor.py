@@ -17,7 +17,8 @@ from analysis.algorithms.point_matching import *
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import correct_track_endpoints_closest, \
-                                      get_track_points_default
+                                      get_track_points_default, \
+                                      local_density_correction
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -943,8 +944,10 @@ class FullChainPredictor:
                 elif p.semantic_type == 1:
                     if self.track_endpoints_mode == 'node_features':
                         get_track_points_default(p)
+                        local_density_correction(p)
                     elif self.track_endpoints_mode == 'max_dist':
                         correct_track_endpoints_closest(p)
+                        local_density_correction(p)
                     else:
                         raise ValueError("Track endpoint attachment mode {}\
                              not supported!".format(self.track_endpoints_mode))
