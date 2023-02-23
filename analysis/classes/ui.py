@@ -252,7 +252,9 @@ class FullChainPredictor:
             selected_opflash_keys = [self.opflash_keys[volume]]
         pmt_v = []
         for key in selected_opflash_keys:
+            print('flash key', key)
             pmt_v.extend(self.data_blob[key][entry])
+        print('self.data_blob[key][entry]:', [self.data_blob[key][entry] for key in selected_opflash_keys])
         input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
 
         # input_pmt_v might be a filtered version of pmt_v,
@@ -345,6 +347,8 @@ class FullChainPredictor:
             for tpc_object in tpc_v:
                 tpc_object.points = self._translate(tpc_object.points, volume)
 
+        print('type self.data_blob[crthits][entry]:', type(self.data_blob['crthits'][entry]))
+        print('self.data_blob[crthits][entry]:', self.data_blob['crthits'][entry])
         crt_v = self.fm.make_crthit(self.data_blob['crthits'][entry])
 
         # TODO Placeholder
