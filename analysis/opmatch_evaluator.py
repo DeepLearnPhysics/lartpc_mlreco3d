@@ -21,8 +21,6 @@ def main(model_config_path, analysis_config_path):
 @evaluate(['fmatch'], mode='per_batch')
 def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
     print('In opmatch_evaluator')
-    print('data type:', type(data))
-    print('data:\n', data)
     flash_fields = OrderedDict(ana_cfg['flash_matches']['fields'])
     crt_fields   = OrderedDict(ana_cfg['crthit']['fields'])
     rows = list()
@@ -39,18 +37,22 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         print('----Image', i, '-----')
         fmatches = predictor.get_flash_matches(i, use_true_tpc_objects=True,
                                                volume=1, ADC_to_MeV=0.00285714285)
-        print('Got flash matches')
+        print('Len of things:')
+        print([len(a) for a in fmatches])
+        cached_interactions = []
         for (interaction, flash, match) in fmatches:
             entry = OrderedDict(flash_fields)
-            print('Starting populate_entry...')
             populate_entry(entry, index, data['meta'][i],
                            data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
                            interaction, flash, match)
-            print('Done with populate_entry')
             rows.append(entry)
+            cached_interactions.append(interaction)
 
+        # Use interactions from flash matching as input to CRT-TPC matching
         print('Starting crt-tpc matching...')
-        crt_tpc_matches = predictor.get_crt_tpc_matches(i)
+        crt_tpc_matches = predictor.get_crt_tpc_matches(i, use_true_tpc_objects=True,
+                                                        volume=1, ADC_to_MeV=0.00285714285,
+                                                        interaction_list=cached_interactions)
         print('Done')
 
         # Loop over CRT hits.
