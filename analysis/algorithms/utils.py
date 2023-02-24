@@ -116,14 +116,15 @@ def correct_track_endpoints_closest(p, pts=None):
 def local_density_correction(p, r=5):
     assert p.semantic_type == 1
     dist_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
-    if not dist_st.all():
+    if not dist_st.any():
         return
     local_d_start = p.depositions[dist_st].sum() / sum(dist_st)
     dist_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
-    if not dist_end.all():
+    if not dist_end.any():
         return
     local_d_end = p.depositions[dist_end].sum() / sum(dist_end)
-    if local_d_start < local_d_end:
+    # Startpoint must have lowest local density
+    if local_d_start > local_d_end:
         p1, p2 = p.startpoint, p.endpoint
         p.startpoint = p2
         p.endpoint = p1
