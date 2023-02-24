@@ -34,6 +34,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     compute_vertex        = analysis_cfg['analysis']['compute_vertex']
     vertex_mode           = analysis_cfg['analysis']['vertex_mode']
     matching_mode         = analysis_cfg['analysis']['matching_mode']
+    compute_energy        = analysis_cfg['analysis'].get('compute_energy', False)
 
     # FullChainEvaluator config
     processor_cfg         = analysis_cfg['analysis'].get('processor_cfg', {})
@@ -44,10 +45,14 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
 
     use_primaries_for_vertex = analysis_cfg['analysis'].get('use_primaries_for_vertex', True)
 
-    splines = {
-        'proton': get_csda_range_spline('proton'),
-        'muon': get_csda_range_spline('muon')
-    }
+    splines = None
+
+    if compute_energy:
+
+        splines = {
+            'proton': get_csda_range_spline('proton'),
+            'muon': get_csda_range_spline('muon')
+        }
 
     # Load data into evaluator
     if enable_flash_matching:
@@ -179,9 +184,9 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             part_dict['particle_match_value'] = particle_matches_values[i]
 
             pred_particle_dict = get_particle_properties(pred_p,
-                prefix='pred', splines=splines)
+                prefix='pred', splines=splines, compute_energy=compute_energy)
             true_particle_dict = get_particle_properties(true_p,
-                prefix='true', splines=splines)
+                prefix='true', splines=splines, compute_energy=compute_energy)
 
             if true_p is not None:
                 pred_particle_dict['pred_particle_has_match'] = True

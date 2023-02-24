@@ -1,5 +1,3 @@
-import ROOT
-
 from analysis.classes.particle import Particle
 import numpy as np
 import numba as nb
@@ -71,7 +69,7 @@ def get_csda_range_spline(particle_type):
     return f
 
 
-def compute_range_based_momentum(particle, f, **kwargs):
+def compute_range_based_energy(particle, f, **kwargs):
     assert particle.semantic_type == 1
     if particle.pid == 4: m = PROTON_MASS
     elif particle.pid == 2: m = MUON_MASS
@@ -80,9 +78,9 @@ def compute_range_based_momentum(particle, f, **kwargs):
              as particle type!".format(particle.pid))
     if not hasattr(particle, 'length'):
         particle.length = compute_track_length(particle.points, **kwargs)
-    T = f(particle.length * PIXELS_TO_CM)
-    p = np.sqrt(T * (T + 2*m))
-    return p
+    kinetic = f(particle.length * PIXELS_TO_CM)
+    total = kinetic + m
+    return total
 
 
 def compute_particle_direction(p: Particle, 

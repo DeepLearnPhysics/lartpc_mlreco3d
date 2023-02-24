@@ -240,7 +240,7 @@ def estimate_vertex(particles,
         if pruned.shape[0] > 0:
             out = pruned.mean(axis=0)
         else:
-            out = candidates.mean(axis=0)
+            out = pseudovtx
     
     if return_candidate_count:
         return out, len(candidates)

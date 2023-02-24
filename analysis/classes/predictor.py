@@ -106,8 +106,6 @@ class FullChainPredictor:
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
         self.prune_vertex = predictor_cfg.get('prune_vertex', True)
         self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
-        print(self.track_endpoints_mode)
-
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)

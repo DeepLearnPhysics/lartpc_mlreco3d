@@ -21,7 +21,8 @@ def multi_particle(cfg, processor_cfg, data_blob, result, logdir, iteration):
     clusts = result['clusts']
     
     labels = get_cluster_label(data_blob['input_data'][0], clusts, 9)
-    primary_labels = get_cluster_label(data_blob['input_data'][0], clusts, 10)
+    primary_labels = get_cluster_label(data_blob['input_data'][0], clusts, 15)
+
     logits = np.vstack(logits)
 
     pred = np.argmax(logits, axis=1)

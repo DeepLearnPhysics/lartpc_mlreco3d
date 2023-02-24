@@ -115,8 +115,8 @@ def get_track_endpoints_max_dist(particle):
     """
     coords = particle.points
     dist = cdist(coords, coords)
-    pts = particle.points[np.where(dist == dist.max())[0]]
-    return pts[0], pts[1]
+    inds = np.unravel_index(dist.argmax(), dist.shape)
+    return coords[inds[0]], coords[inds[1]]
 
 
 # Deprecated
