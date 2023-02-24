@@ -337,9 +337,9 @@ class GNN(torch.nn.Module):
                 return result
 
         # If necessary, compute the cluster distance matrix
-        dist_mat = None
+        dist_mat, closest_index = None, None
         if np.any(self.edge_max_dist > -1) or self.network == 'mst' or self.network == 'knn':
-            dist_mat = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric)
+            dist_mat, closest_index = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric, return_index=True)
 
         # Form the requested network
         if len(clusts) == 1:
@@ -375,6 +375,9 @@ class GNN(torch.nn.Module):
                 if self.source_col == 6: classes = extra_feats[:,-1].cpu().numpy().astype(int) if extra_feats is not None else get_cluster_primary_label(cluster_data, clusts, -1).astype(int)
                 edge_index = restrict_graph(edge_index, dist_mat, self.edge_max_dist, classes)
 
+            # Get index of closest pair of voxels for each pair of clusters
+            closest_index = closest_index[edge_index[0], edge_index[1]]
+
         # Update result with a list of edges for each batch id
         edge_index_split, ebids = split_edge_index(edge_index, batch_ids, batches)
         result['edge_index'] = [edge_index_split]
@@ -383,7 +386,7 @@ class GNN(torch.nn.Module):
 
         # Obtain node and edge features
         x = self.node_encoder(cluster_data, clusts)
-        e = self.edge_encoder(cluster_data, clusts, edge_index)
+        e = self.edge_encoder(cluster_data, clusts, edge_index, closest_index=closest_index)
 
         # If extra features are provided separately, add them
         if extra_feats is not None:
