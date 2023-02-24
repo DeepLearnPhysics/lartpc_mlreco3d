@@ -5,8 +5,13 @@ from analysis.algorithms.calorimetry import *
 
 from scipy.spatial.distance import cdist
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
+
+from analysis.algorithms.calorimetry import get_csda_range_spline
+
 import numpy as np
-import ROOT
+# Splines for ranged based energy reco
+f_proton = get_csda_range_spline('proton')
+f_muon = get_csda_range_spline('muon')
 
 
 def attach_prefix(update_dict, prefix):
@@ -170,7 +175,7 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         'has_vertex': False,
         'vertex_valid': 'Default Invalid',
         'count_primary_protons': -1,
-        'nu_reco_energy': -1
+        # 'nu_reco_energy': -1
     })
 
     if interaction is None:
@@ -221,7 +226,10 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
     return out
 
 
-def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
+def get_particle_properties(particle: Particle, 
+                            prefix=None, 
+                            save_feats=False,
+                            splines=None):
 
     update_dict = OrderedDict({
         'particle_id': -1,
@@ -229,7 +237,8 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_type': -1,
         'particle_semantic_type': -1,
         'particle_size': -1,
-        'particle_E': -1,
+        'particle_sum_edep': -1,
+        'particle_reco_momentum': -1,
         'particle_is_primary': False,
         'particle_has_startpoint': False,
         'particle_has_endpoint': False,
@@ -262,7 +271,7 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         update_dict['particle_type'] = particle.pid
         update_dict['particle_semantic_type'] = particle.semantic_type
         update_dict['particle_size'] = particle.size
-        update_dict['particle_E'] = particle.sum_edep
+        update_dict['particle_sum_edep'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
         # update_dict['particle_is_contained'] = particle.is_contained
         if particle.startpoint is not None:
@@ -287,21 +296,22 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
                 update_dict['particle_startpoint_is_touching'] = False
             creation_process = particle.particle_asis.creation_process()
             update_dict['particle_creation_process'] = creation_process
-        # if particle.semantic_type == 1:
-        #     update_dict['particle_length'] = compute_track_length(particle.points)
-        #     direction = compute_particle_direction(particle, vertex=vertex)
-        #     assert len(direction) == 3
-        #     update_dict['particle_dir_x'] = direction[0]
-        #     update_dict['particle_dir_y'] = direction[1]
-        #     update_dict['particle_dir_z'] = direction[2]
-            # if particle.pid == 2:
-            #     mcs_E = compute_mcs_muon_energy(particle)
-            #     update_dict['particle_mcs_E'] = mcs_E
-        # if not isinstance(particle, TruthParticle):
-        #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
-        #         for i in range(particle.node_features.shape[0])})
 
-        #     update_dict.update(node_dict)
+        if particle.semantic_type == 1:
+            length =  compute_track_length(particle.points)
+            update_dict['particle_length'] = length
+            particle.length = length
+            direction = compute_particle_direction(particle)
+            assert len(direction) == 3
+            update_dict['particle_dir_x'] = direction[0]
+            update_dict['particle_dir_y'] = direction[1]
+            update_dict['particle_dir_z'] = direction[2]
+            if splines is not None and particle.pid == 4:
+                momentum = compute_range_based_momentum(particle, splines['proton'])
+                update_dict['particle_reco_momentum'] = momentum
+            if splines is not None and particle.pid == 2:
+                momentum = compute_range_based_momentum(particle, splines['muon'])
+                update_dict['particle_reco_momentum'] = momentum
 
     out = attach_prefix(update_dict, prefix)
 

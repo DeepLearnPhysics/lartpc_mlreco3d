@@ -1,13 +1,20 @@
+import ROOT
+
 from analysis.classes.particle import Particle
 import numpy as np
 import numba as nb
 from sklearn.decomposition import PCA
+from scipy.interpolate import CubicSpline
+import pandas as pd
 
-
-def compute_sum_deposited(particle : Particle):
-    assert hasattr(particle, 'deposition')
-    sum_E = particle.deposition.sum()
-    return sum_E
+# CONSTANTS (MeV)
+PROTON_MASS = 938.272
+MUON_MASS = 105.7
+ELECTRON_MASS = 0.511998
+ARGON_DENSITY = 1.396
+ADC_TO_MEV = 1. / 350.
+ARGON_MASS = 37211
+PIXELS_TO_CM = 0.3
 
 
 def compute_track_length(points, bin_size=17):
@@ -42,6 +49,40 @@ def compute_track_length(points, bin_size=17):
             dx = pca_axis[:, 0].max() - pca_axis[:, 0].min()
             length += dx
     return length
+
+
+def get_csda_range_spline(particle_type):
+    '''
+    Returns CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
+    '''
+    if particle_type == 'proton':
+        tab = pd.read_csv('/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/pE_liquid_argon.txt', 
+                          delimiter=' ',
+                          index_col=False)
+    elif particle_type == 'muon':
+        tab = pd.read_csv('/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/muE_liquid_argon.txt', 
+                          delimiter=' ',
+                          index_col=False)
+    else:
+        raise ValueError("Range based energy reconstruction for particle type\
+            {} is not supported!".format(particle_type))
+    # print(tab)
+    f = CubicSpline(tab['CSDARange'] / ARGON_DENSITY, tab['T'])
+    return f
+
+
+def compute_range_based_momentum(particle, f, **kwargs):
+    assert particle.semantic_type == 1
+    if particle.pid == 4: m = PROTON_MASS
+    elif particle.pid == 2: m = MUON_MASS
+    else:
+        raise ValueError("For track particle {}, got {}\
+             as particle type!".format(particle.pid))
+    if not hasattr(particle, 'length'):
+        particle.length = compute_track_length(particle.points, **kwargs)
+    T = f(particle.length * PIXELS_TO_CM)
+    p = np.sqrt(T * (T + 2*m))
+    return p
 
 
 def compute_particle_direction(p: Particle, 
@@ -90,46 +131,6 @@ def compute_particle_direction(p: Particle,
         return direction
     else:
         return direction, pca.explained_variance_ratio_
-
-
-def load_range_reco(particle_type='muon', kinetic_energy=True):
-    """
-    Return a function maps the residual range of a track to the kinetic
-    energy of the track. The mapping is based on the Bethe-Bloch formula
-    and stored per particle type in TGraph objects. The TGraph::Eval
-    function is used to perform the interpolation.
-
-    Parameters
-    ----------
-    particle_type: A string with the particle name.
-    kinetic_energy: If true (false), return the kinetic energy (momentum)
-    
-    Returns
-    -------
-    The kinetic energy or momentum according to Bethe-Bloch.
-    """
-    output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
-    if particle_type in ['muon', 'pion', 'kaon', 'proton']:
-        input_file = ROOT.TFile.Open('RRInput.root', 'read')
-        graph = input_file.Get(f'{particle_type}{output_var}')
-        return np.vectorize(graph.Eval)
-    else:
-        print(f'Range-based reconstruction for particle "{particle_type}" not available.')
-
-
-def make_range_based_momentum_fns():
-    f_muon = load_range_reco('muon')
-    f_pion = load_range_reco('pion')
-    f_proton = load_range_reco('proton')
-    return [f_muon, f_pion, f_proton]
-
-
-def compute_range_momentum(particle, f, voxel_to_cm=0.3, **kwargs):
-    assert particle.semantic_type == 1
-    length = compute_track_length(particle.points, 
-                                  bin_size=kwargs.get('bin_size', 17))
-    E = f(length * voxel_to_cm)
-    return E
 
 
 def highland_formula(p, l, m, X_0=14, z=1):
@@ -250,3 +251,42 @@ def compute_mcs_muon_energy(particle, bin_size=17,
     lls = np.array(lls)
     Es = np.array(Es)
     return einit, min_ll
+
+# def load_range_reco(particle_type='muon', kinetic_energy=True):
+#     """
+#     Return a function maps the residual range of a track to the kinetic
+#     energy of the track. The mapping is based on the Bethe-Bloch formula
+#     and stored per particle type in TGraph objects. The TGraph::Eval
+#     function is used to perform the interpolation.
+
+#     Parameters
+#     ----------
+#     particle_type: A string with the particle name.
+#     kinetic_energy: If true (false), return the kinetic energy (momentum)
+    
+#     Returns
+#     -------
+#     The kinetic energy or momentum according to Bethe-Bloch.
+#     """
+#     output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
+#     if particle_type in ['muon', 'pion', 'kaon', 'proton']:
+#         input_file = ROOT.TFile.Open('/sdf/group/neutrino/koh0207/misc/RRInput.root', 'read')
+#         graph = input_file.Get(f'{particle_type}{output_var}')
+#         return np.vectorize(graph.Eval)
+#     else:
+#         print(f'Range-based reconstruction for particle "{particle_type}" not available.')
+
+
+# def make_range_based_momentum_fns():
+#     f_muon = load_range_reco('muon')
+#     f_pion = load_range_reco('pion')
+#     f_proton = load_range_reco('proton')
+#     return [f_muon, f_pion, f_proton]
+
+
+# def compute_range_momentum(particle, f, voxel_to_cm=0.3, **kwargs):
+#     assert particle.semantic_type == 1
+#     length = compute_track_length(particle.points, 
+#                                   bin_size=kwargs.get('bin_size', 17))
+#     E = f(length * voxel_to_cm)
+#     return E

@@ -66,7 +66,7 @@ class FullChainPredictor:
         # quantities separately from data_blob and result
 
         self.deghosting = self.module_config['chain']['enable_ghost']
-        self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net']['pred_vtx_positions']
+        self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net'].get('pred_vtx_positions', None)
         self.data_blob = data_blob
         self.result = result
 

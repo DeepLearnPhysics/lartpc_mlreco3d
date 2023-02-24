@@ -21,6 +21,7 @@ def multi_particle(cfg, processor_cfg, data_blob, result, logdir, iteration):
     clusts = result['clusts']
     
     labels = get_cluster_label(data_blob['input_data'][0], clusts, 9)
+    primary_labels = get_cluster_label(data_blob['input_data'][0], clusts, 10)
     logits = np.vstack(logits)
 
     pred = np.argmax(logits, axis=1)
@@ -44,9 +45,9 @@ def multi_particle(cfg, processor_cfg, data_blob, result, logdir, iteration):
         ent = entropy(probs)
 
         fout.record(('Index', 'Truth', 'Prediction', 
-                    'p0', 'p1', 'p2', 'p3', 'p4', 'entropy'),
+                    'p0', 'p1', 'p2', 'p3', 'p4', 'entropy', 'is_primary'),
                     (int(i), int(label_batch), int(pred),
-                     probs[0], probs[1], probs[2], probs[3], probs[4], ent))
+                     probs[0], probs[1], probs[2], probs[3], probs[4], ent, int(primary_labels[i])))
         fout.write()
 
     fout.close()
