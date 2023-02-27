@@ -40,7 +40,7 @@ def pdist(x: nb.float32[:,:]) -> nb.float32[:,:]:
     """
     res = np.zeros((x.shape[0], x.shape[0]), dtype=x.dtype)
     for i in range(x.shape[0]):
-        for j in range(x.shape[0]):
+        for j in range(i+1, x.shape[0]):
             res[i,j] = res[j,i] = np.sqrt((x[i][0]-x[j][0])**2+(x[i][1]-x[j][1])**2+(x[i][2]-x[j][2])**2)
     return res
 
