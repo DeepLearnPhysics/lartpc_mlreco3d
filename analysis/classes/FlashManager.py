@@ -246,33 +246,34 @@ class FlashManager:
         print('len larcv_crthits:', len(larcv_crthits))
         crthits = []
         print('type crthits:', type(crthits))
-        # TODO larcv::CRTHit exists, but is this what's loaded?
         for branch in larcv_crthits:
-            print('branch', branch)
-            print('type branch', type(branch))
-            # TODO To extend or append? That is the question
-            # Seems like make_flash uses extend because there can be separate lists 
-            # of flashes for each cryostat. I don't think this matters for CRT hits...right?
-            #crthits.extend(branch)
             crthits.append(branch)
 
         crt_v = []
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
             print('----CRTHit loop iteration', idx, '-----')
-            # f is an object of type larcv::CRTHit
+            # larcv_crthit is an object of type larcv::CRTHit
             this_crthit = crthit.CRTHit()
             this_crthit.id  = larcv_crthit.id()  # Assign a unique index
             print('Assigned CRTHit id', this_crthit.id)
             this_crthit.feb_id = larcv_crthit.feb_id()
             this_crthit.pesmap = larcv_crthit.pesmap()
-            this_crthit.t0 = larcv_crthit.ts0_ns()  # crthit timing, a candidate T0
-            print('CRTHit t0', this_crthit.t0)
+            this_crthit.total_pe = larcv_crthit.peshit()
+            this_crthit.t0_sec = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
+            this_crthit.t0_ns  = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
+            print('CRTHit t0_sec', this_crthit.t0_sec)
+            print('CRTHit t0_ns', this_crthit.t0_ns)
             this_crthit.t1 = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
             print('CRTHit t1', this_crthit.t1)
-            this_crthit.total_pe = larcv_crthit.peshit()
             this_crthit.x_position = larcv_crthit.x_pos()
-            this_crthit.x_error = larcv_crthit.x_err()
+            this_crthit.x_error    = larcv_crthit.x_err()
+            this_crthit.y_position = larcv_crthit.y_pos()
+            this_crthit.y_error    = larcv_crthit.y_err()
+            this_crthit.z_position = larcv_crthit.z_pos()
+            this_crthit.z_error    = larcv_crthit.z_err()
+            this_crthit.plane      = larcv_crthit.plane()
+            this_crthit.tagger     = larcv_crthit.tagger()
             # TODO Fill these from the larcv information
             #self.id = id
             #self.t0 = t0
@@ -425,30 +426,44 @@ class FlashManager:
 
         return self.pmt_v[flash_id]
 
-    # TODO Fill this in when classes n junk are in place
-    def get_matched_crthit(self, idx, matches=None):
-        """
-        Parameters
-        ==========
-        idx: int
-            Index of CRT hit object for which we want to retrieve a match.
-        matches: list of flashmatch::FlashMatch_t, optional, default is None
+    def run_crt_tpc_matching(self, interaction, crthits):
+        print('Run crt-tpc matching')
+        if self.tpc_v is None:
+            if interactions is None:
+                #raise Exception('You need to specify `interactions`, or to run make_qcluster.')
+                raise Exception('[CRT-TPC] You need to specify `interactions` or used cached interactions from flash matching')
+        #if interactions is not None:
+        #    print('Interactions is not None')
+        #    self.make_qcluster(interactions, **kwargs)
 
-        Returns
-        =======
-        flashmatch::CRTHit_t
-        """
-        m = self.get_match(idx, matches=matches)
-        if m is None: return None
 
-        flash_id = m.flash_id
-        if flash_id is None: return None
+        if self.crt_v is None:
+            if crthits is None:
+                raise Exception("CRTHit objects need to be defined. Either specify `crthits`, or run make_crthit.")
+        if crthits is not None:
+            print('crthits is not None')
+            self.make_crthit(crthits)
 
-        if flash_id > len(self.pmt_v):
-            raise Exception("Could not find flash id %d in self.pmt_v" % flash_id)
+        assert self.tpc_v is not None and self.crt_v is not None 
 
-        return self.pmt_v[flash_id]
+        ### Run CRT-TPC matching ###
+        # Initialize matcha::Match() class
 
+        return self.crt_matches 
+
+        #self.mgr.Reset()
+
+        # First register all objects in manager
+        #for x in self.tpc_v:
+        #    self.mgr.Add(x)
+        #for x in self.crt_v:
+        #    self.mgr.Add(x)
+
+        # Run the matching
+        #if self.all_matches is not None:
+        #    print("Warning: overwriting internal list of matches.")
+        #self.all_matches = self.mgr.Match()
+        #return self.all_matches
 
     def get_t0(self, idx, matches=None):
         """

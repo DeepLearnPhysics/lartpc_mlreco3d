@@ -35,10 +35,9 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
 
     for i, index in enumerate(image_id):
         print('----Image', i, '-----')
+        print('Starting flash matching...')
         fmatches = predictor.get_flash_matches(i, use_true_tpc_objects=True,
                                                volume=1, ADC_to_MeV=0.00285714285)
-        print('Len of things:')
-        print([len(a) for a in fmatches])
         cached_interactions = []
         for (interaction, flash, match) in fmatches:
             entry = OrderedDict(flash_fields)
@@ -53,6 +52,12 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         crt_tpc_matches = predictor.get_crt_tpc_matches(i, use_true_tpc_objects=True,
                                                         volume=1, ADC_to_MeV=0.00285714285,
                                                         interaction_list=cached_interactions)
+        for (interaction, crthit, match) in crt_tpc_matches:
+            entry = OrderedDict(crt_fields)
+            populate_crthit_entry(entry, index, data['meta'][i],
+                                  data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
+                                  interaction, crthit, match)
+            rows.append(entry)
         print('Done')
 
         # Loop over CRT hits.
@@ -118,7 +123,8 @@ def populate_entry(entry, index, meta, neutrinos,
     entry['neutrino'] = np.any(near(nus, vtx))
     return entry
 
-def populate_crthit_entry(entry, index, crthit):
+def populate_crthit_entry(entry, index, meta, neutrinos,
+                          interaction, crthit, match):
     """
     Populates the CRT hit entry with the relevant informations.
 
@@ -134,13 +140,12 @@ def populate_crthit_entry(entry, index, crthit):
     """
     entry['index'] = index
     entry['peshit'] = crthit.peshit()
-    entry['ts0_s'], entry['ts0_s_corr'] = crthit.ts0_s(), crthit.ts0_s_corr()
-    entry['ts0_ns'], entry['ts0_ns_corr'] = crthit.ts0_ns(), crthit.ts0_ns_corr()
+    entry['t0_sec'], entry['t0_ns'] = crthit.t0_sec(), crthit.t0_ns()
     entry['ts1_ns'] = crthit.ts1_ns()
     entry['plane'], entry['tagger'] = crthit.plane(), crthit.tagger()
-    entry['x_pos'], entry['x_err'] = crthit.x_pos(), crthit.x_err()
-    entry['y_pos'], entry['y_err'] = crthit.y_pos(), crthit.y_err()
-    entry['z_pos'], entry['z_err'] = crthit.z_pos(), crthit.z_err()
+    entry['x_position'], entry['x_error'] = crthit.x_position(), crthit.x_error()
+    entry['y_position'], entry['y_error'] = crthit.y_position(), crthit.y_error()
+    entry['z_position'], entry['z_error'] = crthit.z_position(), crthit.z_error()
 
     return entry
 
