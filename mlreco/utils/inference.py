@@ -1,6 +1,6 @@
 import yaml
 
-def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size=None, cpu=False):
+def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size=None, num_workers=None, cpu=False):
     '''
     Turns a training configuration into an inference configuration:
     - Turn `train` to `False`
@@ -8,6 +8,7 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
     - Load the specified validation dataset_path, if requested
     - Load the specified set of weights_path, if requested
     - Reset the batch_size to a different value, if requested
+    - Sets num_workers to a different value, if requested
     - Make the model run in CPU mode, if requested
 
     Parameters
@@ -20,6 +21,8 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
         Path to the weigths to use for inference
     batch_size: int
         Number of data samples per batch
+    num_workers:
+        Number of workers that load data
     cpu: bool
         Whether or not to execute the inference on CPU
 
@@ -47,6 +50,10 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
 
     # Change the batch_size, if requested
     cfg['iotool']['batch_size'] = batch_size
+
+    # Set the number of workers, if requested
+    if num_workers is not None:
+        cfg['iotool']['num_workers'] = num_workers
 
     # Put the network in CPU mode, if requested
     if cpu:

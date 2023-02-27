@@ -2,16 +2,17 @@
 import numpy as np
 import numba as nb
 import torch
-
 from typing import Tuple
 
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.wrapper import numba_wrapper
 from mlreco.utils import local_cdist
-from mlreco.utils.numba import numba_wrapper, unique_nb
 from mlreco.utils.ppn import get_track_endpoints_geo
 
 from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
+
 
 def cluster_features(data, clusts, extra=False, **kwargs):
     """
@@ -329,7 +330,7 @@ def split_edge_index(edge_index: nb.int64[:,:],
     # For each batch ID, find the cluster IDs within that batch
     ecids = np.empty(len(batch_ids), dtype=np.int64)
     index = 0
-    for n in unique_nb(batch_ids)[1]:
+    for n in nbl.unique(batch_ids)[1]:
         ecids[index:index+n] = np.arange(n, dtype=np.int64)
         index += n
 

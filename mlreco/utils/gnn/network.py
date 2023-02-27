@@ -6,7 +6,8 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb, mean_nb
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.wrapper import numba_wrapper
 
 
 @nb.njit(cache=True)
@@ -131,7 +132,7 @@ def mst_graph(batch_ids: nb.int64[:],
     for b in np.unique(batch_ids):
         clust_ids = np.where(batch_ids == b)[0]
         if len(clust_ids) > 1:
-            submat = np.triu(submatrix_nb(dist_mat, clust_ids, clust_ids))
+            submat = np.triu(nbl.submatrix(dist_mat, clust_ids, clust_ids))
             with nb.objmode(mst_mat = 'float32[:,:]'): # Suboptimal. Ideally want to reimplement in Numba, but tall order...
                 mst_mat = minimum_spanning_tree(submat).toarray().astype(np.float32)
             edges = np.where(mst_mat > 0.)
@@ -168,7 +169,7 @@ def knn_graph(batch_ids: nb.int64[:],
         clust_ids = np.where(batch_ids == b)[0]
         if len(clust_ids) > 1:
             subk = min(k+1, len(clust_ids))
-            submat = submatrix_nb(dist_mat, clust_ids, clust_ids)
+            submat = nbl.submatrix(dist_mat, clust_ids, clust_ids)
             for i in range(len(submat)):
                 idxs = np.argsort(submat[i])[1:subk]
                 edges = np.empty((subk-1,2), dtype=np.int64)
@@ -291,7 +292,7 @@ def _get_cluster_edge_features(data: nb.float32[:,:],
         x2 = data[clusts[c2], coords_col[0]:coords_col[1]]
 
         # Find the closest set point in each cluster
-        imin = np.argmin(cdist_nb(x1, x2)) if closest_index is None else closest_index[k]
+        imin = np.argmin(nbl.cdist(x1, x2)) if closest_index is None else closest_index[k]
         i1, i2 = imin//len(x2), imin%len(x2)
         v1 = x1[i1,:]
         v2 = x2[i2,:]
@@ -418,7 +419,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
             ii = jj = 0
             lend[k] = 0.
         else:
-            dist_mat = cdist_nb(voxels[clusts[i]], voxels[clusts[j]])
+            dist_mat = nbl.cdist(voxels[clusts[i]], voxels[clusts[j]])
             idx = np.argmin(dist_mat)
             ii, jj = idx//len(clusts[j]), idx%len(clusts[j])
             lend[k] = dist_mat[ii, jj]
@@ -460,16 +461,16 @@ def _inter_cluster_distance(voxels: nb.float32[:,:],
                             mode: str = 'voxel') -> nb.float32[:,:]:
 
     assert len(clusts) == len(batch_ids)
-    dist_mat = np.empty((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
+    dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
     indxi, indxj = complete_graph(batch_ids, directed=True)
     if mode == 'voxel':
         for k in nb.prange(len(indxi)):
             i, j = indxi[k], indxj[k]
-            dist_mat[i,j] = dist_mat[j,i] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
+            dist_mat[i,j] = dist_mat[j,i] = np.min(nbl.cdist(voxels[clusts[i]], voxels[clusts[j]]))
     elif mode == 'centroid':
         centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
         for i in nb.prange(len(batch_ids)):
-            centroids[i] = mean_nb(voxels[clusts[i]], axis=0)
+            centroids[i] = nbl.mean(voxels[clusts[i]], axis=0)
         for k in nb.prange(len(indxi)):
             i, j = indxi[k], indxj[k]
             dist_mat[i,j] = dist_mat[j,i] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
@@ -485,12 +486,14 @@ def _inter_cluster_distance_index(voxels: nb.float32[:,:],
                                   batch_ids: nb.int64[:]) -> (nb.float32[:,:], nb.int64[:,:]):
 
     assert len(clusts) == len(batch_ids)
-    dist_mat = np.empty((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
+    dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
     closest_index = np.empty((len(batch_ids), len(batch_ids)), dtype=nb.int64)
+    for i in range(len(clusts)):
+        closest_index[i,i] = i
     indxi, indxj = complete_graph(batch_ids, directed=True)
     for k in nb.prange(len(indxi)):
         i, j = indxi[k], indxj[k]
-        temp_dist_mat = cdist_nb(voxels[clusts[i]], voxels[clusts[j]])
+        temp_dist_mat = nbl.cdist(voxels[clusts[i]], voxels[clusts[j]])
         index = np.argmin(temp_dist_mat)
         ii, jj = index//temp_dist_mat.shape[1], index%temp_dist_mat.shape[1]
 

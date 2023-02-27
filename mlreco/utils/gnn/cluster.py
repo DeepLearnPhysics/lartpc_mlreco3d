@@ -4,7 +4,9 @@ import numba as nb
 import torch
 from typing import List
 
-from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.wrapper import numba_wrapper
+
 
 @numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
@@ -140,7 +142,7 @@ def _get_cluster_label(data: nb.float64[:,:],
 
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        v, cts = unique_nb(data[c, column])
+        v, cts = nbl.unique(data[c, column])
         labels[i] = v[np.argmax(np.array(cts))]
     return labels
 
@@ -177,9 +179,9 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
         cluster_ids  = data[clusts[i], cluster_column]
         primary_mask = cluster_ids == group_ids[i]
         if len(data[clusts[i][primary_mask]]):
-            v, cts = unique_nb(data[clusts[i][primary_mask], column])
+            v, cts = nbl.unique(data[clusts[i][primary_mask], column])
         else: # If the primary is empty, use group
-            v, cts = unique_nb(data[clusts[i], column])
+            v, cts = nbl.unique(data[clusts[i], column])
         labels[i] = v[np.argmax(np.array(cts))]
 
     return labels
@@ -310,7 +312,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         x = data[clust, coords_col[0]:coords_col[1]]
 
         # Center data
-        center = mean_nb(x, 0)
+        center = nbl.mean(x, 0)
         x = x - center
 
         # Get orientation matrix
@@ -378,7 +380,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
         std_value = np.std(data[clust,4])
 
         # Get the cluster semantic class
-        types, cnts = unique_nb(data[clust,-1])
+        types, cnts = nbl.unique(data[clust,-1])
         major_sem_type = types[np.argmax(cnts)]
 
         feats[k] = [mean_value, std_value, major_sem_type]
@@ -426,7 +428,7 @@ def _get_cluster_points_label(data: nb.float64[:,:],
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
-        dist_mat = cdist_nb(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
+        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
         argmins  = np.empty(len(dist_mat), dtype=np.int64)
         for j in range(len(dist_mat)):
             argmins[j] = np.argmin(dist_mat[j])
@@ -580,7 +582,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     """
     # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
     if not optimize and max_dist > 0:
-        dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+        dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
             return np.zeros(3, dtype=voxels.dtype)
@@ -588,14 +590,14 @@ def cluster_direction(voxels: nb.float64[:,:],
     # If optimize is set, select the radius by minimizing the transverse spread
     elif optimize:
         # Order the cluster points by increasing distance to the start point
-        dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+        dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         order = np.argsort(dist_mat)
         voxels = voxels[order]
         dist_mat = dist_mat[order]
 
         # Find the PCA relative secondary spread for each point
         labels = np.zeros(len(voxels), dtype=voxels.dtype)
-        meank = mean_nb(voxels[:3], 0)
+        meank = nbl.mean(voxels[:3], 0)
         covk = (np.transpose(voxels[:3]-meank) @ (voxels[:3]-meank))/3
         for i in range(2, len(voxels)):
             # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
@@ -617,7 +619,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     rel_voxels = np.empty((len(voxels), 3), dtype=voxels.dtype)
     for i in range(len(voxels)):
         rel_voxels[i] = voxels[i]-start
-    mean = mean_nb(rel_voxels, 0)
+    mean = nbl.mean(rel_voxels, 0)
     if np.linalg.norm(mean):
         return mean/np.linalg.norm(mean)
     return mean
@@ -658,7 +660,7 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
         int: (3) Coordinates of the principal axis
     """
     # Center data
-    center = mean_nb(voxels, 0)
+    center = nbl.mean(voxels, 0)
     x = voxels - center
 
     # Get orientation matrix
@@ -686,7 +688,7 @@ def cluster_dedx(voxels: nb.float64[:,:],
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
-    dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+    dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
     if max_dist > 0:
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
