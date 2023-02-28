@@ -88,7 +88,7 @@ class FlashManager:
 
         self.all_matches = None
         self.crt_matches = None
-        self.pmt_v, self.tpc_v, self.crt_v = None, None, None
+        self.pmt_v, self.tpc_v, self.crt_v, self.trk_v = None, None, None, None
 
         self.reflash_merging_window = reflash_merging_window
 
@@ -239,7 +239,6 @@ class FlashManager:
         =======
         list of matcha:CRTHit
         """
-        from flashmatch import flashmatch
         from matcha import crthit
 
         print('[MAKE CRTHITS] type larcv_crthits:', type(larcv_crthits))
@@ -274,50 +273,44 @@ class FlashManager:
             this_crthit.z_error    = larcv_crthit.z_err()
             this_crthit.plane      = larcv_crthit.plane()
             this_crthit.tagger     = larcv_crthit.tagger()
-            # TODO Fill these from the larcv information
-            #self.id = id
-            #self.t0 = t0
-            #self.xyz_cm = xyz_cm
-            #self.xyz_err_cm = xyz_err_cm
-            #self.total_pe = total_pe
-            #self.plane = plane
-            #self.tagger = tagger
 
-            ################### Available larcv::CRTHit fields: ######################
-
-            #InstanceID_t _id; ///< "ID" of this CRTHit in CRTHit collection
-            #std::vector<uint8_t> _feb_id; ///< FEB address
-            #std::map<uint8_t, std::vector<std::pair<int, float>>> _pesmap; ///< Saves signal hit information (FEB, local-channel and PE) .)
-            #float _peshit; ///< Total photo-electron (PE) in a crt hit.)
-
-            #uint64_t _ts0_s; ///< Second-only part of timestamp T0.
-            #double _ts0_s_corr; ///< [Honestly, not sure at this point, it was there since long time (BB)])]
-
-            #double _ts0_ns; ///< Timestamp T0 (from White Rabbit), in UTC absolute time scale in nanoseconds from the Epoch.)
-            #double _ts0_ns_corr; ///< [Honestly, not sure at this point, it was there since long time (BB)])]
-            #double _ts1_ns; ///< timestamp T1 ([signal time w.r.t. Trigger time]), in UTC absolute time scale in nanoseconds from the Epoch.])
-
-            #int _plane; ///< Name of the CRT wall (in the form of numbers)
-
-            #float _x_pos; ///< position in x-direction (cm)
-            #float _x_err; ///< position uncertainty in x-direction (cm)
-            #float _y_pos; ///< position in y-direction (cm)
-            #float _y_err; ///< position uncertainty in y-direction (cm)
-            #float _z_pos; ///< position in z-direction (cm)
-            #float _z_err; ///< position uncertainty in z-direction (cm)
-
-            #std::string _tagger; ///< Name of the CRT wall (in the form of strings)
-            ###############################################################################
-
-
-            #crthit.x, crthit.y, crthit.z = 0, 0, 0
-            #crthit.x_err, crthit.y_err, crthit.z_err = 0, 0, 0
-
-            # TODO Fill the rest of the CRTHit_t fields
             crt_v.append(crthit)
 
         self.crt_v = crt_v
         return crt_v
+
+    def make_tpctrack(particles):
+        from matcha import track
+        '''
+        Fill matcha::Track() from selected muon candidates for CRT-TPC matching
+        Parameters
+        ----------
+        tracks: list of Particle() objects
+
+        Returns
+        -------
+        list of matcha::Track()
+        '''
+        trk_v = []
+
+        self._id = id
+        self.start_x = start_x
+        self.start_y = start_y
+        self.start_z = start_z
+        self.end_x   = end_x
+        self.end_y   = end_y
+        self.end_z   = end_z
+        self.points = points
+        self.depositions = depositions
+
+        for idx, particle in enumerate(particles):
+            track = track.Track()
+            track.id = particle.id()
+            print('Filled Track with id', track.id)
+            trk_v.append(track)
+
+        self.trk_v = trk_v
+        return trk_v
 
     def merge_flashes(self, a, b):
         """

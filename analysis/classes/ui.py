@@ -195,6 +195,9 @@ class FullChainPredictor:
         else: # it wasn't cached, we just computed it
             print('Else')
             tpc_v, pmt_v, matches = out
+        print('[UI:GetFlashMatches] len(tpc_v):', len(tpc_v))
+        print('[UI:GetFlashMatches] len(match):', len(matches))
+        print('mathces:\n', *matches)
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
 
     def _run_flash_matching(self, entry,
@@ -346,6 +349,18 @@ class FullChainPredictor:
         if volume is not None:
             for tpc_object in tpc_v:
                 tpc_object.points = self._translate(tpc_object.points, volume)
+
+        # From tpc_v, get non-contained muon candidates for CRT-TPC matching
+        # Candidate selection criteria:
+        #   - pid >= 2: avoids electrons and photons, but includes pions and protons since mu/pi separation isn't perfect
+        #   - Uncontained track: cosmic tracks shouldn't be contained
+        muon_candidates = []
+        for interaction in tpc_v:
+            for particle in interaction.particles:
+                if particle.pid < 2 or is_contained(particle.points): continue
+                muon_candidates.append(particle)
+
+        trk_v = self.fm.make_tpctrack(muon_candidates)
 
         print('type self.data_blob[crthits][entry]:', type(self.data_blob['crthits'][entry]))
         print('self.data_blob[crthits][entry]:', self.data_blob['crthits'][entry])
