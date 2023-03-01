@@ -241,30 +241,18 @@ class FlashManager:
         """
         from matcha import crthit
 
-        print('[MAKE CRTHITS] type larcv_crthits:', type(larcv_crthits))
-        print('len larcv_crthits:', len(larcv_crthits))
         crthits = []
-        print('type crthits:', type(crthits))
         for branch in larcv_crthits:
             crthits.append(branch)
 
         crt_v = []
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
-            print('----CRTHit loop iteration', idx, '-----')
-            # larcv_crthit is an object of type larcv::CRTHit
-            this_crthit = crthit.CRTHit()
-            this_crthit.id  = larcv_crthit.id()  # Assign a unique index
-            print('Assigned CRTHit id', this_crthit.id)
-            this_crthit.feb_id = larcv_crthit.feb_id()
-            this_crthit.pesmap = larcv_crthit.pesmap()
-            this_crthit.total_pe = larcv_crthit.peshit()
-            this_crthit.t0_sec = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
-            this_crthit.t0_ns  = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
-            print('CRTHit t0_sec', this_crthit.t0_sec)
-            print('CRTHit t0_ns', this_crthit.t0_ns)
-            this_crthit.t1 = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
-            print('CRTHit t1', this_crthit.t1)
+            this_crthit = crthit.CRTHit(larcv_crthit.id())
+            this_crthit.total_pe   = larcv_crthit.peshit()
+            this_crthit.t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
+            this_crthit.t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
+            this_crthit.t1         = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
             this_crthit.x_position = larcv_crthit.x_pos()
             this_crthit.x_error    = larcv_crthit.x_err()
             this_crthit.y_position = larcv_crthit.y_pos()
@@ -279,35 +267,33 @@ class FlashManager:
         self.crt_v = crt_v
         return crt_v
 
-    def make_tpctrack(particles):
+    def make_tpctrack(self, muon_candidates):
         from matcha import track
         '''
-        Fill matcha::Track() from selected muon candidates for CRT-TPC matching
+        Fill matcha::Track() from muons candidates selected from interaction list
+
         Parameters
         ----------
-        tracks: list of Particle() objects
+        interactions: list of Interaction() objects
 
         Returns
         -------
         list of matcha::Track()
         '''
+
         trk_v = []
 
-        self._id = id
-        self.start_x = start_x
-        self.start_y = start_y
-        self.start_z = start_z
-        self.end_x   = end_x
-        self.end_y   = end_y
-        self.end_z   = end_z
-        self.points = points
-        self.depositions = depositions
-
-        for idx, particle in enumerate(particles):
-            track = track.Track()
-            track.id = particle.id()
-            print('Filled Track with id', track.id)
-            trk_v.append(track)
+        for idx, particle in enumerate(muon_candidates):
+            this_track = track.Track(id=particle.id)
+            this_track.start_x = particle.startpoint[0]
+            this_track.start_y = particle.startpoint[1]
+            this_track.start_z = particle.startpoint[2]
+            this_track.end_x   = particle.endpoint[0]
+            this_track.end_y   = particle.endpoint[1]
+            this_track.end_z   = particle.endpoint[2]
+            this_track.points  = particle.points
+            this_track.depositions = particle.depositions
+            trk_v.append(this_track)
 
         self.trk_v = trk_v
         return trk_v
