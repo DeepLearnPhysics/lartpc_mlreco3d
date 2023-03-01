@@ -44,7 +44,11 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
     if 'sampler' in cfg['iotool']:
         del cfg['iotool']['sampler']
 
-    # Load weights_path, if requested
+    # Change dataset, if requested
+    if dataset_path is not None:
+        cfg['iotool']['dataset']['data_keys'] = [dataset_path]
+
+    # Change weights, if requested
     if weights_path is not None:
         cfg['trainval']['model_path'] = weights_path
 
