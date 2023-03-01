@@ -298,8 +298,6 @@ class FullChainPredictor:
             interaction_list=[]):
 
         # No caching done if matching a subset of interactions
-        print('[CRTTPC] Interaction list:\n')
-        print(interaction_list)
         if (entry, volume, use_true_tpc_objects) not in self.crt_tpc_matches or len(interaction_list):
             print('[CRTTPC] No caching done')
             out = self._run_crt_tpc_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
@@ -307,7 +305,7 @@ class FullChainPredictor:
 
         if len(interaction_list) == 0:
             print('[CRTTPC] len(interaction_list) is 0')
-            tpc_v, crt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+            tpc_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
             print('[CRTTPC] Not chached')
             tpc_v, crt_v, matches = out
@@ -331,7 +329,6 @@ class FullChainPredictor:
         else:
             tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
 
-        print('len(interaction_list):', len(interaction_list))
         if len(interaction_list) > 0: # by default, use all interactions
             tpc_v_select = []
             for interaction in tpc_v:
@@ -350,26 +347,22 @@ class FullChainPredictor:
             for tpc_object in tpc_v:
                 tpc_object.points = self._translate(tpc_object.points, volume)
 
-        # From tpc_v, get non-contained muon candidates for CRT-TPC matching
+        # From interactions, get non-contained muon candidates for CRT-TPC matching
         # Candidate selection criteria:
         #   - pid >= 2: avoids electrons and photons, but includes pions and protons since mu/pi separation isn't perfect
         #   - Uncontained track: cosmic tracks shouldn't be contained
-        muon_candidates = []
-        for interaction in tpc_v:
-            for particle in interaction.particles:
-                if particle.pid < 2 or is_contained(particle.points): continue
-                muon_candidates.append(particle)
+        muon_candidates = [particle for interaction in interaction_list
+                           for particle in interaction.particles 
+                           if particle.pid >= 2 and not self.is_contained(particle.points)
+        ]
 
         trk_v = self.fm.make_tpctrack(muon_candidates)
-
-        print('type self.data_blob[crthits][entry]:', type(self.data_blob['crthits'][entry]))
-        print('self.data_blob[crthits][entry]:', self.data_blob['crthits'][entry])
         crt_v = self.fm.make_crthit(self.data_blob['crthits'][entry])
 
         # TODO Placeholder
         matches = []
 
-        return tpc_v, crt_v, matches
+        return trk_v, crt_v, matches
 
     def _fit_predict_ppn(self, entry):
         '''
