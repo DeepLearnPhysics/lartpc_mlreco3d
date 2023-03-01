@@ -302,8 +302,16 @@ def train_loop(handlers):
 
     cfg=handlers.cfg
     tsum = 0.
+    epoch_counter = 0
+    clear_epoch = cfg['trainval'].get('clear_gpu_cache_at_epoch', False)
     while handlers.iteration < cfg['trainval']['iterations']:
         epoch = handlers.iteration / float(len(handlers.data_io))
+        epoch_counter += 1.0 /  float(len(handlers.data_io))
+        if epoch_counter >= clear_epoch:
+            epoch_counter = 0
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
         tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
         handlers.watch.start('iteration')
 
