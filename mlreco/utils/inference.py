@@ -27,7 +27,7 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
         Whether or not to execute the inference on CPU
 
     Returns
-    ------
+    -------
     dict
         Dictionary of parameters to initialize handlers
     '''

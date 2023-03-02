@@ -1,13 +1,14 @@
 import os, re, warnings
 import torch
 
-from mlreco.models import construct
-from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
+from .iotools.data_parallel import DataParallel
+
+from .models import construct
+from .models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
 
 import mlreco.utils as utils
-from mlreco.utils.data_parallel import DataParallel
-from mlreco.utils.utils import to_numpy
-from mlreco.utils.adabound import AdaBound, AdaBoundW
+from .utils.utils import to_numpy
+from .utils.adabound import AdaBound, AdaBoundW
 
 
 class trainval(object):

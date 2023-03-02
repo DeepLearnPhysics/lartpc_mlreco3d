@@ -7,11 +7,8 @@ from pathlib import Path
 
 class HDF5Writer:
     '''
-    Class which build an HDF5 file to store events which contain:
-     - Voxel tensors with their values
-     - Feature tensors
-     - Particle-level objects
-     - ...
+    Class which build an HDF5 file to store the output
+    (and optionally input) of the reconstruction chain.
 
     More documentation to come.
     '''
@@ -21,7 +18,7 @@ class HDF5Writer:
         Initialize the basics of the output file
 
         Parameters
-        ---------
+        ----------
         cfg : dict
             Writer configuration parameter (TODO: turn this into a list of named parameters)
         '''
@@ -51,17 +48,18 @@ class HDF5Writer:
         self.batch_size = len(data_blob['index'])
 
         # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'dtype':None, 'width':0, 'ref':False, 'index':False})
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False})
 
         # If requested, loop over input_keys and add them to what needs to be tracked
         if self.store_input:
             if self.input_keys is None: self.input_keys = data_blob.keys()
             self.input_keys = set(self.input_keys)
+            if 'index' not in self.input_keys: self.input_keys.add('index')
+            for key in self.skip_input_keys:
+                if key in self.input_keys:
+                    self.input_keys.remove(key)
             for key in self.input_keys:
-                if key not in self.skip_input_keys:
-                    self.register_key(data_blob, key)
-                else:
-                    self.input_keys.pop(key)
+                self.register_key(data_blob, key, 'data')
         else:
             self.input_keys = {}
 
@@ -70,11 +68,11 @@ class HDF5Writer:
                 'No result provided, cannot request keys from it'
         if self.result_keys is None: self.result_keys = result_blob.keys()
         self.result_keys = set(self.result_keys)
+        for key in self.skip_result_keys:
+            if key in self.result_keys:
+                self.result_keys.remove(key)
         for key in self.result_keys:
-            if key not in self.skip_result_keys:
-                self.register_key(result_blob, key)
-            else:
-                self.result_keys.pop(key)
+            self.register_key(result_blob, key, 'result')
 
         # Initialize the output HDF5 file
         with h5py.File(self.file_name, 'w') as file:
@@ -89,7 +87,7 @@ class HDF5Writer:
             # Mark file as ready for use
             self.created = True
 
-    def register_key(self, blob, key):
+    def register_key(self, blob, key, category):
         '''
         Identify the dtype and shape objects to be dealt with.
 
@@ -99,8 +97,11 @@ class HDF5Writer:
             Dictionary containing the information to be stored
         key : string
             Dictionary key name
+        category : string
+            Data category: `data` or `result`
         '''
-        # If the data under the key is a scalar, store it as is
+        # Store the necessary information to know how to store a key
+        self.key_dict[key]['category'] = category
         if not isinstance(blob[key], list):
             # Single scalar (TODO: Is that thing? If not, why not?)
             self.key_dict[key]['dtype'] = type(blob[key])
@@ -110,17 +111,21 @@ class HDF5Writer:
                 # TODO: understand why single scalars are in arrays...
                 assert len(blob[key]) == 1 and\
                         not hasattr(blob[key][0], '__len__'),\
-                        'If there is an array of mismatched length, it must contain a single scalar'
+                        'If there is an array of length mismatched with batch_size,\
+                        it must contain a single scalar.'
                 self.key_dict[key]['dtype'] = type(blob[key][0])
             elif not hasattr(blob[key][0], '__len__'):
                 # List containing a single scalar per batch ID
                 self.key_dict[key]['dtype'] = type(blob[key][0])
+            elif isinstance(blob[key][0], list) and\
+                    not hasattr(blob[key][0][0], '__len__'):
+                # List containing a single list of scalars per batch ID
+                self.key_dict[key]['dtype'] = type(blob[key][0][0])
             elif isinstance(blob[key][0], np.ndarray) and\
                     not blob[key][0].dtype == np.object:
                 # List containing a single ndarray of scalars per batch ID
                 self.key_dict[key]['dtype'] = blob[key][0].dtype
                 self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
-                self.key_dict[key]['ref']   = True
             elif isinstance(blob[key][0], (list, np.ndarray)) and isinstance(blob[key][0][0], np.ndarray):
                 # List containing a list (or ndarray) of ndarrays per batch ID
                 widths = []
@@ -130,8 +135,7 @@ class HDF5Writer:
 
                 self.key_dict[key]['dtype'] = blob[key][0][0].dtype
                 self.key_dict[key]['width'] = widths
-                self.key_dict[key]['ref']   = True
-                self.key_dict[key]['index'] = same_width
+                self.key_dict[key]['merge'] = same_width
             else:
                 raise TypeError('Do not know how to store output of type', type(blob[key][0]))
 
@@ -147,31 +151,33 @@ class HDF5Writer:
         self.event_dtype = []
         ref_dtype = h5py.special_dtype(ref=h5py.RegionReference)
         for key, val in self.key_dict.items():
-            if not val['ref'] and not val['index']:
-                # If the key has <= 1 scalar per batch ID: store in the event dataset
-                self.event_dtype.append((key, val['dtype'].__name__))
-            elif val['ref'] and not isinstance(val['width'], list):
-                # If the key contains one ndarray: store as its own dataset + store a reference in the event dataset 
+            cat = val['category']
+            grp = file[cat] if cat in file else file.create_group(cat)
+            self.event_dtype.append((key, ref_dtype))
+            if not val['merge'] and not isinstance(val['width'], list):
+                # If the key contains scalars in an array, store it as such
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                file.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
-                self.event_dtype.append((f'{key}_ref_', ref_dtype))
-            elif val['ref'] and not val['index']:
-                # If the elements of the list are of variable widths, refer to one dataset per element
+                grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
+            elif not val['merge']:
+                # If the elements of the list are of variable widths, refer to one
+                # dataset per element. An index is stored alongside the dataset to break
+                # each element downstream.
+                n_arrays = len(val['width'])
+                subgrp = grp.create_group(key)
+                subgrp.create_dataset(f'index', (0, n_arrays), maxshape=(None, n_arrays), dtype=ref_dtype)
                 for i, w in enumerate(val['width']):
-                    name = f'{key}_el{i:d}'
                     shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                    file.create_dataset(name, shape, maxshape, dtype=val['dtype'])
-                    self.event_dtype.append((f'{name}_ref_', ref_dtype))
-            elif val['index']:
+                    subgrp.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
+            else:
                 # If the  elements of the list are of equal width, store them all 
                 # to one dataset. An index is stored alongside the dataset to break
                 # it into individual elements downstream.
+                subgrp = grp.create_group(key)
                 w = val['width'][0]
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                file.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
-                file.create_dataset(f'{key}_index_', (0,), maxshape=(None,), dtype=ref_dtype)
-                self.event_dtype.append((f'{key}_index_ref_', ref_dtype))
+                subgrp.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
+                subgrp.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
 
         file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
@@ -231,30 +237,29 @@ class HDF5Writer:
             Batch ID to be stored
         '''
         val = self.key_dict[key]
-        if not val['ref'] and not val['index']:
-            # Store the scalar
-            event[key] = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0] # Does not handle scalar case. TODO: Useful?
-        elif val['ref'] and not isinstance(val['width'], list):
-            # Store the array and its reference
-            self.store(file, event, key, blob[key][batch_id])
-        elif val['ref'] and not val['index']:
+        cat = val['category']
+        if not val['merge'] and not isinstance(val['width'], list):
+            # Store the scalar. TODO: Does not handle scalars (useful?)
+            val = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
+            if not hasattr(val, '__len__'): val = [val]
+            self.store(file[cat], event, key, val)
+        elif not val['merge']:
             # Store the array and its reference for each element in the list
-            for i in range(len(val['width'])):
-                self.store(file, event, f'{key}_el{i:d}', blob[key][batch_id][i])
-        elif val['index']:
+            self.store_jagged(file[cat], event, key, blob[key][batch_id])
+        else:
             # Store one array of for all in the list and a index to break them
-            self.store_indexed(file, event, key, blob[key][batch_id])
+            self.store_flat(file[cat], event, key, blob[key][batch_id])
 
     @staticmethod
-    def store(file, event, key, array):
+    def store(group, event, key, array):
         '''
-        Stores an `ndarray`in the file and stores its mapping
+        Stores an `ndarray` in the file and stores its mapping
         in the event dataset.
 
         Parameters
         ----------
-        file : h5py.File
-            HDF5 file instance
+        group : h5py.Group
+            Dataset group under which to store this array
         event : dict
             Dictionary of objects that make up one event
         key: str
@@ -263,25 +268,63 @@ class HDF5Writer:
             Array to be stored
         '''
         # Extend the dataset, store array
-        dataset = file[key]
+        dataset = group[key]
         current_id = len(dataset)
         dataset.resize(current_id + len(array), axis=0)
         dataset[current_id:current_id + len(array)] = array
 
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
-        event[f'{key}_ref_'] = region_ref
+        event[key] = region_ref
 
     @staticmethod
-    def store_indexed(file, event, key, array_list):
+    def store_jagged(group, event, key, array_list):
         '''
-        Stores a list of arrays in the file and stores
-        its index mapping in the event dataset.
+        Stores a jagged list of arrays in the file and stores
+        an index mapping for each array element in the event dataset.
 
         Parameters
         ----------
-        file : h5py.File
-            HDF5 file instance
+        group : h5py.Group
+            Dataset group under which to store this array
+        event : dict
+            Dictionary of objects that make up one event
+        key: str
+            Name of the dataset in the file
+        array_list : list(np.ndarray)
+            List of arrays to be stored
+        '''
+        # Extend the dataset, store combined array
+        region_refs = []
+        for i, array in enumerate(array_list):
+            dataset = group[key][f'element_{i}']
+            current_id = len(dataset)
+            dataset.resize(current_id + len(array), axis=0)
+            dataset[current_id:current_id + len(array)] = array
+
+            region_ref = dataset.regionref[current_id:current_id + len(array)]
+            region_refs.append(region_ref)
+
+        # Define the index which stores a list of region_refs
+        index = group[key]['index']
+        current_id = len(dataset)
+        index.resize(current_id+1, axis=0)
+        index[current_id] = region_refs
+
+        # Define a region reference to all the references, store it at the event level
+        region_ref = index.regionref[current_id:current_id+1]
+        event[key] = region_ref
+
+    @staticmethod
+    def store_flat(group, event, key, array_list):
+        '''
+        Stores a concatenated list of arrays in the file and stores
+        its index mapping in the event dataset to break them.
+
+        Parameters
+        ----------
+        group : h5py.Group
+            Dataset group under which to store this array
         event : dict
             Dictionary of objects that make up one event
         key: str
@@ -291,13 +334,13 @@ class HDF5Writer:
         '''
         # Extend the dataset, store combined array
         array = np.concatenate(array_list)
-        dataset = file[key]
+        dataset = group[key]['elements']
         first_id = len(dataset)
         dataset.resize(first_id + len(array), axis=0)
         dataset[first_id:first_id + len(array)] = array
 
         # Loop over arrays in the list, create a reference for each
-        index = file[f'{key}_index_']
+        index = group[key]['index']
         current_id = len(index)
         index.resize(first_id + len(array_list), axis=0)
         last_id = first_id
@@ -309,4 +352,4 @@ class HDF5Writer:
 
         # Define a region reference to all the references, store it at the event level
         region_ref = index.regionref[current_id:current_id + len(array_list)]
-        event[f'{key}_index_ref_'] = region_ref
+        event[key] = region_ref
