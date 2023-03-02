@@ -129,6 +129,26 @@ def compute_particle_direction(p: Particle,
         return direction
     else:
         return direction, pca.explained_variance_ratio_
+    
+
+def compute_track_dedx(p, bin_size=17):
+    assert len(p.points) >= 2
+    vec = p.endpoint - p.startpoint
+    vec_norm = np.linalg.norm(vec)
+    vec = (vec / vec_norm).astype(np.float64)
+    proj = p.points - p.startpoint
+    proj = np.dot(proj, vec)
+    bins = np.arange(proj.min(), proj.max(), bin_size)
+    bin_inds = np.digitize(proj, bins)
+    dedx = np.zeros(np.unique(bin_inds).shape[0]).astype(np.float64)
+    for i, b_i in enumerate(np.unique(bin_inds)):
+        mask = bin_inds == b_i
+        sum_energy = p.depositions[mask].sum()
+        if np.count_nonzero(mask) < 2: continue
+        # Repeat PCA locally for better measurement of dx
+        dx = proj[mask].max() - proj[mask].min()
+        dedx[i] = sum_energy / dx
+    return dedx
 
 
 def highland_formula(p, l, m, X_0=14, z=1):

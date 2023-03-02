@@ -45,7 +45,7 @@ class Particle:
         (1, 3) array of particle's endpoint, if it could be assigned
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id,
-                 pid, image_id, voxel_indices=None, depositions=None, volume=0, **kwargs):
+                 pid, image_id, nu_id=-1, voxel_indices=None, depositions=None, volume=0, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
@@ -55,6 +55,7 @@ class Particle:
         self.pid = pid
         self.pid_conf = kwargs.get('pid_conf', None)
         self.interaction_id = interaction_id
+        self.nu_id = nu_id
         self.image_id = image_id
         self.is_primary = kwargs.get('is_primary', False)
         self.match = []

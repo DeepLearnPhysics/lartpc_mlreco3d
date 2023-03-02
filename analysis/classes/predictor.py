@@ -18,7 +18,7 @@ from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import correct_track_endpoints_closest, \
                                       get_track_points_default, \
-                                      local_density_correction
+                                      local_density_correction, correct_track_endpoints_linfit
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -106,6 +106,14 @@ class FullChainPredictor:
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
         self.prune_vertex = predictor_cfg.get('prune_vertex', True)
         self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
+        self.track_point_corrector = predictor_cfg.get('track_point_corrector', 'None')
+        if self.track_point_corrector == 'linfit':
+            self.track_point_corrector = correct_track_endpoints_linfit
+        elif self.track_point_corrector == 'density':
+            self.track_point_corrector = local_density_correction
+        else:
+            def f(x): pass
+            self.track_point_corrector = f
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
@@ -942,13 +950,12 @@ class FullChainPredictor:
                 elif p.semantic_type == 1:
                     if self.track_endpoints_mode == 'node_features':
                         get_track_points_default(p)
-                        local_density_correction(p)
                     elif self.track_endpoints_mode == 'max_dist':
                         correct_track_endpoints_closest(p)
-                        local_density_correction(p)
                     else:
                         raise ValueError("Track endpoint attachment mode {}\
                              not supported!".format(self.track_endpoints_mode))
+                    self.track_point_corrector(p)
                 else:
                     continue
             out_particle_list.extend(out)

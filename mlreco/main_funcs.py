@@ -307,7 +307,7 @@ def train_loop(handlers):
     while handlers.iteration < cfg['trainval']['iterations']:
         epoch = handlers.iteration / float(len(handlers.data_io))
         epoch_counter += 1.0 /  float(len(handlers.data_io))
-        if epoch_counter >= clear_epoch:
+        if clear_epoch and (epoch_counter >= clear_epoch):
             epoch_counter = 0
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

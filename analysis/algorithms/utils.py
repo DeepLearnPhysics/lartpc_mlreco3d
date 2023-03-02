@@ -6,7 +6,7 @@ from analysis.algorithms.calorimetry import *
 from scipy.spatial.distance import cdist
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
 
-from analysis.algorithms.calorimetry import get_csda_range_spline
+from analysis.algorithms.calorimetry import get_csda_range_spline, compute_track_dedx
 
 import numpy as np
 # Splines for ranged based energy reco
@@ -158,6 +158,18 @@ def local_density_correction(p, r=5):
         p1, p2 = p.startpoint, p.endpoint
         p.startpoint = p2
         p.endpoint = p1
+
+
+def correct_track_endpoints_linfit(p, bin_size=17):
+    if len(p.points) >= 2:
+        dedx = compute_track_dedx(p, bin_size=bin_size)
+        if len(dedx) > 1:
+            x = np.arange(len(dedx))
+            params = np.polyfit(x, dedx, 1)
+            if params[0] < 0:
+                p1, p2 = p.startpoint, p.endpoint
+                p.startpoint = p2
+                p.endpoint = p1
 
 
 def load_range_reco(particle_type='muon', kinetic_energy=True):

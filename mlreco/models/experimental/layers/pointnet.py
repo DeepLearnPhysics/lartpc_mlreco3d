@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch_geometric.nn import MLP, PointNetConv, fps, global_max_pool, radius
 
 # From Pytorch Geometric Examples for PointNet:
@@ -36,22 +37,63 @@ class GlobalSAModule(torch.nn.Module):
         return x, pos, batch
 
 
-class Net(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
+class PointNet(torch.nn.Module):
+    '''
+    Pytorch Geometric's implementation of PointNet, modified for
+    use in lartpc_mlreco3d and generalized. 
+    '''
+    def __init__(self, cfg, name='pointnet'):
+        super(PointNet, self).__init__()
 
-        # Input channels account for both `pos` and node features.
-        self.sa1_module = SAModule(0.5, 3, MLP([4, 64, 64, 128]))
-        self.sa2_module = SAModule(0.25, 6, MLP([128 + 3, 128, 128, 256]))
-        self.sa3_module = GlobalSAModule(MLP([256 + 3, 256, 512, 1024]))
+        self.model_config = cfg[name]
 
-        self.mlp = MLP([1024, 512, 256, 10], dropout=0.5, norm=None)
+        self.depth = self.model_config.get('depth', 2)
+
+        self.sampling_ratio = self.model_config.get('sampling_ratio', 0.5)
+        if isinstance(self.sampling_ratio, float):
+            self.sampling_ratio = [self.sampling_ratio] * self.depth
+        elif isinstance(self.sampling_ratio, list):
+            assert len(self.sampling_ratio) == self.depth
+        else:
+            raise ValueError("Sampling ratio must either be given as \
+                             float or list of floats.")
+        
+        self.neighbor_radius = self.model_config.get('neighbor_radius', 3.0)
+        if isinstance(self.neighbor_radius, float):
+            self.neighbor_radius = [self.neighbor_radius] * self.depth
+        elif isinstance(self.neighbor_radius, list):
+            assert len(self.neighbor_radius) == self.depth
+        else:
+            raise ValueError("Neighbor aggregation radius must either \
+                             be given as float or list of floats.")
+        
+        self.mlp_specs = []
+        self.sa_modules = nn.ModuleList()
+
+        for i in range(self.depth):
+            mlp_specs = self.model_config['mlp_specs_{}'.format(i)]
+            self.sa_modules.append(
+                SAModule(self.sampling_ratio[i], self.neighbor_radius[i], MLP(mlp_specs))
+            )
+            self.mlp_specs.append(mlp_specs)
+
+        self.mlp_specs_glob = self.model_config.get('mlp_specs_glob', [256 + 3, 256, 512, 1024])
+        self.mlp_specs_final = self.model_config.get('mlp_specs_final', [1024, 512, 256, 128])
+        self.dropout = self.model_config.get('dropout', 0.5)
+        self.latent_size = self.mlp_specs_final[-1]
+
+        self.sa3_module = GlobalSAModule(MLP(self.mlp_specs_glob))
+        self.mlp = MLP(self.mlp_specs_final, dropout=self.dropout, norm=None)
 
     def forward(self, data):
         sa0_out = (data.x, data.pos, data.batch)
-        sa1_out = self.sa1_module(*sa0_out)
-        sa2_out = self.sa2_module(*sa1_out)
-        sa3_out = self.sa3_module(*sa2_out)
+
+        out = sa0_out
+
+        for m in self.sa_modules:
+            out = m(*out)
+
+        sa3_out = self.sa3_module(*out)
         x, pos, batch = sa3_out
 
         return self.mlp(x)
@@ -61,8 +103,8 @@ class PointNetEncoder(torch.nn.Module):
 
     def __init__(self, cfg, name='pointnet_encoder'):
         super(PointNetEncoder, self).__init__()
-        self.net = Net()
-        self.latent_size = 10
+        self.net = PointNet(cfg)
+        self.latent_size = self.net.latent_size
 
     def forward(self, batch):
         out = self.net(batch)
