@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from scipy.special import softmax
 from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
+        TruthParticle, Interaction, TruthInteraction, FlashManager, CRTTPCManager
 from analysis.classes.particle import matrix_counts, matrix_iou, \
         match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
@@ -82,7 +82,8 @@ class FullChainPredictor:
         self.num_images = len(data_blob['input_data'])
         self.index = self.data_blob['index']
 
-        self.spatial_size             = predictor_cfg['spatial_size']
+        #self.spatial_size             = predictor_cfg['spatial_size']
+        self.spatial_size             = predictor_cfg.get('spatial_size', 1)
         # For matching particles and interactions
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
@@ -151,10 +152,14 @@ class FullChainPredictor:
             assert len(opflash_keys) == self._num_volumes
 
             self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0], reflash_merging_window=reflash_merging_window)
+            self.crt_tpc_manager = CRTTPCManager(cfg, meta=self.data_blob['meta'][0])
             self.opflash_keys = opflash_keys
 
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
+
+            # TODO Placeholder.  (key, value) TBD. 
+            self.crt_tpc_matches = {} 
 
 
     def __repr__(self):
