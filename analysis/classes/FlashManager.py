@@ -87,8 +87,7 @@ class FlashManager:
         print('...done.')
 
         self.all_matches = None
-        self.crt_matches = None
-        self.pmt_v, self.tpc_v, self.crt_v, self.trk_v = None, None, None, None
+        self.pmt_v, self.tpc_v = None, None
 
         self.reflash_merging_window = reflash_merging_window
 
@@ -138,8 +137,6 @@ class FlashManager:
         """
         from flashmatch import flashmatch
 
-        print('***** IN MAKE_QCLUSTER *******')
-
         if self.min_x is None:
             raise Exception('min_x is None')
 
@@ -180,11 +177,7 @@ class FlashManager:
         from flashmatch import flashmatch
 
         flashes = []
-        print('type larcv_flahes', type(larcv_flashes))
-        print('len larcv_flahes', len(larcv_flashes))
         for branch in larcv_flashes:
-            print('Type flash branch', type(branch))
-            print('flash branch', branch)
             flashes.extend(branch)
 
         pmt_v, times = [], []
@@ -226,77 +219,7 @@ class FlashManager:
             pmt_v = final_pmt_v
 
         self.pmt_v = pmt_v
-        print('Made list of %d Flash_t' % len(pmt_v))
         return pmt_v
-
-    def make_crthit(self, larcv_crthits):
-        """
-        Parameters
-        ==========
-        larcv_crthits: list of list of larcv::CRTHit
-
-        Returns
-        =======
-        list of matcha:CRTHit
-        """
-        from matcha import crthit
-
-        crthits = []
-        for branch in larcv_crthits:
-            crthits.append(branch)
-
-        crt_v = []
-        # Convert larcv::CRTHit to matcha::CRTHit
-        for idx, larcv_crthit in enumerate(crthits):
-            this_crthit = crthit.CRTHit(larcv_crthit.id())
-            this_crthit.total_pe   = larcv_crthit.peshit()
-            this_crthit.t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
-            this_crthit.t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
-            this_crthit.t1         = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
-            this_crthit.x_position = larcv_crthit.x_pos()
-            this_crthit.x_error    = larcv_crthit.x_err()
-            this_crthit.y_position = larcv_crthit.y_pos()
-            this_crthit.y_error    = larcv_crthit.y_err()
-            this_crthit.z_position = larcv_crthit.z_pos()
-            this_crthit.z_error    = larcv_crthit.z_err()
-            this_crthit.plane      = larcv_crthit.plane()
-            this_crthit.tagger     = larcv_crthit.tagger()
-
-            crt_v.append(crthit)
-
-        self.crt_v = crt_v
-        return crt_v
-
-    def make_tpctrack(self, muon_candidates):
-        from matcha import track
-        '''
-        Fill matcha::Track() from muons candidates selected from interaction list
-
-        Parameters
-        ----------
-        interactions: list of Interaction() objects
-
-        Returns
-        -------
-        list of matcha::Track()
-        '''
-
-        trk_v = []
-
-        for idx, particle in enumerate(muon_candidates):
-            this_track = track.Track(id=particle.id)
-            this_track.start_x = particle.startpoint[0]
-            this_track.start_y = particle.startpoint[1]
-            this_track.start_z = particle.startpoint[2]
-            this_track.end_x   = particle.endpoint[0]
-            this_track.end_y   = particle.endpoint[1]
-            this_track.end_z   = particle.endpoint[2]
-            this_track.points  = particle.points
-            this_track.depositions = particle.depositions
-            trk_v.append(this_track)
-
-        self.trk_v = trk_v
-        return trk_v
 
     def merge_flashes(self, a, b):
         """
@@ -327,12 +250,10 @@ class FlashManager:
         return flash
 
     def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
-        print('Run flash matching')
         if self.tpc_v is None:
             if interactions is None:
                 raise Exception('You need to specify `interactions`, or to run make_qcluster.')
         if interactions is not None:
-            print('Interactions is not None')
             self.make_qcluster(interactions, **kwargs)
 
 
@@ -340,7 +261,6 @@ class FlashManager:
             if flashes is None:
                 raise Exception("PMT objects need to be defined. Either specify `flashes`, or run make_flash.")
         if flashes is not None:
-            print('Flashes is not None')
             self.make_flash(flashes)
 
         assert self.tpc_v is not None and self.pmt_v is not None 
@@ -405,44 +325,6 @@ class FlashManager:
 
         return self.pmt_v[flash_id]
 
-    def run_crt_tpc_matching(self, interaction, crthits):
-        print('Run crt-tpc matching')
-        if self.tpc_v is None:
-            if interactions is None:
-                #raise Exception('You need to specify `interactions`, or to run make_qcluster.')
-                raise Exception('[CRT-TPC] You need to specify `interactions` or used cached interactions from flash matching')
-        #if interactions is not None:
-        #    print('Interactions is not None')
-        #    self.make_qcluster(interactions, **kwargs)
-
-
-        if self.crt_v is None:
-            if crthits is None:
-                raise Exception("CRTHit objects need to be defined. Either specify `crthits`, or run make_crthit.")
-        if crthits is not None:
-            print('crthits is not None')
-            self.make_crthit(crthits)
-
-        assert self.tpc_v is not None and self.crt_v is not None 
-
-        ### Run CRT-TPC matching ###
-        # Initialize matcha::Match() class
-
-        return self.crt_matches 
-
-        #self.mgr.Reset()
-
-        # First register all objects in manager
-        #for x in self.tpc_v:
-        #    self.mgr.Add(x)
-        #for x in self.crt_v:
-        #    self.mgr.Add(x)
-
-        # Run the matching
-        #if self.all_matches is not None:
-        #    print("Warning: overwriting internal list of matches.")
-        #self.all_matches = self.mgr.Match()
-        #return self.all_matches
 
     def get_t0(self, idx, matches=None):
         """
