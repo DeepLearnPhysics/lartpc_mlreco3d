@@ -41,7 +41,7 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
                         dtype=object if not same_length[idx] else np.int64) \
                         for idx, b in enumerate(bcids)]
 
-    frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]
+    frags_seg = [frag_seg_np[b].astype(np.int32) for idx, b in enumerate(bcids)]
 
     out = {
         'frags'         : [fragments_np],

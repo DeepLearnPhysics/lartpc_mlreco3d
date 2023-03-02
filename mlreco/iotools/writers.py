@@ -111,8 +111,8 @@ class HDF5Writer:
                 # TODO: understand why single scalars are in arrays...
                 assert len(blob[key]) == 1 and\
                         not hasattr(blob[key][0], '__len__'),\
-                        'If there is an array of length mismatched with batch_size,\
-                        it must contain a single scalar.'
+                        'If there is an array of length mismatched with batch_size, '+\
+                        'it must contain a single scalar.'
                 self.key_dict[key]['dtype'] = type(blob[key][0])
             elif not hasattr(blob[key][0], '__len__'):
                 # List containing a single scalar per batch ID

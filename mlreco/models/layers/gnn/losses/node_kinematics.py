@@ -240,6 +240,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                     input_node_features = out['input_node_features'][i][j]
                     node_assn_vtx     = np.stack([get_cluster_label(labels, clusts, column=c) for c in range(self.vtx_col, self.vtx_col+3)], axis=1)
                     node_assn_vtx_pos = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
+                    compute_vtx_pos   = node_pred_vtx.shape[-1] == 5
 
                     # Do not apply loss to nodes labeled -1 or nodes with vertices outside of volume (TODO: this is weak if the volume is not a cube)
                     valid_mask_vtx = (node_assn_vtx >= 0.).all(axis=1) & (node_assn_vtx <= self.spatial_size).all(axis=1) & (node_assn_vtx_pos > -1)
@@ -255,7 +256,6 @@ class NodeKinematicsLoss(torch.nn.Module):
                     pos_mask_vtx = np.where(node_assn_vtx_pos[valid_mask_vtx])[0]
                     if len(pos_mask_vtx):
                         # Compute the primary score loss on all valid nodes
-                        compute_vtx_pos   = node_pred_vtx.shape[-1] == 5
                         node_pred_vtx     = node_pred_vtx[valid_mask_vtx]
                         node_assn_vtx_pos = torch.tensor(node_assn_vtx_pos[valid_mask_vtx], dtype=torch.long, device=node_pred_vtx.device)
                         if not compute_vtx_pos:
@@ -294,7 +294,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                             n_clusts_vtx += len(valid_mask_vtx)
                             n_clusts_vtx_pos += len(pos_mask_vtx)
                     else:
-                        vtx_labels.append(np.empty((0,3)))
+                        vtx_labels.append(np.empty((0,3), dtype=np.float32))
                         if self.use_anchor_points: anchors.append(np.empty((0,3)))
 
                 # Compute the accuracy of assignment (fraction of correctly assigned nodes)
@@ -336,12 +336,12 @@ class NodeKinematicsLoss(torch.nn.Module):
             })
         if compute_vtx:
             result.update({
-                'vtx_labels': vtx_labels if n_clusts_vtx_pos else [],
                 'vtx_score_loss': vtx_score_loss/n_clusts_vtx if n_clusts_vtx else 0.,
                 'vtx_score_accuracy': vtx_score_acc/n_clusts_vtx if n_clusts_vtx else 1.,
                 'vtx_position_loss': vtx_position_loss/n_clusts_vtx_pos if n_clusts_vtx_pos else 0.,
                 'vtx_position_accuracy': vtx_position_acc/n_clusts_vtx_pos if n_clusts_vtx_pos else 1.
             })
+            if compute_vtx_pos: result['vtx_labels'] = vtx_labels,
             if self.use_anchor_points: result['vtx_anchors'] = vtx_anchors
 
         return result
