@@ -5,3 +5,4 @@ from .TruthParticleFragment import TruthParticleFragment
 from .Interaction import Interaction
 from .TruthInteraction import TruthInteraction
 from .FlashManager import FlashManager
+from .CRTTPCManager import CRTTPCManager

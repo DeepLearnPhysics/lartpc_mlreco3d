@@ -11,7 +11,7 @@ from collections import defaultdict
 
 from scipy.special import softmax
 from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
+        TruthParticle, Interaction, TruthInteraction, FlashManager, CRTTPCManager
 from analysis.classes.particle import matrix_counts, matrix_iou, \
         match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
@@ -135,6 +135,7 @@ class FullChainPredictor:
             assert len(opflash_keys) == self._num_volumes
 
             self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0], reflash_merging_window=reflash_merging_window)
+            self.crt_tpc_manager = CRTTPCManager(cfg, meta=self.data_blob['meta'][0])
             self.opflash_keys = opflash_keys
 
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
@@ -356,8 +357,8 @@ class FullChainPredictor:
                            if particle.pid >= 2 and not self.is_contained(particle.points)
         ]
 
-        trk_v = self.fm.make_tpctrack(muon_candidates)
-        crt_v = self.fm.make_crthit(self.data_blob['crthits'][entry])
+        trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
+        crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
 
         # TODO Placeholder
         matches = []
