@@ -40,37 +40,8 @@ def list_concat(data_blob, outputs, avoid_keys=[]):
     return result_data, result_outputs
 
 
-def unwrap_2d_scn(data_blob, outputs, avoid_keys=[]):
-    """
-    For 2D data in SCN format
-
-    See unwrap_scn
-    """
-    return unwrap_scn(data_blob, outputs, 2, avoid_keys)
-
-
-def unwrap_3d_scn(data_blob, outputs, avoid_keys=[]):
-    """
-    For 3D data in SCN format
-
-    See unwrap_scn
-    """
-    return unwrap_scn(data_blob, outputs, 3, avoid_keys)
-
-
-def unwrap_3d_mink(data_blob, outputs, avoid_keys=[]):
-    """
-    Adapted for MinkowskiEngine (batch id column is 0)
-    """
-    return unwrap_scn(data_blob, outputs, 0, avoid_keys)
-
-
-def unwrap(*args, **kwargs):
-    return unwrap_3d_mink(*args, **kwargs)
-
-
-def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_data'):
-    """
+def unwrap(data_blob, outputs, batch_id_col=0, avoid_keys=[], input_key='input_data'):
+    '''
     Break down the data_blob and outputs dictionary into events
     for sparseconvnet formatted tensors.
 
@@ -89,7 +60,7 @@ def unwrap_scn(data_blob, outputs, batch_id_col, avoid_keys, input_key='input_da
             array length = num_minibatch*num_device*minibatch_size
     ASSUMES:
         the shape of data_blob and outputs as explained above
-    """
+    '''
 
     batch_idx_max = 0
 

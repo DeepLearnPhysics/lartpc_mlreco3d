@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import fps, knn
 
 from .lovasz import StableBCELoss, lovasz_hinge, lovasz_softmax_flat
+from torch_scatter import scatter_mean
 
 # Collection of Miscellaneous Loss Functions not yet implemented in Pytorch.
 
@@ -202,18 +203,18 @@ def find_cluster_means(features, labels):
         distinct instances. Each row is a (1,d) vector corresponding to
         the coordinates of the i-th centroid.
     '''
-    device = features.device
-    bincount = torch.bincount(labels)
-    zero_bins = bincount > 0
-    bincount[bincount == 0] = 1.0
-    numerator = torch.zeros(bincount.shape[0], features.shape[1]).to(device)
-    numerator = numerator.index_add(0, labels, features)
-    centroids = numerator / bincount.view(-1, 1)
-    centroids = centroids[zero_bins]
+    centroids = scatter_mean(features, labels, dim=0)
     return centroids
 
 
 def intra_cluster_loss(features, cluster_means, labels, margin=1.0):
+    '''
+    Computes the intra-cluster loss between an embedding point cloud and
+    a set of attractor points.
+
+    <labels> must range between 0 to the number of <cluster_means>, otherwise
+    the loss will be underestimated as <scatter_mean> zero value placeholders.
+    '''
     from torch_scatter import scatter_mean
     x = features[:, None, :]
     mu = cluster_means[None, :, :]
@@ -237,7 +238,7 @@ def inter_cluster_loss(cluster_means, margin=0.2):
         return 0.0
     else:
         indices = torch.triu_indices(cluster_means.shape[0], cluster_means.shape[0], 1)
-        dist = torch.cdist(cluster_means, cluster_means)
+        dist = squared_distances(cluster_means, cluster_means)
         return torch.pow(torch.clamp(2.0 * margin - dist[indices[0, :], \
             indices[1, :]], min=0), 2).mean()
 
@@ -298,15 +299,6 @@ def multivariate_kernel(centroid, log_sigma, Lprime, eps=1e-8):
     return f
 
 
-
-
-
-def squared_distances(v1, v2):
-    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
-    return torch.pow(v2_2 - v1_2, 2).sum(2)
-
-
 def bhattacharyya_distance_matrix(v1, v2, eps=1e-8):
     x1, s1 = v1[:, :3], v1[:, 3].view(-1)
     x2, s2 = v2[:, :3], v1[:, 3].view(-1)
@@ -318,12 +310,18 @@ def bhattacharyya_distance_matrix(v1, v2, eps=1e-8):
     return out
 
 
+def squared_distances(v1, v2):
+    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1)).double()
+    return torch.pow(v2_2 - v1_2, 2).sum(2)
+
+
 def bhattacharyya_coeff_matrix(v1, v2, eps=1e-6):
     x1, s1 = v1[:, :3], v1[:, 3].view(-1)
     x2, s2 = v2[:, :3], v1[:, 3].view(-1)
     g1 = torch.ger(s1**2, 1.0 / (s2**2 + eps))
     g2 = g1.t()
-    dist = squared_distances(x1.contiguous(), x2.contiguous())
+    dist = torch.cidst(x1.contiguous(), x2.contiguous())
     denom = 1.0 / (eps + s1.unsqueeze(1)**2 + s2**2)
     out = 0.25 * torch.log(0.25 * (g1 + g2 + 2)) + 0.25 * dist / denom
     out = torch.exp(-out)

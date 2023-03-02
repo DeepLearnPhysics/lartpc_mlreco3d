@@ -18,7 +18,7 @@ from mlreco.utils.metrics import *
 from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
 
-from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier, kneighbors_graph
 from scipy.special import expit
 
 
@@ -27,6 +27,18 @@ from scipy.special import expit
 #   warnings.warn('Outlier label {} is not in training '
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+def knn_sklearn(coords, k=5):
+    if isinstance(coords, torch.Tensor):
+        device = coords.device
+        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=k).tocoo()
+        out = np.vstack([G.row, G.col])
+        return torch.Tensor(out).long().to(device=device)
+    elif isinstance(coords, np.ndarray):
+        G = kneighbors_graph(coords, n_neighbors=k).tocoo()
+        out = np.vstack([G.row, G.col])
+        return out
 
 
 def get_edge_weight(sp_emb: torch.Tensor,
@@ -161,6 +173,8 @@ class ClusterGraphConstructor:
             self._init_graph = knn_graph
         elif mode == 'radius':
             self._init_graph = radius_graph
+        elif mode == 'knn_sklearn':
+            self._init_graph = knn_sklearn
         else:
             raise ValueError('''Mode {} is not supported for initial
                 graph construction!'''.format(mode))

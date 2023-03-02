@@ -1,17 +1,13 @@
-from mlreco.utils import unwrap
-import warnings
+import os, re, warnings
 import torch
-import os
-import mlreco.utils as utils
 
 from mlreco.models import construct
 from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
 
+import mlreco.utils as utils
 from mlreco.utils.data_parallel import DataParallel
 from mlreco.utils.utils import to_numpy
-import re
 from mlreco.utils.adabound import AdaBound, AdaBoundW
-from pprint import pprint
 
 
 class trainval(object):
@@ -162,9 +158,9 @@ class trainval(object):
                     target = data_blob[key][gpu]
                     if isinstance(target,list):
                         #data = [[torch.as_tensor(d).cuda() if len(self._gpus) else torch.as_tensor(d) for d in scale] for scale in data_blob[key][gpu]]
-                        data = [torch.as_tensor(scale).cuda() if len(self._gpus) else torch.as_tensor(scale) for scale in target]
+                        data = [torch.as_tensor(scale, dtype=torch.float).cuda() if len(self._gpus) else torch.as_tensor(scale, torch.float) for scale in target]
                     else:
-                        data = torch.as_tensor(target).cuda() if len(self._gpus) else torch.as_tensor(target)
+                        data = torch.as_tensor(target, dtype=torch.float).cuda() if len(self._gpus) else torch.as_tensor(target, dtype=torch.float)
                     if key in self._input_keys:
                         train_data.append(data)
                     if key in self._loss_keys:
@@ -227,10 +223,10 @@ class trainval(object):
             # should call a single function that returns a list which can be "extended" in res_combined and data_combined.
             # inside the unwrapper function, find all unique batch ids.
             # unwrap the outcome
-            unwrapper = self._trainval_config.get('unwrapper', 'unwrap')
-            if unwrapper is not None:
+            unwrapper = self._trainval_config.get('unwrapper', None)
+            if unwrapper:
                 try:
-                    unwrapper = getattr(utils.unwrap,unwrapper)
+                    unwrapper = getattr(utils.unwrap, unwrapper)
                 except ImportError:
                     msg = 'model.output specifies an unwrapper "%s" which is not available under mlreco.utils'
                     print(msg % self._trainval_config['unwrapper'])
@@ -318,6 +314,8 @@ class trainval(object):
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
+                # elif isinstance(result[key][0], Batch):
+                #     res[key] = result[key]
                 else:
                     res[key] = [to_numpy(s) for s in result[key]]
 
@@ -370,6 +368,10 @@ class trainval(object):
                 model_name = config.get('model_name', module)
                 model_path = config.get('model_path', None)
 
+                # Make sure BN and DO layers are set to eval mode
+                getattr(self._model, model_name).eval()
+
+                # Freeze all weights
                 count = 0
                 # with open(model_path, 'rb') as f:
                 #     checkpoint = torch.load(f, map_location='cpu')
@@ -490,9 +492,6 @@ class trainval(object):
 
         self._model = model(module_config)
 
-        # module-by-module weights loading + param freezing
-        self.freeze_weights(module_config)
-
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
@@ -500,6 +499,10 @@ class trainval(object):
         else:
             self._net.eval().cuda() if len(self._gpus) else self._net.eval().cpu()
 
+        # Module-by-module weights loading + param freezing
+        self.freeze_weights(module_config)
+
+        # Optimizer
         if self._optim == 'AdaBound':
             self._optimizer = AdaBound(self._net.parameters(), **self._optim_args)
         elif self._optim == 'AdaBoundW':
@@ -508,7 +511,7 @@ class trainval(object):
             optim_class = eval('torch.optim.' + self._optim)
             self._optimizer = optim_class(self._net.parameters(), **self._optim_args)
 
-        # learning rate scheduler
+        # Learning rate scheduler
         if self._lr_scheduler is not None:
             scheduler_class = eval('torch.optim.lr_scheduler.' + self._lr_scheduler)
             self._scheduler = scheduler_class(self._optimizer, **self._lr_scheduler_args)

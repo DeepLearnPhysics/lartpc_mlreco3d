@@ -2,7 +2,8 @@ from collections import OrderedDict
 from turtle import update
 from sklearn.decomposition import PCA
 
-from analysis.classes.ui import FullChainEvaluator, FullChainPredictor
+from analysis.classes.predictor import FullChainPredictor
+from analysis.classes.evaluator import FullChainEvaluator
 from analysis.decorator import evaluate
 from analysis.algorithms.selections.flash_matching import find_true_time, find_true_x
 
@@ -301,6 +302,9 @@ def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
                                 'cell_dQ': p.depositions[cell].sum(),
                                 'cell_dN': np.count_nonzero(cell),
                                 'cell_dx': coords_pca.max() - coords_pca.min(),
+                                'cell_deltax': coords[cell][:, x].max() - coords[cell][:, x].min(),
+                                'cell_deltay': coords[cell][:, y].max() - coords[cell][:, y].min(),
+                                'cell_deltaz': coords[cell][:, z].max() - coords[cell][:, z].min(),
                                 'cell_ybin': y_idx,
                                 'cell_zbin': z_idx,
                                 'cell_xbin': x_idx,

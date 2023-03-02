@@ -1,7 +1,10 @@
 import os, time, datetime, glob, sys, yaml
 import numpy as np
 try:
+    if os.environ.get('OMP_NUM_THREADS') is None:
+        os.environ['OMP_NUM_THREADS'] = '16'
     import MinkowskiEngine as ME
+    import torch
 except ImportError:
     pass
 
@@ -80,7 +83,7 @@ def process_config(cfg, verbose=True):
                                  'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
                                  'node_pred_vtx', 'total_num_points', 'total_nonghost_points',
-                                 'spatial_embeddings', 'occupancy', 'hypergraph_features',
+                                 'spatial_embeddings', 'occupancy', 'hypergraph_features', 'logits',
                                  'features', 'feature_embeddings', 'covariance', 'clusts','edge_index','edge_pred','node_pred']
         if 'concat_result' not in cfg['trainval']:
             cfg['trainval']['concat_result'] = default_concat_result
@@ -125,9 +128,9 @@ def process_config(cfg, verbose=True):
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
-    from mlreco.utils import utils
-    # Weight save directory
+    from mlreco.utils import CSVData
     if 'trainval' in cfg:
+        # Weight save directory
         if cfg['trainval']['weight_prefix']:
             save_dir = cfg['trainval']['weight_prefix'][0:cfg['trainval']['weight_prefix'].rfind('/')]
             if save_dir and not os.path.isdir(save_dir):
@@ -143,7 +146,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
             if handlers is not None:
                 if hasattr(handlers,'csv_logger') and handlers.csv_logger:
                     handlers.csv_logger.close()
-                handlers.csv_logger = utils.CSVData(logname)
+                handlers.csv_logger = CSVData(logname)
 
 
 def prepare(cfg, event_list=None):
@@ -180,6 +183,9 @@ def prepare(cfg, event_list=None):
 
         # set the shared clock
         handlers.watch = handlers.trainer._watch
+
+        # Clear cache
+        handlers.empty_cuda_cache = cfg['trainval'].get('empty_cuda_cache', False)
 
         # Restore weights if necessary
         loaded_iteration = handlers.trainer.initialize()
@@ -328,6 +334,11 @@ def train_loop(handlers):
 
         log(handlers, tstamp_iteration,
             tsum, result_blob, cfg, epoch, data_blob['index'][0])
+
+        # Clear GPU memory cache if necessary
+        if handlers.empty_cuda_cache:
+            assert torch.cuda.is_available()
+            torch.cuda.empty_cache()
 
         # Increment iteration counter
         handlers.iteration += 1

@@ -45,7 +45,7 @@ class Particle:
         (1, 3) array of particle's endpoint, if it could be assigned
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id,
-                 pid, image_id=0, voxel_indices=None, depositions=None, volume=0, **kwargs):
+                 pid, image_id, voxel_indices=None, depositions=None, volume=0, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
@@ -79,11 +79,14 @@ class Particle:
 
         self.sum_edep = np.sum(self.depositions)
         self.volume = volume
-
-    def __str__(self):
-        return self.__repr__()
+        self.startpoint = None
+        self.endpoint = None
 
     def __repr__(self):
+        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self.pid, self.size)
+        return msg
+
+    def __str__(self):
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
                 " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,

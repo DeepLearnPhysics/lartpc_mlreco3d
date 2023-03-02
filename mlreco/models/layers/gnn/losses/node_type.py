@@ -28,11 +28,14 @@ class NodeTypeLoss(torch.nn.Module):
         # Set the target for the loss
         self.batch_col = batch_col
         self.coords_col = coords_col
+
+        self.group_col = loss_config.get('group_col', 6)
         self.target_col = loss_config.get('target_col', 7)
 
         # Set the loss
         self.loss = loss_config.get('loss', 'CE')
         self.reduction = loss_config.get('reduction', 'sum')
+        self.high_purity = loss_config.get('high_purity', False)
         self.balance_classes = loss_config.get('balance_classes', False)
 
         if self.loss == 'CE':
@@ -82,28 +85,40 @@ class NodeTypeLoss(torch.nn.Module):
                     continue
                 clusts = out['clusts'][i][j]
                 node_assn = get_cluster_label(labels, clusts, column=self.target_col)
-                node_assn = torch.tensor(node_assn, dtype=torch.long, device=node_pred.device, requires_grad=False)
 
-                # If a cluster target is -1, ignore the loss associated with it
-                node_mask = torch.nonzero(node_assn > -1, as_tuple=True)[0]
-                if not len(node_mask): continue
-                node_pred = node_pred[node_mask]
-                node_assn = node_assn[node_mask]
+                # Do not apply loss to nodes labeled -1 (unknown class)
+                valid_mask = node_assn > -1
 
-                # Increment the loss, balance classes if requested
-                if self.balance_classes:
-                    vals, counts = torch.unique(node_assn, return_counts=True)
-                    weights = np.array([float(counts[k])/len(node_assn) for k in range(len(vals))])
-                    for k, v in enumerate(vals):
-                        total_loss += (1./weights[k])*self.lossfn(node_pred[node_assn==v], node_assn[node_assn==v])
-                else:
-                    total_loss += self.lossfn(node_pred, node_assn)
+                # Do not apply loss if the logit corresponding to the true class is -inf (forbidden)
+                # Not a problem is node_assn_type is -1, as these rows are excluded by previous mask
+                valid_mask &= (node_pred[np.arange(len(node_assn)),node_assn] != -float('inf')).detach().cpu().numpy()
 
-                # Compute accuracy of assignment (fraction of correctly assigned nodes)
-                total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
+                # If high purity is requested, do not include broken particle in the loss
+                if self.high_purity:
+                    group_ids    = get_cluster_label(labels, clusts, column=self.group_col)
+                    _, inv, cnts = np.unique(group_ids, return_inverse=True, return_counts=True)
+                    valid_mask &= (cnts[inv] == 1)
+                valid_mask = np.where(valid_mask)[0]
 
-                # Increment the number of nodes
-                n_clusts += len(node_mask)
+                # Compute loss
+                if len(valid_mask):
+                    node_pred = node_pred[valid_mask]
+                    node_assn = torch.tensor(node_assn[valid_mask], dtype=torch.long, device=node_pred.device, requires_grad=False)
+
+                    # Increment the loss, balance classes if requested
+                    if self.balance_classes:
+                        vals, counts = torch.unique(node_assn, return_counts=True)
+                        weights = len(node_assn)/len(counts)/counts
+                        for k, v in enumerate(vals):
+                            total_loss += weights[k] * self.lossfn(node_pred[node_assn==v], node_assn[node_assn==v])
+                    else:
+                        total_loss += self.lossfn(node_pred, node_assn)
+
+                    # Compute accuracy of assignment (fraction of correctly assigned nodes)
+                    total_acc += torch.sum(torch.argmax(node_pred, dim=1) == node_assn).float()
+
+                    # Increment the number of nodes
+                    n_clusts += len(valid_mask)
 
         return {
             'accuracy': total_acc/n_clusts if n_clusts else 1.,

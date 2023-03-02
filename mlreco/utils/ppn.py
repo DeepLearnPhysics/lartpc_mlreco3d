@@ -1,8 +1,9 @@
 import numpy as np
 import scipy
-from mlreco.utils.dbscan import dbscan_types, dbscan_points
 import torch
 
+from mlreco.utils import local_cdist
+from mlreco.utils.dbscan import dbscan_types, dbscan_points
 
 def contains(meta, point, point_type="3d"):
     """
@@ -309,8 +310,10 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         points = out['points'][entry]
 
     enable_classify_endpoints = 'classify_endpoints' in out
+    print("ENABLE CLASSIFY ENDPOINTS = ", enable_classify_endpoints)
     if enable_classify_endpoints:
         classify_endpoints = out['classify_endpoints'][0]
+        print(classify_endpoints)
 
     mask_ppn = out['mask_ppn'][-1]
     # predicted type labels
@@ -505,7 +508,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False):
         sigmoid = scipy.special.expit
         cat = lambda x: np.stack(x, axis=0)
     else:
-        cdist = torch.cdist
+        cdist = local_cdist
         argmax = torch.argmax
         sigmoid = torch.sigmoid
         cat = torch.cat

@@ -67,7 +67,8 @@ def parse_cluster3d(cluster_event,
                     type_include_mpr = False,
                     type_include_secondary = False,
                     primary_include_mpr = True,
-                    break_clusters = False):
+                    break_clusters = False,
+                    min_size = -1):
     """
     a function to retrieve a 3D clusters tensor
 
@@ -168,7 +169,7 @@ def parse_cluster3d(cluster_event,
     for i in range(num_clusters):
         cluster = cluster_event.as_vector()[i]
         num_points = cluster.as_vector().size()
-        if num_points > 0:
+        if num_points >= max(min_size, 1):
             # Get the position and pixel value from EventSparseTensor3D, append positions
             x = np.empty(shape=(num_points,), dtype=np.int32)
             y = np.empty(shape=(num_points,), dtype=np.int32)
@@ -227,32 +228,16 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     type_include_mpr = False,
                                     type_include_secondary = False,
                                     primary_include_mpr = True,
-                                    break_clusters = False):
+                                    break_clusters = False,
+                                    min_size = -1):
+
     # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
     np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
                                              add_particle_info, add_kinematics_info, clean_data, precedence, 
-                                             type_include_mpr, type_include_secondary, primary_include_mpr, break_clusters)
+                                             type_include_mpr, type_include_secondary, primary_include_mpr, break_clusters, min_size)
 
     from .sparse import parse_sparse3d_charge_rescaled
     _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
     np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features
-
-
-def parse_cluster3d_clean_full(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
-    from warnings import warn
-    warn("Deprecated: parse_cluster3d_clean_full deprecated, use parse_cluster3d instead", DeprecationWarning)
-    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
-        sparse_semantics_event = particle_mpv_event
-        particle_mpv_event = None
-    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_particle_info=True)
-
-
-def parse_cluster3d_kinematics_clean(cluster_event, particle_event, particle_mpv_event=None, sparse_semantics_event=None):
-    from warnings import warn
-    warn("Deprecated: parse_cluster3d_kinematics_clean deprecated, use parse_cluster3d instead", DeprecationWarning)
-    if sparse_semantics_event is None and isinstance(particle_mpv_event, larcv.EventSparseTensor3D):
-        sparse_semantics_event = particle_mpv_event
-        particle_mpv_event = None
-    return parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, add_kinematics_info=True)

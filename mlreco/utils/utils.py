@@ -5,6 +5,12 @@ import torch_geometric
 import pandas as pd
 import os
 
+def local_cdist(v1, v2):
+    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
+    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
+    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
+
+
 def to_numpy(s):
     use_scn, use_mink = True, True
     try:
@@ -30,6 +36,16 @@ def to_numpy(s):
         return s
     else:
         raise TypeError("Unknown return type %s" % type(s))
+
+
+def func_timer(func):
+    def wrap_func(*args, **kwargs):
+        t1 = time.time()
+        result = func(*args, **kwargs)
+        t2 = time.time()
+        print(f'Function {func.__name__!r} executed in {(t2-t1):.4f}s')
+        return result
+    return wrap_func
 
 
 def round_decimals(val, digits):

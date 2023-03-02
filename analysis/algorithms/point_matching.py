@@ -35,7 +35,7 @@ def match_points_to_particles(ppn_points : np.ndarray,
         None (operation is in-place)
     """
     if semantic_type is not None:
-        ppn_points_type = ppn_points[ppn_points[:, -1] == semantic_type]
+        ppn_points_type = ppn_points[ppn_points[:, 5] == semantic_type]
     else:
         ppn_points_type = ppn_points
         # TODO: Fix semantic type ppn selection
@@ -80,12 +80,12 @@ def get_track_endpoints(particle : Particle, verbose=False):
         if verbose:
             print("Particle {} has no PPN candidates!"\
                 " Running brute-force endpoint finder...".format(particle.id))
-        endpoints = get_track_endpoints_centroid(particle)
+        startpoint, endpoint = get_track_endpoints_max_dist(particle)
     elif particle.ppn_candidates.shape[0] == 1:
         if verbose:
             print("Particle {} has only one PPN candidate!"\
                 " Running brute-force endpoint finder...".format(particle.id))
-        endpoints = get_track_endpoints_centroid(particle)
+        startpoint, endpoint = get_track_endpoints_max_dist(particle)
     else:
         centroid = particle.points.mean(axis=0)
         ppn_coordinates = particle.ppn_candidates[:, :3]
@@ -97,7 +97,7 @@ def get_track_endpoints(particle : Particle, verbose=False):
     return endpoints
 
 
-def get_track_endpoints_centroid(particle):
+def get_track_endpoints_max_dist(particle):
     """Helper function for getting track endpoints.
 
     Computes track endpoints without ppn predictions by
@@ -114,12 +114,9 @@ def get_track_endpoints_centroid(particle):
         by network.
     """
     coords = particle.points
-    centroid = coords.mean(axis=0)
-    dist = cdist(coords, centroid.reshape(1, -1))
-    inds = dist.squeeze().argsort()[-2:]
-    endpoints = coords[inds]
-    particle.endpoints = endpoints
-    return endpoints
+    dist = cdist(coords, coords)
+    pts = particle.points[np.where(dist == dist.max())[0]]
+    return pts[0], pts[1]
 
 
 # Deprecated

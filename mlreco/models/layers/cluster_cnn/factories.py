@@ -80,6 +80,7 @@ def spice_loss_dict():
         # SPICE Losses Vectorized
         'se_vectorized': losses.spatial_embeddings_fast.SPICELoss,
         'se_vectorized_inter': losses.spatial_embeddings_fast.SPICEInterLoss,
+        'se_vectorized_inter_attractor': losses.spatial_embeddings_fast.SPICEAttractorLoss,
         'graph_spice_edge_loss': losses.gs_embeddings.NodeEdgeHybridLoss,
         'graph_spice_loss': losses.gs_embeddings.GraphSPICEEmbeddingLoss
         # 'graphgnn_spice_loss': SparseOccuSegGNNLoss
