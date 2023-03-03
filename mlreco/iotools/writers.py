@@ -160,23 +160,21 @@ class HDF5Writer:
         '''
         particle_dtype = []
         members = inspect.getmembers(larcv.Particle)
-        attr_names = [k for k, _ in members if '__' not in k and k != 'dump']
+        skip_keys = ['dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d'] +\
+                [k+a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
+        attr_names = [k for k, _ in members if '__' not in k and k not in skip_keys]
         for key in attr_names:
-            try:
-                val = getattr(particle, key)()
-                if isinstance(val, (int, float)):
-                    particle_dtype.append((key, type(val)))
-                elif isinstance(val, str):
-                    particle_dtype.append((key, h5py.string_dtype()))
-                elif isinstance(val, larcv.Vertex):
-                    particle_dtype.append((key, h5py.vlen_dtype(np.float32)))
-                elif hasattr(val, '__len__') and len(val) and isinstance(val[0], (int, float)):
-                    particle_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
-                else:
-                    pass # Skipping larcv.BBox2D, larcv.BBox3D (nothing in there)
-            except TypeError:
-                # This member takes arguments, no need to store
-                pass
+            val = getattr(particle, key)()
+            if isinstance(val, (int, float)):
+                particle_dtype.append((key, type(val)))
+            elif isinstance(val, str):
+                particle_dtype.append((key, h5py.string_dtype()))
+            elif isinstance(val, larcv.Vertex):
+                particle_dtype.append((key, h5py.vlen_dtype(np.float32)))
+            elif hasattr(val, '__len__') and len(val) and isinstance(val[0], (int, float)):
+                particle_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+            else:
+                raise ValueError('Unexpected key')
 
         self.particle_dtype = particle_dtype
         return particle_dtype

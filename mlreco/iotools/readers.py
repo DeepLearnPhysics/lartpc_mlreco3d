@@ -9,7 +9,7 @@ class HDF5Reader:
     More documentation to come.
     '''
     
-    def __init__(self, file_path, entry_list=[], skip_entry_list=[]):
+    def __init__(self, file_path, entry_list=[], skip_entry_list=[], larcv_particles=False):
         '''
         Load up the HDF5 file.
 
@@ -29,6 +29,7 @@ class HDF5Reader:
             self.n_entries = len(file['events'])
 
         self.entry_list = self.get_entry_list(entry_list, skip_entry_list)
+        self.larcv_particles = larcv_particles
 
     def __len__(self):
         '''
@@ -102,14 +103,19 @@ class HDF5Reader:
         blob = data_blob if cat == 'data' else result_blob
         group = file[cat]
         if isinstance(group[key], h5py.Dataset):
-            # If the reference points at a dataset, return
             if not group[key].dtype.names:
+                # If the reference points at a simple dataset, return
                 blob[key] = group[key][region_ref]
             else:
-                names = group[key].dtype.names
-                blob[key] = []
-                for i in range(len(group[key][region_ref])):
-                    blob[key].append(dict(zip(names, group[key][region_ref][i])))
+                # If the dataset has multiple attributes, it contains particle info
+                array = group[key][region_ref]
+                names = array.dtype.names
+                if self.larcv_particles:
+                    blob[key] = self.make_larcv_particles(array, names)
+                else:
+                    blob[key] = []
+                    for i in range(len(array)):
+                        blob[key].append(dict(zip(names, array[i])))
         else:
             # If the reference points at a group, unpack
             el_refs = group[key]['index'][region_ref].flatten()
@@ -118,3 +124,42 @@ class HDF5Reader:
             else:
                 ret = [group[key][f'element_{i}'][r] for i, r in enumerate(el_refs)]
             blob[key] = ret
+
+    @staticmethod
+    def make_larcv_particles(array, names):
+        '''
+        Rebuild `larcv.Particle` objects from the stored information
+
+        Parameters
+        ----------
+        array : list
+            List of dictionary of particle information
+        names: 
+            List of class attribute names
+
+        Returns
+        -------
+        list
+            List of filled larcv.Particle objects
+        '''
+        from larcv import larcv
+        ret = []
+        for i in range(len(array)):
+            # Initialize new larcv.Particle object
+            part_dict = array[i]
+            particle = larcv.Particle()
+
+            # Momentum is particular, deal with it first
+            particle.momentum(part_dict['px'], part_dict['py'], part_dict['pz'])
+            for name in names:
+                if name in ['px', 'py', 'pz', 'p']:
+                    continue # Addressed by the momentum setter
+                if 'position' in name or 'step' in name:
+                    getattr(particle, name)(*part_dict[name])
+                else:
+                    cast = lambda x: x.item() if type(x) != bytes and not isinstance(x, np.ndarray) else x
+                    getattr(particle, name)(cast(part_dict[name]))
+
+            ret.append(particle)
+
+        return ret
