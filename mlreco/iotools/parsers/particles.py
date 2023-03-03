@@ -37,7 +37,7 @@ def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     if voxel_coordinates:
         assert cluster_event is not None
         meta = cluster_event.meta()
-        funcs = ['first_step', 'last_step', 'position', 'end_position', 'ancestor_position']
+        funcs = ['first_step', 'last_step', 'position', 'end_position', 'parent_position', 'ancestor_position']
         for p in particles:
             for f in funcs:
                 pos = getattr(p,f)()

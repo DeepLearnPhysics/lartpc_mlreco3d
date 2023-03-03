@@ -103,7 +103,13 @@ class HDF5Reader:
         group = file[cat]
         if isinstance(group[key], h5py.Dataset):
             # If the reference points at a dataset, return
-            blob[key] = group[key][region_ref]
+            if not group[key].dtype.names:
+                blob[key] = group[key][region_ref]
+            else:
+                names = group[key].dtype.names
+                blob[key] = []
+                for i in range(len(group[key][region_ref])):
+                    blob[key].append(dict(zip(names, group[key][region_ref][i])))
         else:
             # If the reference points at a group, unpack
             el_refs = group[key]['index'][region_ref].flatten()

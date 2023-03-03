@@ -1,8 +1,9 @@
 import numpy as np
 import h5py
 import yaml
+import inspect
 from collections import defaultdict
-from pathlib import Path
+from larcv import larcv
 
 
 class HDF5Writer:
@@ -117,6 +118,10 @@ class HDF5Writer:
             elif not hasattr(blob[key][0], '__len__'):
                 # List containing a single scalar per batch ID
                 self.key_dict[key]['dtype'] = type(blob[key][0])
+            elif isinstance(blob[key][0], (list, np.ndarray)) and\
+                    isinstance(blob[key][0][0], larcv.Particle):
+                # List containing a single list of larcv.Particle object per batch ID
+                self.key_dict[key]['dtype'] = self.get_particle_dtype(blob[key][0][0])
             elif isinstance(blob[key][0], list) and\
                     not hasattr(blob[key][0][0], '__len__'):
                 # List containing a single list of scalars per batch ID
@@ -139,6 +144,43 @@ class HDF5Writer:
             else:
                 raise TypeError('Do not know how to store output of type', type(blob[key][0]))
 
+    def get_particle_dtype(self, particle):
+        '''
+        Loop over the members of a particle to figure out what to store.
+
+        Parameters
+        ----------
+        particle : larcv.Particle
+            LArCV particle object used to identify attribute types
+
+        Returns
+        -------
+        list
+            List of (key, dtype) pairs
+        '''
+        particle_dtype = []
+        members = inspect.getmembers(larcv.Particle)
+        attr_names = [k for k, _ in members if '__' not in k and k != 'dump']
+        for key in attr_names:
+            try:
+                val = getattr(particle, key)()
+                if isinstance(val, (int, float)):
+                    particle_dtype.append((key, type(val)))
+                elif isinstance(val, str):
+                    particle_dtype.append((key, h5py.string_dtype()))
+                elif isinstance(val, larcv.Vertex):
+                    particle_dtype.append((key, h5py.vlen_dtype(np.float32)))
+                elif hasattr(val, '__len__') and len(val) and isinstance(val[0], (int, float)):
+                    particle_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+                else:
+                    pass # Skipping larcv.BBox2D, larcv.BBox3D (nothing in there)
+            except TypeError:
+                # This member takes arguments, no need to store
+                pass
+
+        self.particle_dtype = particle_dtype
+        return particle_dtype
+
     def initialize_datasets(self, file):
         '''
         Create place hodlers for all the datasets to be filled.
@@ -155,7 +197,7 @@ class HDF5Writer:
             grp = file[cat] if cat in file else file.create_group(cat)
             self.event_dtype.append((key, ref_dtype))
             if not val['merge'] and not isinstance(val['width'], list):
-                # If the key contains scalars in an array, store it as such
+                # If the key contains a list of objects of identical shape
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                 grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
@@ -240,9 +282,12 @@ class HDF5Writer:
         cat = val['category']
         if not val['merge'] and not isinstance(val['width'], list):
             # Store the scalar. TODO: Does not handle scalars (useful?)
-            val = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
-            if not hasattr(val, '__len__'): val = [val]
-            self.store(file[cat], event, key, val)
+            obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
+            if not hasattr(obj, '__len__'): obj = [obj]
+            if not hasattr(self, 'particle_dtype') or val['dtype'] != self.particle_dtype:
+                self.store(file[cat], event, key, obj)
+            else:
+                self.store_particles(file[cat], event, key, obj, self.particle_dtype)
         elif not val['merge']:
             # Store the array and its reference for each element in the list
             self.store_jagged(file[cat], event, key, blob[key][batch_id])
@@ -276,6 +321,7 @@ class HDF5Writer:
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
+
 
     @staticmethod
     def store_jagged(group, event, key, array_list):
@@ -352,4 +398,47 @@ class HDF5Writer:
 
         # Define a region reference to all the references, store it at the event level
         region_ref = index.regionref[current_id:current_id + len(array_list)]
+        event[key] = region_ref
+
+    @staticmethod
+    def store_particles(group, event, key, array, particle_dtype):
+        '''
+        Stores a list of `larcv.Particle` in the file and stores its mapping
+        in the event dataset.
+
+        Parameters
+        ----------
+        group : h5py.Group
+            Dataset group under which to store this array
+        event : dict
+            Dictionary of objects that make up one event
+        key: str
+            Name of the dataset in the file
+        array : np.ndarray
+            Array to be stored
+        particle_dtype : list
+            List of (key, dtype) pairs which specify what's to store
+        '''
+        # Convert list of larcv.Particle to list of storable objects
+        particles = np.empty(len(array), particle_dtype)
+        for i, p in enumerate(array):
+            for k, dtype in particle_dtype:
+                attr = getattr(p, k)()
+                if isinstance(attr, (int, float, str)):
+                    particles[i][k] = attr
+                elif isinstance(attr, larcv.Vertex):
+                    vertex = np.array([getattr(attr, a)() for a in ['x', 'y', 'z', 't']], dtype=np.float32)
+                    particles[i][k] = vertex
+                elif hasattr(attr, '__len__'):
+                    vals = np.array([attr[i] for i in range(len(attr))], dtype=np.int32)
+                    particles[i][k] = vals
+
+        # Extend the dataset, store array
+        dataset = group[key]
+        current_id = len(dataset)
+        dataset.resize(current_id + len(array), axis=0)
+        dataset[current_id:current_id + len(array)] = particles
+
+        # Define region reference, store it at the event level
+        region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
