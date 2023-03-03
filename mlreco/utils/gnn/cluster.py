@@ -420,14 +420,13 @@ def _get_cluster_points_label(data: nb.float64[:,:],
     batch_ids = _get_cluster_batch(data, clusts)
     points = np.empty((len(clusts), 6), dtype=data.dtype)
     for b in np.unique(batch_ids):
-        batch_mask = np.where(particles[:,batch_col] == b)[0]
-        clust_mask = np.where(batch_ids == b)[0]
-        for i in clust_mask:
+        batch_particles = particles[particles[:,batch_col] == b]
+        for i in np.where(batch_ids == b)[0]:
             c = clusts[i]
             clust_ids = np.unique(data[c, 5]).astype(np.int64)
-            minid = np.argmin(particles[batch_mask][clust_ids,-2])
+            minid = np.argmin(batch_particles[clust_ids,-2])
             order = np.arange(6) if (np.random.choice(2) or not random_order) else np.array([3, 4, 5, 0, 1, 2])
-            points[i] = particles[batch_mask][clust_ids[minid]][order+1] # The first column is the batch ID
+            points[i] = batch_particles[clust_ids[minid]][order+1] # The first column is the batch ID
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
