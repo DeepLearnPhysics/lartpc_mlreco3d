@@ -165,6 +165,7 @@ def _get_extra_gnn_features(fragments,
                            input,
                            result,
                            use_ppn=False,
+                           use_proxy=True,
                            use_supp=False,
                            enhance=False,
                            allow_outside=False,
@@ -211,8 +212,6 @@ def _get_extra_gnn_features(fragments,
         mask |= (frag_seg == c)
     mask = np.where(mask)[0]
 
-    #print("INPUT = ", input)
-
     # If requested, extract PPN-related features
     kwargs = {}
     if use_ppn:
@@ -222,7 +221,7 @@ def _get_extra_gnn_features(fragments,
         for i, f in enumerate(fragments[mask]):
             fragment_voxels = input[0][f][:,coords_col[0]:coords_col[1]]
             if frag_seg[mask][i] == 1:
-                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None)
+                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None, use_proxy=use_proxy)
             else:
                 scores = torch.softmax(points_tensor[f, -2:], dim=1)[:,-1]
                 # scores = torch.sigmoid(points_tensor[f, -1])

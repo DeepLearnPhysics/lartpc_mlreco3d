@@ -337,13 +337,14 @@ def cdist(x1: nb.float32[:,:],
 def farthest_pair(x: nb.float32[:,:],
                   algorithm: bool = 'brute') -> (nb.int32, nb.int32, nb.float32):
     '''
-    Algorithm which finds the two furthest points in a set.
+    Algorithm which finds the two points which are
+    farthest from each other in a set.
 
     Two algorithms:
     - `brute`: compute pdist, use argmax
-    - `recursive`: Start with the first point, find the farthest
-                   point, move to that point, repeat. This algorithm is
-                   *not* exact, but a good very quick proxy
+    - `recursive`: Start with the first point in one set, find the farthest
+                   point in the other, move to that point, repeat. This
+                   algorithm is *not* exact, but a good and very quick proxy.
 
     Parameters
     ----------

@@ -53,10 +53,11 @@ def complete_graph(batch_ids: nb.int64[:],
     # Create the sparse incidence matrix
     ret = np.empty((edge_count,2), dtype=np.int64)
     k = 0
-    for i in range(len(batch_ids)):
-        for j in range(i+1, len(batch_ids)):
-            if batch_ids[i] == batch_ids[j]:
-                ret[k] = [i,j]
+    for b in np.unique(batch_ids):
+        clust_ids = np.where(batch_ids == b)[0]
+        for i in range(len(clust_ids)):
+            for j in range(i+1, len(clust_ids)):
+                ret[k] = [clust_ids[i], clust_ids[j]]
                 k += 1
 
     # Add the reciprocal edges as to create an undirected graph, if requested
