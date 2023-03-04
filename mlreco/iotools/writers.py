@@ -25,7 +25,6 @@ class HDF5Writer:
         '''
         # Store attributes
         self.file_name        = cfg.get('file_name', 'output.h5')
-        self.store_input      = cfg.get('store_input', False)
         self.input_keys       = cfg.get('input_keys', None)
         self.skip_input_keys  = cfg.get('skip_input_keys', [])
         self.result_keys      = cfg.get('result_keys', None)
@@ -52,17 +51,14 @@ class HDF5Writer:
         self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False})
 
         # If requested, loop over input_keys and add them to what needs to be tracked
-        if self.store_input:
-            if self.input_keys is None: self.input_keys = data_blob.keys()
-            self.input_keys = set(self.input_keys)
-            if 'index' not in self.input_keys: self.input_keys.add('index')
-            for key in self.skip_input_keys:
-                if key in self.input_keys:
-                    self.input_keys.remove(key)
-            for key in self.input_keys:
-                self.register_key(data_blob, key, 'data')
-        else:
-            self.input_keys = {}
+        if self.input_keys is None: self.input_keys = data_blob.keys()
+        self.input_keys = set(self.input_keys)
+        if 'index' not in self.input_keys: self.input_keys.add('index')
+        for key in self.skip_input_keys:
+            if key in self.input_keys:
+                self.input_keys.remove(key)
+        for key in self.input_keys:
+            self.register_key(data_blob, key, 'data')
 
         # Loop over the result_keys and add them to what needs to be tracked
         assert self.result_keys is None or result_blob is not None,\
