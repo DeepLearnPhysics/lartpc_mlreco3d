@@ -431,7 +431,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
 
 
 @numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
-def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', return_index=False):
+def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', algorithm='brute', return_index=False):
     """
     Finds the inter-cluster distance between every pair of clusters within
     each batch, returned as a block-diagonal matrix.
@@ -441,6 +441,7 @@ def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', return_
         clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
         batch_ids (np.ndarray): (C) List of cluster batch IDs
         mode (str)            : Eiher use closest voxel distance (`voxel`) or centroid distance (`centroid`)
+        algorithm (str)       : `brute` is exact but slow, `recursive` uses a fast but approximate proxy
         return_index (bool)   : If True, returns the combined index of the closest voxel pair
     Returns:
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
@@ -450,16 +451,17 @@ def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', return_
         batch_ids = np.zeros(len(clusts), dtype=np.int64) 
 
     if not return_index:
-        return _inter_cluster_distance(voxels, clusts, batch_ids, mode)
+        return _inter_cluster_distance(voxels, clusts, batch_ids, mode, algorithm)
     else:
         assert mode == 'voxel', 'Cannot return index for centroid method'
-        return _inter_cluster_distance_index(voxels, clusts, batch_ids)
+        return _inter_cluster_distance_index(voxels, clusts, batch_ids, algorithm)
 
 @nb.njit(parallel=True, cache=True)
 def _inter_cluster_distance(voxels: nb.float32[:,:],
                             clusts: nb.types.List(nb.int64[:]),
                             batch_ids: nb.int64[:],
-                            mode: str = 'voxel') -> nb.float32[:,:]:
+                            mode: str = 'voxel',
+                            algorithm: str = 'brute') -> nb.float32[:,:]:
 
     assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
@@ -467,7 +469,7 @@ def _inter_cluster_distance(voxels: nb.float32[:,:],
     if mode == 'voxel':
         for k in nb.prange(len(indxi)):
             i, j = indxi[k], indxj[k]
-            dist_mat[i,j] = dist_mat[j,i] = np.min(nbl.cdist(voxels[clusts[i]], voxels[clusts[j]]))
+            dist_mat[i,j] = dist_mat[j,i] = nbl.closest_pair(voxels[clusts[i]], voxels[clusts[j]], algorithm)[-1]
     elif mode == 'centroid':
         centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
         for i in nb.prange(len(batch_ids)):
@@ -484,7 +486,8 @@ def _inter_cluster_distance(voxels: nb.float32[:,:],
 @nb.njit(parallel=True, cache=True)
 def _inter_cluster_distance_index(voxels: nb.float32[:,:],
                                   clusts: nb.types.List(nb.int64[:]),
-                                  batch_ids: nb.int64[:]) -> (nb.float32[:,:], nb.int64[:,:]):
+                                  batch_ids: nb.int64[:],
+                                  algorithm: str = 'brute') -> (nb.float32[:,:], nb.int64[:,:]):
 
     assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
@@ -494,12 +497,11 @@ def _inter_cluster_distance_index(voxels: nb.float32[:,:],
     indxi, indxj = complete_graph(batch_ids, directed=True)
     for k in nb.prange(len(indxi)):
         i, j = indxi[k], indxj[k]
-        temp_dist_mat = nbl.cdist(voxels[clusts[i]], voxels[clusts[j]])
-        index = np.argmin(temp_dist_mat)
-        ii, jj = index//temp_dist_mat.shape[1], index%temp_dist_mat.shape[1]
+        ii, jj, dist = nbl.closest_pair(voxels[clusts[i]], voxels[clusts[j]], algorithm)
+        index = ii*len(clusts[j]) + jj
 
         closest_index[i,j] = closest_index[j,i] = index
-        dist_mat[i,j] = dist_mat[j,i] = temp_dist_mat[ii,jj]
+        dist_mat[i,j] = dist_mat[j,i] = dist
 
     return dist_mat, closest_index
 

@@ -368,12 +368,76 @@ def farthest_pair(x: nb.float32[:,:],
         idxs = [index//x.shape[0], index%x.shape[0]]
         dist = dist_mat[idxs[0], idxs[1]]
     elif algorithm == 'recursive':
-        idxs, subidx, dist, tempdist = [0, 0], False, 1e9, 1e9+1.
+        idxs, subidx, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
         while dist < tempdist:
             tempdist = dist
-            dists = cdist(np.ascontiguousarray(x[idxs[int(subidx)]]).reshape(1,-1), x).flatten()
-            idxs[int(~subidx)] = np.argmax(dists)
-            dist = dists[idxs[int(~subidx)]]
+            dists = cdist(np.ascontiguousarray(x[idxs[subidx]]).reshape(1,-1), x).flatten()
+            idxs[~subidx] = np.argmax(dists)
+            dist = dists[idxs[~subidx]]
+            subidx = ~subidx
+    else:
+        raise ValueError('Algorithm not supported')
+
+    return idxs[0], idxs[1], dist
+
+
+@nb.njit(cache=True)
+def closest_pair(x1: nb.float32[:,:],
+                 x2: nb.float32[:,:],
+                 algorithm: bool = 'brute',
+                 seed: bool = True) -> (nb.int32, nb.int32, nb.float32):
+    '''
+    Algorithm which finds the two points which are
+    closest to each other from two separate sets.
+
+    Two algorithms:
+    - `brute`: compute cdist, use argmin
+    - `recursive`: Start with one point in one set, find the closest
+                   point in the other set, move to theat point, repeat. This
+                   algorithm is *not* exact, but a good and very quick proxy.
+
+    Parameters
+    ----------
+    x1 : np.ndarray
+        (Nx3) array of point coordinates in the first set
+    x1 : np.ndarray
+        (Nx3) array of point coordinates in the second set
+    algorithm : str
+        Name of the algorithm to use: `brute` or `recursive`
+    seed : bool
+        Whether or not to use the two farthest points in one set to seed the recursion
+
+    Returns
+    -------
+    int
+        ID of the first point that makes up the pair
+    int
+        ID of the second point that makes up the pair
+    float
+        Distance between the two points
+    '''
+    if algorithm == 'brute':
+        dist_mat = cdist(x1, x2)
+        index = np.argmin(dist_mat)
+        idxs = [index//dist_mat.shape[1], index%dist_mat.shape[1]]
+        dist = dist_mat[idxs[0], idxs[1]]
+    elif algorithm == 'recursive':
+        xarr = [x1, x2]
+        idxs, subidx, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
+        if seed:
+            seed_idxs  = np.array(farthest_pair(xarr[~subidx], 'recursive')[:2])
+            seed_dists = cdist(xarr[~subidx][seed_idxs], xarr[subidx])
+            seed_argmins = argmin(seed_dists, axis=1)
+            seed_mins = np.array([seed_dists[0][seed_argmins[0]], seed_dists[1][seed_argmins[1]]])
+            seed_choice = np.argmin(seed_mins)
+            idxs[int(~subidx)] = seed_idxs[seed_choice]
+            idxs[int(subidx) ] = seed_argmins[seed_choice]
+            dist = seed_mins[seed_choice]
+        while dist < tempdist:
+            tempdist = dist
+            dists = cdist(np.ascontiguousarray(xarr[subidx][idxs[subidx]]).reshape(1,-1), xarr[~subidx]).flatten()
+            idxs[~subidx] = np.argmin(dists)
+            dist = dists[idxs[~subidx]]
             subidx = ~subidx
     else:
         raise ValueError('Algorithm not supported')

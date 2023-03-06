@@ -159,6 +159,7 @@ class GNN(torch.nn.Module):
         self.network = base_config.get('network', 'complete')
         self.edge_max_dist = base_config.get('edge_max_dist', -1)
         self.edge_dist_metric = base_config.get('edge_dist_metric', 'voxel')
+        self.edge_dist_algorithm = base_config.get('edge_dist_algorithm', 'brute')
         self.edge_knn_k = base_config.get('edge_knn_k', 5)
         self.edge_max_count = base_config.get('edge_max_count', 2e6)
 
@@ -339,7 +340,7 @@ class GNN(torch.nn.Module):
         # If necessary, compute the cluster distance matrix
         dist_mat, closest_index = None, None
         if np.any(self.edge_max_dist > -1) or self.network == 'mst' or self.network == 'knn':
-            dist_mat, closest_index = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric, return_index=True)
+            dist_mat, closest_index = inter_cluster_distance(cluster_data[:,self.coords_index[0]:self.coords_index[1]].float(), clusts, batch_ids, self.edge_dist_metric, self.edge_dist_algorithm, return_index=True)
 
         # Form the requested network
         if len(clusts) == 1:
