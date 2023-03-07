@@ -419,6 +419,8 @@ class GNN(torch.nn.Module):
 
         result['input_node_features'] = [[x[b] for b in cbids]]
         result['input_edge_features'] = [[e[b] for b in ebids]]
+        if points is not None:
+            result['input_node_points'] = [[points[b] for b in cbids]]
 
         # Pass through the model, update results
         out = self.gnn_model(x, index, e, xbatch)

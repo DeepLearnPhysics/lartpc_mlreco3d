@@ -184,7 +184,6 @@ class FullChainGNN(torch.nn.Module):
         """
 
         frag_dict = self.get_all_fragments(result, input)
-        del result['frag_dict']
         fragments = frag_dict['frags']
         frag_seg = frag_dict['frag_seg']
 
@@ -204,6 +203,7 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
                            'group_pred': 'shower_group_pred',
+                           'input_node_points'  : 'shower_points',
                            'input_node_features': 'shower_node_features'}
             # shower_grappa_input = input
             # if self.use_true_fragments and 'points' not in kwargs:
@@ -235,6 +235,7 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'track_edge_pred',
                            'edge_index': 'track_edge_index',
                            'group_pred': 'track_group_pred',
+                           'input_node_points'  : 'track_points',
                            'input_node_features': 'track_node_features'}
 
             self.run_gnn(self.grappa_track,
@@ -444,6 +445,7 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred_type': 'node_pred_type',
                            'node_pred_p': 'node_pred_p',
                            'node_pred_vtx': 'node_pred_vtx',
+                           'input_node_points'  : 'particle_points',
                            'input_node_features': 'particle_node_features',
                            'input_edge_features': 'particle_edge_features'}
 
@@ -586,6 +588,8 @@ class FullChainGNN(torch.nn.Module):
         result, input, revert_func = self.full_chain_cnn(input)
         if len(input[0]) and 'frag_dict' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
+        if 'frag_dict' in result:
+            del result['frag_dict']
 
         result = revert_func(result)
         return result
