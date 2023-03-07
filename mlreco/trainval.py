@@ -1,13 +1,14 @@
 import os, re, warnings
 import torch
 
-from mlreco.models import construct
-from mlreco.models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
+from .iotools.data_parallel import DataParallel
+
+from .models import construct
+from .models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
 
 import mlreco.utils as utils
-from mlreco.utils.data_parallel import DataParallel
-from mlreco.utils.utils import to_numpy
-from mlreco.utils.adabound import AdaBound, AdaBoundW
+from .utils.utils import to_numpy
+from .utils.adabound import AdaBound, AdaBoundW
 
 
 class trainval(object):
@@ -366,8 +367,11 @@ class trainval(object):
                 model_name = config.get('model_name', module)
                 model_path = config.get('model_path', None)
 
-                # Make sure BN and DO layers are set to eval mode
-                getattr(self._model, model_name).eval()
+                # Make sure BN and DO layers are set to eval mode when the weights are frozen
+                model = self._model
+                for m in module.split('.'):
+                    model = getattr(model, m)
+                model.eval()
 
                 # Freeze all weights
                 count = 0

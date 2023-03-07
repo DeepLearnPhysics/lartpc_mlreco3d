@@ -154,9 +154,9 @@ class FullChainGNN(torch.nn.Module):
                                                fragments,
                                                batch_index=self.batch_col)
         else:
-            fragments = result['frags'][0]
-            frag_seg = result['frag_seg'][0]
-            frag_batch_ids = result['frag_batch_ids'][0]
+            fragments = result['frag_dict']['frags'][0]
+            frag_seg = result['frag_dict']['frag_seg'][0]
+            frag_batch_ids = result['frag_dict']['frag_batch_ids'][0]
             semantic_labels = result['semantic_labels'][0]
 
         frag_dict = {
@@ -168,8 +168,8 @@ class FullChainGNN(torch.nn.Module):
 
         # Since <vids> and <counts> depend on the batch column of the input
         # tensor, they are shared between the two settings.
-        frag_dict['vids'] = result['vids'][0]
-        frag_dict['counts'] = result['counts'][0]
+        frag_dict['vids'] = result['frag_dict']['vids'][0]
+        frag_dict['counts'] = result['frag_dict']['counts'][0]
 
         return frag_dict
 
@@ -203,6 +203,7 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'shower_edge_pred',
                            'edge_index': 'shower_edge_index',
                            'group_pred': 'shower_group_pred',
+                           'input_node_points'  : 'shower_points',
                            'input_node_features': 'shower_node_features'}
             # shower_grappa_input = input
             # if self.use_true_fragments and 'points' not in kwargs:
@@ -234,6 +235,7 @@ class FullChainGNN(torch.nn.Module):
                            'edge_pred' : 'track_edge_pred',
                            'edge_index': 'track_edge_index',
                            'group_pred': 'track_group_pred',
+                           'input_node_points'  : 'track_points',
                            'input_node_features': 'track_node_features'}
 
             self.run_gnn(self.grappa_track,
@@ -443,6 +445,7 @@ class FullChainGNN(torch.nn.Module):
                            'node_pred_type': 'node_pred_type',
                            'node_pred_p': 'node_pred_p',
                            'node_pred_vtx': 'node_pred_vtx',
+                           'input_node_points'  : 'particle_points',
                            'input_node_features': 'particle_node_features',
                            'input_edge_features': 'particle_edge_features'}
 
@@ -583,8 +586,10 @@ class FullChainGNN(torch.nn.Module):
         """
 
         result, input, revert_func = self.full_chain_cnn(input)
-        if len(input[0]) and 'frags' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
+        if len(input[0]) and 'frag_dict' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
+        if 'frag_dict' in result:
+            del result['frag_dict']
 
         result = revert_func(result)
         return result
@@ -673,7 +678,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['accuracy']
             loss += self.ppn_weight*res_ppn['loss']
 
-        if self.enable_ghost and 'ghost_label' in out \
+        if self.enable_ghost and 'ghost' in out \
                              and (self.enable_cnn_clust or \
                                   self.enable_gnn_track or \
                                   self.enable_gnn_shower or \
@@ -681,7 +686,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                                   self.enable_gnn_kinematics or \
                                   self.enable_cosmic):
 
-            deghost = out['ghost_label'][0]
+            deghost = out['ghost'][0].argmax(dim=1) == 0
 
             if self.cheat_ghost:
                 true_mask = deghost

@@ -1,15 +1,22 @@
-"""
-These factories instantiate `torch.utils.data.DataLoader`
-based on the YAML configuration that was provided.
-"""
 from torch.utils.data import DataLoader
 
 
-def dataset_factory(cfg,event_list=None):
+def dataset_factory(cfg, event_list=None):
     """
     Instantiates dataset based on type specified in configuration under
     `iotool.dataset.name`. The name must match the name of a class under
-    mlreco.iotools.datasets.
+    `mlreco.iotools.datasets`.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary. Expects a field `iotool`.
+    event_list: list, optional
+        List of tree idx.
+
+    Returns
+    -------
+    dataset: torch.utils.data.Dataset
 
     Note
     ----
@@ -22,7 +29,7 @@ def dataset_factory(cfg,event_list=None):
     return getattr(mlreco.iotools.datasets, params['name']).create(params)
 
 
-def loader_factory(cfg,event_list=None):
+def loader_factory(cfg, event_list=None):
     """
     Instantiates a DataLoader based on configuration.
 
@@ -80,3 +87,29 @@ def loader_factory(cfg,event_list=None):
                             sampler     = sampler,
                             num_workers = num_workers)
     return loader
+
+
+def writer_factory(cfg):
+    """
+    Instantiates writer based on type specified in configuration under
+    `iotool.writer.name`. The name must match the name of a class under
+    `mlreco.iotools.writers`.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary. Expects a field `iotool`.
+
+    Returns
+    -------
+    writer
+
+    Note
+    ----
+    Currently the choice is limited to `HDF5Writer` only.
+    """
+    import mlreco.iotools.writers
+    params = cfg['iotool'].get('writer', None)
+    if params is not None:
+        return getattr(mlreco.iotools.writers, params['name'])(params)
+    return None

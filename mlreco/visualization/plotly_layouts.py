@@ -3,6 +3,19 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 
+def high_contrast_colorscale():
+    import plotly.express as px
+    colorscale = []
+    step = 1./48
+    for i, c in enumerate(px.colors.qualitative.Dark24):
+        colorscale.append([i*step, c])
+        colorscale.append([(i+1)*step, c])
+    for i, c in enumerate(px.colors.qualitative.Light24):
+        colorscale.append([(i+24)*step, c])
+        colorscale.append([(i+25)*step, c])
+    return colorscale
+
+
 def white_layout():
     bg_color = 'rgba(0,0,0,0)'
     grid_color = 'rgba(220,220,220,100)'

@@ -2,16 +2,17 @@
 import numpy as np
 import numba as nb
 import torch
-
 from typing import Tuple
 
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.wrapper import numba_wrapper
 from mlreco.utils import local_cdist
-from mlreco.utils.numba import numba_wrapper, unique_nb
 from mlreco.utils.ppn import get_track_endpoints_geo
 
 from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
+
 
 def cluster_features(data, clusts, extra=False, **kwargs):
     """
@@ -164,6 +165,7 @@ def _get_extra_gnn_features(fragments,
                            input,
                            result,
                            use_ppn=False,
+                           use_proxy=True,
                            use_supp=False,
                            enhance=False,
                            allow_outside=False,
@@ -210,8 +212,6 @@ def _get_extra_gnn_features(fragments,
         mask |= (frag_seg == c)
     mask = np.where(mask)[0]
 
-    #print("INPUT = ", input)
-
     # If requested, extract PPN-related features
     kwargs = {}
     if use_ppn:
@@ -221,7 +221,7 @@ def _get_extra_gnn_features(fragments,
         for i, f in enumerate(fragments[mask]):
             fragment_voxels = input[0][f][:,coords_col[0]:coords_col[1]]
             if frag_seg[mask][i] == 1:
-                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None)
+                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None, use_proxy=use_proxy)
             else:
                 scores = torch.softmax(points_tensor[f, -2:], dim=1)[:,-1]
                 # scores = torch.sigmoid(points_tensor[f, -1])
@@ -329,7 +329,7 @@ def split_edge_index(edge_index: nb.int64[:,:],
     # For each batch ID, find the cluster IDs within that batch
     ecids = np.empty(len(batch_ids), dtype=np.int64)
     index = 0
-    for n in unique_nb(batch_ids)[1]:
+    for n in nbl.unique(batch_ids)[1]:
         ecids[index:index+n] = np.arange(n, dtype=np.int64)
         index += n
 

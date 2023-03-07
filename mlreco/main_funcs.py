@@ -8,7 +8,7 @@ try:
 except ImportError:
     pass
 
-from mlreco.iotools.factories import loader_factory
+from mlreco.iotools.factories import loader_factory, writer_factory
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
 # We need to set CUDA_VISIBLE_DEVICES first, which
@@ -24,6 +24,7 @@ class Handlers:
     weight_io    = None
     train_logger = None
     watch        = None
+    writer       = None
     iteration    = 0
 
     def keys(self):
@@ -68,6 +69,7 @@ def process_config(cfg, verbose=True):
         default_concat_result = ['input_edge_features', 'input_node_features','points', 'coordinates',
                                  'particle_node_features', 'particle_edge_features',
                                  'track_node_features', 'shower_node_features',
+                                 'input_node_points', 'shower_points', 'track_points', 'particle_points',
                                  'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints',
                                  'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales',
                                  'seediness', 'margins', 'embeddings', 'fragments',
@@ -168,6 +170,9 @@ def prepare(cfg, event_list=None):
 
     # IO iterator
     handlers.data_io_iter = iter(cycle(handlers.data_io))
+
+    # IO writer
+    handlers.writer = writer_factory(cfg)
 
     if 'trainval' in cfg:
         # Set random seed for reproducibility
@@ -392,6 +397,7 @@ def inference_loop(handlers):
 
             # Run inference
             data_blob, result_blob = handlers.trainer.forward(handlers.data_io_iter)
+
             # Store output if requested
             if 'post_processing' in handlers.cfg:
                 for processor_name,processor_cfg in handlers.cfg['post_processing'].items():
@@ -404,6 +410,9 @@ def inference_loop(handlers):
 
             log(handlers, tstamp_iteration,
                 tsum, result_blob, handlers.cfg, epoch, data_blob['index'][0])
+
+            if handlers.writer:
+                handlers.writer.append(handlers.cfg, data_blob, result_blob)
 
             handlers.iteration += 1
 

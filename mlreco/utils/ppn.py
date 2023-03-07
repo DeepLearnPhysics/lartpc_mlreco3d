@@ -4,6 +4,7 @@ import torch
 
 from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_types, dbscan_points
+from mlreco.utils.numba_local import farthest_pair
 
 def contains(meta, point, point_type="3d"):
     """
@@ -481,7 +482,7 @@ def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
     return pts_out
 
 
-def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False):
+def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False, use_proxy=True):
     """
     Compute endpoints of a track-like cluster f
     based on PPN point predictions (coordinates
@@ -511,9 +512,13 @@ def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False):
         sigmoid = torch.sigmoid
         cat = torch.cat
 
-    dist_mat = cdist(data[f,1:4], data[f,1:4])
-    idx = argmax(dist_mat)
-    idxs = int(idx)//len(f), int(idx)%len(f)
+    if not use_numpy or not use_proxy:
+        dist_mat = cdist(data[f,1:4], data[f,1:4])
+        idx = argmax(dist_mat)
+        idxs = int(idx)//len(f), int(idx)%len(f)
+    else:
+        idxs = [0, 0]
+        idxs[0], idxs[1], _ = farthest_pair(data[f,1:4], 'brute' if not use_proxy else 'recursive')
     correction0, correction1 = 0.0, 0.0
     if points_tensor is not None:
         scores = sigmoid(points_tensor[f, -1])

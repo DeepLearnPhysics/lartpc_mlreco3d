@@ -258,7 +258,6 @@ class FullChain(FullChainGNN):
             # else:
             deghost = result['ghost'][0].argmax(dim=1) == 0
 
-            result['ghost_label'] = [deghost]
             input = [input[0][deghost]]
 
             if label_seg is not None and label_clustering is not None:
@@ -369,7 +368,12 @@ class FullChain(FullChainGNN):
                                             input[0][:, self.batch_col],
                                             batch_size=self.batch_size)
 
-        cnn_result.update(fragments_result)
+        cnn_result.update({'frag_dict':fragments_result})
+
+        cnn_result.update({
+            'fragments': fragments_result['fragments'],
+            'fragments_seg': fragments_result['fragments_seg']
+        })
 
         if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({ 'semantic_labels': [semantic_labels] })
