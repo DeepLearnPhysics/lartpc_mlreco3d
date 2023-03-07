@@ -16,6 +16,7 @@ from analysis.algorithms.utils import get_interaction_properties, \
                                       get_mparticles_from_minteractions
 
 from analysis.algorithms.calorimetry import get_csda_range_spline
+from analysis.algorithms.vertex import estimate_vertex
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
@@ -44,8 +45,11 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     particle_dict         = analysis_cfg['analysis'].get('particle_dict', {})
 
     use_primaries_for_vertex = analysis_cfg['analysis'].get('use_primaries_for_vertex', True)
+    run_reco_vertex = analysis_cfg['analysis'].get('run_reco_vertex', False)
+    test_containment = analysis_cfg['analysis'].get('test_containment', False)
 
     splines = None
+    skip_classes = set([3, 4])
 
     if compute_energy:
 
@@ -90,7 +94,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             compute_vertex=compute_vertex,
             vertex_mode=vertex_mode,
             overlap_mode=predictor.overlap_mode,
-            matching_mode='optimal')
+            matching_mode=matching_mode)
 
         # 1 a) Check outputs from interaction matching 
         if len(matches) == 0:
@@ -119,6 +123,19 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                 # this predicted interaction. Hence:
                 pred_int_dict['pred_interaction_has_match'] = True
                 true_int_dict['true_nu_id'] = true_int.nu_id
+
+                if run_reco_vertex:
+
+                    reco_vtx, _ = estimate_vertex(true_int.particles, 
+                                            use_primaries=use_primaries_for_vertex, 
+                                            mode=vertex_mode,
+                                            prune_candidates=predictor.prune_vertex,
+                                            return_candidate_count=True)
+                    
+                    true_int_dict['true_reco_vtx_x'] = reco_vtx[0]
+                    true_int_dict['true_reco_vtx_y'] = reco_vtx[1]
+                    true_int_dict['true_reco_vtx_z'] = reco_vtx[2]
+
                 if 'neutrino_asis' in data_blob and true_int.nu_id > 0:
                     # assert 'particles_asis' in data_blob
                     # particles = data_blob['particles_asis'][i]
@@ -190,6 +207,8 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
 
             if true_p is not None:
                 pred_particle_dict['pred_particle_has_match'] = True
+                if test_containment:
+                    true_particle_dict['true_particle_is_contained'] = predictor.is_contained(true_p.points)
                 true_particle_dict['true_particle_interaction_id'] = true_p.interaction_id
                 if 'particles_asis' in data_blob:
                     particles_asis = data_blob['particles_asis'][idx]
@@ -204,6 +223,8 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
                         true_particle_dict['true_particle_children_count'] = len(children)
 
             if pred_p is not None:
+                if test_containment:
+                    pred_particle_dict['pred_particle_is_contained'] = predictor.is_contained(pred_p.points)
                 true_particle_dict['true_particle_has_match'] = True
                 pred_particle_dict['pred_particle_interaction_id'] = pred_p.interaction_id
 
