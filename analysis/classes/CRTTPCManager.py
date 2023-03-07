@@ -39,6 +39,9 @@ class CRTTPCManager:
             self.min_x = meta[0]
             self.min_y = meta[1]
             self.min_z = meta[2]
+            self.max_x = meta[0]
+            self.max_y = meta[1]
+            self.max_z = meta[2]
             self.size_voxel_x = meta[6]
             self.size_voxel_y = meta[7]
             self.size_voxel_z = meta[8]
@@ -84,31 +87,6 @@ class CRTTPCManager:
         self.crt_v = crt_v
         return crt_v
 
-    def run_crt_tpc_matching(self, interaction, crthits):
-        print('Run crt-tpc matching')
-        if self.tpc_v is None:
-            if interactions is None:
-                #raise Exception('You need to specify `interactions`, or to run make_qcluster.')
-                raise Exception('[CRT-TPC] You need to specify `interactions` or used cached interactions from flash matching')
-        #if interactions is not None:
-        #    print('Interactions is not None')
-        #    self.make_qcluster(interactions, **kwargs)
-
-
-        if self.crt_v is None:
-            if crthits is None:
-                raise Exception("CRTHit objects need to be defined. Either specify `crthits`, or run make_crthit.")
-        if crthits is not None:
-            print('crthits is not None')
-            self.make_crthit(crthits)
-
-        assert self.tpc_v is not None and self.crt_v is not None 
-
-        ### Run CRT-TPC matching ###
-        # Initialize matcha::Match() class
-
-        return self.crt_matches 
-
     def make_tpctrack(self, muon_candidates):
         from matcha import track
         '''
@@ -126,16 +104,65 @@ class CRTTPCManager:
         trk_v = []
 
         for idx, particle in enumerate(muon_candidates):
+            particle.points = points_to_cm(particle.points)
             this_track = track.Track(id=particle.id)
+            this_track.image_id = particle.image_id
+            this_track.interaction_id = particle.interaction_id
             this_track.start_x = particle.startpoint[0]
             this_track.start_y = particle.startpoint[1]
             this_track.start_z = particle.startpoint[2]
             this_track.end_x   = particle.endpoint[0]
             this_track.end_y   = particle.endpoint[1]
             this_track.end_z   = particle.endpoint[2]
+            print('[MAKE_TPCTRACK] Track info:\n')
+            print('\t Track start: ({}, {}, {})'.format(this_track.start_x, this_track.start_y, this_track.start_z))
+            print('\t Track end: ({}, {}, {})'.format(this_track.end_x, this_track.end_y, this_track.end_z))
             this_track.points  = particle.points
             this_track.depositions = particle.depositions
             trk_v.append(this_track)
 
         self.trk_v = trk_v
         return trk_v
+
+    def run_crt_tpc_matching(self, tracks, crthits):
+        from matcha import matcher
+        print('[CRTTPCManager] Run crt-tpc matching')
+
+        ### Run CRT-TPC matching ###
+        # Initialize matcha::Match() class
+
+        crt_tpc_matches = []
+
+        # For each track, loop CRTHits and find DCA
+        #for track in tracks:
+            #for crthit in crthits:
+                #matcher = matcher.MatchMaker(track, crthit)
+                #matcher.calculate_distance_of_closest_approach(track, crthit)
+
+
+        return crt_tpc_matches 
+        # TODO Why did I have it return an attribute?
+        #return self.crt_tpc_matches 
+
+    def points_to_cm(self, points):
+        """
+        Convert particle points from voxel units to cm
+
+        Parameters
+        ----------
+        points: np.ndarray
+            Shape (N, 3). Coordinates in voxel units.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (N, 3). Coordinates in cm.
+        """
+        for ip, point in enumerate(points):
+            absolute_x = point[0] * self.size_voxel_x + self.min_x
+            absolute_y = point[1] * self.size_voxel_y + self.min_y
+            absolute_z = point[2] * self.size_voxel_z + self.min_z
+
+
+
+
