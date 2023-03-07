@@ -302,11 +302,12 @@ class FullChainPredictor:
 
         if len(interaction_list) == 0:
             print('[CRTTPC] len(interaction_list) is 0')
-            tpc_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
+            trk_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
-            print('[CRTTPC] Not chached')
-            tpc_v, crt_v, matches = out
-        return [(tpc_v[m.tpc_id], crt_v[m.flash_id], m) for m in matches]
+            print('[CRTTPC] Not cached')
+            trk_v, crt_v, matches = out
+
+        return [(m.track.id, m.crthit.id, m) for m in matches]
 
     def _run_crt_tpc_matching(self, entry,
             use_true_tpc_objects=False,
@@ -321,7 +322,6 @@ class FullChainPredictor:
         if use_true_tpc_objects:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
-
             tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
         else:
             tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
@@ -357,7 +357,7 @@ class FullChainPredictor:
         crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
 
         # TODO Placeholder
-        matches = []
+        matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
 
         return trk_v, crt_v, matches
 
