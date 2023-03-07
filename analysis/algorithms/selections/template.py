@@ -54,8 +54,8 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     if compute_energy:
 
         splines = {
-            'proton': get_csda_range_spline('proton'),
-            'muon': get_csda_range_spline('muon')
+            'proton': get_csda_range_spline('proton', '/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/pE_liquid_argon.txt'),
+            'muon': get_csda_range_spline('muon', '/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/muE_liquid_argon.txt')
         }
 
     # Load data into evaluator

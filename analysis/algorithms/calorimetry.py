@@ -49,16 +49,16 @@ def compute_track_length(points, bin_size=17):
     return length
 
 
-def get_csda_range_spline(particle_type):
+def get_csda_range_spline(particle_type, table_path):
     '''
     Returns CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
     '''
     if particle_type == 'proton':
-        tab = pd.read_csv('/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/pE_liquid_argon.txt', 
+        tab = pd.read_csv(table_path, 
                           delimiter=' ',
                           index_col=False)
     elif particle_type == 'muon':
-        tab = pd.read_csv('/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/muE_liquid_argon.txt', 
+        tab = pd.read_csv(table_path, 
                           delimiter=' ',
                           index_col=False)
     else:
