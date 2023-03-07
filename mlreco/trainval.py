@@ -369,8 +369,11 @@ class trainval(object):
                 model_name = config.get('model_name', module)
                 model_path = config.get('model_path', None)
 
-                # Make sure BN and DO layers are set to eval mode
-                getattr(self._model, model_name).eval()
+                # Make sure BN and DO layers are set to eval mode when the weights are frozen
+                model = self._model
+                for m in module.split('.'):
+                    model = getattr(model, m)
+                model.eval()
 
                 # Freeze all weights
                 count = 0
