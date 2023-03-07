@@ -74,10 +74,6 @@ class UResNetPPN(nn.Module):
         assert self.ghost == cfg.get('ppn', {}).get('ghost', False)
         self.backbone = UResNet_Chain(cfg)
         self.ppn = PPN(cfg)
-        self.num_classes = self.backbone.num_classes
-        self.num_filters = self.backbone.F
-        self.segmentation = ME.MinkowskiLinear(
-            self.num_filters, self.num_classes)
 
     def forward(self, input):
 
@@ -94,9 +90,9 @@ class UResNetPPN(nn.Module):
         out = defaultdict(list)
 
         for igpu, x in enumerate(input_tensors):
-            # input_data = x[:, :5]
             res = self.backbone([x])
-            out.update({'ghost': res['ghost']})
+            out.update({'ghost': res['ghost'],
+                        'segmentation': res['segmentation']})
             if self.ghost:
                 if self.ppn.use_true_ghost_mask:
                     res_ppn = self.ppn(res['finalTensor'][igpu],
@@ -111,12 +107,6 @@ class UResNetPPN(nn.Module):
             else:
                 res_ppn = self.ppn(res['finalTensor'][igpu],
                                    res['decoderTensors'][igpu])
-            # if self.training:
-            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
-            # else:
-            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
-            segmentation = self.segmentation(res['decoderTensors'][igpu][-1])
-            out['segmentation'].append(segmentation.F)
             out.update(res_ppn)
 
         return out
