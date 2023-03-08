@@ -1,6 +1,7 @@
 import flashmatch
 from flashmatch import flashmatch
 from flashmatch import geoalgo
+from matcha import track, crthit, match_candidate
 import numpy as np
 from analysis.decorator import evaluate
 from collections import OrderedDict
@@ -52,11 +53,11 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         crt_tpc_matches = predictor.get_crt_tpc_matches(i, use_true_tpc_objects=True,
                                                         volume=1, ADC_to_MeV=0.00285714285,
                                                         interaction_list=cached_interactions)
-        for (interaction, crthit, match) in crt_tpc_matches:
+        for match in crt_tpc_matches:
             entry = OrderedDict(crt_fields)
             populate_crthit_entry(entry, index, data['meta'][i],
                                   data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
-                                  interaction, crthit, match)
+                                  match)
             rows.append(entry)
         print('Done')
 
@@ -123,21 +124,27 @@ def populate_entry(entry, index, meta, neutrinos,
     entry['neutrino'] = np.any(near(nus, vtx))
     return entry
 
-def populate_crthit_entry(entry, index, meta, neutrinos,
-                          interaction, crthit, match):
+def populate_crthit_entry(entry, index, meta, neutrinos, match):
     """
-    Populates the CRT hit entry with the relevant informations.
+    Populates the CRT-TPC match information.
+
+    Matched CRT hits and TPC tracks are stored in matcha.MatchCandidate
+    instances. 
 
     Parameters
     ----------
     entry: A dictionary configured according to the analysis config.
     index: The image index.
-    crthit: The LArCV CRTHit object.
+    meta: Meta information about real spatial coordinates.
+    neutrinos: The list of neutrinos in the image.
+    match: matcha.MatchCandidate instance containing matched CRT hit
+           and TPC track objects
 
     Returns
     -------
     The populated CRT hit entry.
     """
+    # TODO Update absolutely all of this
     entry['index'] = index
     entry['peshit'] = crthit.peshit()
     entry['t0_sec'], entry['t0_ns'] = crthit.t0_sec(), crthit.t0_ns()
