@@ -9,9 +9,6 @@ from analysis.algorithms.point_matching import get_track_endpoints_max_dist
 from analysis.algorithms.calorimetry import get_csda_range_spline, compute_track_dedx
 
 import numpy as np
-# Splines for ranged based energy reco
-f_proton = get_csda_range_spline('proton')
-f_muon = get_csda_range_spline('muon')
 
 
 def attach_prefix(update_dict, prefix):
@@ -195,13 +192,6 @@ def load_range_reco(particle_type='muon', kinetic_energy=True):
         return np.vectorize(graph.Eval)
     else:
         print(f'Range-based reconstruction for particle "{particle_type}" not available.')
-
-
-def make_range_based_momentum_fns():
-    f_muon = load_range_reco('muon')
-    f_pion = load_range_reco('pion')
-    f_proton = load_range_reco('proton')
-    return [f_muon, f_pion, f_proton]
 
 
 def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
