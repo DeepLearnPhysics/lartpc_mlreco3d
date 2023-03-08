@@ -141,7 +141,7 @@ def get_validation_df(log_dir, keys, prefix='inference'):
     for log_file in log_files:
         df = pd.read_csv(log_file)
         it = int(log_file.split('/')[-1].split('-')[-1].split('.')[0])
-        val_data['iter'].append(it)
+        val_data['iter'].append(it-1)
         for key_list in keys:
             key, key_name = find_key(df, key_list)
             val_data[f'{key_name}_mean'].append(df[key].mean())
