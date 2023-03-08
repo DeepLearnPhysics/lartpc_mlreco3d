@@ -8,7 +8,7 @@ from mlreco.utils.ppn import get_track_endpoints_geo
 from sklearn.decomposition import PCA
 from mlreco.utils.gnn.evaluation import primary_assignment
 from mlreco.utils.groups import type_labels
-from analysis.algorithms.calorimetry import compute_particle_direction
+from analysis.algorithms.calorimetry import get_particle_direction
 
 
 def find_closest_points_of_approach(point1, direction1, point2, direction2):

@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA
 from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.decorator import evaluate
-from analysis.algorithms.calorimetry import compute_track_length, compute_particle_direction
+from analysis.algorithms.calorimetry import compute_track_length
 
 from pprint import pprint
 import time

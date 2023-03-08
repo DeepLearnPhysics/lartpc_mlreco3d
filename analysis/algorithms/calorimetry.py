@@ -3,6 +3,7 @@ import numpy as np
 import numba as nb
 from sklearn.decomposition import PCA
 from scipy.interpolate import CubicSpline
+from mlreco.utils.gnn.cluster import cluster_direction
 import pandas as pd
 
 # CONSTANTS (MeV)
@@ -83,52 +84,59 @@ def compute_range_based_energy(particle, f, **kwargs):
     return total
 
 
-def compute_particle_direction(p: Particle, 
-                               start_segment_radius=17, 
-                               vertex=None,
-                               return_explained_variance=False):
-    """
-    Given a Particle, compute the start direction. Within `start_segment_radius`
-    of the start point, find PCA axis and measure direction.
+def get_particle_direction(p: Particle, **kwargs):
+    startpoint = p.startpoint
+    v = cluster_direction(p.points, p.startpoint, **kwargs)
+    return v
 
-    If not start point is found, returns (-1, -1, -1).
 
-    Parameters
-    ----------
-    p: Particle
-    start_segment_radius: float, optional
+# # Deprecated
+# def compute_particle_direction(p: Particle, 
+#                                start_segment_radius=17, 
+#                                vertex=None,
+#                                return_explained_variance=False):
+#     """
+#     Given a Particle, compute the start direction. Within `start_segment_radius`
+#     of the start point, find PCA axis and measure direction.
 
-    Returns
-    -------
-    np.ndarray
-        Shape (3,)
-    """
-    pca = PCA(n_components=2)
-    direction = None
-    if p.startpoint is not None and p.startpoint[0] >= 0.:
-        startpoint = p.startpoint
-        if p.endpoint is not None and vertex is not None: # make sure we pick the one closest to vertex
-            use_end = np.argmin([
-                np.sqrt(((vertex-p.startpoint)**2).sum()),
-                np.sqrt(((vertex-p.endpoint)**2).sum())
-            ])
-            startpoint = p.endpoint if use_end else p.startpoint
-        d = np.sqrt(((p.points - startpoint)**2).sum(axis=1))
-        if (d < start_segment_radius).sum() >= 2:
-            direction = pca.fit(p.points[d < start_segment_radius]).components_[0, :]
-    if direction is None: # we could not find a startpoint
-        if len(p.points) >= 2: # just all voxels
-            direction = pca.fit(p.points).components_[0, :]
-        else:
-            direction = np.array([-1, -1, -1])
-            if not return_explained_variance:
-                return direction
-            else:
-                return direction, np.array([-1, -1])
-    if not return_explained_variance:
-        return direction
-    else:
-        return direction, pca.explained_variance_ratio_
+#     If not start point is found, returns (-1, -1, -1).
+
+#     Parameters
+#     ----------
+#     p: Particle
+#     start_segment_radius: float, optional
+
+#     Returns
+#     -------
+#     np.ndarray
+#         Shape (3,)
+#     """
+#     pca = PCA(n_components=2)
+#     direction = None
+#     if p.startpoint is not None and p.startpoint[0] >= 0.:
+#         startpoint = p.startpoint
+#         if p.endpoint is not None and vertex is not None: # make sure we pick the one closest to vertex
+#             use_end = np.argmin([
+#                 np.sqrt(((vertex-p.startpoint)**2).sum()),
+#                 np.sqrt(((vertex-p.endpoint)**2).sum())
+#             ])
+#             startpoint = p.endpoint if use_end else p.startpoint
+#         d = np.sqrt(((p.points - startpoint)**2).sum(axis=1))
+#         if (d < start_segment_radius).sum() >= 2:
+#             direction = pca.fit(p.points[d < start_segment_radius]).components_[0, :]
+#     if direction is None: # we could not find a startpoint
+#         if len(p.points) >= 2: # just all voxels
+#             direction = pca.fit(p.points).components_[0, :]
+#         else:
+#             direction = np.array([-1, -1, -1])
+#             if not return_explained_variance:
+#                 return direction
+#             else:
+#                 return direction, np.array([-1, -1])
+#     if not return_explained_variance:
+#         return direction
+#     else:
+#         return direction, pca.explained_variance_ratio_
     
 
 def compute_track_dedx(p, bin_size=17):
@@ -217,8 +225,7 @@ def compute_mcs_muon_energy(particle, bin_size=17,
     pca = PCA(n_components=3)
     coords_pca = pca.fit_transform(particle.points)
     proj = coords_pca[:, 0]
-    global_dir = compute_particle_direction(particle, 
-                                            start_segment_radius=bin_size)
+    global_dir = get_particle_direction(particle, optimize=True)
     if global_dir[0] < 0:
         global_dir = pca.components_[0]
     perm = np.argsort(proj.squeeze())
@@ -269,42 +276,3 @@ def compute_mcs_muon_energy(particle, bin_size=17,
     lls = np.array(lls)
     Es = np.array(Es)
     return einit, min_ll
-
-# def load_range_reco(particle_type='muon', kinetic_energy=True):
-#     """
-#     Return a function maps the residual range of a track to the kinetic
-#     energy of the track. The mapping is based on the Bethe-Bloch formula
-#     and stored per particle type in TGraph objects. The TGraph::Eval
-#     function is used to perform the interpolation.
-
-#     Parameters
-#     ----------
-#     particle_type: A string with the particle name.
-#     kinetic_energy: If true (false), return the kinetic energy (momentum)
-    
-#     Returns
-#     -------
-#     The kinetic energy or momentum according to Bethe-Bloch.
-#     """
-#     output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
-#     if particle_type in ['muon', 'pion', 'kaon', 'proton']:
-#         input_file = ROOT.TFile.Open('/sdf/group/neutrino/koh0207/misc/RRInput.root', 'read')
-#         graph = input_file.Get(f'{particle_type}{output_var}')
-#         return np.vectorize(graph.Eval)
-#     else:
-#         print(f'Range-based reconstruction for particle "{particle_type}" not available.')
-
-
-# def make_range_based_momentum_fns():
-#     f_muon = load_range_reco('muon')
-#     f_pion = load_range_reco('pion')
-#     f_proton = load_range_reco('proton')
-#     return [f_muon, f_pion, f_proton]
-
-
-# def compute_range_momentum(particle, f, voxel_to_cm=0.3, **kwargs):
-#     assert particle.semantic_type == 1
-#     length = compute_track_length(particle.points, 
-#                                   bin_size=kwargs.get('bin_size', 17))
-#     E = f(length * voxel_to_cm)
-#     return E

@@ -16,9 +16,7 @@ from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
-from analysis.algorithms.utils import correct_track_endpoints_closest, \
-                                      get_track_points_default, \
-                                      local_density_correction, correct_track_endpoints_linfit
+from analysis.algorithms.utils import get_track_points
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -106,14 +104,7 @@ class FullChainPredictor:
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
         self.prune_vertex = predictor_cfg.get('prune_vertex', True)
         self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
-        self.track_point_corrector = predictor_cfg.get('track_point_corrector', 'None')
-        if self.track_point_corrector == 'linfit':
-            self.track_point_corrector = correct_track_endpoints_linfit
-        elif self.track_point_corrector == 'density':
-            self.track_point_corrector = local_density_correction
-        else:
-            def f(x): pass
-            self.track_point_corrector = f
+        self.track_point_corrector = predictor_cfg.get('track_point_corrector', 'ppn')
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
@@ -871,9 +862,7 @@ class FullChainPredictor:
             particles_seg    = self.result['particles_seg'][entry]
 
             type_logits = self.result['node_pred_type'][entry]
-            input_node_features = [None] * type_logits.shape[0]
-            if 'particle_node_features' in self.result:
-                input_node_features = self.result['particle_node_features'][entry]
+            particle_points = self.result['particle_points'][entry]
             pids = np.argmax(type_logits, axis=1)
 
             out = []
@@ -881,7 +870,7 @@ class FullChainPredictor:
                 return out
             assert len(particles_seg) == len(particles)
             assert len(pids) == len(particles)
-            assert len(input_node_features) == len(particles)
+            assert len(particle_points) == len(particles)
             assert point_cloud.shape[0] == depositions.shape[0]
 
             node_pred_vtx = self.result['node_pred_vtx'][entry]
@@ -921,7 +910,9 @@ class FullChainPredictor:
                                 pid_conf=softmax(type_logits[i])[pids[i]],
                                 volume=volume)
 
-                part._node_features = input_node_features[i]
+                part.startpoint = particle_points[i][:3]
+                part.endpoint = particle_points[i][3:]
+
                 out.append(part)
 
             if only_primaries:
@@ -942,20 +933,21 @@ class FullChainPredictor:
                 if p.size < min_particle_voxel_count:
                     continue
                 if p.semantic_type == 0:
-                    pt = p._node_features[19:22]
                     # Check startpoint is replicated
                     assert(np.sum(
-                        np.abs(pt - p._node_features[22:25])) < 1e-12)
-                    p.startpoint = pt
+                        np.abs(p.startpoint - p.endpoint)) < 1e-12)
+                    p.endpoint = None
                 elif p.semantic_type == 1:
                     if self.track_endpoints_mode == 'node_features':
-                        get_track_points_default(p)
-                    elif self.track_endpoints_mode == 'max_dist':
-                        correct_track_endpoints_closest(p)
+                        get_track_points(p, 
+                                         correction_mode=self.track_point_corrector)
+                    elif self.track_endpoints_mode == 'brute_force':
+                        get_track_points(p, 
+                                         correction_mode=self.track_point_corrector, 
+                                         brute_force=True)
                     else:
                         raise ValueError("Track endpoint attachment mode {}\
                              not supported!".format(self.track_endpoints_mode))
-                    self.track_point_corrector(p)
                 else:
                     continue
             out_particle_list.extend(out)

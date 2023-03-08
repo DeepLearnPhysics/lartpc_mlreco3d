@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 from scipy.spatial.distance import cdist
-from analysis.algorithms.calorimetry import compute_particle_direction
+from analysis.algorithms.calorimetry import get_particle_direction
 from mlreco.utils.utils import func_timer
 from analysis.classes.Interaction import Interaction
 
@@ -61,7 +61,7 @@ def get_track_shower_poca(particles, return_annot=False, start_segment_radius=10
     track_starts = np.array([p.startpoint for p in particles if p.semantic_type == 1])
     shower_starts, shower_dirs = [], []
     for p in particles:
-        vec = compute_particle_direction(p, start_segment_radius=start_segment_radius)
+        vec = get_particle_direction(p, optimize=True)
         if p.semantic_type == 0 and (vec != -1).all():
             shower_dirs.append(vec)
             shower_starts.append(p.startpoint)
@@ -132,10 +132,10 @@ def compute_vertex_matrix_inversion(particles,
     C = np.zeros((dim, ))
         
     for p in particles:
-        vec, var = compute_particle_direction(p, return_explained_variance=True)
+        vec = get_particle_direction(p, optimize=True)
         w = 1.0
-        if weight:
-            w = np.exp(-(var[0] - 1)**2 / (2.0 * var_sigma)**2)
+        # if weight:
+        #     w = np.exp(-(var[0] - 1)**2 / (2.0 * var_sigma)**2)
         S += w * (np.outer(vec, vec) - np.eye(dim))
         C += w * (np.outer(vec, vec) - np.eye(dim)) @ p.startpoint
     # print(S, C)
@@ -259,7 +259,7 @@ def correct_primary_with_vertex(ia, r_adj=10, r_bt=10, start_segment_radius=10):
                 else:
                     p.is_primary = False
             if p.semantic_type == 0:
-                vec = compute_particle_direction(p, start_segment_radius=start_segment_radius)
+                vec = get_particle_direction(p, start_segment_radius=start_segment_radius)
                 dist = point_to_line_distance_(ia.vertex, p.startpoint, vec)
                 if np.linalg.norm(p.startpoint - ia.vertex) < r_adj:
                     p.is_primary = True

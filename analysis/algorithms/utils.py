@@ -3,10 +3,10 @@ from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
+from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
-
-from analysis.algorithms.calorimetry import get_csda_range_spline, compute_track_dedx
+from analysis.algorithms.calorimetry import compute_track_dedx, get_particle_direction
 
 import numpy as np
 
@@ -62,11 +62,6 @@ def correct_track_points(particle):
         particle.endpoint = x[scores[:, 1].argmax()]
 
 
-def get_track_points_default(p):
-    pts = np.vstack([p._node_features[19:22], p._node_features[22:25]])
-    correct_track_endpoints_closest(p, pts=pts)
-
-
 def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
     assert ppn_candidates.shape[0] == 1
     score = ppn_candidates[0][5:]
@@ -83,12 +78,9 @@ def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
 
 
 
-def correct_track_endpoints_closest(p, pts=None):
+def correct_track_endpoints_ppn(p):
     assert p.semantic_type == 1
-    if pts is None:
-        pts = np.vstack(get_track_endpoints_max_dist(p))
-    else:
-        assert pts.shape == (2, 3)
+    pts = np.vstack([p.startpoint, p.endpoint])
 
     if p.ppn_candidates.shape[0] == 0:
         p.startpoint = pts[0]
@@ -135,21 +127,26 @@ def correct_track_endpoints_closest(p, pts=None):
                 p.endpoint = pts[ix]
             else:
                 raise ValueError("Classify endpoints feature dimension must be 2, got something else!")
-    if np.linalg.norm(p.startpoint - p.endpoint) > 1e-6:
+    if np.linalg.norm(p.startpoint - p.endpoint) < 1e-6:
         p.startpoint = pts[0]
         p.endpoint = pts[1]
 
 
-def local_density_correction(p, r=5):
+def correct_track_endpoints_local_density(p, r=5):
+    pca = PCA(n_components=2)
     assert p.semantic_type == 1
-    dist_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
-    if not dist_st.any():
+    mask_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
+    if np.count_nonzero(mask_st) < 2:
         return
-    local_d_start = p.depositions[dist_st].sum() / sum(dist_st)
-    dist_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
-    if not dist_end.any():
+    pca_axis = pca.fit_transform(p.points[mask_st])
+    length = pca_axis[:, 0].max() - pca_axis[:, 0].min()
+    local_d_start = p.depositions[mask_st].sum() / length
+    mask_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
+    if np.count_nonzero(mask_end) < 2:
         return
-    local_d_end = p.depositions[dist_end].sum() / sum(dist_end)
+    pca_axis = pca.fit_transform(p.points[mask_end])
+    length = pca_axis[:, 0].max() - pca_axis[:, 0].min()
+    local_d_end = p.depositions[mask_end].sum() / length
     # Startpoint must have lowest local density
     if local_d_start > local_d_end:
         p1, p2 = p.startpoint, p.endpoint
@@ -167,6 +164,21 @@ def correct_track_endpoints_linfit(p, bin_size=17):
                 p1, p2 = p.startpoint, p.endpoint
                 p.startpoint = p2
                 p.endpoint = p1
+
+
+def get_track_points(p, correction_mode='ppn', brute_force=False):
+    if brute_force:
+        pts = np.vstack(get_track_endpoints_max_dist(p))
+    else:
+        pts = np.vstack([p.startpoint, p.endpoint])
+    if correction_mode == 'ppn':
+        correct_track_endpoints_ppn(p, pts=pts)
+    elif correction_mode == 'local_density':
+        correct_track_endpoints_local_density(p)
+    elif correction_mode == 'linfit':
+        correct_track_endpoints_linfit(p)
+    else:
+        raise ValueError("Track extrema correction mode {} not defined!".format(correction_mode))
 
 
 def load_range_reco(particle_type='muon', kinetic_energy=True):
@@ -338,7 +350,7 @@ def get_particle_properties(particle: Particle,
             update_dict['particle_pz'] = float(particle.particle_asis.pz())
         if compute_energy:
             update_dict['particle_sum_edep'] = particle.sum_edep
-            direction = compute_particle_direction(particle)
+            direction = get_particle_direction(particle, optimize=True)
             assert len(direction) == 3
             update_dict['particle_dir_x'] = direction[0]
             update_dict['particle_dir_y'] = direction[1]
