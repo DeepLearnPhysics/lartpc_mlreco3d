@@ -1,3 +1,5 @@
+import numpy as np
+
 class CRTTPCManager:
     """
     Class that manages TPC track and CRT hit objects. Similar to the FlashManager
@@ -104,7 +106,7 @@ class CRTTPCManager:
         trk_v = []
 
         for idx, particle in enumerate(muon_candidates):
-            particle.points = points_to_cm(particle.points)
+            particle.points = self.points_to_cm(particle.points)
             this_track = track.Track(id=particle.id)
             this_track.image_id = particle.image_id
             this_track.interaction_id = particle.interaction_id
@@ -121,11 +123,16 @@ class CRTTPCManager:
             this_track.depositions = particle.depositions
             trk_v.append(this_track)
 
+        with open('track_reprs.txt', 'w') as f:
+            for track in trk_v:
+                f.write(repr(track) + '\n')
+
         self.trk_v = trk_v
         return trk_v
 
     def run_crt_tpc_matching(self, tracks, crthits):
-        from matcha import matcher
+        # TODO What to import here? Refactoring has happened...
+        #from matcha import matchmaker
         print('[CRTTPCManager] Run crt-tpc matching')
 
         ### Run CRT-TPC matching ###
@@ -158,10 +165,13 @@ class CRTTPCManager:
         np.ndarray
             Shape (N, 3). Coordinates in cm.
         """
+        points_in_cm = np.zeros(shape=(len(points), 3))
         for ip, point in enumerate(points):
-            absolute_x = point[0] * self.size_voxel_x + self.min_x
-            absolute_y = point[1] * self.size_voxel_y + self.min_y
-            absolute_z = point[2] * self.size_voxel_z + self.min_z
+            points_in_cm[ip][0] = point[0] * self.size_voxel_x + self.min_x
+            points_in_cm[ip][1] = point[1] * self.size_voxel_y + self.min_y
+            points_in_cm[ip][2] = point[2] * self.size_voxel_z + self.min_z
+
+        return points_in_cm
 
 
 
