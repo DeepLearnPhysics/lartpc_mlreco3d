@@ -158,9 +158,9 @@ class FullChainPredictor:
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
 
-            # TODO Placeholder.  (key, value) TBD. 
+            # Key is (entry, use_true_tpc_objects), value is list of matcha.MatchCandidate
+            # The MatchCandidate object stores the matched matcha.Track and matcha.CRTHit
             self.crt_tpc_matches = {} 
-
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
@@ -297,17 +297,27 @@ class FullChainPredictor:
         # No caching done if matching a subset of interactions
         if (entry, volume, use_true_tpc_objects) not in self.crt_tpc_matches or len(interaction_list):
             print('[CRTTPC] No caching done')
-            out = self._run_crt_tpc_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
-                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV, interaction_list=interaction_list)
+            trk_v, crt_v, matches = self._run_crt_tpc_matching(
+                    entry, 
+                    use_true_tpc_objects=use_true_tpc_objects, 
+                    volume=volume,
+                    use_depositions_MeV=use_depositions_MeV, 
+                    ADC_to_MeV=ADC_to_MeV, 
+                    interaction_list=interaction_list
+            )
 
         if len(interaction_list) == 0:
             print('[CRTTPC] len(interaction_list) is 0')
             trk_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
+            #matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
             print('[CRTTPC] Not cached')
             trk_v, crt_v, matches = out
 
-        return [(m.track.id, m.crthit.id, m) for m in matches]
+        # matches contains the track and crthit objects, so this should
+        # be sufficient 
+        return matches
+        #return [(m.track.id, m.crthit.id, m) for m in matches]
 
     def _run_crt_tpc_matching(self, entry,
             use_true_tpc_objects=False,
@@ -359,7 +369,11 @@ class FullChainPredictor:
         # TODO Placeholder
         matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
 
-        return trk_v, crt_v, matches
+        if len(interaction_list) == 0:
+            self.crt_tpc_matches[(entry, use_true_tpc_objects)] = (matches)
+
+        return matches
+        #return trk_v, crt_v, matches
 
     def _fit_predict_ppn(self, entry):
         '''
