@@ -4,8 +4,11 @@ from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
 from scipy.spatial.distance import cdist
+from analysis.algorithms.point_matching import get_track_endpoints_max_dist
+
+from analysis.algorithms.calorimetry import get_csda_range_spline, compute_track_dedx
+
 import numpy as np
-import ROOT
 
 
 def attach_prefix(update_dict, prefix):
@@ -59,6 +62,113 @@ def correct_track_points(particle):
         particle.endpoint = x[scores[:, 1].argmax()]
 
 
+def get_track_points_default(p):
+    pts = np.vstack([p._node_features[19:22], p._node_features[22:25]])
+    correct_track_endpoints_closest(p, pts=pts)
+
+
+def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
+    assert ppn_candidates.shape[0] == 1
+    score = ppn_candidates[0][5:]
+    label = np.argmax(score)
+    dist = cdist(pts, ppn_candidates[:, :3])
+    pt_near = pts[dist.argmin(axis=0)]
+    pt_far = pts[dist.argmax(axis=0)]
+    if label == 0:
+        p.startpoint = pt_near.reshape(-1)
+        p.endpoint = pt_far.reshape(-1)
+    else:
+        p.endpoint = pt_near.reshape(-1)
+        p.startpoint = pt_far.reshape(-1)
+
+
+
+def correct_track_endpoints_closest(p, pts=None):
+    assert p.semantic_type == 1
+    if pts is None:
+        pts = np.vstack(get_track_endpoints_max_dist(p))
+    else:
+        assert pts.shape == (2, 3)
+
+    if p.ppn_candidates.shape[0] == 0:
+        p.startpoint = pts[0]
+        p.endpoint = pts[1]
+    elif p.ppn_candidates.shape[0] == 1:
+        # If only one ppn candidate, find track endpoint closer to
+        # ppn candidate and give the candidate's label to that track point
+        handle_singleton_ppn_candidate(p, pts, p.ppn_candidates)
+    else:
+        dist1 = cdist(np.atleast_2d(p.ppn_candidates[:, :3]), 
+                      np.atleast_2d(pts[0])).reshape(-1)
+        dist2 = cdist(np.atleast_2d(p.ppn_candidates[:, :3]), 
+                      np.atleast_2d(pts[1])).reshape(-1)
+        
+        ind1, ind2 = dist1.argmin(), dist2.argmin()
+        if ind1 == ind2:
+            ppn_candidates = p.ppn_candidates[dist1.argmin()].reshape(1, 7)
+            handle_singleton_ppn_candidate(p, pts, ppn_candidates)
+        else:
+            pt1_score = p.ppn_candidates[ind1][5:]
+            pt2_score = p.ppn_candidates[ind2][5:]
+            
+            labels = np.array([pt1_score.argmax(), pt2_score.argmax()])
+            scores = np.array([pt1_score.max(), pt2_score.max()])
+            
+            if labels[0] == 0 and labels[1] == 1:
+                p.startpoint = pts[0]
+                p.endpoint = pts[1]
+            elif labels[0] == 1 and labels[1] == 0:
+                p.startpoint = pts[1]
+                p.endpoint = pts[0]
+            elif labels[0] == 0 and labels[1] == 0:
+                # print("Particle {} has no endpoint".format(p.id))
+                # Select point with larger score as startpoint
+                ix = np.argmax(scores)
+                iy = np.argmin(scores)
+                # print(ix, iy, pts, scores)
+                p.startpoint = pts[ix]
+                p.endpoint = pts[iy]
+            elif labels[0] == 1 and labels[1] == 1:
+                ix = np.argmax(scores) # point with higher endpoint score
+                iy = np.argmin(scores)
+                p.startpoint = pts[iy]
+                p.endpoint = pts[ix]
+            else:
+                raise ValueError("Classify endpoints feature dimension must be 2, got something else!")
+    if np.linalg.norm(p.startpoint - p.endpoint) > 1e-6:
+        p.startpoint = pts[0]
+        p.endpoint = pts[1]
+
+
+def local_density_correction(p, r=5):
+    assert p.semantic_type == 1
+    dist_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
+    if not dist_st.any():
+        return
+    local_d_start = p.depositions[dist_st].sum() / sum(dist_st)
+    dist_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
+    if not dist_end.any():
+        return
+    local_d_end = p.depositions[dist_end].sum() / sum(dist_end)
+    # Startpoint must have lowest local density
+    if local_d_start > local_d_end:
+        p1, p2 = p.startpoint, p.endpoint
+        p.startpoint = p2
+        p.endpoint = p1
+
+
+def correct_track_endpoints_linfit(p, bin_size=17):
+    if len(p.points) >= 2:
+        dedx = compute_track_dedx(p, bin_size=bin_size)
+        if len(dedx) > 1:
+            x = np.arange(len(dedx))
+            params = np.polyfit(x, dedx, 1)
+            if params[0] < 0:
+                p1, p2 = p.startpoint, p.endpoint
+                p.startpoint = p2
+                p.endpoint = p1
+
+
 def load_range_reco(particle_type='muon', kinetic_energy=True):
     """
     Return a function maps the residual range of a track to the kinetic
@@ -84,13 +194,6 @@ def load_range_reco(particle_type='muon', kinetic_energy=True):
         print(f'Range-based reconstruction for particle "{particle_type}" not available.')
 
 
-def make_range_based_momentum_fns():
-    f_muon = load_range_reco('muon')
-    f_pion = load_range_reco('pion')
-    f_proton = load_range_reco('proton')
-    return [f_muon, f_pion, f_proton]
-
-
 def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
 
     update_dict = OrderedDict({
@@ -104,7 +207,8 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         'vertex_z': -1,
         'has_vertex': False,
         'vertex_valid': 'Default Invalid',
-        'count_primary_protons': -1
+        'count_primary_protons': -1,
+        # 'nu_reco_energy': -1
     })
 
     if interaction is None:
@@ -155,7 +259,11 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
     return out
 
 
-def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
+def get_particle_properties(particle: Particle, 
+                            prefix=None, 
+                            save_feats=False,
+                            splines=None,
+                            compute_energy=False):
 
     update_dict = OrderedDict({
         'particle_id': -1,
@@ -163,14 +271,9 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_type': -1,
         'particle_semantic_type': -1,
         'particle_size': -1,
-        'particle_E': -1,
         'particle_is_primary': False,
         'particle_has_startpoint': False,
         'particle_has_endpoint': False,
-        'particle_length': -1,
-        'particle_dir_x': -1,
-        'particle_dir_y': -1,
-        'particle_dir_z': -1,
         'particle_startpoint_x': -1,
         'particle_startpoint_y': -1,
         'particle_startpoint_z': -1,
@@ -178,8 +281,20 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         'particle_endpoint_y': -1,
         'particle_endpoint_z': -1,
         'particle_startpoint_is_touching': True,
+        'particle_creation_process': "Default Invalid",
+        'particle_num_ppn_candidates': -1,
         # 'particle_is_contained': False
     })
+
+    if compute_energy:
+        update_dict.update(OrderedDict({
+            'particle_dir_x': -1,
+            'particle_dir_y': -1,
+            'particle_dir_z': -1,
+            'particle_length': -1,
+            'particle_reco_energy': -1,
+            'particle_sum_edep': -1
+        }))
 
     if save_feats:
         node_dict = OrderedDict({'node_feat_{}'.format(i) : -1 for i in range(28)})
@@ -194,7 +309,6 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
         update_dict['particle_type'] = particle.pid
         update_dict['particle_semantic_type'] = particle.semantic_type
         update_dict['particle_size'] = particle.size
-        update_dict['particle_E'] = particle.sum_edep
         update_dict['particle_is_primary'] = particle.is_primary
         # update_dict['particle_is_contained'] = particle.is_contained
         if particle.startpoint is not None:
@@ -208,26 +322,37 @@ def get_particle_properties(particle: Particle, prefix=None, save_feats=False):
             update_dict['particle_endpoint_y'] = particle.endpoint[1]
             update_dict['particle_endpoint_z'] = particle.endpoint[2]
 
+        if hasattr(particle, 'ppn_candidates'):
+            assert particle.ppn_candidates.shape[1] == 7
+            update_dict['particle_num_ppn_candidates'] = len(particle.ppn_candidates)
+
         if isinstance(particle, TruthParticle):
             dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
             min_dist = np.min(dists)
             if min_dist > 5.0:
                 update_dict['particle_startpoint_is_touching'] = False
-        # if particle.semantic_type == 1:
-        #     update_dict['particle_length'] = compute_track_length(particle.points)
-        #     direction = compute_particle_direction(particle, vertex=vertex)
-        #     assert len(direction) == 3
-        #     update_dict['particle_dir_x'] = direction[0]
-        #     update_dict['particle_dir_y'] = direction[1]
-        #     update_dict['particle_dir_z'] = direction[2]
-            # if particle.pid == 2:
-            #     mcs_E = compute_mcs_muon_energy(particle)
-            #     update_dict['particle_mcs_E'] = mcs_E
-        # if not isinstance(particle, TruthParticle):
-        #     node_dict = OrderedDict({'node_feat_{}'.format(i) : particle.node_features[i] \
-        #         for i in range(particle.node_features.shape[0])})
-
-        #     update_dict.update(node_dict)
+            creation_process = particle.particle_asis.creation_process()
+            update_dict['particle_creation_process'] = creation_process
+            update_dict['particle_px'] = float(particle.particle_asis.px())
+            update_dict['particle_py'] = float(particle.particle_asis.py())
+            update_dict['particle_pz'] = float(particle.particle_asis.pz())
+        if compute_energy:
+            update_dict['particle_sum_edep'] = particle.sum_edep
+            direction = compute_particle_direction(particle)
+            assert len(direction) == 3
+            update_dict['particle_dir_x'] = direction[0]
+            update_dict['particle_dir_y'] = direction[1]
+            update_dict['particle_dir_z'] = direction[2]
+            if particle.semantic_type == 1:
+                length =  compute_track_length(particle.points)
+                update_dict['particle_length'] = length
+                particle.length = length
+                if splines is not None and particle.pid == 4:
+                    reco_energy = compute_range_based_energy(particle, splines['proton'])
+                    update_dict['particle_reco_energy'] = reco_energy
+                if splines is not None and particle.pid == 2:
+                    reco_energy = compute_range_based_energy(particle, splines['muon'])
+                    update_dict['particle_reco_energy'] = reco_energy
 
     out = attach_prefix(update_dict, prefix)
 

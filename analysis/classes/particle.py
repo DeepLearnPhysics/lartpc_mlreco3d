@@ -134,7 +134,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
             print("No particles to match.")
-        return [], 0
+        return [], [0]
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(particles_x, particles_y)
@@ -144,7 +144,7 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
         raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
     # print(overlap_matrix)
     idx = overlap_matrix.argmax(axis=0)
-    intersections = overlap_matrix.max(axis=0)
+    intersections = np.atleast_1d(overlap_matrix.max(axis=0))
 
     matches = []
 
@@ -191,7 +191,7 @@ def match_particles_optimal(particles_from : Union[List[Particle], List[TruthPar
     if len(particles_y) == 0 or len(particles_x) == 0:
         if verbose:
             print("No particles to match.")
-        return [], 0
+        return [], [0]
 
     if overlap_mode == 'counts':
         overlap_matrix = matrix_counts(particles_y, particles_x)

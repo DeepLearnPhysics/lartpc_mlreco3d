@@ -19,4 +19,5 @@ from .evidential_gnn import default_gnn_metrics
 from .duq_metrics import duq_metrics
 from .pid_metrics import pid_metrics
 from .doublet_metrics import doublet_metrics
+from .multi_particle import multi_particle
 #from .analysis_tools_metrics import analysis_tools_metrics

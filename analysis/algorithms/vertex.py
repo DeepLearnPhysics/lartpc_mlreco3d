@@ -240,7 +240,7 @@ def estimate_vertex(particles,
         if pruned.shape[0] > 0:
             out = pruned.mean(axis=0)
         else:
-            out = candidates.mean(axis=0)
+            out = pseudovtx
     
     if return_candidate_count:
         return out, len(candidates)
@@ -253,7 +253,7 @@ def correct_primary_with_vertex(ia, r_adj=10, r_bt=10, start_segment_radius=10):
         for p in ia.particles:
             if p.semantic_type == 1:
                 dist = np.linalg.norm(p.startpoint - ia.vertex)
-                print(p.id, p.is_primary, p.semantic_type, dist)
+                # print(p.id, p.is_primary, p.semantic_type, dist)
                 if dist < r_adj:
                     p.is_primary = True
                 else:
