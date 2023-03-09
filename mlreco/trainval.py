@@ -211,7 +211,6 @@ class trainval(object):
             self.tspent_sum['io'] += self._watch.time('io')
 
             res = self._forward(input_train, input_loss, iteration=iteration)
-
             # Here, contruct the unwrapped input and output
             # First, handle the case of a simple list concat
             concat_keys = self._trainval_config.get('concat_result', [])
@@ -237,7 +236,6 @@ class trainval(object):
             else:
                 if 'index' in input_data:
                     input_data['index'] = input_data['index'][0]
-
             for key in res.keys():
                 if key not in res_combined:
                     res_combined[key] = []

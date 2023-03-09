@@ -7,3 +7,4 @@ from .statistics import statistics
 from .flash_matching import flash_matching
 from .muon_decay import muon_decay
 from .benchmark import benchmark
+from .particles import run_inference_particles

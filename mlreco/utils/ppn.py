@@ -311,10 +311,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         points = out['ppn_points'][entry]
 
     enable_classify_endpoints = 'ppn_classify_endpoints' in out
-    #print("ENABLE CLASSIFY ENDPOINTS = ", enable_classify_endpoints)
     if enable_classify_endpoints:
         classify_endpoints = out['ppn_classify_endpoints'][0]
-        #print(classify_endpoints)
 
     ppn_mask = out['ppn_masks'][-1]
     # predicted type labels

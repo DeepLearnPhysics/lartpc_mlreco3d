@@ -491,6 +491,7 @@ class FullChainEvaluator(FullChainPredictor):
                         mode='pred_to_true',
                         volume=None, 
                         matching_mode='one_way', 
+                        return_counts=False,
                         **kwargs):
         '''
         Returns (<Particle>, None) if no match was found
@@ -507,9 +508,10 @@ class FullChainEvaluator(FullChainPredictor):
 
         entries = self._get_entries(entry, volume)
         all_matches = []
+        all_counts = []
         for e in entries:
             volume = e % self._num_volumes if self.vb is not None else volume
-            print('matching', entries, volume)
+            # print('matching', entries, volume)
             if mode == 'pred_to_true':
                 # Match each pred to one in true
                 particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
@@ -523,15 +525,19 @@ class FullChainEvaluator(FullChainPredictor):
                     " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
             all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
             if matching_mode == 'one_way':
-                matched_pairs, _ = match_particles_fn(particles_from, particles_to,
+                matched_pairs, counts = match_particles_fn(particles_from, particles_to,
                                                         **all_kwargs)
             elif matching_mode == 'optimal':
-                matched_pairs, _ = match_particles_optimal(particles_from, particles_to,
+                matched_pairs, counts = match_particles_optimal(particles_from, particles_to,
                                                            **all_kwargs)
             else:
                 raise ValueError
             all_matches.extend(matched_pairs)
-        return all_matches
+            all_counts.extend(list(counts))
+        if return_counts:
+            return all_matches, all_counts
+        else:
+            return all_matches
 
     
     def match_interactions(self, entry, mode='pred_to_true',
