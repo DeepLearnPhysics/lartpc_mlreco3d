@@ -77,8 +77,8 @@ class FragmentManager(nn.Module):
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
             - cnn_result: dict of List[torch.Tensor], containing:
                 - segmentation
-                - points
-                - mask_ppn2
+                - ppn_points
+                - ppn_masks
 
         Returns:
             - fragment_data
@@ -109,8 +109,8 @@ class DBSCANFragmentManager(FragmentManager):
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
             - cnn_result: dict of List[torch.Tensor], containing:
                 - segmentation
-                - points
-                - mask_ppn2
+                - ppn_points
+                - ppn_masks
 
         Returns:
             - fragments

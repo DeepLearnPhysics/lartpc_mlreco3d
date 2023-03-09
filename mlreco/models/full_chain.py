@@ -275,14 +275,12 @@ class FullChain(FullChainGNN):
             deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             if self.enable_ppn and not self.enable_charge_rescaling:
-                deghost_result['points']            = [result['points'][0][deghost]]
-                if 'classify_endpoints' in deghost_result:
-                    deghost_result['classify_endpoints'] = [result['classify_endpoints'][0][deghost]]
-                deghost_result['mask_ppn'][0][-1]   = result['mask_ppn'][0][-1][deghost]
-                #print(len(result['ppn_score']))
-                #deghost_result['ppn_score'][0][-1]   = result['ppn_score'][0][-1][deghost]
+                deghost_result['ppn_points'] = [result['ppn_points'][0][deghost]]
+                deghost_result['ppn_masks'][0][-1]  = result['ppn_masks'][0][-1][deghost]
                 deghost_result['ppn_coords'][0][-1] = result['ppn_coords'][0][-1][deghost]
                 deghost_result['ppn_layers'][0][-1] = result['ppn_layers'][0][-1][deghost]
+                if 'ppn_classify_endpoints' in deghost_result:
+                    deghost_result['ppn_classify_endpoints'] = [result['ppn_classify_endpoints'][0][deghost]]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
             # cnn_result['segmentation'][0] = segmentation
@@ -352,16 +350,12 @@ class FullChain(FullChainGNN):
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
-            # print('Input = ', input[0].shape)
-            # print('points = ', cnn_result['points'][0].shape)
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
             cluster_result['fragments'].extend(fragment_data[0])
             cluster_result['frag_batch_ids'].extend(fragment_data[1])
             cluster_result['frag_seg'].extend(fragment_data[2])
 
         # Format Fragments
-        # for i, c in enumerate(cluster_result['fragments']):
-        #     print('format' , torch.unique(input[0][c, self.batch_column_id], return_counts=True))
         fragments_result = format_fragments(cluster_result['fragments'],
                                             cluster_result['frag_batch_ids'],
                                             cluster_result['frag_seg'],

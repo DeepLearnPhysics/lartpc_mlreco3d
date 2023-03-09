@@ -1,9 +1,31 @@
 import numpy as np
 import torch
 
+
 def list_concat(data_blob, outputs, avoid_keys=[]):
+    '''
+    Concatenate the data_blob and outputs dictionary
+
+    Need to account for: multi-gpu, minibatching, multiple outputs, batches.
+
+    Parameters
+    ----------
+    data_blob : dict
+        A dictionary of array of array of minibatch data [key][num_minibatch][num_device]
+    outputs : dict
+        Results dictionary, output of trainval.forward [key][num_minibatch*num_device]
+    avoid_keys: list
+        List of keys not to concatenate
+
+    Returns
+    -------
+    dict
+        Concatenated version of data_blob where array lenghts are num_minibatch*num_device*minibatch_size
+    dict
+        Concatenated version of outputs where array lenghts are num_minibatch*num_device*minibatch_size
+    '''
     result_data = {}
-    for key,data in data_blob.items():
+    for key, data in data_blob.items():
         if key in avoid_keys:
             result_data[key]=data
             continue
@@ -40,33 +62,40 @@ def list_concat(data_blob, outputs, avoid_keys=[]):
     return result_data, result_outputs
 
 
-def unwrap(data_blob, outputs, batch_id_col=0, avoid_keys=[], input_key='input_data'):
+def unwrap(data_blob, outputs, batch_id_col=0, avoid_keys=[], input_key='input_data', boundaries=None):
     '''
     Break down the data_blob and outputs dictionary into events
     for sparseconvnet formatted tensors.
 
     Need to account for: multi-gpu, minibatching, multiple outputs, batches.
-    INPUTS:
-        data_blob: a dictionary of array of array of
-            minibatch data [key][num_minibatch][num_device]
-        outputs: results dictionary, output of trainval.forward,
-            [key][num_minibatch*num_device]
-        batch_id_col: 2 for 2D, 3 for 3D,,, and indicate
-            the location of "batch id". For MinkowskiEngine, batch indices
-            are always located at the 0th column of the N x C coordinate
-            array
-    OUTPUT:
-        two un-wrapped arrays of dictionaries where
-            array length = num_minibatch*num_device*minibatch_size
-    ASSUMES:
-        the shape of data_blob and outputs as explained above
-    '''
 
+    Parameters
+    ----------
+    data_blob : dict
+        A dictionary of array of array of minibatch data [key][num_minibatch][num_device]
+    outputs : dict
+        Results dictionary, output of trainval.forward [key][num_minibatch*num_device]
+    batch_id_col : int
+            Indicates the location of "batch id". For MinkowskiEngine, batch indices are always located at
+            the 0th column of the N x C coordinate array
+
+    Returns
+    -------
+    dict
+        Unwrapped version of data_blob where array lenghts are num_minibatch*num_device*minibatch_size
+    dict
+        Unwrapped version of outputs where array lenghts are num_minibatch*num_device*minibatch_size
+
+    Info
+    ----
+    Assumes the shape of data_blob and outputs as explained above
+    '''
     batch_idx_max = 0
 
     # Handle data
     result_data = {}
     unwrap_map  = {} # dict of [#pts][batch_id] = where
+
     # a-0) Find the target keys
     target_array_keys = []
     target_list_keys  = []
@@ -137,7 +166,6 @@ def unwrap(data_blob, outputs, batch_id_col=0, avoid_keys=[], input_key='input_d
     # b-0) Find the target keys
     target_array_keys = []
     target_list_keys  = []
-    # print(len(result_outputs['points']))
     for key, data in outputs.items():
         if key in avoid_keys:
             if not isinstance(data, list):
@@ -173,7 +201,7 @@ def unwrap(data_blob, outputs, batch_id_col=0, avoid_keys=[], input_key='input_d
                 batch_id_loc = batch_id_col if d.shape[1] > batch_id_col else -1
                 batch_idx = np.unique(d[:,batch_id_loc])
                 # ensure these are integer values
-                # if target == 'points':
+                # if target == 'ppn_points':
                 #     print(target)
                 #     print(d)
                 #     print("--------------Batch IDX----------------")

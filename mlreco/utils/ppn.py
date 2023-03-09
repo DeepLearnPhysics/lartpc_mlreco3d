@@ -299,24 +299,24 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     1 row per ppn-predicted points
     """
     event_data = data#.cpu().detach().numpy()
-    points = out['points'][0]#[entry]#.cpu().detach().numpy()
+    points = out['ppn_points'][0]#[entry]#.cpu().detach().numpy()
     ppn_coords = out['ppn_coords']
-    # If 'points' is specified in `concat_result`,
+    # If 'ppn_points' is specified in `concat_result`,
     # then it won't be unwrapped.
     if len(points) == len(ppn_coords[-1]):
         pass
         # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
         #points = points[ppn_coords[-1][:, 0] == entry, :]
     else: # in case it has been unwrapped (possible in no-ghost scenario)
-        points = out['points'][entry]
+        points = out['ppn_points'][entry]
 
-    enable_classify_endpoints = 'classify_endpoints' in out
+    enable_classify_endpoints = 'ppn_classify_endpoints' in out
     #print("ENABLE CLASSIFY ENDPOINTS = ", enable_classify_endpoints)
     if enable_classify_endpoints:
-        classify_endpoints = out['classify_endpoints'][0]
+        classify_endpoints = out['ppn_classify_endpoints'][0]
         #print(classify_endpoints)
 
-    mask_ppn = out['mask_ppn'][-1]
+    ppn_mask = out['ppn_masks'][-1]
     # predicted type labels
     # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
@@ -327,7 +327,7 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         #points = points[mask_ghost]
         #if enable_classify_endpoints:
         #    classify_endpoints = classify_endpoints[mask_ghost]
-        #mask_ppn = mask_ppn[mask_ghost]
+        #ppn_mask = ppn_mask[mask_ghost]
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
 
@@ -352,8 +352,8 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
         final_endpoints = []
         batch_index = batch_ids == b
         batch_index2 = ppn_coords[-1][:, 0] == b
-        # print(batch_index.shape, batch_index2.shape, mask_ppn.shape, scores.shape)
-        mask = ((~(mask_ppn[batch_index2] == 0)).any(axis=1)) & (scores[batch_index2][:, 1] > score_threshold)
+        # print(batch_index.shape, batch_index2.shape, ppn_mask.shape, scores.shape)
+        mask = ((~(ppn_mask[batch_index2] == 0)).any(axis=1)) & (scores[batch_index2][:, 1] > score_threshold)
         # If we want to restrict the postprocessing to specific voxels
         # (e.g. within a particle cluster, not the full event)
         # then use the argument `selection`.
@@ -421,69 +421,6 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     return result
 
 
-def uresnet_ppn_point_selector(data, out, nms_score_threshold=0.8, entry=0,
-                               window_size=4, score_threshold=0.9, **kwargs):
-    """
-    Basic selection of PPN points.
-
-    Parameters
-    ----------
-    data - 5-types sparse tensor
-    out - ppn output
-
-    Returns
-    -------
-    [x,y,z,bid,label] of ppn-predicted points
-    """
-    # analysis_keys:
-    #  segmentation: 3
-    #  points: 0
-    #  mask: 5
-    #  ppn1: 1
-    #  ppn2: 2
-    # FIXME assumes 3D for now
-    points = out['points'][entry]#.cpu().detach().numpy()
-    #ppn1 = out['ppn1'][entry]#.cpu().detach().numpy()
-    #ppn2 = out[2][0].cpu().detach().numpy()
-    mask = out['mask_ppn2'][entry]#.cpu().detach().numpy()
-    # predicted type labels
-    pred_labels = np.argmax(out['segmentation'][entry], axis=-1)#.cpu().detach().numpy()
-
-    scores = scipy.special.softmax(points[:, 3:5], axis=1)
-    points = points[:,:3]
-
-
-    # PPN predictions after masking
-    mask = (~(mask == 0)).any(axis=1)
-
-    scores = scores[mask]
-    maskinds = np.where(mask)[0]
-    keep = scores[:,1] > score_threshold
-
-    # NMS filter
-    keep2 = nms_numpy(points[mask][keep], scores[keep,1], nms_score_threshold, window_size)
-
-    maskinds = maskinds[keep][keep2]
-    points = points[maskinds]
-    labels = pred_labels[maskinds]
-
-    data_in = data#.cpu().detach().numpy()
-    voxels = data_in[:,:3]
-    ppn_pts = voxels[maskinds] + 0.5 + points
-    batch = data_in[maskinds,3]
-    label = pred_labels[maskinds]
-
-    # TODO: only return single point in voxel per batch per label
-    ppn_pts, batch, label = group_points(ppn_pts, batch, label)
-
-
-    # Output should be in [x,y,z,bid,label] format
-    pts_out = np.column_stack((ppn_pts, batch, label))
-
-    # return indices of points in input, offsets
-    return pts_out
-
-
 def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False, use_proxy=True):
     """
     Compute endpoints of a track-like cluster f
@@ -496,7 +433,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False, use_pr
 
     Input:
     - data is the input data tensor, which can be indexed by f.
-    - points_tensor is the output of PPN 'points' (optional)
+    - points_tensor is the output of PPN `ppn_points` (optional)
     - f is a list of voxel indices for voxels that belong to the track.
 
     Output:

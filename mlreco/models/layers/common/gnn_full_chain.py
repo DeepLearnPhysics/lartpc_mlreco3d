@@ -205,13 +205,7 @@ class FullChainGNN(torch.nn.Module):
                            'group_pred': 'shower_group_pred',
                            'input_node_points'  : 'shower_points',
                            'input_node_features': 'shower_node_features'}
-            # shower_grappa_input = input
-            # if self.use_true_fragments and 'points' not in kwargs:
-            #     # Add true particle coords to input
-            #     print("adding true points to grappa shower input")
-            #     shower_grappa_input += result['true_points']
-            # result['shower_gnn_points'] = [kwargs['points']]
-            # result['shower_gnn_extra_feats'] = [kwargs['extra_feats']]
+
             self.run_gnn(self.grappa_shower,
                          input,
                          result,
@@ -604,7 +598,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
     mlreco.models.full_chain.FullChainLoss, FullChainGNN
     """
     # INPUT_SCHEMA = [
-    #     ["parse_sparse3d_scn", (int,), (3, 1)],
+    #     ["parse_sparse3d", (int,), (3, 1)],
     #     ["parse_particle_points", (int,), (3, 1)]
     # ]
 
@@ -669,7 +663,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             loss += self.segmentation_weight*res_seg['loss']
             #print('uresnet ', self.segmentation_weight, res_seg['loss'], loss)
 
-        if self.enable_ppn and 'ppn_output_coordinates' in out:
+        if self.enable_ppn and 'ppn_output_coords' in out:
             # Apply the PPN loss
             res_ppn = self.ppn_loss(out, seg_label, ppn_label)
             for key in res_ppn:
@@ -901,7 +895,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Deghosting Accuracy: {:.4f}'.format(res_deghost['accuracy']))
             if self.enable_uresnet and 'segmentation' in out:
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
-            if self.enable_ppn and 'ppn_output_coordinates' in out:
+            if self.enable_ppn and 'ppn_output_coords' in out:
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['accuracy']))
             if self.enable_cnn_clust and ('graph' in out or 'embeddings' in out):
                 if not self._enable_graph_spice:
