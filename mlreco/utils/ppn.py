@@ -374,13 +374,13 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
                     d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
-                    ppn_mask = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask][:, coords_col[0]:coords_col[1]])
-                    final_scores.append(scores[batch_index2][mask][ppn_points][ppn_mask])
-                    final_types.append(ppn_type_predictions[ppn_points][ppn_mask])
-                    final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask])
+                    ppn_mask2 = (d < type_threshold).any(axis=1)
+                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask2][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask2][:, coords_col[0]:coords_col[1]])
+                    final_scores.append(scores[batch_index2][mask][ppn_points][ppn_mask2])
+                    final_types.append(ppn_type_predictions[ppn_points][ppn_mask2])
+                    final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask2])
                     if enable_classify_endpoints:
-                        final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask])
+                        final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask2])
         else:
             final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
             final_scores = [scores[batch_index2][mask]]
