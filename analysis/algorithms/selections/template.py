@@ -207,7 +207,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
 
             if true_p is not None:
                 pred_particle_dict['pred_particle_has_match'] = True
-                if test_containment:
+                if test_containment and true_p.size > 0:
                     true_particle_dict['true_particle_is_contained'] = predictor.is_contained(true_p.points)
                 true_particle_dict['true_particle_interaction_id'] = true_p.interaction_id
                 if 'particles_asis' in data_blob:

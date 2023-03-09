@@ -28,6 +28,87 @@ from mlreco.iotools.collates import VolumeBoundaries
 from analysis.classes.predictor import FullChainPredictor
 
 
+def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
+    semantic_type, sem_counts = np.unique(labels[mask][:, -1].astype(int), 
+                                            return_counts=True)
+    if semantic_type.shape[0] > 1:
+        if verbose:
+            print("Semantic Type of Particle {} is not "\
+                "unique: {}, {}".format(pid,
+                                        str(semantic_type),
+                                        str(sem_counts)))
+        perm = sem_counts.argmax()
+        semantic_type = semantic_type[perm]
+    else:
+        semantic_type = semantic_type[0]
+    
+    interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
+                                        return_counts=True)
+    if interaction_id.shape[0] > 1:
+        if verbose:
+            print("Interaction ID of Particle {} is not "\
+                "unique: {}".format(pid, str(interaction_id)))
+        perm = int_counts.argmax()
+        interaction_id = interaction_id[perm]
+    else:
+        interaction_id = interaction_id[0]
+
+    nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
+                                return_counts=True)
+    if nu_id.shape[0] > 1:
+        if verbose:
+            print("Neutrino ID of Particle {} is not "\
+                "unique: {}".format(pid, str(nu_id)))
+        perm = nu_counts.argmax()
+        nu_id = nu_id[perm]
+    else:
+        nu_id = nu_id[0]
+
+    return semantic_type, interaction_id, nu_id
+
+
+def handle_empty_true_particles(labels_noghost,  mask_noghost, p, entry, num_volumes, 
+                                verbose=False):
+    pid = int(p.id())
+    pdg = TYPE_LABELS.get(p.pdg_code(), -1)
+    is_primary = p.group_id() == p.parent_id()
+
+    semantic_type, interaction_id, nu_id = -1, -1, -1
+    coords, depositions, voxel_indices = np.array([]), np.array([]), np.array([])
+    coords_noghost, depositions_noghost = np.array([]), np.array([])
+    if np.count_nonzero(mask_noghost) > 0:
+        coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+        depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+        semantic_type, interaction_id, nu_id = get_true_particle_labels(labels_noghost, 
+                                                                        mask_noghost, 
+                                                                        pid=pid, 
+                                                                        verbose=verbose)
+    particle = TruthParticle(coords,
+        pid, semantic_type, interaction_id, pdg, 
+        entry, particle_asis=p,
+        depositions=depositions,
+        is_primary=is_primary,
+        coords_noghost=coords_noghost,
+        depositions_noghost=depositions_noghost,
+        depositions_MeV=depositions,
+        volume=entry % num_volumes)
+    particle.p = np.array([p.px(), p.py(), p.pz()])
+    particle.fragments = []
+    particle.particle_asis = p
+    particle.nu_id = nu_id
+    particle.voxel_indices = voxel_indices
+
+    particle.startpoint = np.array([p.first_step().x(),
+                                    p.first_step().y(),
+                                    p.first_step().z()])
+
+    if semantic_type == 1:
+        particle.endpoint = np.array([p.last_step().x(),
+                                    p.last_step().y(),
+                                    p.last_step().z()])
+    return particle
+
+
 class FullChainEvaluator(FullChainPredictor):
     '''
     Helper class for full chain prediction and evaluation.
@@ -309,11 +390,41 @@ class FullChainEvaluator(FullChainPredictor):
 
             for idx, p in enumerate(self.data_blob['particles_asis'][global_entry]):
                 pid = int(p.id())
+                pdg = TYPE_LABELS.get(p.pdg_code(), -1)
+                is_primary = p.group_id() == p.parent_id()
+                if self.deghosting:
+                    mask_noghost = labels_noghost[:, 6].astype(int) == pid
+                if np.count_nonzero(mask_noghost) <= 0:
+                    continue
                 # 1. Check if current pid is one of the existing group ids
                 if pid not in particle_ids:
-                    # print("PID {} not in particle_ids".format(pid))
+                    particle = handle_empty_true_particles(labels_noghost, mask_noghost, p, entry, 
+                                                           self._num_volumes, verbose=verbose)
+                    particles.append(particle)
                     continue
-                is_primary = p.group_id() == p.parent_id()
+
+                # 1. Process voxels
+                mask = labels[:, 6].astype(int) == pid
+                # If particle is Michel electron, we have the option to
+                # only consider the primary ionization.
+                # Semantic labels only label the primary ionization as Michel.
+                # Cluster labels will have the entire Michel together.
+                if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
+                    mask = mask & (labels[:, -1].astype(int) == 2)
+                    if self.deghosting:
+                        mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
+
+                coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+                voxel_indices = np.where(mask)[0]
+                fragments = np.unique(labels[mask][:, 5].astype(int))
+                depositions_MeV = labels[mask][:, 4]
+                depositions = rescaled_input_charge[mask] # Will be in ADC
+                coords_noghost, depositions_noghost = None, None
+                if self.deghosting:
+                    coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+                    depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+
+                # 2. Process particle-level labels
                 if p.pdg_code() not in TYPE_LABELS:
                     # print("PID {} not in TYPE LABELS".format(pid))
                     continue
@@ -327,68 +438,8 @@ class FullChainEvaluator(FullChainPredictor):
                         #         p.id(), str(exclude_ids)
                         #     ))
                         continue
-
-                pdg = TYPE_LABELS[p.pdg_code()]
-                mask = labels[:, 6].astype(int) == pid
-                if self.deghosting:
-                    mask_noghost = labels_noghost[:, 6].astype(int) == pid
-                # If particle is Michel electron, we have the option to
-                # only consider the primary ionization.
-                # Semantic labels only label the primary ionization as Michel.
-                # Cluster labels will have the entire Michel together.
-                if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
-                    mask = mask & (labels[:, -1].astype(int) == 2)
-                    if self.deghosting:
-                        mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
-
-                # Check semantics
-                semantic_type, sem_counts = np.unique(
-                    labels[mask][:, -1].astype(int), return_counts=True)
-
-                if semantic_type.shape[0] > 1:
-                    if verbose:
-                        print("Semantic Type of Particle {} is not "\
-                            "unique: {}, {}".format(pid,
-                                                    str(semantic_type),
-                                                    str(sem_counts)))
-                    perm = sem_counts.argmax()
-                    semantic_type = semantic_type[perm]
-                else:
-                    semantic_type = semantic_type[0]
-
-
-
-                coords = self.data_blob['input_data'][entry][mask][:, 1:4]
-
-                interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
-                                                       return_counts=True)
-                if interaction_id.shape[0] > 1:
-                    if verbose:
-                        print("Interaction ID of Particle {} is not "\
-                            "unique: {}".format(pid, str(interaction_id)))
-                    perm = int_counts.argmax()
-                    interaction_id = interaction_id[perm]
-                else:
-                    interaction_id = interaction_id[0]
-
-                nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
-                                             return_counts=True)
-                if nu_id.shape[0] > 1:
-                    if verbose:
-                        print("Neutrino ID of Particle {} is not "\
-                            "unique: {}".format(pid, str(nu_id)))
-                    perm = nu_counts.argmax()
-                    nu_id = nu_id[perm]
-                else:
-                    nu_id = nu_id[0]
-
-                fragments = np.unique(labels[mask][:, 5].astype(int))
-                depositions_MeV = labels[mask][:, 4]
-                depositions = rescaled_input_charge[mask] # Will be in ADC
-                coords_noghost, depositions_noghost = None, None
-                if self.deghosting:
-                    coords_noghost = labels_noghost[mask_noghost][:, 1:4]
-                    depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+                
+                semantic_type, interaction_id, nu_id = get_true_particle_labels(labels, mask, pid=pid, verbose=verbose)
 
                 particle = TruthParticle(self._translate(coords, volume),
                     pid,
@@ -405,7 +456,7 @@ class FullChainEvaluator(FullChainPredictor):
                 particle.fragments = fragments
                 particle.particle_asis = p
                 particle.nu_id = nu_id
-                particle.voxel_indices = np.where(mask)[0]
+                particle.voxel_indices = voxel_indices
 
                 particle.startpoint = np.array([p.first_step().x(),
                                                 p.first_step().y(),
@@ -445,7 +496,7 @@ class FullChainEvaluator(FullChainPredictor):
             if compute_vertex:
                 vertices = self.get_true_vertices(entry, volume=volume)
             for ia in out:
-                if compute_vertex:
+                if compute_vertex and ia.id in vertices:
                     ia.vertex = vertices[ia.id]
                 ia.volume = volume
             out_interactions_list.extend(out)
@@ -615,6 +666,8 @@ class FullChainEvaluator(FullChainPredictor):
                     if codomain is not None:
                         codomain_particles = codomain.particles
                         # continue
+                    domain_particles = [p for p in domain_particles if p.points.shape[0] > 0]
+                    codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
                     if matching_mode == 'one_way':
                         matched_particles, _ = match_particles_fn(domain_particles, codomain_particles,
                                                                     min_overlap=self.min_overlap_count,

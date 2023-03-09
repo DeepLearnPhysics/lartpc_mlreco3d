@@ -44,15 +44,19 @@ class Interaction:
         self.points = []
         self.depositions = []
         for p in self.particles:
-            self.voxel_indices.append(p.voxel_indices)
-            self.points.append(p.points)
-            self.depositions.append(p.depositions)
-            assert p.interaction_id == interaction_id
-        self.voxel_indices = np.hstack(self.voxel_indices)
-        self.points = np.concatenate(self.points, axis=0)
-        self.depositions = np.hstack(self.depositions)
+            if p.points.shape[0] > 0:
+                self.voxel_indices.append(p.voxel_indices)
+                self.points.append(p.points)
+                self.depositions.append(p.depositions)
+                assert p.interaction_id == interaction_id
+        if len(self.voxel_indices) > 0:
+            self.voxel_indices = np.hstack(self.voxel_indices)
+        if len(self.points) > 0:
+            self.points = np.concatenate(self.points, axis=0)
+        if len(self.depositions) > 0:
+            self.depositions = np.hstack(self.depositions)
 
-        self.size = self.voxel_indices.shape[0]
+        self.size = len(self.voxel_indices)
         self.num_particles = len(self.particles)
 
         self.get_particles_summary()

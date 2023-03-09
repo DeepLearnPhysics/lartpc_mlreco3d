@@ -339,16 +339,17 @@ def get_particle_properties(particle: Particle,
             update_dict['particle_num_ppn_candidates'] = len(particle.ppn_candidates)
 
         if isinstance(particle, TruthParticle):
-            dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
-            min_dist = np.min(dists)
-            if min_dist > 5.0:
-                update_dict['particle_startpoint_is_touching'] = False
+            if particle.size > 0:
+                dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
+                min_dist = np.min(dists)
+                if min_dist > 5.0:
+                    update_dict['particle_startpoint_is_touching'] = False
             creation_process = particle.particle_asis.creation_process()
             update_dict['particle_creation_process'] = creation_process
             update_dict['particle_px'] = float(particle.particle_asis.px())
             update_dict['particle_py'] = float(particle.particle_asis.py())
             update_dict['particle_pz'] = float(particle.particle_asis.pz())
-        if compute_energy:
+        if compute_energy and particle.size > 0:
             update_dict['particle_sum_edep'] = particle.sum_edep
             direction = get_particle_direction(particle, optimize=True)
             assert len(direction) == 3
