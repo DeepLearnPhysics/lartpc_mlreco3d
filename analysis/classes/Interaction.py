@@ -33,7 +33,8 @@ class Interaction:
             1: 'Electron',
             2: 'Muon',
             3: 'Pion',
-            4: 'Proton'
+            4: 'Proton',
+            -1: 'Other'
         }
         self.particles = particles
         self.match = []
@@ -80,10 +81,10 @@ class Interaction:
 
     def update_info(self):
         self.particle_ids = list(self._particles.keys())
-        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
         self.particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values()])
 
-        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
         self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values() if p.is_primary])
         if sum(self.primary_particle_counts.values()) > 0:
             self.is_valid = True
