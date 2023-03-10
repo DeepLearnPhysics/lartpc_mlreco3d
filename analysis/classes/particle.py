@@ -7,6 +7,7 @@ from functools import partial
 import re
 
 from scipy.optimize import linear_sum_assignment
+from scipy.spatial.distance import cdist
 
 from pprint import pprint
 
@@ -61,6 +62,53 @@ def matrix_iou(particles_x, particles_y):
             cap = np.intersect1d(py.voxel_indices, px.voxel_indices)
             cup = np.union1d(py.voxel_indices, px.voxel_indices)
             overlap_matrix[i, j] = float(cap.shape[0] / cup.shape[0])
+    return overlap_matrix
+
+
+def matrix_chamfer(particles_x, particles_y, mode='default'):
+    """Function for computing the M x N overlap matrix by the Chamfer distance.
+
+    Parameters
+    ----------
+    particles_x: List[Particle]
+        List of N particles to match with <particles_y>
+    particles_y: List[Particle]
+        List of M particles to match with <particles_x>
+
+    Note the correspondence particles_x -> N and particles_y -> M.
+
+    This function can match two arbitrary points clouds, hence
+    there is no need for the two particle lists to share the same
+    voxels. 
+
+    In particular, this could be used to match TruthParticle with Particles
+    using true nonghost coordinates. In this case, <particles_x> must be the
+    list of TruthParticles and <particles_y> the list of Particles. 
+
+    Returns
+    -------
+    overlap_matrix: (M, N) np.float array, with range [0, 1]
+    """
+    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.float32)
+    for i, py in enumerate(particles_y):
+        for j, px in enumerate(particles_x):
+            if mode == 'default':
+                dist = cdist(px.points, py.points)
+            elif mode == 'true_nonghost':
+                if type(px) == TruthParticle and type(py) == Particle:
+                    dist = cdist(px.coords_noghost, py.points)
+                elif type(px) == Particle and type(py) == TruthParticle:
+                    dist = cdist(px.points, py.coords_noghost)
+                elif type(px) == Particle and type(py) == Particle:
+                    dist = cdist(px.points, py.points)
+                else:
+                    dist = cdist(px.coords_noghost, py.coords_noghost)
+            else:
+                raise ValueError('Particle overlap computation mode {} is not implemented!'.format(mode))
+            loss_x = np.min(dist, axis=0)
+            loss_y = np.min(dist, axis=1)
+            loss = loss_x.sum() / loss_x.shape[0] + loss_y.sum() / loss_y.shape[0]
+            overlap_matrix[i, j] = loss
     return overlap_matrix
 
 
@@ -170,7 +218,11 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
 
 def match_particles_optimal(particles_from : Union[List[Particle], List[TruthParticle]],
                             particles_to   : Union[List[Particle], List[TruthParticle]],
-                            min_overlap=0, num_classes=5, verbose=False, overlap_mode='iou'):
+                            min_overlap=0, 
+                            num_classes=5, 
+                            verbose=False, 
+                            overlap_mode='iou',
+                            use_true_nonghost_voxels=False):
     '''
     Match particles so that the final resulting sum of the overlap matrix
     is optimal. 
@@ -197,6 +249,8 @@ def match_particles_optimal(particles_from : Union[List[Particle], List[TruthPar
         overlap_matrix = matrix_counts(particles_y, particles_x)
     elif overlap_mode == 'iou':
         overlap_matrix = matrix_iou(particles_y, particles_x)
+    elif overlap_mode == 'chamfer':
+        overlap_matrix = -matrix_chamfer(particles_y, particles_x)
     else:
         raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
 
@@ -295,6 +349,8 @@ def match_interactions_optimal(ints_from : List[Interaction],
         overlap_matrix = matrix_counts(ints_y, ints_x)
     elif overlap_mode == 'iou':
         overlap_matrix = matrix_iou(ints_y, ints_x)
+    elif overlap_mode == 'chamfer':
+        overlap_matrix = -matrix_iou(ints_y, ints_x)
     else:
         raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
 

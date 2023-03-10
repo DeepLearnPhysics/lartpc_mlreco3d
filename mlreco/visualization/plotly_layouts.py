@@ -105,6 +105,8 @@ def trace_particles(particles, color='id', size=1,
     cmin, cmax = int(colors.min()), int(colors.max())
     opacity = 1
     for p in particles:
+        if p.points.shape[0] <= 0:
+            continue
         c = int(getattr(p, color)) * np.ones(p.points.shape[0])
         if highlight_primaries:
             if p.is_primary:
@@ -194,7 +196,8 @@ def trace_interactions(interactions, color='id', colorscale="rainbow", prefix=''
         voxels = []
         # Merge all particles' voxels into one tensor
         for p in particles:
-            voxels.append(p.points)
+            if p.points.shape[0] > 0:
+                voxels.append(p.points)
         voxels = np.vstack(voxels)
         plot = go.Scatter3d(x=voxels[:,0],
                             y=voxels[:,1],
