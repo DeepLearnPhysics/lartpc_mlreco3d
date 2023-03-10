@@ -213,6 +213,16 @@ class PPN(torch.nn.Module):
     --------
     PPNLonelyLoss, mlreco.models.uresnet_ppn_chain
     '''
+
+    RETURNS = {
+        'ppn_points': ('tensor', 'ppn_output_coords'),
+        'ppn_masks': ('tensor_list', 'ppn_coords'),
+        'ppn_layers': ('tensor_list', 'ppn_coords'),
+        'ppn_coords': ('tensor_list',),
+        'ppn_output_coords': ('tensor',),
+        'ppn_classify_endpoints': ('tensor', 'ppn_output_coords')
+    }
+
     def __init__(self, cfg, name='ppn'):
         super(PPN, self).__init__()
         setup_cnn_configuration(self, cfg, name)
@@ -432,6 +442,18 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
     --------
     PPN, mlreco.models.uresnet_ppn_chain
     """
+
+    RETURNS = {
+        'reg_loss': ('scalar',),
+        'mask_loss': ('scalar',),
+        'type_loss': ('scalar',),
+        'classify_endpoints_loss': ('scalar',),
+        'output_mask_accuracy': ('scalar',),
+        'type_accuracy': ('scalar',),
+        'classify_endpoints_accuracy': ('scalar',),
+        'num_positives': ('scalar',),
+        'num_voxels': ('scalar',)
+    }
 
     def __init__(self, cfg, name='ppn'):
         super(PPNLonelyLoss, self).__init__()
