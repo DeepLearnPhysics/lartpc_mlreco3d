@@ -5,7 +5,7 @@ import numpy as np
 from mlreco.models.layers.common.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
-from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
+from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
@@ -95,7 +95,7 @@ class FullChain(FullChainGNN):
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
-            self.graph_spice               = MinkGraphSPICE(cfg)
+            self.graph_spice               = GraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
                                                                     batch_col=self.batch_col,
                                                                     training=False) # for downstream, need to run prediction in inference mode

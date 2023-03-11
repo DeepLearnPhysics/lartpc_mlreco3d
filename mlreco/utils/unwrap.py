@@ -34,7 +34,7 @@ class Unwrapper:
         self.remove_batch_col = remove_batch_col
         self.merger = VolumeBoundaries(boundaries) if boundaries else None
         self.rules = self._parse_rules(rules)
-        self.masks = {}
+        self.masks, self.offsets = {}, {}
 
     def __call__(self, data_blob, result_blob):
         '''
@@ -81,7 +81,7 @@ class Unwrapper:
             if not parsed_rules[key].ref_key:
                 parsed_rules[key].ref_key = key
 
-            assert parsed_rules[key].method in ['scalar', 'tensor', 'tensor_list']
+            assert parsed_rules[key].method in ['scalar', 'tensor', 'tensor_list', 'edge_tensor']
 
         return parsed_rules
 
@@ -98,14 +98,14 @@ class Unwrapper:
         result_blob : dict
             Results dictionary, output of trainval.forward [key][num_minibatch*num_device]
         '''
-        self.masks = {}
+        self.masks, self.offsets = {}, {}
         for key, value in data_blob.items():
             if isinstance(value[0], np.ndarray):
                 self.masks[key] = [self._batch_masks(value[g]) for g in range(self.num_gpus)]
                 if key not in self.rules:
                     self.rules[key] = self.Rule('tensor', key)
         for key in result_blob.keys():
-            if key in self.rules and self.rules[key].method != 'scalar':
+            if key in self.rules and self.rules[key].method in ['tensor', 'tensor_list']:
                 ref_key = self.rules[key].ref_key
                 assert ref_key in self.masks or ref_key in result_blob, 'Must provide the reference tensor to unwrap'
                 assert self.rules[key].method == self.rules[ref_key].method, 'Reference must be of same type'
@@ -114,6 +114,15 @@ class Unwrapper:
                         self.masks[ref_key] = [self._batch_masks(result_blob[ref_key][g]) for g in range(self.num_gpus)]
                     elif self.rules[key].method == 'tensor_list':
                         self.masks[ref_key] = [[self._batch_masks(v) for v in result_blob[ref_key][g]] for g in range(self.num_gpus)]
+            elif key in self.rules and self.rules[key].method == 'edge_tensor':
+                assert len(self.rules[key].ref_key) == 2, 'Must provide a reference to the edge_index and the node batch ids'
+                for ref_key in self.rules[key].ref_key:
+                    assert ref_key in result_blob, 'Must provide reference tensor to unwrap'
+                ref_edge, ref_node = self.rules[key].ref_key
+                if ref_edge not in self.masks:
+                    edge_index, batch_ids = result_blob[ref_edge], result_blob[ref_node]
+                    self.masks[ref_edge] = [self._batch_masks(batch_ids[g][edge_index[g][:,0]]) for g in range(self.num_gpus)]
+                    self.offsets[ref_edge] = [np.cumsum([np.sum(batch_ids[g][:,BATCH_COL] == b-1) for b in range(self.batch_size)]) for g in range(self.num_gpus)]
 
     def _batch_masks(self, tensor):
         '''
@@ -156,7 +165,8 @@ class Unwrapper:
                 return [data[g][mask] for g in range(self.num_gpus) for mask in self.masks[ref_key][g]]
             elif self.rules[key].method == 'tensor_list':
                 return [[d[self.masks[ref_key][g][i][b]] for i, d in enumerate(data[g])] for g in range(self.num_gpus) for b in range(self.batch_size)]
-                #return [[d[mask] for mask in self.masks[ref_key][g][i]] for g in range(self.num_gpus) for i, d in enumerate(data[g])]
+            elif self.rules[key].method == 'edge_tensor':
+                return [data[g][mask]-(key==ref_key[0])*self.offsets[ref_key[0]][g][i] for g in range(self.num_gpus) for i, mask in enumerate(self.masks[ref_key[0]][g])]
 
     def _concatenate(self, data):
         '''

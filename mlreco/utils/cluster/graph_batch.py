@@ -1,12 +1,12 @@
 from typing import List, AnyStr
+import numpy as np
 
 import torch
 from torch import Tensor
 from torch_sparse import SparseTensor, cat
 
 import torch_geometric
-from torch_geometric.data import Data
-from torch_geometric.data import Batch
+from torch_geometric.data import Data, Batch
 
 class GraphBatch(Batch):
     '''
@@ -147,7 +147,7 @@ class GraphBatch(Batch):
 
         return batch.contiguous()
 
-    def get_example(self, idx: int) -> Data:
+    def get_example_old(self, idx: int) -> Data:
         r"""Reconstructs the :class:`torch_geometric.data.Data` object at index
         :obj:`idx` from the batch object.
         The batch object must have been created via :meth:`from_data_list` in
@@ -205,6 +205,27 @@ class GraphBatch(Batch):
 
         return data
 
+    def get_example(self, idx: int) -> Data:
+        r"""Reconstructs the :class:`torch_geometric.data.Data` object at index
+        :obj:`idx` from the batch object.
+        The batch object must have been created via :meth:`from_data_list` in
+        order to be able to reconstruct the initial objects."""
+
+        if isinstance(self.x, torch.Tensor):
+            x_mask  = torch.nonzero(self.batch == idx).flatten()
+            e_mask  = torch.nonzeros(self.batch[self.edge_index[0]] == idx).flatten()
+        else:
+            x_mask = np.where(self.batch == idx)[0]
+            e_mask = np.where(self.batch[self.edge_index[0]] == idx)[0]
+
+        data = Data()
+        data.x = self.x[x_mask]
+        data.pos = self.pos[x_mask]
+        data.edge_index = self.edge_index[:,e_mask]
+        data.edge_attr = self.edge_attr[e_mask]
+        data.edge_truth = self.edge_truth[e_mask]
+
+        return data
 
     def add_node_features(self, node_feats, name : AnyStr, dtype=None):
         if hasattr(self, name):

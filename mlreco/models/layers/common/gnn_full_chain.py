@@ -720,9 +720,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     'hypergraph_features': out['hypergraph_features'],
                     'features': out['features'],
                     'occupancy': out['occupancy'],
-                    'coordinates': out['coordinates'],
-                    'batch_indices': out['batch_indices'],
-                    #'segmentation': [out['segmentation'][0][deghost]] if self.enable_ghost else [out['segmentation'][0]]
+                    'coordinates': out['coordinates']
                 }
 
                 segmentation_pred = out['segmentation'][0]

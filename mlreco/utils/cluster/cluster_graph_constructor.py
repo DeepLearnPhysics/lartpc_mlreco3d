@@ -233,8 +233,8 @@ class ClusterGraphConstructor:
         (see initialize_graph for functionality)
         '''
         features = res['hypergraph_features']
-        batch_indices = res['batch_indices']
-        coordinates = res['coordinates']
+        batch_indices = res['coordinates'][:,0].int()
+        coordinates = res['coordinates'][:,1:4]
         assert len(features) != len(labels)
         assert len(features) != torch.unique(batch_indices).shpae[0]
         data_list = []
@@ -295,11 +295,9 @@ class ClusterGraphConstructor:
             return self._initialize_graph_unwrapped(res, labels)
 
         features = res['hypergraph_features'][0]
-        batch_indices = res['batch_indices'][0]
-        coordinates = res['coordinates'][0]
+        batch_indices = res['coordinates'][0][:,0].int()
+        coordinates = res['coordinates'][0][:,1:4]
         data_list = []
-
-        # print(labels)
 
         graph_id = 0
         index = 0
@@ -321,8 +319,8 @@ class ClusterGraphConstructor:
                 data = GraphData(x=features_class,
                                  pos=coords_class,
                                  edge_index=edge_indices)
-                graph_id_key = dict(Index=index,
-                                    BatchID=int(bidx),
+                graph_id_key = dict(BatchID=int(bidx),
+                                    Index=index,
                                     SemanticID=int(c),
                                     GraphID=graph_id)
                 graph_id += 1
@@ -342,12 +340,20 @@ class ClusterGraphConstructor:
         self._num_total_edges = self._graph_batch.edge_index.shape[1]
 
 
-    def replace_state(self, graph_batch, info):
-        self._graph_batch = graph_batch
+    def replace_state(self, result, prefix=''):
+
+        concat = torch.cat if isinstance(result[prefix+'features'][0], torch.Tensor) else np.concatenate
+        graph = GraphBatch(x = concat(result[prefix+'features']),
+                           batch = concat(result[prefix+'coordinates'])[:,0],
+                           pos = concat(result[prefix+'coordinates'])[:,1:4],
+                           edge_index = concat(result[prefix+'edge_index']).T,
+                           edge_attr = concat(result[prefix+'edge_score']),
+                           edge_truth = concat(result[prefix+'edge_truth']))
+        self._graph_batch = graph
         self._num_total_nodes = self._graph_batch.x.shape[0]
         self._node_dim = self._graph_batch.x.shape[1]
         self._num_total_edges = self._graph_batch.edge_index.shape[1]
-        self._info = info
+        self._info = result[prefix+'graph_info']
 
 
     def _set_edge_attributes(self, kernel_fn : Callable):
@@ -436,8 +442,11 @@ class ClusterGraphConstructor:
         G.add_nodes_from(np.arange(num_nodes))
 
         # Drop edges with low predicted probability score
-        edges = subgraph.edge_index.T.cpu().numpy()
-        edge_logits = subgraph.edge_attr.detach().cpu().numpy()
+        edges = subgraph.edge_index.T
+        edge_logits = subgraph.edge_attr
+        if isinstance(edges, torch.Tensor):
+            edges = edges.detach().cpu().numpy
+            edge_logits = edge_logits.detach().cpu().numpy
         edge_probs = expit(edge_logits)
         if invert:
             pos_edges = edges[edge_probs < self.ths]
@@ -456,7 +465,9 @@ class ClusterGraphConstructor:
                 orphan_mask[x] = True
 
         # Assign orphans
-        G.pos = subgraph.pos.cpu().numpy()
+        G.pos = subgraph.pos
+        if isinstance(G.pos, torch.Tensor):
+            G.pos = G.pos.detach().cpu().numpy()
         if not orphan_mask.all():
             n_orphans = 0
             while orphan_mask.any() and (n_orphans != np.sum(orphan_mask)):
@@ -495,7 +506,10 @@ class ClusterGraphConstructor:
 
         for entry in entry_list:
             pred, G, subgraph = self.fit_predict_one(entry, **kwargs)
-            batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
+            batch = self._graph_batch.batch
+            if isinstance(batch, torch.Tensor):
+                batch = batch.cpu().numpy()
+            batch_index = batch == entry
             pred_data_list.append(GraphData(x=torch.Tensor(pred).long(),
                                             pos=torch.Tensor(G.pos)))
             # node_pred[batch_index] = pred

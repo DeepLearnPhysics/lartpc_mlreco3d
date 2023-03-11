@@ -11,7 +11,7 @@ from pprint import pprint
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 
 
-class MinkGraphSPICE(nn.Module):
+class GraphSPICE(nn.Module):
     '''
     Neighbor-graph embedding based particle clustering.
 
@@ -118,7 +118,6 @@ class MinkGraphSPICE(nn.Module):
     graph:
     graph_info:
     coordinates:
-    batch_indices:
     hypergraph_features:
 
     See Also
@@ -128,8 +127,16 @@ class MinkGraphSPICE(nn.Module):
 
     MODULES = ['constructor_cfg', 'embedder_cfg', 'kernel_cfg', 'gspice_fragment_manager']
 
+    RETURNS = {
+        'coordinates': ['tensor'],
+        'edge_index': ['edge_tensor', ('edge_index', 'coordinates')],
+        'edge_score': ['edge_tensor', ('edge_index', 'coordinates')],
+        'edge_truth': ['edge_tensor', ('edge_index', 'coordinates')],
+        'graph_info': ['tensor']
+    }
+
     def __init__(self, cfg, name='graph_spice'):
-        super(MinkGraphSPICE, self).__init__()
+        super(GraphSPICE, self).__init__()
         self.model_config = cfg.get(name, {})
         self.skip_classes = self.model_config.get('skip_classes', [2, 3, 4])
         self.dimension = self.model_config.get('dimension', 3)
@@ -148,7 +155,9 @@ class MinkGraphSPICE(nn.Module):
         # `training` needs to be set at forward time.
         # Before that, self.training is always True.
         self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                batch_col=0)
+                                                  batch_col=0)
+
+        self.RETURNS.update(self.embedder.RETURNS)
 
 
     def weight_initialization(self):
@@ -174,24 +183,25 @@ class MinkGraphSPICE(nn.Module):
         '''
 
         '''
+        # Pass input through the model
         self.gs_manager.training = self.training
         point_cloud, labels = self.filter_class(input)
         res = self.embedder([point_cloud])
 
-        coordinates = point_cloud[:, 1:4]
-        batch_indices = point_cloud[:, 0].int()
-
-        res['coordinates'] = [coordinates]
-        res['batch_indices'] = [batch_indices]
-
+        res['coordinates'] = [point_cloud[:, :4]]
         if self.use_raw_features:
             res['hypergraph_features'] = res['features']
 
+        # Build the graph
         graph = self.gs_manager(res,
                                 self.kernel_fn,
                                 labels)
-        res['graph'] = [graph]
-        res['graph_info'] = [self.gs_manager.info]
+
+        res['edge_index'] = [graph.edge_index.T]
+        res['edge_score'] = [graph.edge_attr]
+        res['edge_truth'] = [graph.edge_truth]
+        res['graph_info'] = [self.gs_manager.info.to_numpy()]
+
         return res
 
 
@@ -230,8 +240,11 @@ class GraphSPICELoss(nn.Module):
 
     See Also
     --------
-    MinkGraphSPICE
+    GraphSPICE
     """
+
+    RETURNS = {}
+
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICELoss, self).__init__()
         self.model_config = cfg.get('graph_spice', {})
@@ -244,6 +257,8 @@ class GraphSPICELoss(nn.Module):
         # self.skip_classes += [-1]
         # self.eval_mode = self.loss_config.get('eval', False)
         self.loss_fn = spice_loss_construct(self.loss_name)(self.loss_config)
+
+        self.RETURNS.update(self.loss_fn.RETURNS)
 
         constructor_cfg = self.model_config.get('constructor_cfg', {})
         self.gs_manager = ClusterGraphConstructor(constructor_cfg,
@@ -266,15 +281,7 @@ class GraphSPICELoss(nn.Module):
         '''
 
         '''
-        slabel, clabel = self.filter_class(segment_label, cluster_label)
-
-        graph = result['graph'][0]
-        graph_info = result['graph_info'][0]
-        self.gs_manager.replace_state(graph, graph_info)
-        result['edge_score'] = [graph.edge_attr]
-        result['edge_index'] = [graph.edge_index]
-        if self.gs_manager.use_cluster_labels:
-            result['edge_truth'] = [graph.edge_truth]
+        #self.gs_manager.replace_state(result)
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0
@@ -290,5 +297,6 @@ class GraphSPICELoss(nn.Module):
         #     edge_diff.shape[0]))
 
 
+        slabel, clabel = self.filter_class(segment_label, cluster_label)
         res = self.loss_fn(result, slabel, clabel)
         return res

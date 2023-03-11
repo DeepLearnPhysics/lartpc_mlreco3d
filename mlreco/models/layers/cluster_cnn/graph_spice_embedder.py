@@ -12,6 +12,16 @@ class GraphSPICEEmbedder(UResNet):
 
     MODULES = ['network_base', 'uresnet', 'graph_spice_embedder']
 
+    RETURNS = {
+        'spatial_embeddings': ['tensor', 'coordinates'],
+        'covariance': ['tensor', 'coordinates'],
+        'feature_embeddings': ['tensor', 'coordinates'],
+        'occupancy': ['tensor', 'coordinates'],
+        'features': ['tensor', 'coordinates'],
+        'hypergraph_features': ['tensor', 'coordinates'],
+        'segmentation': ['tensor', 'coordinates']
+    }
+
     def __init__(self, cfg, name='graph_spice_embedder'):
         super(GraphSPICEEmbedder, self).__init__(cfg)
         self.model_config = cfg.get(name, {})
@@ -130,7 +140,6 @@ class GraphSPICEEmbedder(UResNet):
             "occupancy": [occupancy],
             "features": [output_features],
             "hypergraph_features": [hypergraph_features],
-            # "segmentation": [segmentation]
         }
         if self.segmentationLayer:
             res["segmentation"] = [segmentation]
