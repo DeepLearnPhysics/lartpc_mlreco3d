@@ -5,7 +5,7 @@ import numpy as np
 from mlreco.models.layers.common.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
-from mlreco.models.graph_spice import MinkGraphSPICE, GraphSPICELoss
+from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
@@ -70,6 +70,14 @@ class FullChain(FullChainGNN):
                'fragment_clustering',  'chain', 'dbscan_frag',
                ('mink_uresnet_ppn', ['mink_uresnet', 'mink_ppn'])]
 
+    RETURNS = {
+        'fragments': ['done'],
+        'fragments_seg' : ['done'],
+        'particles': ['done'],
+        'particles_seg': ['done'],
+        'particle_points': ['done']
+    }
+
     def __init__(self, cfg):
         super(FullChain, self).__init__(cfg)
 
@@ -78,6 +86,7 @@ class FullChain(FullChainGNN):
             self.uresnet_deghost = UResNet_Chain(cfg.get('uresnet_deghost', {}),
                                                  name='uresnet_lonely')
             self.deghost_input_features = self.uresnet_deghost.net.num_input
+            self.RETURNS.update(self.uresnet_deghost.RETURNS)
 
         # Initialize the UResNet+PPN modules
         self.input_features = 1
@@ -85,9 +94,11 @@ class FullChain(FullChainGNN):
             self.uresnet_lonely = UResNet_Chain(cfg.get('uresnet_ppn', {}),
                                                 name='uresnet_lonely')
             self.input_features = self.uresnet_lonely.net.num_input
+            self.RETURNS.update(self.uresnet_lonely.RETURNS)
 
         if self.enable_ppn:
             self.ppn            = PPN(cfg.get('uresnet_ppn', {}))
+            self.RETURNS.update(self.ppn.RETURNS)
 
         # Initialize the CNN dense clustering module
         # We will only use GraphSPICE for CNN based clustering, as it is
@@ -95,7 +106,7 @@ class FullChain(FullChainGNN):
         self.cluster_classes = []
         if self.enable_cnn_clust:
             self._enable_graph_spice       = 'graph_spice' in cfg
-            self.graph_spice               = MinkGraphSPICE(cfg)
+            self.graph_spice               = GraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
                                                                     batch_col=self.batch_col,
                                                                     training=False) # for downstream, need to run prediction in inference mode
@@ -106,6 +117,21 @@ class FullChain(FullChainGNN):
             self._gspice_invert               = cfg.get('graph_spice_loss', {}).get('invert', True)
             self._gspice_fragment_manager     = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
             self._gspice_min_points           = cfg.get('graph_spice', {}).get('min_points', 1)
+
+            # TODO: DIRTY AF, fix it
+            gspice_returns = {f'graph_spice_{k}':v for k, v in self.graph_spice.RETURNS.items()}
+            for k, v in gspice_returns.items():
+                if len(v) > 1:
+                    if isinstance(v[1], str):
+                        if 'graph_spice' in v[1]: continue
+                        gspice_returns[k][1] = 'graph_spice_'+v[1]
+                    else:
+                        for i in range(len(v[1])):
+                            if 'graph_spice' in v[1][i]: continue
+                            gspice_returns[k][1][i] = 'graph_spice_'+v[1][i]
+            self.RETURNS.update(gspice_returns)
+            #self.RETURNS.update({f'graph_spice_{k}':v for k, v in self.graph_spice.RETURNS.items()})
+
 
         if self.enable_dbscan:
             self.frag_cfg = cfg.get('dbscan', {}).get('dbscan_fragment_manager', {})
@@ -275,14 +301,12 @@ class FullChain(FullChainGNN):
             deghost_result.pop('ghost')
             deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             if self.enable_ppn and not self.enable_charge_rescaling:
-                deghost_result['points']            = [result['points'][0][deghost]]
-                if 'classify_endpoints' in deghost_result:
-                    deghost_result['classify_endpoints'] = [result['classify_endpoints'][0][deghost]]
-                deghost_result['mask_ppn'][0][-1]   = result['mask_ppn'][0][-1][deghost]
-                #print(len(result['ppn_score']))
-                #deghost_result['ppn_score'][0][-1]   = result['ppn_score'][0][-1][deghost]
+                deghost_result['ppn_points'] = [result['ppn_points'][0][deghost]]
+                deghost_result['ppn_masks'][0][-1]  = result['ppn_masks'][0][-1][deghost]
                 deghost_result['ppn_coords'][0][-1] = result['ppn_coords'][0][-1][deghost]
                 deghost_result['ppn_layers'][0][-1] = result['ppn_layers'][0][-1][deghost]
+                if 'ppn_classify_endpoints' in deghost_result:
+                    deghost_result['ppn_classify_endpoints'] = [result['ppn_classify_endpoints'][0][deghost]]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
             # cnn_result['segmentation'][0] = segmentation
@@ -328,12 +352,13 @@ class FullChain(FullChainGNN):
                 cnn_result['graph_spice_label'] = [graph_spice_label]
                 spatial_embeddings_output = self.graph_spice((input[0][:,:5],
                                                               graph_spice_label))
-                cnn_result.update(spatial_embeddings_output)
+                cnn_result.update({f'graph_spice_{k}':v for k, v in spatial_embeddings_output.items()})
 
 
                 if self.process_fragments:
-                    self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
-                                                  spatial_embeddings_output['graph_info'][0])
+                    #self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
+                    #                              spatial_embeddings_output['graph_info'][0])
+                    self.gs_manager.replace_state(spatial_embeddings_output)
 
                     self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
                     cluster_predictions = self.gs_manager._node_pred.x
@@ -352,16 +377,12 @@ class FullChain(FullChainGNN):
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
-            # print('Input = ', input[0].shape)
-            # print('points = ', cnn_result['points'][0].shape)
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
             cluster_result['fragments'].extend(fragment_data[0])
             cluster_result['frag_batch_ids'].extend(fragment_data[1])
             cluster_result['frag_seg'].extend(fragment_data[2])
 
         # Format Fragments
-        # for i, c in enumerate(cluster_result['fragments']):
-        #     print('format' , torch.unique(input[0][c, self.batch_column_id], return_counts=True))
         fragments_result = format_fragments(cluster_result['fragments'],
                                             cluster_result['frag_batch_ids'],
                                             cluster_result['frag_seg'],

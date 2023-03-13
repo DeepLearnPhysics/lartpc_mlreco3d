@@ -67,6 +67,8 @@ class UResNetPPN(nn.Module):
     """
     MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
 
+    RETURNS = dict(UResNet_Chain.RETURNS, **PPN.RETURNS)
+
     def __init__(self, cfg):
         super(UResNetPPN, self).__init__()
         self.model_config = cfg
@@ -118,10 +120,19 @@ class UResNetPPNLoss(nn.Module):
     --------
     mlreco.models.uresnet.SegmentationLoss, mlreco.models.layers.common.ppnplus.PPNLonelyLoss
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar']
+    }
+
     def __init__(self, cfg):
         super(UResNetPPNLoss, self).__init__()
         self.ppn_loss = PPNLonelyLoss(cfg)
         self.segmentation_loss = SegmentationLoss(cfg)
+
+        self.RETURNS.update({'segmentation_'+k:v for k, v in self.segmentation_loss.RETURNS.items()})
+        self.RETURNS.update({'ppn_'+k:v for k, v in self.ppn_loss.RETURNS.items()})
 
     def forward(self, outputs, segment_label, particles_label, weights=None):
 

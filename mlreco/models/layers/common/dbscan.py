@@ -123,8 +123,8 @@ class DBSCANFragmenter(torch.nn.Module):
             if points is None:
                 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
                 numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
-                                'points'      : [output['points'][0].detach().cpu().numpy()],
-                                'mask_ppn'    : [x.detach().cpu().numpy() for x in output['mask_ppn'][0]],
+                                'ppn_points'  : [output['ppn_points'][0].detach().cpu().numpy()],
+                                'ppn_masks'   : [x.detach().cpu().numpy() for x in output['ppn_masks'][0]],
                                 'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
 
                 points =  uresnet_ppn_type_point_selector(data, numpy_output,

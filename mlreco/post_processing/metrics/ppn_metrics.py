@@ -4,7 +4,7 @@ import scipy
 
 from mlreco.post_processing import post_processing
 from mlreco.utils.dbscan import dbscan_points
-from mlreco.utils.ppn import uresnet_ppn_point_selector, uresnet_ppn_type_point_selector
+from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 
 
 @post_processing(['ppn-metrics-gt', 'ppn-metrics-pred'],
@@ -72,7 +72,6 @@ def ppn_metrics(cfg, module_cfg, data_blob, res, logdir, iteration,
         if mode == 'no_type':
             ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2, enforce_type=False)
         else:
-            #ppn = uresnet_ppn_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.6, window_size=10, nms_score_threshold=0.99 )
             ppn = uresnet_ppn_type_point_selector(input_data[data_idx], res, entry=data_idx, score_threshold=0.5, window_size=3, type_threshold=2)
 
         if ppn.shape[0] == 0:

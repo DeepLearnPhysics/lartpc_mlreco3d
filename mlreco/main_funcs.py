@@ -66,11 +66,11 @@ def process_config(cfg, verbose=True):
         os.environ['OMP_NUM_THREADS'] = '16' # default value
 
         # Set default concat_result
-        default_concat_result = ['input_edge_features', 'input_node_features','points', 'coordinates',
+        default_concat_result = ['input_edge_features', 'input_node_features', 'coordinates',
                                  'particle_node_features', 'particle_edge_features',
                                  'track_node_features', 'shower_node_features',
                                  'input_node_points', 'shower_points', 'track_points', 'particle_points',
-                                 'ppn_coords', 'mask_ppn', 'ppn_layers', 'classify_endpoints',
+                                 'ppn_points', 'ppn_coords', 'ppn_masks', 'ppn_layers', 'ppn_classify_endpoints',
                                  'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales',
                                  'seediness', 'margins', 'embeddings', 'fragments',
                                  'fragments_seg', 'shower_fragments', 'shower_edge_index',
@@ -86,7 +86,7 @@ def process_config(cfg, verbose=True):
                                  'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
                                  'node_pred_vtx', 'total_num_points', 'total_nonghost_points',
                                  'spatial_embeddings', 'occupancy', 'hypergraph_features', 'logits',
-                                 'features', 'feature_embeddings', 'covariance', 'clusts','edge_index','edge_pred','node_pred']
+                                 'features', 'feature_embeddings', 'covariance', 'clusts', 'edge_index', 'edge_pred', 'node_pred']
         if 'concat_result' not in cfg['trainval']:
             cfg['trainval']['concat_result'] = default_concat_result
 
@@ -375,12 +375,15 @@ def inference_loop(handlers):
     # Metrics for each event
     # global_metrics = {}
     weights = glob.glob(handlers.cfg['trainval']['model_path'])
-    # if len(weights) > 0:
-    print("Looping over weights: ", len(weights))
-    for w in weights: print('  -',w)
+    if not len(weights):
+        weights = [None]
+    if len(weights) > 1:
+        print("Looping over weights: ", len(weights))
+        for w in weights: print('  -',w)
     for weight in weights:
-        print('Setting weights',weight)
-        handlers.cfg['trainval']['model_path'] = weight
+        if weight is not None and len(weights) > 1:
+            print('Setting weights', weight)
+            handlers.cfg['trainval']['model_path'] = weight
         loaded_iteration = handlers.trainer.initialize()
         make_directories(handlers.cfg,loaded_iteration,handlers)
         handlers.iteration = 0
@@ -400,10 +403,10 @@ def inference_loop(handlers):
 
             # Store output if requested
             if 'post_processing' in handlers.cfg:
-                for processor_name,processor_cfg in handlers.cfg['post_processing'].items():
+                for processor_name, processor_cfg in handlers.cfg['post_processing'].items():
                     processor_name = processor_name.split('+')[0]
-                    processor = getattr(post_processing,str(processor_name))
-                    processor(handlers.cfg,processor_cfg,data_blob,result_blob,handlers.cfg['trainval']['log_dir'],handlers.iteration)
+                    processor = getattr(post_processing, str(processor_name))
+                    processor(handlers.cfg, processor_cfg, data_blob, result_blob, handlers.cfg['trainval']['log_dir'], handlers.iteration)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

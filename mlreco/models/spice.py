@@ -1,19 +1,15 @@
 import torch
 import torch.nn as nn
 
-from mlreco.models.layers.cluster_cnn.embeddings import SPICE
+from mlreco.models.layers.cluster_cnn.embeddings import SPICE as SPICE_base # TODO why does this live out of this module?
 from mlreco.models.layers.cluster_cnn import spice_loss_construct
 
-class MinkSPICE(SPICE):
+class SPICE(SPICE_base):
 
     MODULES = ['network_base', 'uresnet_encoder', 'embedding_decoder', 'seediness_decoder']
 
     def __init__(self, cfg):
-        super(MinkSPICE, self).__init__(cfg)
-
-        #print('Total Number of Trainable Parameters = {}'.format(
-        #            sum(p.numel() for p in self.parameters() if p.requires_grad)))
-        #print(self)
+        super(SPICE, self).__init__(cfg)
 
 
 class SPICELoss(nn.Module):

@@ -168,14 +168,14 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
 
     Output
     ------
-    reg_loss: float
+    vertex_reg_loss : float
         Distance loss
-    mask_loss: float
+    vertex_mask_loss : float
         Binary voxel-wise prediction (is there an object of interest or not)
-    type_loss: float
-        Semantic prediction loss.
-    classify_endpoints_loss: float
-    classify_endpoints_acc: float
+    vertex_loss : float
+        Combined loss
+    vertex_accuracy : float
+        Combined accuracy
 
     See Also
     --------
@@ -345,5 +345,5 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
 
         total_acc /= num_batches
         res['vertex_loss'] = total_loss
-        res['vertex_acc'] = float(total_acc)
+        res['vertex_accuracy'] = float(total_acc)
         return res

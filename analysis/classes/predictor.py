@@ -20,7 +20,7 @@ from analysis.algorithms.utils import get_track_points
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
-from mlreco.iotools.collates import VolumeBoundaries
+from mlreco.utils.volumes import VolumeBoundaries
 
 
 class FullChainPredictor:
@@ -299,7 +299,7 @@ class FullChainPredictor:
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
-        if 'classify_endpoints' in self.result:
+        if 'ppn_classify_endpoints' in self.result:
             ppn_endpoint = ppn[:, 13:]
             assert ppn_endpoint.shape[1] == 2
 
@@ -307,7 +307,7 @@ class FullChainPredictor:
         for i, pred_point in enumerate(ppn_voxels):
             pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
             x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            if 'classify_endpoints' in self.result:
+            if 'ppn_classify_endpoints' in self.result:
                 ppn_candidates.append(np.array([x, y, z, 
                                                 pred_point_score, 
                                                 pred_point_type, 
@@ -319,7 +319,7 @@ class FullChainPredictor:
         if len(ppn_candidates):
             ppn_candidates = np.vstack(ppn_candidates)
         else:
-            enable_classify_endpoints = 'classify_endpoints' in self.result
+            enable_classify_endpoints = 'ppn_classify_endpoints' in self.result
             ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 6), dtype=np.float32)
         return ppn_candidates
 
