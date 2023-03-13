@@ -81,7 +81,7 @@ class Unwrapper:
             if not parsed_rules[key].ref_key:
                 parsed_rules[key].ref_key = key
 
-            assert parsed_rules[key].method in ['scalar', 'tensor', 'tensor_list', 'edge_tensor']
+            assert parsed_rules[key].method in ['done', 'scalar', 'tensor', 'tensor_list', 'edge_tensor']
 
         return parsed_rules
 
@@ -157,7 +157,7 @@ class Unwrapper:
         data : list
             Data product
         '''
-        if key not in self.rules or self.rules[key].method in [None, 'scalar']:
+        if key not in self.rules or self.rules[key].method in [None, 'done', 'scalar']:
             return self._concatenate(data)
         else:
             ref_key = self.rules[key].ref_key

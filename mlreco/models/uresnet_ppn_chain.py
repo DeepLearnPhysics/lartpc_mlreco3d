@@ -122,8 +122,8 @@ class UResNetPPNLoss(nn.Module):
     """
 
     RETURNS = {
-        'loss': ('scalar',),
-        'accuracy': ('scalar',)
+        'loss': ['scalar'],
+        'accuracy': ['scalar']
     }
 
     def __init__(self, cfg):

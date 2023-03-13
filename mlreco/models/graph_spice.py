@@ -129,9 +129,9 @@ class GraphSPICE(nn.Module):
 
     RETURNS = {
         'coordinates': ['tensor'],
-        'edge_index': ['edge_tensor', ('edge_index', 'coordinates')],
-        'edge_score': ['edge_tensor', ('edge_index', 'coordinates')],
-        'edge_truth': ['edge_tensor', ('edge_index', 'coordinates')],
+        'edge_index': ['edge_tensor', ['edge_index', 'coordinates']],
+        'edge_score': ['edge_tensor', ['edge_index', 'coordinates']],
+        'edge_truth': ['edge_tensor', ['edge_index', 'coordinates']],
         'graph_info': ['tensor']
     }
 
@@ -281,7 +281,7 @@ class GraphSPICELoss(nn.Module):
         '''
 
         '''
-        #self.gs_manager.replace_state(result)
+        self.gs_manager.replace_state(result)
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0

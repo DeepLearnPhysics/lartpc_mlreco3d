@@ -710,18 +710,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
         if self.enable_cnn_clust:
             # If there is no track voxel, maybe GraphSpice didn't run
-            if self._enable_graph_spice and 'graph' in out:
-                graph_spice_out = {
-                    'graph': out['graph'],
-                    'graph_info': out['graph_info'],
-                    'spatial_embeddings': out['spatial_embeddings'],
-                    'feature_embeddings': out['feature_embeddings'],
-                    'covariance': out['covariance'],
-                    'hypergraph_features': out['hypergraph_features'],
-                    'features': out['features'],
-                    'occupancy': out['occupancy'],
-                    'coordinates': out['coordinates']
-                }
+            if self._enable_graph_spice and 'graph_spice_graph_info' in out:
+                graph_spice_out = {k.split('graph_spice_')[-1]:v for k, v in out.items() if 'graph_spice_' in k}
 
                 segmentation_pred = out['segmentation'][0]
 
@@ -895,7 +885,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn and 'ppn_output_coords' in out:
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['accuracy']))
-            if self.enable_cnn_clust and ('graph' in out or 'embeddings' in out):
+            if self.enable_cnn_clust and ('graph_spice_graph_info' in out or 'embeddings' in out):
                 if not self._enable_graph_spice:
                     print('Clustering Embedding Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
                 else:
@@ -932,6 +922,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                     print('Primary particle score accuracy: {:.4f}'.format(res['grappa_kinematics_vtx_score_accuracy']))
             if self.enable_cosmic:
                 print('Cosmic discrimination accuracy: {:.4f}'.format(res_cosmic['accuracy']))
+
         return res
 
 

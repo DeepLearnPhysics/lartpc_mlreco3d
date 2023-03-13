@@ -213,15 +213,17 @@ class GraphBatch(Batch):
 
         if isinstance(self.x, torch.Tensor):
             x_mask  = torch.nonzero(self.batch == idx).flatten()
-            e_mask  = torch.nonzeros(self.batch[self.edge_index[0]] == idx).flatten()
+            x_offset = x_mask[0]
+            e_mask  = torch.nonzero(self.batch[self.edge_index[0]] == idx).flatten()
         else:
             x_mask = np.where(self.batch == idx)[0]
+            x_offset = 0
             e_mask = np.where(self.batch[self.edge_index[0]] == idx)[0]
 
         data = Data()
         data.x = self.x[x_mask]
         data.pos = self.pos[x_mask]
-        data.edge_index = self.edge_index[:,e_mask]
+        data.edge_index = self.edge_index[:,e_mask] - x_offset
         data.edge_attr = self.edge_attr[e_mask]
         data.edge_truth = self.edge_truth[e_mask]
 

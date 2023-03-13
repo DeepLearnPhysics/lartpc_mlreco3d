@@ -298,25 +298,15 @@ def uresnet_ppn_type_point_selector(data, out, score_threshold=0.5, type_score_t
     (optional) endpoint type]
     1 row per ppn-predicted points
     """
+    unwrapped = len(out['ppn_points']) == len(out['ppn_coords'])
     event_data = data#.cpu().detach().numpy()
-    points = out['ppn_points'][0]#[entry]#.cpu().detach().numpy()
-    ppn_coords = out['ppn_coords']
-    # If 'ppn_points' is specified in `concat_result`,
-    # then it won't be unwrapped.
-    if len(points) == len(ppn_coords[-1]):
-        pass
-        # print(entry, np.unique(ppn_coords[-1][:, 0], return_counts=True))
-        #points = points[ppn_coords[-1][:, 0] == entry, :]
-    else: # in case it has been unwrapped (possible in no-ghost scenario)
-        points = out['ppn_points'][entry]
-
+    points = out['ppn_points'][entry]
+    ppn_coords = out['ppn_coords'][entry] if unwrapped else out['ppn_coords']
     enable_classify_endpoints = 'ppn_classify_endpoints' in out
     if enable_classify_endpoints:
-        classify_endpoints = out['ppn_classify_endpoints'][0]
+        classify_endpoints = out['ppn_classify_endpoints'][entry]
 
-    ppn_mask = out['ppn_masks'][-1]
-    # predicted type labels
-    # uresnet_predictions = torch.argmax(out['segmentation'][0], -1).cpu().detach().numpy()
+    ppn_mask = out['ppn_masks'][entry][-1] if unwrapped else out['ppn_masks'][-1]
     uresnet_predictions = np.argmax(out['segmentation'][entry], -1)
 
     if 'ghost' in out and apply_deghosting:

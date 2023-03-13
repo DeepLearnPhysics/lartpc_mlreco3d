@@ -74,12 +74,12 @@ class UResNet_Chain(nn.Module):
     MODULES = ['uresnet_lonely']
 
     RETURNS = {
-        'segmentation': ('tensor', 'input_data'), # Suboptimal, depends on input
-        'finalTensor': ('tensor',),
-        'encoderTensors': ('tensor_list',),
-        'decoderTensors': ('tensor_list',),
-        'ghost': ('tensor', 'ghost_sptensor',),
-        'ghost_sptensor': ('tensor',)
+        'segmentation': ['tensor', 'input_data'], # Suboptimal, depends on input
+        'finalTensor': ['tensor'],
+        'encoderTensors': ['tensor_list'],
+        'decoderTensors': ['tensor_list'],
+        'ghost': ['tensor', 'ghost_sptensor'],
+        'ghost_sptensor': ['tensor']
     }
 
     def __init__(self, cfg, name='uresnet_lonely'):

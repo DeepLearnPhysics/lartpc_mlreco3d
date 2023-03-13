@@ -445,8 +445,8 @@ class ClusterGraphConstructor:
         edges = subgraph.edge_index.T
         edge_logits = subgraph.edge_attr
         if isinstance(edges, torch.Tensor):
-            edges = edges.detach().cpu().numpy
-            edge_logits = edge_logits.detach().cpu().numpy
+            edges = edges.detach().cpu().numpy()
+            edge_logits = edge_logits.detach().cpu().numpy()
         edge_probs = expit(edge_logits)
         if invert:
             pos_edges = edges[edge_probs < self.ths]

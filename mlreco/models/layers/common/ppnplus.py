@@ -215,12 +215,12 @@ class PPN(torch.nn.Module):
     '''
 
     RETURNS = {
-        'ppn_points': ('tensor', 'ppn_output_coords'),
-        'ppn_masks': ('tensor_list', 'ppn_coords'),
-        'ppn_layers': ('tensor_list', 'ppn_coords'),
-        'ppn_coords': ('tensor_list',),
-        'ppn_output_coords': ('tensor',),
-        'ppn_classify_endpoints': ('tensor', 'ppn_output_coords')
+        'ppn_points': ['tensor', 'ppn_output_coords'],
+        'ppn_masks': ['tensor_list', 'ppn_coords'],
+        'ppn_layers': ['tensor_list', 'ppn_coords'],
+        'ppn_coords': ['tensor_list'],
+        'ppn_output_coords': ['tensor'],
+        'ppn_classify_endpoints': ['tensor', 'ppn_output_coords']
     }
 
     def __init__(self, cfg, name='ppn'):
@@ -444,15 +444,15 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
     """
 
     RETURNS = {
-        'reg_loss': ('scalar',),
-        'mask_loss': ('scalar',),
-        'type_loss': ('scalar',),
-        'classify_endpoints_loss': ('scalar',),
-        'output_mask_accuracy': ('scalar',),
-        'type_accuracy': ('scalar',),
-        'classify_endpoints_accuracy': ('scalar',),
-        'num_positives': ('scalar',),
-        'num_voxels': ('scalar',)
+        'reg_loss': ['scalar'],
+        'mask_loss': ['scalar'],
+        'type_loss': ['scalar'],
+        'classify_endpoints_loss': ['scalar'],
+        'output_mask_accuracy': ['scalar'],
+        'type_accuracy': ['scalar'],
+        'classify_endpoints_accuracy': ['scalar'],
+        'num_positives': ['scalar'],
+        'num_voxels': ['scalar']
     }
 
     def __init__(self, cfg, name='ppn'):

@@ -375,12 +375,15 @@ def inference_loop(handlers):
     # Metrics for each event
     # global_metrics = {}
     weights = glob.glob(handlers.cfg['trainval']['model_path'])
-    # if len(weights) > 0:
-    print("Looping over weights: ", len(weights))
-    for w in weights: print('  -',w)
+    if not len(weights):
+        weights = [None]
+    if len(weights) > 1:
+        print("Looping over weights: ", len(weights))
+        for w in weights: print('  -',w)
     for weight in weights:
-        print('Setting weights',weight)
-        handlers.cfg['trainval']['model_path'] = weight
+        if weight is not None and len(weights) > 1:
+            print('Setting weights', weight)
+            handlers.cfg['trainval']['model_path'] = weight
         loaded_iteration = handlers.trainer.initialize()
         make_directories(handlers.cfg,loaded_iteration,handlers)
         handlers.iteration = 0
