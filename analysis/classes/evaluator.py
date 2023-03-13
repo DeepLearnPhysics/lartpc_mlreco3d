@@ -481,7 +481,7 @@ class FullChainEvaluator(FullChainPredictor):
                                 self.data_blob['cluster_label'],
                                 data_idx=entry,
                                 inter_idx=inter_idx)
-                out[inter_idx] = self._translate(vtx, volume)
+                out[inter_idx] = vtx
 
         return out
 
