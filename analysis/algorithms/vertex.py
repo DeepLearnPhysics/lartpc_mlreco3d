@@ -90,9 +90,7 @@ def get_track_shower_poca(particles, return_annot=False, start_segment_radius=10
 
 def compute_vertex_matrix_inversion(particles, 
                                     dim=3, 
-                                    use_primaries=True, 
-                                    weight=False, 
-                                    var_sigma=0.05):
+                                    use_primaries=True):
     """
     Given a set of particles, compute the vertex by the following method:
 

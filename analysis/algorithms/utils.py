@@ -166,6 +166,18 @@ def correct_track_endpoints_linfit(p, bin_size=17):
                 p.endpoint = p1
 
 
+def correct_track_endpoints_direction(p):
+    assert p.semantic_type == 1
+    vec = p.endpoint - p.startpoint
+    vec = vec / np.linalg.norm(vec)
+    direction = get_particle_direction(p, optimize=True)
+    direction = direction / np.linalg.norm(direction)
+    if np.sum(vec * direction) < 0:
+        p1, p2 = p.startpoint, p.endpoint
+        p.startpoint = p2
+        p.endpoint = p1
+
+
 def get_track_points(p, correction_mode='ppn', brute_force=False):
     if brute_force:
         pts = np.vstack(get_track_endpoints_max_dist(p))
@@ -177,33 +189,10 @@ def get_track_points(p, correction_mode='ppn', brute_force=False):
         correct_track_endpoints_local_density(p)
     elif correction_mode == 'linfit':
         correct_track_endpoints_linfit(p)
+    elif correction_mode == 'direction':
+        correct_track_endpoints_direction(p)
     else:
         raise ValueError("Track extrema correction mode {} not defined!".format(correction_mode))
-
-
-def load_range_reco(particle_type='muon', kinetic_energy=True):
-    """
-    Return a function maps the residual range of a track to the kinetic
-    energy of the track. The mapping is based on the Bethe-Bloch formula
-    and stored per particle type in TGraph objects. The TGraph::Eval
-    function is used to perform the interpolation.
-
-    Parameters
-    ----------
-    particle_type: A string with the particle name.
-    kinetic_energy: If true (false), return the kinetic energy (momentum)
-    
-    Returns
-    -------
-    The kinetic energy or momentum according to Bethe-Bloch.
-    """
-    output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
-    if particle_type in ['muon', 'pion', 'kaon', 'proton']:
-        input_file = ROOT.TFile.Open('RRInput.root', 'read')
-        graph = input_file.Get(f'{particle_type}{output_var}')
-        return np.vectorize(graph.Eval)
-    else:
-        print(f'Range-based reconstruction for particle "{particle_type}" not available.')
 
 
 def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
@@ -211,15 +200,17 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
     update_dict = OrderedDict({
         'interaction_id': -1,
         'interaction_size': -1,
-        'count_primary_leptons': -1,
-        'count_primary_electrons': -1,
         'count_primary_particles': -1,
         'vertex_x': -1,
         'vertex_y': -1,
         'vertex_z': -1,
         'has_vertex': False,
         'vertex_valid': 'Default Invalid',
-        'count_primary_protons': -1,
+        'count_primary_photons': -1,
+        'count_primary_electrons': -1,
+        'count_primary_muons': -1,
+        'count_primary_pions': -1,
+        'count_primary_protons': -1
         # 'nu_reco_energy': -1
     })
 
@@ -227,24 +218,32 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         out = attach_prefix(update_dict, prefix)
         return out
     else:
-        count_primary_leptons = {}
+        count_primary_muons = {}
         count_primary_particles = {}
         count_primary_protons = {}
         count_primary_electrons = {}
+        count_primary_photons = {}
+        count_primary_pions = {}
 
         for p in interaction.particles:
             if p.is_primary:
                 count_primary_particles[p.id] = True
+                if p.pid == 0:
+                    count_primary_photons[p.id] = True
                 if p.pid == 1:
                     count_primary_electrons[p.id] = True
-                if (p.pid == 1 or p.pid == 2):
-                    count_primary_leptons[p.id] = True
-                elif p.pid == 4:
-                    count_primary_protons[p.id] = True
+                if p.pid == 2:
+                    count_primary_muons[p.id] = True
+                if p.pid == 3:
+                    count_primary_pions[p.id] = True
+                if p.pid == 4:
+                    count_primary_protons[p.id] = True 
 
         update_dict['interaction_id'] = interaction.id
         update_dict['interaction_size'] = interaction.size
-        update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
+        update_dict['count_primary_muons'] = sum(count_primary_muons.values())
+        update_dict['count_primary_photons'] = sum(count_primary_photons.values())
+        update_dict['count_primary_pions'] = sum(count_primary_pions.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
         update_dict['count_primary_electrons'] = sum(count_primary_electrons.values())
