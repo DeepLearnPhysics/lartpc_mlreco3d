@@ -1,7 +1,9 @@
 import flashmatch
 from flashmatch import flashmatch
 from flashmatch import geoalgo
-from matcha import track, crthit, match_candidate
+from matcha.track import Track
+from matcha.crthit import CRTHit
+from matcha.match_candidate import MatchCandidate
 import numpy as np
 from analysis.decorator import evaluate
 from collections import OrderedDict
@@ -23,7 +25,7 @@ def main(model_config_path, analysis_config_path):
 def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
     print('In opmatch_evaluator')
     flash_fields = OrderedDict(ana_cfg['flash_matches']['fields'])
-    crt_fields   = OrderedDict(ana_cfg['crthit']['fields'])
+    crt_fields   = OrderedDict(ana_cfg['crt_tpc_matches']['fields'])
     rows = list()
     image_id = data['index']
     print('Run FullChainEvaluator...')
@@ -42,10 +44,10 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         cached_interactions = []
         for (interaction, flash, match) in fmatches:
             entry = OrderedDict(flash_fields)
-            populate_entry(entry, index, data['meta'][i],
-                           data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
-                           interaction, flash, match)
-            rows.append(entry)
+            #populate_entry(entry, index, data['meta'][i],
+            #               data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
+            #               interaction, flash, match)
+            #rows.append(entry)
             cached_interactions.append(interaction)
 
         # Use interactions from flash matching as input to CRT-TPC matching
@@ -55,7 +57,7 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
                                                         interaction_list=cached_interactions)
         for match in crt_tpc_matches:
             entry = OrderedDict(crt_fields)
-            populate_crthit_entry(entry, index, data['meta'][i],
+            populate_crt_tpc_entry(entry, index, data['meta'][i],
                                   data['neutrinos'][i] if 'neutrinos' in data.keys() else list(),
                                   match)
             rows.append(entry)
@@ -124,7 +126,7 @@ def populate_entry(entry, index, meta, neutrinos,
     entry['neutrino'] = np.any(near(nus, vtx))
     return entry
 
-def populate_crthit_entry(entry, index, meta, neutrinos, match):
+def populate_crt_tpc_entry(entry, index, meta, neutrinos, match):
     """
     Populates the CRT-TPC match information.
 
@@ -144,15 +146,30 @@ def populate_crthit_entry(entry, index, meta, neutrinos, match):
     -------
     The populated CRT hit entry.
     """
-    # TODO Update absolutely all of this
     entry['index'] = index
-    entry['peshit'] = crthit.peshit()
-    entry['t0_sec'], entry['t0_ns'] = crthit.t0_sec(), crthit.t0_ns()
-    entry['ts1_ns'] = crthit.ts1_ns()
-    entry['plane'], entry['tagger'] = crthit.plane(), crthit.tagger()
-    entry['x_position'], entry['x_error'] = crthit.x_position(), crthit.x_error()
-    entry['y_position'], entry['y_error'] = crthit.y_position(), crthit.y_error()
-    entry['z_position'], entry['z_error'] = crthit.z_position(), crthit.z_error()
+    entry['crthit_id'] = match.crthit.id
+    entry['crthit_total_pe'] = match.crthit.total_pe
+    entry['crthit_t0_sec'] = match.crthit.t0_sec
+    entry['crthit_t0_ns'] = match.crthit.t0_ns
+    entry['crthit_t1_ns'] = match.crthit.t1_ns
+    entry['crthit_position_x'] = match.crthit.position_x
+    entry['crthit_position_y'] = match.crthit.position_y
+    entry['crthit_position_z'] = match.crthit.position_z
+    entry['crthit_error_x'] = match.crthit.error_x
+    entry['crthit_error_y'] = match.crthit.error_y
+    entry['crthit_error_z'] = match.crthit.error_z
+    entry['crthit_plane'] = match.crthit.plane
+    entry['crthit_tagger'] = match.crthit.tagger
+    entry['track_id'] = match.track.id
+    entry['track_image_id'] = match.track.image_id
+    entry['track_interaction_id'] = match.track.interaction_id
+    entry['track_start_x'] = match.track.start_x
+    entry['track_start_y'] = match.track.start_y
+    entry['track_start_z'] = match.track.start_z
+    entry['track_end_x'] = match.track.end_x
+    entry['track_end_y'] = match.track.end_y
+    entry['track_end_z'] = match.track.end_z
+    entry['match_dca'] = match.distance_of_closest_approach
 
     return entry
 
