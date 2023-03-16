@@ -331,8 +331,11 @@ def parse_particle_singlep_einit(particle_event):
     np.ndarray
         List of true initial energy for each particle in TTree.
     """
+    einits = []
+    einit = -1
     for p in particle_event.as_vector():
         is_primary = p.track_id() == p.parent_track_id()
         if not p.track_id() == 1: continue
-        return p.energy_init()
-    return -1
+        return np.asarray([p.energy_init()])
+
+    return np.asarray([einit])

@@ -65,31 +65,6 @@ def process_config(cfg, verbose=True):
         # Set MinkowskiEngine number of threads
         os.environ['OMP_NUM_THREADS'] = '16' # default value
 
-        # Set default concat_result
-        default_concat_result = ['input_edge_features', 'input_node_features', 'coordinates',
-                                 'particle_node_features', 'particle_edge_features',
-                                 'track_node_features', 'shower_node_features',
-                                 'input_node_points', 'shower_points', 'track_points', 'particle_points',
-                                 'ppn_points', 'ppn_coords', 'ppn_masks', 'ppn_layers', 'ppn_classify_endpoints',
-                                 'vertex_layers', 'vertex_coords', 'primary_label_scales', 'segment_label_scales',
-                                 'seediness', 'margins', 'embeddings', 'fragments',
-                                 'fragments_seg', 'shower_fragments', 'shower_edge_index',
-                                 'shower_edge_pred','shower_node_pred','shower_group_pred','track_fragments',
-                                 'track_edge_index', 'track_node_pred', 'track_edge_pred', 'track_group_pred',
-                                 'particle_fragments', 'particle_edge_index', 'particle_node_pred',
-                                 'particle_edge_pred', 'particle_group_pred', 'particles',
-                                 'inter_edge_index', 'inter_node_pred', 'inter_edge_pred', 'inter_group_pred',
-                                 'inter_particles', 'node_pred_p', 'node_pred_type',
-                                 'vtx_labels', 'vtx_anchors', 'grappa_inter_vtx_labels', 'grappa_inter_vtx_anchors',
-                                 'kinematics_node_pred_p', 'kinematics_node_pred_type',
-                                 'flow_edge_pred', 'kinematics_particles', 'kinematics_edge_index',
-                                 'clust_fragments', 'clust_frag_seg', 'interactions', 'inter_cosmic_pred',
-                                 'node_pred_vtx', 'total_num_points', 'total_nonghost_points',
-                                 'spatial_embeddings', 'occupancy', 'hypergraph_features', 'logits',
-                                 'features', 'feature_embeddings', 'covariance', 'clusts', 'edge_index', 'edge_pred', 'node_pred']
-        if 'concat_result' not in cfg['trainval']:
-            cfg['trainval']['concat_result'] = default_concat_result
-
     if 'iotool' in cfg:
 
         # Update IO seed

@@ -3,6 +3,7 @@ import torch
 from collections import defaultdict
 
 from .iotools.data_parallel import DataParallel
+from .iotools.parsers.unwrap_rules import input_unwrap_rules
 
 from .models import construct
 from .models.experimental.bayes.calibration import calibrator_construct, calibrator_loss_construct
@@ -204,8 +205,9 @@ class trainval(object):
         # Initialize unwrapper (TODO: Move to __init__)
         unwrap = self._trainval_config.get('unwrap', False) or bool(self._trainval_config.get('unwrapper', None))
         if unwrap:
-            rules = self._net.module.RETURNS if hasattr(self._net.module, 'RETURNS') else {}
-            rules = dict(rules, **self._criterion.RETURNS) if hasattr(self._criterion, 'RETURNS') else rules
+            rules = input_unwrap_rules(self._iotool_config['dataset']['schema'])
+            if hasattr(self._net.module, 'RETURNS'): rules.update(self._net.module.RETURNS)
+            if hasattr(self._criterion, 'RETURNS'): rules.update(self._criterion.RETURNS)
             unwrapper = Unwrapper(max(1, len(self._gpus)), self._batch_size, rules, self._boundaries, remove_batch_col=False) # TODO: make True
 
         # If batch_size > mini_batch_size * n_gpus, run forward more than once per iteration

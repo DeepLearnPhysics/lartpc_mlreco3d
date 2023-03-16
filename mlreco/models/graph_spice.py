@@ -199,7 +199,8 @@ class GraphSPICE(nn.Module):
 
         res['edge_index'] = [graph.edge_index.T]
         res['edge_score'] = [graph.edge_attr]
-        res['edge_truth'] = [graph.edge_truth]
+        if hasattr(graph, 'edge_truth'):
+            res['edge_truth'] = [graph.edge_truth]
         res['graph_info'] = [self.gs_manager.info.to_numpy()]
 
         return res

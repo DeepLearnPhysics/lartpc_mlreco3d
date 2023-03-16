@@ -225,7 +225,8 @@ class GraphBatch(Batch):
         data.pos = self.pos[x_mask]
         data.edge_index = self.edge_index[:,e_mask] - x_offset
         data.edge_attr = self.edge_attr[e_mask]
-        data.edge_truth = self.edge_truth[e_mask]
+        if hasattr(self, 'edge_truth') and self.edge_truth is not None:
+            data.edge_truth = self.edge_truth[e_mask]
 
         return data
 
