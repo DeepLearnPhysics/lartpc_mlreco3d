@@ -22,6 +22,13 @@ class NodeTypeLoss(torch.nn.Module):
             reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
             balance_classes : <balance loss per class: True or False (default False)>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'n_clusts': ['scalar']
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodeTypeLoss, self).__init__()
 

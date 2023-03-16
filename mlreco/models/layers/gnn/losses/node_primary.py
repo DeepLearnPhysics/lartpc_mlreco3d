@@ -24,6 +24,13 @@ class NodePrimaryLoss(torch.nn.Module):
             use_group_pred  : <redifines group ids according to edge predictions (default False)>
             group_pred_alg  : <algorithm used to predict cluster labels: 'threshold' or 'score' (default 'score')>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'n_clusts': ['scalar']
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodePrimaryLoss, self).__init__()
 

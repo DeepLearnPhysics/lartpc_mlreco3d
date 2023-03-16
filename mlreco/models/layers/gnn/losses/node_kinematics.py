@@ -63,6 +63,26 @@ class NodeKinematicsLoss(torch.nn.Module):
             reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
             balance_classes : <balance loss per class: True or False (default False)>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'type_loss': ['scalar'],
+        'p_loss': ['scalar'],
+        'vtx_score_loss': ['scalar'],
+        'vtx_position_loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'type_accuracy': ['scalar'],
+        'p_accuracy': ['scalar'],
+        'vtx_score_accuracy': ['scalar'],
+        'vtx_position_accuracy': ['scalar'],
+        'n_clusts_momentum': ['scalar'],
+        'n_clusts_type': ['scalar'],
+        'n_clusts_vtx': ['scalar'],
+        'n_clusts_vtx_positives': ['scalar'],
+        'vtx_labels': ['tensor', None, True],
+        'vtx_labels': ['tensor', None, True]
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodeKinematicsLoss, self).__init__()
 
@@ -237,7 +257,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 if compute_vtx and out['node_pred_vtx'][i][j].shape[0]:
                     # Get the vertex predictions, node features and true vertices from the specified columns
                     node_pred_vtx = out['node_pred_vtx'][i][j]
-                    input_node_features = out['input_node_features'][i][j]
+                    node_features = out['node_features'][i][j]
                     node_assn_vtx     = np.stack([get_cluster_label(labels, clusts, column=c) for c in range(self.vtx_col, self.vtx_col+3)], axis=1)
                     node_assn_vtx_pos = get_cluster_label(labels, clusts, column=self.vtx_positives_col)
                     compute_vtx_pos   = node_pred_vtx.shape[-1] == 5
@@ -274,7 +294,7 @@ class NodeKinematicsLoss(torch.nn.Module):
 
                             vtx_pred = node_pred_vtx[pos_mask_vtx,:3]
                             if self.use_anchor_points: # If requested, predict positions with respect to anchor points (end points of particles)
-                                end_points = input_node_features[valid_mask_vtx,19:25][pos_mask_vtx].view(-1, 2, 3)
+                                end_points = node_features[valid_mask_vtx,19:25][pos_mask_vtx].view(-1, 2, 3)
                                 dist_to_anchor = torch.norm(vtx_pred.view(-1, 1, 3) - end_points, dim=2).view(-1, 2)
                                 min_dist = torch.argmin(dist_to_anchor, dim=1)
                                 range_index = torch.arange(end_points.shape[0]).to(device=end_points.device).long()

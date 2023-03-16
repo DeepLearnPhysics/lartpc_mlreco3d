@@ -7,6 +7,7 @@ from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
+from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.deghosting import compute_rescaled_charge
@@ -15,6 +16,7 @@ from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              format_fragments)
 from mlreco.utils.ppn import get_track_endpoints_geo
 from mlreco.utils.gnn.data import _get_extra_gnn_features
+from mlreco.utils.unwrap import prefix_unwrapper_rules
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 
 
@@ -70,12 +72,15 @@ class FullChain(FullChainGNN):
                'fragment_clustering',  'chain', 'dbscan_frag',
                ('mink_uresnet_ppn', ['mink_uresnet', 'mink_ppn'])]
 
-    RETURNS = {
-        'fragments': ['done'],
-        'fragments_seg' : ['done'],
-        'particles': ['done'],
-        'particles_seg': ['done'],
-        'particle_points': ['done']
+    RETURNS = { # TODO
+        'fragment_clusts': ['index_list', ['input_data', 'fragment_batch_ids'], True],
+        'fragment_seg' : ['tensor', 'fragment_batch_ids', True],
+        'fragment_batch_ids' : ['tensor'],
+        'particle_seg': ['tensor', 'particle_batch_ids', True],
+        'particle_start_points': ['tensor', 'particle_start_points', False, True],
+        'particle_end_points': ['tensor', 'particle_end_points', False, True],
+        'segment_label_adapted': ['tensor', 'input_data'],
+        'cluster_label_adapted': ['tensor', 'cluster_label_adapted', False, True]
     }
 
     def __init__(self, cfg):
@@ -87,6 +92,9 @@ class FullChain(FullChainGNN):
                                                  name='uresnet_lonely')
             self.deghost_input_features = self.uresnet_deghost.net.num_input
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
+            self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
+            self.RETURNS['segment_label_adapted'][1] = 'input_rescaled'
+            self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
 
         # Initialize the UResNet+PPN modules
         self.input_features = 1
@@ -118,19 +126,8 @@ class FullChain(FullChainGNN):
             self._gspice_fragment_manager     = GraphSPICEFragmentManager(cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), batch_col=self.batch_col)
             self._gspice_min_points           = cfg.get('graph_spice', {}).get('min_points', 1)
 
-            # TODO: DIRTY AF, fix it
-            gspice_returns = {f'graph_spice_{k}':v for k, v in self.graph_spice.RETURNS.items()}
-            for k, v in gspice_returns.items():
-                if len(v) > 1:
-                    if isinstance(v[1], str):
-                        if 'graph_spice' in v[1]: continue
-                        gspice_returns[k][1] = 'graph_spice_'+v[1]
-                    else:
-                        for i in range(len(v[1])):
-                            if 'graph_spice' in v[1][i]: continue
-                            gspice_returns[k][1][i] = 'graph_spice_'+v[1][i]
-            self.RETURNS.update(gspice_returns)
-            #self.RETURNS.update({f'graph_spice_{k}':v for k, v in self.graph_spice.RETURNS.items()})
+            self.RETURNS.update(prefix_unwrapper_rules(self.graph_spice.RETURNS, 'graph_spice'))
+            self.RETURNS['graph_spice_label'] = ['tensor', 'graph_spice_label', False, True]
 
 
         if self.enable_dbscan:
@@ -150,7 +147,7 @@ class FullChain(FullChainGNN):
 
     @staticmethod
     def get_extra_gnn_features(fragments,
-                               frag_seg,
+                               fragments_seg,
                                classes,
                                input,
                                result,
@@ -166,7 +163,7 @@ class FullChain(FullChainGNN):
         Parameters
         ==========
         fragments: np.ndarray
-        frag_seg: np.ndarray
+        fragments_seg: np.ndarray
         classes: list
         input: list
         result: dictionary
@@ -183,7 +180,7 @@ class FullChain(FullChainGNN):
             and `extra_feats` (if `use_supp` is True).
         """
         return _get_extra_gnn_features(fragments,
-                                       frag_seg,
+                                       fragments_seg,
                                        classes,
                                        input,
                                        result,
@@ -318,14 +315,14 @@ class FullChain(FullChainGNN):
         # ---
         # 1. Clustering w/ CNN or DBSCAN will produce
         # - fragments (list of list of integer indexing the input data)
-        # - frag_batch_ids (list of batch ids for each fragment)
-        # - frag_seg (list of integers, semantic label for each fragment)
+        # - fragments_batch_ids (list of batch ids for each fragment)
+        # - fragments_seg (list of integers, semantic label for each fragment)
         # ---
 
         cluster_result = {
-            'fragments': [],
-            'frag_batch_ids': [],
-            'frag_seg': []
+            'fragment_clusts': [],
+            'fragment_batch_ids': [],
+            'fragment_seg': []
         }
         if self._gspice_use_true_labels:
             semantic_labels = label_seg[0][:, -1]
@@ -371,35 +368,36 @@ class FullChain(FullChainGNN):
                     #     print('filtered input', filtered_input.shape, filtered_input[:, 0].sum(), filtered_input[:, 1].sum(), filtered_input[:, 2].sum(), filtered_input[:, 3].sum(), filtered_input[:, 4].sum(), filtered_input[:, 5].sum())
                     #     print(torch.unique( filtered_input[:, 5], return_counts=True))
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
-                    cluster_result['fragments'].extend(fragment_data[0])
-                    cluster_result['frag_batch_ids'].extend(fragment_data[1])
-                    cluster_result['frag_seg'].extend(fragment_data[2])
+                    cluster_result['fragment_clusts'].extend(fragment_data[0])
+                    cluster_result['fragment_batch_ids'].extend(fragment_data[1])
+                    cluster_result['fragment_seg'].extend(fragment_data[2])
 
         if self.enable_dbscan and self.process_fragments:
             # Get the fragment predictions from the DBSCAN fragmenter
             fragment_data = self.dbscan_fragment_manager(input[0], cnn_result)
-            cluster_result['fragments'].extend(fragment_data[0])
-            cluster_result['frag_batch_ids'].extend(fragment_data[1])
-            cluster_result['frag_seg'].extend(fragment_data[2])
+            cluster_result['fragment_clusts'].extend(fragment_data[0])
+            cluster_result['fragment_batch_ids'].extend(fragment_data[1])
+            cluster_result['fragment_seg'].extend(fragment_data[2])
 
         # Format Fragments
-        fragments_result = format_fragments(cluster_result['fragments'],
-                                            cluster_result['frag_batch_ids'],
-                                            cluster_result['frag_seg'],
+        fragments_result = format_fragments(cluster_result['fragment_clusts'],
+                                            cluster_result['fragment_batch_ids'],
+                                            cluster_result['fragment_seg'],
                                             input[0][:, self.batch_col],
                                             batch_size=self.batch_size)
 
         cnn_result.update({'frag_dict':fragments_result})
 
         cnn_result.update({
-            'fragments': fragments_result['fragments'],
-            'fragments_seg': fragments_result['fragments_seg']
+            'fragment_clusts': fragments_result['fragment_clusts'],
+            'fragment_seg': fragments_result['fragment_seg'],
+            'fragment_batch_ids': fragments_result['fragment_batch_ids']
         })
 
         if self.enable_cnn_clust or self.enable_dbscan:
-            cnn_result.update({ 'semantic_labels': [semantic_labels] })
+            cnn_result.update({'segment_label_adapted': [semantic_labels] })
             if label_clustering is not None:
-                cnn_result.update({ 'label_clustering': label_clustering })
+                cnn_result.update({'cluster_label_adapted': label_clustering })
 
         # if self.use_true_fragments and coords is not None:
         #     print('adding true points info')

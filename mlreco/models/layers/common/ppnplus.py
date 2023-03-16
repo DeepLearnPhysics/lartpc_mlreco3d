@@ -6,6 +6,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.utils import local_cdist
+from mlreco.utils.globals import *
 from mlreco.models.layers.common.blocks import ResNetBlock, SPP, ASPP
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
@@ -218,8 +219,8 @@ class PPN(torch.nn.Module):
         'ppn_points': ['tensor', 'ppn_output_coords'],
         'ppn_masks': ['tensor_list', 'ppn_coords'],
         'ppn_layers': ['tensor_list', 'ppn_coords'],
-        'ppn_coords': ['tensor_list'],
-        'ppn_output_coords': ['tensor'],
+        'ppn_coords': ['tensor_list', 'ppn_coords', False, True],
+        'ppn_output_coords': ['tensor', 'ppn_output_coords', False, True],
         'ppn_classify_endpoints': ['tensor', 'ppn_output_coords']
     }
 

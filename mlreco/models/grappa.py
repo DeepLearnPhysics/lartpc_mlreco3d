@@ -7,6 +7,7 @@ from mlreco.models.layers.common.momentum import DeepVertexNet, EvidentialMoment
 from mlreco.models.experimental.transformers.transformer import TransformerEncoderLayer
 from mlreco.models.layers.gnn import gnn_model_construct, node_encoder_construct, edge_encoder_construct, node_loss_construct, edge_loss_construct
 
+from mlreco.utils.globals import *
 from mlreco.utils.gnn.data import merge_batch, split_clusts, split_edge_index
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_batch, get_cluster_label, get_cluster_primary_label, get_cluster_points_label, get_cluster_directions, get_cluster_dedxs
 from mlreco.utils.gnn.network import complete_graph, delaunay_graph, mst_graph, bipartite_graph, inter_cluster_distance, knn_graph, restrict_graph
@@ -105,8 +106,8 @@ class GNN(torch.nn.Module):
 
     Outputs
     -------
-    input_node_features:
-    input_edge_features:
+    node_features:
+    edge_features:
     clusts:
     edge_index:
     node_pred:
@@ -121,6 +122,20 @@ class GNN(torch.nn.Module):
     """
 
     MODULES = [('grappa', ['base', 'dbscan', 'node_encoder', 'edge_encoder', 'gnn_model']), 'grappa_loss']
+
+    RETURNS = {
+        'batch_ids': ['tensor'],
+        'clusts' : ['index_list', ['input_data', 'batch_ids'], True],
+        'node_features': ['tensor', 'batch_ids', True],
+        'node_pred': ['tensor', 'batch_ids', True],
+        'node_pred_type': ['tensor', 'batch_ids', True],
+        'node_pred_vtx': ['tensor', 'batch_ids', True],
+        'node_pred_p': ['tensor', 'batch_ids', True],
+        'group_pred': ['index_tensor', 'batch_ids', True],
+        'edge_features': ['edge_tensor', ['edge_index', 'batch_ids'], True],
+        'edge_index': ['edge_tensor', ['edge_index', 'batch_ids'], True],
+        'edge_pred': ['edge_tensor', ['edge_index', 'batch_ids'], True]
+    }
 
     def __init__(self, cfg, name='grappa', batch_col=0, coords_col=(1, 4)):
         super(GNN, self).__init__()
@@ -331,6 +346,7 @@ class GNN(torch.nn.Module):
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
+        result['batch_ids'] = [batch_ids]
         result['clusts'] = [clusts_split]
         if self.edge_max_count > -1:
             _, cnts = np.unique(batch_ids, return_counts=True)
@@ -417,10 +433,8 @@ class GNN(torch.nn.Module):
         index = torch.tensor(edge_index, device=cluster_data.device, dtype=torch.long)
         xbatch = torch.tensor(batch_ids, device=cluster_data.device)
 
-        result['input_node_features'] = [[x[b] for b in cbids]]
-        result['input_edge_features'] = [[e[b] for b in ebids]]
-        if points is not None:
-            result['input_node_points'] = [[points[b] for b in cbids]]
+        result['node_features'] = [[x[b] for b in cbids]]
+        result['edge_features'] = [[e[b] for b in ebids]]
 
         # Pass through the model, update results
         out = self.gnn_model(x, index, e, xbatch)
@@ -477,6 +491,16 @@ class GNNLoss(torch.nn.modules.loss._Loss):
                 name: <name of the edge loss>
                 <dictionary of arguments to pass to the loss>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'node_loss': ['scalar'],
+        'edge_loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'node_accuracy': ['scalar'],
+        'edge_accuracy': ['scalar']
+    }
+
     def __init__(self, cfg, name='grappa_loss', batch_col=0, coords_col=(1, 4)):
         super(GNNLoss, self).__init__()
 
@@ -488,9 +512,11 @@ class GNNLoss(torch.nn.modules.loss._Loss):
         if 'node_loss' in cfg[name]:
             self.apply_node_loss = True
             self.node_loss = node_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
+            self.RETURNS.update(self.node_loss.RETURNS)
         if 'edge_loss' in cfg[name]:
             self.apply_edge_loss = True
             self.edge_loss = edge_loss_construct(cfg[name], batch_col=batch_col, coords_col=coords_col)
+            self.RETURNS.update(self.edge_loss.RETURNS)
 
 
     def forward(self, result, clust_label, graph=None, node_label=None, iteration=None):
