@@ -23,18 +23,15 @@ def main(model_config_path, analysis_config_path):
 
 @evaluate(['fmatch'], mode='per_batch')
 def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
-    print('In opmatch_evaluator')
     flash_fields = OrderedDict(ana_cfg['flash_matches']['fields'])
     crt_fields   = OrderedDict(ana_cfg['crt_tpc_matches']['fields'])
     rows = list()
     image_id = data['index']
-    print('Run FullChainEvaluator...')
     predictor = FullChainEvaluator(data, res, mod_cfg, ana_cfg,
                                    deghosting=True,
                                    enable_flash_matching=True,
                                    flash_matching_cfg=ana_cfg['fmatch_cfg'],
                                    opflash_keys=ana_cfg['opflash_keys'])
-    print('FullChainEvaluator done')
 
     for i, index in enumerate(image_id):
         print('----Image', i, '-----')

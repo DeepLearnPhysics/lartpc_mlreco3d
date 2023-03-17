@@ -122,21 +122,21 @@ class CRTTPCManager:
             this_track.end_z   = particle.endpoint[0][2]
             this_track.points  = particle.points
             this_track.depositions = particle.depositions
-            start, end = this_track.get_track_endpoints()
+            start, end = this_track.get_endpoints()
             trk_v.append(this_track)
             print('[MAKETPCTRACK]', this_track)
+            print('[MAKETPCTRACK] alternative start/end:\n')
+            print('\t', start, end)
 
         self.trk_v = trk_v
         return trk_v
 
     def run_crt_tpc_matching(self, tracks, crthits):
         from matcha import match_maker
-        print('[CRTTPCManager] Running CRT-TPC matching...')
 
-        crt_tpc_matches = match_maker.get_match_candidates(tracks, crthits, approach_distance_threshold=50)
-        #best_match = match_maker.get_best_match(crt_tpc_matches)
+        distance_threshold = 50
+        crt_tpc_matches = match_maker.get_track_crthit_matches(tracks, crthits, approach_distance_threshold=50)
 
-        #return best_match
         return crt_tpc_matches
 
     def points_to_cm(self, points):
