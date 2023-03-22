@@ -3,10 +3,10 @@ from turtle import up
 from analysis.classes.particle import Interaction, Particle, TruthParticle
 from analysis.algorithms.calorimetry import *
 
+from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
-
-from analysis.algorithms.calorimetry import get_csda_range_spline, compute_track_dedx
+from analysis.algorithms.calorimetry import compute_track_dedx, get_particle_direction
 
 import numpy as np
 
@@ -62,11 +62,6 @@ def correct_track_points(particle):
         particle.endpoint = x[scores[:, 1].argmax()]
 
 
-def get_track_points_default(p):
-    pts = np.vstack([p._node_features[19:22], p._node_features[22:25]])
-    correct_track_endpoints_closest(p, pts=pts)
-
-
 def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
     assert ppn_candidates.shape[0] == 1
     score = ppn_candidates[0][5:]
@@ -83,12 +78,9 @@ def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
 
 
 
-def correct_track_endpoints_closest(p, pts=None):
+def correct_track_endpoints_ppn(p):
     assert p.semantic_type == 1
-    if pts is None:
-        pts = np.vstack(get_track_endpoints_max_dist(p))
-    else:
-        assert pts.shape == (2, 3)
+    pts = np.vstack([p.startpoint, p.endpoint])
 
     if p.ppn_candidates.shape[0] == 0:
         p.startpoint = pts[0]
@@ -135,21 +127,26 @@ def correct_track_endpoints_closest(p, pts=None):
                 p.endpoint = pts[ix]
             else:
                 raise ValueError("Classify endpoints feature dimension must be 2, got something else!")
-    if np.linalg.norm(p.startpoint - p.endpoint) > 1e-6:
+    if np.linalg.norm(p.startpoint - p.endpoint) < 1e-6:
         p.startpoint = pts[0]
         p.endpoint = pts[1]
 
 
-def local_density_correction(p, r=5):
+def correct_track_endpoints_local_density(p, r=5):
+    pca = PCA(n_components=2)
     assert p.semantic_type == 1
-    dist_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
-    if not dist_st.any():
+    mask_st = np.linalg.norm(p.startpoint - p.points, axis=1) < r
+    if np.count_nonzero(mask_st) < 2:
         return
-    local_d_start = p.depositions[dist_st].sum() / sum(dist_st)
-    dist_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
-    if not dist_end.any():
+    pca_axis = pca.fit_transform(p.points[mask_st])
+    length = pca_axis[:, 0].max() - pca_axis[:, 0].min()
+    local_d_start = p.depositions[mask_st].sum() / length
+    mask_end = np.linalg.norm(p.endpoint - p.points, axis=1) < r
+    if np.count_nonzero(mask_end) < 2:
         return
-    local_d_end = p.depositions[dist_end].sum() / sum(dist_end)
+    pca_axis = pca.fit_transform(p.points[mask_end])
+    length = pca_axis[:, 0].max() - pca_axis[:, 0].min()
+    local_d_end = p.depositions[mask_end].sum() / length
     # Startpoint must have lowest local density
     if local_d_start > local_d_end:
         p1, p2 = p.startpoint, p.endpoint
@@ -169,29 +166,33 @@ def correct_track_endpoints_linfit(p, bin_size=17):
                 p.endpoint = p1
 
 
-def load_range_reco(particle_type='muon', kinetic_energy=True):
-    """
-    Return a function maps the residual range of a track to the kinetic
-    energy of the track. The mapping is based on the Bethe-Bloch formula
-    and stored per particle type in TGraph objects. The TGraph::Eval
-    function is used to perform the interpolation.
+def correct_track_endpoints_direction(p):
+    assert p.semantic_type == 1
+    vec = p.endpoint - p.startpoint
+    vec = vec / np.linalg.norm(vec)
+    direction = get_particle_direction(p, optimize=True)
+    direction = direction / np.linalg.norm(direction)
+    if np.sum(vec * direction) < 0:
+        p1, p2 = p.startpoint, p.endpoint
+        p.startpoint = p2
+        p.endpoint = p1
 
-    Parameters
-    ----------
-    particle_type: A string with the particle name.
-    kinetic_energy: If true (false), return the kinetic energy (momentum)
-    
-    Returns
-    -------
-    The kinetic energy or momentum according to Bethe-Bloch.
-    """
-    output_var = ('_RRtoT' if kinetic_energy else '_RRtodEdx')
-    if particle_type in ['muon', 'pion', 'kaon', 'proton']:
-        input_file = ROOT.TFile.Open('RRInput.root', 'read')
-        graph = input_file.Get(f'{particle_type}{output_var}')
-        return np.vectorize(graph.Eval)
+
+def get_track_points(p, correction_mode='ppn', brute_force=False):
+    if brute_force:
+        pts = np.vstack(get_track_endpoints_max_dist(p))
     else:
-        print(f'Range-based reconstruction for particle "{particle_type}" not available.')
+        pts = np.vstack([p.startpoint, p.endpoint])
+    if correction_mode == 'ppn':
+        correct_track_endpoints_ppn(p, pts=pts)
+    elif correction_mode == 'local_density':
+        correct_track_endpoints_local_density(p)
+    elif correction_mode == 'linfit':
+        correct_track_endpoints_linfit(p)
+    elif correction_mode == 'direction':
+        correct_track_endpoints_direction(p)
+    else:
+        raise ValueError("Track extrema correction mode {} not defined!".format(correction_mode))
 
 
 def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
@@ -199,15 +200,17 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
     update_dict = OrderedDict({
         'interaction_id': -1,
         'interaction_size': -1,
-        'count_primary_leptons': -1,
-        'count_primary_electrons': -1,
         'count_primary_particles': -1,
         'vertex_x': -1,
         'vertex_y': -1,
         'vertex_z': -1,
         'has_vertex': False,
         'vertex_valid': 'Default Invalid',
-        'count_primary_protons': -1,
+        'count_primary_photons': -1,
+        'count_primary_electrons': -1,
+        'count_primary_muons': -1,
+        'count_primary_pions': -1,
+        'count_primary_protons': -1
         # 'nu_reco_energy': -1
     })
 
@@ -215,24 +218,32 @@ def get_interaction_properties(interaction: Interaction, spatial_size, prefix=No
         out = attach_prefix(update_dict, prefix)
         return out
     else:
-        count_primary_leptons = {}
+        count_primary_muons = {}
         count_primary_particles = {}
         count_primary_protons = {}
         count_primary_electrons = {}
+        count_primary_photons = {}
+        count_primary_pions = {}
 
         for p in interaction.particles:
             if p.is_primary:
                 count_primary_particles[p.id] = True
+                if p.pid == 0:
+                    count_primary_photons[p.id] = True
                 if p.pid == 1:
                     count_primary_electrons[p.id] = True
-                if (p.pid == 1 or p.pid == 2):
-                    count_primary_leptons[p.id] = True
-                elif p.pid == 4:
-                    count_primary_protons[p.id] = True
+                if p.pid == 2:
+                    count_primary_muons[p.id] = True
+                if p.pid == 3:
+                    count_primary_pions[p.id] = True
+                if p.pid == 4:
+                    count_primary_protons[p.id] = True 
 
         update_dict['interaction_id'] = interaction.id
         update_dict['interaction_size'] = interaction.size
-        update_dict['count_primary_leptons'] = sum(count_primary_leptons.values())
+        update_dict['count_primary_muons'] = sum(count_primary_muons.values())
+        update_dict['count_primary_photons'] = sum(count_primary_photons.values())
+        update_dict['count_primary_pions'] = sum(count_primary_pions.values())
         update_dict['count_primary_particles'] = sum(count_primary_particles.values())
         update_dict['count_primary_protons'] = sum(count_primary_protons.values())
         update_dict['count_primary_electrons'] = sum(count_primary_electrons.values())
@@ -327,18 +338,19 @@ def get_particle_properties(particle: Particle,
             update_dict['particle_num_ppn_candidates'] = len(particle.ppn_candidates)
 
         if isinstance(particle, TruthParticle):
-            dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
-            min_dist = np.min(dists)
-            if min_dist > 5.0:
-                update_dict['particle_startpoint_is_touching'] = False
+            if particle.size > 0:
+                dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
+                min_dist = np.min(dists)
+                if min_dist > 5.0:
+                    update_dict['particle_startpoint_is_touching'] = False
             creation_process = particle.particle_asis.creation_process()
             update_dict['particle_creation_process'] = creation_process
             update_dict['particle_px'] = float(particle.particle_asis.px())
             update_dict['particle_py'] = float(particle.particle_asis.py())
             update_dict['particle_pz'] = float(particle.particle_asis.pz())
-        if compute_energy:
+        if compute_energy and particle.size > 0:
             update_dict['particle_sum_edep'] = particle.sum_edep
-            direction = compute_particle_direction(particle)
+            direction = get_particle_direction(particle, optimize=True)
             assert len(direction) == 3
             update_dict['particle_dir_x'] = direction[0]
             update_dict['particle_dir_y'] = direction[1]

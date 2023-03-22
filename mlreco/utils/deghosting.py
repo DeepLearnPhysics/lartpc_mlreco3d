@@ -303,7 +303,6 @@ def deghost_labels_and_predictions(data_blob, result):
     data_blob['input_data'] = [data_blob['input_data'][i][mask] \
         for i, mask in enumerate(result['ghost_mask'])]
 
-
     if 'cluster_label' in data_blob \
         and data_blob['cluster_label'] is not None:
         # Save the clust_data before deghosting

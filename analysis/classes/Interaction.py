@@ -33,7 +33,8 @@ class Interaction:
             1: 'Electron',
             2: 'Muon',
             3: 'Pion',
-            4: 'Proton'
+            4: 'Proton',
+            -1: 'Other'
         }
         self.particles = particles
         self.match = []
@@ -44,15 +45,19 @@ class Interaction:
         self.points = []
         self.depositions = []
         for p in self.particles:
-            self.voxel_indices.append(p.voxel_indices)
-            self.points.append(p.points)
-            self.depositions.append(p.depositions)
-            assert p.interaction_id == interaction_id
-        self.voxel_indices = np.hstack(self.voxel_indices)
-        self.points = np.concatenate(self.points, axis=0)
-        self.depositions = np.hstack(self.depositions)
+            if p.points.shape[0] > 0:
+                self.voxel_indices.append(p.voxel_indices)
+                self.points.append(p.points)
+                self.depositions.append(p.depositions)
+                assert p.interaction_id == interaction_id
+        if len(self.voxel_indices) > 0:
+            self.voxel_indices = np.hstack(self.voxel_indices)
+        if len(self.points) > 0:
+            self.points = np.concatenate(self.points, axis=0)
+        if len(self.depositions) > 0:
+            self.depositions = np.hstack(self.depositions)
 
-        self.size = self.voxel_indices.shape[0]
+        self.size = len(self.voxel_indices)
         self.num_particles = len(self.particles)
 
         self.get_particles_summary()
@@ -76,10 +81,10 @@ class Interaction:
 
     def update_info(self):
         self.particle_ids = list(self._particles.keys())
-        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
         self.particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values()])
 
-        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in range(len(self.pid_keys))})
+        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
         self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values() if p.is_primary])
         if sum(self.primary_particle_counts.values()) > 0:
             self.is_valid = True

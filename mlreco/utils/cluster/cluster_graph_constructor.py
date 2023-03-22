@@ -17,6 +17,7 @@ from torch_cluster import knn_graph, radius_graph
 from mlreco.utils.metrics import *
 from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
+# from torch_geometric.data import Batch as GraphBatch
 
 from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier, kneighbors_graph
 from scipy.special import expit
@@ -340,16 +341,33 @@ class ClusterGraphConstructor:
         self._num_total_edges = self._graph_batch.edge_index.shape[1]
 
 
-    def replace_state(self, result, prefix=''):
-
+    def replace_state(self, result, prefix='', unwrapped=False):
         concat = torch.cat if isinstance(result[prefix+'features'][0], torch.Tensor) else np.concatenate
-        has_truth = prefix+'edge_truth' in result
-        graph = GraphBatch(x = concat(result[prefix+'features']),
-                           batch = concat(result[prefix+'coordinates'])[:,0],
-                           pos = concat(result[prefix+'coordinates'])[:,1:4],
-                           edge_index = concat(result[prefix+'edge_index']).T,
-                           edge_attr = concat(result[prefix+'edge_score']),
-                           edge_truth = concat(result[prefix+'edge_truth']) if has_truth else None)
+        if unwrapped:
+            batch_size = len(result[prefix+'features'])
+            data_list = []
+            for i in range(batch_size):
+                data = GraphData(x = torch.Tensor(result[prefix+'features'][i]).float(),
+                                #  batch = result[prefix+'coordinates'][:,0],
+                                 pos = torch.Tensor(result[prefix+'coordinates'][i][:,1:4]).float(),
+                                 edge_index = torch.Tensor(result[prefix+'edge_index'][i].T).long(),
+                                 edge_attr = torch.Tensor(result[prefix+'edge_score'][i]).float(),
+                                 edge_truth = torch.Tensor(result[prefix+'edge_truth'][i]).long())
+                data_list.append(data)
+            graph = GraphBatch.from_data_list(data_list)
+            if not isinstance(result[prefix+'features'][0], torch.Tensor):
+                graph.x = graph.x.numpy()
+                graph.pos = graph.pos.numpy()
+                graph.edge_index = graph.edge_index.numpy()
+                graph.edge_attr = graph.edge_attr.numpy()
+                graph.edge_truth = graph.edge_truth.numpy()
+        else:
+            graph = GraphBatch(x = concat(result[prefix+'features']),
+                               batch = concat(result[prefix+'coordinates'])[:,0],
+                               pos = concat(result[prefix+'coordinates'])[:,1:4],
+                               edge_index = concat(result[prefix+'edge_index']).T,
+                               edge_attr = concat(result[prefix+'edge_score']),
+                               edge_truth = concat(result[prefix+'edge_truth']))
         self._graph_batch = graph
         self._num_total_nodes = self._graph_batch.x.shape[0]
         self._node_dim = self._graph_batch.x.shape[1]
