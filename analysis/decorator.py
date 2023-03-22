@@ -10,6 +10,7 @@ import time
 from mlreco.main_funcs import cycle
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
+from mlreco.iotools.readers import HDF5Reader
 
 from mlreco.utils.utils import ChunkCSVData
 
@@ -24,25 +25,37 @@ def evaluate(filenames, mode='per_image'):
     def decorate(func):
 
         @wraps(func)
-        def process_dataset(cfg, analysis_config, profile=True):
+        def process_dataset(analysis_config, cfg=None, profile=True):
 
-            io_cfg = cfg['iotool']
-
-            module_config = cfg['model']['modules']
-            event_list = cfg['iotool']['dataset'].get('event_list', None)
-            if event_list is not None:
-                event_list = eval(event_list)
-                if isinstance(event_list, tuple):
-                    assert event_list[0] < event_list[1]
-                    event_list = list(range(event_list[0], event_list[1]))
-
-            loader = loader_factory(cfg, event_list=event_list)
-            dataset = iter(cycle(loader))
-            Trainer = trainval(cfg)
-            loaded_iteration = Trainer.initialize()
+            assert cfg is not None or 'reader' in analysis_config
             max_iteration = analysis_config['analysis']['iteration']
-            if max_iteration == -1:
-                max_iteration = len(loader.dataset)
+            if cfg is not None:
+                io_cfg = cfg['iotool']
+
+                module_config = cfg['model']['modules']
+                event_list = cfg['iotool']['dataset'].get('event_list', None)
+                if event_list is not None:
+                    event_list = eval(event_list)
+                    if isinstance(event_list, tuple):
+                        assert event_list[0] < event_list[1]
+                        event_list = list(range(event_list[0], event_list[1]))
+
+                loader = loader_factory(cfg, event_list=event_list)
+                dataset = iter(cycle(loader))
+                Trainer = trainval(cfg)
+                loaded_iteration = Trainer.initialize()
+
+                if max_iteration == -1:
+                    max_iteration = len(loader.dataset)
+                assert max_iteration <= len(loader.dataset)
+            else:
+                file_path = analysis_config['reader']['file_paths']
+                entry_list = analysis_config['reader']['entry_list']
+                skip_entry_list = analysis_config['reader']['skip_entry_list']
+                Reader = HDF5Reader(file_paths, entry_list, skip_entry_list, True)
+                if max_iteration == -1:
+                    max_iteration = len(Reader)
+                assert max_iteration <= len(Reader)
 
             iteration = 0
 
@@ -61,7 +74,10 @@ def evaluate(filenames, mode='per_image'):
             while iteration < max_iteration:
                 if profile:
                     start = time.time()
-                data_blob, res = Trainer.forward(dataset)
+                if cfg is not None:
+                    data_blob, res = Trainer.forward(dataset)
+                else:
+                    data_blob, res = Reader.get(iteration, nested=True)
                 if profile:
                     print("Forward took %d s" % (time.time() - start))
                 img_indices = data_blob['index']
