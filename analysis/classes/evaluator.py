@@ -67,7 +67,7 @@ def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
     return semantic_type, interaction_id, nu_id
 
 
-def handle_empty_true_particles(labels_noghost,  mask_noghost, p, entry, num_volumes, 
+def handle_empty_true_particles(labels_noghost,  mask_noghost, p, entry, 
                                 verbose=False):
     pid = int(p.id())
     pdg = TYPE_LABELS.get(p.pdg_code(), -1)
@@ -90,8 +90,7 @@ def handle_empty_true_particles(labels_noghost,  mask_noghost, p, entry, num_vol
         is_primary=is_primary,
         coords_noghost=coords_noghost,
         depositions_noghost=depositions_noghost,
-        depositions_MeV=depositions,
-        volume=entry % num_volumes)
+        depositions_MeV=depositions)
     particle.p = np.array([p.px(), p.py(), p.pz()])
     particle.fragments = []
     particle.particle_asis = p
@@ -179,7 +178,7 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
         self.michel_primary_ionization_only = processor_cfg.get('michel_primary_ionization_only', False)
 
-    def get_true_label(self, entry, name, schema='cluster_label', volume=None):
+    def get_true_label(self, entry, name, schema='cluster_label'):
         """
         Retrieve tensor in data blob, labelled with `schema`.
 
@@ -203,16 +202,11 @@ class FullChainEvaluator(FullChainPredictor):
                     name, str(list(self.LABEL_TO_COLUMN.keys()))))
         column_idx = self.LABEL_TO_COLUMN[name]
 
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-        out = []
-        for entry in entries:
-            out.append(self.data_blob[schema][entry][:, column_idx])
+        out = self.data_blob[schema][entry][:, column_idx]
         return np.concatenate(out, axis=0)
 
 
-    def get_predicted_label(self, entry, name, volume=None):
+    def get_predicted_label(self, entry, name):
         """
         Returns predicted quantities to label a plot.
 
@@ -228,7 +222,7 @@ class FullChainEvaluator(FullChainPredictor):
         =======
         np.array
         """
-        pred = self.fit_predict_labels(entry, volume=volume)
+        pred = self.fit_predict_labels(entry)
         return pred[name]
 
 
@@ -254,7 +248,7 @@ class FullChainEvaluator(FullChainPredictor):
         return set(particles_exclude)
 
 
-    def get_true_fragments(self, entry, verbose=False, volume=None) -> List[TruthParticleFragment]:
+    def get_true_fragments(self, entry, verbose=False) -> List[TruthParticleFragment]:
         '''
         Get list of <TruthParticleFragment> instances for given <entry> batch id.
         '''
@@ -343,7 +337,7 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def get_true_particles(self, entry, only_primaries=True,
-                           verbose=False, volume=None) -> List[TruthParticle]:
+                           verbose=False) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id.
 
@@ -384,7 +378,7 @@ class FullChainEvaluator(FullChainPredictor):
             # 1. Check if current pid is one of the existing group ids
             if pid not in particle_ids:
                 particle = handle_empty_true_particles(labels_noghost, mask_noghost, p, entry, 
-                                                        self._num_volumes, verbose=verbose)
+                                                       verbose=verbose)
                 particles.append(particle)
                 continue
 
@@ -400,6 +394,9 @@ class FullChainEvaluator(FullChainPredictor):
                     mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
             coords = self.data_blob['input_data'][entry][mask][:, 1:4]
+            volume_labels = self.data_blob['input_data'][entry][mask][:, 0]
+            volume_id, cts = np.unique(volume_labels, return_counts=True)
+            volume_id = int(volume_id[cts.argmax()])
             voxel_indices = np.where(mask)[0]
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions_MeV = labels[mask][:, 4]
@@ -426,7 +423,7 @@ class FullChainEvaluator(FullChainPredictor):
             
             semantic_type, interaction_id, nu_id = get_true_particle_labels(labels, mask, pid=pid, verbose=verbose)
 
-            particle = TruthParticle(self._translate(coords, volume),
+            particle = TruthParticle(coords,
                 pid,
                 semantic_type, interaction_id, pdg, entry,
                 particle_asis=p,
@@ -435,7 +432,7 @@ class FullChainEvaluator(FullChainPredictor):
                 coords_noghost=coords_noghost,
                 depositions_noghost=depositions_noghost,
                 depositions_MeV=depositions_MeV,
-                volume=entry % self._num_volumes)
+                volume=volume_id)
 
             particle.p = np.array([p.px(), p.py(), p.pz()])
             particle.fragments = fragments
@@ -465,26 +462,25 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=-1,
-                              volume=None,
                               compute_vertex=True) -> List[Interaction]:
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
         out = []
-        true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
+        true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(true_particles,
                                                     get_nu_id=True, mode='truth')
         if compute_vertex:
-            vertices = self.get_true_vertices(entry, volume=volume)
+            vertices = self.get_true_vertices(entry)
         for ia in out:
             if compute_vertex and ia.id in vertices:
                 ia.vertex = vertices[ia.id]
-            ia.volume = volume
+            # ia.volume = volume
 
         return out
 
 
-    def get_true_vertices(self, entry, volume=None):
+    def get_true_vertices(self, entry):
         """
         Parameters
         ==========
@@ -507,7 +503,7 @@ class FullChainEvaluator(FullChainPredictor):
                             self.data_blob['cluster_label'],
                             data_idx=entry,
                             inter_idx=inter_idx)
-            out[inter_idx] = self._translate(vtx, volume)
+            out[inter_idx] = vtx
 
         return out
 
@@ -515,7 +511,6 @@ class FullChainEvaluator(FullChainPredictor):
     def match_particles(self, entry,
                         only_primaries=False,
                         mode='pred_to_true',
-                        volume=None, 
                         matching_mode='one_way', 
                         return_counts=False,
                         **kwargs):
@@ -530,20 +525,17 @@ class FullChainEvaluator(FullChainPredictor):
             Must be either 'pred_to_true' or 'true_to_pred'
         volume: int, default None
         '''
-        self._check_volume(volume)
-
         all_matches = []
         all_counts = []
-        volume = e % self._num_volumes if self.vb is not None else volume
         # print('matching', entries, volume)
         if mode == 'pred_to_true':
             # Match each pred to one in true
-            particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
-            particles_to = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
+            particles_from = self.get_particles(entry, only_primaries=only_primaries)
+            particles_to = self.get_true_particles(entry, only_primaries=only_primaries)
         elif mode == 'true_to_pred':
             # Match each true to one in pred
-            particles_to = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
-            particles_from = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
+            particles_to = self.get_particles(entry, only_primaries=only_primaries)
+            particles_from = self.get_true_particles(entry, only_primaries=only_primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
@@ -566,7 +558,6 @@ class FullChainEvaluator(FullChainPredictor):
                            drop_nonprimary_particles=True,
                            match_particles=True,
                            return_counts=False,
-                           volume=None,
                            compute_vertex=True,
                            vertex_mode='all',
                            matching_mode='one_way',
@@ -587,28 +578,23 @@ class FullChainEvaluator(FullChainPredictor):
         List[Tuple[Interaction, Interaction]]
             List of tuples, indicating the matched interactions.
         """
-        self._check_volume(volume)
 
         all_matches, all_counts = [], []
         if mode == 'pred_to_true':
             ints_from = self.get_interactions(entry, 
                                                 drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                volume=volume, 
                                                 compute_vertex=compute_vertex,
                                                 vertex_mode=vertex_mode)
             ints_to = self.get_true_interactions(entry, 
                                                     drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                    volume=volume, 
                                                     compute_vertex=compute_vertex)
         elif mode == 'true_to_pred':
             ints_to = self.get_interactions(entry, 
                                             drop_nonprimary_particles=drop_nonprimary_particles, 
-                                            volume=volume, 
                                             compute_vertex=compute_vertex,
                                             vertex_mode=vertex_mode)
             ints_from = self.get_true_interactions(entry, 
                                                     drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                    volume=volume, 
                                                     compute_vertex=compute_vertex)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\

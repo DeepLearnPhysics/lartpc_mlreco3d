@@ -20,7 +20,7 @@ from analysis.algorithms.utils import get_track_points
 from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
-from mlreco.utils.volumes import VolumeBoundaries
+# from mlreco.utils.volumes import VolumeBoundaries
 
 
 class FullChainPredictor:
@@ -128,13 +128,13 @@ class FullChainPredictor:
         # split over "virtual" batch ids
         # Note this is different from "self.volume_boundaries" above
         # FIXME rename one or the other to be clearer
-        boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
-        if boundaries is not None:
-            self.vb = VolumeBoundaries(boundaries)
-            self._num_volumes = self.vb.num_volumes()
-        else:
-            self.vb = None
-            self._num_volumes = 1
+        # boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
+        # if boundaries is not None:
+        #     self.vb = VolumeBoundaries(boundaries)
+        #     self._num_volumes = self.vb.num_volumes()
+        # else:
+        #     self.vb = None
+        #     self._num_volumes = 1
 
         # Prepare flash matching if requested
         self.enable_flash_matching = enable_flash_matching
@@ -475,7 +475,7 @@ class FullChainPredictor:
         Returns:
             - labels: 1D numpy integer array of predicted group labels.
         '''
-        particles = self.result['particles'][entry]
+        particles = self.result['particle_clusts'][entry]
         num_voxels = self.data_blob['input_data'][entry].shape[0]
         pred_group_labels = -np.ones(num_voxels).astype(int)
 
@@ -558,45 +558,45 @@ class FullChainPredictor:
         if volume is not None:
             assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
 
-    def _translate(self, voxels, volume):
-        """
-        Go from 1-volume-only back to full volume coordinates
+    # def _translate(self, voxels, volume):
+    #     """
+    #     Go from 1-volume-only back to full volume coordinates
 
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
+    #     Parameters
+    #     ==========
+    #     voxels: np.ndarray
+    #         Shape (N, 3)
+    #     volume: int
 
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        """
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.translate(voxels, volume)
+    #     Returns
+    #     =======
+    #     np.ndarray
+    #         Shape (N, 3)
+    #     """
+    #     if self.vb is None or volume is None:
+    #         return voxels
+    #     else:
+    #         return self.vb.translate(voxels, volume)
 
-    def _untranslate(self, voxels, volume):
-        """
-        Go from full volume to 1-volume-only coordinates
+    # def _untranslate(self, voxels, volume):
+    #     """
+    #     Go from full volume to 1-volume-only coordinates
 
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
+    #     Parameters
+    #     ==========
+    #     voxels: np.ndarray
+    #         Shape (N, 3)
+    #     volume: int
 
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        """
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.untranslate(voxels, volume)
+    #     Returns
+    #     =======
+    #     np.ndarray
+    #         Shape (N, 3)
+    #     """
+    #     if self.vb is None or volume is None:
+    #         return voxels
+    #     else:
+    #         return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
@@ -674,7 +674,7 @@ class FullChainPredictor:
         for i, p in enumerate(fragments):
             voxels = point_cloud[p]
             seg_label = fragments_seg[i]
-            part = ParticleFragment(self._translate(voxels, volume),
+            part = ParticleFragment(voxels,
                             i, seg_label,
                             interaction_id=inter_ids[i],
                             group_id=group_ids[i],
@@ -738,7 +738,7 @@ class FullChainPredictor:
         return out_fragment_list
 
 
-    def get_particles(self, entry, only_primaries=True,
+    def get_particles(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
                       attaching_threshold=2,
                       volume=None,
@@ -789,6 +789,7 @@ class FullChainPredictor:
 
         # Loop over images
 
+        volume_labels    = self.data_blob['input_data'][entry][:, 0]
         point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particle_clusts'][entry]
@@ -813,6 +814,14 @@ class FullChainPredictor:
         node_pred_vtx = self.result['particle_node_pred_vtx'][entry]
 
         assert node_pred_vtx.shape[0] == len(particles)
+        primary_labels = -np.ones(len(node_pred_vtx)).astype(int)
+        if self.pred_vtx_positions:
+            assert node_pred_vtx.shape[1] == 5
+            primary_labels = np.argmax(node_pred_vtx[:, 3:], axis=1)
+        else:
+            assert node_pred_vtx.shape[1] == 2
+            primary_labels = np.argmax(node_pred_vtx, axis=1)
+        assert primary_labels.shape[0] == len(particles)
 
         if ('particle_group_pred' in self.result) and ('particle_clusts' in self.result) and len(particles) > 0:
 
@@ -824,6 +833,8 @@ class FullChainPredictor:
 
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
+            volume_id, cts = np.unique(volume_labels[p], return_counts=True)
+            volume_id = int(volume_id[cts.argmax()])
             if voxels.shape[0] < min_particle_voxel_count:
                 continue
             seg_label = particle_seg[i]
@@ -831,10 +842,6 @@ class FullChainPredictor:
             if seg_label == 2 or seg_label == 3:
                 pid = 1
             interaction_id = inter_ids[i]
-            if self.pred_vtx_positions:
-                is_primary = bool(np.argmax(node_pred_vtx[i][3:]))
-            else:
-                is_primary = bool(np.argmax(node_pred_vtx[i]))
             part = Particle(voxels,
                             i,
                             seg_label, interaction_id,
@@ -842,8 +849,9 @@ class FullChainPredictor:
                             entry,
                             voxel_indices=p,
                             depositions=depositions[p],
-                            is_primary=is_primary,
-                            pid_conf=softmax(type_logits[i])[pids[i]])
+                            is_primary=primary_labels[i],
+                            pid_conf=softmax(type_logits[i])[pids[i]],
+                            volume=volume_id)
 
             part.startpoint = particle_start_points[i][1:4]
             part.endpoint = particle_end_points[i][1:4]
@@ -946,40 +954,24 @@ class FullChainPredictor:
 
         We define <labels> to be 1d tensors that annotate voxels.
         '''
-        self._check_volume(volume)
-        entries = self._get_entries(entry, volume)
 
-        all_pred = {
-            'segment': [],
-            'fragment': [],
-            'group': [],
-            'interaction': [],
-            'pdg': []
+        pred_seg = self._fit_predict_semantics(entry)
+        pred_fragments = self._fit_predict_fragments(entry)
+        pred_groups = self._fit_predict_groups(entry)
+        pred_interaction_labels = self._fit_predict_interaction_labels(entry)
+        pred_pids = self._fit_predict_pids(entry)
+
+        pred = {
+            'segment': pred_seg,
+            'fragment': pred_fragments,
+            'group': pred_groups,
+            'interaction': pred_interaction_labels,
+            'pdg': pred_pids
         }
-        for entry in entries:
-            pred_seg = self._fit_predict_semantics(entry)
-            pred_fragments = self._fit_predict_fragments(entry)
-            pred_groups = self._fit_predict_groups(entry)
-            pred_interaction_labels = self._fit_predict_interaction_labels(entry)
-            pred_pids = self._fit_predict_pids(entry)
 
-            pred = {
-                'segment': pred_seg,
-                'fragment': pred_fragments,
-                'group': pred_groups,
-                'interaction': pred_interaction_labels,
-                'pdg': pred_pids
-            }
+        self._pred = pred
 
-            for key in pred:
-                if len(all_pred[key]) == 0:
-                    all_pred[key] = pred[key]
-                else:
-                    all_pred[key] = np.concatenate([all_pred[key], pred[key]], axis=0)
-
-        self._pred = all_pred
-
-        return all_pred
+        return pred
 
 
     def fit_predict(self, **kwargs):
@@ -999,7 +991,7 @@ class FullChainPredictor:
         labels = []
         list_particles, list_interactions = [], []
 
-        for entry in range(int(self.num_images / self._num_volumes)):
+        for entry in range(self.num_images):
 
             pred_dict = self.fit_predict_labels(entry)
             labels.append(pred_dict)

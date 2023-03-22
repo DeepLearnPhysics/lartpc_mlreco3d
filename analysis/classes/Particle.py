@@ -45,7 +45,7 @@ class Particle:
         (1, 3) array of particle's endpoint, if it could be assigned
     '''
     def __init__(self, coords, group_id, semantic_type, interaction_id,
-                 pid, image_id, nu_id=-1, voxel_indices=None, depositions=None, volume=0, **kwargs):
+                 pid, image_id, nu_id=-1, voxel_indices=None, depositions=None, volume=-1, **kwargs):
         self.id = group_id
         self.points = coords
         self.size = coords.shape[0]
@@ -89,14 +89,14 @@ class Particle:
 
     def __str__(self):
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
-                " | PID: {:<8} | Primary: {:<2} | Score = {:.2f}% | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
+                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Score = {:.2f}% | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,
                          self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
                          self.pid_keys[self.pid] if self.pid in self.pid_keys else "None",
                          self.is_primary,
-                         self.pid_conf * 100,
                          self.interaction_id,
                          self.points.shape[0],
+                         self.pid_conf * 100,
                          self.volume)
         return msg
 
