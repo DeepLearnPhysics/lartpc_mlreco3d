@@ -147,64 +147,6 @@ class GraphBatch(Batch):
 
         return batch.contiguous()
 
-    def get_example_old(self, idx: int) -> Data:
-        r"""Reconstructs the :class:`torch_geometric.data.Data` object at index
-        :obj:`idx` from the batch object.
-        The batch object must have been created via :meth:`from_data_list` in
-        order to be able to reconstruct the initial objects."""
-
-        if self.__slices__ is None:
-            raise RuntimeError(
-                ('Cannot reconstruct data list from batch because the batch '
-                 'object was not created using `Batch.from_data_list()`.'))
-
-        data = self.__data_class__()
-
-        for key in self.__slices__.keys():
-            item = self[key]
-            if self.__cat_dims__[key] is None:
-                # The item was concatenated along a new batch dimension,
-                # so just index in that dimension:
-                item = item[idx]
-            else:
-                # Narrow the item based on the values in `__slices__`.
-                if isinstance(item, Tensor):
-                    dim = self.__cat_dims__[key]
-                    start = self.__slices__[key][idx]
-                    end = self.__slices__[key][idx + 1]
-                    item = item.narrow(dim, start, end - start)
-                elif isinstance(item, SparseTensor):
-                    for j, dim in enumerate(self.__cat_dims__[key]):
-                        start = self.__slices__[key][idx][j].item()
-                        end = self.__slices__[key][idx + 1][j].item()
-                        item = item.narrow(dim, start, end - start)
-                else:
-                    start = self.__slices__[key][idx]
-                    end = self.__slices__[key][idx + 1]
-                    item = item[start:end]
-                    item = item[0] if len(item) == 1 else item
-
-            # Decrease its value by `cumsum` value:
-            cum = self.__cumsum__[key][idx]
-            if isinstance(item, Tensor):
-                if not isinstance(cum, int) or cum != 0:
-                    item = item - cum
-            elif isinstance(item, SparseTensor):
-                value = item.storage.value()
-                if value is not None and value.dtype != torch.bool:
-                    if not isinstance(cum, int) or cum != 0:
-                        value = value - cum
-                    item = item.set_value(value, layout='coo')
-            elif isinstance(item, (int, float)):
-                item = item - cum
-
-            data[key] = item
-
-        if self.__num_nodes_list__[idx] is not None:
-            data.num_nodes = self.__num_nodes_list__[idx]
-
-        return data
-
     def get_example(self, idx: int) -> Data:
         r"""Reconstructs the :class:`torch_geometric.data.Data` object at index
         :obj:`idx` from the batch object.
@@ -213,7 +155,7 @@ class GraphBatch(Batch):
 
         if isinstance(self.x, torch.Tensor):
             x_mask  = torch.nonzero(self.batch == idx).flatten()
-            x_offset = x_mask[0]
+            x_offset = x_mask[0] if len(x_mask) else 0
             e_mask  = torch.nonzero(self.batch[self.edge_index[0]] == idx).flatten()
         else:
             x_mask = np.where(self.batch == idx)[0]

@@ -243,9 +243,14 @@ class Unwrapper:
                         for v in range(self.num_volumes):
                             if not self.rules[key].done:
                                 tensor = data[g][self.masks[ref_key][g][b*self.num_volumes+v]]
-                                if v > 0 and self.rules[key].translate:
-                                    tensor[:, BATCH_COL] = b
-                                    tensor[:, COORD_COLS] = self.merger.translate(tensor[:,COORD_COLS], v)
+                                if key == ref_key:
+                                    if len(tensor.shape) == 2:
+                                        tensor[:, BATCH_COL] = v
+                                    else:
+                                        tensor[:] = v
+                                if self.rules[key].translate:
+                                    if v > 0:
+                                        tensor[:, COORD_COLS] = self.merger.translate(tensor[:,COORD_COLS], v)
                                 tensors.append(tensor)
                             else:
                                 tensors.append(data[g][b*self.num_volumes+v])
@@ -258,9 +263,14 @@ class Unwrapper:
                             subtensors = []
                             for v in range(self.num_volumes):
                                 subtensor = d[self.masks[ref_key][g][i][b*self.num_volumes+v]]
-                                if v > 0 and self.rules[key].translate:
-                                    subtensor[:, BATCH_COL] = b
-                                    subtensor[:, COORD_COLS] = self.merger.translate(subtensor[:,COORD_COLS], v)
+                                if key == ref_key:
+                                    if len(subtensor.shape) == 2:
+                                        subtensor[:, BATCH_COL] = v
+                                    else:
+                                        subtensor[:] = v
+                                if self.rules[key].translate:
+                                    if v > 0:
+                                        subtensor[:, COORD_COLS] = self.merger.translate(subtensor[:,COORD_COLS], v)
                                 subtensors.append(subtensor)
                             tensors.append(np.concatenate(subtensors))
                         unwrapped.append(tensors)

@@ -673,7 +673,7 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
     return v[:,2]
 
 
-@nb.njit
+@nb.njit(cache=True)
 def cluster_dedx(voxels: nb.float64[:,:],
                  values: nb.float64[:],
                  start: nb.float64[:],
