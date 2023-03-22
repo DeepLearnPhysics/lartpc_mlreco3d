@@ -175,8 +175,7 @@ def compute_vertex_candidates(particles,
         # 3. Select POCA of all primary tracks and showers
         pseudovtx = compute_vertex_matrix_inversion(valid_particles, 
                                                   dim=3, 
-                                                  use_primaries=True, 
-                                                  weight=True)
+                                                  use_primaries=True)
         # if not (pseudovtx < 0).all():
         #     candidates.append(pseudovtx)
             
