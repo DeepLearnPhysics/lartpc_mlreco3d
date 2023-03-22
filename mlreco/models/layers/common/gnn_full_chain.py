@@ -887,17 +887,17 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Interaction grouping accuracy: {:.4f}'.format(res_gnn_inter['edge_accuracy']))
             if self.enable_gnn_kinematics:
                 print('Flow accuracy: {:.4f}'.format(res_kinematics['edge_accuracy']))
-            if 'node_pred_type' in out:
+            if 'particle_node_pred_type' in out:
                 if 'grappa_inter_type_accuracy' in res:
                     print('Particle ID accuracy: {:.4f}'.format(res['grappa_inter_type_accuracy']))
                 elif 'grappa_kinematics_type_accuracy' in res:
                     print('Particle ID accuracy: {:.4f}'.format(res['grappa_kinematics_type_accuracy']))
-            if 'node_pred_p' in out:
+            if 'particle_node_pred_p' in out:
                 if 'grappa_inter_p_accuracy' in res:
                     print('Momentum accuracy: {:.4f}'.format(res['grappa_inter_p_accuracy']))
                 elif 'grappa_kinematics_p_accuracy' in res:
                     print('Momentum accuracy: {:.4f}'.format(res['grappa_kinematics_p_accuracy']))
-            if 'node_pred_vtx' in out:
+            if 'particle_node_pred_vtx' in out:
                 if 'grappa_inter_vtx_score_accuracy' in res:
                     print('Primary particle score accuracy: {:.4f}'.format(res['grappa_inter_vtx_score_accuracy']))
                 elif 'grappa_kinematics_vtx_score_accuracy' in res:
