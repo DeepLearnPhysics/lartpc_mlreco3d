@@ -115,13 +115,9 @@ class Unwrapper:
         result_blob : dict
             Results dictionary, output of trainval.forward [key][num_gpus][batch_size]
         '''
+        comb_blob = dict(data_blob, **result_blob)
         self.masks, self.offsets = {}, {}
-        for key, value in data_blob.items():
-            # Inputs are all either tensors or lists, only build mask for tensors
-            if key in self.rules and self.rules[key].method == 'tensor':
-                self.masks[key] = [self._batch_masks(value[g]) for g in range(self.num_gpus)]
-
-        for key in result_blob.keys():
+        for key in comb_blob.keys():
             # Skip outputs with no rule
             if key not in self.rules:
                 continue
@@ -129,21 +125,21 @@ class Unwrapper:
             # For tensors and lists of tensors, build one mask per reference tensor
             if not self.rules[key].done and self.rules[key].method in ['tensor', 'tensor_list']:
                 ref_key = self.rules[key].ref_key
-                assert ref_key in self.masks or ref_key in result_blob, 'Must provide the reference tensor to unwrap'
-                assert self.rules[key].method == self.rules[ref_key].method, 'Reference must be of same type'
                 if ref_key not in self.masks:
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
+                    assert self.rules[key].method == self.rules[ref_key].method, f'Reference ({ref_key}) must be of same type as {key}'
                     if self.rules[key].method == 'tensor':
-                        self.masks[ref_key] = [self._batch_masks(result_blob[ref_key][g]) for g in range(self.num_gpus)]
+                        self.masks[ref_key] = [self._batch_masks(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
                     elif self.rules[key].method == 'tensor_list':
-                        self.masks[ref_key] = [[self._batch_masks(v) for v in result_blob[ref_key][g]] for g in range(self.num_gpus)]
+                        self.masks[ref_key] = [[self._batch_masks(v) for v in comb_blob[ref_key][g]] for g in range(self.num_gpus)]
 
             # For edge tensors, build one mask from each tensor (must figure out batch IDs of edges)
             elif self.rules[key].method == 'edge_tensor':
                 assert len(self.rules[key].ref_key) == 2, 'Must provide a reference to the edge_index and the node batch ids'
                 for ref_key in self.rules[key].ref_key:
-                    assert ref_key in result_blob, 'Must provide reference tensor to unwrap'
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
                 ref_edge, ref_node = self.rules[key].ref_key
-                edge_index, batch_ids  = result_blob[ref_edge], result_blob[ref_node]
+                edge_index, batch_ids = comb_blob[ref_edge], comb_blob[ref_node]
                 if not self.rules[key].done and ref_edge not in self.masks:
                     self.masks[ref_edge] = [self._batch_masks(batch_ids[g][edge_index[g][:,0]]) for g in range(self.num_gpus)]
                 if ref_node not in self.offsets:
@@ -152,22 +148,22 @@ class Unwrapper:
             # For an index tensor, only need to record the batch offsets within the wrapped tensor
             elif self.rules[key].method == 'index_tensor':
                 ref_key = self.rules[key].ref_key
-                assert ref_key in result_blob, 'Must provide reference tensor to unwrap'
+                assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}' 
                 if not self.rules[key].done and ref_key not in self.masks:
-                    self.masks[ref_key] = [self._batch_masks(result_blob[ref_key][g]) for g in range(self.num_gpus)]
+                    self.masks[ref_key] = [self._batch_masks(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
                 if ref_key not in self.offsets:
-                    self.offsets[ref_key] = [self._batch_offsets(result_blob[ref_key][g]) for g in range(self.num_gpus)]
+                    self.offsets[ref_key] = [self._batch_offsets(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
 
             # For lists of tensor indices, only need to record the offsets within the wrapped tensor
             elif self.rules[key].method == 'index_list':
                 assert len(self.rules[key].ref_key) == 2, 'Must provide a reference to indexed tensor and the index batch ids'
                 for ref_key in self.rules[key].ref_key:
-                    assert ref_key in result_blob, 'Must provide reference tensor to unwrap'
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
                 ref_tensor, ref_index = self.rules[key].ref_key
                 if not self.rules[key].done and ref_index not in self.masks:
-                    self.masks[ref_index] = [self._batch_masks(result_blob[ref_index][g]) for g in range(self.num_gpus)]
+                    self.masks[ref_index] = [self._batch_masks(comb_blob[ref_index][g]) for g in range(self.num_gpus)]
                 if ref_tensor not in self.offsets:
-                    self.offsets[ref_tensor] = [self._batch_offsets(result_blob[ref_tensor][g]) for g in range(self.num_gpus)]
+                    self.offsets[ref_tensor] = [self._batch_offsets(comb_blob[ref_tensor][g]) for g in range(self.num_gpus)]
 
     def _batch_masks(self, tensor):
         '''

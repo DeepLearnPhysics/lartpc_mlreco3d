@@ -1,3 +1,4 @@
+from copy import deepcopy
 from mlreco.utils.globals import COORD_COLS
 
 RULES = {
@@ -43,7 +44,7 @@ def input_unwrap_rules(schemas):
     for name, schema in schemas.items():
         parser = schema['parser']
         assert parser in RULES, f'Unable to unwrap data from {parser}'
-        rules[name] = RULES[parser]
+        rules[name] = deepcopy(RULES[parser])
         if rules[name][0] == 'tensor':
             rules[name][1] = name
 
