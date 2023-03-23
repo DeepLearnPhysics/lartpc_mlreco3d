@@ -324,7 +324,7 @@ class FullChain(FullChainGNN):
             semantic_labels = label_seg[0][:, -1]
         else:
             semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten()
-            if not self.charge_rescaling and 'ghost' in cnn_result:
+            if not self.enable_charge_rescaling and 'ghost' in cnn_result:
                 deghost = result['ghost'][0].argmax(dim=1) == 0
                 semantic_labels = semantic_labels[deghost]
 
