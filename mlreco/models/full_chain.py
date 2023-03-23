@@ -79,8 +79,9 @@ class FullChain(FullChainGNN):
         'particle_seg': ['tensor', 'particle_batch_ids', True],
         'particle_start_points': ['tensor', 'particle_start_points', False, True],
         'particle_end_points': ['tensor', 'particle_end_points', False, True],
-        'segment_label_adapted': ['tensor', 'input_data'],
-        'cluster_label_adapted': ['tensor', 'cluster_label_adapted', False, True]
+        'segment_label_tmp': ['tensor', 'input_data'], # Will get rid of this
+        'cluster_label_adapted': ['tensor', 'cluster_label_adapted', False, True],
+        'kinematics_label_adapted': ['tensor', 'kinematics_label_adapted', False, True]
     }
 
     def __init__(self, cfg):
@@ -93,7 +94,8 @@ class FullChain(FullChainGNN):
             self.deghost_input_features = self.uresnet_deghost.net.num_input
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
             self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
-            self.RETURNS['segment_label_adapted'][1] = 'input_rescaled'
+            self.RETURNS['segmentation'][1] = 'input_rescaled'
+            self.RETURNS['segment_label_tmp'][1] = 'input_rescaled'
             self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
 
         # Initialize the UResNet+PPN modules
@@ -241,15 +243,13 @@ class FullChain(FullChainGNN):
             if not self.enable_charge_rescaling:
                 result.update(self.uresnet_lonely([input[0][:, :4+self.input_features]]))
             else:
-                full_seg = torch.zeros((input[0][:,:5].shape[0], 5), device=input[0].device, dtype=input[0].dtype)
                 if torch.sum(deghost):
                     result.update(self.uresnet_lonely([input[0][deghost, :4+self.input_features]]))
-                    seg = result['segmentation'][0]
-                    full_seg[deghost] = seg
-                    result['segmentation'][0] = full_seg
                 else:
-                    result['segmentation'] = [full_seg]
-                    return result, input, lambda x: x
+                    # TODO: move empty case handling elsewhere
+                    seg = torch.zeros((input[0][deghost,:5].shape[0], 5), device=input[0].device, dtype=input[0].dtype) # DUMB
+                    result['segmentation'] = [seg]
+                    return result, input
 
         if self.enable_ppn:
             ppn_input = {}
@@ -291,12 +291,9 @@ class FullChain(FullChainGNN):
                                                 batch_column=0,
                                                 coords_column_range=(1,4))
 
-            segmentation = result['segmentation'][0].clone()
-
             deghost_result = {}
             deghost_result.update(result)
             deghost_result.pop('ghost')
-            deghost_result['segmentation'][0] = result['segmentation'][0][deghost]
             if self.enable_ppn and not self.enable_charge_rescaling:
                 deghost_result['ppn_points'] = [result['ppn_points'][0][deghost]]
                 deghost_result['ppn_masks'][0][-1]  = result['ppn_masks'][0][-1][deghost]
@@ -306,7 +303,6 @@ class FullChain(FullChainGNN):
                     deghost_result['ppn_classify_endpoints'] = [result['ppn_classify_endpoints'][0][deghost]]
             cnn_result.update(deghost_result)
             cnn_result['ghost'] = result['ghost']
-            # cnn_result['segmentation'][0] = segmentation
 
         else:
             cnn_result.update(result)
@@ -328,6 +324,9 @@ class FullChain(FullChainGNN):
             semantic_labels = label_seg[0][:, -1]
         else:
             semantic_labels = torch.argmax(cnn_result['segmentation'][0], dim=1).flatten()
+            if not self.charge_rescaling and 'ghost' in cnn_result:
+                deghost = result['ghost'][0].argmax(dim=1) == 0
+                semantic_labels = semantic_labels[deghost]
 
         if self.enable_cnn_clust:
             if label_clustering is None and self.training:
@@ -395,7 +394,7 @@ class FullChain(FullChainGNN):
         })
 
         if self.enable_cnn_clust or self.enable_dbscan:
-            cnn_result.update({'segment_label_adapted': [semantic_labels] })
+            cnn_result.update({'segment_label_tmp': [semantic_labels] })
             if label_clustering is not None:
                 cnn_result.update({'cluster_label_adapted': label_clustering })
 
@@ -403,12 +402,7 @@ class FullChain(FullChainGNN):
         #     print('adding true points info')
         #     cnn_result['true_points'] = coords
 
-        def return_to_original(result):
-            if self.enable_ghost:
-                result['segmentation'][0] = segmentation
-            return result
-
-        return cnn_result, input, return_to_original
+        return cnn_result, input
 
 
 class FullChainLoss(FullChainLoss):
