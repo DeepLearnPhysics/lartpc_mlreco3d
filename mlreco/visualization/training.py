@@ -205,7 +205,7 @@ def draw_training_curves(log_dir, models, metrics,
         layout = go.Layout(template='plotly_white', width=1000, height=500, margin=dict(r=20, l=20, b=20, t=20), 
                            xaxis=dict(title=dict(text='Epochs', font=dict(size=20)), tickfont=dict(size=20), linecolor='black', mirror=True),
                            yaxis=dict(title=dict(text='Metric', font=dict(size=20)), tickfont=dict(size=20), linecolor='black', mirror=True),
-                           legend=dict(font=dict(size=20)))
+                           legend=dict(font=dict(size=20), tracegroupgap=1))
         if len(models) == 1 and same_plot:
             layout['legend']['title'] = model_names[models[0]] if models[0] in model_names else models[0]
  
@@ -289,11 +289,12 @@ def draw_training_curves(log_dir, models, metrics,
                 if draw_val:
                     axis.errorbar(epoch_val, metricm_val, yerr=metrice_val, fmt='.', color=color, linewidth=linewidth, markersize=markersize)
             else:
-                graphs += [go.Scatter(x=epoch_train, y=metric_train, name=label, line=dict(color=color), showlegend=(same_plot | (not same_plot and not i)))]
+                legendgroup = f'group{i*len(models)+j}'
+                graphs += [go.Scatter(x=epoch_train, y=metric_train, name=label, line=dict(color=color), legendgroup=legendgroup, showlegend=(same_plot | (not same_plot and not i)))]
                 if draw_val:
                     hovertext = [f'(Iteration: {iter_val[i]:d})' for i in range(len(iter_val))]
                     # hovertext = [f'(Iteration: {iter_val[i]:d}, Epoch: {epoch_val[i]:0.3f}, Metric: {metricm_val[i]:0.3f})' for i in range(len(iter_val))]
-                    graphs += [go.Scatter(x=epoch_val, y=metricm_val, error_y_array=metrice_val, mode='markers', hovertext=hovertext, marker=dict(color=color), showlegend=False)]
+                    graphs += [go.Scatter(x=epoch_val, y=metricm_val, error_y_array=metrice_val, mode='markers', hovertext=hovertext, marker=dict(color=color), legendgroup=legendgroup, showlegend=False)]
 
     if not interactive:
         if not same_plot:
