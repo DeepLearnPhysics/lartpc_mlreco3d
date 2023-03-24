@@ -60,7 +60,7 @@ def parse_cluster3d(cluster_event,
                     particle_mpv_event = None,
                     sparse_semantics_event = None,
                     sparse_value_event = None,
-                    add_particle_info = False,
+                    add_particle_info = True,
                     add_kinematics_info = False,
                     clean_data = True,
                     precedence = [1,2,0,3,4],
@@ -84,7 +84,6 @@ def parse_cluster3d(cluster_event,
               sparse_semantics_event: sparse3d_semantics
               sparse_value_event: sparse3d_pcluster
               add_particle_info: true
-              add_kinematics_info: false
               clean_data: true
               precedence: [1,2,0,3,4]
               type_include_mpr: false
@@ -100,7 +99,6 @@ def parse_cluster3d(cluster_event,
     sparse_semantics_event: larcv::EventSparseTensor3D
     sparse_value_event: larcv::EventSparseTensor3D
     add_particle_info: bool
-    add_kinematics_info: bool
     clean_data: bool
     precedence: list
     type_include_mpr: bool
@@ -122,46 +120,41 @@ def parse_cluster3d(cluster_event,
         * interaction id,
         * nu id,
         * particle type,
-        * primary id
-        if add_kinematics_info is true, it also includes
-        * group id,
-        * particle type,
-        * momentum,
+        * shower primary id,
+        * primary group id,
         * vtx (x,y,z),
-        * primary group id
-        if either add_* is true, it includes last:
+        * momentum,
         * semantic type
     """
+    # Temporary deprecation warning
+    if add_kinematics_info:
+        from warnings import warn
+        warn('add_kinematics_info is deprecated, simply use add_particle_info')
+        add_particle_info = True
 
     # Get the cluster-wise information
     meta = cluster_event.meta()
     num_clusters = cluster_event.as_vector().size()
     labels = OrderedDict()
     labels['cluster'] = np.arange(num_clusters)
-    if add_particle_info or add_kinematics_info:
-        assert particle_event is not None, "Must provide particle tree if particle/kinematics information is included"
+    if add_particle_info:
+        assert particle_event is not None, "Must provide particle tree if particle information is included"
         particles_v     = particle_event.as_vector()
         particles_mpv_v = particle_mpv_event.as_vector() if particle_mpv_event is not None else None
-        inter_ids       = get_interaction_id(particles_v)
-        nu_ids          = get_nu_id(cluster_event, particles_v, inter_ids, particle_mpv=particles_mpv_v)
+        particles_voxel = parse_particles(particle_event, cluster_event)
 
         labels['cluster'] = np.array([p.id() for p in particles_v])
         labels['group']   = np.array([p.group_id() for p in particles_v])
-        if add_particle_info:
-            labels['inter']   = inter_ids
-            labels['nu']      = nu_ids
-            labels['type']    = get_particle_id(particles_v, nu_ids, type_include_mpr, type_include_secondary)
-            labels['primary_shower'] = get_shower_primary_id(cluster_event, particles_v)
-        if add_kinematics_info:
-            primary_ids       = get_group_primary_id(particles_v, nu_ids, primary_include_mpr)
-            labels['type']    = get_particle_id(particles_v, nu_ids, type_include_mpr, type_include_secondary)
-            labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
-            particles_v       = parse_particles(particle_event, cluster_event)
-            labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
-            labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
-            labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
-            labels['primary_group'] = primary_ids
-        labels['sem'] = np.array([p.shape() for p in particles_v])
+        labels['inter']   = get_interaction_id(particles_v)
+        labels['nu']      = get_nu_id(cluster_event, particles_v, labels['inter'], particles_mpv_v)
+        labels['type']    = get_particle_id(particles_v, labels['nu'], type_include_mpr, type_include_secondary)
+        labels['pshower'] = get_shower_primary_id(cluster_event, particles_v)
+        labels['pgroup']  = get_group_primary_id(particles_v, labels['nu'], primary_include_mpr)
+        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
+        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
+        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
+        labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
+        labels['shape']   = np.array([p.shape() for p in particles_v])
 
     # Loop over clusters, store info
     clusters_voxels, clusters_features = [], []
