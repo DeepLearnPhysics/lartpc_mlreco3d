@@ -1,29 +1,16 @@
-from typing import Callable, Tuple, List
+from typing import List
 import numpy as np
-import os
-import time
 
-from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-from mlreco.utils.ppn import uresnet_ppn_type_point_selector
-from mlreco.utils.metrics import unique_label
-from collections import defaultdict
-
-from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
-from analysis.classes.particle import matrix_counts, matrix_iou, \
-        match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn, \
-        match_interactions_optimal, match_particles_optimal
+from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
+from analysis.classes.particle import (match_particles_fn, 
+                                       match_interactions_fn, 
+                                       group_particles_to_interactions_fn, 
+                                       match_interactions_optimal, 
+                                       match_particles_optimal)
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex
-from analysis.algorithms.vertex import estimate_vertex
-from analysis.algorithms.utils import correct_track_points
-from mlreco.utils.deghosting import deghost_labels_and_predictions
-
-from mlreco.utils.gnn.cluster import get_cluster_label, form_clusters
-from mlreco.iotools.collates import VolumeBoundaries
 
 from analysis.classes.predictor import FullChainPredictor
 
@@ -178,7 +165,7 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
         self.michel_primary_ionization_only = processor_cfg.get('michel_primary_ionization_only', False)
 
-    def get_true_label(self, entry, name, schema='cluster_label'):
+    def get_true_label(self, entry, name, schema='cluster_label_adapted'):
         """
         Retrieve tensor in data blob, labelled with `schema`.
 
@@ -202,7 +189,7 @@ class FullChainEvaluator(FullChainPredictor):
                     name, str(list(self.LABEL_TO_COLUMN.keys()))))
         column_idx = self.LABEL_TO_COLUMN[name]
 
-        out = self.data_blob[schema][entry][:, column_idx]
+        out = self.result[schema][entry][:, column_idx]
         return np.concatenate(out, axis=0)
 
 
@@ -228,7 +215,7 @@ class FullChainEvaluator(FullChainPredictor):
 
     def _apply_true_voxel_cut(self, entry):
 
-        labels = self.data_blob['cluster_label_true_nonghost'][entry]
+        labels = self.data_blob['cluster_label'][entry]
 
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
         particles_exclude = []
@@ -256,7 +243,7 @@ class FullChainEvaluator(FullChainPredictor):
         fragments = []
 
         # Both are "adapted" labels
-        labels = self.data_blob['cluster_label'][entry]
+        labels = self.result['cluster_label_adapted'][entry]
         rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
         fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
@@ -356,9 +343,8 @@ class FullChainEvaluator(FullChainPredictor):
         '''
         out_particles_list = []
 
-        labels = self.data_blob['cluster_label'][entry]
-        if self.deghosting:
-            labels_noghost = self.data_blob['cluster_label_true_nonghost'][entry]
+        labels = self.result['cluster_label_adapted'][entry]
+        labels_noghost = self.data_blob['cluster_label'][entry]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
         rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
@@ -369,8 +355,7 @@ class FullChainEvaluator(FullChainPredictor):
             pid = int(p.id())
             pdg = TYPE_LABELS.get(p.pdg_code(), -1)
             is_primary = p.group_id() == p.parent_id()
-            if self.deghosting:
-                mask_noghost = labels_noghost[:, 6].astype(int) == pid
+            mask_noghost = labels_noghost[:, 6].astype(int) == pid
             if np.count_nonzero(mask_noghost) <= 0:
                 continue
             # 1. Check if current pid is one of the existing group ids
@@ -388,36 +373,27 @@ class FullChainEvaluator(FullChainPredictor):
             # Cluster labels will have the entire Michel together.
             if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
                 mask = mask & (labels[:, -1].astype(int) == 2)
-                if self.deghosting:
-                    mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
+                mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
-            coords = self.data_blob['input_data'][entry][mask][:, 1:4]
-            volume_labels = self.data_blob['input_data'][entry][mask][:, 0]
+            coords = self.result['input_rescaled'][entry][mask][:, 1:4]
+            volume_labels = self.result['input_rescaled'][entry][mask][:, 0]
             volume_id, cts = np.unique(volume_labels, return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             voxel_indices = np.where(mask)[0]
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions_MeV = labels[mask][:, 4]
             depositions = rescaled_input_charge[mask] # Will be in ADC
-            coords_noghost, depositions_noghost = None, None
-            if self.deghosting:
-                coords_noghost = labels_noghost[mask_noghost][:, 1:4]
-                depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+            coords_noghost = labels_noghost[mask_noghost][:, 1:4]
+            depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
 
             # 2. Process particle-level labels
             if p.pdg_code() not in TYPE_LABELS:
                 # print("PID {} not in TYPE LABELS".format(pid))
                 continue
-            # For deghosting inputs, perform voxel cut with true nonghost coords.
-            if self.deghosting:
-                exclude_ids = self._apply_true_voxel_cut(entry)
-                if pid in exclude_ids:
-                    # Skip this particle if its below the voxel minimum requirement
-                    # print("PID {} was excluded from the list of particles due"\
-                    #     " to true nonghost voxel cut. Exclude IDS = {}".format(
-                    #         p.id(), str(exclude_ids)
-                    #     ))
-                    continue
+            exclude_ids = self._apply_true_voxel_cut(entry)
+            if pid in exclude_ids:
+                # Skip this particle if its below the voxel minimum requirement
+                continue
             
             semantic_type, interaction_id, nu_id = get_true_particle_labels(labels, mask, pid=pid, verbose=verbose)
 
@@ -496,7 +472,7 @@ class FullChainEvaluator(FullChainPredictor):
         """
         out = {}
         inter_idxs = np.unique(
-            self.data_blob['cluster_label'][entry][:, 7].astype(int))
+            self.result['cluster_label_adapted'][entry][:, 7].astype(int))
         for inter_idx in inter_idxs:
             if inter_idx < 0:
                 continue

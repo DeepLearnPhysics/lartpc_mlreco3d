@@ -393,7 +393,7 @@ def _tag_neutral_pions_true(particles):
     out = []
     tagged = defaultdict(list)
     for part in particles:
-        num_voxels_noghost = p.coords_noghost.shape[0]
+        num_voxels_noghost = part.coords_noghost.shape[0]
         p = part.asis
         ancestor = p.ancestor_track_id()
         if p.pdg_code() == 22 \

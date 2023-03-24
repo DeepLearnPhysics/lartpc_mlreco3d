@@ -6,18 +6,15 @@ import time
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
-from collections import defaultdict
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
+from analysis.classes import Particle, ParticleFragment, Interaction, FlashManager
 from analysis.classes.particle import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import get_track_points
-from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
 # from mlreco.utils.volumes import VolumeBoundaries
@@ -52,32 +49,17 @@ class FullChainPredictor:
 
     3) Some outputs needs to be listed under trainval.concat_result.
     The predictor will run through a checklist to ensure this condition
-
-    4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False,
-            enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
+    def __init__(self, data_blob, result, cfg, predictor_cfg={},
+                 enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
         self.module_config = cfg['model']['modules']
         self.cfg = cfg
 
-        # Handle deghosting before anything and save deghosting specific
-        # quantities separately from data_blob and result
-
-        self.deghosting = self.module_config['chain']['enable_ghost']
         self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net'].get('pred_vtx_positions', None)
         self.data_blob = data_blob
         self.result = result
 
-        # Check data_blob lengths
-        # if len(self.data_blob['segment_label']) != len(self.data_blob['cluster_label']):
-        #     for key in self.data_blob:
-        #         print(key, len(self.data_blob[key]))
-        #     raise AssertionError
-
-        if self.deghosting:
-            deghost_labels_and_predictions(self.data_blob, self.result)
-
-        self.num_images = len(data_blob['input_data'])
+        self.num_images = len(result['input_rescaled'])
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg['spatial_size']
@@ -97,8 +79,6 @@ class FullChainPredictor:
         # Following 2 parameters are vertex heuristic parameters
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
-
-        self.batch_mask = self.data_blob['input_data']
 
         # Vertex estimation modes
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
@@ -293,9 +273,9 @@ class FullChainPredictor:
             x, y, z, coordinates, Score, Type, and sample index.
         '''
         # Deghosting is already applied during initialization
-        ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
+        ppn = uresnet_ppn_type_point_selector(self.result['input_rescaled'][entry],
                                               self.result,
-                                              entry=entry, apply_deghosting=not self.deghosting)
+                                              entry=entry, apply_deghosting=False)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
@@ -450,7 +430,7 @@ class FullChainPredictor:
         '''
         fragments = self.result['fragment_clusts'][entry]
 
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_frag_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(fragments):
@@ -476,7 +456,7 @@ class FullChainPredictor:
             - labels: 1D numpy integer array of predicted group labels.
         '''
         particles = self.result['particle_clusts'][entry]
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_group_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(particles):
@@ -503,7 +483,7 @@ class FullChainPredictor:
         '''
         inter_group_pred = self.result['particle_group_pred'][entry]
         particles = self.result['particle_clusts'][entry]
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_inter_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(particles):
@@ -532,7 +512,7 @@ class FullChainPredictor:
         particles = self.result['particle_clusts'][entry]
         type_logits = self.result['particle_node_pred_type'][entry]
         pids = np.argmax(type_logits, axis=1)
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
 
         pred_pids = -np.ones(num_voxels).astype(int)
 
@@ -639,7 +619,7 @@ class FullChainPredictor:
 
         out_fragment_list = []
 
-        point_cloud = self.data_blob['input_data'][entry][:, 1:4]
+        point_cloud = self.result['input_rescaled'][entry][:, 1:4]
         depositions = self.result['input_rescaled'][entry][:, 4]
         fragments = self.result['fragment_clusts'][entry]
         fragments_seg = self.result['fragment_seg'][entry]
@@ -789,8 +769,8 @@ class FullChainPredictor:
 
         # Loop over images
 
-        volume_labels    = self.data_blob['input_data'][entry][:, 0]
-        point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
+        volume_labels    = self.result['input_rescaled'][entry][:, 0]
+        point_cloud      = self.result['input_rescaled'][entry][:, 1:4]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particle_clusts'][entry]
         # inter_group_pred = self.result['inter_group_pred'][entry]
