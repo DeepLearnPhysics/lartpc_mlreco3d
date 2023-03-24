@@ -172,13 +172,13 @@ class FullChainGNN(torch.nn.Module):
             fragments = result['frag_dict']['frags'][0]
             frag_seg = result['frag_dict']['frag_seg'][0]
             frag_batch_ids = result['frag_dict']['frag_batch_ids'][0]
-            semantic_labels = result['segment_label_adapted'][0]
+            semantic_labels = result['segment_label_tmp'][0]
 
         frag_dict = {
             'frags': fragments,
             'frag_seg': frag_seg,
             'frag_batch_ids': frag_batch_ids,
-            'segment_label_adapted': semantic_labels
+            'segment_label_tmp': semantic_labels
         }
 
         # Since <vids> and <counts> depend on the batch column of the input
@@ -267,7 +267,7 @@ class FullChainGNN(torch.nn.Module):
         fragments = frag_result['frags']
         frag_seg = frag_result['frag_seg']
         frag_batch_ids = frag_result['frag_batch_ids']
-        semantic_labels = frag_result['segment_label_adapted']
+        semantic_labels = frag_result['segment_label_tmp']
 
         # for i, c in enumerate(fragments):
         #     print('format' , torch.unique(input[0][c, self.batch_col], return_counts=True))
@@ -432,11 +432,6 @@ class FullChainGNN(torch.nn.Module):
                          'particle',
                          kwargs)
 
-            # Store particle level quantities for ease of access
-            if 'points' in kwargs:
-                result['particle_start_points'] = [np.hstack([result['particle_batch_ids'][0][:,None], kwargs['points'][:,:3].cpu().numpy()])]
-                result['particle_end_points']   = [np.hstack([result['particle_batch_ids'][0][:,None], kwargs['points'][:,3:].cpu().numpy()])]
-
             # If requested, enforce that particle PID predictions are compatible with semantics,
             # i.e. set logits to -inf if they belong to incompatible PIDs
             if self._inter_enforce_semantics and 'particle_node_pred_type' in result:
@@ -561,13 +556,12 @@ class FullChainGNN(torch.nn.Module):
         input: list of np.ndarray
         """
 
-        result, input, revert_func = self.full_chain_cnn(input)
+        result, input = self.full_chain_cnn(input)
         if len(input[0]) and 'frag_dict' in result and self.process_fragments and (self.enable_gnn_track or self.enable_gnn_shower or self.enable_gnn_inter or self.enable_gnn_particle):
             result = self.full_chain_gnn(result, input)
         if 'frag_dict' in result:
             del result['frag_dict']
 
-        result = revert_func(result)
         return result
 
 
@@ -632,13 +626,14 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 res['deghost_' + key] = res_deghost[key]
             accuracy += res_deghost['accuracy']
             loss += self.deghost_weight*res_deghost['loss']
-            deghost = (out['ghost'][0][:,0] > out['ghost'][0][:,1]) & (seg_label[0][:,-1] < 5) # Only apply loss to reco/true non-ghosts
+            deghost = out['ghost'][0][:,0] > out['ghost'][0][:,1]
 
         if self.enable_uresnet and 'segmentation' in out:
             if not self.enable_charge_rescaling:
                 res_seg = self.uresnet_loss(out, seg_label)
             else:
-                res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][deghost]]}, [seg_label[0][deghost]])
+                true_deghost = seg_label[0][deghost,-1] < 5 # Do not apply loss on true ghosts classified as non-ghosts
+                res_seg = self.uresnet_loss({'segmentation':[out['segmentation'][0][true_deghost]]}, [seg_label[0][deghost][true_deghost]])
             for key in res_seg:
                 res['segmentation_' + key] = res_seg[key]
             accuracy += res_seg['accuracy']
@@ -671,11 +666,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
             # Adapt to ghost points
             if cluster_label is not None:
-                cluster_label = adapt_labels(out,
-                                             seg_label,
-                                             cluster_label,
-                                             batch_column=self.batch_col,
-                                             true_mask=true_mask)
+                cluster_label = out['cluster_label_adapted']
 
             if kinematics_label is not None:
                 kinematics_label = adapt_labels(out,
@@ -683,6 +674,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                                                 kinematics_label,
                                                 batch_column=self.batch_col,
                                                 true_mask=true_mask)
+                out['kinematics_label_adapted'] = kinematics_label # TODO: Merge cluster and kinematics labels
 
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]
@@ -697,8 +689,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
                 segmentation_pred = out['segmentation'][0]
 
-                if self.enable_ghost:
-                    segmentation_pred = segmentation_pred[deghost]
                 if self._gspice_use_true_labels:
                     gs_seg_label = torch.cat([cluster_label[0][:, :4], segment_label[:, None]], dim=1)
                 else:

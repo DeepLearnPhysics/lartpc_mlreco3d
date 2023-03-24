@@ -106,6 +106,8 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         compute_neighbor  = lambda X_true, X_pred: cdist(X_pred[:, c1:c2], X_true[:, c1:c2]).argmin(axis=1)
         compute_distances = lambda X_true, X_pred: np.amax(np.abs(X_true[:, c1:c2] - X_pred[:, c1:c2]), axis=1)
         make_float        = lambda x : x
+        make_long         = lambda x: x.astype(np.int64)
+        to_device         = lambda x, y: x
         get_shape         = lambda x, y: (x.shape[0], y.shape[1])
     else:
         unique            = lambda x: x.int().unique()
@@ -117,6 +119,8 @@ def adapt_labels_knn(result, label_seg, label_clustering,
         compute_neighbor  = lambda X_true, X_pred: knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)[1]
         compute_distances = lambda X_true, X_pred: torch.amax(torch.abs(X_true[:, c1:c2] - X_pred[:, c1:c2]), dim=1)
         make_float        = lambda x: x.float()
+        make_long         = lambda x: x.long()
+        to_device         = lambda x, y: x.to(y.device)
         get_shape         = lambda x, y: (x.size(0), y.size(1))
 
     if true_mask is not None:
@@ -126,6 +130,9 @@ def adapt_labels_knn(result, label_seg, label_clustering,
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
+        full_nonghost_mask = argmax(result['ghost'][i]) == 0 if true_mask is None else true_mask
+        full_semantic_pred = to_device(make_long(result['segmentation'][i].shape[1]*ones(len(coords))), coords)
+        full_semantic_pred[full_nonghost_mask] = argmax(result['segmentation'][i])
         for batch_id in unique(coords[:, batch_column]):
             batch_mask = coords[:, batch_column] == batch_id
             batch_coords = coords[batch_mask]
@@ -133,10 +140,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             if len(batch_clustering) == 0:
                 continue
 
-            if true_mask is None:
-                nonghost_mask = argmax(result['ghost'][i][batch_mask]) == 0
-            else:
-                nonghost_mask = true_mask[batch_mask]
+            nonghost_mask = full_nonghost_mask[batch_mask]
 
             # Prepare new labels
             new_label_clustering = -1. * ones(get_shape(batch_coords, batch_clustering))
@@ -144,13 +148,8 @@ def adapt_labels_knn(result, label_seg, label_clustering,
                 new_label_clustering = new_label_clustering.cuda()
             new_label_clustering[:, :c3] = batch_coords
 
-            # Loop over predicted semantics
-            # print(result['segmentation'][i].shape, batch_mask.shape, batch_mask.sum())
-            if result['segmentation'][i].shape[0] == batch_mask.shape[0]:
-                semantic_pred = argmax(result['segmentation'][i][batch_mask])
-            else: # adapt_labels was called from analysis tools (see below deghost_labels_and_predictions)
-                # the problem in this case is that `segmentation` has already been deghosted
-                semantic_pred = argmax(result['segmentation_true_nonghost'][i][batch_mask])
+            # Segmentation is always pre-deghosted
+            semantic_pred = full_semantic_pred[batch_mask]
 
             # Include true nonghost voxels by default when they have the right semantic prediction
             true_pred = label_seg[i][batch_mask, -1]

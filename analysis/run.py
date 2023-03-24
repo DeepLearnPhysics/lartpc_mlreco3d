@@ -25,10 +25,11 @@ from analysis.algorithms.selections import *
 
 def main(analysis_cfg_path, model_cfg_path):
 
-    analysis_config = yaml.load(open(analysis_cfg_path, 'r'),
-                                Loader=yaml.Loader)
-    config = yaml.load(open(model_cfg_path, 'r'), Loader=yaml.Loader)
-    process_config(config, verbose=False)
+    analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
+    config = None
+    if model_cfg_path is not None:
+        config = yaml.safe_load(open(model_cfg_path, 'r'))
+        process_config(config, verbose=False)
     
     pprint(analysis_config)
     if 'analysis' not in analysis_config:
@@ -65,7 +66,7 @@ def main(analysis_cfg_path, model_cfg_path):
         raise Exception('You need to specify either `name` or `scripts` under `analysis` section.')
 
     # Run Algorithm
-    process_func(config, analysis_config)
+    process_func(analysis_config, config)
 
 
 if __name__=="__main__":

@@ -131,6 +131,8 @@ class GNN(torch.nn.Module):
         'node_pred_type': ['tensor', 'batch_ids', True],
         'node_pred_vtx': ['tensor', 'batch_ids', True],
         'node_pred_p': ['tensor', 'batch_ids', True],
+        'start_points': ['tensor', 'batch_ids', False, True],
+        'end_points': ['tensor', 'batch_ids', False, True],
         'group_pred': ['index_tensor', 'batch_ids', True],
         'edge_features': ['edge_tensor', ['edge_index', 'batch_ids'], True],
         'edge_index': ['edge_tensor', ['edge_index', 'batch_ids'], True],
@@ -414,6 +416,8 @@ class GNN(torch.nn.Module):
             if points is None:
                 points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
             x = torch.cat([x, points.float()], dim=1)
+            result['start_points'] = [np.hstack([batch_ids[:,None], points[:,:3].detach().cpu().numpy()])]
+            result['end_points'] = [np.hstack([batch_ids[:,None], points[:,3:].detach().cpu().numpy()])]
             if self.add_local_dirs:
                 dirs_start = get_cluster_directions(cluster_data[:, self.coords_index[0]:self.coords_index[1]], points[:,:3], clusts, self.dir_max_dist, self.opt_dir_max_dist)
                 if self.add_local_dirs != 'start':
