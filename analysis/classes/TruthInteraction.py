@@ -18,6 +18,7 @@ class TruthInteraction(Interaction):
             self.depositions_MeV.append(p.depositions_MeV)
             if p.is_primary: self.num_primaries += 1
         self.depositions_MeV = np.hstack(self.depositions_MeV)
+        self._pi0_tagged_photons = []
 
 
     @property

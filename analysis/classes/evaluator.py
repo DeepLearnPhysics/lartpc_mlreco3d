@@ -257,7 +257,6 @@ class FullChainEvaluator(FullChainPredictor):
 
         # Both are "adapted" labels
         labels = self.data_blob['cluster_label'][entry]
-        segment_label = self.data_blob['segment_label'][entry][:, -1]
         rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
         fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
@@ -360,7 +359,6 @@ class FullChainEvaluator(FullChainPredictor):
         labels = self.data_blob['cluster_label'][entry]
         if self.deghosting:
             labels_noghost = self.data_blob['cluster_label_true_nonghost'][entry]
-        segment_label = self.data_blob['segment_label'][entry][:, -1]
         particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
         rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
 
@@ -462,14 +460,17 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=-1,
-                              compute_vertex=True) -> List[Interaction]:
+                              compute_vertex=True,
+                              tag_pi0=False) -> List[Interaction]:
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
         out = []
         true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
         out = group_particles_to_interactions_fn(true_particles,
-                                                    get_nu_id=True, mode='truth')
+                                                 get_nu_id=True, 
+                                                 mode='truth',
+                                                 tag_pi0=tag_pi0)
         if compute_vertex:
             vertices = self.get_true_vertices(entry)
         for ia in out:
@@ -561,6 +562,7 @@ class FullChainEvaluator(FullChainPredictor):
                            compute_vertex=True,
                            vertex_mode='all',
                            matching_mode='one_way',
+                           tag_pi0=False,
                            **kwargs):
         """
         Parameters
@@ -584,18 +586,22 @@ class FullChainEvaluator(FullChainPredictor):
             ints_from = self.get_interactions(entry, 
                                                 drop_nonprimary_particles=drop_nonprimary_particles, 
                                                 compute_vertex=compute_vertex,
-                                                vertex_mode=vertex_mode)
+                                                vertex_mode=vertex_mode,
+                                                tag_pi0=tag_pi0)
             ints_to = self.get_true_interactions(entry, 
-                                                    drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                    compute_vertex=compute_vertex)
+                                                 drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                 compute_vertex=compute_vertex,
+                                                 tag_pi0=tag_pi0)
         elif mode == 'true_to_pred':
             ints_to = self.get_interactions(entry, 
                                             drop_nonprimary_particles=drop_nonprimary_particles, 
                                             compute_vertex=compute_vertex,
-                                            vertex_mode=vertex_mode)
+                                            vertex_mode=vertex_mode,
+                                            tag_pi0=tag_pi0)
             ints_from = self.get_true_interactions(entry, 
-                                                    drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                    compute_vertex=compute_vertex)
+                                                   drop_nonprimary_particles=drop_nonprimary_particles, 
+                                                   compute_vertex=compute_vertex,
+                                                   tag_pi0=tag_pi0)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))

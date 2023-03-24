@@ -647,9 +647,9 @@ class FullChainPredictor:
         shower_mask = np.isin(fragments_seg, self.module_config['grappa_shower']['base']['node_type'])
         shower_frag_primary = np.argmax(self.result['shower_fragment_node_pred'][entry], axis=1)
 
-        if 'shower_node_features' in self.result:
+        if 'shower_fragment_node_features' in self.result:
             shower_node_features = self.result['shower_fragment_node_features'][entry]
-        if 'track_node_features' in self.result:
+        if 'track_fragment_node_features' in self.result:
             track_node_features = self.result['track_fragment_node_features'][entry]
 
         assert len(fragments_seg) == len(fragments)
@@ -900,7 +900,8 @@ class FullChainPredictor:
                          volume=None,
                          compute_vertex=True, 
                          use_primaries_for_vertex=True, 
-                         vertex_mode=None) -> List[Interaction]:
+                         vertex_mode=None,
+                         tag_pi0=False) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -934,7 +935,7 @@ class FullChainPredictor:
         particles = self.get_particles(entry, 
             only_primaries=drop_nonprimary_particles, 
             volume=volume)
-        out = group_particles_to_interactions_fn(particles)
+        out = group_particles_to_interactions_fn(particles, mode='pred', tag_pi0=tag_pi0)
         for ia in out:
             if compute_vertex:
                 ia.vertex, ia.vertex_candidate_count = estimate_vertex(
