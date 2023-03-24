@@ -316,7 +316,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         x = x - center
 
         # Get orientation matrix
-        A = x.T.dot(x)
+        A = np.dot(x.T, x)
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
         # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
@@ -331,7 +331,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         v0 = v[:,2]
 
         # Projection all points, x, along the principal axis
-        x0 = x.dot(v0)
+        x0 = np.dot(x, v0)
 
         # Evaluate the distance from the points to the principal axis
         xp0 = x - np.outer(x0, v0)
@@ -667,7 +667,7 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
     x = voxels - center
 
     # Get orientation matrix
-    A = x.T.dot(x)
+    A = np.dot(x.T, x)
 
     # Get eigenvectors, select the one which corresponds to the maximal spread
     _, v = np.linalg.eigh(A)
