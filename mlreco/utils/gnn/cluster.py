@@ -143,7 +143,7 @@ def _get_cluster_label(data: nb.float64[:,:],
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
         v, cts = nbl.unique(data[c, column])
-        labels[i] = v[np.argmax(np.array(cts))]
+        labels[i] = v[np.argmax(cts)]
     return labels
 
 
@@ -182,7 +182,7 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
             v, cts = nbl.unique(data[clusts[i][primary_mask], column])
         else: # If the primary is empty, use group
             v, cts = nbl.unique(data[clusts[i], column])
-        labels[i] = v[np.argmax(np.array(cts))]
+        labels[i] = v[np.argmax(cts)]
 
     return labels
 
@@ -298,7 +298,7 @@ def get_cluster_features(data: nb.float64[:,:],
     """
     return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
-@nb.njit(cache=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
                           batch_col: nb.int64 = 0,
@@ -367,6 +367,7 @@ def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    batch_col: nb.int64 = 0,
@@ -511,7 +512,7 @@ def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     """
     return _get_cluster_dedxs(data, values, starts, clusts, max_dist)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_dedxs(data: nb.float64[:,:],
                        values: nb.float64[:],
                        starts: nb.float64[:,:],
