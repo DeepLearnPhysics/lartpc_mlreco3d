@@ -184,7 +184,7 @@ def get_track_points(p, correction_mode='ppn', brute_force=False):
     else:
         pts = np.vstack([p.startpoint, p.endpoint])
     if correction_mode == 'ppn':
-        correct_track_endpoints_ppn(p, pts=pts)
+        correct_track_endpoints_ppn(p)
     elif correction_mode == 'local_density':
         correct_track_endpoints_local_density(p)
     elif correction_mode == 'linfit':
