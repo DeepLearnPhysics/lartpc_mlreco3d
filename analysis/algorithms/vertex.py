@@ -8,7 +8,7 @@ from analysis.classes.Interaction import Interaction
 
 @nb.njit(cache=True)
 def point_to_line_distance_(p1, p2, v2):
-    dist = np.linalg.norm(np.cross(v2, (p2 - p1)))
+    dist = np.sqrt(np.sum(np.cross(v2, (p2 - p1))**2)+1e-8)
     return dist
 
 
