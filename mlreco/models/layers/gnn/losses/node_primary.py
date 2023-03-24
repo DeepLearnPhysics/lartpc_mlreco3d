@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from mlreco.utils.globals import *
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask
 
@@ -37,7 +38,7 @@ class NodePrimaryLoss(torch.nn.Module):
         # Set the loss
         self.batch_col = batch_col
         self.coords_col = coords_col
-        self.primary_col = loss_config.get('primary_col', 10)
+        self.primary_col = loss_config.get('primary_col', PSHOW_COL)
 
         self.loss = loss_config.get('loss', 'CE')
         self.reduction = loss_config.get('reduction', 'sum')

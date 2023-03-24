@@ -618,6 +618,9 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 particle_graph=None, iteration=None):
         res = {}
         accuracy, loss = 0., 0.
+        if kinematics_label is not None:
+            from warnings import warn
+            warn('kinematics_label is no longer needed, remove it from the config', DeprecationWarning, stacklevel=2)
 
         if self.enable_charge_rescaling:
             ghost_label = torch.cat((seg_label[0][:,:4], (seg_label[0][:,-1] == 5).type(seg_label[0].dtype).reshape(-1,1)), dim=-1)
@@ -667,14 +670,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             # Adapt to ghost points
             if cluster_label is not None:
                 cluster_label = out['cluster_label_adapted']
-
-            if kinematics_label is not None:
-                kinematics_label = adapt_labels(out,
-                                                seg_label,
-                                                kinematics_label,
-                                                batch_column=self.batch_col,
-                                                true_mask=true_mask)
-                out['kinematics_label_adapted'] = kinematics_label # TODO: Merge cluster and kinematics labels
 
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]
@@ -793,7 +788,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             if 'particle_node_features' in out:   gnn_out.update({ 'node_features': out['particle_node_features'] })
             if 'particle_edge_features' in out:   gnn_out.update({ 'edge_features': out['particle_edge_features'] })
 
-            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=kinematics_label, graph=particle_graph, iteration=iteration)
+            res_gnn_inter = self.inter_gnn_loss(gnn_out, cluster_label, node_label=cluster_label, graph=particle_graph, iteration=iteration)
             for key in res_gnn_inter:
                 res['grappa_inter_' + key] = res_gnn_inter[key]
 
@@ -813,7 +808,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 gnn_out.update({ 'node_pred_type': out['kinematics_node_pred_type'] })
             if 'kinematics_node_pred_p' in out:
                 gnn_out.update({ 'node_pred_p': out['kinematics_node_pred_p'] })
-            res_kinematics = self.kinematics_loss(gnn_out, kinematics_label, graph=particle_graph)
+            res_kinematics = self.kinematics_loss(gnn_out, cluster_label, graph=particle_graph)
             for key in res_kinematics:
                 res['grappa_kinematics_' + key] = res_kinematics[key]
 

@@ -1,6 +1,7 @@
-from mlreco.utils.metrics import unique_label
 import torch
 import numpy as np
+from mlreco.utils.globals import *
+from mlreco.utils.metrics import unique_label
 from mlreco.utils.gnn.cluster import get_cluster_label, get_momenta_label
 from mlreco.models.experimental.bayes.evidential import EDLRegressionLoss, EVDLoss
 from torch_scatter import scatter
@@ -90,11 +91,11 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.batch_col = batch_col
         self.coords_col = coords_col
 
-        self.group_col = loss_config.get('cluster_col', 6)
-        self.type_col = loss_config.get('type_col', 7)
-        self.momentum_col = loss_config.get('momentum_col', 8)
-        self.vtx_col = loss_config.get('vtx_col', 9)
-        self.vtx_positives_col = loss_config.get('vtx_positives_col', 12)
+        self.group_col = loss_config.get('cluster_col', GROUP_COL)
+        self.type_col = loss_config.get('type_col', TYPE_COL)
+        self.momentum_col = loss_config.get('momentum_col', MOM_COL)
+        self.vtx_col = loss_config.get('vtx_col', VTX_COLS[0])
+        self.vtx_positives_col = loss_config.get('vtx_positives_col', PGRP_COL)
 
         # Set the losses
         self.type_loss = loss_config.get('type_loss', 'CE')

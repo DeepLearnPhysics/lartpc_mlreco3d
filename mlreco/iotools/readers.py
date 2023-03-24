@@ -1,6 +1,7 @@
-import numpy as np
-import h5py
 import yaml
+import h5py
+import glob
+import numpy as np
 
 class HDF5Reader:
     '''
@@ -9,7 +10,7 @@ class HDF5Reader:
     More documentation to come.
     '''
     
-    def __init__(self, file_paths, entry_list=[], skip_entry_list=[], larcv_particles=False):
+    def __init__(self, file_keys, entry_list=[], skip_entry_list=[], larcv_particles=False):
         '''
         Load up the HDF5 file.
 
@@ -22,19 +23,24 @@ class HDF5Reader:
         skip_entry_list: list(int)
             Entry IDs to be skipped
         '''
-        # Make sure the file path(s) is(are) provided in the form of a list
-        if isinstance(file_paths, str):
-            file_paths = [file_paths]
+        # Convert the file keys to a list of file paths with glob
+        self.file_paths = []
+        if isinstance(file_keys, str):
+            file_keys = [file_keys]
+        for file_key in file_keys:
+            file_paths = glob.glob(file_key)
+            assert len(file_paths), f'File key {file_key} yielded no compatible path'
+            self.file_paths.extend(sorted(file_paths))
 
         # Loop over the input files, build a map from index to file ID
-        self.file_paths  = file_paths
-        self.file_index  = []
         self.num_entries = 0
-        for i, path in enumerate(file_paths):
+        self.file_index  = []
+        for i, path in enumerate(self.file_paths):
             with h5py.File(path, 'r') as file:
                 assert 'events' in file, 'File does not contain an event tree'
                 self.num_entries += len(file['events'])
                 self.file_index.append(i*np.ones(len(file['events']), dtype=np.int32))
+                print('Registered', path)
         self.file_index = np.concatenate(self.file_index)
 
         # Build an entry list to access

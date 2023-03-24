@@ -360,14 +360,16 @@ class ClusterGraphConstructor:
                 graph.pos = graph.pos.numpy()
                 graph.edge_index = graph.edge_index.numpy()
                 graph.edge_attr = graph.edge_attr.numpy()
-                graph.edge_truth = graph.edge_truth.numpy()
+                if hasattr(graph, 'edge_truth'):
+                    graph.edge_truth = graph.edge_truth.numpy()
         else:
             graph = GraphBatch(x = concat(result[prefix+'features']),
                                batch = concat(result[prefix+'coordinates'])[:,0],
                                pos = concat(result[prefix+'coordinates'])[:,1:4],
                                edge_index = concat(result[prefix+'edge_index']).T,
-                               edge_attr = concat(result[prefix+'edge_score']),
-                               edge_truth = concat(result[prefix+'edge_truth']))
+                               edge_attr = concat(result[prefix+'edge_score']))
+            if prefix+'edge_truth' in result:
+                 graph.edge_truth = concat(result[prefix+'edge_truth'])
         self._graph_batch = graph
         self._num_total_nodes = self._graph_batch.x.shape[0]
         self._node_dim = self._graph_batch.x.shape[1]

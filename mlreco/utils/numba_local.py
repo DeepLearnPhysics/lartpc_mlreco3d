@@ -31,7 +31,7 @@ def submatrix(x: nb.float32[:,:],
 
 
 @nb.njit(cache=True)
-def unique(x: nb.int32[:]) -> (nb.int32[:], nb.int32[:]):
+def unique(x: nb.int32[:]) -> (nb.int32[:], nb.int64[:]):
     """
     Numba implementation of `np.unique(x, return_counts=True)`.
 
@@ -50,13 +50,20 @@ def unique(x: nb.int32[:]) -> (nb.int32[:], nb.int32[:]):
     b = np.sort(x.flatten())
     unique = list(b[:1])
     counts = [1 for _ in unique]
-    for x in b[1:]:
-        if x != unique[-1]:
-            unique.append(x)
+    for v in b[1:]:
+        if v != unique[-1]:
+            unique.append(v)
             counts.append(1)
         else:
             counts[-1] += 1
-    return unique, counts
+
+    unique_np = np.empty(len(unique), dtype=x.dtype)
+    counts_np = np.empty(len(counts), dtype=np.int32)
+    for i in range(len(unique)):
+        unique_np[i] = unique[i]
+        counts_np[i] = counts[i]
+
+    return unique_np, counts_np
 
 
 @nb.njit(cache=True)

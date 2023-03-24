@@ -143,7 +143,7 @@ def _get_cluster_label(data: nb.float64[:,:],
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
         v, cts = nbl.unique(data[c, column])
-        labels[i] = v[np.argmax(np.array(cts))]
+        labels[i] = v[np.argmax(cts)]
     return labels
 
 
@@ -182,7 +182,7 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
             v, cts = nbl.unique(data[clusts[i][primary_mask], column])
         else: # If the primary is empty, use group
             v, cts = nbl.unique(data[clusts[i], column])
-        labels[i] = v[np.argmax(np.array(cts))]
+        labels[i] = v[np.argmax(cts)]
 
     return labels
 
@@ -298,7 +298,7 @@ def get_cluster_features(data: nb.float64[:,:],
     """
     return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
-@nb.njit(cache=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
                           batch_col: nb.int64 = 0,
@@ -316,7 +316,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         x = x - center
 
         # Get orientation matrix
-        A = x.T.dot(x)
+        A = np.dot(x.T, x)
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
         # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
@@ -331,7 +331,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         v0 = v[:,2]
 
         # Projection all points, x, along the principal axis
-        x0 = x.dot(v0)
+        x0 = np.dot(x, v0)
 
         # Evaluate the distance from the points to the principal axis
         xp0 = x - np.outer(x0, v0)
@@ -367,6 +367,7 @@ def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    batch_col: nb.int64 = 0,
@@ -511,7 +512,7 @@ def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     """
     return _get_cluster_dedxs(data, values, starts, clusts, max_dist)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_dedxs(data: nb.float64[:,:],
                        values: nb.float64[:],
                        starts: nb.float64[:,:],
@@ -666,7 +667,7 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
     x = voxels - center
 
     # Get orientation matrix
-    A = x.T.dot(x)
+    A = np.dot(x.T, x)
 
     # Get eigenvectors, select the one which corresponds to the maximal spread
     _, v = np.linalg.eigh(A)

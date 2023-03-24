@@ -40,6 +40,9 @@ def get_inference_cfg(cfg_path, dataset_path=None, weights_path=None, batch_size
     # Turn train to False
     cfg['trainval']['train'] = False
 
+    # Turn on unwrapper
+    cfg['trainval']['unwrap'] = True
+
     # Delete the random sampler
     if 'sampler' in cfg['iotool']:
         del cfg['iotool']['sampler']

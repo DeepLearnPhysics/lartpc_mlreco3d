@@ -349,7 +349,7 @@ def inference_loop(handlers):
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}
-    weights = glob.glob(handlers.cfg['trainval']['model_path'])
+    weights = sorted(glob.glob(handlers.cfg['trainval']['model_path']))
     if not len(weights):
         weights = [None]
     if len(weights) > 1:
