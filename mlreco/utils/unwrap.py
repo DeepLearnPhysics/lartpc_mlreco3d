@@ -98,7 +98,8 @@ class Unwrapper:
             if not parsed_rules[key].ref_key:
                 parsed_rules[key].ref_key = key
 
-            assert parsed_rules[key].method in valid_methods
+            assert parsed_rules[key].method in valid_methods,\
+                    f'Unwrapping method {parsed_rules[key].method} for {key} not valid'
 
         return parsed_rules
 

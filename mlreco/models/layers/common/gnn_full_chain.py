@@ -432,11 +432,6 @@ class FullChainGNN(torch.nn.Module):
                          'particle',
                          kwargs)
 
-            # Store particle level quantities for ease of access
-            if 'points' in kwargs:
-                result['particle_start_points'] = [np.hstack([result['particle_batch_ids'][0][:,None], kwargs['points'][:,:3].cpu().numpy()])]
-                result['particle_end_points']   = [np.hstack([result['particle_batch_ids'][0][:,None], kwargs['points'][:,3:].cpu().numpy()])]
-
             # If requested, enforce that particle PID predictions are compatible with semantics,
             # i.e. set logits to -inf if they belong to incompatible PIDs
             if self._inter_enforce_semantics and 'particle_node_pred_type' in result:

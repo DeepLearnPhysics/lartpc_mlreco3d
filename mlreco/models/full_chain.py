@@ -77,8 +77,6 @@ class FullChain(FullChainGNN):
         'fragment_seg' : ['tensor', 'fragment_batch_ids', True],
         'fragment_batch_ids' : ['tensor'],
         'particle_seg': ['tensor', 'particle_batch_ids', True],
-        'particle_start_points': ['tensor', 'particle_start_points', False, True],
-        'particle_end_points': ['tensor', 'particle_end_points', False, True],
         'segment_label_tmp': ['tensor', 'input_data'], # Will get rid of this
         'cluster_label_adapted': ['tensor', 'cluster_label_adapted', False, True],
         'kinematics_label_adapted': ['tensor', 'kinematics_label_adapted', False, True]
