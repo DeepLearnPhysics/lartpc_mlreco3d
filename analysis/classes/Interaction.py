@@ -69,6 +69,7 @@ class Interaction:
 
         self.nu_id = nu_id
         self.volume = volume
+        self._pi0_tagged_photons = []
 
 
     @property

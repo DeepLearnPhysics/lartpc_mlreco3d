@@ -4,6 +4,7 @@ import pandas as pd
 from typing import Counter, List, Union
 from collections import defaultdict, OrderedDict
 from functools import partial
+from itertools import combinations
 import re
 
 from scipy.optimize import linear_sum_assignment
@@ -12,6 +13,8 @@ from scipy.spatial.distance import cdist
 from pprint import pprint
 
 from . import Particle, TruthParticle, Interaction, TruthInteraction
+from analysis.algorithms.utils import closest_distance_two_lines
+from analysis.algorithms.calorimetry import get_particle_direction
 
 
 def matrix_counts(particles_x, particles_y):
@@ -386,8 +389,47 @@ def match_interactions_optimal(ints_from : List[Interaction],
     return matches, intersections
 
 
+def _tag_neutral_pions_true(particles):
+    out = []
+    tagged = defaultdict(list)
+    for part in particles:
+        num_voxels_noghost = part.coords_noghost.shape[0]
+        p = part.asis
+        ancestor = p.ancestor_track_id()
+        if p.pdg_code() == 22 \
+            and p.creation_process() == "Decay" \
+            and p.parent_creation_process() == "primary" \
+            and p.ancestor_pdg_code() == 111 \
+            and num_voxels_noghost > 0:
+            tagged[ancestor].append(p.id())
+    for photon_list in tagged.values():
+        out.append(tuple(photon_list))
+    return out
+
+def _tag_neutral_pions_reco(particles, threshold=5):
+    out = []
+    photons = [p for p in particles if p.pid == 0]
+    for entry in combinations(photons, 2):
+        p1, p2 = entry
+        v1, v2 = get_particle_direction(p1), get_particle_direction(p2)
+        d = closest_distance_two_lines(p1.startpoint, v1, p2.startpoint, v2)
+        if d < threshold:
+            out.append((p1.id, p2.id))
+    return out
+
+
+def tag_neutral_pions(particles, mode):
+    if mode == 'truth':
+        return _tag_neutral_pions_true(particles)
+    elif mode == 'pred':
+        return _tag_neutral_pions_reco(particles)
+    else:
+        raise ValueError
+
+
 def group_particles_to_interactions_fn(particles : List[Particle],
-                                       get_nu_id=False, mode='pred'):
+                                       get_nu_id=False, mode='pred',
+                                       tag_pi0=False):
     """
     Function for grouping particles to its parent interactions.
 
@@ -426,5 +468,8 @@ def group_particles_to_interactions_fn(particles : List[Particle],
             interactions[int_id] = TruthInteraction(int_id, particles_dict, nu_id=nu_id)
         else:
             raise ValueError
+        if tag_pi0:
+            tagged = tag_neutral_pions(particles, mode=mode)
+            interactions[int_id]._pi0_tagged_photons = tagged
 
     return list(interactions.values())

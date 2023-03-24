@@ -6,21 +6,18 @@ import time
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
-from collections import defaultdict
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
+from analysis.classes import Particle, ParticleFragment, Interaction, FlashManager
 from analysis.classes.particle import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import get_track_points
-from mlreco.utils.deghosting import deghost_labels_and_predictions
 
 from mlreco.utils.gnn.cluster import get_cluster_label
-# from mlreco.utils.volumes import VolumeBoundaries
+from mlreco.utils.volumes import VolumeBoundaries
 
 
 class FullChainPredictor:
@@ -52,32 +49,17 @@ class FullChainPredictor:
 
     3) Some outputs needs to be listed under trainval.concat_result.
     The predictor will run through a checklist to ensure this condition
-
-    4) Does not support deghosting at the moment. (TODO)
     '''
-    def __init__(self, data_blob, result, cfg, predictor_cfg={}, deghosting=False,
-            enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
+    def __init__(self, data_blob, result, cfg, predictor_cfg={},
+                 enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
         self.module_config = cfg['model']['modules']
         self.cfg = cfg
 
-        # Handle deghosting before anything and save deghosting specific
-        # quantities separately from data_blob and result
-
-        self.deghosting = self.module_config['chain']['enable_ghost']
         self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net'].get('pred_vtx_positions', None)
         self.data_blob = data_blob
         self.result = result
 
-        # Check data_blob lengths
-        # if len(self.data_blob['segment_label']) != len(self.data_blob['cluster_label']):
-        #     for key in self.data_blob:
-        #         print(key, len(self.data_blob[key]))
-        #     raise AssertionError
-
-        if self.deghosting:
-            deghost_labels_and_predictions(self.data_blob, self.result)
-
-        self.num_images = len(data_blob['input_data'])
+        self.num_images = len(result['input_rescaled'])
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg['spatial_size']
@@ -97,8 +79,6 @@ class FullChainPredictor:
         # Following 2 parameters are vertex heuristic parameters
         self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
         self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
-
-        self.batch_mask = self.data_blob['input_data']
 
         # Vertex estimation modes
         self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
@@ -128,17 +108,20 @@ class FullChainPredictor:
         # split over "virtual" batch ids
         # Note this is different from "self.volume_boundaries" above
         # FIXME rename one or the other to be clearer
-        # boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
-        # if boundaries is not None:
-        #     self.vb = VolumeBoundaries(boundaries)
-        #     self._num_volumes = self.vb.num_volumes()
-        # else:
-        #     self.vb = None
-        #     self._num_volumes = 1
+        boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
+        if boundaries is not None:
+            self.vb = VolumeBoundaries(boundaries)
+            self._num_volumes = self.vb.num_volumes()
+        else:
+            self.vb = None
+            self._num_volumes = 1
 
         # Prepare flash matching if requested
         self.enable_flash_matching = enable_flash_matching
         self.fm = None
+
+        self._num_volumes = len(np.unique(self.data_blob['cluster_label'][0][:, 0]))
+
         if enable_flash_matching:
             reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
 
@@ -293,9 +276,9 @@ class FullChainPredictor:
             x, y, z, coordinates, Score, Type, and sample index.
         '''
         # Deghosting is already applied during initialization
-        ppn = uresnet_ppn_type_point_selector(self.data_blob['input_data'][entry],
+        ppn = uresnet_ppn_type_point_selector(self.result['input_rescaled'][entry],
                                               self.result,
-                                              entry=entry, apply_deghosting=not self.deghosting)
+                                              entry=entry, apply_deghosting=False)
         ppn_voxels = ppn[:, 1:4]
         ppn_score = ppn[:, 5]
         ppn_type = ppn[:, 12]
@@ -450,7 +433,7 @@ class FullChainPredictor:
         '''
         fragments = self.result['fragment_clusts'][entry]
 
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_frag_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(fragments):
@@ -476,7 +459,7 @@ class FullChainPredictor:
             - labels: 1D numpy integer array of predicted group labels.
         '''
         particles = self.result['particle_clusts'][entry]
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_group_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(particles):
@@ -503,7 +486,7 @@ class FullChainPredictor:
         '''
         inter_group_pred = self.result['particle_group_pred'][entry]
         particles = self.result['particle_clusts'][entry]
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
         pred_inter_labels = -np.ones(num_voxels).astype(int)
 
         for i, mask in enumerate(particles):
@@ -532,7 +515,7 @@ class FullChainPredictor:
         particles = self.result['particle_clusts'][entry]
         type_logits = self.result['particle_node_pred_type'][entry]
         pids = np.argmax(type_logits, axis=1)
-        num_voxels = self.data_blob['input_data'][entry].shape[0]
+        num_voxels = self.result['input_rescaled'][entry].shape[0]
 
         pred_pids = -np.ones(num_voxels).astype(int)
 
@@ -558,45 +541,45 @@ class FullChainPredictor:
         if volume is not None:
             assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
 
-    # def _translate(self, voxels, volume):
-    #     """
-    #     Go from 1-volume-only back to full volume coordinates
+    def _translate(self, voxels, volume):
+        """
+        Go from 1-volume-only back to full volume coordinates
 
-    #     Parameters
-    #     ==========
-    #     voxels: np.ndarray
-    #         Shape (N, 3)
-    #     volume: int
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
 
-    #     Returns
-    #     =======
-    #     np.ndarray
-    #         Shape (N, 3)
-    #     """
-    #     if self.vb is None or volume is None:
-    #         return voxels
-    #     else:
-    #         return self.vb.translate(voxels, volume)
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.translate(voxels, volume)
 
-    # def _untranslate(self, voxels, volume):
-    #     """
-    #     Go from full volume to 1-volume-only coordinates
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
 
-    #     Parameters
-    #     ==========
-    #     voxels: np.ndarray
-    #         Shape (N, 3)
-    #     volume: int
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
 
-    #     Returns
-    #     =======
-    #     np.ndarray
-    #         Shape (N, 3)
-    #     """
-    #     if self.vb is None or volume is None:
-    #         return voxels
-    #     else:
-    #         return self.vb.untranslate(voxels, volume)
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
@@ -639,7 +622,7 @@ class FullChainPredictor:
 
         out_fragment_list = []
 
-        point_cloud = self.data_blob['input_data'][entry][:, 1:4]
+        point_cloud = self.result['input_rescaled'][entry][:, 1:4]
         depositions = self.result['input_rescaled'][entry][:, 4]
         fragments = self.result['fragment_clusts'][entry]
         fragments_seg = self.result['fragment_seg'][entry]
@@ -647,9 +630,9 @@ class FullChainPredictor:
         shower_mask = np.isin(fragments_seg, self.module_config['grappa_shower']['base']['node_type'])
         shower_frag_primary = np.argmax(self.result['shower_fragment_node_pred'][entry], axis=1)
 
-        if 'shower_node_features' in self.result:
+        if 'shower_fragment_node_features' in self.result:
             shower_node_features = self.result['shower_fragment_node_features'][entry]
-        if 'track_node_features' in self.result:
+        if 'track_fragment_node_features' in self.result:
             track_node_features = self.result['track_fragment_node_features'][entry]
 
         assert len(fragments_seg) == len(fragments)
@@ -789,8 +772,8 @@ class FullChainPredictor:
 
         # Loop over images
 
-        volume_labels    = self.data_blob['input_data'][entry][:, 0]
-        point_cloud      = self.data_blob['input_data'][entry][:, 1:4]
+        volume_labels    = self.result['input_rescaled'][entry][:, 0]
+        point_cloud      = self.result['input_rescaled'][entry][:, 1:4]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particle_clusts'][entry]
         # inter_group_pred = self.result['inter_group_pred'][entry]
@@ -900,7 +883,8 @@ class FullChainPredictor:
                          volume=None,
                          compute_vertex=True, 
                          use_primaries_for_vertex=True, 
-                         vertex_mode=None) -> List[Interaction]:
+                         vertex_mode=None,
+                         tag_pi0=False) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
@@ -934,7 +918,7 @@ class FullChainPredictor:
         particles = self.get_particles(entry, 
             only_primaries=drop_nonprimary_particles, 
             volume=volume)
-        out = group_particles_to_interactions_fn(particles)
+        out = group_particles_to_interactions_fn(particles, mode='pred', tag_pi0=tag_pi0)
         for ia in out:
             if compute_vertex:
                 ia.vertex, ia.vertex_candidate_count = estimate_vertex(
