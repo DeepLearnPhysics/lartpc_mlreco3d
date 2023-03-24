@@ -49,7 +49,7 @@ def evaluate(filenames, mode='per_image'):
                     max_iteration = len(loader.dataset)
                 assert max_iteration <= len(loader.dataset)
             else:
-                file_path = analysis_config['reader']['file_paths']
+                file_keys = analysis_config['reader']['file_keys']
                 entry_list = analysis_config['reader']['entry_list']
                 skip_entry_list = analysis_config['reader']['skip_entry_list']
                 Reader = HDF5Reader(file_paths, entry_list, skip_entry_list, True)
