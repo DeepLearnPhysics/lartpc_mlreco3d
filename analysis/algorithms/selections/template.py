@@ -2,8 +2,7 @@ from collections import OrderedDict
 import os, copy, sys
 
 # Flash Matching
-sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
-
+# sys.path.append('/sdf/group/neutrino/koh0207/OpT0Finder/python')
 
 from analysis.decorator import evaluate
 from analysis.classes.evaluator import FullChainEvaluator
@@ -36,6 +35,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     vertex_mode           = analysis_cfg['analysis']['vertex_mode']
     matching_mode         = analysis_cfg['analysis']['matching_mode']
     compute_energy        = analysis_cfg['analysis'].get('compute_energy', False)
+    flash_matching_cfg    = analysis_cfg['analysis'].get('flash_matching_cfg', '')
 
     # FullChainEvaluator config
     processor_cfg         = analysis_cfg['analysis'].get('processor_cfg', {})
@@ -61,12 +61,11 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     # Load data into evaluator
     if enable_flash_matching:
         predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
-                deghosting=deghosting,
                 enable_flash_matching=enable_flash_matching,
-                flash_matching_cfg="/sdf/group/neutrino/koh0207/logs/nu_selection/flash_matching/config/flashmatch.cfg",
+                flash_matching_cfg=flash_matching_cfg,
                 opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
     else:
-        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg, deghosting=deghosting)
+        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg)
 
     image_idxs = data_blob['index']
     spatial_size = predictor.spatial_size

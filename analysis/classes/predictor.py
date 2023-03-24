@@ -17,7 +17,7 @@ from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import get_track_points
 
 from mlreco.utils.gnn.cluster import get_cluster_label
-# from mlreco.utils.volumes import VolumeBoundaries
+from mlreco.utils.volumes import VolumeBoundaries
 
 
 class FullChainPredictor:
@@ -108,17 +108,20 @@ class FullChainPredictor:
         # split over "virtual" batch ids
         # Note this is different from "self.volume_boundaries" above
         # FIXME rename one or the other to be clearer
-        # boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
-        # if boundaries is not None:
-        #     self.vb = VolumeBoundaries(boundaries)
-        #     self._num_volumes = self.vb.num_volumes()
-        # else:
-        #     self.vb = None
-        #     self._num_volumes = 1
+        boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
+        if boundaries is not None:
+            self.vb = VolumeBoundaries(boundaries)
+            self._num_volumes = self.vb.num_volumes()
+        else:
+            self.vb = None
+            self._num_volumes = 1
 
         # Prepare flash matching if requested
         self.enable_flash_matching = enable_flash_matching
         self.fm = None
+
+        self._num_volumes = len(np.unique(self.data_blob['cluster_label'][0][:, 0]))
+
         if enable_flash_matching:
             reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
 
@@ -538,45 +541,45 @@ class FullChainPredictor:
         if volume is not None:
             assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
 
-    # def _translate(self, voxels, volume):
-    #     """
-    #     Go from 1-volume-only back to full volume coordinates
+    def _translate(self, voxels, volume):
+        """
+        Go from 1-volume-only back to full volume coordinates
 
-    #     Parameters
-    #     ==========
-    #     voxels: np.ndarray
-    #         Shape (N, 3)
-    #     volume: int
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
 
-    #     Returns
-    #     =======
-    #     np.ndarray
-    #         Shape (N, 3)
-    #     """
-    #     if self.vb is None or volume is None:
-    #         return voxels
-    #     else:
-    #         return self.vb.translate(voxels, volume)
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.translate(voxels, volume)
 
-    # def _untranslate(self, voxels, volume):
-    #     """
-    #     Go from full volume to 1-volume-only coordinates
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
 
-    #     Parameters
-    #     ==========
-    #     voxels: np.ndarray
-    #         Shape (N, 3)
-    #     volume: int
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
 
-    #     Returns
-    #     =======
-    #     np.ndarray
-    #         Shape (N, 3)
-    #     """
-    #     if self.vb is None or volume is None:
-    #         return voxels
-    #     else:
-    #         return self.vb.untranslate(voxels, volume)
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
