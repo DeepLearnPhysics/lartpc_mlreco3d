@@ -1,5 +1,6 @@
 import numpy as np
 import plotly.graph_objs as go
+from mlreco.utils.numba_local import closest_pair
 
 def scatter_clusters(voxels, labels, clusters, markersize=5, colorscale='Viridis'):
     """
@@ -229,12 +230,10 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
                                  **kwargs) for i, c in enumerate(clusters)]
 
         # Define the edges closest pixel to closest pixel
-        import scipy as sp
         edge_vertices = []
         for i, j in edge_index:
             vi, vj = voxels[clusters[i]], voxels[clusters[j]]
-            d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
-            i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
+            i1, i2, _ = closest_pair(vi, vj, 'recursive')
             edge_vertices.append([vi[i1], vj[i2], [None, None, None]])
 
         if draw_edges:
@@ -270,12 +269,10 @@ def network_topology(voxels, clusters, edge_index=[], clust_labels=[], edge_labe
 
         # Define the edges closest pixel to closest pixel
         if draw_edges:
-            import scipy as sp
             edge_vertices = []
             for i, j in edge_index:
                 vi, vj = voxels[clusters[i]], voxels[clusters[j]]
-                d12 = sp.spatial.distance.cdist(vi, vj, 'euclidean')
-                i1, i2 = np.unravel_index(np.argmin(d12), d12.shape)
+                i1, i2, _ = closest_pair(vi, vj, 'recursive')
                 edge_vertices.append([vi[i1], vj[i2], [None, None, None]])
 
             edge_vertices = np.concatenate(edge_vertices)
