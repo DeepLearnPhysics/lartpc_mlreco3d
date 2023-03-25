@@ -29,7 +29,7 @@ def evaluate(filenames, mode='per_image'):
 
             assert cfg is not None or 'reader' in analysis_config
             max_iteration = analysis_config['analysis']['iteration']
-            if cfg is not None:
+            if 'reader' not in analysis_config:
                 io_cfg = cfg['iotool']
 
                 module_config = cfg['model']['modules']
@@ -74,7 +74,7 @@ def evaluate(filenames, mode='per_image'):
             while iteration < max_iteration:
                 if profile:
                     start = time.time()
-                if cfg is not None:
+                if 'reader' not in analysis_config:
                     data_blob, res = Trainer.forward(dataset)
                 else:
                     data_blob, res = Reader.get(iteration, nested=True)
