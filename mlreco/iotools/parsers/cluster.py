@@ -141,7 +141,7 @@ def parse_cluster3d(cluster_event,
         assert particle_event is not None, "Must provide particle tree if particle information is included"
         particles_v     = particle_event.as_vector()
         particles_mpv_v = particle_mpv_event.as_vector() if particle_mpv_event is not None else None
-        particles_voxel = parse_particles(particle_event, cluster_event)
+        particles_v_v   = parse_particles(particle_event, cluster_event)
 
         labels['cluster'] = np.array([p.id() for p in particles_v])
         labels['group']   = np.array([p.group_id() for p in particles_v])
@@ -150,9 +150,9 @@ def parse_cluster3d(cluster_event,
         labels['type']    = get_particle_id(particles_v, labels['nu'], type_include_mpr, type_include_secondary)
         labels['pshower'] = get_shower_primary_id(cluster_event, particles_v)
         labels['pgroup']  = get_group_primary_id(particles_v, labels['nu'], primary_include_mpr)
-        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v])
-        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v])
-        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v])
+        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v_v])
+        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v_v])
+        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v_v])
         labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
         labels['shape']   = np.array([p.shape() for p in particles_v])
 

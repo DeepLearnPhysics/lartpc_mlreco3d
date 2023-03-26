@@ -76,7 +76,7 @@ def process_config(cfg, verbose=True):
                 cfg['iotool']['sampler']['seed'] = int(cfg['iotool']['sampler']['seed'])
 
         # Batch size checker
-        if cfg['iotool'].get('minibatch_size',None) is None:
+        if cfg['iotool'].get('minibatch_size', None) is None:
             cfg['iotool']['minibatch_size'] = -1
         if cfg['iotool']['batch_size'] < 0 and cfg['iotool']['minibatch_size'] < 0:
             raise ValueError('Cannot have both BATCH_SIZE (-bs) and MINIBATCH_SIZE (-mbs) negative values!')
