@@ -1,6 +1,8 @@
 from typing import List
 import numpy as np
 
+from mlreco.utils.globals import VTX_COLS
+
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.particle import (match_particles_fn, 
                                        match_interactions_fn, 
@@ -474,7 +476,7 @@ class FullChainEvaluator(FullChainPredictor):
                             self.data_blob['cluster_label'],
                             data_idx=entry,
                             inter_idx=inter_idx,
-                            vtx_col=12)
+                            vtx_col=VTX_COLS[0])
             out[inter_idx] = vtx
 
         return out
