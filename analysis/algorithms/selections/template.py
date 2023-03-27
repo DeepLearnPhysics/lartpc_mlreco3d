@@ -36,6 +36,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     matching_mode         = analysis_cfg['analysis']['matching_mode']
     compute_energy        = analysis_cfg['analysis'].get('compute_energy', False)
     flash_matching_cfg    = analysis_cfg['analysis'].get('flash_matching_cfg', '')
+    tag_pi0               = analysis_cfg['analysis'].get('tag_pi0', False)
 
     # FullChainEvaluator config
     processor_cfg         = analysis_cfg['analysis'].get('processor_cfg', {})
@@ -93,7 +94,8 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             compute_vertex=compute_vertex,
             vertex_mode=vertex_mode,
             overlap_mode=predictor.overlap_mode,
-            matching_mode=matching_mode)
+            matching_mode=matching_mode,
+            tag_pi0=tag_pi0)
 
         # 1 a) Check outputs from interaction matching 
         if len(matches) == 0:

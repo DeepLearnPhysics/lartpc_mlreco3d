@@ -19,6 +19,8 @@ from analysis.algorithms.utils import get_track_points
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.volumes import VolumeBoundaries
 
+from scipy.special import softmax
+
 
 class FullChainPredictor:
     '''
@@ -85,6 +87,7 @@ class FullChainPredictor:
         self.prune_vertex = predictor_cfg.get('prune_vertex', True)
         self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
         self.track_point_corrector = predictor_cfg.get('track_point_corrector', 'ppn')
+        self.primary_score_threshold = predictor_cfg.get('primary_score_threshold', None)
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
@@ -798,13 +801,24 @@ class FullChainPredictor:
 
         assert node_pred_vtx.shape[0] == len(particles)
         primary_labels = -np.ones(len(node_pred_vtx)).astype(int)
+        primary_scores = np.zeros(len(node_pred_vtx)).astype(float)
         if self.pred_vtx_positions:
             assert node_pred_vtx.shape[1] == 5
-            primary_labels = np.argmax(node_pred_vtx[:, 3:], axis=1)
+            # primary_labels = np.argmax(node_pred_vtx[:, 3:], axis=1)
+            primary_scores = node_pred_vtx[:, 3:]
         else:
             assert node_pred_vtx.shape[1] == 2
-            primary_labels = np.argmax(node_pred_vtx, axis=1)
+            # primary_labels = np.argmax(node_pred_vtx, axis=1)
+            primary_scores = node_pred_vtx
+
+        primary_scores = softmax(node_pred_vtx, axis=1)
+        
         assert primary_labels.shape[0] == len(particles)
+
+        if self.primary_score_threshold is None:
+            primary_labels = np.argmax(node_pred_vtx, axis=1)
+        else:
+            primary_labels = node_pred_vtx[:, 0] > self.primary_score_threshold
 
         if ('particle_group_pred' in self.result) and ('particle_clusts' in self.result) and len(particles) > 0:
 
