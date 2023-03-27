@@ -319,7 +319,7 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def get_true_particles(self, entry, only_primaries=True,
-                           verbose=False) -> List[TruthParticle]:
+                           verbose=False, volume=None) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id.
 
@@ -372,15 +372,16 @@ class FullChainEvaluator(FullChainPredictor):
                 mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
 
             coords = self.result['input_rescaled'][entry][mask][:, 1:4]
-            volume_labels = self.result['input_rescaled'][entry][mask][:, 0]
-            volume_id, cts = np.unique(volume_labels, return_counts=True)
-            volume_id = int(volume_id[cts.argmax()])
             voxel_indices = np.where(mask)[0]
             fragments = np.unique(labels[mask][:, 5].astype(int))
             depositions_MeV = labels[mask][:, 4]
             depositions = rescaled_input_charge[mask] # Will be in ADC
             coords_noghost = labels_noghost[mask_noghost][:, 1:4]
             depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+
+            volume_labels = labels_noghost[mask_noghost][:, 0]
+            volume_id, cts = np.unique(volume_labels, return_counts=True)
+            volume_id = int(volume_id[cts.argmax()])
 
             # 2. Process particle-level labels
             if p.pdg_code() not in TYPE_LABELS:
@@ -426,6 +427,8 @@ class FullChainEvaluator(FullChainPredictor):
 
         if only_primaries:
             out_particles_list = [p for p in out_particles_list if p.is_primary]
+        if volume is not None:
+            out_particles_list = [p for p in out_particles_list if p.volume == volume]
 
         return out_particles_list
 
@@ -433,12 +436,15 @@ class FullChainEvaluator(FullChainPredictor):
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=-1,
                               compute_vertex=True,
+                              volume=None,
                               tag_pi0=False) -> List[Interaction]:
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
         out = []
-        true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles)
+        true_particles = self.get_true_particles(entry, 
+                                                 only_primaries=drop_nonprimary_particles,
+                                                 volume=volume)
         out = group_particles_to_interactions_fn(true_particles,
                                                  get_nu_id=True, 
                                                  mode='truth',
@@ -448,7 +454,6 @@ class FullChainEvaluator(FullChainPredictor):
         for ia in out:
             if compute_vertex and ia.id in vertices:
                 ia.vertex = vertices[ia.id]
-            # ia.volume = volume
 
         return out
 

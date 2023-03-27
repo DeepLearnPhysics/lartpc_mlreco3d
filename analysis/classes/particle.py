@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from typing import Counter, List, Union
-from collections import defaultdict, OrderedDict
+from typing import List, Union
+from collections import defaultdict, OrderedDict, Counter
 from functools import partial
 from itertools import combinations
 import re
@@ -461,15 +461,22 @@ def group_particles_to_interactions_fn(particles : List[Particle],
                 nu_id = nu_id[0]
             else:
                 nu_id = nu_id[0]
+
+        counter = Counter([p.volume for p in particles if p.volume != -1])
+        if not bool(counter):
+            volume_id = -1
+        else:
+            volume_id = counter.most_common(1)[0][0]
         particles_dict = OrderedDict({p.id : p for p in particles})
         if mode == 'pred':
-            interactions[int_id] = Interaction(int_id, particles_dict, nu_id=nu_id)
+            interactions[int_id] = Interaction(int_id, particles_dict, nu_id=nu_id, volume=volume_id)
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction(int_id, particles_dict, nu_id=nu_id)
+            interactions[int_id] = TruthInteraction(int_id, particles_dict, nu_id=nu_id, volume=volume_id)
         else:
             raise ValueError
         if tag_pi0:
             tagged = tag_neutral_pions(particles, mode=mode)
             interactions[int_id]._pi0_tagged_photons = tagged
+        
 
     return list(interactions.values())

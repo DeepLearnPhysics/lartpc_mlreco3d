@@ -875,6 +875,9 @@ class FullChainPredictor:
             else:
                 continue
 
+        if volume is not None:
+            out = [p for p in out if p.volume == volume]
+
         return out
 
 
