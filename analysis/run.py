@@ -27,6 +27,7 @@ def main(analysis_cfg_path, model_cfg_path):
 
     analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
     config = yaml.safe_load(open(model_cfg_path, 'r'))
+    process_config(config, verbose=False)
     
     pprint(analysis_config)
     if 'analysis' not in analysis_config:
