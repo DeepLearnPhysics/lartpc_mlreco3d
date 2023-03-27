@@ -818,7 +818,7 @@ class FullChainPredictor:
         if self.primary_score_threshold is None:
             primary_labels = np.argmax(node_pred_vtx, axis=1)
         else:
-            primary_labels = node_pred_vtx[:, 0] > self.primary_score_threshold
+            primary_labels = node_pred_vtx[:, 1] > self.primary_score_threshold
 
         if ('particle_group_pred' in self.result) and ('particle_clusts' in self.result) and len(particles) > 0:
 
