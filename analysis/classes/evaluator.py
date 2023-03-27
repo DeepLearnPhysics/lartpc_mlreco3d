@@ -127,12 +127,6 @@ class FullChainEvaluator(FullChainPredictor):
                 - parse_particle_points_with_tagging
                 - sparse3d_pcluster
                 - particle_corrected
-            kinematics_label:
-                - parse_cluster3d_kinematics_clean
-                - cluster3d_pcluster
-                - particle_corrected
-                #- particle_mpv
-                - sparse3d_pcluster_semantics
             particle_graph:
                 - parse_particle_graph_corrected
                 - particle_corrected
@@ -476,10 +470,11 @@ class FullChainEvaluator(FullChainPredictor):
         for inter_idx in inter_idxs:
             if inter_idx < 0:
                 continue
-            vtx = get_vertex(self.data_blob['kinematics_label'],
+            vtx = get_vertex(self.data_blob['cluster_label'],
                             self.data_blob['cluster_label'],
                             data_idx=entry,
-                            inter_idx=inter_idx)
+                            inter_idx=inter_idx,
+                            vtx_col=12)
             out[inter_idx] = vtx
 
         return out
