@@ -76,10 +76,11 @@ def process_config(cfg, verbose=True):
                 cfg['iotool']['sampler']['seed'] = int(cfg['iotool']['sampler']['seed'])
 
         # Batch size checker
-        if cfg['iotool'].get('minibatch_size',None) is None:
+        if cfg['iotool'].get('minibatch_size', None) is None:
             cfg['iotool']['minibatch_size'] = -1
         if cfg['iotool']['batch_size'] < 0 and cfg['iotool']['minibatch_size'] < 0:
             raise ValueError('Cannot have both BATCH_SIZE (-bs) and MINIBATCH_SIZE (-mbs) negative values!')
+
         # Assign non-default values
         num_gpus = 1
         if 'trainval' in cfg:
@@ -88,6 +89,7 @@ def process_config(cfg, verbose=True):
             cfg['iotool']['batch_size'] = int(cfg['iotool']['minibatch_size'] * num_gpus)
         if cfg['iotool']['minibatch_size'] < 0:
             cfg['iotool']['minibatch_size'] = int(cfg['iotool']['batch_size'] / num_gpus)
+
         # Check consistency
         if not (cfg['iotool']['batch_size'] % (cfg['iotool']['minibatch_size'] * num_gpus)) == 0:
             raise ValueError('BATCH_SIZE (-bs) must be multiples of MINIBATCH_SIZE (-mbs) and GPU count (--gpus)!')
@@ -149,6 +151,7 @@ def prepare(cfg, event_list=None):
     # IO writer
     handlers.writer = writer_factory(cfg)
 
+
     if 'trainval' in cfg:
         # Set random seed for reproducibility
         np.random.seed(cfg['trainval']['seed'])
@@ -172,12 +175,16 @@ def prepare(cfg, event_list=None):
         if cfg['trainval']['train']:
             handlers.iteration = loaded_iteration
 
+        # If the number of iterations is negative, run over the whole dataset once
+        if cfg['trainval']['iterations'] < 0:
+            cfg['trainval']['iterations'] = len(handlers.data_io)
+
         make_directories(cfg, loaded_iteration, handlers=handlers)
 
     return handlers
 
 
-def apply_event_filter(handlers,event_list=None):
+def apply_event_filter(handlers, event_list=None):
     """
     Reconfigures IO to apply an event filter
     INPUT:

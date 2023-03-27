@@ -29,7 +29,7 @@ def evaluate(filenames, mode='per_image'):
 
             assert cfg is not None or 'reader' in analysis_config
             max_iteration = analysis_config['analysis']['iteration']
-            if cfg is not None:
+            if 'reader' not in analysis_config:
                 io_cfg = cfg['iotool']
 
                 module_config = cfg['model']['modules']
@@ -49,10 +49,10 @@ def evaluate(filenames, mode='per_image'):
                     max_iteration = len(loader.dataset)
                 assert max_iteration <= len(loader.dataset)
             else:
-                file_path = analysis_config['reader']['file_paths']
-                entry_list = analysis_config['reader']['entry_list']
-                skip_entry_list = analysis_config['reader']['skip_entry_list']
-                Reader = HDF5Reader(file_paths, entry_list, skip_entry_list, True)
+                file_keys = analysis_config['reader']['file_keys']
+                entry_list = analysis_config['reader'].get('entry_list', [])
+                skip_entry_list = analysis_config['reader'].get('skip_entry_list', [])
+                Reader = HDF5Reader(file_keys, entry_list, skip_entry_list, True)
                 if max_iteration == -1:
                     max_iteration = len(Reader)
                 assert max_iteration <= len(Reader)
@@ -74,7 +74,7 @@ def evaluate(filenames, mode='per_image'):
             while iteration < max_iteration:
                 if profile:
                     start = time.time()
-                if cfg is not None:
+                if 'reader' not in analysis_config:
                     data_blob, res = Trainer.forward(dataset)
                 else:
                     data_blob, res = Reader.get(iteration, nested=True)

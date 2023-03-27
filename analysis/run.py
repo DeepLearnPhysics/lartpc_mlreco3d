@@ -26,10 +26,7 @@ from analysis.algorithms.selections import *
 def main(analysis_cfg_path, model_cfg_path):
 
     analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
-    config = None
-    if model_cfg_path is not None:
-        config = yaml.safe_load(open(model_cfg_path, 'r'))
-        process_config(config, verbose=False)
+    config = yaml.safe_load(open(model_cfg_path, 'r'))
     
     pprint(analysis_config)
     if 'analysis' not in analysis_config:

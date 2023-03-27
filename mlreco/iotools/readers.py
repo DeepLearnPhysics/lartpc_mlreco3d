@@ -10,7 +10,7 @@ class HDF5Reader:
     More documentation to come.
     '''
     
-    def __init__(self, file_keys, entry_list=[], skip_entry_list=[], larcv_particles=False):
+    def __init__(self, file_keys, entry_list=[], skip_entry_list=[], to_larcv=False):
         '''
         Load up the HDF5 file.
 
@@ -47,8 +47,8 @@ class HDF5Reader:
         self.entry_list = self.get_entry_list(entry_list, skip_entry_list)
         self.file_index = self.file_index[self.entry_list]
 
-        # Set whether or not to load true particle objects as LArCV particles
-        self.larcv_particles = larcv_particles
+        # Set whether or not to initialize LArCV objects as such
+        self.to_larcv = to_larcv
 
     def __len__(self):
         '''
@@ -169,11 +169,11 @@ class HDF5Reader:
                 # If the reference points at a simple dataset, return
                 blob[key] = group[key][region_ref]
             else:
-                # If the dataset has multiple attributes, it contains particle info
+                # If the dataset has multiple attributes, it contains an object
                 array = group[key][region_ref]
                 names = array.dtype.names
-                if self.larcv_particles:
-                    blob[key] = self.make_larcv_particles(array, names)
+                if self.to_larcv:
+                    blob[key] = self.make_larcv_objects(array, names)
                 else:
                     blob[key] = []
                     for i in range(len(array)):
@@ -191,40 +191,54 @@ class HDF5Reader:
             blob[key] = [blob[key]]
 
     @staticmethod
-    def make_larcv_particles(array, names):
+    def make_larcv_objects(array, names):
         '''
-        Rebuild `larcv.Particle` objects from the stored information
+        Rebuild `larcv` objects from the stored information. Supports
+        `larcv.Particle`, `larcv.Neutrino`, `larcv.Flash` and `larcv.CRTHit`
 
         Parameters
         ----------
         array : list
-            List of dictionary of particle information
+            List of dictionary of larcv object attributes
         names: 
             List of class attribute names
 
         Returns
         -------
         list
-            List of filled larcv.Particle objects
+            List of filled `larcv` objects
         '''
         from larcv import larcv
+        if len(array):
+            obj_class = larcv.Particle
+            if 'bjorken_x' in names: obj_class = larcv.Neutrino
+            elif 'TotalPE' in names: obj_class = larcv.Flash
+            elif 'tagger'  in names: obj_class = larcv.CRTHit
+
         ret = []
         for i in range(len(array)):
-            # Initialize new larcv.Particle object
-            part_dict = array[i]
-            particle = larcv.Particle()
+            # Initialize new larcv.Particle or larcv.Neutrino object
+            obj_dict = array[i]
+            obj = obj_class()
 
             # Momentum is particular, deal with it first
-            particle.momentum(part_dict['px'], part_dict['py'], part_dict['pz'])
+            if isinstance(obj, (larcv.Particle, larcv.Neutrino)):
+                obj.momentum(*[obj_dict[f'p{k}'] for k in ['x', 'y', 'z']])
+
+            # Trajectory for neutrino is also particular, deal with it
+            if isinstance(obj, larcv.Neutrino):
+                obj.add_trajectory_point(*[obj_dict[f'traj_{k}'] for k in ['x', 'y', 'z', 't', 'px', 'py', 'pz', 'e']])
+
+            # Now deal with the rest
             for name in names:
-                if name in ['px', 'py', 'pz', 'p']:
-                    continue # Addressed by the momentum setter
+                if name in ['px', 'py', 'pz', 'p', 'TotalPE'] or name[:5] == 'traj_':
+                    continue # Addressed by other setters
                 if 'position' in name or 'step' in name:
-                    getattr(particle, name)(*part_dict[name])
+                    getattr(obj, name)(*obj_dict[name])
                 else:
                     cast = lambda x: x.item() if type(x) != bytes and not isinstance(x, np.ndarray) else x
-                    getattr(particle, name)(cast(part_dict[name]))
+                    getattr(obj, name)(cast(obj_dict[name]))
 
-            ret.append(particle)
+            ret.append(obj)
 
         return ret

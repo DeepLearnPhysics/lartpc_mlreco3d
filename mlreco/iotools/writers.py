@@ -102,6 +102,7 @@ class HDF5Writer:
         if not isinstance(blob[key], list):
             # Single scalar (TODO: Is that thing? If not, why not?)
             self.key_dict[key]['dtype'] = type(blob[key])
+
         else:
             if len(blob[key]) != self.batch_size:
                 # List with a single scalar, regardless of batch_size
@@ -111,22 +112,50 @@ class HDF5Writer:
                         'If there is an array of length mismatched with batch_size, '+\
                         'it must contain a single scalar.'
                 self.key_dict[key]['dtype'] = type(blob[key][0])
+
             elif not hasattr(blob[key][0], '__len__'):
                 # List containing a single scalar per batch ID
                 self.key_dict[key]['dtype'] = type(blob[key][0])
+
             elif isinstance(blob[key][0], (list, np.ndarray)) and\
                     isinstance(blob[key][0][0], larcv.Particle):
                 # List containing a single list of larcv.Particle object per batch ID
-                self.key_dict[key]['dtype'] = self.get_particle_dtype(blob[key][0][0])
+                if not hasattr(self, 'particle_dtype'):
+                    self.particle_dtype = self.get_object_dtype(blob[key][0][0])
+                self.key_dict[key]['dtype'] = self.particle_dtype
+
+            elif isinstance(blob[key][0], (list, np.ndarray)) and\
+                    isinstance(blob[key][0][0], larcv.Neutrino):
+                # List containing a single list of larcv.Neutrino object per batch ID
+                if not hasattr(self, 'neutrino_dtype'):
+                    self.neutrino_dtype = self.get_object_dtype(blob[key][0][0])
+                self.key_dict[key]['dtype'] = self.neutrino_dtype
+
+            elif isinstance(blob[key][0], (list, np.ndarray)) and\
+                    isinstance(blob[key][0][0], larcv.Flash):
+                # List containing a single list of larcv.Flash object per batch ID
+                if not hasattr(self, 'flash_dtype'):
+                    self.flash_dtype = self.get_object_dtype(blob[key][0][0])
+                self.key_dict[key]['dtype'] = self.flash_dtype
+
+            elif isinstance(blob[key][0], (list, np.ndarray)) and\
+                    isinstance(blob[key][0][0], larcv.CRTHit):
+                # List containing a single list of larcv.CRTHit object per batch ID
+                if not hasattr(self, 'crthit_dtype'):
+                    self.crthit_dtype = self.get_object_dtype(blob[key][0][0])
+                self.key_dict[key]['dtype'] = self.crthit_dtype
+
             elif isinstance(blob[key][0], list) and\
                     not hasattr(blob[key][0][0], '__len__'):
                 # List containing a single list of scalars per batch ID
                 self.key_dict[key]['dtype'] = type(blob[key][0][0])
+
             elif isinstance(blob[key][0], np.ndarray) and\
                     not blob[key][0].dtype == np.object:
                 # List containing a single ndarray of scalars per batch ID
                 self.key_dict[key]['dtype'] = blob[key][0].dtype
                 self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
+
             elif isinstance(blob[key][0], (list, np.ndarray)) and isinstance(blob[key][0][0], np.ndarray):
                 # List containing a list (or ndarray) of ndarrays per batch ID
                 widths = []
@@ -140,40 +169,43 @@ class HDF5Writer:
             else:
                 raise TypeError('Do not know how to store output of type', type(blob[key][0]))
 
-    def get_particle_dtype(self, particle):
+    def get_object_dtype(self, obj):
         '''
-        Loop over the members of a particle to figure out what to store.
+        Loop over the members of a class to figure out what to store. This
+        function assumes that the the class only posses getters that return
+        either a scalar, a string, a larcv.Vertex, a list, np.ndarrary or a set.
 
         Parameters
         ----------
-        particle : larcv.Particle
-            LArCV particle object used to identify attribute types
+        object : class instance
+            Instance of an object used to identify attribute types
 
         Returns
         -------
         list
             List of (key, dtype) pairs
         '''
-        particle_dtype = []
-        members = inspect.getmembers(larcv.Particle)
-        skip_keys = ['dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d'] +\
+        object_dtype = []
+        members = inspect.getmembers(obj)
+        skip_keys = ['add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d'] +\
                 [k+a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
         attr_names = [k for k, _ in members if '__' not in k and k not in skip_keys]
         for key in attr_names:
-            val = getattr(particle, key)()
+            val = getattr(obj, key)()
             if isinstance(val, (int, float)):
-                particle_dtype.append((key, type(val)))
+                object_dtype.append((key, type(val)))
             elif isinstance(val, str):
-                particle_dtype.append((key, h5py.string_dtype()))
+                object_dtype.append((key, h5py.string_dtype()))
             elif isinstance(val, larcv.Vertex):
-                particle_dtype.append((key, h5py.vlen_dtype(np.float32)))
+                object_dtype.append((key, h5py.vlen_dtype(np.float32)))
             elif hasattr(val, '__len__') and len(val) and isinstance(val[0], (int, float)):
-                particle_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+                object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+            elif hasattr(val, '__len__'):
+                pass # Empty list, no point in storing
             else:
                 raise ValueError('Unexpected key')
 
-        self.particle_dtype = particle_dtype
-        return particle_dtype
+        return object_dtype
 
     def initialize_datasets(self, file):
         '''
@@ -275,16 +307,26 @@ class HDF5Writer:
         val = self.key_dict[key]
         cat = val['category']
         if not val['merge'] and not isinstance(val['width'], list):
-            # Store the scalar. TODO: Does not handle scalars (useful?)
+            # Store single object
             obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
-            if not hasattr(obj, '__len__'): obj = [obj]
-            if not hasattr(self, 'particle_dtype') or val['dtype'] != self.particle_dtype:
-                self.store(file[cat], event, key, obj)
+            if not hasattr(obj, '__len__'):
+                obj = [obj]
+
+            if hasattr(self, 'particle_dtype') and val['dtype'] == self.particle_dtype:
+                self.store_objects(file[cat], event, key, obj, self.particle_dtype)
+            elif hasattr(self, 'neutrino_dtype') and val['dtype'] == self.neutrino_dtype:
+                self.store_objects(file[cat], event, key, obj, self.neutrino_dtype)
+            elif hasattr(self, 'flash_dtype') and val['dtype'] == self.flash_dtype:
+                self.store_objects(file[cat], event, key, obj, self.flash_dtype)
+            elif hasattr(self, 'crthit_dtype') and val['dtype'] == self.crthit_dtype:
+                self.store_objects(file[cat], event, key, obj, self.crthit_dtype)
             else:
-                self.store_particles(file[cat], event, key, obj, self.particle_dtype)
+                self.store(file[cat], event, key, obj)
+
         elif not val['merge']:
             # Store the array and its reference for each element in the list
             self.store_jagged(file[cat], event, key, blob[key][batch_id])
+
         else:
             # Store one array of for all in the list and a index to break them
             self.store_flat(file[cat], event, key, blob[key][batch_id])
@@ -395,10 +437,10 @@ class HDF5Writer:
         event[key] = region_ref
 
     @staticmethod
-    def store_particles(group, event, key, array, particle_dtype):
+    def store_objects(group, event, key, array, obj_dtype):
         '''
-        Stores a list of `larcv.Particle` in the file and stores its mapping
-        in the event dataset.
+        Stores a list of objects with understandable attributes in 
+        the file and stores its mapping in the event dataset.
 
         Parameters
         ----------
@@ -410,28 +452,28 @@ class HDF5Writer:
             Name of the dataset in the file
         array : np.ndarray
             Array to be stored
-        particle_dtype : list
+        obj_dtype : list
             List of (key, dtype) pairs which specify what's to store
         '''
-        # Convert list of larcv.Particle to list of storable objects
-        particles = np.empty(len(array), particle_dtype)
-        for i, p in enumerate(array):
-            for k, dtype in particle_dtype:
-                attr = getattr(p, k)()
+        # Convert list of objects to list of storable objects
+        objects = np.empty(len(array), obj_dtype)
+        for i, o in enumerate(array):
+            for k, dtype in obj_dtype:
+                attr = getattr(o, k)()
                 if isinstance(attr, (int, float, str)):
-                    particles[i][k] = attr
+                    objects[i][k] = attr
                 elif isinstance(attr, larcv.Vertex):
                     vertex = np.array([getattr(attr, a)() for a in ['x', 'y', 'z', 't']], dtype=np.float32)
-                    particles[i][k] = vertex
+                    objects[i][k] = vertex
                 elif hasattr(attr, '__len__'):
                     vals = np.array([attr[i] for i in range(len(attr))], dtype=np.int32)
-                    particles[i][k] = vals
+                    objects[i][k] = vals
 
         # Extend the dataset, store array
         dataset = group[key]
         current_id = len(dataset)
         dataset.resize(current_id + len(array), axis=0)
-        dataset[current_id:current_id + len(array)] = particles
+        dataset[current_id:current_id + len(array)] = objects
 
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
