@@ -54,10 +54,7 @@ class FullChainPredictor:
     '''
     def __init__(self, data_blob, result, cfg, predictor_cfg={},
                  enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
-        self.module_config = cfg['model']['modules']
-        self.cfg = cfg
-
-        self.pred_vtx_positions = self.module_config['grappa_inter']['vertex_net'].get('pred_vtx_positions', None)
+        # self.module_config = cfg['model']['modules']
         self.data_blob = data_blob
         self.result = result
 
@@ -123,7 +120,7 @@ class FullChainPredictor:
         self.enable_flash_matching = enable_flash_matching
         self.fm = None
 
-        self._num_volumes = len(np.unique(self.data_blob['cluster_label'][0][:, 0]))
+        self._num_volumes = len(np.unique(self.result['input_rescaled'][0][:, 0]))
 
         if enable_flash_matching:
             reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
@@ -352,8 +349,8 @@ class FullChainPredictor:
         index_mapping = { key : val for key, val in zip(
            range(0, len(graph_info.Index.unique())), self.index)}
 
-        min_points = self.module_config['graph_spice'].get('min_points', 1)
-        invert = self.module_config['graph_spice_loss'].get('invert', True)
+        # min_points = self.module_config['graph_spice'].get('min_points', 1)
+        # invert = self.module_config['graph_spice_loss'].get('invert', True)
 
         graph_info['Index'] = graph_info['Index'].map(index_mapping)
         constructor_cfg = self.cluster_graph_constructor.constructor_cfg
@@ -363,8 +360,8 @@ class FullChainPredictor:
                                              batch_col=0,
                                              training=False)
         pred, G, subgraph = gs_manager.fit_predict_one(entry,
-                                                       invert=invert,
-                                                       min_points=min_points)
+                                                       invert=True,
+                                                       min_points=1)
 
         return pred, G, subgraph
 
@@ -588,7 +585,7 @@ class FullChainPredictor:
                       min_particle_voxel_count=-1,
                       attaching_threshold=2,
                       semantic_type=None, verbose=False,
-                      true_id=False, volume=None) -> List[Particle]:
+                      true_id=False, volume=None, allow_nodes=[0, 2, 3]) -> List[Particle]:
         '''
         Method for retriving fragment list for given batch index.
 
@@ -630,7 +627,7 @@ class FullChainPredictor:
         fragments = self.result['fragment_clusts'][entry]
         fragments_seg = self.result['fragment_seg'][entry]
 
-        shower_mask = np.isin(fragments_seg, self.module_config['grappa_shower']['base']['node_type'])
+        shower_mask = np.isin(fragments_seg, allow_nodes)
         shower_frag_primary = np.argmax(self.result['shower_fragment_node_pred'][entry], axis=1)
 
         if 'shower_fragment_node_features' in self.result:
@@ -802,14 +799,14 @@ class FullChainPredictor:
         assert node_pred_vtx.shape[0] == len(particles)
         primary_labels = -np.ones(len(node_pred_vtx)).astype(int)
         primary_scores = np.zeros(len(node_pred_vtx)).astype(float)
-        if self.pred_vtx_positions:
-            assert node_pred_vtx.shape[1] == 5
+        if node_pred_vtx.shape[1] == 5:
             # primary_labels = np.argmax(node_pred_vtx[:, 3:], axis=1)
             primary_scores = node_pred_vtx[:, 3:]
-        else:
-            assert node_pred_vtx.shape[1] == 2
+        elif node_pred_vtx.shape[1] == 2:
             # primary_labels = np.argmax(node_pred_vtx, axis=1)
             primary_scores = node_pred_vtx
+        else:
+            raise ValueError('<node_pred_vtx> must either be (N, 5) or (N, 2)')
 
         primary_scores = softmax(node_pred_vtx, axis=1)
         

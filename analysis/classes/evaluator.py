@@ -473,7 +473,7 @@ class FullChainEvaluator(FullChainPredictor):
         """
         out = {}
         inter_idxs = np.unique(
-            self.result['cluster_label_adapted'][entry][:, 7].astype(int))
+            self.data_blob['cluster_label'][entry][:, 7].astype(int))
         for inter_idx in inter_idxs:
             if inter_idx < 0:
                 continue
