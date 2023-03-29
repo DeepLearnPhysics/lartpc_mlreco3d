@@ -417,7 +417,6 @@ def _tag_neutral_pions_reco(particles, threshold=5):
             out.append((p1.id, p2.id))
     return out
 
-
 def tag_neutral_pions(particles, mode):
     if mode == 'truth':
         return _tag_neutral_pions_true(particles)

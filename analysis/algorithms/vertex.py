@@ -56,11 +56,13 @@ def get_track_shower_poca(particles, return_annot=False, start_segment_radius=10
     '''
     
     candidates = []
+
+    valid_particles = [p for p in particles if len(p.points) > 0]
     
-    track_ids, shower_ids = np.array([p.id for p in particles if p.semantic_type == 1]), []
-    track_starts = np.array([p.startpoint for p in particles if p.semantic_type == 1])
+    track_ids, shower_ids = np.array([p.id for p in valid_particles if p.semantic_type == 1]), []
+    track_starts = np.array([p.startpoint for p in valid_particles if p.semantic_type == 1])
     shower_starts, shower_dirs = [], []
-    for p in particles:
+    for p in valid_particles:
         vec = get_particle_direction(p, optimize=True)
         if p.semantic_type == 0 and (vec != -1).all():
             shower_dirs.append(vec)
@@ -120,20 +122,20 @@ def compute_vertex_matrix_inversion(particles,
     """
     pseudovtx = np.zeros((dim, ))
 
+    valid_particles = [p for p in particles if len(p.points) > 0]
+
     if use_primaries:
-        particles = [p for p in particles if (p.is_primary and p.startpoint is not None)]
+        valid_particles = [p for p in valid_particles if (p.is_primary and p.startpoint is not None)]
         
-    if len(particles) < 2:
+    if len(valid_particles) < 2:
         return np.array([-1, -1, -1])
         
     S = np.zeros((dim, dim))
     C = np.zeros((dim, ))
         
-    for p in particles:
+    for p in valid_particles:
         vec = get_particle_direction(p, optimize=True)
         w = 1.0
-        # if weight:
-        #     w = np.exp(-(var[0] - 1)**2 / (2.0 * var_sigma)**2)
         S += w * (np.outer(vec, vec) - np.eye(dim))
         C += w * (np.outer(vec, vec) - np.eye(dim)) @ p.startpoint
     # print(S, C)
