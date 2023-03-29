@@ -17,7 +17,7 @@ from analysis.algorithms.utils import get_interaction_properties, \
 
 from analysis.algorithms.calorimetry import get_csda_range_spline
 
-@evaluate(['particles'], mode='per_batch')
+@evaluate(['particles'])
 def run_inference_particles(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Analysis tools inference script for particle-level information.

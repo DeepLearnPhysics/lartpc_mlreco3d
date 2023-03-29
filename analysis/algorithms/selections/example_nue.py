@@ -10,7 +10,7 @@ import time, os
 import numpy as np
 
 
-@evaluate(['interactions', 'particles'], mode='per_batch')
+@evaluate(['interactions', 'particles'])
 def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Example of analysis script for nue analysis.

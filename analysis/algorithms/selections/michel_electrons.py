@@ -142,7 +142,7 @@ def find_true_cosmic_angle(muon, michel, particles_asis_voxels, radius=30):
     endpoint = muon.points[muon_id]
     return find_cosmic_angle(muon, michel, endpoint, radius=radius)
 
-@evaluate(['michels_pred', 'michels_true'], mode='per_batch')
+@evaluate(['michels_pred', 'michels_true'])
 def michel_electrons(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Selection of Michel electrons

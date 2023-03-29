@@ -14,7 +14,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 
-@evaluate(['stopping_muons_cells', 'stopping_muons_pred', 'stopping_muons_true'], mode='per_batch')
+@evaluate(['stopping_muons_cells', 'stopping_muons_pred', 'stopping_muons_true'])
 def stopping_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Selection of stopping muons

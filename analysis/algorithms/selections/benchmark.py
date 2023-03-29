@@ -7,7 +7,7 @@ import time
 import numpy as np
 import os, sys
 
-@evaluate(['test'], mode='per_batch')
+@evaluate(['test'])
 def benchmark(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Dummy script to see how long FullChainEvaluator initialization takes.
