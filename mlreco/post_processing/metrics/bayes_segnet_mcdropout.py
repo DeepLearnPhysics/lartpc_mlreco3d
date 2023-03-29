@@ -3,7 +3,6 @@ import pandas as pd
 import os
 
 from mlreco.utils import CSVData
-from mlreco.utils import CSVData, ChunkCSVData
 
 from scipy.special import softmax as softmax_func
 from scipy.stats import entropy
@@ -38,7 +37,7 @@ def bayes_segnet_mcdropout(cfg,
     fout = CSVData(
         os.path.join(logdir, 'bayes-segnet-metrics.csv'), append=append)
 
-    fout_voxel = ChunkCSVData(
+    fout_voxel = CSVData(
         os.path.join(logdir, 'bayes-segnet-metrics-voxels.csv'), append=append)
 
     for batch_id, event_id in enumerate(index):
