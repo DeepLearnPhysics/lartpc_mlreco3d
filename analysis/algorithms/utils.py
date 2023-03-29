@@ -48,7 +48,7 @@ def correct_track_points(particle):
             particle.startpoint = x[x1]
             particle.endpoint = x[x2]
         elif label == 1:
-            # Closest point x2 is adj to an endpoint
+            #  point x2 is adj to an endpoint
             particle.endpoint = x[x1]
             particle.startpoint = x[x2]
         else:

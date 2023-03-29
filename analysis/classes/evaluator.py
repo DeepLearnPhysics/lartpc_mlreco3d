@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from mlreco.utils.globals import VTX_COLS
+from mlreco.utils.globals import VTX_COLS, INTER_COL, COORD_COLS
 
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.particle import (match_particles_fn, 
@@ -473,7 +473,7 @@ class FullChainEvaluator(FullChainPredictor):
         """
         out = {}
         inter_idxs = np.unique(
-            self.data_blob['cluster_label'][entry][:, 7].astype(int))
+            self.data_blob['cluster_label'][entry][:, INTER_COL].astype(int))
         for inter_idx in inter_idxs:
             if inter_idx < 0:
                 continue
@@ -482,7 +482,10 @@ class FullChainEvaluator(FullChainPredictor):
                             data_idx=entry,
                             inter_idx=inter_idx,
                             vtx_col=VTX_COLS[0])
-            out[inter_idx] = vtx
+            mask = self.data_blob['cluster_label'][entry][:, INTER_COL].astype(int) == inter_idx
+            points = self.data_blob['cluster_label'][entry][:, COORD_COLS[0]:COORD_COLS[-1]+1]
+            new_vtx = points[mask][np.linalg.norm(points[mask] - vtx, axis=1).argmin()]
+            out[inter_idx] = new_vtx
 
         return out
 
