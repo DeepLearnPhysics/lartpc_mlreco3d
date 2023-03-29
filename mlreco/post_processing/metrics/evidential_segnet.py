@@ -3,7 +3,7 @@ import pandas as pd
 import sys, os, re
 
 from mlreco.post_processing import post_processing
-from mlreco.utils import CSVData, ChunkCSVData
+from mlreco.utils import CSVData
 
 from scipy.special import softmax as softmax_func
 from scipy.stats import entropy
@@ -35,7 +35,7 @@ def evidential_segnet_metrics(cfg, processor_cfg, data_blob, result, logdir, ite
     else:
         append = False
 
-    fout_voxel = ChunkCSVData(os.path.join(logdir, 'evidential-segnet-metrics-voxels.csv'), append=append)
+    fout_voxel = CSVData(os.path.join(logdir, 'evidential-segnet-metrics-voxels.csv'), append=append)
     fout = CSVData(
         os.path.join(logdir, 'evidential-segnet-metrics.csv'), append=append)
 
