@@ -8,28 +8,47 @@ from larcv import larcv
 
 class HDF5Writer:
     '''
-    Class which build an HDF5 file to store the output
-    (and optionally input) of the reconstruction chain.
+    Class which builds an HDF5 file to store the input
+    and/or the output of the reconstruction chain. It
+    can also be used to append an existing HDF5 file with
+    information coming out of the analysis tools.
 
     More documentation to come.
     '''
 
-    def __init__(self, cfg):
+    def __init__(self,
+                 file_name: str = 'output.h5',
+                 input_keys: list = None,
+                 skip_input_keys: list = [],
+                 result_keys: list = None,
+                 skip_result_keys: list = [],
+                 add_results: bool = False):
         '''
         Initialize the basics of the output file
 
         Parameters
         ----------
-        cfg : dict
-            Writer configuration parameter (TODO: turn this into a list of named parameters)
+        file_name : str, default 'output.h5'
+            Name of the output HDF5 file
+        input_keys : list, optional
+            List of input keys to store. If not specified, stores all of the input keys
+        skip_input_keys: list, optional
+            List of input keys to skip
+        result_keys : list, optional
+            List of result keys to store. If not specified, stores all of the result keys
+        skip_result_keys: list, optional
+            List of result keys to skip
+        add_results: bool, default False
+            Whether to append an existing HDF5 file with more results, or to create one from scratch
         '''
         # Store attributes
-        self.file_name        = cfg.get('file_name', 'output.h5')
-        self.input_keys       = cfg.get('input_keys', None)
-        self.skip_input_keys  = cfg.get('skip_input_keys', [])
-        self.result_keys      = cfg.get('result_keys', None)
-        self.skip_result_keys = cfg.get('skip_result_keys', [])
-        self.created          = False
+        self.file_name        = file_name
+        self.input_keys       = input_keys
+        self.skip_input_keys  = skip_input_keys
+        self.result_keys      = result_keys
+        self.skip_result_keys = skip_result_keys
+        self.add_results      = add_results
+        self.ready            = False
 
     def create(self, cfg, data_blob, result_blob=None):
         '''
@@ -48,7 +67,7 @@ class HDF5Writer:
         self.batch_size = len(data_blob['index'])
 
         # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False})
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
 
         # If requested, loop over input_keys and add them to what needs to be tracked
         if self.input_keys is None: self.input_keys = data_blob.keys()
@@ -82,7 +101,35 @@ class HDF5Writer:
             self.initialize_datasets(file)
 
             # Mark file as ready for use
-            self.created = True
+            self.ready = True
+
+    def add_keys(self, result_blob):
+        '''
+        Create the output file structure based on the data and result blobs.
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the additional output to store
+        '''
+        # Get the expected batch_size from the data_blob (index must be present)
+        self.batch_size = 1
+
+        # Initialize a dictionary to store keys and their properties (dtype and shape)
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
+
+        # Loop over the result_keys and add them to what needs to be tracked
+        self.result_keys = list(result_blob.keys())
+        for key in self.result_keys:
+            self.register_key(result_blob, key, 'result')
+
+        # Initialize the output HDF5 file
+        with h5py.File(self.file_name, 'a') as file:
+            # Initialize the event dataset and the corresponding reference array datasets
+            self.initialize_datasets(file)
+
+            # Mark file as ready for use
+            self.ready = True
 
     def register_key(self, blob, key, category):
         '''
@@ -101,7 +148,8 @@ class HDF5Writer:
         self.key_dict[key]['category'] = category
         if not isinstance(blob[key], list):
             # Single scalar (TODO: Is that thing? If not, why not?)
-            self.key_dict[key]['dtype'] = type(blob[key])
+            self.key_dict[key]['dtype']  = type(blob[key])
+            self.key_dict[key]['scalar'] = True
 
         else:
             if len(blob[key]) != self.batch_size:
@@ -111,11 +159,13 @@ class HDF5Writer:
                         not hasattr(blob[key][0], '__len__'),\
                         'If there is an array of length mismatched with batch_size, '+\
                         'it must contain a single scalar.'
-                self.key_dict[key]['dtype'] = type(blob[key][0])
+                self.key_dict[key]['dtype']  = type(blob[key][0])
+                self.key_dict[key]['scalar'] = True
 
             elif not hasattr(blob[key][0], '__len__'):
                 # List containing a single scalar per batch ID
-                self.key_dict[key]['dtype'] = type(blob[key][0])
+                self.key_dict[key]['dtype']  = type(blob[key][0])
+                self.key_dict[key]['scalar'] = True
 
             elif isinstance(blob[key][0], (list, np.ndarray)) and\
                     isinstance(blob[key][0][0], larcv.Particle):
@@ -227,6 +277,10 @@ class HDF5Writer:
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                 grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
+                if val['scalar']:
+                    print('SCALAR')
+                    grp[key].attrs['scalar'] = True
+
             elif not val['merge']:
                 # If the elements of the list are of variable widths, refer to one
                 # dataset per element. An index is stored alongside the dataset to break
@@ -237,6 +291,7 @@ class HDF5Writer:
                 for i, w in enumerate(val['width']):
                     shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                     subgrp.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
+
             else:
                 # If the  elements of the list are of equal width, store them all 
                 # to one dataset. An index is stored alongside the dataset to break
@@ -249,7 +304,7 @@ class HDF5Writer:
 
         file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
-    def append(self, cfg, data_blob, result_blob):
+    def append(self, cfg=None, data_blob=None, result_blob=None):
         '''
         Append the HDF5 file with the content of a batch.
 
@@ -263,8 +318,15 @@ class HDF5Writer:
             Dictionary containing the output of the reconstruction chain
         '''
         # If this function has never been called, initialiaze the HDF5 file
-        if not self.created:
-            self.create(cfg, data_blob, result_blob)
+        if not self.ready:
+            if not self.add_results:
+                assert cfg is not None and data_blob is not None and result_blob is not None,\
+                        'Need to provide a reconstruction config, a data_blob and a result_blob to store'
+                self.create(cfg, data_blob, result_blob)
+            else:
+                assert result_blob is not None, 'Need to provide a result dictionary to append'
+                self.add_keys(result_blob)
+            self.ready = True
 
         # Append file
         with h5py.File(self.file_name, 'a') as file:
@@ -357,7 +419,6 @@ class HDF5Writer:
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
-
 
     @staticmethod
     def store_jagged(group, event, key, array_list):
@@ -478,3 +539,70 @@ class HDF5Writer:
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
+
+
+class CSVWriter:
+    '''
+    Class which builds a CSV file to store the output
+    of analysis tools. It can only be used to store
+    relatively basic quantities (scalars, strings, etc.)
+
+    More documentation to come.
+    '''
+
+    def __init__(self,
+                 file_name: str = 'output.csv',
+                 append_file: bool = False):
+        '''
+        Initialize the basics of the output file
+
+        Parameters
+        ----------
+        file_name : str, default 'output.csv'
+            Name of the output CSV file
+        append_file : bool, default False
+            Add more rows to an existing CSV file
+        '''
+        self.file_name   = file_name
+        self.append_file = append_file
+        self.result_keys = None
+        if self.append_file:
+            with open(self.file_name, 'r') as file:
+                self.result_keys = file.readline().split(', ')
+                print('KEYS', self.result_keys)
+
+    def create(self, result_blob):
+        '''
+        Initialize the header of the CSV file,
+        record the keys to be stored.
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the output of the reconstruction chain
+        '''
+        # Save the list of keys to store
+        self.result_keys = list(result_blob.keys())
+
+        # Create a header and write it to file
+        with open(self.file_name, 'w') as file:
+            header_str = ', '.join(self.result_keys)+'\n'
+            file.write(header_str)
+
+    def append(self, result_blob):
+        '''
+        Append the CSV file with the output
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the output of the reconstruction chain
+        '''
+        # If this function has never been called, initialiaze the CSV file
+        if self.result_keys is None:
+            self.create(result_blob)
+
+        # Append file
+        with open(self.file_name, 'a') as file:
+            result_str = ', '.join([str(result_blob[k]) for k in self.result_keys])+'\n'
+            file.write(result_str)

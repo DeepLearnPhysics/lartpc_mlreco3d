@@ -9,9 +9,8 @@ import time
 
 from mlreco.main_funcs import cycle
 from mlreco.trainval import trainval
-from mlreco.iotools.factories import loader_factory
+from mlreco.iotools.factories import loader_factory, writer_factory
 from mlreco.iotools.readers import HDF5Reader
-from mlreco.iotools.writers import HDF5Writer, CSVWriter
 
 
 def evaluate(filenames):
@@ -61,24 +60,25 @@ def evaluate(filenames):
                     max_iteration = len(Reader)
                 assert max_iteration <= len(Reader)
 
-            # Initialize the writer
-            writer_cfg = analysis_cfg.get('writer', {})
-            writer_cfg['name'] = writer_cfg.get('name', 'CSVWriter')
-            for name in file
-
-            iteration = 0
-
+            # Initialize the writer(s)
             log_dir = analysis_config['analysis']['log_dir']
-            append = analysis_config['analysis'].get('append', True)
+            append = analysis_config['analysis'].get('append', False)
 
-            output_logs = {}
-            for fname in filenames:
-                f = os.path.join(log_dir, '{}.csv'.format(fname))
-                output_logs[fname] = CSVData(f, append=append)
-                output_logs[fname].open()
+            writer_cfg = analysis_config.get('writer', {})
+            writer_cfg['name'] = writer_cfg.get('name', 'CSVWriter')
+            writer_cfg['append_file'] = append
 
+            writers = {}
+            for file_name in filenames:
+                writer_cfg['file_name'] = f'{log_dir}/{file_name}.csv'
+                cfg['iotool']['writer'] = writer_cfg
+                writers[file_name] = writer_factory(cfg)
+
+            # Loop over the number of requested iterations
+            iteration = 0
             while iteration < max_iteration:
 
+                # Load data batch
                 if profile:
                     start = time.time()
                 if 'reader' not in analysis_config:
@@ -89,34 +89,25 @@ def evaluate(filenames):
                     print("Forward took %d s" % (time.time() - start))
                 img_indices = data_blob['index']
 
+                # Build the output dictionary
                 fname_to_update_list = defaultdict(list)
                 for batch_index, img_index in enumerate(img_indices):
                     dict_list = func(data_blob, res, batch_index, analysis_config, cfg)
                     for i, analysis_dict in enumerate(dict_list):
                         fname_to_update_list[filenames[i]].extend(analysis_dict)
 
+                # Store
                 for i, fname in enumerate(fname_to_update_list):
                     headers = False
                     for row_dict in fname_to_update_list[fname]:
+                        writers[fname].append(row_dict)
 
-                        keys, vals = row_dict.keys(), row_dict.values()
-                        output_logs[fname].record(list(keys), list(vals))
-                        if not iteration and not headers:
-                            output_logs[fname].write_headers(list(keys))
-                            headers = True
-                        output_logs[fname].write_data(str_format='{}')
-                        output_logs[fname].flush()
-                        os.fsync(output_logs[fname]._fout.fileno())
+                # Increment iteration count
                 iteration += 1
                 if profile:
                     end = time.time()
                     print("Iteration %d (total %d s)" % (iteration, end - start))
-                torch.cuda.empty_cache()
-
-            for fname in filenames:
-                output_logs[fname].close()
 
         process_dataset._filenames = filenames
-        process_dataset._mode = mode
         return process_dataset
     return decorate

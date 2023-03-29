@@ -10,13 +10,21 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     Function which wraps a *numba* function with some checks on the input
     to make the relevant conversions to numpy where necessary.
 
-    Args:
-        cast_args ([str]): List of arguments to be cast to numpy
-        list_args ([str]): List of arguments which need to be cast to a numba typed list
-        keep_torch (bool): Make the output a torch object, if the reference argument is one
-        ref_arg (str)    : Reference argument used to assign a type and device to the torch output
-    Returns:
-        Function
+    Parameters
+    ----------
+    cast_args : list(str), optional
+        List of arguments to be cast to numpy
+    list_args : list(str), optional
+        List of arguments which need to be cast to a numba typed list
+    keep_torch : bool, default False
+        Make the output a torch object, if the reference argument is one
+    ref_arg : str, optional
+        Reference argument used to assign a type and device to the torch output
+
+    Returns
+    -------
+    callable
+        Wrapped function
     '''
     def outer(fn):
         @wraps(fn)
