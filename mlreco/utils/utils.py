@@ -177,12 +177,32 @@ class CSVData:
         self._str  = None
         self._dict = {}
         self.append = append
+        self._headers = []
 
     def record(self, keys, vals):
         for i, key in enumerate(keys):
             self._dict[key] = vals[i]
 
-    def write(self):
+    def open(self):
+        self._fout=open(self.name,'w')
+
+    def write_headers(self, headers):
+        self._header_str = ''
+        for i, key in enumerate(headers):
+            self._fout.write(key)
+            if i < len(headers)-1: self._fout.write(',')
+            self._headers.append(key)
+        self._fout.write('\n')
+
+    def write_data(self, str_format='{:f}'):
+        self._str = ''
+        for i, key in enumerate(self._dict.keys()):
+            if i: self._str += ','
+            self._str += str_format
+        self._str += '\n'
+        self._fout.write(self._str.format(*(self._dict.values())))
+
+    def write(self, str_format='{:f}'):
         if self._str is None:
             mode = 'a' if self.append else 'w'
             self._fout=open(self.name,mode)
@@ -192,7 +212,7 @@ class CSVData:
                     if not self.append: self._fout.write(',')
                     self._str += ','
                 if not self.append: self._fout.write(key)
-                self._str+='{:f}'
+                self._str+=str_format
             if not self.append: self._fout.write('\n')
             self._str+='\n'
         self._fout.write(self._str.format(*(self._dict.values())))
@@ -203,33 +223,3 @@ class CSVData:
     def close(self):
         if self._str is not None:
             self._fout.close()
-
-
-class ChunkCSVData:
-
-    def __init__(self, fout, append=True, chunksize=1000):
-        self.name = fout
-        if append:
-            self.append = 'a'
-        else:
-            self.append = 'w'
-        self.chunksize = chunksize
-
-        self.header = True
-
-        if not os.path.exists(os.path.dirname(self.name)):
-            os.makedirs(os.path.dirname(self.name))
-
-        with open(self.name, 'w') as f:
-            pass
-        # df = pd.DataFrame(list())
-        # df.to_csv(self.name, mode='w')
-
-    def record(self, df, verbose=False):
-        if verbose:
-            print(df)
-        df.to_csv(self.name,
-                  mode=self.append,
-                  chunksize=self.chunksize,
-                  index=False,
-                  header=self.header)

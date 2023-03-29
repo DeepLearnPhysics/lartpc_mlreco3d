@@ -12,7 +12,7 @@ from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.iotools.readers import HDF5Reader
 
-from mlreco.utils.utils import ChunkCSVData
+from mlreco.utils.utils import CSVData
 
 
 def evaluate(filenames, mode='per_image'):
@@ -63,15 +63,16 @@ def evaluate(filenames, mode='per_image'):
             append = analysis_config['analysis'].get('append', True)
             chunksize = analysis_config['analysis'].get('chunksize', 100)
 
-            output_logs = []
-            header_recorded = []
-
+            output_logs = {}
             for fname in filenames:
-                fout = os.path.join(log_dir, fname + '.csv')
-                output_logs.append(ChunkCSVData(fout, append=append, chunksize=chunksize))
-                header_recorded.append(False)
+                f = os.path.join(log_dir, '{}.csv'.format(fname))
+                output_logs[fname] = CSVData(f, append=append)
+                output_logs[fname].open()
+
+            headers = False
 
             while iteration < max_iteration:
+
                 if profile:
                     start = time.time()
                 if 'reader' not in analysis_config:
@@ -95,17 +96,23 @@ def evaluate(filenames, mode='per_image'):
                 else:
                     raise Exception("Evaluation mode {} is invalid!".format(mode))
                 for i, fname in enumerate(fname_to_update_list):
-                    df = pd.DataFrame(fname_to_update_list[fname])
-                    if len(df):
-                        output_logs[i].record(df)
-                        header_recorded[i] = True
-                    # disable pandas from appending additional header lines
-                    if header_recorded[i]: output_logs[i].header = False
+                    for row_dict in fname_to_update_list[fname]:
+                        keys, vals = row_dict.keys(), row_dict.values()
+                        output_logs[fname].record(list(keys), list(vals))
+                        if not headers:
+                            output_logs[fname].write_headers(list(keys))
+                            headers = True
+                        output_logs[fname].write_data(str_format='{}')
+                        output_logs[fname].flush()
+                        os.fsync(output_logs[fname]._fout.fileno())
                 iteration += 1
                 if profile:
                     end = time.time()
                     print("Iteration %d (total %d s)" % (iteration, end - start))
                 torch.cuda.empty_cache()
+
+            for fname in filenames:
+                output_logs[fname].close()
 
         process_dataset._filenames = filenames
         process_dataset._mode = mode

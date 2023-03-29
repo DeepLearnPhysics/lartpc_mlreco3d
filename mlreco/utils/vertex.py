@@ -8,6 +8,7 @@ from mlreco.utils.ppn import get_track_endpoints_geo
 from sklearn.decomposition import PCA
 from mlreco.utils.gnn.evaluation import primary_assignment
 from mlreco.utils.groups import type_labels
+from mlreco.utils.globals import INTER_COL, PGRP_COL, VTX_COLS
 
 
 def find_closest_points_of_approach(point1, direction1, point2, direction2):
@@ -474,9 +475,9 @@ def get_vertex(kinematics, cluster_label, data_idx, inter_idx,
     np.ndarray
         True vertex coordinates. Shape (3,)
     """
-    inter_mask = cluster_label[data_idx][:, 7] == inter_idx
-    primary_mask = kinematics[data_idx][:, vtx_col+3] == primary_label
+    inter_mask = cluster_label[data_idx][:, INTER_COL] == inter_idx
+    primary_mask = kinematics[data_idx][:, PGRP_COL] == primary_label
     mask = inter_mask if (inter_mask & primary_mask).sum() == 0 else inter_mask & primary_mask
-    vtx, counts = np.unique(kinematics[data_idx][mask][:, [vtx_col, vtx_col+1, vtx_col+2]], axis=0, return_counts=True)
+    vtx, counts = np.unique(kinematics[data_idx][mask][:, [VTX_COLS[0], VTX_COLS[1], VTX_COLS[2]]], axis=0, return_counts=True)
     vtx = vtx[np.argmax(counts)]
     return vtx
