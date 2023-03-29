@@ -20,7 +20,7 @@ sys.path.insert(0, current_directory)
 from mlreco.main_funcs import process_config
 from analysis.decorator import evaluate
 # Folder `selections` contains several scripts
-from analysis.algorithms.selections import *
+from analysis.algorithms.scripts import *
 
 
 def main(analysis_cfg_path, model_cfg_path):

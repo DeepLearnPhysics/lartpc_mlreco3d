@@ -69,8 +69,6 @@ def evaluate(filenames, mode='per_image'):
                 output_logs[fname] = CSVData(f, append=append)
                 output_logs[fname].open()
 
-            headers = False
-
             while iteration < max_iteration:
 
                 if profile:
@@ -96,10 +94,11 @@ def evaluate(filenames, mode='per_image'):
                 else:
                     raise Exception("Evaluation mode {} is invalid!".format(mode))
                 for i, fname in enumerate(fname_to_update_list):
+                    headers = False
                     for row_dict in fname_to_update_list[fname]:
                         keys, vals = row_dict.keys(), row_dict.values()
                         output_logs[fname].record(list(keys), list(vals))
-                        if not headers:
+                        if not iteration and not headers:
                             output_logs[fname].write_headers(list(keys))
                             headers = True
                         output_logs[fname].write_data(str_format='{}')

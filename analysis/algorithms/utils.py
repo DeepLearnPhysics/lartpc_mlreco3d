@@ -77,7 +77,6 @@ def handle_singleton_ppn_candidate(p, pts, ppn_candidates):
         p.startpoint = pt_far.reshape(-1)
 
 
-
 def correct_track_endpoints_ppn(p):
     assert p.semantic_type == 1
     pts = np.vstack([p.startpoint, p.endpoint])
