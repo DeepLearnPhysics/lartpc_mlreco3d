@@ -9,8 +9,9 @@ import time
 
 from mlreco.main_funcs import cycle
 from mlreco.trainval import trainval
-from mlreco.iotools.factories import loader_factory, writer_factory
+from mlreco.iotools.factories import loader_factory
 from mlreco.iotools.readers import HDF5Reader
+from mlreco.iotools.writers import CSVWriter
 
 
 def evaluate(filenames):
@@ -64,15 +65,9 @@ def evaluate(filenames):
             log_dir = analysis_config['analysis']['log_dir']
             append = analysis_config['analysis'].get('append', False)
 
-            writer_cfg = analysis_config.get('writer', {})
-            writer_cfg['name'] = writer_cfg.get('name', 'CSVWriter')
-            writer_cfg['append_file'] = append
-
             writers = {}
             for file_name in filenames:
-                writer_cfg['file_name'] = f'{log_dir}/{file_name}.csv'
-                cfg['iotool']['writer'] = writer_cfg
-                writers[file_name] = writer_factory(cfg)
+                writers[file_name] = CSVWriter(f'{log_dir}/{file_name}.csv', append)
 
             # Loop over the number of requested iterations
             iteration = 0
@@ -86,10 +81,11 @@ def evaluate(filenames):
                 else:
                     data_blob, res = Reader.get(iteration, nested=True)
                 if profile:
-                    print("Forward took %d s" % (time.time() - start))
+                    print("Forward took %.2f s" % (time.time() - start))
                 img_indices = data_blob['index']
 
                 # Build the output dictionary
+                stime = time.time()
                 fname_to_update_list = defaultdict(list)
                 for batch_index, img_index in enumerate(img_indices):
                     dict_list = func(data_blob, res, batch_index, analysis_config, cfg)
@@ -98,7 +94,6 @@ def evaluate(filenames):
 
                 # Store
                 for i, fname in enumerate(fname_to_update_list):
-                    headers = False
                     for row_dict in fname_to_update_list[fname]:
                         writers[fname].append(row_dict)
 
@@ -106,7 +101,7 @@ def evaluate(filenames):
                 iteration += 1
                 if profile:
                     end = time.time()
-                    print("Iteration %d (total %d s)" % (iteration, end - start))
+                    print("Iteration %d (total %.2f s)" % (iteration, end - start))
 
         process_dataset._filenames = filenames
         return process_dataset
