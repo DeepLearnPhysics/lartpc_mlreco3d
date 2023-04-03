@@ -62,9 +62,9 @@ def parse_cluster3d(cluster_event,
                     particle_mpv_event = None,
                     sparse_semantics_event = None,
                     sparse_value_event = None,
-                    add_particle_info = True,
+                    add_particle_info = False,
                     add_kinematics_info = False,
-                    clean_data = True,
+                    clean_data = False,
                     type_include_mpr = False,
                     type_include_secondary = False,
                     primary_include_mpr = True,
@@ -193,11 +193,17 @@ def parse_cluster3d(cluster_event,
     np_features = np.concatenate(clusters_features, axis=0)
 
     # If requested, remove duplicate voxels (cluster overlaps) and account for semantics
+    if (sparse_semantics_event is not None or sparse_value_event is not None) and not clean_data:
+        from warnings import warn
+        warn('You should set `clean_data` to True if you specify a sparse tensor in parse_cluster3d')
+        clean_data = True
+
     if clean_data:
+        assert add_particle_info, 'Need to add particle info to fetch particle semantics for each voxel'
         assert sparse_semantics_event is not None, 'Need to provide a semantics tensor to clean up output'
         sem_voxels, sem_features = parse_sparse3d([sparse_semantics_event])
         np_voxels,  np_features  = clean_sparse_data(np_voxels, np_features, sem_voxels)
-        np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor (probably superfluous)
+        np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor
         np_features[sem_features[:,-1] > 3, 1:-1] = -1 # Set all cluster labels to -1 if semantic class is LE or ghost
 
         # If a value tree is provided, override value colum
@@ -215,7 +221,7 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     sparse_value_event_list = None,
                                     add_particle_info = False,
                                     add_kinematics_info = False,
-                                    clean_data = True,
+                                    clean_data = False,
                                     type_include_mpr = False,
                                     type_include_secondary = False,
                                     primary_include_mpr = True,
