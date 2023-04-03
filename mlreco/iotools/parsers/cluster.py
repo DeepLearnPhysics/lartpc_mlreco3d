@@ -2,8 +2,10 @@ from collections import OrderedDict
 import numpy as np
 from larcv import larcv
 from sklearn.cluster import DBSCAN
-from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
+
 from mlreco.utils.groups import type_labels as TYPE_LABELS
+from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
+
 from mlreco.iotools.parsers.sparse import parse_sparse3d
 from mlreco.iotools.parsers.particles import parse_particles
 from mlreco.iotools.parsers.clean_data import clean_sparse_data
@@ -63,7 +65,6 @@ def parse_cluster3d(cluster_event,
                     add_particle_info = True,
                     add_kinematics_info = False,
                     clean_data = True,
-                    precedence = [1,2,0,3,4],
                     type_include_mpr = False,
                     type_include_secondary = False,
                     primary_include_mpr = True,
@@ -85,7 +86,6 @@ def parse_cluster3d(cluster_event,
               sparse_value_event: sparse3d_pcluster
               add_particle_info: true
               clean_data: true
-              precedence: [1,2,0,3,4]
               type_include_mpr: false
               type_include_secondary: false
               primary_include_mpr: true
@@ -100,7 +100,6 @@ def parse_cluster3d(cluster_event,
     sparse_value_event: larcv::EventSparseTensor3D
     add_particle_info: bool
     clean_data: bool
-    precedence: list
     type_include_mpr: bool
     type_include_secondary: bool
     primary_include_mpr: bool
@@ -197,8 +196,8 @@ def parse_cluster3d(cluster_event,
     if clean_data:
         assert sparse_semantics_event is not None, 'Need to provide a semantics tensor to clean up output'
         sem_voxels, sem_features = parse_sparse3d([sparse_semantics_event])
-        np_voxels,  np_features  = clean_sparse_data(np_voxels, np_features, sem_voxels, sem_features, meta, precedence)
-        np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor
+        np_voxels,  np_features  = clean_sparse_data(np_voxels, np_features, sem_voxels)
+        np_features[:,-1] = sem_features[:,-1] # Match semantic column to semantic tensor (probably superfluous)
         np_features[sem_features[:,-1] > 3, 1:-1] = -1 # Set all cluster labels to -1 if semantic class is LE or ghost
 
         # If a value tree is provided, override value colum
@@ -217,7 +216,6 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     add_particle_info = False,
                                     add_kinematics_info = False,
                                     clean_data = True,
-                                    precedence = [1,2,0,3,4],
                                     type_include_mpr = False,
                                     type_include_secondary = False,
                                     primary_include_mpr = True,
@@ -226,7 +224,7 @@ def parse_cluster3d_charge_rescaled(cluster_event,
 
     # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
     np_voxels, np_features = parse_cluster3d(cluster_event, particle_event, particle_mpv_event, sparse_semantics_event, None,
-                                             add_particle_info, add_kinematics_info, clean_data, precedence, 
+                                             add_particle_info, add_kinematics_info, clean_data,
                                              type_include_mpr, type_include_secondary, primary_include_mpr, break_clusters, min_size)
 
     from .sparse import parse_sparse3d_charge_rescaled
