@@ -3,12 +3,10 @@ import numpy as np
 from larcv import larcv
 from sklearn.cluster import DBSCAN
 
-from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.groups import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
-
-from mlreco.iotools.parsers.sparse import parse_sparse3d
-from mlreco.iotools.parsers.particles import parse_particles
-from mlreco.iotools.parsers.clean_data import clean_sparse_data
+from .sparse import parse_sparse3d
+from .particles import parse_particles
+from .clean_data import clean_sparse_data
+from .label_data import get_interaction_id, get_nu_id, get_particle_id, get_shower_primary_id, get_group_primary_id
 
 
 def parse_cluster2d(cluster_event):

@@ -1,8 +1,8 @@
 import numpy as np
 from larcv import larcv
-from mlreco.utils.ppn import get_ppn_info
-from mlreco.utils.groups import type_labels as TYPE_LABELS
 
+from mlreco.utils.globals import PDG_TO_PID
+from mlreco.utils.ppn import get_ppn_info
 
 def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     """
@@ -302,8 +302,8 @@ def parse_particle_singlep_pdg(particle_event):
     pdg = -1
     for p in particle_event.as_vector():
         if not p.track_id() == 1: continue
-        if int(p.pdg_code()) in TYPE_LABELS.keys():
-            pdg = TYPE_LABELS[int(p.pdg_code())]
+        if int(p.pdg_code()) in PDG_TO_PID.keys():
+            pdg = PDG_TO_PID[int(p.pdg_code())]
         else: pdg = -1
         return np.asarray([pdg])
 

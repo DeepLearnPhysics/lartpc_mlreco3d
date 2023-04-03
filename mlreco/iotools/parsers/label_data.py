@@ -1,38 +1,7 @@
 import numpy as np
 import torch
-from larcv import larcv
 
-def get_group_types(particle_v, meta, point_type="3d"):
-    """
-    Gets particle classes for voxel groups
-    """
-    if point_type not in ["3d", "xy", "yz", "zx"]:
-        raise Exception("Point type not supported in PPN I/O.")
-    gt_types = []
-    for particle in particle_v:
-        pdg_code = abs(particle.pdg_code())
-        prc = particle.creation_process()
-
-        # Determine point type
-        if (pdg_code == 2212):
-            gt_type = 0 # proton
-        elif pdg_code != 22 and pdg_code != 11:
-            gt_type = 1
-        elif pdg_code == 22:
-            gt_type = 2
-        else:
-            if prc == "primary" or prc == "nCapture" or prc == "conv":
-                gt_type = 2 # em shower
-            elif prc == "muIoni" or prc == "hIoni":
-                gt_type = 3 # delta
-            elif prc == "muMinusCaptureAtRest" or prc == "muPlusCaptureAtRest" or prc == "Decay":
-                gt_type = 4 # michel
-            else:
-                gt_type = -1 # not well defined
-
-        gt_types.append(gt_type)
-
-    return np.array(gt_types)
+from mlreco.utils.globals import SHOW_SHP, TRACK_SHP, PDG_TO_PID
 
 
 def get_interaction_id(particle_v, num_ancestor_loop=1):
@@ -158,18 +127,6 @@ def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
     return nu_id
 
 
-type_labels = {
-    22: 0,  # photon
-    11: 1,  # e-
-    -11: 1, # e+
-    13: 2,  # mu-
-    -13: 2, # mu+
-    211: 3, # pi+
-    -211: 3, # pi-
-    2212: 4, # protons
-}
-
-
 def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=False):
     '''
     Function that gives one of five labels to particles of
@@ -210,8 +167,8 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=Fa
         # If the particle type exists in the predefined list, assign
         group_id = int(particles_v[i].group_id())
         t = int(particles_v[group_id].pdg_code())
-        if t in type_labels.keys():
-            particle_ids[i] = type_labels[t]
+        if t in PDG_TO_PID.keys():
+            particle_ids[i] = PDG_TO_PID[t]
         else:
             particle_ids[i] = -1
 
@@ -297,7 +254,7 @@ def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
             continue
 
         # If the particle is not a shower or a track, it is not a primary
-        if p.shape() != larcv.kShapeShower and p.shape() != larcv.kShapeTrack:
+        if p.shape() != SHOW_SHP and p.shape() != TRACK_SHP:
             primary_ids[i] = 0
             continue
 

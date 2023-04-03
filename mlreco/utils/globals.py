@@ -32,5 +32,17 @@ LOWE_SHP   = larcv.kShapeLEScatter # 4
 GHOST_SHP  = larcv.kShapeGhost     # 5
 UNKWN_SHP  = larcv.kShapeUnknown   # 6
 
-# Shape precedence in cluster labels
+# Shape precedence used in the cluster labeling process
 SHAPE_PREC = [TRACK_SHP, MICH_SHP, SHOW_SHP, DELTA_SHP, LOWE_SHP]
+
+# Mapping between particle PDG code and particle ID labels
+PDG_TO_PID = {
+    22:   0,  # photon
+    11:   1,  # e-
+    -11:  1,  # e+
+    13:   2,  # mu-
+    -13:  2,  # mu+
+    211:  3,  # pi+
+    -211: 3,  # pi-
+    2212: 4,  # protons
+}
