@@ -132,10 +132,25 @@ class CRTTPCManager:
         return trk_v
 
     def run_crt_tpc_matching(self, tracks, crthits):
+        """
+        Call matcha's match-making function
+
+        Parameters
+        ----------
+        tracks: list of matcha.Track instances
+        crthits: list of matcha.CRTHit instances
+
+        Returns
+        -------
+        list of matcha.MatchCandidate instances containing matched Track and
+        CRTHit objects
+        """
         from matcha import match_maker
 
         distance_threshold = 50
-        crt_tpc_matches = match_maker.get_track_crthit_matches(tracks, crthits, approach_distance_threshold=50)
+        crt_tpc_matches = match_maker.get_track_crthit_matches(
+            tracks, crthits, approach_distance_threshold=50, save_to_file=True
+        )
 
         return crt_tpc_matches
 
