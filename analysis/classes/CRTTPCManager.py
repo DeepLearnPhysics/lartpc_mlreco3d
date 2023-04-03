@@ -73,7 +73,7 @@ class CRTTPCManager:
             crthit_id  = larcv_crthit.id()
             t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
             t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
-            t1         = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
+            t1_ns      = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
             position_x = larcv_crthit.x_pos()
             position_y = larcv_crthit.y_pos()
             position_z = larcv_crthit.z_pos()
@@ -84,7 +84,7 @@ class CRTTPCManager:
             plane      = larcv_crthit.plane()
             tagger     = larcv_crthit.tagger()
             this_crthit = CRTHit(
-                id=crthit_id, t0_sec=t0_sec, t0_ns=t0_ns, t1=t1,
+                id=crthit_id, t0_sec=t0_sec, t0_ns=t0_ns, t1_ns=t1_ns,
                 position_x=position_x, position_y=position_y, position_z=position_z,
                 error_x=error_x, error_y=error_y, error_z=error_z,
                 total_pe=total_pe, plane=plane, tagger=tagger
