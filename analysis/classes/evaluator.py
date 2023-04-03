@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from mlreco.utils.globals import VTX_COLS, INTER_COL, COORD_COLS
+from mlreco.utils.globals import VTX_COLS, INTER_COL, COORD_COLS, PDG_TO_PID
 
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.particle import (match_particles_fn, 
@@ -11,7 +11,6 @@ from analysis.classes.particle import (match_particles_fn,
                                        match_particles_optimal)
 from analysis.algorithms.point_matching import *
 
-from mlreco.utils.groups import type_labels as TYPE_LABELS
 from mlreco.utils.vertex import get_vertex
 
 from analysis.classes.predictor import FullChainPredictor
@@ -59,7 +58,7 @@ def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
 def handle_empty_true_particles(labels_noghost,  mask_noghost, p, entry, 
                                 verbose=False):
     pid = int(p.id())
-    pdg = TYPE_LABELS.get(p.pdg_code(), -1)
+    pdg = PDG_TO_PID.get(p.pdg_code(), -1)
     is_primary = p.group_id() == p.parent_id()
 
     semantic_type, interaction_id, nu_id = -1, -1, -1
@@ -221,7 +220,7 @@ class FullChainEvaluator(FullChainPredictor):
             if pid not in particle_ids:
                 continue
             is_primary = p.group_id() == p.parent_id()
-            if p.pdg_code() not in TYPE_LABELS:
+            if p.pdg_code() not in PDG_TO_PID:
                 continue
             mask = labels[:, 6].astype(int) == pid
             coords = labels[mask][:, 1:4]
@@ -349,7 +348,7 @@ class FullChainEvaluator(FullChainPredictor):
 
         for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
             pid = int(p.id())
-            pdg = TYPE_LABELS.get(p.pdg_code(), -1)
+            pdg = PDG_TO_PID.get(p.pdg_code(), -1)
             is_primary = p.group_id() == p.parent_id()
             mask_noghost = labels_noghost[:, 6].astype(int) == pid
             if np.count_nonzero(mask_noghost) <= 0:
@@ -384,7 +383,7 @@ class FullChainEvaluator(FullChainPredictor):
             volume_id = int(volume_id[cts.argmax()])
 
             # 2. Process particle-level labels
-            if p.pdg_code() not in TYPE_LABELS:
+            if p.pdg_code() not in PDG_TO_PID:
                 # print("PID {} not in TYPE LABELS".format(pid))
                 continue
             exclude_ids = self._apply_true_voxel_cut(entry)

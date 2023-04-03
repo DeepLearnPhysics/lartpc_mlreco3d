@@ -7,8 +7,7 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.ppn import get_track_endpoints_geo
 from sklearn.decomposition import PCA
 from mlreco.utils.gnn.evaluation import primary_assignment
-from mlreco.utils.groups import type_labels
-from mlreco.utils.globals import INTER_COL, PGRP_COL, VTX_COLS
+from mlreco.utils.globals import INTER_COL, PGRP_COL, VTX_COLS, PDG_TO_PID
 
 
 def find_closest_points_of_approach(point1, direction1, point2, direction2):
@@ -284,7 +283,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
 
     # Identify PID among primary particles
     pid = np.argmax(res['node_pred_type'][data_idx][inter_mask][primary_particles], axis=1)
-    photon_label = type_labels[22]
+    photon_label = PDG_TO_PID[22]
 
     #
     # Get PPN candidates for vertex, listed per primary particle
@@ -357,12 +356,12 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             # Ignore photons if
             # - at least 3 primary particles involved
             # - at least 2 non-photon primary
-            use_gamma_threshold = (pid[c_indices] != type_labels[22]).sum() <= 1
+            use_gamma_threshold = (pid[c_indices] != PDG_TO_PID[22]).sum() <= 1
             for c_idx, c2 in enumerate(c_candidates):
                 if c_idx == p_idx: continue
                 # Ignore photons
-                # if no_photon_count > 0 and pid[c_indices[c_idx]] == type_labels[22]: continue
-                if ~use_gamma_threshold and pid[c_indices[c_idx]] == type_labels[22]: continue
+                # if no_photon_count > 0 and pid[c_indices[c_idx]] == PDG_TO_PID[22]: continue
+                if ~use_gamma_threshold and pid[c_indices[c_idx]] == PDG_TO_PID[22]: continue
                 d2 = scipy.spatial.distance.cdist(all_voxels[c_candidates[p_idx], coords_col[0]:coords_col[1]], all_voxels[c2, coords_col[0]:coords_col[1]])
                 distance_to_other_primaries.append(d2.min())
                 d3 = scipy.spatial.distance.cdist(points, all_voxels[c2, coords_col[0]:coords_col[1]])
@@ -383,7 +382,7 @@ def predict_vertex(inter_idx, data_idx, input_data, res,
             #
             # Apply T_B threshold
             #
-            use_gamma_threshold = (current_pid == type_labels[22]) or use_gamma_threshold
+            use_gamma_threshold = (current_pid == PDG_TO_PID[22]) or use_gamma_threshold
             if use_gamma_threshold and (other_primaries_gamma_threshold > -1) and (distance_to_other_primaries.min() >= other_primaries_gamma_threshold):
                 #print('Skipping photon')
                 continue

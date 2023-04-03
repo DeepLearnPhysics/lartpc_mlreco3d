@@ -12,7 +12,6 @@ from analysis.classes import Particle, ParticleFragment, Interaction, FlashManag
 from analysis.classes.particle import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
-from mlreco.utils.groups import type_labels as TYPE_LABELS
 from analysis.algorithms.vertex import estimate_vertex
 from analysis.algorithms.utils import get_track_points
 
