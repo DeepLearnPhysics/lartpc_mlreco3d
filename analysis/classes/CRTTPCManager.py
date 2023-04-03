@@ -70,20 +70,25 @@ class CRTTPCManager:
         crt_v = []
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
-            this_crthit = CRTHit(larcv_crthit.id())
-            this_crthit.total_pe   = larcv_crthit.peshit()
-            this_crthit.t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
-            this_crthit.t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
-            this_crthit.t1         = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
-            this_crthit.position_x = larcv_crthit.x_pos()
-            this_crthit.position_y = larcv_crthit.y_pos()
-            this_crthit.position_z = larcv_crthit.z_pos()
-            this_crthit.error_x    = larcv_crthit.x_err()
-            this_crthit.error_y    = larcv_crthit.y_err()
-            this_crthit.error_z    = larcv_crthit.z_err()
-            this_crthit.plane      = larcv_crthit.plane()
-            this_crthit.tagger     = larcv_crthit.tagger()
-            print('[MAKECRTHIT]', this_crthit)
+            crthit_id  = larcv_crthit.id()
+            t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
+            t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
+            t1         = larcv_crthit.ts1_ns()  # crthit timing, a candidate T0
+            position_x = larcv_crthit.x_pos()
+            position_y = larcv_crthit.y_pos()
+            position_z = larcv_crthit.z_pos()
+            error_x    = larcv_crthit.x_err()
+            error_y    = larcv_crthit.y_err()
+            error_z    = larcv_crthit.z_err()
+            total_pe   = larcv_crthit.peshit()
+            plane      = larcv_crthit.plane()
+            tagger     = larcv_crthit.tagger()
+            this_crthit = CRTHit(
+                id=crthit_id, t0_sec=t0_sec, t0_ns=t0_ns, t1=t1,
+                position_x=position_x, position_y=position_y, position_z=position_z,
+                error_x=error_x, error_y=error_y, error_z=error_z,
+                total_pe=total_pe, plane=plane, tagger=tagger
+            )
 
             crt_v.append(this_crthit)
 
@@ -106,22 +111,29 @@ class CRTTPCManager:
 
         trk_v = []
 
+        #'image_id', 'interaction_id', 'points', and 'depositions'
         for idx, particle in enumerate(muon_candidates):
             print('-----TRACK', particle.id, '-------')
             particle.points     = self.points_to_cm(particle.points)
             particle.startpoint = self.points_to_cm(np.array(particle.startpoint).reshape(1, 3))
             particle.endpoint   = self.points_to_cm(np.array(particle.endpoint).reshape(1, 3))
-            this_track = Track(id=particle.id)
-            this_track.image_id = particle.image_id
-            this_track.interaction_id = particle.interaction_id
-            this_track.start_x = particle.startpoint[0][0]
-            this_track.start_y = particle.startpoint[0][1]
-            this_track.start_z = particle.startpoint[0][2]
-            this_track.end_x   = particle.endpoint[0][0]
-            this_track.end_y   = particle.endpoint[0][1]
-            this_track.end_z   = particle.endpoint[0][2]
-            this_track.points  = particle.points
-            this_track.depositions = particle.depositions
+            track_id = particle.id
+            image_id = particle.image_id
+            interaction_id = particle.interaction_id
+            start_x = particle.startpoint[0][0]
+            start_y = particle.startpoint[0][1]
+            start_z = particle.startpoint[0][2]
+            end_x   = particle.endpoint[0][0]
+            end_y   = particle.endpoint[0][1]
+            end_z   = particle.endpoint[0][2]
+            points  = particle.points
+            depositions = particle.depositions
+            this_track = Track(
+                id=track_id, image_id=image_id, interaction_id=interaction_id, 
+                start_x=start_x, start_y=start_y, start_z=start_z, 
+                end_x=end_x, end_y=end_y, end_z=end_z, 
+                points=points, depositions=depositions
+            )
             start, end = this_track.get_endpoints()
             trk_v.append(this_track)
             print('[MAKETPCTRACK]', this_track)
