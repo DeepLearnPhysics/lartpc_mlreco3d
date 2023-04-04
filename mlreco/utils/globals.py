@@ -35,6 +35,9 @@ UNKWN_SHP  = larcv.kShapeUnknown   # 6
 # Shape precedence used in the cluster labeling process
 SHAPE_PREC = [TRACK_SHP, MICH_SHP, SHOW_SHP, DELTA_SHP, LOWE_SHP]
 
+# Invalid labels
+INVAL_TID  = larcv.kINVALID_UINT
+
 # Mapping between particle PDG code and particle ID labels
 PDG_TO_PID = {
     22:   0,  # photon

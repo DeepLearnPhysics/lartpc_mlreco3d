@@ -1,130 +1,106 @@
 import numpy as np
 import torch
 
-from mlreco.utils.globals import SHOW_SHP, TRACK_SHP, PDG_TO_PID
+from mlreco.utils.globals import SHOW_SHP, TRACK_SHP, LOWE_SHP, INVAL_TID, PDG_TO_PID
 
 
-def get_interaction_id(particle_v, num_ancestor_loop=1):
+def get_interaction_ids(particles):
     '''
-    A function to sort out interaction ids.
-    Note that this assumes cluster_id==particle_id.
-    Inputs:
-        - particle_v (array)     : larcv::EventParticle.as_vector()
-        - num_ancestor_loop (int): number of ancestor loops (default 1)
-    Outputs:
-        - interaction_ids: a numpy array with the shape (n,)
+    A function which gets the interaction ID of each of the
+    particle in the input particle list. It leverages shared
+    ancestor position as a basis for interaction building and
+    sets the interaction ID to -1 for parrticles with invalid
+    ancestor track IDs.
+
+    Parameters
+    ----------
+    particles : list(larcv.Particle)
+        List of true particle instances
+
+    Results
+    -------
+    np.ndarray
+        List of interaction IDs, one per true particle instance
     '''
-    ##########################################################################
-    # sort out the interaction ids using the information of ancestor vtx info
-    # then loop over to make sure the ancestor particles having the same interaction ids
-    ##########################################################################
-    # get the particle ancestor vtx array first
-    # and the track ids
-    # and the ancestor track ids
-    ancestor_vtxs = []
-    track_ids = []
-    ancestor_track_ids = np.empty(0, dtype=int)
-    for particle in particle_v:
-        ancestor_vtx = [
-            particle.ancestor_x(),
-            particle.ancestor_y(),
-            particle.ancestor_z(),
-        ]
-        ancestor_vtxs.append(ancestor_vtx)
-        track_ids.append(particle.track_id())
-        ancestor_track_ids = np.append(ancestor_track_ids, [particle.ancestor_track_id()])
-    ancestor_vtxs = np.asarray(ancestor_vtxs)
-    # get the list of unique interaction vertexes
-    interaction_vtx_list = np.unique(
-        ancestor_vtxs,
-        axis=0,
-    ).tolist()
-    # loop over each cluster to assign interaction ids
-    interaction_ids = np.ones(particle_v.size(), dtype=int)*(-1)
-    for clust_id in range(particle_v.size()):
-        # get the interaction id from the unique list (index is the id)
-        interaction_ids[clust_id] = interaction_vtx_list.index(
-            ancestor_vtxs[clust_id].tolist()
-        )
-    # Loop over ancestor, making sure particle having the same interaction id as ancestor
-    for _ in range(num_ancestor_loop):
-        for clust_id, ancestor_track_id in enumerate(ancestor_track_ids):
-            if ancestor_track_id in track_ids:
-                ancestor_clust_index = track_ids.index(ancestor_track_id)
-                interaction_ids[clust_id] = interaction_ids[ancestor_clust_index]
+    # Define the interaction ID on the basis of sharing an ancestor vertex position
+    anc_pos   = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
+    inter_ids = np.unique(anc_pos, axis=0, return_inverse=True)[-1]
 
-    return interaction_ids
+    # Now set the interaction ID of particles with an undefined ancestor to -1
+    if len(particles):
+        anc_ids = np.array([p.ancestor_track_id() for p in particles])
+        inter_ids[anc_ids == INVAL_TID] = -1
+
+    return inter_ids
 
 
-def get_nu_id(cluster_event, particle_v, interaction_ids, particle_mpv=None):
+def get_nu_ids(inter_ids, particles, particles_mpv=None, neutrinos=None):
     '''
-    A function to sorts interactions into nu or not nu (0 for cosmic, 1 for nu).
-    CAVEAT: Dirty way to sort out nu_ids
-            Assuming only one nu interaction is generated and first group/cluster belongs to such interaction
-    Inputs:
-        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
-        - particle_v vector: larcv::EventParticle.as_vector()
-        - interaction_id: a numpy array with shape (n, 1) where 1 is interaction id
-        - (optional) particle_mpv: vector of particles from mpv generator, used to work around
-        the lack of proper interaction id for the time being.
-    Outputs:
-        - nu_id: a numpy array with the shape (n,1)
-    '''
-    # initiate the nu_id
-    nu_id = np.zeros(len(particle_v))
+    A function which gets the neutrino-like ID (0 for cosmic, 1 for
+    neutrino) of each of the particle in the input particle list.
 
-    if particle_mpv is None:
-        # find the first cluster that has nonzero size
-        sizes = np.array([cluster_event.as_vector()[i].as_vector().size() for i in range(len(particle_v))])
-        nonzero = np.where(sizes > 0)[0]
-        if not len(nonzero):
-            return nu_id
-        first_clust_id = nonzero[0]
-        # the corresponding interaction id
-        nu_interaction_id = interaction_ids[first_clust_id]
-        # Get clust indexes for interaction_id = nu_interaction_id
-        inds = np.where(interaction_ids == nu_interaction_id)[0]
-        # Check whether there're at least two clusts coming from 'primary' process
-        num_primary = 0
-        for i, part in enumerate(particle_v):
-            if i not in inds:
-                continue
-            create_prc = part.creation_process()
-            parent_pdg = part.parent_pdg_code()
-            if create_prc == 'primary' or parent_pdg == 111:
-                num_primary += 1
-        # if there is nu interaction
+    If `particles_mpv` and `neutrinos` are not specified, it assumes that
+    there is only one neutrino-like interaction, the first valid one, and
+    it enforces that it must contain at least two true primaries.
+
+    If a list of multi-particle vertex (MPV) particles or neutrinos is
+    provided,  that information is leveraged to identify which interaction
+    is  neutrino-like and which is not.
+
+    Parameters
+    ----------
+    inter_ids : np.ndarray
+        Array of interaction ID values, one per true particle instance
+    particles : list(larcv.Particle)
+        List of true particle instances
+    particles_mpv : list(larcv.Particle), optional
+        List of true MPV particle instances
+    neutrinos : list(larcv.Neutrino), optional
+        List of true neutrino instances
+
+    Results
+    -------
+    np.ndarray
+        List of neutrino IDs, one per true particle instance
+    '''
+    # Make sure there is only either MPV particles or neutrinos specified, not both
+    assert particles_mpv is None or neutrinos is None,\
+            'Do not specify both particle_mpv_event and neutrino_event in parse_cluster3d'
+
+    # Initialize neutrino IDs
+    nu_ids = np.zeros(len(inter_ids), dtype=inter_ids.dtype)
+    nu_ids[inter_ids == -1] = -1
+    if particles_mpv is None and neutrinos is None:
+        # Find the first particle with a valid interaction ID
+        valid_mask = np.where(inter_ids > -1)[0]
+        if not len(valid_mask):
+            return nu_ids
+
+        # Identify the interaction ID of that particle
+        inter_id = inter_ids[valid_mask[0]]
+        inter_index = np.where(inter_ids == inter_id)[0]
+
+        # If there are at least two primaries, the interaction is nu-like
+        primary_ids = get_group_primary_id(particles)
+        num_primary = np.sum(primary_ids[inter_index])
         if num_primary > 1:
-            nu_id[inds] = 1
-    elif len(particle_mpv) > 0:
-        # Find mpv particles
-        is_mpv = np.zeros((len(particle_v),))
-        # mpv_ids = [p.id() for p in particle_mpv]
-        mpv_pdg = np.array([p.pdg_code() for p in particle_mpv]).reshape((-1,))
-        mpv_energy = np.array([p.energy_init() for p in particle_mpv]).reshape((-1,))
-        for idx, part in enumerate(particle_v):
-            # track_id - 1 in `particle_pcluster_tree` corresponds to id (or track_id) in `particle_mpv_tree`
-            # if (part.track_id()-1) in mpv_ids or (part.ancestor_track_id()-1) in mpv_ids:
-            # FIXME the above was wrong I think.
-            close = np.isclose(part.energy_init()*1e-3, mpv_energy)
-            pdg = part.pdg_code() == mpv_pdg
-            if (close & pdg).any():
-                is_mpv[idx] = 1.
-            # else:
-            #     print("fake cosmic", part.pdg_code(), part.shape(), part.creation_process(), part.track_id(), part.ancestor_track_id(), mpv_ids)
-        is_mpv = is_mpv.astype(bool)
-        nu_interaction_ids = np.unique(interaction_ids[is_mpv])
-        for idx, x in enumerate(nu_interaction_ids):
-            # # Check whether there're at least two clusts coming from 'primary' process
-            # num_primary = 0
-            # for part in particle_v[interaction_ids == x]:
-            #     if part.creation_process() == 'primary':
-            #         num_primary += 1
-            # if num_primary > 1:
-            nu_id[interaction_ids == x] = 1 # Only tells whether neutrino or not
-            # nu_id[interaction_ids == x] = idx
+            nu_ids[inter_index] = 1
+    else:
+        # Find the reference positions gauge if a particle comes from a neutrino-like interaction
+        ref_pos = None
+        if particles_mpv:
+            ref_pos = np.vstack([[getattr(p, f'{a}')() for a in ['x', 'y', 'z']] for p in particles_mpv])
+        elif neutrinos:
+            ref_pos = np.vstack([[getattr(n, f'{a}')() for a in ['x', 'y', 'z']] for n in neutrinos])
 
-    return nu_id
+        # If a particle shares its ancestor position with an MPV particle
+        # or a neutrino, it belongs to a neutrino-like interaction
+        if ref_pos is not None and len(ref_pos):
+            anc_pos = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
+            for pos in ref_pos:
+                nu_ids[(anc_pos == pos).all(axis=1)] = 1
+
+    return nu_ids
 
 
 def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=False):
@@ -254,7 +230,7 @@ def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
             continue
 
         # If the particle is not a shower or a track, it is not a primary
-        if p.shape() != SHOW_SHP and p.shape() != TRACK_SHP:
+        if p.shape() != SHOW_SHP and p.shape() != TRACK_SHP and p.shape() != LOWE_SHP:
             primary_ids[i] = 0
             continue
 
