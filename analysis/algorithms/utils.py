@@ -1,14 +1,14 @@
+import numpy as np
 from collections import OrderedDict
 from turtle import up
-from analysis.classes.particle import Interaction, Particle, TruthParticle
-from analysis.algorithms.calorimetry import *
-
 from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
+
+from analysis.classes import Particle
+from analysis.classes import TruthParticle
+from analysis.algorithms.calorimetry import *
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
 from analysis.algorithms.calorimetry import compute_track_dedx, get_particle_direction
-
-import numpy as np
 
 
 def attach_prefix(update_dict, prefix):
@@ -192,185 +192,6 @@ def get_track_points(p, correction_mode='ppn', brute_force=False):
         correct_track_endpoints_direction(p)
     else:
         raise ValueError("Track extrema correction mode {} not defined!".format(correction_mode))
-
-
-def get_interaction_properties(interaction: Interaction, spatial_size, prefix=None):
-
-    update_dict = OrderedDict({
-        'interaction_id': -1,
-        'interaction_size': -1,
-        'count_primary_particles': -1,
-        'vertex_x': -1,
-        'vertex_y': -1,
-        'vertex_z': -1,
-        'has_vertex': False,
-        'vertex_valid': 'Default Invalid',
-        'count_primary_photons': -1,
-        'count_primary_electrons': -1,
-        'count_primary_muons': -1,
-        'count_primary_pions': -1,
-        'count_primary_protons': -1,
-        'count_pi0': -1
-        # 'nu_reco_energy': -1
-    })
-
-    if interaction is None:
-        out = attach_prefix(update_dict, prefix)
-        return out
-    else:
-        count_primary_muons = {}
-        count_primary_particles = {}
-        count_primary_protons = {}
-        count_primary_electrons = {}
-        count_primary_photons = {}
-        count_primary_pions = {}
-
-        for p in interaction.particles:
-            if p.is_primary:
-                count_primary_particles[p.id] = True
-                if p.pid == 0:
-                    count_primary_photons[p.id] = True
-                if p.pid == 1:
-                    count_primary_electrons[p.id] = True
-                if p.pid == 2:
-                    count_primary_muons[p.id] = True
-                if p.pid == 3:
-                    count_primary_pions[p.id] = True
-                if p.pid == 4:
-                    count_primary_protons[p.id] = True 
-
-        update_dict['count_pi0'] = len(interaction._pi0_tagged_photons)
-
-        update_dict['interaction_id'] = interaction.id
-        update_dict['interaction_size'] = interaction.size
-        update_dict['count_primary_muons'] = sum(count_primary_muons.values())
-        update_dict['count_primary_photons'] = sum(count_primary_photons.values())
-        update_dict['count_primary_pions'] = sum(count_primary_pions.values())
-        update_dict['count_primary_particles'] = sum(count_primary_particles.values())
-        update_dict['count_primary_protons'] = sum(count_primary_protons.values())
-        update_dict['count_primary_electrons'] = sum(count_primary_electrons.values())
-
-        within_volume = np.all(interaction.vertex <= spatial_size) and np.all(interaction.vertex >= 0)
-
-        if within_volume:
-            update_dict['has_vertex'] = True
-            update_dict['vertex_x'] = interaction.vertex[0]
-            update_dict['vertex_y'] = interaction.vertex[1]
-            update_dict['vertex_z'] = interaction.vertex[2]
-            update_dict['vertex_valid'] = 'Valid'
-        else:
-            if ((np.abs(np.array(interaction.vertex)) > 1e6).any()):
-                update_dict['vertex_valid'] = 'Invalid Magnitude'
-            else:
-                update_dict['vertex_valid'] = 'Outside Volume'
-                update_dict['has_vertex'] = True
-                update_dict['vertex_x'] = interaction.vertex[0]
-                update_dict['vertex_y'] = interaction.vertex[1]
-                update_dict['vertex_z'] = interaction.vertex[2]
-        out = attach_prefix(update_dict, prefix)
-
-    return out
-
-
-def get_particle_properties(particle: Particle, 
-                            prefix=None, 
-                            save_feats=False,
-                            splines=None,
-                            compute_energy=False):
-
-    update_dict = OrderedDict({
-        'particle_id': -1,
-        'particle_interaction_id': -1,
-        'particle_type': -1,
-        'particle_semantic_type': -1,
-        'particle_size': -1,
-        'particle_is_primary': False,
-        'particle_has_startpoint': False,
-        'particle_has_endpoint': False,
-        'particle_startpoint_x': -1,
-        'particle_startpoint_y': -1,
-        'particle_startpoint_z': -1,
-        'particle_endpoint_x': -1,
-        'particle_endpoint_y': -1,
-        'particle_endpoint_z': -1,
-        'particle_startpoint_is_touching': True,
-        'particle_creation_process': "Default Invalid",
-        'particle_num_ppn_candidates': -1,
-        # 'particle_is_contained': False
-    })
-
-    if compute_energy:
-        update_dict.update(OrderedDict({
-            'particle_dir_x': -1,
-            'particle_dir_y': -1,
-            'particle_dir_z': -1,
-            'particle_length': -1,
-            'particle_reco_energy': -1,
-            'particle_sum_edep': -1
-        }))
-
-    if save_feats:
-        node_dict = OrderedDict({'node_feat_{}'.format(i) : -1 for i in range(28)})
-        update_dict.update(node_dict)
-
-    if particle is None:
-        out = attach_prefix(update_dict, prefix)
-        return out
-    else:
-        update_dict['particle_id'] = particle.id
-        update_dict['particle_interaction_id'] = particle.interaction_id
-        update_dict['particle_type'] = particle.pid
-        update_dict['particle_semantic_type'] = particle.semantic_type
-        update_dict['particle_size'] = particle.size
-        update_dict['particle_is_primary'] = particle.is_primary
-        # update_dict['particle_is_contained'] = particle.is_contained
-        if particle.startpoint is not None:
-            update_dict['particle_has_startpoint'] = True
-            update_dict['particle_startpoint_x'] = particle.startpoint[0]
-            update_dict['particle_startpoint_y'] = particle.startpoint[1]
-            update_dict['particle_startpoint_z'] = particle.startpoint[2]
-        if particle.endpoint is not None:
-            update_dict['particle_has_endpoint'] = True
-            update_dict['particle_endpoint_x'] = particle.endpoint[0]
-            update_dict['particle_endpoint_y'] = particle.endpoint[1]
-            update_dict['particle_endpoint_z'] = particle.endpoint[2]
-
-        if hasattr(particle, 'ppn_candidates'):
-            assert particle.ppn_candidates.shape[1] == 7
-            update_dict['particle_num_ppn_candidates'] = len(particle.ppn_candidates)
-
-        if isinstance(particle, TruthParticle):
-            if particle.size > 0:
-                dists = np.linalg.norm(particle.points - particle.startpoint.reshape(1, -1), axis=1)
-                min_dist = np.min(dists)
-                if min_dist > 5.0:
-                    update_dict['particle_startpoint_is_touching'] = False
-            creation_process = particle.particle_asis.creation_process()
-            update_dict['particle_creation_process'] = creation_process
-            update_dict['particle_px'] = float(particle.particle_asis.px())
-            update_dict['particle_py'] = float(particle.particle_asis.py())
-            update_dict['particle_pz'] = float(particle.particle_asis.pz())
-        if compute_energy and particle.size > 0:
-            update_dict['particle_sum_edep'] = particle.sum_edep
-            direction = get_particle_direction(particle, optimize=True)
-            assert len(direction) == 3
-            update_dict['particle_dir_x'] = direction[0]
-            update_dict['particle_dir_y'] = direction[1]
-            update_dict['particle_dir_z'] = direction[2]
-            if particle.semantic_type == 1:
-                length =  compute_track_length(particle.points)
-                update_dict['particle_length'] = length
-                particle.length = length
-                if splines is not None and particle.pid == 4:
-                    reco_energy = compute_range_based_energy(particle, splines['proton'])
-                    update_dict['particle_reco_energy'] = reco_energy
-                if splines is not None and particle.pid == 2:
-                    reco_energy = compute_range_based_energy(particle, splines['muon'])
-                    update_dict['particle_reco_energy'] = reco_energy
-
-    out = attach_prefix(update_dict, prefix)
-
-    return out
 
 
 def get_mparticles_from_minteractions(int_matches):

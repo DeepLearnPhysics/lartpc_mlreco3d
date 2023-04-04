@@ -60,7 +60,7 @@ class TruthParticle(Particle):
 
     def is_contained(self, spatial_size):
 
-        p = self.particle_asis
+        p = self.asis
         check_contained = p.position().x() >= 0 and p.position().x() <= spatial_size \
             and p.position().y() >= 0 and p.position().y() <= spatial_size \
             and p.position().z() >= 0 and p.position().z() <= spatial_size \

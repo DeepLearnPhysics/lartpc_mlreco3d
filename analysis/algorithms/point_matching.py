@@ -1,10 +1,8 @@
 from typing import List
 import numpy as np
-import pandas as pd
 
 from scipy.spatial.distance import cdist
-from scipy.special import expit
-from ..classes.particle import Particle
+from analysis.classes.Particle import Particle
 
 def match_points_to_particles(ppn_points : np.ndarray,
                               particles : List[Particle],

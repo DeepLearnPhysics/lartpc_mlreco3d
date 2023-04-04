@@ -4,8 +4,8 @@ from analysis.classes.evaluator import FullChainEvaluator
 from analysis.algorithms.calorimetry import compute_track_length
 
 from analysis.decorator import evaluate
-from analysis.classes.particle import match_particles_fn, matrix_iou
-from analysis.algorithms.selections.michel_electrons import get_bounding_box, is_attached_at_edge
+from lartpc_mlreco3d.analysis.classes.particle_utils import match_particles_fn, matrix_iou
+from analysis.algorithms.arxiv.michel_electrons import get_bounding_box, is_attached_at_edge
 
 from pprint import pprint
 import time

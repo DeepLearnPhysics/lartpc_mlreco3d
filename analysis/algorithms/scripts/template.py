@@ -1,21 +1,12 @@
+import copy
 from collections import OrderedDict
-import os, copy, sys
-
-# Flash Matching
-# sys.path.append('/sdf/group/neutrino/koh0207/OpT0Finder/python')
 
 from analysis.decorator import evaluate
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction
-from analysis.classes.Particle import Particle
-from analysis.classes.TruthParticle import TruthParticle
-from analysis.algorithms.utils import get_interaction_properties, \
-                                      get_particle_properties, \
-                                      get_mparticles_from_minteractions
-
-from analysis.algorithms.calorimetry import get_csda_range_spline
-from analysis.algorithms.vertex import estimate_vertex
+from analysis.algorithms.utils import get_mparticles_from_minteractions
+from analysis.algorithms.logger import ParticleLogger, InteractionLogger
 
 @evaluate(['interactions', 'particles'], mode='per_batch')
 def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
@@ -43,21 +34,13 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
 
     # Skeleton for csv output
     interaction_dict      = analysis_cfg['analysis'].get('interaction_dict', {})
-    particle_dict         = analysis_cfg['analysis'].get('particle_dict', {})
+
+    particle_fieldnames   = analysis_cfg['analysis'].get('particle_fieldnames', {})
+    int_fieldnames        = analysis_cfg['analysis'].get('interaction_fieldnames', {})
 
     use_primaries_for_vertex = analysis_cfg['analysis'].get('use_primaries_for_vertex', True)
     run_reco_vertex = analysis_cfg['analysis'].get('run_reco_vertex', False)
     test_containment = analysis_cfg['analysis'].get('test_containment', False)
-
-    splines = None
-    skip_classes = set([3, 4])
-
-    if compute_energy:
-
-        splines = {
-            'proton': get_csda_range_spline('proton', '/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/pE_liquid_argon.txt'),
-            'muon': get_csda_range_spline('muon', '/sdf/group/neutrino/koh0207/lartpc_mlreco3d/analysis/algorithms/tables/muE_liquid_argon.txt')
-        }
 
     # Load data into evaluator
     if enable_flash_matching:
@@ -101,148 +84,43 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
         if len(matches) == 0:
             continue
 
-        particle_matches, particle_matches_values = get_mparticles_from_minteractions(matches)
+        particle_matches, particle_match_counts = get_mparticles_from_minteractions(matches)
 
         # 2. Process interaction level information
+        interaction_logger = InteractionLogger(int_fieldnames)
+        interaction_logger.prepare()
         for i, interaction_pair in enumerate(matches):
+
             int_dict = copy.deepcopy(interaction_dict)
-
             int_dict.update(index_dict)
-
             int_dict['interaction_match_counts'] = counts[i]
             true_int, pred_int = interaction_pair[0], interaction_pair[1]
 
             assert (type(true_int) is TruthInteraction) or (true_int is None)
             assert (type(pred_int) is Interaction) or (pred_int is None)
 
-            true_int_dict = get_interaction_properties(true_int, spatial_size, prefix='true')
-            pred_int_dict = get_interaction_properties(pred_int, spatial_size, prefix='pred')
-            fmatch_dict = {}
-            
-            if true_int is not None:
-                # This means there is a true interaction corresponding to
-                # this predicted interaction. Hence:
-                pred_int_dict['pred_interaction_has_match'] = True
-                true_int_dict['true_nu_id'] = true_int.nu_id
+            true_int_dict = interaction_logger.produce(true_int, mode='true')
+            pred_int_dict = interaction_logger.produce(pred_int, mode='pred')
 
-                if run_reco_vertex:
-
-                    reco_vtx, _ = estimate_vertex(true_int.particles, 
-                                            use_primaries=use_primaries_for_vertex, 
-                                            mode=vertex_mode,
-                                            prune_candidates=predictor.prune_vertex,
-                                            return_candidate_count=True)
-                    
-                    true_int_dict['true_reco_vtx_x'] = reco_vtx[0]
-                    true_int_dict['true_reco_vtx_y'] = reco_vtx[1]
-                    true_int_dict['true_reco_vtx_z'] = reco_vtx[2]
-
-                if 'neutrino_asis' in data_blob and true_int.nu_id > 0:
-                    # assert 'particles_asis' in data_blob
-                    # particles = data_blob['particles_asis'][i]
-                    neutrinos = data_blob['neutrino_asis'][idx]
-                    if len(neutrinos) > 1 or len(neutrinos) == 0: continue
-                    nu = neutrinos[0]
-                    # Get larcv::Particle objects for each
-                    # particle of the true interaction
-                    # true_particles = np.array(particles)[np.array([p.id for p in true_int.particles])]
-                    # true_particles_track_ids = [p.track_id() for p in true_particles]
-                    # for nu in neutrinos:
-                    #     if nu.mct_index() not in true_particles_track_ids: continue
-                    true_int_dict['true_nu_interaction_type'] = nu.interaction_type()
-                    true_int_dict['true_nu_interaction_mode'] = nu.interaction_mode()
-                    true_int_dict['true_nu_current_type'] = nu.current_type()
-                    true_int_dict['true_nu_energy'] = nu.energy_init()
-            if pred_int is not None:
-                # Similarly:
-                pred_int_dict['pred_vertex_candidate_count'] = pred_int.vertex_candidate_count
-                true_int_dict['true_interaction_has_match'] = True
-
-            if enable_flash_matching:
-                volume = true_int.volume if true_int is not None else pred_int.volume
-                flash_matches = flash_matches_cryoW if volume == 1 else flash_matches_cryoE
-                if pred_int is not None:
-                    for interaction, flash, match in flash_matches:
-                        if interaction.id != pred_int.id: continue
-                        fmatch_dict['fmatched'] = True
-                        fmatch_dict['fmatch_time'] = flash.time()
-                        fmatch_dict['fmatch_total_pe'] = flash.TotalPE()
-                        fmatch_dict['fmatch_id'] = flash.id()
-                        break
-
-            for k1, v1 in true_int_dict.items():
-                if k1 in int_dict:
-                    int_dict[k1] = v1
-                else:
-                    raise ValueError("{} not in pre-defined fieldnames.".format(k1))
-            for k2, v2 in pred_int_dict.items():
-                if k2 in int_dict:
-                    int_dict[k2] = v2
-                else:
-                    raise ValueError("{} not in pre-defined fieldnames.".format(k2))
-            if enable_flash_matching:
-                for k3, v3 in fmatch_dict.items():
-                    if k3 in int_dict:
-                        int_dict[k3] = v3
-                    else:
-                        raise ValueError("{} not in pre-defined fieldnames.".format(k3))
+            int_dict = OrderedDict()
+            int_dict.update(true_int_dict)
+            int_dict.update(pred_int_dict)
             interactions.append(int_dict)
 
-
         # 3. Process particle level information
+        particle_logger = ParticleLogger(particle_fieldnames)
+        particle_logger.prepare()
+
         for i, mparticles in enumerate(particle_matches):
             true_p, pred_p = mparticles[0], mparticles[1]
 
-            assert (type(true_p) is TruthParticle) or true_p is None
-            assert (type(pred_p) is Particle) or pred_p is None
+            true_p_dict = particle_logger.produce(true_p, mode='true')
+            pred_p_dict = particle_logger.produce(pred_p, mode='pred')
 
-            part_dict = copy.deepcopy(particle_dict)
-
-            part_dict.update(index_dict)
-            part_dict['particle_match_value'] = particle_matches_values[i]
-
-            pred_particle_dict = get_particle_properties(pred_p,
-                prefix='pred', splines=splines, compute_energy=compute_energy)
-            true_particle_dict = get_particle_properties(true_p,
-                prefix='true', splines=splines, compute_energy=compute_energy)
-
-            if true_p is not None:
-                pred_particle_dict['pred_particle_has_match'] = True
-                if test_containment and true_p.size > 0:
-                    true_particle_dict['true_particle_is_contained'] = predictor.is_contained(true_p.points)
-                true_particle_dict['true_particle_interaction_id'] = true_p.interaction_id
-                if 'particles_asis' in data_blob:
-                    particles_asis = data_blob['particles_asis'][idx]
-                    if len(particles_asis) > true_p.id:
-                        true_part = particles_asis[true_p.id]
-                        true_particle_dict['true_particle_energy_init'] = true_part.energy_init()
-                        true_particle_dict['true_particle_energy_deposit'] = true_part.energy_deposit()
-                        true_particle_dict['true_particle_creation_process'] = true_part.creation_process()
-                        # If no children other than itself: particle is stopping.
-                        children = true_part.children_id()
-                        children = [x for x in children if x != true_part.id()]
-                        true_particle_dict['true_particle_children_count'] = len(children)
-
-            if pred_p is not None:
-                if test_containment:
-                    pred_particle_dict['pred_particle_is_contained'] = predictor.is_contained(pred_p.points)
-                true_particle_dict['true_particle_has_match'] = True
-                pred_particle_dict['pred_particle_interaction_id'] = pred_p.interaction_id
-
-
-            for k1, v1 in true_particle_dict.items():
-                if k1 in part_dict:
-                    part_dict[k1] = v1
-                else:
-                    raise ValueError("{} not in pre-defined fieldnames.".format(k1))
-
-            for k2, v2 in pred_particle_dict.items():
-                if k2 in part_dict:
-                    part_dict[k2] = v2
-                else:
-                    raise ValueError("{} not in pre-defined fieldnames.".format(k2))
-
-        
+            part_dict = OrderedDict()
+            part_dict['particle_match_counts'] = particle_match_counts[i]
+            part_dict.update(true_p_dict)
+            part_dict.update(pred_p_dict)
             particles.append(part_dict)
 
     return [interactions, particles]

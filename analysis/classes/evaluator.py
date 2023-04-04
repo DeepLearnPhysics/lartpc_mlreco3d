@@ -4,11 +4,11 @@ import numpy as np
 from mlreco.utils.globals import VTX_COLS, INTER_COL, COORD_COLS
 
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
-from analysis.classes.particle import (match_particles_fn, 
-                                       match_interactions_fn, 
-                                       group_particles_to_interactions_fn, 
-                                       match_interactions_optimal, 
-                                       match_particles_optimal)
+from analysis.classes.particle_utils import (match_particles_fn, 
+                                             match_interactions_fn, 
+                                             group_particles_to_interactions_fn, 
+                                             match_interactions_optimal, 
+                                             match_particles_optimal)
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
@@ -454,6 +454,25 @@ class FullChainEvaluator(FullChainPredictor):
         for ia in out:
             if compute_vertex and ia.id in vertices:
                 ia.vertex = vertices[ia.id]
+
+            if 'neutrino_asis' in self.data_blob and ia.nu_id > 0:
+                # assert 'particles_asis' in data_blob
+                # particles = data_blob['particles_asis'][i]
+                neutrinos = self.data_blob['neutrino_asis'][entry]
+                if len(neutrinos) > 1 or len(neutrinos) == 0: continue
+                nu = neutrinos[0]
+                # Get larcv::Particle objects for each
+                # particle of the true interaction
+                # true_particles = np.array(particles)[np.array([p.id for p in true_int.particles])]
+                # true_particles_track_ids = [p.track_id() for p in true_particles]
+                # for nu in neutrinos:
+                #     if nu.mct_index() not in true_particles_track_ids: continue
+                ia.nu_info = {
+                    'interaction_type': nu.interaction_type(),
+                    'interaction_mode': nu.interaction_mode(),
+                    'current_type': nu.current_type(),
+                    'energy_init': nu.energy_init()
+                }
 
         return out
 

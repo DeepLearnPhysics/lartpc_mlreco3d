@@ -1,10 +1,9 @@
-from analysis.classes.particle import Particle
 import numpy as np
-import numba as nb
 from sklearn.decomposition import PCA
 from scipy.interpolate import CubicSpline
 from mlreco.utils.gnn.cluster import cluster_direction
 import pandas as pd
+from analysis.classes import Particle
 
 # CONSTANTS (MeV)
 PROTON_MASS = 938.272

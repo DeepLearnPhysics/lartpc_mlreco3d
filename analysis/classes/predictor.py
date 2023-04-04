@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, List
+from typing import List
 import numpy as np
 import os
 import time
@@ -9,7 +9,7 @@ from mlreco.utils.metrics import unique_label
 
 from scipy.special import softmax
 from analysis.classes import Particle, ParticleFragment, Interaction, FlashManager
-from analysis.classes.particle import group_particles_to_interactions_fn
+from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.groups import type_labels as TYPE_LABELS
