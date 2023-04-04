@@ -16,7 +16,7 @@ from mlreco.utils.globals import *
                                                   'input_rescaled', 
                                                   'particle_node_pred_type'])
 def range_based_track_energy(data_dict, result_dict,
-                             bin_size=17, include_pids=[2, 3, 4]):
+                             bin_size=17, include_pids=[2, 3, 4], table_path=''):
 
     input_data     = result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
@@ -30,7 +30,6 @@ def range_based_track_energy(data_dict, result_dict,
     if len(particles) == 0:
         return update_dict
 
-    table_path = '/sdf/group/neutrino/koh0207/lartpc_mlreco3d/mlreco/post_processing/reconstruction/tables'
     splines = {ptype: get_splines(ptype, table_path) for ptype in include_pids}
 
     pred_ptypes = np.argmax(particle_types, axis=1)
