@@ -42,7 +42,7 @@ def find_true_x(interaction):
     return values[np.argmax(counts)]
 
 
-@evaluate(['interactions', 'flashes', 'matches'], mode='per_batch')
+@evaluate(['interactions', 'flashes', 'matches'])
 def flash_matching(data_blob, res, data_idx, analysis_cfg, cfg):
     # Setup OpT0finder
     #sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')

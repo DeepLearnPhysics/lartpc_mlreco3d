@@ -4,7 +4,7 @@ import scipy
 from mlreco.post_processing import post_processing
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.vertex import predict_vertex, get_vertex
-from mlreco.utils.groups import type_labels
+from mlreco.utils.globals import PDG_TO_PID
 
 
 @post_processing(['nue-selection-true', 'nue-selection-primaries'],
@@ -49,7 +49,7 @@ def nue_selection(cfg, module_cfg, data_blob, res, logdir, iteration,
     inter_threshold          = module_cfg.get('inter_threshold', 10)
 
     # Translate into particle type labels
-    primary_types = np.unique([type_labels[pdg] for pdg in primary_pdgs])
+    primary_types = np.unique([PDG_TO_PID[pdg] for pdg in primary_pdgs])
 
     row_names_true, row_values_true = [], []
     row_names_primaries, row_values_primaries = [], []

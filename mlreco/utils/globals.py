@@ -1,3 +1,5 @@
+from larcv import larcv
+
 # Column which specifies the batch ID in a sparse tensor
 BATCH_COL  = 0
 
@@ -39,3 +41,30 @@ ELECTRON_MASS = 0.511998
 ARGON_DENSITY = 1.396
 ADC_TO_MEV = 1. / 350.
 PIXELS_TO_CM = 0.3
+
+# Shape ID of each type of voxel category
+SHOW_SHP   = larcv.kShapeShower    # 0
+TRACK_SHP  = larcv.kShapeTrack     # 1
+MICH_SHP   = larcv.kShapeMichel    # 2
+DELTA_SHP  = larcv.kShapeDelta     # 3
+LOWE_SHP   = larcv.kShapeLEScatter # 4
+GHOST_SHP  = larcv.kShapeGhost     # 5
+UNKWN_SHP  = larcv.kShapeUnknown   # 6
+
+# Shape precedence used in the cluster labeling process
+SHAPE_PREC = [TRACK_SHP, MICH_SHP, SHOW_SHP, DELTA_SHP, LOWE_SHP]
+
+# Invalid labels
+INVAL_TID  = larcv.kINVALID_UINT
+
+# Mapping between particle PDG code and particle ID labels
+PDG_TO_PID = {
+    22:   0,  # photon
+    11:   1,  # e-
+    -11:  1,  # e+
+    13:   2,  # mu-
+    -13:  2,  # mu+
+    211:  3,  # pi+
+    -211: 3,  # pi-
+    2212: 4,  # protons
+}

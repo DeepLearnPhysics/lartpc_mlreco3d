@@ -21,7 +21,7 @@ def must_invert(x, invert_regions):
 
 
 
-@evaluate(['acpt_muons_cells', 'acpt_muons'], mode='per_batch')
+@evaluate(['acpt_muons_cells', 'acpt_muons'])
 def through_going_muons(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Selection of through going muons

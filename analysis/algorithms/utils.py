@@ -6,7 +6,6 @@ from scipy.spatial.distance import cdist
 
 from analysis.classes import Particle
 from analysis.classes import TruthParticle
-from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import *
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
 # from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_dedx, get_particle_direction
 

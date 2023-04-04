@@ -1,4 +1,3 @@
-import copy
 from collections import OrderedDict
 
 from analysis.decorator import evaluate
@@ -8,7 +7,7 @@ from analysis.classes.Interaction import Interaction
 from analysis.algorithms.utils import get_mparticles_from_minteractions
 from analysis.algorithms.logger import ParticleLogger, InteractionLogger
 
-@evaluate(['interactions', 'particles'], mode='per_batch')
+@evaluate(['interactions', 'particles'])
 def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Example of analysis script for nue analysis.

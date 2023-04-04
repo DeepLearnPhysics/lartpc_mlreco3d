@@ -420,7 +420,7 @@ def inference_loop(handlers):
                 tsum, result_blob, handlers.cfg, epoch, data_blob['index'][0])
 
             if handlers.writer:
-                handlers.writer.append(handlers.cfg, data_blob, result_blob)
+                handlers.writer.append(data_blob, result_blob, handlers.cfg)
 
             handlers.iteration += 1
 

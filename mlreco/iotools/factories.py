@@ -1,3 +1,4 @@
+from copy import deepcopy
 from torch.utils.data import DataLoader
 
 
@@ -108,8 +109,11 @@ def writer_factory(cfg):
     ----
     Currently the choice is limited to `HDF5Writer` only.
     """
+    if 'writer' not in cfg['iotool']:
+        return None
+
     import mlreco.iotools.writers
-    params = cfg['iotool'].get('writer', None)
-    if params is not None:
-        return getattr(mlreco.iotools.writers, params['name'])(params)
-    return None
+    params = deepcopy(cfg['iotool']['writer'])
+    name   = params.pop('name')
+    writer = getattr(mlreco.iotools.writers, name)(**params)
+    return writer

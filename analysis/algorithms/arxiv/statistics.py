@@ -10,7 +10,7 @@ from analysis.decorator import evaluate
 import numpy as np
 
 
-@evaluate(['particles', 'interactions', 'events', 'opflash', 'ohmflash'], mode='per_batch')
+@evaluate(['particles', 'interactions', 'events', 'opflash', 'ohmflash'])
 def statistics(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Collect statistics of predicted particles/interactions.

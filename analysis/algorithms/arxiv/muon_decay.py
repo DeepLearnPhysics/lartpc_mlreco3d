@@ -14,7 +14,7 @@ import os, sys
 from scipy.spatial.distance import cdist
 
 
-@evaluate(['michels'], mode='per_batch')
+@evaluate(['michels'])
 def muon_decay(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Muon lifetime measurement.

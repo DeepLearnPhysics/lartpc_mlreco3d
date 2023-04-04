@@ -11,11 +11,10 @@ from mlreco.main_funcs import cycle
 from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.iotools.readers import HDF5Reader
+from mlreco.iotools.writers import CSVWriter
 
-from mlreco.utils.utils import CSVData
 
-
-def evaluate(filenames, mode='per_image'):
+def evaluate(filenames):
     '''
     Inputs
     ------
@@ -25,11 +24,14 @@ def evaluate(filenames, mode='per_image'):
     def decorate(func):
 
         @wraps(func)
-        def process_dataset(analysis_config, cfg=None, profile=True):
+        def process_dataset(analysis_config, cfg, profile=True):
 
-            assert cfg is not None or 'reader' in analysis_config
+            # Total number of iterations to process
             max_iteration = analysis_config['analysis']['iteration']
+
+            # Initialize the process which produces the reconstruction output
             if 'reader' not in analysis_config:
+                # If there is not reader, initialize the full chain
                 io_cfg = cfg['iotool']
 
                 module_config = cfg['model']['modules']
@@ -48,7 +50,9 @@ def evaluate(filenames, mode='per_image'):
                 if max_iteration == -1:
                     max_iteration = len(loader.dataset)
                 assert max_iteration <= len(loader.dataset)
+
             else:
+                # If there is a reader, simply load reconstructed data
                 file_keys = analysis_config['reader']['file_keys']
                 entry_list = analysis_config['reader'].get('entry_list', [])
                 skip_entry_list = analysis_config['reader'].get('skip_entry_list', [])
@@ -57,19 +61,19 @@ def evaluate(filenames, mode='per_image'):
                     max_iteration = len(Reader)
                 assert max_iteration <= len(Reader)
 
-            iteration = 0
-
+            # Initialize the writer(s)
             log_dir = analysis_config['analysis']['log_dir']
-            append = analysis_config['analysis'].get('append', True)
+            append = analysis_config['analysis'].get('append', False)
 
-            output_logs = {}
-            for fname in filenames:
-                f = os.path.join(log_dir, '{}.csv'.format(fname))
-                output_logs[fname] = CSVData(f, append=append)
-                output_logs[fname].open()
+            writers = {}
+            for file_name in filenames:
+                writers[file_name] = CSVWriter(f'{log_dir}/{file_name}.csv', append)
 
+            # Loop over the number of requested iterations
+            iteration = 0
             while iteration < max_iteration:
 
+                # Load data batch
                 if profile:
                     start = time.time()
                 if 'reader' not in analysis_config:
@@ -77,41 +81,28 @@ def evaluate(filenames, mode='per_image'):
                 else:
                     data_blob, res = Reader.get(iteration, nested=True)
                 if profile:
-                    print("Forward took %d s" % (time.time() - start))
+                    print("Forward took %.2f s" % (time.time() - start))
                 img_indices = data_blob['index']
+
+                # Build the output dictionary
+                stime = time.time()
                 fname_to_update_list = defaultdict(list)
-                if mode == 'per_batch':
-                    # list of (list of dicts)
-                    dict_list = func(data_blob, res, None, analysis_config, cfg)
+                for batch_index, img_index in enumerate(img_indices):
+                    dict_list = func(data_blob, res, batch_index, analysis_config, cfg)
                     for i, analysis_dict in enumerate(dict_list):
                         fname_to_update_list[filenames[i]].extend(analysis_dict)
-                elif mode == 'per_image':
-                    for batch_index, img_index in enumerate(img_indices):
-                        dict_list = func(data_blob, res, batch_index, analysis_config, cfg)
-                        for i, analysis_dict in enumerate(dict_list):
-                            fname_to_update_list[filenames[i]].extend(analysis_dict)
-                else:
-                    raise Exception("Evaluation mode {} is invalid!".format(mode))
+
+                # Store
                 for i, fname in enumerate(fname_to_update_list):
-                    headers = False
                     for row_dict in fname_to_update_list[fname]:
-                        keys, vals = row_dict.keys(), row_dict.values()
-                        output_logs[fname].record(list(keys), list(vals))
-                        if not iteration and not headers:
-                            output_logs[fname].write_headers(list(keys))
-                            headers = True
-                        output_logs[fname].write_data(str_format='{}')
-                        output_logs[fname].flush()
-                        os.fsync(output_logs[fname]._fout.fileno())
+                        writers[fname].append(row_dict)
+
+                # Increment iteration count
                 iteration += 1
                 if profile:
                     end = time.time()
-                    print("Iteration %d (total %d s)" % (iteration, end - start))
-
-            for fname in filenames:
-                output_logs[fname].close()
+                    print("Iteration %d (total %.2f s)" % (iteration, end - start))
 
         process_dataset._filenames = filenames
-        process_dataset._mode = mode
         return process_dataset
     return decorate

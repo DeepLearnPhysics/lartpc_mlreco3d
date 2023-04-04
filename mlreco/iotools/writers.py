@@ -1,69 +1,97 @@
-import numpy as np
-import h5py
+import os
 import yaml
+import h5py
 import inspect
+import numpy as np
 from collections import defaultdict
 from larcv import larcv
 
 
 class HDF5Writer:
     '''
-    Class which build an HDF5 file to store the output
-    (and optionally input) of the reconstruction chain.
+    Class which builds an HDF5 file to store the input
+    and/or the output of the reconstruction chain. It
+    can also be used to append an existing HDF5 file with
+    information coming out of the analysis tools.
 
     More documentation to come.
     '''
 
-    def __init__(self, cfg):
+    def __init__(self,
+                 file_name: str = 'output.h5',
+                 input_keys: list = None,
+                 skip_input_keys: list = [],
+                 result_keys: list = None,
+                 skip_result_keys: list = [],
+                 append_file: bool = False,
+                 add_results: bool = False):
         '''
-        Initialize the basics of the output file
+        Initializes the basics of the output file
 
         Parameters
         ----------
-        cfg : dict
-            Writer configuration parameter (TODO: turn this into a list of named parameters)
+        file_name : str, default 'output.h5'
+            Name of the output HDF5 file
+        input_keys : list, optional
+            List of input keys to store. If not specified, stores all of the input keys
+        skip_input_keys: list, optional
+            List of input keys to skip
+        result_keys : list, optional
+            List of result keys to store. If not specified, stores all of the result keys
+        skip_result_keys: list, optional
+            List of result keys to skip
+        append_file: bool, default False
+            Add new values to the end of an existing file
+        add_results: bool, default False
+            Add new keys to an existing file (must match existing length)
         '''
         # Store attributes
-        self.file_name        = cfg.get('file_name', 'output.h5')
-        self.input_keys       = cfg.get('input_keys', None)
-        self.skip_input_keys  = cfg.get('skip_input_keys', [])
-        self.result_keys      = cfg.get('result_keys', None)
-        self.skip_result_keys = cfg.get('skip_result_keys', [])
-        self.created          = False
+        self.file_name        = file_name
+        self.input_keys       = input_keys
+        self.skip_input_keys  = skip_input_keys
+        self.result_keys      = result_keys
+        self.skip_result_keys = skip_result_keys
+        self.append_file      = append_file
+        self.add_results      = add_results
+        self.ready            = False
 
-    def create(self, cfg, data_blob, result_blob=None):
+        assert not (append_file and add_results), 'Cannot append a file with new keys'
+
+    def create(self, data_blob, result_blob=None, cfg=None):
         '''
         Create the output file structure based on the data and result blobs.
 
         Parameters
         ----------
-        cfg : dict
-            Dictionary containing the ML chain configuration
         data_blob : dict
             Dictionary containing the input data
         result_blob : dict
             Dictionary containing the output of the reconstruction chain
+        cfg : dict
+            Dictionary containing the ML chain configuration
         '''
-        # Get the expected batch_size from the data_blob (index must be present)
+        # Make sure there is something to store
+        assert data_blob or result_blob, 'Must provide a non-empty data blob or result blob'
+
+        # Get the expected batch_size (index is alaways provided by the reco. chain)
         self.batch_size = len(data_blob['index'])
 
         # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False})
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
 
         # If requested, loop over input_keys and add them to what needs to be tracked
         if self.input_keys is None: self.input_keys = data_blob.keys()
         self.input_keys = set(self.input_keys)
-        if 'index' not in self.input_keys: self.input_keys.add('index')
+        if 'index' not in self.input_keys:
+            self.input_keys.add('index')
         for key in self.skip_input_keys:
             if key in self.input_keys:
                 self.input_keys.remove(key)
         for key in self.input_keys:
             self.register_key(data_blob, key, 'data')
 
-        # Loop over the result_keys and add them to what needs to be tracked
-        assert self.result_keys is None or result_blob is not None,\
-                'No result provided, cannot request keys from it'
-        if self.result_keys is None: self.result_keys = result_blob.keys()
+        # If requested, loop over the result_keys and add them to what needs to be tracked
+        if self.result_keys is None: self.result_keys = result_blob.keys() if result_blob is not None else []
         self.result_keys = set(self.result_keys)
         for key in self.skip_result_keys:
             if key in self.result_keys:
@@ -74,15 +102,46 @@ class HDF5Writer:
         # Initialize the output HDF5 file
         with h5py.File(self.file_name, 'w') as file:
             # Initialize the info dataset that stores top-level description of what is stored
-            # TODO: This needs to be fleshed out, currently dumping the config as a single string...
-            file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
-            file['info'].attrs['cfg'] = yaml.dump(cfg)
+            if cfg is not None:
+                file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
+                file['info'].attrs['cfg'] = yaml.dump(cfg)
 
             # Initialize the event dataset and the corresponding reference array datasets
             self.initialize_datasets(file)
 
             # Mark file as ready for use
-            self.created = True
+            self.ready = True
+
+    def add_keys(self, result_blob):
+        '''
+        Add more keys to the results group of an existing file.
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the additional output to store
+        '''
+        # Make sure there is something to store
+        assert result_blob, 'Must provide a non-empty result blob'
+
+        # Get the expected batch_size from the data_blob (index must be present)
+        self.batch_size = 1
+
+        # Initialize a dictionary to store keys and their properties (dtype and shape)
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
+
+        # Loop over the result_keys and add them to what needs to be tracked
+        self.result_keys = list(result_blob.keys())
+        for key in self.result_keys:
+            self.register_key(result_blob, key, 'result')
+
+        # Initialize the output HDF5 file
+        with h5py.File(self.file_name, 'a') as file:
+            # Initialize the event dataset and the corresponding reference array datasets
+            self.initialize_datasets(file)
+
+            # Mark file as ready for use
+            self.ready = True
 
     def register_key(self, blob, key, category):
         '''
@@ -99,75 +158,70 @@ class HDF5Writer:
         '''
         # Store the necessary information to know how to store a key
         self.key_dict[key]['category'] = category
-        if not isinstance(blob[key], list):
-            # Single scalar (TODO: Is that thing? If not, why not?)
-            self.key_dict[key]['dtype'] = type(blob[key])
+        if self.is_scalar(blob[key]):
+            # Single scalar
+            self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key], str) else type(blob[key])
+            self.key_dict[key]['scalar'] = True
 
         else:
-            if len(blob[key]) != self.batch_size:
+            if len(blob[key]) != self.batch_size: # TODO: Get rid of this possibility upstream
                 # List with a single scalar, regardless of batch_size
-                # TODO: understand why single scalars are in arrays...
-                assert len(blob[key]) == 1 and\
-                        not hasattr(blob[key][0], '__len__'),\
+                assert len(blob[key]) == 1 and self.is_scalar(blob[key][0]),\
                         'If there is an array of length mismatched with batch_size, '+\
                         'it must contain a single scalar.'
-                self.key_dict[key]['dtype'] = type(blob[key][0])
 
-            elif not hasattr(blob[key][0], '__len__'):
+            if self.is_scalar(blob[key][0]):
                 # List containing a single scalar per batch ID
-                self.key_dict[key]['dtype'] = type(blob[key][0])
+                self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key][0], str) else type(blob[key][0])
+                self.key_dict[key]['scalar'] = True
 
-            elif isinstance(blob[key][0], (list, np.ndarray)) and\
-                    isinstance(blob[key][0][0], larcv.Particle):
-                # List containing a single list of larcv.Particle object per batch ID
-                if not hasattr(self, 'particle_dtype'):
-                    self.particle_dtype = self.get_object_dtype(blob[key][0][0])
-                self.key_dict[key]['dtype'] = self.particle_dtype
-
-            elif isinstance(blob[key][0], (list, np.ndarray)) and\
-                    isinstance(blob[key][0][0], larcv.Neutrino):
-                # List containing a single list of larcv.Neutrino object per batch ID
-                if not hasattr(self, 'neutrino_dtype'):
-                    self.neutrino_dtype = self.get_object_dtype(blob[key][0][0])
-                self.key_dict[key]['dtype'] = self.neutrino_dtype
-
-            elif isinstance(blob[key][0], (list, np.ndarray)) and\
-                    isinstance(blob[key][0][0], larcv.Flash):
-                # List containing a single list of larcv.Flash object per batch ID
-                if not hasattr(self, 'flash_dtype'):
-                    self.flash_dtype = self.get_object_dtype(blob[key][0][0])
-                self.key_dict[key]['dtype'] = self.flash_dtype
-
-            elif isinstance(blob[key][0], (list, np.ndarray)) and\
-                    isinstance(blob[key][0][0], larcv.CRTHit):
-                # List containing a single list of larcv.CRTHit object per batch ID
-                if not hasattr(self, 'crthit_dtype'):
-                    self.crthit_dtype = self.get_object_dtype(blob[key][0][0])
-                self.key_dict[key]['dtype'] = self.crthit_dtype
-
-            elif isinstance(blob[key][0], list) and\
-                    not hasattr(blob[key][0][0], '__len__'):
-                # List containing a single list of scalars per batch ID
-                self.key_dict[key]['dtype'] = type(blob[key][0][0])
-
-            elif isinstance(blob[key][0], np.ndarray) and\
-                    not blob[key][0].dtype == np.object:
-                # List containing a single ndarray of scalars per batch ID
-                self.key_dict[key]['dtype'] = blob[key][0].dtype
-                self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
-
-            elif isinstance(blob[key][0], (list, np.ndarray)) and isinstance(blob[key][0][0], np.ndarray):
-                # List containing a list (or ndarray) of ndarrays per batch ID
-                widths = []
-                for i in range(len(blob[key][0])):
-                    widths.append(blob[key][0][i].shape[1] if len(blob[key][0][i].shape) == 2 else 0)
-                same_width = np.all([widths[i] == widths[0] for i in range(len(widths))])
-
-                self.key_dict[key]['dtype'] = blob[key][0][0].dtype
-                self.key_dict[key]['width'] = widths
-                self.key_dict[key]['merge'] = same_width
             else:
-                raise TypeError('Do not know how to store output of type', type(blob[key][0]))
+                # List containing a list/array of objects per batch ID
+                if isinstance(blob[key][0][0], larcv.Particle):
+                    # List containing a single list of larcv.Particle object per batch ID
+                    if not hasattr(self, 'particle_dtype'):
+                        self.particle_dtype = self.get_object_dtype(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = self.particle_dtype
+
+                elif isinstance(blob[key][0][0], larcv.Neutrino):
+                    # List containing a single list of larcv.Neutrino object per batch ID
+                    if not hasattr(self, 'neutrino_dtype'):
+                        self.neutrino_dtype = self.get_object_dtype(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = self.neutrino_dtype
+
+                elif isinstance(blob[key][0][0], larcv.Flash):
+                    # List containing a single list of larcv.Flash object per batch ID
+                    if not hasattr(self, 'flash_dtype'):
+                        self.flash_dtype = self.get_object_dtype(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = self.flash_dtype
+
+                elif isinstance(blob[key][0][0], larcv.CRTHit):
+                    # List containing a single list of larcv.CRTHit object per batch ID
+                    if not hasattr(self, 'crthit_dtype'):
+                        self.crthit_dtype = self.get_object_dtype(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = self.crthit_dtype
+
+                elif not hasattr(blob[key][0][0], '__len__'):
+                    # List containing a single list of scalars per batch ID
+                    self.key_dict[key]['dtype'] = type(blob[key][0][0])
+
+                elif not blob[key][0].dtype == np.object:
+                    # List containing a single ndarray of scalars per batch ID
+                    self.key_dict[key]['dtype'] = blob[key][0].dtype
+                    self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
+
+                elif isinstance(blob[key][0][0], np.ndarray):
+                    # List containing a list (or ndarray) of ndarrays per batch ID
+                    widths = []
+                    for i in range(len(blob[key][0])):
+                        widths.append(blob[key][0][i].shape[1] if len(blob[key][0][i].shape) == 2 else 0)
+                    same_width = np.all([widths[i] == widths[0] for i in range(len(widths))])
+
+                    self.key_dict[key]['dtype'] = blob[key][0][0].dtype
+                    self.key_dict[key]['width'] = widths
+                    self.key_dict[key]['merge'] = same_width
+                else:
+                    raise TypeError('Do not know how to store output of type', type(blob[key][0]))
 
     def get_object_dtype(self, obj):
         '''
@@ -227,6 +281,9 @@ class HDF5Writer:
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                 grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
+                if val['scalar']:
+                    grp[key].attrs['scalar'] = True
+
             elif not val['merge']:
                 # If the elements of the list are of variable widths, refer to one
                 # dataset per element. An index is stored alongside the dataset to break
@@ -237,6 +294,7 @@ class HDF5Writer:
                 for i, w in enumerate(val['width']):
                     shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                     subgrp.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
+
             else:
                 # If the  elements of the list are of equal width, store them all 
                 # to one dataset. An index is stored alongside the dataset to break
@@ -249,22 +307,27 @@ class HDF5Writer:
 
         file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
-    def append(self, cfg, data_blob, result_blob):
+    def append(self, data_blob=None, result_blob=None, cfg=None):
         '''
         Append the HDF5 file with the content of a batch.
 
         Parameters
         ----------
-        cfg : dict
-            Dictionary containing the ML chain configuration
-        data_blob : dict
-            Dictionary containing the input data
         result_blob : dict
             Dictionary containing the output of the reconstruction chain
+        data_blob : dict
+            Dictionary containing the input data
+        cfg : dict
+            Dictionary containing the ML chain configuration
         '''
         # If this function has never been called, initialiaze the HDF5 file
-        if not self.created:
-            self.create(cfg, data_blob, result_blob)
+        if not self.ready:
+            if not self.add_results:
+                if not self.append_file or not os.path.isfile(self.file_name):
+                    self.create(data_blob, result_blob, cfg)
+            else:
+                self.add_keys(result_blob)
+            self.ready = True
 
         # Append file
         with h5py.File(self.file_name, 'a') as file:
@@ -308,7 +371,10 @@ class HDF5Writer:
         cat = val['category']
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single object
-            obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
+            if self.is_scalar(blob[key]):
+                obj = blob[key]
+            else:
+                obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
             if not hasattr(obj, '__len__'):
                 obj = [obj]
 
@@ -330,6 +396,24 @@ class HDF5Writer:
         else:
             # Store one array of for all in the list and a index to break them
             self.store_flat(file[cat], event, key, blob[key][batch_id])
+
+    @staticmethod
+    def is_scalar(obj):
+        '''
+        Returns true if the object has no __len__
+        attribute or is a string object.
+
+        Parameters
+        ----------
+        object : class instance
+            Instance of an object used to check typing
+
+        Returns
+        -------
+        bool
+            True if the object is a scalar or a string
+        '''
+        return not hasattr(obj, '__len__') or isinstance(obj, str)
 
     @staticmethod
     def store(group, event, key, array):
@@ -357,7 +441,6 @@ class HDF5Writer:
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
-
 
     @staticmethod
     def store_jagged(group, event, key, array_list):
@@ -478,3 +561,69 @@ class HDF5Writer:
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
+
+
+class CSVWriter:
+    '''
+    Class which builds a CSV file to store the output
+    of analysis tools. It can only be used to store
+    relatively basic quantities (scalars, strings, etc.)
+
+    More documentation to come.
+    '''
+
+    def __init__(self,
+                 file_name: str = 'output.csv',
+                 append_file: bool = False):
+        '''
+        Initialize the basics of the output file
+
+        Parameters
+        ----------
+        file_name : str, default 'output.csv'
+            Name of the output CSV file
+        append_file : bool, default False
+            Add more rows to an existing CSV file
+        '''
+        self.file_name   = file_name
+        self.append_file = append_file
+        self.result_keys = None
+        if self.append_file:
+            with open(self.file_name, 'r') as file:
+                self.result_keys = file.readline().split(', ')
+
+    def create(self, result_blob):
+        '''
+        Initialize the header of the CSV file,
+        record the keys to be stored.
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the output of the reconstruction chain
+        '''
+        # Save the list of keys to store
+        self.result_keys = list(result_blob.keys())
+
+        # Create a header and write it to file
+        with open(self.file_name, 'w') as file:
+            header_str = ', '.join(self.result_keys)+'\n'
+            file.write(header_str)
+
+    def append(self, result_blob):
+        '''
+        Append the CSV file with the output
+
+        Parameters
+        ----------
+        result_blob : dict
+            Dictionary containing the output of the reconstruction chain
+        '''
+        # If this function has never been called, initialiaze the CSV file
+        if self.result_keys is None:
+            self.create(result_blob)
+
+        # Append file
+        with open(self.file_name, 'a') as file:
+            result_str = ', '.join([str(result_blob[k]) for k in self.result_keys])+'\n'
+            file.write(result_str)

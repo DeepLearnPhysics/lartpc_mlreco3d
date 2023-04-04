@@ -18,10 +18,12 @@ class HDF5Reader:
         ----------
         file_paths : list
             List of paths to the HDF5 files to be read
-        entry_list: list(int)
-            Entry IDs to be accessed
-        skip_entry_list: list(int)
+        entry_list: list(int), optional
+            Entry IDs to be accessed. If not specified, expose all entries
+        skip_entry_list: list(int), optional
             Entry IDs to be skipped
+        to_larcv : bool, default False
+            Convert dictionary of LArCV object properties to LArCV objects
         '''
         # Convert the file keys to a list of file paths with glob
         self.file_paths = []
@@ -127,8 +129,11 @@ class HDF5Reader:
         list
             List of integer entry IDs in the index
         '''
-        if not entry_list:
-            entry_list = np.arange(self.num_entries, dtype=int)
+        entry_index = np.empty(self.num_entries, dtype=int)
+        for i in np.unique(self.file_index):
+            file_mask = np.where(self.file_index==i)[0]
+            entry_index[file_mask] = np.arange(len(file_mask))
+
         if skip_entry_list:
             assert np.all(np.asarray(entry_list) < self.num_entries)
             entry_list = set(entry_list)
@@ -136,9 +141,12 @@ class HDF5Reader:
                 if s in entry_list:
                     entry_list.pop(s)
             entry_list = list(entry_list)
-        
-        assert len(entry_list), 'Must at least have one entry to load'
-        return entry_list
+
+        if entry_list:
+            entry_index = entry_index[entry_list]
+
+        assert len(entry_index), 'Must at least have one entry to load'
+        return entry_index
 
     def load_key(self, file, event, data_blob, result_blob, key, nested):
         '''
@@ -168,6 +176,8 @@ class HDF5Reader:
             if not group[key].dtype.names:
                 # If the reference points at a simple dataset, return
                 blob[key] = group[key][region_ref]
+                if 'scalar' in group[key].attrs and group[key].attrs['scalar']:
+                    blob[key] = blob[key][0]
             else:
                 # If the dataset has multiple attributes, it contains an object
                 array = group[key][region_ref]
