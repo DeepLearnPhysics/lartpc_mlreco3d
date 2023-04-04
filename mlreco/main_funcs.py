@@ -403,7 +403,15 @@ def inference_loop(handlers):
                                                                processor_cfg=pcfg)
 
                 post_processor_output_dict = post_processor_interface.process()
-                print(post_processor_output_dict)
+
+                for key, val in post_processor_output_dict.items():
+                    if key in result_blob:
+                        msg = "Post processing script output key {} "\
+                        "is already in result_dict, you may want"\
+                        "to rename it.".format(key)
+                        raise RuntimeError(msg)
+                    else:
+                        result_blob[key] = val
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')
