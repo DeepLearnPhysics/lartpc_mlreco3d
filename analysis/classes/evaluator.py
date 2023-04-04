@@ -455,7 +455,7 @@ class FullChainEvaluator(FullChainPredictor):
             if compute_vertex and ia.id in vertices:
                 ia.vertex = vertices[ia.id]
 
-            if 'neutrino_asis' in self.data_blob and ia.nu_id > 0:
+            if 'neutrino_asis' in self.data_blob and ia.nu_id == 1:
                 # assert 'particles_asis' in data_blob
                 # particles = data_blob['particles_asis'][i]
                 neutrinos = self.data_blob['neutrino_asis'][entry]
@@ -468,10 +468,10 @@ class FullChainEvaluator(FullChainPredictor):
                 # for nu in neutrinos:
                 #     if nu.mct_index() not in true_particles_track_ids: continue
                 ia.nu_info = {
-                    'interaction_type': nu.interaction_type(),
-                    'interaction_mode': nu.interaction_mode(),
-                    'current_type': nu.current_type(),
-                    'energy_init': nu.energy_init()
+                    'nu_interaction_type': nu.interaction_type(),
+                    'nu_interaction_mode': nu.interaction_mode(),
+                    'nu_current_type': nu.current_type(),
+                    'nu_energy_init': nu.energy_init()
                 }
 
         return out

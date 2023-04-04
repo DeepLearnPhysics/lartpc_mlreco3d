@@ -33,7 +33,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     processor_cfg         = analysis_cfg['analysis'].get('processor_cfg', {})
 
     # Skeleton for csv output
-    interaction_dict      = analysis_cfg['analysis'].get('interaction_dict', {})
+    # interaction_dict      = analysis_cfg['analysis'].get('interaction_dict', {})
 
     particle_fieldnames   = analysis_cfg['analysis'].get('particle_fieldnames', {})
     int_fieldnames        = analysis_cfg['analysis'].get('interaction_fieldnames', {})
@@ -91,7 +91,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
         interaction_logger.prepare()
         for i, interaction_pair in enumerate(matches):
 
-            int_dict = copy.deepcopy(interaction_dict)
+            int_dict = OrderedDict()
             int_dict.update(index_dict)
             int_dict['interaction_match_counts'] = counts[i]
             true_int, pred_int = interaction_pair[0], interaction_pair[1]
@@ -100,9 +100,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             assert (type(pred_int) is Interaction) or (pred_int is None)
 
             true_int_dict = interaction_logger.produce(true_int, mode='true')
-            pred_int_dict = interaction_logger.produce(pred_int, mode='pred')
-
-            int_dict = OrderedDict()
+            pred_int_dict = interaction_logger.produce(pred_int, mode='reco')
             int_dict.update(true_int_dict)
             int_dict.update(pred_int_dict)
             interactions.append(int_dict)
@@ -115,9 +113,10 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
             true_p, pred_p = mparticles[0], mparticles[1]
 
             true_p_dict = particle_logger.produce(true_p, mode='true')
-            pred_p_dict = particle_logger.produce(pred_p, mode='pred')
+            pred_p_dict = particle_logger.produce(pred_p, mode='reco')
 
             part_dict = OrderedDict()
+            part_dict.update(index_dict)
             part_dict['particle_match_counts'] = particle_match_counts[i]
             part_dict.update(true_p_dict)
             part_dict.update(pred_p_dict)
