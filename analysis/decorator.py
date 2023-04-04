@@ -61,7 +61,6 @@ def evaluate(filenames, mode='per_image'):
 
             log_dir = analysis_config['analysis']['log_dir']
             append = analysis_config['analysis'].get('append', True)
-            chunksize = analysis_config['analysis'].get('chunksize', 100)
 
             output_logs = {}
             for fname in filenames:
@@ -108,7 +107,6 @@ def evaluate(filenames, mode='per_image'):
                 if profile:
                     end = time.time()
                     print("Iteration %d (total %d s)" % (iteration, end - start))
-                torch.cuda.empty_cache()
 
             for fname in filenames:
                 output_logs[fname].close()

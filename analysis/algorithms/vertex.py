@@ -1,7 +1,8 @@
 import numpy as np
 import numba as nb
 from scipy.spatial.distance import cdist
-from analysis.algorithms.calorimetry import get_particle_direction
+
+# from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import get_particle_direction
 from mlreco.utils.utils import func_timer
 from analysis.classes.Interaction import Interaction
 

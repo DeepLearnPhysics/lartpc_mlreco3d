@@ -1,11 +1,8 @@
 import numpy as np
-import pandas as pd
 
 from typing import List, Union
 from collections import defaultdict, OrderedDict, Counter
-from functools import partial
 from itertools import combinations
-import re
 
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
@@ -14,7 +11,7 @@ from pprint import pprint
 
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 from analysis.algorithms.utils import closest_distance_two_lines
-from analysis.algorithms.calorimetry import get_particle_direction
+from analysis.algorithms.arxiv.calorimetry import get_particle_direction
 
 
 def matrix_counts(particles_x, particles_y):

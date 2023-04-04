@@ -6,9 +6,9 @@ from scipy.spatial.distance import cdist
 
 from analysis.classes import Particle
 from analysis.classes import TruthParticle
-from analysis.algorithms.calorimetry import *
+from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import *
 from analysis.algorithms.point_matching import get_track_endpoints_max_dist
-from analysis.algorithms.calorimetry import compute_track_dedx, get_particle_direction
+# from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_dedx, get_particle_direction
 
 
 def attach_prefix(update_dict, prefix):

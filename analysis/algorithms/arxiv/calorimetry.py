@@ -4,15 +4,7 @@ from scipy.interpolate import CubicSpline
 from mlreco.utils.gnn.cluster import cluster_direction
 import pandas as pd
 from analysis.classes import Particle
-
-# CONSTANTS (MeV)
-PROTON_MASS = 938.272
-MUON_MASS = 105.7
-ELECTRON_MASS = 0.511998
-ARGON_DENSITY = 1.396
-ADC_TO_MEV = 1. / 350.
-ARGON_MASS = 37211
-PIXELS_TO_CM = 0.3
+from mlreco.utils.globals import *
 
 
 def compute_track_length(points, bin_size=17):

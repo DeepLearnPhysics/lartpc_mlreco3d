@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
-from analysis.algorithms.calorimetry import compute_track_length
+from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_length
 
 from analysis.decorator import evaluate
 from lartpc_mlreco3d.analysis.classes.particle_utils import match_particles_fn, matrix_iou

@@ -2,7 +2,7 @@ from collections import OrderedDict
 from turtle import update
 from sklearn.decomposition import PCA
 
-from analysis.algorithms.calorimetry import compute_track_length, get_particle_direction
+from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_length, get_particle_direction
 from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.decorator import evaluate

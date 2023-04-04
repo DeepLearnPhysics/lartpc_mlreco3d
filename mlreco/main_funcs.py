@@ -9,6 +9,7 @@ except ImportError:
     pass
 
 from mlreco.iotools.factories import loader_factory, writer_factory
+from mlreco.post_processing.common import PostProcessor
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
 # We need to set CUDA_VISIBLE_DEVICES first, which
@@ -319,10 +320,17 @@ def train_loop(handlers):
 
         # Store output if requested
         if 'post_processing' in cfg:
-            for processor_name,processor_cfg in cfg['post_processing'].items():
+
+            post_processor_interface = PostProcessor(cfg, data_blob, result_blob)
+
+            for processor_name, pcfg in cfg['post_processing'].items():
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
-                processor(cfg,processor_cfg,data_blob,result_blob,cfg['trainval']['log_dir'],handlers.iteration)
+                post_processor_interface.register_function(processor, 
+                                                           processor_cfg=pcfg)
+
+            post_processor_output_dict = post_processor_interface.process()
+            print(post_processor_output_dict)
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
@@ -385,10 +393,17 @@ def inference_loop(handlers):
 
             # Store output if requested
             if 'post_processing' in handlers.cfg:
-                for processor_name, processor_cfg in handlers.cfg['post_processing'].items():
+
+                post_processor_interface = PostProcessor(handlers.cfg, data_blob, result_blob)
+
+                for processor_name, pcfg in handlers.cfg['post_processing'].items():
                     processor_name = processor_name.split('+')[0]
-                    processor = getattr(post_processing, str(processor_name))
-                    processor(handlers.cfg, processor_cfg, data_blob, result_blob, handlers.cfg['trainval']['log_dir'], handlers.iteration)
+                    processor = getattr(post_processing,str(processor_name))
+                    post_processor_interface.register_function(processor, 
+                                                               processor_cfg=pcfg)
+
+                post_processor_output_dict = post_processor_interface.process()
+                print(post_processor_output_dict)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')
