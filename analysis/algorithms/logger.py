@@ -187,14 +187,12 @@ class ParticleLogger(AnalysisLogger):
             out['particle_dir_z'] = v[2]
         return out
     
-    # @staticmethod
-    # def reco_length(particle):
-    #     out = {'particle_length': -1}
-    #     if particle is not None \
-    #         and particle.semantic_type == 1 \
-    #         and len(particle.points) > 0:
-    #         out['particle_length'] = compute_track_length(particle.points)
-    #     return out
+    @staticmethod
+    def reco_length(particle):
+        out = {'particle_length': -1}
+        if particle is not None and hasattr(particle, 'length'):
+            out['particle_length'] = particle.length
+        return out
     
     @staticmethod
     def is_contained(particle, vb, threshold=30):

@@ -127,7 +127,6 @@ class FullChainPredictor:
             self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
             # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
 
-
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
@@ -708,6 +707,22 @@ class FullChainPredictor:
         out_fragment_list.extend(out)
 
         return out_fragment_list
+    
+    def _get_primary_labels(self, node_pred_vtx):
+        primary_labels = -np.ones(len(node_pred_vtx)).astype(int)
+        primary_scores = np.zeros(len(node_pred_vtx)).astype(float)
+        if node_pred_vtx.shape[1] == 5:
+            primary_scores = node_pred_vtx[:, 3:]
+        elif node_pred_vtx.shape[1] == 2:
+            primary_scores = node_pred_vtx
+        else:
+            raise ValueError('<node_pred_vtx> must either be (N, 5) or (N, 2)')
+        primary_scores = softmax(node_pred_vtx, axis=1)
+        if self.primary_score_threshold is None:
+            primary_labels = np.argmax(primary_scores, axis=1)
+        else:
+            primary_labels = primary_scores[:, 1] > self.primary_score_threshold
+        return primary_labels
 
 
     def get_particles(self, entry, only_primaries=False,
@@ -717,12 +732,6 @@ class FullChainPredictor:
                       particles_cfg=None) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
-
-        The output particles will have its ppn candidates attached as
-        attributes in the form of pandas dataframes (same as _fit_predict_ppn)
-
-        Method also performs endpoint prediction for tracks and startpoint
-        prediction for showers.
 
         1) If a track has no or only one ppn candidate, the endpoints
         will be calculated by selecting two voxels that have the largest
@@ -759,60 +768,34 @@ class FullChainPredictor:
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
-        # Loop over images
-
+        # Essential Information
         volume_labels    = self.result['input_rescaled'][entry][:, 0]
         point_cloud      = self.result['input_rescaled'][entry][:, 1:4]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particle_clusts'][entry]
-        # inter_group_pred = self.result['inter_group_pred'][entry]
-        #print(point_cloud.shape, depositions.shape, len(particles))
-        particle_seg    = self.result['particle_seg'][entry]
+        particle_seg     = self.result['particle_seg'][entry]
 
-        type_logits = self.result['particle_node_pred_type'][entry]
+        type_logits           = self.result['particle_node_pred_type'][entry]
         particle_start_points = self.result['particle_start_points'][entry]
-        particle_end_points = self.result['particle_end_points'][entry]
+        particle_end_points   = self.result['particle_end_points'][entry]
+        node_pred_vtx         = self.result['particle_node_pred_vtx'][entry]
+        inter_ids             = self.result['particle_group_pred'][entry]
         pids = np.argmax(type_logits, axis=1)
 
         out = []
-        if point_cloud.shape[0] == 0:
+
+        # Some basic input checks
+        if point_cloud.shape[0] == 0 or len(particles) == 0:
             return out
         assert len(particle_seg) == len(particles)
         assert len(pids) == len(particles)
         assert len(particle_end_points) == len(particles)
         assert len(particle_start_points) == len(particles)
         assert point_cloud.shape[0] == depositions.shape[0]
-
-        node_pred_vtx = self.result['particle_node_pred_vtx'][entry]
-
         assert node_pred_vtx.shape[0] == len(particles)
-        primary_labels = -np.ones(len(node_pred_vtx)).astype(int)
-        primary_scores = np.zeros(len(node_pred_vtx)).astype(float)
-        if node_pred_vtx.shape[1] == 5:
-            # primary_labels = np.argmax(node_pred_vtx[:, 3:], axis=1)
-            primary_scores = node_pred_vtx[:, 3:]
-        elif node_pred_vtx.shape[1] == 2:
-            # primary_labels = np.argmax(node_pred_vtx, axis=1)
-            primary_scores = node_pred_vtx
-        else:
-            raise ValueError('<node_pred_vtx> must either be (N, 5) or (N, 2)')
+        assert len(inter_ids) == len(particles)
 
-        primary_scores = softmax(node_pred_vtx, axis=1)
-        
-        assert primary_labels.shape[0] == len(particles)
-
-        if self.primary_score_threshold is None:
-            primary_labels = np.argmax(node_pred_vtx, axis=1)
-        else:
-            primary_labels = node_pred_vtx[:, 1] > self.primary_score_threshold
-
-        if ('particle_group_pred' in self.result) and ('particle_clusts' in self.result) and len(particles) > 0:
-
-            assert len(self.result['particle_group_pred'][entry]) == len(particles)
-            inter_labels = self._fit_predict_interaction_labels(entry)
-            inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), particles, column=0)
-        else:
-            inter_ids = np.ones(len(particles)).astype(int) * -1
+        primary_labels = self._get_primary_labels(node_pred_vtx)
 
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
@@ -827,7 +810,8 @@ class FullChainPredictor:
             interaction_id = inter_ids[i]
             part = Particle(voxels,
                             i,
-                            seg_label, interaction_id,
+                            seg_label, 
+                            interaction_id,
                             pid,
                             entry,
                             voxel_indices=p,
@@ -836,8 +820,8 @@ class FullChainPredictor:
                             pid_conf=softmax(type_logits[i])[pids[i]],
                             volume=volume_id)
 
-            part.startpoint = particle_start_points[i][1:4]
-            part.endpoint = particle_end_points[i][1:4]
+            part.startpoint = particle_start_points[i][COORD_COLS[0]:COORD_COLS[-1]+1]
+            part.endpoint   = particle_end_points[i][COORD_COLS[0]:COORD_COLS[-1]+1]
 
             out.append(part)
 
@@ -846,25 +830,11 @@ class FullChainPredictor:
 
         if len(out) == 0:
             return out
-
-        ppn_results = self._fit_predict_ppn(entry)
-
+        
         # Get ppn candidates for particle
+        ppn_results = self._fit_predict_ppn(entry)
         match_points_to_particles(ppn_results, out,
             ppn_distance_threshold=attaching_threshold)
-
-        # Attach startpoint and endpoint
-        # as done in full chain geometric encoder
-        for p in out:
-            if p.size < min_particle_voxel_count:
-                continue
-            if p.semantic_type == 0:
-                # Check startpoint is replicated
-                assert(np.sum(
-                    np.abs(p.startpoint - p.endpoint)) < 1e-12)
-                p.endpoint = None
-            else:
-                continue
 
         if volume is not None:
             out = [p for p in out if p.volume == volume]
@@ -875,8 +845,7 @@ class FullChainPredictor:
     def get_interactions(self, entry, 
                          drop_nonprimary_particles=True, 
                          volume=None,
-                         get_vertex=True, 
-                         tag_pi0=False) -> List[Interaction]:
+                         get_vertex=True) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
