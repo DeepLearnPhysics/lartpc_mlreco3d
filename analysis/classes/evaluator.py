@@ -434,9 +434,7 @@ class FullChainEvaluator(FullChainPredictor):
 
     def get_true_interactions(self, entry, drop_nonprimary_particles=True,
                               min_particle_voxel_count=-1,
-                              compute_vertex=True,
-                              volume=None,
-                              tag_pi0=False) -> List[Interaction]:
+                              volume=None) -> List[Interaction]:
         if min_particle_voxel_count < 0:
             min_particle_voxel_count = self.min_particle_voxel_count
 
@@ -446,12 +444,10 @@ class FullChainEvaluator(FullChainPredictor):
                                                  volume=volume)
         out = group_particles_to_interactions_fn(true_particles,
                                                  get_nu_id=True, 
-                                                 mode='truth',
-                                                 tag_pi0=tag_pi0)
-        if compute_vertex:
-            vertices = self.get_true_vertices(entry)
+                                                 mode='truth')
+        vertices = self.get_true_vertices(entry)
         for ia in out:
-            if compute_vertex and ia.id in vertices:
+            if ia.id in vertices:
                 ia.vertex = vertices[ia.id]
 
             if 'neutrino_asis' in self.data_blob and ia.nu_id == 1:
@@ -474,6 +470,45 @@ class FullChainEvaluator(FullChainPredictor):
                 }
 
         return out
+    
+    @staticmethod
+    def match_parts_within_ints(int_matches):
+        '''
+        Given list of Tuple[(Truth)Interaction, (Truth)Interaction], 
+        return list of particle matches Tuple[TruthParticle, Particle]. 
+
+        If no match, (Truth)Particle is replaced with None.
+        '''
+
+        matched_particles, match_counts = [], []
+
+        for m in int_matches:
+            ia1, ia2 = m[0], m[1]
+            num_parts_1, num_parts_2 = -1, -1
+            if m[0] is not None:
+                num_parts_1 = len(m[0].particles)
+            if m[1] is not None:
+                num_parts_2 = len(m[1].particles)
+            if num_parts_1 <= num_parts_2:
+                ia1, ia2 = m[0], m[1]
+            else:
+                ia1, ia2 = m[1], m[0]
+                
+            for p in ia2.particles:
+                if len(p.match) == 0:
+                    if type(p) is Particle:
+                        matched_particles.append((None, p))
+                        match_counts.append(-1)
+                    else:
+                        matched_particles.append((p, None))
+                        match_counts.append(-1)
+                for match_id in p.match:
+                    if type(p) is Particle:
+                        matched_particles.append((ia1[match_id], p))
+                    else:
+                        matched_particles.append((p, ia1[match_id]))
+                    match_counts.append(p._match_counts[match_id])
+        return matched_particles, np.array(match_counts)
 
 
     def get_true_vertices(self, entry):
@@ -530,12 +565,16 @@ class FullChainEvaluator(FullChainPredictor):
         # print('matching', entries, volume)
         if mode == 'pred_to_true':
             # Match each pred to one in true
-            particles_from = self.get_particles(entry, only_primaries=only_primaries)
-            particles_to = self.get_true_particles(entry, only_primaries=only_primaries)
+            particles_from = self.get_particles(entry, 
+                                                only_primaries=only_primaries)
+            particles_to = self.get_true_particles(entry,
+                                                   only_primaries=only_primaries)
         elif mode == 'true_to_pred':
             # Match each true to one in pred
-            particles_to = self.get_particles(entry, only_primaries=only_primaries)
-            particles_from = self.get_true_particles(entry, only_primaries=only_primaries)
+            particles_to = self.get_particles(entry, 
+                                              only_primaries=only_primaries)
+            particles_from = self.get_true_particles(entry, 
+                                                     only_primaries=only_primaries)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
@@ -558,10 +597,7 @@ class FullChainEvaluator(FullChainPredictor):
                            drop_nonprimary_particles=True,
                            match_particles=True,
                            return_counts=False,
-                           compute_vertex=True,
-                           vertex_mode='all',
                            matching_mode='one_way',
-                           tag_pi0=False,
                            **kwargs):
         """
         Parameters
@@ -583,24 +619,14 @@ class FullChainEvaluator(FullChainPredictor):
         all_matches, all_counts = [], []
         if mode == 'pred_to_true':
             ints_from = self.get_interactions(entry, 
-                                                drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                compute_vertex=compute_vertex,
-                                                vertex_mode=vertex_mode,
-                                                tag_pi0=tag_pi0)
+                                              drop_nonprimary_particles=drop_nonprimary_particles)
             ints_to = self.get_true_interactions(entry, 
-                                                 drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                 compute_vertex=compute_vertex,
-                                                 tag_pi0=tag_pi0)
+                                                 drop_nonprimary_particles=drop_nonprimary_particles)
         elif mode == 'true_to_pred':
             ints_to = self.get_interactions(entry, 
-                                            drop_nonprimary_particles=drop_nonprimary_particles, 
-                                            compute_vertex=compute_vertex,
-                                            vertex_mode=vertex_mode,
-                                            tag_pi0=tag_pi0)
+                                            drop_nonprimary_particles=drop_nonprimary_particles)
             ints_from = self.get_true_interactions(entry, 
-                                                   drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                   compute_vertex=compute_vertex,
-                                                   tag_pi0=tag_pi0)
+                                                   drop_nonprimary_particles=drop_nonprimary_particles)
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))

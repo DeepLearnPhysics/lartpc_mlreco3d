@@ -12,11 +12,9 @@ from analysis.classes import Particle, ParticleFragment, Interaction, FlashManag
 from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
-from analysis.algorithms.vertex import estimate_vertex
-from analysis.algorithms.utils import get_track_points
-
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.volumes import VolumeBoundaries
+from mlreco.utils.globals import BATCH_COL, COORD_COLS
 
 from scipy.special import softmax
 
@@ -74,15 +72,7 @@ class FullChainPredictor:
         # We want to count how well we identify interactions with some PDGs
         # as primary particles
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
-        # Following 2 parameters are vertex heuristic parameters
-        self.attaching_threshold      = predictor_cfg.get('attaching_threshold', 2)
-        self.inter_threshold          = predictor_cfg.get('inter_threshold', 10)
 
-        # Vertex estimation modes
-        self.vertex_mode = predictor_cfg.get('vertex_mode', 'all')
-        self.prune_vertex = predictor_cfg.get('prune_vertex', True)
-        self.track_endpoints_mode = predictor_cfg.get('track_endpoints_mode', 'node_features')
-        self.track_point_corrector = predictor_cfg.get('track_point_corrector', 'ppn')
         self.primary_score_threshold = predictor_cfg.get('primary_score_threshold', None)
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
@@ -873,15 +863,6 @@ class FullChainPredictor:
                 assert(np.sum(
                     np.abs(p.startpoint - p.endpoint)) < 1e-12)
                 p.endpoint = None
-            elif p.semantic_type == 1:
-                if self.track_endpoints_mode == 'node_features':
-                    get_track_points(p, correction_mode=self.track_point_corrector)
-                elif self.track_endpoints_mode == 'brute_force':
-                    get_track_points(p, correction_mode=self.track_point_corrector, 
-                                        brute_force=True)
-                else:
-                    raise ValueError("Track endpoint attachment mode {}\
-                            not supported!".format(self.track_endpoints_mode))
             else:
                 continue
 
@@ -894,17 +875,13 @@ class FullChainPredictor:
     def get_interactions(self, entry, 
                          drop_nonprimary_particles=True, 
                          volume=None,
-                         compute_vertex=True, 
-                         use_primaries_for_vertex=True, 
-                         vertex_mode=None,
+                         get_vertex=True, 
                          tag_pi0=False) -> List[Interaction]:
         '''
         Method for retriving interaction list for given batch index.
 
         The output particles will have its constituent particles attached as
         attributes as List[Particle].
-
-        Method also performs vertex prediction for each interaction.
 
         Note
         ----
@@ -918,30 +895,23 @@ class FullChainPredictor:
             If True, all non-primary particles will not be included in
             the output interactions' .particle attribute.
         volume: int
-        compute_vertex: bool, default True
+        get_vertex: bool, default True
 
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-
-        if vertex_mode == None:
-            vertex_mode = self.vertex_mode
-
         out = []
         particles = self.get_particles(entry, 
             only_primaries=drop_nonprimary_particles, 
             volume=volume)
-        out = group_particles_to_interactions_fn(particles, mode='pred', tag_pi0=tag_pi0)
-        for ia in out:
-            if compute_vertex:
-                ia.vertex, ia.vertex_candidate_count = estimate_vertex(
-                    ia.particles, 
-                    use_primaries=use_primaries_for_vertex, 
-                    mode=vertex_mode,
-                    prune_candidates=self.prune_vertex,
-                    return_candidate_count=True)
-            ia.volume = volume
-
+        out = group_particles_to_interactions_fn(particles, mode='pred')
+        for ia in out: ia.volume = volume
+        if get_vertex:
+            vertices = self.result['vertices'][entry]
+            for ia in out:
+                mask = vertices[:, BATCH_COL].astype(int) == ia.id
+                vertex = vertices[mask][:, COORD_COLS[0]:COORD_COLS[-1]+1]
+                ia.vertex = vertex.squeeze()
         return out
 
 

@@ -12,7 +12,7 @@ from mlreco.trainval import trainval
 from mlreco.iotools.factories import loader_factory
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter
-
+from mlreco.main_funcs import run_post_processing
 
 def evaluate(filenames):
     '''
@@ -67,13 +67,14 @@ def evaluate(filenames):
 
             writers = {}
             for file_name in filenames:
-                writers[file_name] = CSVWriter(f'{log_dir}/{file_name}.csv', append)
+                path = os.path.join(log_dir, file_name+'.csv')
+                writers[file_name] = CSVWriter(path, append)
 
             # Loop over the number of requested iterations
             iteration = 0
             while iteration < max_iteration:
 
-                # Load data batch
+                # 1. Forwarding or Reading HDF5 file
                 if profile:
                     start = time.time()
                 if 'reader' not in analysis_config:
@@ -83,8 +84,14 @@ def evaluate(filenames):
                 if profile:
                     print("Forward took %.2f s" % (time.time() - start))
                 img_indices = data_blob['index']
+                
+                # 2. Run post-processing scripts
+                stime = time.time()
+                if 'post_processing' in analysis_config:
+                    run_post_processing(analysis_config, data_blob, res)
+                
 
-                # Build the output dictionary
+                # 3. Run analysis tools script
                 stime = time.time()
                 fname_to_update_list = defaultdict(list)
                 for batch_index, img_index in enumerate(img_indices):
@@ -92,10 +99,14 @@ def evaluate(filenames):
                     for i, analysis_dict in enumerate(dict_list):
                         fname_to_update_list[filenames[i]].extend(analysis_dict)
 
-                # Store
+                # 4. Store information to csv file.
                 for i, fname in enumerate(fname_to_update_list):
                     for row_dict in fname_to_update_list[fname]:
                         writers[fname].append(row_dict)
+
+                if profile:
+                    end = time.time()
+                    print("Analysis tools and logging took %.2f s" % (time.time() - stime))
 
                 # Increment iteration count
                 iteration += 1

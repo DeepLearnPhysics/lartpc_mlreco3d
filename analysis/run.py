@@ -34,32 +34,32 @@ def main(analysis_cfg_path, model_cfg_path):
         raise Exception('Analysis configuration needs to live under `analysis` section.')
     if 'name' in analysis_config['analysis']:
         process_func = eval(analysis_config['analysis']['name'])
-    elif 'scripts' in analysis_config['analysis']:
-        assert isinstance(analysis_config['analysis']['scripts'], dict)
+    # elif 'scripts' in analysis_config['analysis']:
+    #     assert isinstance(analysis_config['analysis']['scripts'], dict)
 
-        filenames = []
-        modes = []
-        for name in analysis_config['analysis']['scripts']:
-            files = eval(name)._filenames
-            mode = eval(name)._mode
+    #     filenames = []
+    #     modes = []
+    #     for name in analysis_config['analysis']['scripts']:
+    #         files = eval(name)._filenames
+    #         mode = eval(name)._mode
 
-            filenames.extend(files)
-            modes.append(mode)
-        unique_modes, counts = np.unique(modes, return_counts=True)
-        mode = unique_modes[np.argmax(counts)] # most frequent mode wins
+    #         filenames.extend(files)
+    #         modes.append(mode)
+    #     unique_modes, counts = np.unique(modes, return_counts=True)
+    #     mode = unique_modes[np.argmax(counts)] # most frequent mode wins
 
-        @evaluate(filenames, mode=mode)
-        def process_func(data_blob, res, data_idx, analysis, model_cfg):
-            outs = []
-            for name in analysis_config['analysis']['scripts']:
-                cfg = analysis.copy()
-                cfg['analysis']['name'] = name
-                cfg['analysis']['processor_cfg'] = analysis_config['analysis']['scripts'][name]
-                func = eval(name).__wrapped__
+    #     @evaluate(filenames, mode=mode)
+    #     def process_func(data_blob, res, data_idx, analysis, model_cfg):
+    #         outs = []
+    #         for name in analysis_config['analysis']['scripts']:
+    #             cfg = analysis.copy()
+    #             cfg['analysis']['name'] = name
+    #             cfg['analysis']['processor_cfg'] = analysis_config['analysis']['scripts'][name]
+    #             func = eval(name).__wrapped__
 
-                out = func(copy.deepcopy(data_blob), copy.deepcopy(res), data_idx, cfg, model_cfg)
-                outs.extend(out)
-            return outs
+    #             out = func(copy.deepcopy(data_blob), copy.deepcopy(res), data_idx, cfg, model_cfg)
+    #             outs.extend(out)
+    #         return outs
     else:
         raise Exception('You need to specify either `name` or `scripts` under `analysis` section.')
 
