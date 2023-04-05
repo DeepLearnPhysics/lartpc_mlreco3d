@@ -58,12 +58,12 @@ def get_splines(particle_type, table_path):
     '''
     Returns CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
     '''
-    if particle_type == PARTICLE_TO_PID_LABEL['PROTON']:
+    if particle_type == PDG_TO_PID[2212]:
         path = os.path.join(table_path, 'pE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',
                           index_col=False)
-    elif particle_type == PARTICLE_TO_PID_LABEL['MUON']:
+    elif particle_type == PDG_TO_PID[13]:
         path = os.path.join(table_path, 'muE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',

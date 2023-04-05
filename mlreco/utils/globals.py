@@ -34,28 +34,22 @@ PARTICLE_TO_PID_LABEL = {
 
 PID_LABEL_TO_PARTICLE = {val : key for key, val in PARTICLE_TO_PID_LABEL.items()}
 
-# CONSTANTS (MeV)
-PROTON_MASS = 938.272
-MUON_MASS = 105.7
-ELECTRON_MASS = 0.511998
-ARGON_DENSITY = 1.396
-ADC_TO_MEV = 1. / 350.
-PIXELS_TO_CM = 0.3
-
 # Shape ID of each type of voxel category
-SHOW_SHP   = larcv.kShapeShower    # 0
+SHOWR_SHP  = larcv.kShapeShower    # 0
 TRACK_SHP  = larcv.kShapeTrack     # 1
-MICH_SHP   = larcv.kShapeMichel    # 2
+MICHL_SHP  = larcv.kShapeMichel    # 2
 DELTA_SHP  = larcv.kShapeDelta     # 3
-LOWE_SHP   = larcv.kShapeLEScatter # 4
+LOWES_SHP  = larcv.kShapeLEScatter # 4
 GHOST_SHP  = larcv.kShapeGhost     # 5
 UNKWN_SHP  = larcv.kShapeUnknown   # 6
 
 # Shape precedence used in the cluster labeling process
-SHAPE_PREC = [TRACK_SHP, MICH_SHP, SHOW_SHP, DELTA_SHP, LOWE_SHP]
+SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP]
 
-# Invalid labels
-INVAL_TID  = larcv.kINVALID_UINT
+# Invalid larcv.Particle labels
+INVAL_ID   = larcv.kINVALID_INSTANCEID # Particle group/parent/interaction ID
+INVAL_TID  = larcv.kINVALID_UINT       # Particle Geant4 track ID
+INVAL_PDG  = 0                         # Patricle PDG code
 
 # Mapping between particle PDG code and particle ID labels
 PDG_TO_PID = {
@@ -68,3 +62,11 @@ PDG_TO_PID = {
     -211: 3,  # pi-
     2212: 4,  # protons
 }
+
+# CONSTANTS
+MUON_MASS     = 105.7     # [MeV/c^2]
+ELECTRON_MASS = 0.511998  # [MeV/c^2]
+PROTON_MASS   = 938.272   # [MeV/c^2]
+ARGON_DENSITY = 1.396     # [g/cm^3]
+ADC_TO_MEV    = 1. / 350. # < MUST GO
+PIXELS_TO_CM  = 0.3       # < MUST GO

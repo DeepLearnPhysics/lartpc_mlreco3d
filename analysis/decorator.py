@@ -63,7 +63,7 @@ def evaluate(filenames):
 
             # Initialize the writer(s)
             log_dir = analysis_config['analysis']['log_dir']
-            append = analysis_config['analysis'].get('append', False)
+            append = analysis_config['analysis'].get('append', True)
 
             writers = {}
             for file_name in filenames:
