@@ -45,13 +45,13 @@ def get_interaction_ids(particles):
     np.ndarray
         (P) List of interaction IDs, one per true particle instance
     '''
-    # If the interaction IDs are specified in the particle tree, just use that
+    # If the interaction IDs are set in the particle tree, simply use that
     inter_ids = np.array([p.interaction_id() for p in particles], dtype=np.int32)
     if np.any(inter_ids != INVAL_ID):
         inter_ids[inter_ids == INVAL_ID] == -1
         return inter_ids
 
-    # Define interaction IDs on the basis of sharing an ancestor vertex position
+    # Otherwise, define interaction IDs on the basis of sharing an ancestor vertex position
     anc_pos   = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
     inter_ids = np.unique(anc_pos, axis=0, return_inverse=True)[-1]
 
@@ -68,12 +68,12 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     neutrino) of each of the particle in the input particle list.
 
     If `particles_mpv` and `neutrinos` are not specified, it assumes that
-    there is only one neutrino-like interaction, the first valid one, and
-    it enforces that it must contain at least two true primaries.
+    only neutrino-like interactions have more than one true primary
+    particle in a single interaction.
 
     If a list of multi-particle vertex (MPV) particles or neutrinos is
-    provided,  that information is leveraged to identify which interaction
-    is  neutrino-like and which is not.
+    provided,  that information is leveraged to identify which interactions
+    are neutrino-like and which are not.
 
     Parameters
     ----------
@@ -99,17 +99,16 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     nu_ids = np.zeros(len(inter_ids), dtype=inter_ids.dtype)
     nu_ids[inter_ids == -1] = -1
     if particles_mpv is None and neutrinos is None:
-        # Find the first particle with a valid interaction ID
-        valid_mask = np.where(inter_ids > -1)[0]
-        if not len(valid_mask):
-            return nu_ids
-        inter_id = inter_ids[valid_mask[0]]
-
-        # If there are at least two primaries, the interaction is neutrino-like
+        # Loop over the interactions
         primary_ids = get_group_primary_ids(particles)
-        inter_index = np.where(inter_ids == inter_id)[0]
-        if np.sum(primary_ids[inter_index] == 1) > 1:
-            nu_ids[inter_index] = 1
+        for i in np.unique(inter_ids):
+            # If the interaction ID is invalid, skip
+            if i < 0: continue
+
+            # If there are at least two primaries, the interaction is neutrino-like
+            inter_index = np.where(inter_ids == i)[0]
+            if np.sum(primary_ids[inter_index] == 1) > 1:
+                nu_ids[inter_index] = 1
     else:
         # Find the reference positions gauge if a particle comes from a neutrino-like interaction
         ref_pos = None
@@ -164,12 +163,10 @@ def get_particle_ids(particles, nu_ids, include_mpr=False, include_secondary=Fal
     primary_ids  = get_group_primary_ids(particles, nu_ids, include_mpr)
     for i in range(len(particle_ids)):
         # If the primary ID is invalid, skip
-        if primary_ids[i] < 0:
-            continue
+        if primary_ids[i] < 0: continue
 
         # If secondary particles are not included and primary_id < 1, skip
-        if not include_secondary and primary_ids[i] < 1:
-            continue
+        if not include_secondary and primary_ids[i] < 1: continue
 
         # If the particle type exists in the predefined list, assign
         group_id = particles[i].group_id()
@@ -201,18 +198,16 @@ def get_shower_primary_ids(particles):
     valid_mask  = get_valid_mask(particles)
     for g in np.unique(group_ids):
         # If the particle group has invalid labeling, it does not contain a primary
-        if g == INVAL_ID or not valid_mask[g]:
-            continue
-        p = particles[g]
+        if g == INVAL_ID or not valid_mask[g]: continue
 
         # If a group originates from a Delta or a Michel, that has a primary
+        p = particles[g]
         if p.shape() == MICHL_SHP or p.shape() == DELTA_SHP:
             primary_ids[g] = 1
             continue
 
         # If a group does not originate from EM activity, it does not contain a primary
-        if p.shape() != SHOWR_SHP:
-            continue
+        if p.shape() != SHOWR_SHP: continue
 
         # If a shower group's parent fragment the first in time, it is a valid primary
         group_index = np.where(group_ids == g)[0]
