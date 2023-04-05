@@ -9,7 +9,7 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, Interaction, FlashManager
+from analysis.classes import Particle, ParticleFragment, Interaction
 from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
