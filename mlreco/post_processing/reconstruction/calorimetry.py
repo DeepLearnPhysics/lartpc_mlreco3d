@@ -7,14 +7,14 @@ from sklearn.decomposition import PCA
 from scipy.interpolate import CubicSpline
 from functools import lru_cache
 
-from mlreco.utils.gnn.cluster import cluster_direction
 from mlreco.post_processing import post_processing
 from mlreco.utils.globals import *
 
-@post_processing(data_capture=[], result_capture=['particle_clusts', 
-                                                  'particle_seg', 
-                                                  'input_rescaled', 
-                                                  'particle_node_pred_type'])
+@post_processing(data_capture=[], 
+                 result_capture=['particle_clusts', 
+                                 'particle_seg', 
+                                 'input_rescaled', 
+                                 'particle_node_pred_type'])
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, include_pids=[2, 3, 4], table_path=''):
 
@@ -41,7 +41,7 @@ def range_based_track_energy(data_dict, result_dict,
     for i, p in enumerate(particles):
         semantic_type = particle_seg[i]
         if semantic_type == 1 and pred_ptypes[i] in include_pids:
-            points = input_data[p]
+            points = input_data[p][:, 1:4]
             length = compute_track_length(points, bin_size=bin_size)
             particle_length[i] = length
             particle_energy[i] = splines[pred_ptypes[i]](length * PIXELS_TO_CM)
@@ -109,4 +109,23 @@ def compute_track_length(points, bin_size=17):
             dx = pca_axis.max() - pca_axis.min()
             length += dx
     return length
+    
 
+def compute_track_dedx(points, startpoint, endpoint, depositions, bin_size=17):
+    assert len(points) >= 2
+    vec = endpoint - startpoint
+    vec_norm = np.linalg.norm(vec)
+    vec = (vec / (vec_norm + 1e-6)).astype(np.float64)
+    proj = points - startpoint
+    proj = np.dot(proj, vec)
+    bins = np.arange(proj.min(), proj.max(), bin_size)
+    bin_inds = np.digitize(proj, bins)
+    dedx = np.zeros(np.unique(bin_inds).shape[0]).astype(np.float64)
+    for i, b_i in enumerate(np.unique(bin_inds)):
+        mask = bin_inds == b_i
+        sum_energy = depositions[mask].sum()
+        if np.count_nonzero(mask) < 2: continue
+        # Repeat PCA locally for better measurement of dx
+        dx = proj[mask].max() - proj[mask].min()
+        dedx[i] = sum_energy / dx
+    return dedx

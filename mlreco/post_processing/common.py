@@ -1,33 +1,38 @@
 import numpy as np
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 class PostProcessor:
 
     def __init__(self, cfg, data, result, debug=True):
-        self._funcs = []
+        self._funcs = defaultdict(list)
         self._num_batches = cfg['iotool']['batch_size']
         self.data = data
         self.result = result
         self.debug = debug
 
-    def register_function(self, f, processor_cfg={}):
+    def register_function(self, f, priority, processor_cfg={}):
         data_capture, result_capture = f._data_capture, f._result_capture
+        result_capture_optional      = f._result_capture_optional
         pf = partial(f, **processor_cfg)
-        pf._data_capture = data_capture
-        pf._result_capture = result_capture
-        self._funcs.append(pf)
+        pf._data_capture            = data_capture
+        pf._result_capture          = result_capture
+        pf._result_capture_optional = result_capture_optional
+        self._funcs[priority].append(pf)
 
-    def process_event(self, image_id):
+    def process_event(self, image_id, f_list):
 
         image_dict = {}
         
-        for f in self._funcs:
+        for f in f_list:
             data_dict, result_dict = {}, {}
             for data_key in f._data_capture:
                 data_dict[data_key] = self.data[data_key][image_id]
             for result_key in f._result_capture:
                 result_dict[result_key] = self.result[result_key][image_id]
+            for result_key in f._result_capture_optional:
+                if result_key in self.result:
+                    result_dict[result_key] = self.result[result_key][image_id]
             update_dict = f(data_dict, result_dict)
             for key, val in update_dict.items():
                 if key in image_dict:
@@ -40,20 +45,30 @@ class PostProcessor:
 
         return image_dict
     
-    def process(self):
-
-        out_dict = defaultdict(list)
-
-        for image_id in range(self._num_batches):
-            image_dict = self.process_event(image_id)
-            for key, val in image_dict.items():
-                out_dict[key].append(val)
+    def process_and_modify(self):
+        """
         
-        if self.debug:
-            for key, val in out_dict.items():
-                assert len(out_dict[key]) == self._num_batches
+        """
+        sorted_processors = sorted([x for x in self._funcs.items()], reverse=True)
+        for priority, f_list in sorted_processors:
+            out_dict = defaultdict(list)
+            for image_id in range(self._num_batches):
+                image_dict = self.process_event(image_id, f_list)
+                for key, val in image_dict.items():
+                    out_dict[key].append(val)
+            
+            if self.debug:
+                for key, val in out_dict.items():
+                    assert len(out_dict[key]) == self._num_batches
 
-        return out_dict
+            for key, val in out_dict.items():
+                if key in self.result:
+                    msg = "Post processing script output key {} "\
+                    "is already in result_dict, you may want"\
+                    "to rename it.".format(key)
+                    raise RuntimeError(msg)
+                else:
+                    self.result[key] = val
 
 
 def extent(voxels):

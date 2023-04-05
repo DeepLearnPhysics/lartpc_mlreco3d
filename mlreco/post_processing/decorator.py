@@ -6,7 +6,8 @@ from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
 from functools import wraps
 from pprint import pprint
 
-def post_processing(data_capture, result_capture):
+def post_processing(data_capture, result_capture,
+                    result_capture_optional=[]):
     """
     Decorator for common post-processing boilerplate.
 
@@ -30,8 +31,9 @@ def post_processing(data_capture, result_capture):
 
             return out
         
-        wrapper._data_capture = data_capture
-        wrapper._result_capture = result_capture
+        wrapper._data_capture            = data_capture
+        wrapper._result_capture          = result_capture
+        wrapper._result_capture_optional = result_capture_optional
 
         return wrapper
     return decorator
