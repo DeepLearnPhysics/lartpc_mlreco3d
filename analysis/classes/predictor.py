@@ -820,8 +820,8 @@ class FullChainPredictor:
                             pid_conf=softmax(type_logits[i])[pids[i]],
                             volume=volume_id)
 
-            part.startpoint = particle_start_points[i][COORD_COLS[0]:COORD_COLS[-1]+1]
-            part.endpoint   = particle_end_points[i][COORD_COLS[0]:COORD_COLS[-1]+1]
+            part.startpoint = particle_start_points[i][COORD_COLS]
+            part.endpoint   = particle_end_points[i][COORD_COLS]
 
             out.append(part)
 

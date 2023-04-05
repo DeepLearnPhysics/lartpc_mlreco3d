@@ -10,7 +10,24 @@ from functools import lru_cache
 from mlreco.post_processing import post_processing
 from mlreco.utils.globals import *
 
-@post_processing(data_capture=[], 
+@post_processing(data_capture=['input_data'], 
+                 result_capture=['input_rescaled',
+                                 'particle_clusts'])
+def calorimetric_energy(data_dict,
+                        result_dict,
+                        conversion_factor=1.):
+
+    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
+    particles      = result_dict['particle_clusts']
+
+    update_dict = {
+        'particle_calo_energy': conversion_factor*np.array([np.sum(input_data[p, VALUE_COL]) for p in particles])
+    }
+            
+    return update_dict
+
+
+@post_processing(data_capture=['input_data'], 
                  result_capture=['particle_clusts', 
                                  'particle_seg', 
                                  'input_rescaled', 
@@ -18,7 +35,7 @@ from mlreco.utils.globals import *
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, include_pids=[2, 3, 4], table_path=''):
 
-    input_data     = result_dict['input_rescaled']
+    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
     particle_seg   = result_dict['particle_seg']
     particle_types = result_dict['particle_node_pred_type']
@@ -53,7 +70,7 @@ def range_based_track_energy(data_dict, result_dict,
 
 
 # Helper Functions
-@lru_cache
+@lru_cache(maxsize=10)
 def get_splines(particle_type, table_path):
     '''
     Returns CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)

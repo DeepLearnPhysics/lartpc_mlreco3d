@@ -49,7 +49,7 @@ SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP]
 # Invalid larcv.Particle labels
 INVAL_ID   = larcv.kINVALID_INSTANCEID # Particle group/parent/interaction ID
 INVAL_TID  = larcv.kINVALID_UINT       # Particle Geant4 track ID
-INVAL_PDG  = 0                         # Patricle PDG code
+INVAL_PDG  = 0                         # Particle PDG code
 
 # Mapping between particle PDG code and particle ID labels
 PDG_TO_PID = {
@@ -63,10 +63,11 @@ PDG_TO_PID = {
     2212: 4,  # protons
 }
 
-# CONSTANTS
+# Physical constants
 MUON_MASS     = 105.7     # [MeV/c^2]
 ELECTRON_MASS = 0.511998  # [MeV/c^2]
 PROTON_MASS   = 938.272   # [MeV/c^2]
 ARGON_DENSITY = 1.396     # [g/cm^3]
+
 ADC_TO_MEV    = 1. / 350. # < MUST GO
 PIXELS_TO_CM  = 0.3       # < MUST GO
