@@ -1,19 +1,10 @@
-from analysis.classes.particle import Particle
 import numpy as np
-import numba as nb
 from sklearn.decomposition import PCA
 from scipy.interpolate import CubicSpline
 from mlreco.utils.gnn.cluster import cluster_direction
 import pandas as pd
-
-# CONSTANTS (MeV)
-PROTON_MASS = 938.272
-MUON_MASS = 105.7
-ELECTRON_MASS = 0.511998
-ARGON_DENSITY = 1.396
-ADC_TO_MEV = 1. / 350.
-ARGON_MASS = 37211
-PIXELS_TO_CM = 0.3
+from analysis.classes import Particle
+from mlreco.utils.globals import *
 
 
 def compute_track_length(points, bin_size=17):
@@ -85,58 +76,8 @@ def compute_range_based_energy(particle, f, **kwargs):
 
 
 def get_particle_direction(p: Particle, **kwargs):
-    startpoint = p.startpoint
     v = cluster_direction(p.points, p.startpoint, **kwargs)
     return v
-
-
-# # Deprecated
-# def compute_particle_direction(p: Particle, 
-#                                start_segment_radius=17, 
-#                                vertex=None,
-#                                return_explained_variance=False):
-#     """
-#     Given a Particle, compute the start direction. Within `start_segment_radius`
-#     of the start point, find PCA axis and measure direction.
-
-#     If not start point is found, returns (-1, -1, -1).
-
-#     Parameters
-#     ----------
-#     p: Particle
-#     start_segment_radius: float, optional
-
-#     Returns
-#     -------
-#     np.ndarray
-#         Shape (3,)
-#     """
-#     pca = PCA(n_components=2)
-#     direction = None
-#     if p.startpoint is not None and p.startpoint[0] >= 0.:
-#         startpoint = p.startpoint
-#         if p.endpoint is not None and vertex is not None: # make sure we pick the one closest to vertex
-#             use_end = np.argmin([
-#                 np.sqrt(((vertex-p.startpoint)**2).sum()),
-#                 np.sqrt(((vertex-p.endpoint)**2).sum())
-#             ])
-#             startpoint = p.endpoint if use_end else p.startpoint
-#         d = np.sqrt(((p.points - startpoint)**2).sum(axis=1))
-#         if (d < start_segment_radius).sum() >= 2:
-#             direction = pca.fit(p.points[d < start_segment_radius]).components_[0, :]
-#     if direction is None: # we could not find a startpoint
-#         if len(p.points) >= 2: # just all voxels
-#             direction = pca.fit(p.points).components_[0, :]
-#         else:
-#             direction = np.array([-1, -1, -1])
-#             if not return_explained_variance:
-#                 return direction
-#             else:
-#                 return direction, np.array([-1, -1])
-#     if not return_explained_variance:
-#         return direction
-#     else:
-#         return direction, pca.explained_variance_ratio_
     
 
 def compute_track_dedx(p, bin_size=17):

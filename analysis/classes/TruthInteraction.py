@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from collections import OrderedDict, Counter
+from collections import OrderedDict
 from . import Interaction, TruthParticle
 
 
@@ -18,7 +18,7 @@ class TruthInteraction(Interaction):
             self.depositions_MeV.append(p.depositions_MeV)
             if p.is_primary: self.num_primaries += 1
         self.depositions_MeV = np.hstack(self.depositions_MeV)
-        self._pi0_tagged_photons = []
+        self.nu_info = None
 
 
     @property

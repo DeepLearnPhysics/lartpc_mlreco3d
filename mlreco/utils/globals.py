@@ -51,3 +51,11 @@ PDG_TO_PID = {
     -211: 3,  # pi-
     2212: 4,  # protons
 }
+
+# CONSTANTS
+MUON_MASS     = 105.7     # [MeV/c^2]
+ELECTRON_MASS = 0.511998  # [MeV/c^2]
+PROTON_MASS   = 938.272   # [MeV/c^2]
+ARGON_DENSITY = 1.396     # [g/cm^3]
+ADC_TO_MEV    = 1. / 350. # < MUST GO
+PIXELS_TO_CM  = 0.3       # < MUST GO

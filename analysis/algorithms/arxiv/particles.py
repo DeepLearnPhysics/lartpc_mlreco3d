@@ -15,7 +15,7 @@ from analysis.algorithms.utils import get_interaction_properties, \
                                       get_particle_properties, \
                                       get_mparticles_from_minteractions
 
-from analysis.algorithms.calorimetry import get_csda_range_spline
+from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import get_csda_range_spline
 
 @evaluate(['particles'])
 def run_inference_particles(data_blob, res, data_idx, analysis_cfg, cfg):
