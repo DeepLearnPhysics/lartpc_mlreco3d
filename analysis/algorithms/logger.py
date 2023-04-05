@@ -114,8 +114,8 @@ class ParticleLogger(AnalysisLogger):
             'particle_startpoint_y': -1,
             'particle_startpoint_z': -1
         }
-        if hasattr(particle, 'startpoint') \
-            and not (particle.startpoint == -1).all():
+        if (particle is not None) and (particle.startpoint is not None) \
+            and (not (particle.startpoint == -1).all()):
             out['particle_has_startpoint'] = True
             out['particle_startpoint_x'] = particle.startpoint[0]
             out['particle_startpoint_y'] = particle.startpoint[1]
@@ -130,8 +130,8 @@ class ParticleLogger(AnalysisLogger):
             'particle_endpoint_y': -1,
             'particle_endpoint_z': -1
         }
-        if hasattr(particle, 'endpoint') \
-            and not (particle.endpoint == -1).all():
+        if (particle is not None) and (particle.endpoint is not None) \
+            and (not (particle.endpoint == -1).all()):
             out['particle_has_endpoint'] = True
             out['particle_endpoint_x'] = particle.endpoint[0]
             out['particle_endpoint_y'] = particle.endpoint[1]
@@ -174,7 +174,7 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def reco_direction(particle, **kwargs):
+    def reco_direction(particle):
         out = {
             'particle_dir_x': 0,
             'particle_dir_y': 0,

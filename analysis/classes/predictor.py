@@ -2,6 +2,7 @@ from typing import List
 import numpy as np
 import os
 import time
+from collections import OrderedDict
 
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
@@ -728,8 +729,7 @@ class FullChainPredictor:
     def get_particles(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,
                       attaching_threshold=2,
-                      volume=None,
-                      particles_cfg=None) -> List[Particle]:
+                      volume=None) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
@@ -765,19 +765,16 @@ class FullChainPredictor:
         '''
         self._check_volume(volume)
 
-        if min_particle_voxel_count < 0:
-            min_particle_voxel_count = self.min_particle_voxel_count
-
         # Essential Information
-        volume_labels    = self.result['input_rescaled'][entry][:, 0]
-        point_cloud      = self.result['input_rescaled'][entry][:, 1:4]
+        volume_labels    = self.result['input_rescaled'][entry][:, BATCH_COL]
+        point_cloud      = self.result['input_rescaled'][entry][:, COORD_COLS]
         depositions      = self.result['input_rescaled'][entry][:, 4]
         particles        = self.result['particle_clusts'][entry]
         particle_seg     = self.result['particle_seg'][entry]
 
         type_logits           = self.result['particle_node_pred_type'][entry]
-        particle_start_points = self.result['particle_start_points'][entry]
-        particle_end_points   = self.result['particle_end_points'][entry]
+        particle_start_points = self.result['particle_start_points'][entry][:, COORD_COLS]
+        particle_end_points   = self.result['particle_end_points'][entry][:, COORD_COLS]
         node_pred_vtx         = self.result['particle_node_pred_vtx'][entry]
         inter_ids             = self.result['particle_group_pred'][entry]
         pids = np.argmax(type_logits, axis=1)
@@ -801,8 +798,6 @@ class FullChainPredictor:
             voxels = point_cloud[p]
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
-            if voxels.shape[0] < min_particle_voxel_count:
-                continue
             seg_label = particle_seg[i]
             pid = pids[i]
             if seg_label == 2 or seg_label == 3:
@@ -820,27 +815,51 @@ class FullChainPredictor:
                             pid_conf=softmax(type_logits[i])[pids[i]],
                             volume=volume_id)
 
-            part.startpoint = particle_start_points[i][COORD_COLS]
-            part.endpoint   = particle_end_points[i][COORD_COLS]
+            part.startpoint = particle_start_points[i]
+            part.endpoint   = particle_end_points[i]
 
             out.append(part)
 
-        if only_primaries:
-            out = [p for p in out if p.is_primary]
+        out = self._decorate_particles(entry, out,
+                                       only_primaries=only_primaries,
+                                       volume=volume)
+        return out
+    
+
+    def _decorate_particles(self, entry, particles, **kwargs):
+        
+        # Decorate particles
+        for i, p in enumerate(particles):
+            if 'particle_length' in self.result:
+                p.length = self.result['particle_length'][entry][i]
+            if 'particle_range_based_energy' in self.result:
+                energy = self.result['particle_range_based_energy'][entry][i]
+                if energy > 0: p.csda_energy = energy
+            if 'particle_calo_energy' in self.result:
+                p.calo_energy = self.result['particle_calo_energy'][entry][i]
+            if 'particle_start_directions' in self.result:
+                p.direction = self.result['particle_start_directions'][entry][i]
+
+        out = [p for p in particles]
+        # Filtering actions on particles
+        if kwargs.get('only_primaries', False):
+            out = [p for p in particles if p.is_primary]
 
         if len(out) == 0:
             return out
         
         # Get ppn candidates for particle
-        ppn_results = self._fit_predict_ppn(entry)
-        match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=attaching_threshold)
+        # ppn_results = self._fit_predict_ppn(entry)
+        # match_points_to_particles(ppn_results, out,
+        #     ppn_distance_threshold=kwargs['attaching_threshold'])
 
+        volume = kwargs.get('volume', None)
         if volume is not None:
             out = [p for p in out if p.volume == volume]
-
         return out
 
+    def _decorate_interactions(self, interactions, **kwargs):
+        pass
 
     def get_interactions(self, entry, 
                          drop_nonprimary_particles=True, 
@@ -884,7 +903,7 @@ class FullChainPredictor:
         return out
 
 
-    def fit_predict_labels(self, entry, volume=None):
+    def fit_predict_labels(self, entry):
         '''
         Predict all labels of a given batch index <entry>.
 
