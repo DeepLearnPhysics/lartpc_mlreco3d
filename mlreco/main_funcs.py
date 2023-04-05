@@ -286,8 +286,6 @@ def train_loop(handlers):
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
-    import mlreco.post_processing as post_processing
-
     cfg=handlers.cfg
     tsum = 0.
     epoch_counter = 0
@@ -317,20 +315,6 @@ def train_loop(handlers):
         # Save snapshot
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)
-
-        # Store output if requested
-        if 'post_processing' in cfg:
-
-            post_processor_interface = PostProcessor(cfg, data_blob, result_blob)
-
-            for processor_name, pcfg in cfg['post_processing'].items():
-                processor_name = processor_name.split('+')[0]
-                processor = getattr(post_processing,str(processor_name))
-                post_processor_interface.register_function(processor, 
-                                                           processor_cfg=pcfg)
-
-            post_processor_output_dict = post_processor_interface.process()
-            print(post_processor_output_dict)
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
@@ -407,9 +391,11 @@ def inference_loop(handlers):
                 for key, val in post_processor_output_dict.items():
                     if key in result_blob:
                         msg = "Post processing script output key {} "\
-                        "is already in result_dict, you may want"\
-                        "to rename it.".format(key)
-                        raise RuntimeError(msg)
+                        "is already in result_dict, you are overwriting"\
+                        "existing keys.".format(key)
+                        print(msg)
+                        #raise RuntimeError(msg)
+                        result_blob[key] = val
                     else:
                         result_blob[key] = val
 
