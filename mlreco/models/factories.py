@@ -51,7 +51,9 @@ def model_dict():
         # Deep Single Pass Uncertainty Quantification
         'duq_singlep': (singlep.DUQParticleClassifier, singlep.MultiLabelCrossEntropy),
         # Vertex PPN
-        'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss)
+        'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss),
+        # Vertex Pointnet
+        'vertex_pointnet': (vertex.VertexPointNet, vertex.VertexPointNetLoss)
     }
     return models
 
