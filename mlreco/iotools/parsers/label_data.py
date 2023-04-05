@@ -1,40 +1,68 @@
 import numpy as np
 import torch
 
-from mlreco.utils.globals import SHOW_SHP, TRACK_SHP, LOWE_SHP, INVAL_TID, PDG_TO_PID
+from mlreco.utils.globals import *
 
-
-def get_interaction_ids(particles):
+def get_valid_mask(particles):
     '''
-    A function which gets the interaction ID of each of the
-    particle in the input particle list. It leverages shared
-    ancestor position as a basis for interaction building and
-    sets the interaction ID to -1 for parrticles with invalid
-    ancestor track IDs.
+    A function which checks that the particle labels have been
+    filled properly at the SUPERA level. It checks that the ancestor
+    track ID of each particle is not an invalid number and that
+    the ancestor creation process is filled.
 
     Parameters
     ----------
     particles : list(larcv.Particle)
-        List of true particle instances
+        (P) List of true particle instances
 
     Results
     -------
     np.ndarray
-        List of interaction IDs, one per true particle instance
+        (P) Boolean list of validity, one per true particle instance
     '''
-    # Define the interaction ID on the basis of sharing an ancestor vertex position
+    mask  = np.array([p.ancestor_track_id() != INVAL_TID for p in particles])
+    mask &= np.array([bool(len(p.ancestor_creation_process())) for p in particles])
+    return mask
+
+
+def get_interaction_ids(particles):
+    '''
+    A function which gets the interaction ID of each of the particle in
+    the input particle list. If the `interaction_id` member of the
+    larcv.Particle class is filled, it simply uses that quantity.
+
+    Otherwise, it leverages shared ancestor position as a
+    basis for interaction building and sets the interaction
+    ID to -1 for particles with invalid ancestor track IDs.
+
+    Parameters
+    ----------
+    particles : list(larcv.Particle)
+        (P) List of true particle instances
+
+    Results
+    -------
+    np.ndarray
+        (P) List of interaction IDs, one per true particle instance
+    '''
+    # If the interaction IDs are specified in the particle tree, just use that
+    inter_ids = np.array([p.interaction_id() for p in particles], dtype=np.int32)
+    if np.any(inter_ids != INVAL_ID):
+        inter_ids[inter_ids == INVAL_ID] == -1
+        return inter_ids
+
+    # Define interaction IDs on the basis of sharing an ancestor vertex position
     anc_pos   = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
     inter_ids = np.unique(anc_pos, axis=0, return_inverse=True)[-1]
 
     # Now set the interaction ID of particles with an undefined ancestor to -1
     if len(particles):
-        anc_ids = np.array([p.ancestor_track_id() for p in particles])
-        inter_ids[anc_ids == INVAL_TID] = -1
+        inter_ids[get_valid_mask(particles)] = -1
 
     return inter_ids
 
 
-def get_nu_ids(inter_ids, particles, particles_mpv=None, neutrinos=None):
+def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     '''
     A function which gets the neutrino-like ID (0 for cosmic, 1 for
     neutrino) of each of the particle in the input particle list.
@@ -49,14 +77,14 @@ def get_nu_ids(inter_ids, particles, particles_mpv=None, neutrinos=None):
 
     Parameters
     ----------
-    inter_ids : np.ndarray
-        Array of interaction ID values, one per true particle instance
     particles : list(larcv.Particle)
-        List of true particle instances
+        (P) List of true particle instances
+    inter_ids : np.ndarray
+        (P) Array of interaction ID values, one per true particle instance
     particles_mpv : list(larcv.Particle), optional
-        List of true MPV particle instances
+        (M) List of true MPV particle instances
     neutrinos : list(larcv.Neutrino), optional
-        List of true neutrino instances
+        (N) List of true neutrino instances
 
     Results
     -------
@@ -75,23 +103,20 @@ def get_nu_ids(inter_ids, particles, particles_mpv=None, neutrinos=None):
         valid_mask = np.where(inter_ids > -1)[0]
         if not len(valid_mask):
             return nu_ids
-
-        # Identify the interaction ID of that particle
         inter_id = inter_ids[valid_mask[0]]
-        inter_index = np.where(inter_ids == inter_id)[0]
 
-        # If there are at least two primaries, the interaction is nu-like
-        primary_ids = get_group_primary_id(particles)
-        num_primary = np.sum(primary_ids[inter_index])
-        if num_primary > 1:
+        # If there are at least two primaries, the interaction is neutrino-like
+        primary_ids = get_group_primary_ids(particles)
+        inter_index = np.where(inter_ids == inter_id)[0]
+        if np.sum(primary_ids[inter_index] == 1) > 1:
             nu_ids[inter_index] = 1
     else:
         # Find the reference positions gauge if a particle comes from a neutrino-like interaction
         ref_pos = None
         if particles_mpv:
-            ref_pos = np.vstack([[getattr(p, f'{a}')() for a in ['x', 'y', 'z']] for p in particles_mpv])
+            ref_pos = np.vstack([[getattr(p, a)() for a in ['x', 'y', 'z']] for p in particles_mpv])
         elif neutrinos:
-            ref_pos = np.vstack([[getattr(n, f'{a}')() for a in ['x', 'y', 'z']] for n in neutrinos])
+            ref_pos = np.vstack([[getattr(n, a)() for a in ['x', 'y', 'z']] for n in neutrinos])
 
         # If a particle shares its ancestor position with an MPV particle
         # or a neutrino, it belongs to a neutrino-like interaction
@@ -103,10 +128,10 @@ def get_nu_ids(inter_ids, particles, particles_mpv=None, neutrinos=None):
     return nu_ids
 
 
-def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=False):
+def get_particle_ids(particles, nu_ids, include_mpr=False, include_secondary=False):
     '''
-    Function that gives one of five labels to particles of
-    particle species predictions. This function ensures:
+    Function which gets a particle ID (PID) for each of the particle in
+    the input particle list. This function ensures:
     - Particles that do not originate from an MPV are labeled -1,
       unless the include_mpr flag is set to true
     - Secondary particles (includes Michel/delta and neutron activity) are
@@ -119,136 +144,126 @@ def get_particle_id(particles_v, nu_ids, include_mpr=False, include_secondary=Fa
       This is handled downstream with the high_purity flag.
     - Particles that are not in the list target are labeled -1
 
-    Inputs:
-        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
-        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
-        - include_mpr: include MPR (cosmic-like) particles to PID target
-        - include_secondary: include secondary particles into the PID target
-    Outputs:
-        - array: (N) list of group ids
+    Parameters
+    ----------
+    particles : list(larcv.Particle)
+        (P) List of true particle instances
+    nu_ids : np.ndarray
+        (P) Array of neutrino ID values, one per true particle instance
+    include_mpr : bool, default False
+        Include cosmic-like particles (MPR or cosmics) to valid PID labels
+    include_secondary : bool, default False
+        Inlcude secondary particles to valid PID labels
+
+    Returns
+    -------
+    np.ndarray
+        (P) List of particle IDs, one per true particle instance
     '''
-    particle_ids = np.empty(len(nu_ids))
-    primary_ids  = get_group_primary_id(particles_v, nu_ids, include_mpr)
+    particle_ids = -np.ones(len(nu_ids), dtype=np.int32)
+    primary_ids  = get_group_primary_ids(particles, nu_ids, include_mpr)
     for i in range(len(particle_ids)):
-        # If the primary ID is invalid, assign invalid
+        # If the primary ID is invalid, skip
         if primary_ids[i] < 0:
-            particle_ids[i] = -1
             continue
 
-        # If secondary particles are not included and primary_id < 1, assign invalid
+        # If secondary particles are not included and primary_id < 1, skip
         if not include_secondary and primary_ids[i] < 1:
-            particle_ids[i] = -1
             continue
 
         # If the particle type exists in the predefined list, assign
-        group_id = int(particles_v[i].group_id())
-        t = int(particles_v[group_id].pdg_code())
+        group_id = particles[i].group_id()
+        t = particles[group_id].pdg_code()
         if t in PDG_TO_PID.keys():
             particle_ids[i] = PDG_TO_PID[t]
-        else:
-            particle_ids[i] = -1
 
     return particle_ids
 
 
-def get_shower_primary_id(cluster_event, particles_v):
+def get_shower_primary_ids(particles):
     '''
-    Function that assigns valid primary tags to shower fragments.
+    Function which gets primary labels for shower fragments.
     This could be handled somewhere else (e.g. SUPERA)
 
-    Inputs:
-        - cluster_event (larcv::EventClusterVoxel3D): (N) Array of cluster tensors
-        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
-    Outputs:
-        - array: (N) list of group ids
+    Parameters
+    ----------
+    particles : list(larcv.Particle)
+        (P) List of true particle instances
+
+    Results
+    -------
+    np.ndarray
+        (P) List of particle shower primary IDs, one per true particle instance
     '''
-    # Loop over the list of particles
-    group_ids   = np.array([p.group_id() for p in particles_v])
-    primary_ids = np.empty(particles_v.size(), dtype=np.int32)
-    for i, p in enumerate(particles_v):
-        # If the particle is a track or a low energy cluster, it is not a primary shower fragment
-        if p.shape() == 1 or p.shape() == 4:
-            primary_ids[i] = 0
+    # Loop over the list of particle groups
+    primary_ids = np.zeros(len(particles), dtype=np.int32)
+    group_ids   = np.array([p.group_id() for p in particles], dtype=np.int32)
+    valid_mask  = get_valid_mask(particles)
+    for g in np.unique(group_ids):
+        # If the particle group has invalid labeling, it does not contain a primary
+        if g == INVAL_ID or not valid_mask[g]:
+            continue
+        p = particles[g]
+
+        # If a group originates from a Delta or a Michel, that has a primary
+        if p.shape() == MICHL_SHP or p.shape() == DELTA_SHP:
+            primary_ids[g] = 1
             continue
 
-        # If a particle is a Delta or a Michel, it is a primary shower fragment
-        if p.shape() == 2 or p.shape() == 3:
-            primary_ids[i] = 1
+        # If a group does not originate from EM activity, it does not contain a primary
+        if p.shape() != SHOWR_SHP:
             continue
 
-        # If the shower fragment originates from nuclear activity, it is not a primary
-        process = p.creation_process()
-        parent_pdg_code = abs(p.parent_pdg_code())
-        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 2112:
-            primary_ids[i] = 0
-            continue
-
-        # If a shower group's parent fragment has size zero, there is no valid primary in the group
-        gid = int(p.group_id())
-        parent_size = cluster_event.as_vector()[gid].as_vector().size()
-        if not parent_size:
-            primary_ids[i] = 0
-            continue
-
-        # If a shower group's parent fragment is not the first in time, there is no valid primary in the group
-        idxs = np.where(group_ids == gid)[0]
-        clust_times = np.array([particles_v[int(j)].first_step().t() for j in idxs])
+        # If a shower group's parent fragment the first in time, it is a valid primary
+        group_index = np.where(group_ids == g)[0]
+        clust_times = np.array([particles[i].first_step().t() for i in group_index])
         min_id = np.argmin(clust_times)
-        if idxs[min_id] != gid :
-            primary_ids[i] = 0
-            continue
-
-        # If all conditions are met, label shower fragments which have identical ID and group ID as primary
-        primary_ids[i] = int(gid == i)
+        if group_index[min_id] == g:
+            primary_ids[g] = 1
 
     return primary_ids
 
 
-def get_group_primary_id(particles_v, nu_ids=None, include_mpr=True):
+def get_group_primary_ids(particles, nu_ids=None, include_mpr=True):
     '''
-    Function that assigns valid primary tags to particle groups.
-    This could be handled somewhere else (e.g. SUPERA)
+    Parameters
+    ----------
+    particles : list(larcv.Particle)
+        (P) List of true particle instances
+    nu_ids : np.ndarray, optional
+        (P) List of neutrino IDs, one per particle instance
+    include_mpr : bool, default False
+        Include cosmic-like particles (MPR or cosmics) to valid primary labels
 
-    Inputs:
-        - particles_v (array of larcv::Particle)    : (N) LArCV Particle objects
-        - nu_ids: a numpy array with shape (n, 1) where 1 is neutrino id (0 if not an MPV)
-        - include_mpr: include MPR (cosmic-like) particles to primary target
-    Outputs:
-        - array: (N) list of group ids
+    Results
+    -------
+    np.ndarray
+        (P) List of particle shower primary IDs, one per true particle instance
     '''
     # Loop over the list of particles
-    primary_ids = np.empty(particles_v.size(), dtype=np.int32)
-    for i, p in enumerate(particles_v):
+    primary_ids = np.empty(len(particles), dtype=np.int32)
+    valid_mask  = get_valid_mask(particles)
+    for i, p in enumerate(particles):
+        # If the particle has invalid labeling, it does not contain a primary
+        if p.group_id() == INVAL_ID or not valid_mask[i]:
+            primary_ids[i] = -1
+            continue
+
         # If MPR particles are not included and the nu_id < 1, assign invalid
-        if not include_mpr and nu_ids[i] < 1:
+        if not include_mpr and nu_ids is not None and nu_ids[i] < 1:
             primary_ids[i] = -1
             continue
 
-        # If the ancestor particle is unknown (no creation process), assign invalid (TODO: fix in supera)
-        if not p.ancestor_creation_process():
-            primary_ids[i] = -1
+        # If the particle originates from a primary pi0, label as primary
+        # Small issue with photo-nuclear activity here, but very rare
+        group_p = particles[p.group_id()]
+        if group_p.ancestor_pdg_code() == 111:
+            primary_ids[i] = 1
             continue
 
-        # If the particle is not a shower or a track, it is not a primary
-        if p.shape() != SHOW_SHP and p.shape() != TRACK_SHP and p.shape() != LOWE_SHP:
-            primary_ids[i] = 0
-            continue
-
-        # If the particle group originates from nuclear activity, it is not a primary
-        gid = int(p.group_id())
-        process = particles_v[gid].creation_process()
-        parent_pdg_code = abs(particles_v[gid].parent_pdg_code())
-        ancestor_pdg_code = abs(particles_v[gid].ancestor_pdg_code())
-        if 'Inelastic' in process or 'Capture' in process or parent_pdg_code == 2112 or ancestor_pdg_code == 2112:
-            primary_ids[i] = 0
-            continue
-
-        # If the parent is a pi0, make sure that it is a primary pi0 (pi0s are not stored in particle list)
-        if parent_pdg_code == 111 and ancestor_pdg_code != 111:
-            primary_ids[i] = 0
-            continue
-
-        # If the parent ID of the primary particle in the group is the same as the group ID, it is a primary
-        primary_ids[i] = int(particles_v[gid].parent_id() == gid)
+        # If the origin of a particle agrees with the origin of its ancestor, label as primary
+        group_pos = np.array([getattr(group_p, a)() for a in ['x', 'y', 'z']])
+        anc_pos   = np.array([getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']])
+        primary_ids[i] = (group_pos == anc_pos).all()
 
     return primary_ids

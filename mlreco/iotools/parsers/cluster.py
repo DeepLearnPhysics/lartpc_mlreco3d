@@ -6,7 +6,7 @@ from sklearn.cluster import DBSCAN
 from .sparse import parse_sparse3d
 from .particles import parse_particles
 from .clean_data import clean_sparse_data
-from .label_data import get_interaction_ids, get_nu_ids, get_particle_id, get_shower_primary_id, get_group_primary_id
+from .label_data import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 
 
 def parse_cluster2d(cluster_event):
@@ -139,23 +139,24 @@ def parse_cluster3d(cluster_event,
     labels['cluster'] = np.arange(num_clusters)
     if add_particle_info:
         assert particle_event is not None, "Must provide particle tree if particle information is included"
-        particles_v     = particle_event.as_vector()
-        particles_v_v   = parse_particles(particle_event, cluster_event)
-        particles_mpv_v = particle_mpv_event.as_vector() if particle_mpv_event is not None else None
-        neutrinos_v     = neutrino_event.as_vector() if neutrino_event is not None else None
+        particles     = list(particle_event.as_vector())
+        particles_mpv = list(particle_mpv_event.as_vector()) if particle_mpv_event is not None else None
+        neutrinos     = list(neutrino_event.as_vector()) if neutrino_event is not None else None
 
-        labels['cluster'] = np.array([p.id() for p in particles_v])
-        labels['group']   = np.array([p.group_id() for p in particles_v])
-        labels['inter']   = get_interaction_ids(particles_v)
-        labels['nu']      = get_nu_ids(labels['inter'], particles_v, particles_mpv_v, neutrinos_v)
-        labels['type']    = get_particle_id(particles_v, labels['nu'], type_include_mpr, type_include_secondary)
-        labels['pshower'] = get_shower_primary_id(cluster_event, particles_v)
-        labels['pgroup']  = get_group_primary_id(particles_v, labels['nu'], primary_include_mpr)
-        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_v_v])
-        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_v_v])
-        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_v_v])
-        labels['p']       = np.array([p.p()/1e3 for p in particles_v]) # In GeV
-        labels['shape']   = np.array([p.shape() for p in particles_v])
+        particles_p   = parse_particles(particle_event, cluster_event)
+
+        labels['cluster'] = np.array([p.id() for p in particles])
+        labels['group']   = np.array([p.group_id() for p in particles])
+        labels['inter']   = get_interaction_ids(particles)
+        labels['nu']      = get_nu_ids(particles, labels['inter'], particles_mpv, neutrinos)
+        labels['type']    = get_particle_ids(particles, labels['nu'], type_include_mpr, type_include_secondary)
+        labels['pshower'] = get_shower_primary_ids(particles)
+        labels['pgroup']  = get_group_primary_ids(particles, labels['nu'], primary_include_mpr)
+        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_p])
+        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_p])
+        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_p])
+        labels['p']       = np.array([p.p()/1e3 for p in particles]) # In GeV
+        labels['shape']   = np.array([p.shape() for p in particles])
 
     # Loop over clusters, store info
     clusters_voxels, clusters_features = [], []

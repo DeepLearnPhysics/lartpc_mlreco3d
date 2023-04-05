@@ -24,19 +24,21 @@ MOM_COL    = 15
 SHAPE_COL  = -1
 
 # Shape ID of each type of voxel category
-SHOW_SHP   = larcv.kShapeShower    # 0
+SHOWR_SHP  = larcv.kShapeShower    # 0
 TRACK_SHP  = larcv.kShapeTrack     # 1
-MICH_SHP   = larcv.kShapeMichel    # 2
+MICHL_SHP  = larcv.kShapeMichel    # 2
 DELTA_SHP  = larcv.kShapeDelta     # 3
-LOWE_SHP   = larcv.kShapeLEScatter # 4
+LOWES_SHP  = larcv.kShapeLEScatter # 4
 GHOST_SHP  = larcv.kShapeGhost     # 5
 UNKWN_SHP  = larcv.kShapeUnknown   # 6
 
 # Shape precedence used in the cluster labeling process
-SHAPE_PREC = [TRACK_SHP, MICH_SHP, SHOW_SHP, DELTA_SHP, LOWE_SHP]
+SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP]
 
-# Invalid labels
-INVAL_TID  = larcv.kINVALID_UINT
+# Invalid larcv.Particle labels
+INVAL_ID   = larcv.kINVALID_INSTANCEID # Particle group/parent/interaction ID
+INVAL_TID  = larcv.kINVALID_UINT       # Particle Geant4 track ID
+INVAL_PDG  = 0                         # Patricle PDG code
 
 # Mapping between particle PDG code and particle ID labels
 PDG_TO_PID = {
