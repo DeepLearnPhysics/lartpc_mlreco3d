@@ -394,31 +394,7 @@ def inference_loop(handlers):
 
             # Store output if requested
             if 'post_processing' in handlers.cfg:
-<<<<<<< HEAD
                 run_post_processing(handlers.cfg, data_blob, result_blob)
-=======
-
-                post_processor_interface = PostProcessor(handlers.cfg, data_blob, result_blob)
-
-                for processor_name, pcfg in handlers.cfg['post_processing'].items():
-                    processor_name = processor_name.split('+')[0]
-                    processor = getattr(post_processing,str(processor_name))
-                    post_processor_interface.register_function(processor, 
-                                                               processor_cfg=pcfg)
-
-                post_processor_output_dict = post_processor_interface.process()
-
-                for key, val in post_processor_output_dict.items():
-                    if key in result_blob:
-                        msg = "Post processing script output key {} "\
-                        "is already in result_dict, you are overwriting"\
-                        "existing keys.".format(key)
-                        print(msg)
-                        #raise RuntimeError(msg)
-                        result_blob[key] = val
-                    else:
-                        result_blob[key] = val
->>>>>>> 939098d19498f430438350bba62793f0ca3a87f8
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')
