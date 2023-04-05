@@ -62,8 +62,8 @@ def evaluate(filenames):
                 assert max_iteration <= len(Reader)
 
             # Initialize the writer(s)
-            log_dir = analysis_config['analysis']['log_dir']
-            append = analysis_config['analysis'].get('append', True)
+            log_dir = analysis_config['logger']['log_dir']
+            append  = analysis_config['logger'].get('append', False)
 
             writers = {}
             for file_name in filenames:
@@ -82,6 +82,7 @@ def evaluate(filenames):
                 else:
                     data_blob, res = Reader.get(iteration, nested=True)
                 if profile:
+                    print('------------------------------------------------')
                     print("Forward took %.2f s" % (time.time() - start))
                 img_indices = data_blob['index']
                 
@@ -89,8 +90,10 @@ def evaluate(filenames):
                 stime = time.time()
                 if 'post_processing' in analysis_config:
                     run_post_processing(analysis_config, data_blob, res)
+                if profile:
+                    end = time.time()
+                    print("Post-processing took %.2f s" % (time.time() - stime))
                 
-
                 # 3. Run analysis tools script
                 stime = time.time()
                 fname_to_update_list = defaultdict(list)
@@ -113,6 +116,7 @@ def evaluate(filenames):
                 if profile:
                     end = time.time()
                     print("Iteration %d (total %.2f s)" % (iteration, end - start))
+                    print('------------------------------------------------')
 
         process_dataset._filenames = filenames
         return process_dataset

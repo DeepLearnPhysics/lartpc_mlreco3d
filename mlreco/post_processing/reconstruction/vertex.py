@@ -74,31 +74,33 @@ def reconstruct_vertex(data_dict, result_dict,
         
         if len(startpoints_int) > 0:
             startpoints_int = np.vstack(startpoints_int)
-        
-            # Gather vertex candidates from each algorithm
-            vertices_1 = get_centroid_adj_pairs(startpoints_int, r1=r1)
-            vertices_2 = get_track_shower_poca(startpoints_int,
-                                            particles_int,
-                                            particle_seg_int,
-                                            input_coords,
-                                            r2=r2,
-                                            particle_dirs=dirs_int)
-            if len(particles_int) >= 2:
-                pseudovertex = compute_pseudovertex(particles_int, 
-                                                    startpoints_int, 
-                                                    input_coords, 
-                                                    dim=3, 
-                                                    particle_dirs=dirs_int)
+            if len(startpoints_int) == 1:
+                vertex = startpoints_int.squeeze()
             else:
-                pseudovertex = np.array([])
+                # Gather vertex candidates from each algorithm
+                vertices_1 = get_centroid_adj_pairs(startpoints_int, r1=r1)
+                vertices_2 = get_track_shower_poca(startpoints_int,
+                                                particles_int,
+                                                particle_seg_int,
+                                                input_coords,
+                                                r2=r2,
+                                                particle_dirs=dirs_int)
+                if len(particles_int) >= 2:
+                    pseudovertex = compute_pseudovertex(particles_int, 
+                                                        startpoints_int, 
+                                                        input_coords, 
+                                                        dim=3, 
+                                                        particle_dirs=dirs_int)
+                else:
+                    pseudovertex = np.array([])
 
-            if vertices_1.shape[0] > 0:
-                candidates.append(vertices_1)
-            if vertices_2.shape[0] > 0:
-                candidates.append(vertices_2)
-            if len(candidates) > 0:
-                candidates = np.vstack(candidates)
-                vertex = np.mean(candidates, axis=0)
+                if vertices_1.shape[0] > 0:
+                    candidates.append(vertices_1)
+                if vertices_2.shape[0] > 0:
+                    candidates.append(vertices_2)
+                if len(candidates) > 0:
+                    candidates = np.vstack(candidates)
+                    vertex = np.mean(candidates, axis=0)
         vertices.append(vertex)
 
     if len(vertices) > 0:
@@ -248,31 +250,6 @@ def compute_pseudovertex(particle_clusts,
 
     pseudovtx = np.linalg.pinv(S) @ C
     return pseudovtx
-
-
-def compute_vertex_candidates(particle_clusts,
-                              particle_seg,
-                              input_coords,
-                              particle_start_points,
-                              r1=5.0, 
-                              r2=5.0,
-                              particle_dirs=None):
-    
-    candidates = []
-
-    # 1. Select two startpoints within dist r1
-    candidates.append(get_centroid_adj_pairs(particle_start_points, 
-                                             r1=r1))
-    # 2. Select a track start point which is close
-    #    to a line defined by shower direction
-    candidates.append(get_track_shower_poca(particle_start_points, 
-                                            particle_clusts, 
-                                            particle_seg, 
-                                            input_coords, 
-                                            r2=r2, 
-                                            particle_dirs=particle_dirs))
-            
-    return candidates
 
 
 def prune_vertex_candidates(candidates, pseudovtx, r=30):

@@ -9,7 +9,9 @@ except ImportError:
     pass
 
 from mlreco.iotools.factories import loader_factory, writer_factory
+import mlreco.post_processing as post_processing
 from mlreco.post_processing.common import PostProcessor
+from collections import OrderedDict
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
 # We need to set CUDA_VISIBLE_DEVICES first, which
@@ -281,13 +283,26 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         if handlers.train_logger: handlers.train_logger.flush()
 
 
+def run_post_processing(cfg, data_blob, result_blob):
+
+    post_processor_interface = PostProcessor(data_blob, result_blob)
+
+    for processor_name, pcfg in cfg['post_processing'].items():
+        priority = pcfg.pop('priority', -1)
+        processor_name = processor_name.split('+')[0]
+        processor = getattr(post_processing,str(processor_name))
+        post_processor_interface.register_function(processor, 
+                                                   priority,
+                                                   processor_cfg=pcfg)
+
+    post_processor_interface.process_and_modify()
+
+
 def train_loop(handlers):
     """
     Trainval loop. With optional minibatching as determined by the parameters
     cfg['iotool']['batch_size'] vs cfg['iotool']['minibatch_size'].
     """
-    import mlreco.post_processing as post_processing
-
     cfg=handlers.cfg
     tsum = 0.
     epoch_counter = 0
@@ -320,17 +335,7 @@ def train_loop(handlers):
 
         # Store output if requested
         if 'post_processing' in cfg:
-
-            post_processor_interface = PostProcessor(cfg, data_blob, result_blob)
-
-            for processor_name, pcfg in cfg['post_processing'].items():
-                processor_name = processor_name.split('+')[0]
-                processor = getattr(post_processing,str(processor_name))
-                post_processor_interface.register_function(processor, 
-                                                           processor_cfg=pcfg)
-
-            post_processor_output_dict = post_processor_interface.process()
-            print(post_processor_output_dict)
+            run_post_processing(cfg, data_blob, result_blob)
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
@@ -393,25 +398,7 @@ def inference_loop(handlers):
 
             # Store output if requested
             if 'post_processing' in handlers.cfg:
-
-                post_processor_interface = PostProcessor(handlers.cfg, data_blob, result_blob)
-
-                for processor_name, pcfg in handlers.cfg['post_processing'].items():
-                    processor_name = processor_name.split('+')[0]
-                    processor = getattr(post_processing,str(processor_name))
-                    post_processor_interface.register_function(processor, 
-                                                               processor_cfg=pcfg)
-
-                post_processor_output_dict = post_processor_interface.process()
-
-                for key, val in post_processor_output_dict.items():
-                    if key in result_blob:
-                        msg = "Post processing script output key {} "\
-                        "is already in result_dict, you may want"\
-                        "to rename it.".format(key)
-                        raise RuntimeError(msg)
-                    else:
-                        result_blob[key] = val
+                run_post_processing(handlers.cfg, data_blob, result_blob)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

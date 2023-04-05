@@ -4,9 +4,9 @@ from collections import defaultdict, OrderedDict
 
 class PostProcessor:
 
-    def __init__(self, cfg, data, result, debug=True):
+    def __init__(self, data, result, debug=True):
         self._funcs = defaultdict(list)
-        self._num_batches = cfg['iotool']['batch_size']
+        self._num_batches = len(data['index'])
         self.data = data
         self.result = result
         self.debug = debug
