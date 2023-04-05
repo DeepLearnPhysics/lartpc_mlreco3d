@@ -205,7 +205,7 @@ class HDF5Writer:
                     # List containing a single list of scalars per batch ID
                     self.key_dict[key]['dtype'] = type(blob[key][0][0])
 
-                elif not blob[key][0].dtype == np.object:
+                elif not isinstance(blob[key][0], list) and not blob[key][0].dtype == np.object:
                     # List containing a single ndarray of scalars per batch ID
                     self.key_dict[key]['dtype'] = blob[key][0].dtype
                     self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0

@@ -110,7 +110,7 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
             if np.sum(primary_ids[inter_index] == 1) > 1:
                 nu_ids[inter_index] = 1
     else:
-        # Find the reference positions gauge if a particle comes from a neutrino-like interaction
+        # Find the reference positions to gauge if a particle comes from a neutrino-like interaction
         ref_pos = None
         if particles_mpv:
             ref_pos = np.vstack([[getattr(p, a)() for a in ['x', 'y', 'z']] for p in particles_mpv])
@@ -238,7 +238,7 @@ def get_group_primary_ids(particles, nu_ids=None, include_mpr=True):
     Results
     -------
     np.ndarray
-        (P) List of particle shower primary IDs, one per true particle instance
+        (P) List of particle primary IDs, one per true particle instance
     '''
     # Loop over the list of particles
     primary_ids = np.empty(len(particles), dtype=np.int32)
