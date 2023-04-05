@@ -41,20 +41,19 @@ class FlashManager:
         # Setup OpT0finder
         basedir = os.getenv('FMATCH_BASEDIR')
         if basedir is None:
-            raise Exception("You need to source OpT0Finder configure.sh first, or set the FMATCH_BASEDIR environment variable.")
+            msg = "You need to source OpT0Finder configure.sh "\
+                "first, or set the FMATCH_BASEDIR environment variable."
+            raise Exception(msg)
 
         sys.path.append(os.path.join(basedir, 'python'))
-        #print(os.getenv('LD_LIBRARY_PATH'), os.getenv('ROOT_INCLUDE_PATH'))
         os.environ['LD_LIBRARY_PATH'] = "%s:%s" % (os.path.join(basedir, 'build/lib'), os.environ['LD_LIBRARY_PATH'])
         #os.environ['ROOT_INCLUDE_PATH'] = os.path.join(basedir, 'build/include')
-        #print(os.environ['LD_LIBRARY_PATH'], os.environ['ROOT_INCLUDE_PATH'])
         if 'FMATCH_DATADIR' not in os.environ: # needed for loading detector specs
             os.environ['FMATCH_DATADIR'] = os.path.join(basedir, 'dat')
         import ROOT
 
         import flashmatch
-        from flashmatch.visualization import plotly_layout3d, plot_track, plot_flash, plot_qcluster
-        from flashmatch import flashmatch, geoalgo
+        from flashmatch import flashmatch
 
         # Setup meta
         self.cfg = cfg
@@ -68,15 +67,14 @@ class FlashManager:
             self.size_voxel_x = meta[6]
             self.size_voxel_y = meta[7]
             self.size_voxel_z = meta[8]
-            #print('Meta min = ', self.min_x, self.min_y, self.min_z)
-            #print('Meta size = ', self.size_voxel_x, self.size_voxel_y, self.size_voxel_z)
 
         # Setup flash matching
         print('Setting up OpT0Finder for flash matching...')
         self.mgr = flashmatch.FlashMatchManager()
         cfg = flashmatch.CreatePSetFromFile(cfg_fmatch)
         if detector_specs is None:
-            self.det = flashmatch.DetectorSpecs.GetME(os.path.join(basedir, 'dat/detector_specs.cfg'))
+            self.det = flashmatch.DetectorSpecs.GetME(
+                os.path.join(basedir, 'dat/detector_specs.cfg'))
         else:
             assert isinstance(detector_specs, str)
             if not os.path.exists(detector_specs):
@@ -117,7 +115,8 @@ class FlashManager:
 
         raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
 
-    def make_qcluster(self, interactions, use_depositions_MeV=False, ADC_to_MeV=1.):
+    def make_qcluster(self, interactions, 
+                      use_depositions_MeV=False, ADC_to_MeV=1.):
         """
         Make flashmatch::QCluster_t objects from list of interactions.
 
@@ -152,14 +151,10 @@ class FlashManager:
                     p.points[i, 1] * self.size_voxel_y + self.min_y,
                     p.points[i, 2] * self.size_voxel_z + self.min_z,
                     p.depositions[i]*ADC_to_MeV*self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
-                    #modified_box_model(p.depositions[i], ADC_to_MeV) * self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
-                #print("make_qcluster ", p.depositions[i] * ADC_to_MeV, p.depositions_MeV[i], p.depositions[i] * 0.00285714)
                 # Add it to geoalgo::QCluster_t
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)
 
-        #if self.tpc_v is not None:
-        #    print("Warning: overwriting internal list of particles.")
         self.tpc_v = tpc_v
         print('Made list of %d QCluster_t' % len(tpc_v))
         return tpc_v
@@ -194,15 +189,11 @@ class FlashManager:
             flash.x_err, flash.y_err, flash.z_err = 0, 0, 0
 
             # PE distribution over the 360 photodetectors
-            #flash.pe_v = f.PEPerOpDet()
-            #for i in range(360):
             offset = 0 if len(f.PEPerOpDet()) == 180 else 180
             for i in range(180):
                 flash.pe_v.push_back(f.PEPerOpDet()[i + offset])
                 flash.pe_err_v.push_back(0.)
             pmt_v.append(flash)
-        #if self.pmt_v is not None:
-        #    print("Warning: overwriting internal list of flashes.")
         if self.reflash_merging_window is not None and len(pmt_v) > 0:
             # then proceed to merging close flashes
             perm = np.argsort(times)
@@ -211,7 +202,6 @@ class FlashManager:
             for idx, flash in enumerate(pmt_v[1:]):
                 if flash.time - final_pmt_v[-1].time < self.reflash_merging_window:
                     new_flash = self.merge_flashes(flash, final_pmt_v[-1])
-                    # print("Merged reflash", final_pmt_v[-1].time, new_flash.time, flash.time, np.sum(final_pmt_v[-1].pe_v), np.sum(new_flash.pe_v), np.sum(flash.pe_v))
                     final_pmt_v[-1] = new_flash
                 else:
                     final_pmt_v.append(flash)
@@ -243,7 +233,9 @@ class FlashManager:
         flash.time = min(a.time, b.time)
         flash.time_true = min(a.time_true, b.time_true)
         flash.x, flash.y, flash.z = min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)
-        flash.x_err, flash.y_err, flash.z_err = min(a.x_err, b.x_err), min(a.y_err, b.y_err), min(a.z_err, b.z_err)
+        flash.x_err = min(a.x_err, b.x_err)
+        flash.y_err = min(a.y_err, b.y_err)
+        flash.z_err = min(a.z_err, b.z_err)
         for i in range(180):
             flash.pe_v.push_back(a.pe_v[i] + b.pe_v[i])
             flash.pe_err_v.push_back(a.pe_err_v[i] + b.pe_err_v[i])
@@ -252,14 +244,18 @@ class FlashManager:
     def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
         if self.tpc_v is None:
             if interactions is None:
-                raise Exception('You need to specify `interactions`, or to run make_qcluster.')
+                msg = "You need to specify `interactions`, "\
+                    "or to run make_qcluster."
+                raise Exception(msg)
         if interactions is not None:
             self.make_qcluster(interactions, **kwargs)
 
 
         if self.pmt_v is None:
             if flashes is None:
-                raise Exception("PMT objects need to be defined. Either specify `flashes`, or run make_flash.")
+                msg = "PMT objects need to be defined. "\
+                    "Either specify `flashes`, or run make_flash."
+                raise Exception(msg)
         if flashes is not None:
             self.make_flash(flashes)
 
@@ -274,8 +270,6 @@ class FlashManager:
             self.mgr.Add(x)
 
         # Run the matching
-        #if self.all_matches is not None:
-        #    print("Warning: overwriting internal list of matches.")
         self.all_matches = self.mgr.Match()
         return self.all_matches
 

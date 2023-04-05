@@ -726,10 +726,7 @@ class FullChainPredictor:
         return primary_labels
 
 
-    def get_particles(self, entry, only_primaries=False,
-                      min_particle_voxel_count=-1,
-                      attaching_threshold=2,
-                      volume=None) -> List[Particle]:
+    def get_particles(self, entry, only_primaries=False, volume=None) -> List[Particle]:
         '''
         Method for retriving particle list for given batch index.
 
