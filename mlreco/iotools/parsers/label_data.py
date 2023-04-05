@@ -117,12 +117,17 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
         elif neutrinos:
             ref_pos = np.vstack([[getattr(n, a)() for a in ['x', 'y', 'z']] for n in neutrinos])
 
-        # If a particle shares its ancestor position with an MPV particle
-        # or a neutrino, it belongs to a neutrino-like interaction
+        # If any particle in an interaciton shares its ancestor position with an MPV particle
+        # or a neutrino, the whole interaction is a neutrino-like interaction.
         if ref_pos is not None and len(ref_pos):
             anc_pos = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
-            for pos in ref_pos:
-                nu_ids[(anc_pos == pos).all(axis=1)] = 1
+            for i in np.unique(inter_ids):
+                inter_index = np.where(inter_ids == i)[0]
+                if i < 0: continue
+                for pos in ref_pos:
+                    if np.any((anc_pos[inter_index] == pos).all(axis=1)):
+                        nu_ids[inter_index] = 1
+                        break
 
     return nu_ids
 
