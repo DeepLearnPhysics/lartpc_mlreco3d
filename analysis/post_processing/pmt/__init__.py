@@ -1,1 +1,1 @@
-from FlashManager import FlashManager
+from .FlashManager import FlashManager

@@ -1,6 +1,8 @@
 import os, sys
 import numpy as np
 
+from mlreco.utils.volumes import VolumeBoundaries
+
 def modified_box_model(x, constant_calib):
     W_ion = 23.6 * 1e-6 # MeV/electron, work function of argon
     E = 0.5 # kV/cm, drift electric field
@@ -10,7 +12,6 @@ def modified_box_model(x, constant_calib):
     rho = 1.39295 # g.cm^-3
     return (np.exp(x/constant_calib * beta \
                    * W_ion / (rho * E)) - alpha) / (beta / (rho * E)) # MeV/cm
-
 
 class FlashMatcherInterface:
     """
@@ -25,9 +26,16 @@ class FlashMatcherInterface:
         self.detector_specs = kwargs.get('detector_specs', None)
         self.ADC_to_MeV = kwargs.get('ADC_to_MeV', 1.)
         self.use_depositions_MeV = kwargs.get('use_depositions_MeV', False)
+        self.boundaries = kwargs.get('boundaries', None)
 
         self.flash_matches = {}
-        
+        if self.boundaries is not None:
+            self.vb = VolumeBoundaries(self.boundaries)
+            self._num_volumes = self.vb.num_volumes()
+        else:
+            self.vb = None
+            self._num_volumes = 1
+
     def initialize_flash_manager(self, meta):
         self.fm = FlashManager(self.config, self.fm_config, 
                                meta=meta,
@@ -102,10 +110,10 @@ class FlashMatcherInterface:
                 raise Exception('This Predictor does not know about truth info.')
 
             ints = result['Interactions'][entry]
-            tpc_v = [ia for ia in ints if ia.volume == volume]
+            tpc_v = [ia for ia in ints if volume is None or ia.volume == volume]
         else:
             ints = result['TruthInteractions'][entry]
-            tpc_v = [ia for ia in ints if ia.volume == volume]
+            tpc_v = [ia for ia in ints if volume is None or ia.volume == volume]
 
         if len(interaction_list) > 0: # by default, use all interactions
             tpc_v_select = []
@@ -162,6 +170,46 @@ class FlashMatcherInterface:
         if len(interaction_list) == 0:
             self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
         return tpc_v, new_pmt_v, matches
+    
+    def _translate(self, voxels, volume):
+        """
+        Go from 1-volume-only back to full volume coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.translate(voxels, volume)
+
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
         
     
 
