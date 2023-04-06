@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy
 from scipy.spatial.distance import cdist
 
-from mlreco.post_processing import post_processing
+from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
 

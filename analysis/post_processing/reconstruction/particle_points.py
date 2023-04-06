@@ -3,8 +3,8 @@ import numba as nb
 from scipy.spatial.distance import cdist
 from sklearn.decomposition import PCA
 
-from mlreco.post_processing import post_processing
-from mlreco.post_processing.reconstruction.calorimetry import compute_track_dedx
+from analysis.post_processing import post_processing
+from analysis.post_processing.reconstruction.calorimetry import compute_track_dedx
 
 @post_processing(data_capture=[], 
                  result_capture=['particle_start_points',

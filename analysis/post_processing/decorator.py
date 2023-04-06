@@ -1,10 +1,4 @@
-from mlreco.utils import CSVData
-import os
-import numpy as np
-from mlreco.utils.deghosting import adapt_labels_numpy as adapt_labels
-
 from functools import wraps
-from pprint import pprint
 
 def post_processing(data_capture, result_capture,
                     result_capture_optional=[]):
@@ -21,14 +15,12 @@ def post_processing(data_capture, result_capture,
         List of result keys needed. 
     """
     def decorator(func):
-        # This mapping is hardcoded for now...
         @wraps(func)
         def wrapper(data_dict, result_dict, **kwargs):
 
             # TODO: Handle unwrap/non-unwrap
 
             out = func(data_dict, result_dict, **kwargs)
-
             return out
         
         wrapper._data_capture            = data_capture

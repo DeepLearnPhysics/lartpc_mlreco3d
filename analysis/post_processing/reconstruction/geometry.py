@@ -1,7 +1,7 @@
 import numpy as np
 
 from mlreco.utils.gnn.cluster import get_cluster_directions
-from mlreco.post_processing import post_processing
+from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
 

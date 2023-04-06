@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import combinations
-from mlreco.post_processing.reconstruction.utils import closest_distance_two_lines
+from analysis.post_processing.reconstruction.utils import closest_distance_two_lines
 from mlreco.utils.gnn.cluster import cluster_direction
 
 # TODO: Need to refactor according to post processing conventions

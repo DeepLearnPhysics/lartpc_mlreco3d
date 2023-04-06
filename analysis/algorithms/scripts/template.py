@@ -1,13 +1,14 @@
 from collections import OrderedDict
 
-from analysis.decorator import evaluate
+from analysis.algorithms.decorator import write_to
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction
 from analysis.algorithms.logger import ParticleLogger, InteractionLogger
 
-@evaluate(['interactions', 'particles'])
-def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
+
+@write_to(['interactions', 'particles'])
+def run_inference(data_blob, res, **kwargs):
     """
     Example of analysis script for nue analysis.
     """
@@ -16,26 +17,30 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
     interactions, particles = [], []
 
     # Analysis tools configuration
-    primaries             = analysis_cfg['analysis']['match_primaries']
-    enable_flash_matching = analysis_cfg['analysis'].get('enable_flash_matching', False)
-    ADC_to_MeV            = analysis_cfg['analysis'].get('ADC_to_MeV', 1./350.)
-    matching_mode         = analysis_cfg['analysis']['matching_mode']
-    flash_matching_cfg    = analysis_cfg['analysis'].get('flash_matching_cfg', '')
+    primaries             = kwargs['match_primaries']
+    enable_flash_matching = kwargs.get('enable_flash_matching', False)
+    ADC_to_MeV            = kwargs.get('ADC_to_MeV', 1./350.)
+    matching_mode         = kwargs['matching_mode']
+    flash_matching_cfg    = kwargs.get('flash_matching_cfg', '')
+    boundaries            = kwargs.get('boundaries', [[1376.3], None, None])
 
     # FullChainEvaluator config
-    processor_cfg         = analysis_cfg['analysis'].get('processor_cfg', {})
+    evaluator_cfg         = kwargs.get('evaluator_cfg', {})
     # Particle and Interaction processor names
-    particle_fieldnames   = analysis_cfg['logger'].get('particles', {})
-    int_fieldnames        = analysis_cfg['logger'].get('interactions', {})
+    particle_fieldnames   = kwargs['logger'].get('particles', {})
+    int_fieldnames        = kwargs['logger'].get('interactions', {})
 
     # Load data into evaluator
     if enable_flash_matching:
-        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg,
+        predictor = FullChainEvaluator(data_blob, res, 
+                predictor_cfg=evaluator_cfg,
                 enable_flash_matching=enable_flash_matching,
                 flash_matching_cfg=flash_matching_cfg,
                 opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
     else:
-        predictor = FullChainEvaluator(data_blob, res, cfg, processor_cfg)
+        predictor = FullChainEvaluator(data_blob, res, 
+                                       evaluator_cfg=evaluator_cfg,
+                                       boundaries=boundaries)
 
     image_idxs = data_blob['index']
     spatial_size = predictor.spatial_size
@@ -72,6 +77,7 @@ def run_inference(data_blob, res, data_idx, analysis_cfg, cfg):
         # 2. Process interaction level information
         interaction_logger = InteractionLogger(int_fieldnames)
         interaction_logger.prepare()
+        
         for i, interaction_pair in enumerate(matches):
 
             int_dict = OrderedDict()

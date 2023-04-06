@@ -2,6 +2,7 @@ import numpy as np
 from functools import partial
 from collections import defaultdict, OrderedDict
 
+
 class PostProcessor:
 
     def __init__(self, data, result, debug=True):
@@ -14,10 +15,10 @@ class PostProcessor:
     def register_function(self, f, priority, processor_cfg={}):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
-        pf = partial(f, **processor_cfg)
-        pf._data_capture            = data_capture
-        pf._result_capture          = result_capture
-        pf._result_capture_optional = result_capture_optional
+        pf                           = partial(f, **processor_cfg)
+        pf._data_capture             = data_capture
+        pf._result_capture           = result_capture
+        pf._result_capture_optional  = result_capture_optional
         self._funcs[priority].append(pf)
 
     def process_event(self, image_id, f_list):

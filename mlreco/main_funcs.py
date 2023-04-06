@@ -9,8 +9,6 @@ except ImportError:
     pass
 
 from mlreco.iotools.factories import loader_factory, writer_factory
-import mlreco.post_processing as post_processing
-from mlreco.post_processing.common import PostProcessor
 from collections import OrderedDict
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
@@ -283,21 +281,6 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         if handlers.train_logger: handlers.train_logger.flush()
 
 
-def run_post_processing(cfg, data_blob, result_blob):
-
-    post_processor_interface = PostProcessor(data_blob, result_blob)
-
-    for processor_name, pcfg in cfg['post_processing'].items():
-        priority = pcfg.pop('priority', -1)
-        processor_name = processor_name.split('+')[0]
-        processor = getattr(post_processing,str(processor_name))
-        post_processor_interface.register_function(processor, 
-                                                   priority,
-                                                   processor_cfg=pcfg)
-
-    post_processor_interface.process_and_modify()
-
-
 def train_loop(handlers):
     """
     Trainval loop. With optional minibatching as determined by the parameters
@@ -360,7 +343,6 @@ def inference_loop(handlers):
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
-    import mlreco.post_processing as post_processing
 
     tsum = 0.
     # Metrics for each event
@@ -391,10 +373,6 @@ def inference_loop(handlers):
 
             # Run inference
             data_blob, result_blob = handlers.trainer.forward(handlers.data_io_iter)
-
-            # Store output if requested
-            if 'post_processing' in handlers.cfg:
-                run_post_processing(handlers.cfg, data_blob, result_blob)
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

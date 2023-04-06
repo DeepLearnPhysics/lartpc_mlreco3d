@@ -1,13 +1,13 @@
 from analysis.classes.evaluator import FullChainEvaluator
 
-from analysis.decorator import evaluate
+from analysis.algorithms.decorator import write_to
 
 from pprint import pprint
 import time
 import numpy as np
 import os, sys
 
-@evaluate(['test'])
+@write_to(['test'])
 def benchmark(data_blob, res, data_idx, analysis_cfg, cfg):
     """
     Dummy script to see how long FullChainEvaluator initialization takes.

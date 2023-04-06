@@ -9,7 +9,7 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, Interaction
+from analysis.classes import Particle, ParticleFragment, Interaction, ParticleBuilder, InteractionBuilder
 from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from analysis.algorithms.point_matching import *
 
@@ -50,11 +50,18 @@ class FullChainPredictor:
     3) Some outputs needs to be listed under trainval.concat_result.
     The predictor will run through a checklist to ensure this condition
     '''
-    def __init__(self, data_blob, result, cfg, predictor_cfg={},
-                 enable_flash_matching=False, flash_matching_cfg="", opflash_keys=[]):
-        # self.module_config = cfg['model']['modules']
+    def __init__(self, data_blob, result, 
+                 predictor_cfg={},
+                 enable_flash_matching=False, 
+                 flash_matching_cfg="", 
+                 opflash_keys=[],
+                 boundaries=None):
+
         self.data_blob = data_blob
         self.result = result
+
+        self.particle_builder    = ParticleBuilder()
+        self.interaction_builder = InteractionBuilder()
 
         self.num_images = len(result['input_rescaled'])
         self.index = self.data_blob['index']
@@ -98,7 +105,7 @@ class FullChainPredictor:
         # split over "virtual" batch ids
         # Note this is different from "self.volume_boundaries" above
         # FIXME rename one or the other to be clearer
-        boundaries = cfg['iotool'].get('collate', {}).get('boundaries', None)
+
         if boundaries is not None:
             self.vb = VolumeBoundaries(boundaries)
             self._num_volumes = self.vb.num_volumes()
@@ -605,108 +612,7 @@ class FullChainPredictor:
             List of <Particle> instances (see Particle class definition).
         '''
         self._check_volume(volume)
-
-        if min_particle_voxel_count < 0:
-            min_particle_voxel_count = self.min_particle_voxel_count
-
-        out_fragment_list = []
-
-        point_cloud = self.result['input_rescaled'][entry][:, 1:4]
-        depositions = self.result['input_rescaled'][entry][:, 4]
-        fragments = self.result['fragment_clusts'][entry]
-        fragments_seg = self.result['fragment_seg'][entry]
-
-        shower_mask = np.isin(fragments_seg, allow_nodes)
-        shower_frag_primary = np.argmax(self.result['shower_fragment_node_pred'][entry], axis=1)
-
-        if 'shower_fragment_node_features' in self.result:
-            shower_node_features = self.result['shower_fragment_node_features'][entry]
-        if 'track_fragment_node_features' in self.result:
-            track_node_features = self.result['track_fragment_node_features'][entry]
-
-        assert len(fragments_seg) == len(fragments)
-
-        temp = []
-
-        if ('particle_group_pred' in self.result) and ('particle_clusts' in self.result) and len(fragments) > 0:
-
-            group_labels = self._fit_predict_groups(entry)
-            inter_labels = self._fit_predict_interaction_labels(entry)
-            group_ids = get_cluster_label(group_labels.reshape(-1, 1), fragments, column=0)
-            inter_ids = get_cluster_label(inter_labels.reshape(-1, 1), fragments, column=0)
-
-        else:
-            group_ids = np.ones(len(fragments)).astype(int) * -1
-            inter_ids = np.ones(len(fragments)).astype(int) * -1
-
-        if true_id:
-            true_fragment_labels = self.data_blob['cluster_label'][entry][:, 5]
-
-
-        for i, p in enumerate(fragments):
-            voxels = point_cloud[p]
-            seg_label = fragments_seg[i]
-            part = ParticleFragment(voxels,
-                            i, seg_label,
-                            interaction_id=inter_ids[i],
-                            group_id=group_ids[i],
-                            image_id=entry,
-                            voxel_indices=p,
-                            depositions=depositions[p],
-                            is_primary=False,
-                            pid_conf=-1,
-                            alias='Fragment',
-                            volume=volume)
-            temp.append(part)
-            if true_id:
-                fid = true_fragment_labels[p]
-                fids, counts = np.unique(fid.astype(int), return_counts=True)
-                part.true_ids = fids
-                part.true_counts = counts
-
-        # Label shower fragments as primaries and attach startpoint
-        shower_counter = 0
-        for p in np.array(temp)[shower_mask]:
-            is_primary = shower_frag_primary[shower_counter]
-            p.is_primary = bool(is_primary)
-            p.startpoint = shower_node_features[shower_counter][19:22]
-            # p.group_id = int(shower_group_pred[shower_counter])
-            shower_counter += 1
-        assert shower_counter == shower_frag_primary.shape[0]
-
-        # Attach endpoint to track fragments
-        track_counter = 0
-        for p in temp:
-            if p.semantic_type == 1:
-                # p.group_id = int(track_group_pred[track_counter])
-                p.startpoint = track_node_features[track_counter][19:22]
-                p.endpoint = track_node_features[track_counter][22:25]
-                track_counter += 1
-        # assert track_counter == track_group_pred.shape[0]
-
-        # Apply fragment voxel cut
-        out = []
-        for p in temp:
-            if p.points.shape[0] < min_particle_voxel_count:
-                continue
-            out.append(p)
-
-        # Check primaries and assign ppn points
-        if only_primaries:
-            out = [p for p in out if p.is_primary]
-
-        if semantic_type is not None:
-            out = [p for p in out if p.semantic_type == semantic_type]
-
-        if len(out) == 0:
-            return out
-
-        ppn_results = self._fit_predict_ppn(entry)
-        match_points_to_particles(ppn_results, out,
-            ppn_distance_threshold=attaching_threshold)
-
-        out_fragment_list.extend(out)
-
+        out_fragment_list = self.result['ParticleFragments'][entry]
         return out_fragment_list
     
     def _get_primary_labels(self, node_pred_vtx):
@@ -761,62 +667,7 @@ class FullChainPredictor:
             List of <Particle> instances (see Particle class definition).
         '''
         self._check_volume(volume)
-
-        # Essential Information
-        volume_labels    = self.result['input_rescaled'][entry][:, BATCH_COL]
-        point_cloud      = self.result['input_rescaled'][entry][:, COORD_COLS]
-        depositions      = self.result['input_rescaled'][entry][:, 4]
-        particles        = self.result['particle_clusts'][entry]
-        particle_seg     = self.result['particle_seg'][entry]
-
-        type_logits           = self.result['particle_node_pred_type'][entry]
-        particle_start_points = self.result['particle_start_points'][entry][:, COORD_COLS]
-        particle_end_points   = self.result['particle_end_points'][entry][:, COORD_COLS]
-        node_pred_vtx         = self.result['particle_node_pred_vtx'][entry]
-        inter_ids             = self.result['particle_group_pred'][entry]
-        pids = np.argmax(type_logits, axis=1)
-
-        out = []
-
-        # Some basic input checks
-        if point_cloud.shape[0] == 0 or len(particles) == 0:
-            return out
-        assert len(particle_seg) == len(particles)
-        assert len(pids) == len(particles)
-        assert len(particle_end_points) == len(particles)
-        assert len(particle_start_points) == len(particles)
-        assert point_cloud.shape[0] == depositions.shape[0]
-        assert node_pred_vtx.shape[0] == len(particles)
-        assert len(inter_ids) == len(particles)
-
-        primary_labels = self._get_primary_labels(node_pred_vtx)
-
-        for i, p in enumerate(particles):
-            voxels = point_cloud[p]
-            volume_id, cts = np.unique(volume_labels[p], return_counts=True)
-            volume_id = int(volume_id[cts.argmax()])
-            seg_label = particle_seg[i]
-            pid = pids[i]
-            if seg_label == 2 or seg_label == 3:
-                pid = 1
-            interaction_id = inter_ids[i]
-            part = Particle(voxels,
-                            i,
-                            seg_label, 
-                            interaction_id,
-                            pid,
-                            entry,
-                            voxel_indices=p,
-                            depositions=depositions[p],
-                            is_primary=primary_labels[i],
-                            pid_conf=softmax(type_logits[i])[pids[i]],
-                            volume=volume_id)
-
-            part.startpoint = particle_start_points[i]
-            part.endpoint   = particle_end_points[i]
-
-            out.append(part)
-
+        out = self.result['Particles'][entry]
         out = self._decorate_particles(entry, out,
                                        only_primaries=only_primaries,
                                        volume=volume)
@@ -885,18 +736,7 @@ class FullChainPredictor:
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-        out = []
-        particles = self.get_particles(entry, 
-            only_primaries=drop_nonprimary_particles, 
-            volume=volume)
-        out = group_particles_to_interactions_fn(particles, mode='pred')
-        for ia in out: ia.volume = volume
-        if get_vertex:
-            vertices = self.result['vertices'][entry]
-            for ia in out:
-                mask = vertices[:, BATCH_COL].astype(int) == ia.id
-                vertex = vertices[mask][:, COORD_COLS[0]:COORD_COLS[-1]+1]
-                ia.vertex = vertex.squeeze()
+        out = self.result['Interactions'][entry]
         return out
 
 

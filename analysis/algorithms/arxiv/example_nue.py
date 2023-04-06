@@ -2,7 +2,7 @@ from collections import OrderedDict
 from analysis.algorithms.utils import get_interaction_properties, get_particle_properties
 from analysis.classes.evaluator import FullChainEvaluator
 
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from lartpc_mlreco3d.analysis.classes.particle_utils import match_particles_fn, matrix_iou, match_particles_optimal
 
 from pprint import pprint

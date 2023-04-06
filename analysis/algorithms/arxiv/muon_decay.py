@@ -3,7 +3,7 @@ from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
 from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_length
 
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from lartpc_mlreco3d.analysis.classes.particle_utils import match_particles_fn, matrix_iou
 from analysis.algorithms.arxiv.michel_electrons import get_bounding_box, is_attached_at_edge
 

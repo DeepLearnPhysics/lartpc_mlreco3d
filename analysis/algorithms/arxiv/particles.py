@@ -5,7 +5,7 @@ import os, copy, sys
 sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
 
 
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction

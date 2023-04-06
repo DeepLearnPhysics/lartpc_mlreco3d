@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA
 from scipy.interpolate import CubicSpline
 from functools import lru_cache
 
-from mlreco.post_processing import post_processing
+from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
 @post_processing(data_capture=['input_data'], 

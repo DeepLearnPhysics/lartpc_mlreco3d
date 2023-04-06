@@ -3,7 +3,7 @@ import numba as nb
 from scipy.spatial.distance import cdist
 
 from mlreco.utils.gnn.cluster import cluster_direction
-from mlreco.post_processing import post_processing
+from analysis.post_processing import post_processing
 from mlreco.utils.globals import COORD_COLS
 
 
