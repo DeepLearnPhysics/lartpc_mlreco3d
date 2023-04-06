@@ -9,7 +9,7 @@ except ImportError:
     pass
 
 from mlreco.iotools.factories import loader_factory, writer_factory
-from mlreco.post_processing.common import PostProcessor
+from collections import OrderedDict
 # Important: do not import here anything that might
 # trigger cuda initialization through PyTorch.
 # We need to set CUDA_VISIBLE_DEVICES first, which
@@ -343,7 +343,6 @@ def inference_loop(handlers):
     Note: Accuracy/loss will be per batch in the CSV log file, not per event.
     Write an analysis function to do per-event analysis (TODO).
     """
-    import mlreco.post_processing as post_processing
 
     tsum = 0.
     # Metrics for each event
@@ -374,30 +373,6 @@ def inference_loop(handlers):
 
             # Run inference
             data_blob, result_blob = handlers.trainer.forward(handlers.data_io_iter)
-
-            # Store output if requested
-            if 'post_processing' in handlers.cfg:
-
-                post_processor_interface = PostProcessor(handlers.cfg, data_blob, result_blob)
-
-                for processor_name, pcfg in handlers.cfg['post_processing'].items():
-                    processor_name = processor_name.split('+')[0]
-                    processor = getattr(post_processing,str(processor_name))
-                    post_processor_interface.register_function(processor, 
-                                                               processor_cfg=pcfg)
-
-                post_processor_output_dict = post_processor_interface.process()
-
-                for key, val in post_processor_output_dict.items():
-                    if key in result_blob:
-                        msg = "Post processing script output key {} "\
-                        "is already in result_dict, you are overwriting"\
-                        "existing keys.".format(key)
-                        print(msg)
-                        #raise RuntimeError(msg)
-                        result_blob[key] = val
-                    else:
-                        result_blob[key] = val
 
             handlers.watch.stop('iteration')
             tsum += handlers.watch.time('iteration')

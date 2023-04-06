@@ -5,15 +5,13 @@ import os, copy, sys
 sys.path.append('/sdf/group/neutrino/ldomine/OpT0Finder/python')
 
 
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction
 from analysis.classes.Particle import Particle
 from analysis.classes.TruthParticle import TruthParticle
-from analysis.algorithms.utils import get_interaction_properties, \
-                                      get_particle_properties, \
-                                      get_mparticles_from_minteractions
+from analysis.algorithms.utils import get_particle_properties
 
 from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import get_csda_range_spline
 

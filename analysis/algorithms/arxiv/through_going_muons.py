@@ -4,7 +4,7 @@ from sklearn.decomposition import PCA
 
 from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from analysis.algorithms.selections.flash_matching import find_true_time, find_true_x
 
 from pprint import pprint

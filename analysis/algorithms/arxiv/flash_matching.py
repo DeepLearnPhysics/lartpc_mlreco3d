@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from analysis.classes.evaluator import FullChainEvaluator
 
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 
 from pprint import pprint
 import time

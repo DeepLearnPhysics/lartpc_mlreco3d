@@ -23,6 +23,17 @@ MOM_COL    = 15
 # Colum which specifies the shape ID of a voxel in a sparse tensor 
 SHAPE_COL  = -1
 
+# Convention for particle type labels 
+PARTICLE_TO_PID_LABEL = {
+    'PHOTON': 0,
+    'ELECTRON': 1,
+    'MUON': 2,
+    'PION': 3,
+    'PROTON': 4
+}
+
+PID_LABEL_TO_PARTICLE = {val : key for key, val in PARTICLE_TO_PID_LABEL.items()}
+
 # Shape ID of each type of voxel category
 SHOWR_SHP  = larcv.kShapeShower    # 0
 TRACK_SHP  = larcv.kShapeTrack     # 1

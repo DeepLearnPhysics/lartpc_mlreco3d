@@ -44,20 +44,44 @@ class Particle:
     endpoint: (1,3) np.array
         (1, 3) array of particle's endpoint, if it could be assigned
     '''
-    def __init__(self, coords, group_id, semantic_type, interaction_id,
-                 pid, image_id, nu_id=-1, voxel_indices=None, depositions=None, volume=-1, **kwargs):
-        self.id = group_id
-        self.points = coords
-        self.size = coords.shape[0]
-        self.depositions = depositions # In rescaled ADC
-        self.voxel_indices = voxel_indices
-        self.semantic_type = semantic_type
-        self.pid = pid
-        self.pid_conf = kwargs.get('pid_conf', None)
+    def __init__(self, 
+                 coords, 
+                 group_id, 
+                 semantic_type, 
+                 interaction_id, 
+                 image_id, 
+                 nu_id=-1, 
+                 voxel_indices=None, 
+                 depositions=None, 
+                 volume=-1, **kwargs):
+        self.id             = group_id
+        self.points         = coords
+        self.size           = coords.shape[0]
+        self.depositions    = depositions # In rescaled ADC
+        self.voxel_indices  = voxel_indices
+        self.semantic_type  = semantic_type
         self.interaction_id = interaction_id
-        self.nu_id = nu_id
-        self.image_id = image_id
-        self.is_primary = kwargs.get('is_primary', False)
+        self.image_id       = image_id
+
+        self.nu_id          = nu_id
+        self.primary_scores = kwargs.get('primary_scores', None)
+        self.pid_scores     = kwargs.get('pid_scores', None)
+
+        assert 'pid' in kwargs or self.pid_scores is not None
+        assert 'is_primary' in kwargs or self.primary_scores is not None
+
+        # Override argmax pid if pid is explicitly given.
+        if kwargs.get('pid', None) is not None:
+            self.pid = kwargs['pid']
+        else:
+            self.pid = np.argmax(self.pid_scores)
+
+        # Overrite argmax primary label if primariness is explicity given.
+        if 'is_primary' in kwargs:
+            self.is_primary = kwargs['is_primary']
+        else:
+            self.is_primary = np.argmax(self.primary_scores)
+
         self.match = []
         self._match_counts = {}
 #         self.fragments = fragment_ids

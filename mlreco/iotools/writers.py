@@ -589,10 +589,15 @@ class CSVWriter:
         self.append_file = append_file
         self.result_keys = None
         if self.append_file:
+            if not os.path.isfile(file_name):
+                msg = "File not found at path: {}. When using append=True "\
+                "in CSVWriter, the file must exist at the prescribed path "\
+                "before data is written to it.".format(file_name)
+                raise FileNotFoundError(msg)
             with open(self.file_name, 'r') as file:
                 self.result_keys = file.readline().split(', ')
 
-    def create(self, result_blob):
+    def create(self, result_blob: dict):
         '''
         Initialize the header of the CSV file,
         record the keys to be stored.
@@ -610,7 +615,7 @@ class CSVWriter:
             header_str = ', '.join(self.result_keys)+'\n'
             file.write(header_str)
 
-    def append(self, result_blob):
+    def append(self, result_blob: dict):
         '''
         Append the CSV file with the output
 

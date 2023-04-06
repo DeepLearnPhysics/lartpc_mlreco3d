@@ -4,7 +4,7 @@ from sklearn.decomposition import PCA
 
 from analysis.classes.predictor import FullChainPredictor
 from analysis.classes.evaluator import FullChainEvaluator
-from analysis.decorator import evaluate
+from lartpc_mlreco3d.analysis.algorithms.arxiv.decorator import evaluate
 from lartpc_mlreco3d.analysis.algorithms.arxiv.calorimetry import compute_track_length
 
 from pprint import pprint
