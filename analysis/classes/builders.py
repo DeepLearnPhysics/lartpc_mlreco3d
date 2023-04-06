@@ -498,7 +498,7 @@ def handle_empty_true_particles(labels_noghost,
                                     return_counts=True)
         volume_id = int(volume_id[cts.argmax()])
     particle = TruthParticle(coords,
-                                id,
+                                pid,
                                 semantic_type, 
                                 interaction_id, 
                                 entry,
@@ -511,7 +511,7 @@ def handle_empty_true_particles(labels_noghost,
                                 depositions=depositions,
                                 volume=volume_id,
                                 is_primary=is_primary,
-                                pid=pid)
+                                pid=pdg)
     particle.p = np.array([p.px(), p.py(), p.pz()])
     # particle.fragments = []
     # particle.particle_asis = p
