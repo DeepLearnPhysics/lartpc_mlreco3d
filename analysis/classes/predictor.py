@@ -9,8 +9,7 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, Interaction, ParticleBuilder, InteractionBuilder
-from analysis.classes.particle_utils import group_particles_to_interactions_fn
+from analysis.classes import Particle, Interaction, ParticleBuilder, InteractionBuilder
 from analysis.algorithms.point_matching import *
 
 from mlreco.utils.gnn.cluster import get_cluster_label
@@ -18,6 +17,7 @@ from mlreco.utils.volumes import VolumeBoundaries
 from mlreco.utils.globals import BATCH_COL, COORD_COLS
 
 from scipy.special import softmax
+from analysis.post_processing.pmt import FlashManager
 
 
 class FullChainPredictor:

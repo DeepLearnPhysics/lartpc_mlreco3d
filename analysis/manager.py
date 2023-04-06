@@ -171,6 +171,11 @@ class AnaToolsManager:
             end = time.time()
             print("Writing to csvs took %.2f s" % (end - start))
 
+
+    def write_to_hdf5(self):
+        raise NotImplementedError
+    
+
     def step(self, iteration):
         # 1. Run forward
         data, res = self.forward(iteration=iteration)
