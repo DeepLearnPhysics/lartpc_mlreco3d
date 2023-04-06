@@ -5,7 +5,7 @@ from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction
 from analysis.algorithms.logger import ParticleLogger, InteractionLogger
-
+from pprint import pprint
 
 @write_to(['interactions', 'particles'])
 def run_inference(data_blob, res, **kwargs):

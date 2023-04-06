@@ -14,7 +14,8 @@ from mlreco.utils.globals import COORD_COLS
                                  'particle_start_points',
                                  'particle_group_pred',
                                  'particle_node_pred_vtx',
-                                 'input_rescaled'],
+                                 'input_rescaled',
+                                 'Interactions'],
                  result_capture_optional=['particle_dirs'])
 def reconstruct_vertex(data_dict, result_dict,
                        mode='all',
@@ -112,13 +113,13 @@ def reconstruct_vertex(data_dict, result_dict,
         vertices = np.array([])
 
     interaction_ids = np.array(interaction_ids).reshape(-1, 1)
-    vertices = np.hstack([interaction_ids, vertices])
 
-    update_dict = {
-        'vertices': vertices
-    }
+    vertices = {key: val for key, val in zip(interaction_ids.squeeze(), vertices)}
 
-    return update_dict
+    for i, ia in enumerate(result_dict['Interactions']):
+        ia.vertex = vertices[ia.id]
+
+    return {}
 
 @nb.njit(cache=True)
 def point_to_line_distance_(p1, p2, v2):
