@@ -89,13 +89,13 @@ class ParticleBuilder(Builder):
 
         pid_scores     = softmax(type_logits, axis=1)
         primary_scores = softmax(primary_logits, axis=1)
-        pid            = None
 
         for i, p in enumerate(particles):
             voxels = point_cloud[p]
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             seg_label = particle_seg[i]
+            pid = np.argmax(pid_scores[i])
             if seg_label == 2 or seg_label == 3:
                 pid = 1
             interaction_id = inter_ids[i]

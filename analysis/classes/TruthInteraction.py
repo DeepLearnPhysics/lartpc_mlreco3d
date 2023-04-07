@@ -20,7 +20,6 @@ class TruthInteraction(Interaction):
         self.depositions_MeV = np.hstack(self.depositions_MeV)
         self.nu_info = None
 
-
     @property
     def particles(self):
         return list(self._particles.values())

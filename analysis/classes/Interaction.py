@@ -108,10 +108,11 @@ class Interaction:
 
 
     def get_particles_summary(self):
+        primary_str = {True: '*', False: '-'}
         self.particles_summary = ""
-        for p in self.particles:
-            pmsg = "    - Particle {}: PID = {}, Size = {}, Match = {} \n".format(
-                p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
+        for p in sorted(self.particles, key=lambda x: x.is_primary, reverse=True):
+            pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
+                primary_str[p.is_primary], p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
             self.particles_summary += pmsg
 
 
@@ -122,9 +123,9 @@ class Interaction:
     def __str__(self):
 
         self.get_particles_summary()
-        msg = "Interaction {}, Valid: {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
+        msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "--------------------------------------------------------------------\n".format(
-            self.id, self.is_valid, self.vertex[0], self.vertex[1], self.vertex[2])
+            self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
 
     def __repr__(self):

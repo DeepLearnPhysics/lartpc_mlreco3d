@@ -44,6 +44,7 @@ class AnaToolsManager:
         self.ana_config = ana_cfg
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir = self.ana_config['analysis']['log_dir']
+        self.ana_mode = self.ana_config['analysis'].get('run_mode', None)
 
         # Initialize data product builders
         self.data_builders = self.ana_config['analysis']['data_builders']
@@ -105,22 +106,56 @@ class AnaToolsManager:
             end = time.time()
             print("Forwarding data took %.2f s" % (end - start))
         return data, res
-
-    def build_representations(self, data, result):
-        if self.profile:
-            start = time.time()
+    
+    def _build_reco_reps(self, data, result):
+        length_check = []
         if 'ParticleBuilder' in self.builders:
             result['Particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
-            result['TruthParticles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
-            assert len(result['Particles']) == len(result['TruthParticles'])
+            length_check.append(len(result['Particles']))
         if 'InteractionBuilder' in self.builders:
             result['Interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
-            result['TruthInteractions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
-            assert len(result['Interactions']) == len(result['TruthInteractions'])
+            length_check.append(len(result['Interactions']))
         if 'FragmentBuilder' in self.builders:
             result['ParticleFragments']      = self.builders['FragmentBuilder'].build(data, result, mode='reco')
+            length_check.append(len(result['ParticleFragments']))
+        return length_check
+    
+    def _build_truth_reps(self, data, result):
+        length_check = []
+        if 'ParticleBuilder' in self.builders:
+            result['TruthParticles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
+            length_check.append(len(result['TruthParticles']))
+        if 'InteractionBuilder' in self.builders:
+            result['TruthInteractions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
+            length_check.append(len(result['TruthInteractions']))
+        if 'FragmentBuilder' in self.builders:
             result['TruthParticleFragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
-            assert len(result['ParticleFragments']) == len(result['TruthParticleFragments'])
+            length_check.append(len(result['TruthParticleFragments']))
+        return length_check
+
+    def build_representations(self, data, result, mode=None):
+
+        num_batches = len(data['index'])
+
+        lcheck_reco, lcheck_truth = [], []
+
+        if self.ana_mode is not None:
+            mode = self.ana_mode
+        if self.profile:
+            start = time.time()
+        if mode == 'reco':
+            lcheck_reco = self._build_reco_reps(data, result)
+        elif mode == 'truth':
+            lcheck_truth = self._build_truth_reps(data, result)
+        elif mode is None:
+            lcheck_reco = self._build_reco_reps(data, result)
+            lcheck_truth = self._build_truth_reps(data, result)
+        else:
+            raise ValueError(f"DataBuilder mode {mode} is not supported!")
+        for lreco in lcheck_reco:
+            assert lreco == num_batches
+        for ltruth in lcheck_truth:
+            assert ltruth == num_batches
         if self.profile:
             end = time.time()
             print("Data representation change took %.2f s" % (end - start))
