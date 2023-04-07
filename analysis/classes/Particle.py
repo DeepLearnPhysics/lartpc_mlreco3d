@@ -113,14 +113,13 @@ class Particle:
 
     def __str__(self):
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
-                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Score = {:.2f}% | Volume: {:<2} )"
+                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,
                          self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
                          self.pid_keys[self.pid] if self.pid in self.pid_keys else "None",
                          self.is_primary,
                          self.interaction_id,
                          self.points.shape[0],
-                         self.pid_conf * 100,
                          self.volume)
         return msg
 
