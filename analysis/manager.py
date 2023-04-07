@@ -1,4 +1,4 @@
-import time, os, sys
+import time, os, sys, copy
 from collections import defaultdict
 
 from mlreco.iotools.factories import loader_factory
@@ -14,7 +14,31 @@ from analysis.algorithms.common import ScriptProcessor
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 class AnaToolsManager:
+    """
+    Chain of responsibility mananger for running analysis related tasks
+    on full chain output.
 
+    AnaToolsManager handles the following procedures
+
+    1) Forwarding data through the ML Chain
+       OR reading data from an HDF5 file using the HDF5Reader.
+
+    2) Build human-readable data representations for full chain output.
+
+    3) Run (usually non-ML) reconstruction and post-processing algorithms
+
+    4) Extract attributes from data structures for logging and analysis.
+
+    Parameters
+    ----------
+    cfg : dict
+        Processed full chain config (after applying process_config)
+    ana_cfg: dict
+        Analysis config that specifies configurations for steps 1-4.
+    profile: bool
+        Whether to print out execution times.
+    
+    """
     def __init__(self, cfg, ana_cfg, profile=True):
         self.config = cfg
         self.ana_config = ana_cfg
@@ -88,15 +112,15 @@ class AnaToolsManager:
         if 'ParticleBuilder' in self.builders:
             result['Particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             result['TruthParticles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
+            assert len(result['Particles']) == len(result['TruthParticles'])
         if 'InteractionBuilder' in self.builders:
             result['Interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             result['TruthInteractions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
+            assert len(result['Interactions']) == len(result['TruthInteractions'])
         if 'FragmentBuilder' in self.builders:
             result['ParticleFragments']      = self.builders['FragmentBuilder'].build(data, result, mode='reco')
             result['TruthParticleFragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
-        assert len(result['Particles']) == len(result['TruthParticles'])
-        assert len(result['Interactions']) == len(result['TruthInteractions'])
-        assert len(result['ParticleFragments']) == len(result['TruthParticleFragments'])
+            assert len(result['ParticleFragments']) == len(result['TruthParticleFragments'])
         if self.profile:
             end = time.time()
             print("Data representation change took %.2f s" % (end - start))
@@ -107,13 +131,17 @@ class AnaToolsManager:
         if 'post_processing' in self.ana_config:
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
+
             for processor_name, pcfg in self.ana_config['post_processing'].items():
-                priority = pcfg.pop('priority', -1)
+                local_pcfg = copy.deepcopy(pcfg)
+                priority = local_pcfg.pop('priority', -1)
+                run_on_batch = local_pcfg.pop('run_on_batch', False)
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
                 post_processor_interface.register_function(processor, 
                                                         priority,
-                                                        processor_cfg=pcfg)
+                                                        processor_cfg=local_pcfg,
+                                                        run_on_batch=run_on_batch)
 
             post_processor_interface.process_and_modify()
         if self.profile:
@@ -170,6 +198,11 @@ class AnaToolsManager:
         if self.profile:
             end = time.time()
             print("Writing to csvs took %.2f s" % (end - start))
+
+
+    def write_to_hdf5(self):
+        raise NotImplementedError
+    
 
     def step(self, iteration):
         # 1. Run forward

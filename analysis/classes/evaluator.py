@@ -78,7 +78,22 @@ class FullChainEvaluator(FullChainPredictor):
 
     def __init__(self, data_blob, result, evaluator_cfg={}, **kwargs):
         super(FullChainEvaluator, self).__init__(data_blob, result, evaluator_cfg, **kwargs)
+        self.build_representations()
         self.michel_primary_ionization_only = evaluator_cfg.get('michel_primary_ionization_only', False)
+
+    def build_representations(self):
+        if 'Particles' not in self.result:
+            self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
+        if 'TruthParticles' not in self.result:
+            self.result['TruthParticles'] = self.particle_builder.build(self.data_blob, self.result, mode='truth')
+        if 'Interactions' not in self.result:
+            self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
+        if 'TruthInteractions' not in self.result:
+            self.result['TruthInteractions'] = self.interaction_builder.build(self.data_blob, self.result, mode='truth')
+        if 'ParticleFragments' not in self.result:
+            self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
+        if 'TruthParticleFragments' not in self.result:
+            self.result['TruthParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='truth')
 
     def get_true_label(self, entry, name, schema='cluster_label_adapted'):
         """

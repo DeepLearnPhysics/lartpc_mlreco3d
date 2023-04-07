@@ -7,34 +7,38 @@ class PostProcessor:
 
     def __init__(self, data, result, debug=True):
         self._funcs = defaultdict(list)
+        self._batch_funcs = defaultdict(list)
         self._num_batches = len(data['index'])
         self.data = data
         self.result = result
         self.debug = debug
 
-    def register_function(self, f, priority, processor_cfg={}):
+    def register_function(self, f, priority, processor_cfg={}, run_on_batch=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
         pf                           = partial(f, **processor_cfg)
         pf._data_capture             = data_capture
         pf._result_capture           = result_capture
         pf._result_capture_optional  = result_capture_optional
-        self._funcs[priority].append(pf)
+        if run_on_batch:
+            self._batch_funcs[priority].append(pf)
+        else:
+            self._funcs[priority].append(pf)
 
     def process_event(self, image_id, f_list):
 
         image_dict = {}
         
         for f in f_list:
-            data_dict, result_dict = {}, {}
+            data_one_event, result_one_event = {}, {}
             for data_key in f._data_capture:
-                data_dict[data_key] = self.data[data_key][image_id]
+                data_one_event[data_key] = self.data[data_key][image_id]
             for result_key in f._result_capture:
-                result_dict[result_key] = self.result[result_key][image_id]
+                result_one_event[result_key] = self.result[result_key][image_id]
             for result_key in f._result_capture_optional:
                 if result_key in self.result:
-                    result_dict[result_key] = self.result[result_key][image_id]
-            update_dict = f(data_dict, result_dict)
+                    result_one_event[result_key] = self.result[result_key][image_id]
+            update_dict = f(data_one_event, result_one_event)
             for key, val in update_dict.items():
                 if key in image_dict:
                     msg = 'Output {} in post-processing function {},'\
@@ -45,6 +49,24 @@ class PostProcessor:
                     image_dict[key] = val
 
         return image_dict
+    
+    def process_batch(self):
+        out_dict = defaultdict(list)
+        sorted_processors = sorted([x for x in self._batch_funcs.items()], reverse=True)
+        for priority, f_list in sorted_processors:
+            for f in f_list:
+
+                data_batch, result_batch = {}, {}
+                for data_key in f._data_capture:
+                    data_batch[data_key] = self.data[data_key]
+                for result_key in f._result_capture:
+                    result_batch[result_key] = self.result[result_key]
+                for result_key in f._result_capture_optional:
+                    if result_key in self.result:
+                        result_batch[result_key] = self.result[result_key]
+                update_dict = f(data_batch, result_batch)
+                out_dict.update(update_dict)
+        return out_dict
     
     def process_and_modify(self):
         """
@@ -63,6 +85,7 @@ class PostProcessor:
                     assert len(out_dict[key]) == self._num_batches
 
             for key, val in out_dict.items():
+                assert len(val) == self._num_batches
                 if key in self.result:
                     msg = "Post processing script output key {} "\
                     "is already in result_dict, you may want"\
@@ -70,6 +93,17 @@ class PostProcessor:
                     raise RuntimeError(msg)
                 else:
                     self.result[key] = val
+        batch_fn_output = self.process_batch()
+        # Check batch processed output length agrees with batch size
+        for key, val in batch_fn_output.items():
+            assert len(val) == self._num_batches
+            if key in self.result:
+                msg = 'Output {} in post-processing function {},'\
+                    ' caused a dictionary key conflict. You may '\
+                    'want to change the output dict key for that function.'
+                raise ValueError(msg)
+            else:
+                self.result[key] = val
 
 
 def extent(voxels):

@@ -9,13 +9,12 @@ from mlreco.utils.ppn import uresnet_ppn_type_point_selector
 from mlreco.utils.metrics import unique_label
 
 from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, Interaction, ParticleBuilder, InteractionBuilder
-from analysis.classes.particle_utils import group_particles_to_interactions_fn
+from analysis.classes import (Particle, 
+                              Interaction, 
+                              ParticleBuilder, 
+                              InteractionBuilder, 
+                              FragmentBuilder)
 from analysis.algorithms.point_matching import *
-
-from mlreco.utils.gnn.cluster import get_cluster_label
-from mlreco.utils.volumes import VolumeBoundaries
-from mlreco.utils.globals import BATCH_COL, COORD_COLS
 
 from scipy.special import softmax
 
@@ -28,27 +27,12 @@ class FullChainPredictor:
 
         model = Trainer._net.module
         entry = 0   # batch id
-        predictor = FullChainPredictor(model, data_blob, res, cfg)
-        pred_seg = predictor._fit_predict_semantics(entry)
+        predictor = FullChainPredictor(model, data_blob, res, 
+                                       predictor_cfg=predictor_cfg)
+        particles = predictor.get_particles(entry)
 
     Instructions
     -----------------------------------------------------------------------
-
-    1) To avoid confusion between different quantities, the label namings under
-    iotools.schema must be set as follows:
-
-        schema:
-            input_data:
-                - parse_sparse3d_scn
-                - sparse3d_pcluster
-
-    2) By default, unwrapper must be turned ON under trainval:
-
-        trainval:
-            unwrapper: unwrap_3d_mink
-
-    3) Some outputs needs to be listed under trainval.concat_result.
-    The predictor will run through a checklist to ensure this condition
     '''
     def __init__(self, data_blob, result, 
                  predictor_cfg={},
@@ -62,6 +46,9 @@ class FullChainPredictor:
 
         self.particle_builder    = ParticleBuilder()
         self.interaction_builder = InteractionBuilder()
+        self.fragment_builder    = FragmentBuilder()
+
+        self.build_representations()
 
         self.num_images = len(result['input_rescaled'])
         self.index = self.data_blob['index']
@@ -84,181 +71,41 @@ class FullChainPredictor:
         self.primary_score_threshold = predictor_cfg.get('primary_score_threshold', None)
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
-        self.volume_boundaries = predictor_cfg.get('volume_boundaries', None)
-        if self.volume_boundaries is None:
+        self.vb = predictor_cfg.get('volume_boundaries', None)
+        self.set_volume_boundaries()
+
+
+    def set_volume_boundaries(self):
+        if self.vb is None:
             # Using ICARUS Cryo 0 as a default
             pass
         else:
-            self.volume_boundaries = np.array(self.volume_boundaries, dtype=np.float64)
+            self.vb = np.array(self.vb, dtype=np.float64)
             if 'meta' not in self.data_blob:
-                raise Exception("Cannot use volume boundaries because meta is missing from iotools config.")
+                msg = "Cannot use volume boundaries because meta is "\
+                    "missing from iotools config."
+                raise Exception(msg)
             else: # convert to voxel units
                 meta = self.data_blob['meta'][0]
                 min_x, min_y, min_z = meta[0:3]
                 size_voxel_x, size_voxel_y, size_voxel_z = meta[6:9]
 
-                self.volume_boundaries[0, :] = (self.volume_boundaries[0, :] - min_x) / size_voxel_x
-                self.volume_boundaries[1, :] = (self.volume_boundaries[1, :] - min_y) / size_voxel_y
-                self.volume_boundaries[2, :] = (self.volume_boundaries[2, :] - min_z) / size_voxel_z
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
 
-        # Determine whether we need to account for several distinct volumes
-        # split over "virtual" batch ids
-        # Note this is different from "self.volume_boundaries" above
-        # FIXME rename one or the other to be clearer
 
-        if boundaries is not None:
-            self.vb = VolumeBoundaries(boundaries)
-            self._num_volumes = self.vb.num_volumes()
-        else:
-            self.vb = None
-            self._num_volumes = 1
-
-        # Prepare flash matching if requested
-        self.enable_flash_matching = enable_flash_matching
-        self.fm = None
-
-        self._num_volumes = len(np.unique(self.result['input_rescaled'][0][:, 0]))
-
-        if enable_flash_matching:
-            reflash_merging_window = predictor_cfg.get('reflash_merging_window', None)
-
-            if 'meta' not in self.data_blob:
-                raise Exception('Meta unspecified in data_blob. Please add it to your I/O schema.')
-            #if 'FMATCH_BASEDIR' not in os.environ:
-            #    raise Exception('FMATCH_BASEDIR undefined. Please source `OpT0Finder/configure.sh` or define it manually.')
-            assert os.path.exists(flash_matching_cfg)
-            assert len(opflash_keys) == self._num_volumes
-
-            self.fm = FlashManager(cfg, flash_matching_cfg, meta=self.data_blob['meta'][0], reflash_merging_window=reflash_merging_window)
-            self.opflash_keys = opflash_keys
-
-            self.flash_matches = {} # key is (entry, volume, use_true_tpc_objects), value is tuple (tpc_v, pmt_v, list of matches)
-            # type is (list of Interaction/TruthInteraction, list of larcv::Flash, list of flashmatch::FlashMatch_t)
+    def build_representations(self):
+        if 'Particles' not in self.result:
+            self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
+        if 'Interactions' not in self.result:
+            self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
+        if 'ParticleFragments' not in self.result:
+            self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
         return msg
-
-    def get_flash_matches(self, entry,
-            use_true_tpc_objects=False,
-            volume=None,
-            use_depositions_MeV=False,
-            ADC_to_MeV=1.,
-            interaction_list=[]):
-        """
-        If flash matches has not yet been computed for this volume, then it will
-        be run as part of this function. Otherwise, flash matching results are
-        cached in `self.flash_matches` per volume.
-
-        If `interaction_list` is specified, no caching is done.
-
-        Parameters
-        ==========
-        entry: int
-        use_true_tpc_objects: bool, default is False
-            Whether to use true or predicted interactions.
-        volume: int, default is None
-        use_depositions_MeV: bool, default is False
-            If using true interactions, whether to use true MeV depositions or reconstructed charge.
-        ADC_to_MEV: double, default is 1.
-            If using reconstructed interactions, this defines the conversion in OpT0Finder.
-            OpT0Finder computes the hypothesis flash using light yield and deposited charge in MeV.
-        interaction_list: list, default is []
-           If specified, the interactions to match will be whittle down to this subset of interactions.
-           Provide list of interaction ids.
-
-        Returns
-        =======
-        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
-        """
-        # No caching done if matching a subset of interactions
-        if (entry, volume, use_true_tpc_objects) not in self.flash_matches or len(interaction_list):
-            out = self._run_flash_matching(entry, use_true_tpc_objects=use_true_tpc_objects, volume=volume,
-                    use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV, interaction_list=interaction_list)
-
-        if len(interaction_list) == 0:
-            tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
-        else: # it wasn't cached, we just computed it
-            tpc_v, pmt_v, matches = out
-        return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
-
-    def _run_flash_matching(self, entry,
-            use_true_tpc_objects=False,
-            volume=None,
-            use_depositions_MeV=False,
-            ADC_to_MeV=1.,
-            interaction_list=[]):
-        """
-        Parameters
-        ==========
-        entry: int
-        use_true_tpc_objects: bool, default is False
-            Whether to use true or predicted interactions.
-        volume: int, default is None
-        """
-        if use_true_tpc_objects:
-            if not hasattr(self, 'get_true_interactions'):
-                raise Exception('This Predictor does not know about truth info.')
-
-            tpc_v = self.get_true_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
-        else:
-            tpc_v = self.get_interactions(entry, drop_nonprimary_particles=False, volume=volume, compute_vertex=False)
-
-        if len(interaction_list) > 0: # by default, use all interactions
-            tpc_v_select = []
-            for interaction in tpc_v:
-                if interaction.id in interaction_list:
-                    tpc_v_select.append(interaction)
-            tpc_v = tpc_v_select
-
-        # If we are not running flash matching over the entire volume at once,
-        # then we need to shift the coordinates that will be used for flash matching
-        # back to the reference of the first volume.
-        if volume is not None:
-            for tpc_object in tpc_v:
-                tpc_object.points = self._untranslate(tpc_object.points, volume)
-        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
-        if volume is not None:
-            for tpc_object in tpc_v:
-                tpc_object.points = self._translate(tpc_object.points, volume)
-
-        # Now making Flash_t objects
-        selected_opflash_keys = self.opflash_keys
-        if volume is not None:
-            assert isinstance(volume, int)
-            selected_opflash_keys = [self.opflash_keys[volume]]
-        pmt_v = []
-        for key in selected_opflash_keys:
-            pmt_v.extend(self.data_blob[key][entry])
-        input_pmt_v = self.fm.make_flash([self.data_blob[key][entry] for key in selected_opflash_keys])
-
-        # input_pmt_v might be a filtered version of pmt_v,
-        # and we want to store larcv::Flash objects not
-        # flashmatch::Flash_t objects in self.flash_matches
-        from larcv import larcv
-        new_pmt_v = []
-        for flash in input_pmt_v:
-            new_flash = larcv.Flash()
-            new_flash.time(flash.time)
-            new_flash.absTime(flash.time_true) # Hijacking this field
-            new_flash.timeWidth(flash.time_width)
-            new_flash.xCenter(flash.x)
-            new_flash.yCenter(flash.y)
-            new_flash.zCenter(flash.z)
-            new_flash.xWidth(flash.x_err)
-            new_flash.yWidth(flash.y_err)
-            new_flash.zWidth(flash.z_err)
-            new_flash.PEPerOpDet(flash.pe_v)
-            new_flash.id(flash.idx)
-            new_pmt_v.append(new_flash)
-
-        # Running flash matching and caching the results
-        start = time.time()
-        matches = self.fm.run_flash_matching()
-        print('Actual flash matching took %d s' % (time.time() - start))
-        if len(interaction_list) == 0:
-            self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
-        return tpc_v, new_pmt_v, matches
 
     def _fit_predict_ppn(self, entry):
         '''
@@ -536,46 +383,6 @@ class FullChainPredictor:
             raise Exception("You need to specify volume boundaries in your I/O config (collate section).")
         if volume is not None:
             assert isinstance(volume, (int, np.int64, np.int32)) and volume >= 0
-
-    def _translate(self, voxels, volume):
-        """
-        Go from 1-volume-only back to full volume coordinates
-
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
-
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        """
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.translate(voxels, volume)
-
-    def _untranslate(self, voxels, volume):
-        """
-        Go from full volume to 1-volume-only coordinates
-
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
-
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        """
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.untranslate(voxels, volume)
 
     def get_fragments(self, entry, only_primaries=False,
                       min_particle_voxel_count=-1,

@@ -31,8 +31,8 @@ def reconstruct_vertex(data_dict, result_dict,
     particle_group_pred    = result_dict['particle_group_pred']
     primary_ids            = np.argmax(result_dict['particle_node_pred_vtx'], axis=1)
     particle_seg           = result_dict['particle_seg']
-    input_coords           = result_dict['input_rescaled'][:, COORD_COLS[0]:COORD_COLS[-1]+1]
-    startpoints            = result_dict['particle_start_points'][:, COORD_COLS[0]:COORD_COLS[-1]+1]
+    input_coords           = result_dict['input_rescaled'][:, COORD_COLS]
+    startpoints            = result_dict['particle_start_points'][:, COORD_COLS]
 
     # Optional
     particle_dirs          = result_dict.get('particle_dirs', None)

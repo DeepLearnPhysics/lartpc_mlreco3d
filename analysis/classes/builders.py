@@ -25,7 +25,12 @@ from mlreco.utils.vertex import get_vertex
 from mlreco.utils.gnn.cluster import get_cluster_label
 
 class Builder(ABC):
+    """Abstract base class for building all data structures
 
+    A Builder takes input data and full chain output dictionaries
+    and processes them into human-readable data structures.
+    
+    """
     def build(self, data: dict, result: dict, mode='reco'):
         output = []
         num_batches = len(data['index'])
@@ -192,7 +197,7 @@ class ParticleBuilder(Builder):
                                      depositions=depositions,
                                      volume=volume_id,
                                      is_primary=is_primary,
-                                     pid=pid,)
+                                     pid=pid)
 
             particle.p = np.array([lpart.px(), lpart.py(), lpart.pz()])
             # particle.fragments = fragments
@@ -483,25 +488,35 @@ def handle_empty_true_particles(labels_noghost,
     coords, depositions, voxel_indices = np.array([]), np.array([]), np.array([])
     coords_noghost, depositions_noghost = np.array([]), np.array([])
     if np.count_nonzero(mask_noghost) > 0:
-        coords_noghost = labels_noghost[mask_noghost][:, 1:4]
-        depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
+        coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
+        depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
         semantic_type, interaction_id, nu_id = get_true_particle_labels(labels_noghost, 
                                                                         mask_noghost, 
                                                                         pid=pid, 
                                                                         verbose=verbose)
+        volume_id, cts = np.unique(labels_noghost[:, BATCH_COL][mask_noghost].astype(int), 
+                                    return_counts=True)
+        volume_id = int(volume_id[cts.argmax()])
     particle = TruthParticle(coords,
-        pid, semantic_type, interaction_id, pdg, 
-        entry, particle_asis=p,
-        depositions=depositions,
-        is_primary=is_primary,
-        coords_noghost=coords_noghost,
-        depositions_noghost=depositions_noghost,
-        depositions_MeV=depositions)
+                                pid,
+                                semantic_type, 
+                                interaction_id, 
+                                entry,
+                                particle_asis=p,
+                                coords_noghost=coords_noghost,
+                                depositions_noghost=depositions_noghost,
+                                depositions_MeV=np.array([]),
+                                nu_id=nu_id,
+                                voxel_indices=voxel_indices,
+                                depositions=depositions,
+                                volume=volume_id,
+                                is_primary=is_primary,
+                                pid=pdg)
     particle.p = np.array([p.px(), p.py(), p.pz()])
-    particle.fragments = []
-    particle.particle_asis = p
-    particle.nu_id = nu_id
-    particle.voxel_indices = voxel_indices
+    # particle.fragments = []
+    # particle.particle_asis = p
+    # particle.nu_id = nu_id
+    # particle.voxel_indices = voxel_indices
 
     particle.startpoint = np.array([p.first_step().x(),
                                     p.first_step().y(),

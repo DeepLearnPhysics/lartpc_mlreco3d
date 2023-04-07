@@ -1,5 +1,8 @@
 import os, sys
 import numpy as np
+import time
+
+from mlreco.utils.volumes import VolumeBoundaries
 
 def modified_box_model(x, constant_calib):
     W_ion = 23.6 * 1e-6 # MeV/electron, work function of argon
@@ -8,7 +11,213 @@ def modified_box_model(x, constant_calib):
     beta = 0.212 # kV/cm g/cm^2 /MeV
     alpha = 0.93
     rho = 1.39295 # g.cm^-3
-    return (np.exp(x/constant_calib * beta * W_ion / (rho * E)) - alpha) / (beta / (rho * E)) # MeV/cm
+    return (np.exp(x/constant_calib * beta \
+                   * W_ion / (rho * E)) - alpha) / (beta / (rho * E)) # MeV/cm
+
+class FlashMatcherInterface:
+    """
+    Adapter class between full chain outputs and FlashManager/OpT0Finder
+    """
+    def __init__(self, config, fm_config, 
+                 boundaries=None, opflash_keys=[], **kwargs):
+
+        self.config = config
+        self.fm_config = fm_config
+        self.opflash_keys = opflash_keys
+
+        self.reflash_merging_window = kwargs.get('reflash_merging_window', None)
+        self.detector_specs = kwargs.get('detector_specs', None)
+        self.ADC_to_MeV = kwargs.get('ADC_to_MeV', 1.)
+        self.use_depositions_MeV = kwargs.get('use_depositions_MeV', False)
+        self.boundaries = kwargs.get('boundaries', None)
+
+        self.flash_matches = {}
+        if self.boundaries is not None:
+            self.vb = VolumeBoundaries(self.boundaries)
+            self._num_volumes = self.vb.num_volumes()
+        else:
+            self.vb = None
+            self._num_volumes = 1
+
+    def initialize_flash_manager(self, meta):
+        self.fm = FlashManager(self.config, self.fm_config, 
+                               meta=meta,
+                               reflash_merging_window=self.reflash_merging_window, 
+                               detector_specs=self.detector_specs)
+        
+    def get_flash_matches(self, 
+                          entry, 
+                          interactions,
+                          opflashes,
+                          use_true_tpc_objects=False,
+                          volume=None,
+                          use_depositions_MeV=False,
+                          ADC_to_MeV=1.,
+                          restrict_interactions=[]):
+        """
+        If flash matches has not yet been computed for this volume, then it will
+        be run as part of this function. Otherwise, flash matching results are
+        cached in `self.flash_matches` per volume.
+
+        If `restrict_interactions` is specified, no caching is done.
+
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+        use_depositions_MeV: bool, default is False
+            If using true interactions, whether to use true MeV depositions or reconstructed charge.
+        ADC_to_MEV: double, default is 1.
+            If using reconstructed interactions, this defines the conversion in OpT0Finder.
+            OpT0Finder computes the hypothesis flash using light yield and deposited charge in MeV.
+        restrict_interactions: list, default is []
+           If specified, the interactions to match will be whittle down to this subset of interactions.
+           Provide list of interaction ids.
+
+        Returns
+        =======
+        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
+        """
+        # No caching done if matching a subset of interactions
+        if (entry, volume, use_true_tpc_objects) not in self.flash_matches or len(restrict_interactions):
+            out = self._run_flash_matching(entry, 
+                                           interactions,
+                                           opflashes,
+                                           use_true_tpc_objects=use_true_tpc_objects, 
+                                           volume=volume,
+                                           use_depositions_MeV=use_depositions_MeV, 
+                                           ADC_to_MeV=ADC_to_MeV, 
+                                           restrict_interactions=restrict_interactions)
+
+        if len(restrict_interactions) == 0:
+            tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+        else: # it wasn't cached, we just computed it
+            tpc_v, pmt_v, matches = out
+        return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
+    
+
+    def _run_flash_matching(self, entry, interactions,
+            opflashes, 
+            use_true_tpc_objects=False,
+            volume=None,
+            use_depositions_MeV=False,
+            ADC_to_MeV=1.,
+            restrict_interactions=[]):
+        """
+        Parameters
+        ==========
+        entry: int
+        use_true_tpc_objects: bool, default is False
+            Whether to use true or predicted interactions.
+        volume: int, default is None
+        """
+        if use_true_tpc_objects:
+            if not hasattr(self, 'get_true_interactions'):
+                raise Exception('This Predictor does not know about truth info.')
+
+            tpc_v = [ia for ia in interactions if volume is None or ia.volume == volume]
+        else:
+            tpc_v = [ia for ia in interactions if volume is None or ia.volume == volume]
+
+        if len(restrict_interactions) > 0: # by default, use all interactions
+            tpc_v_select = []
+            for interaction in tpc_v:
+                if interaction.id in restrict_interactions:
+                    tpc_v_select.append(interaction)
+            tpc_v = tpc_v_select
+
+        # If we are not running flash matching over the entire volume at once,
+        # then we need to shift the coordinates that will be used for flash matching
+        # back to the reference of the first volume.
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._untranslate(tpc_object.points, volume)
+        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+        if volume is not None:
+            for tpc_object in tpc_v:
+                tpc_object.points = self._translate(tpc_object.points, volume)
+
+        # Now making Flash_t objects
+        selected_opflash_keys = self.opflash_keys
+        if volume is not None:
+            assert isinstance(volume, int)
+            selected_opflash_keys = [self.opflash_keys[volume]]
+        pmt_v = []
+        for key in selected_opflash_keys:
+            pmt_v.extend(opflashes[key][entry])
+        input_pmt_v = self.fm.make_flash([opflashes[key][entry] for key in selected_opflash_keys])
+
+        # input_pmt_v might be a filtered version of pmt_v,
+        # and we want to store larcv::Flash objects not
+        # flashmatch::Flash_t objects in self.flash_matches
+        from larcv import larcv
+        new_pmt_v = []
+        for flash in input_pmt_v:
+            new_flash = larcv.Flash()
+            new_flash.time(flash.time)
+            new_flash.absTime(flash.time_true) # Hijacking this field
+            new_flash.timeWidth(flash.time_width)
+            new_flash.xCenter(flash.x)
+            new_flash.yCenter(flash.y)
+            new_flash.zCenter(flash.z)
+            new_flash.xWidth(flash.x_err)
+            new_flash.yWidth(flash.y_err)
+            new_flash.zWidth(flash.z_err)
+            new_flash.PEPerOpDet(flash.pe_v)
+            new_flash.id(flash.idx)
+            new_pmt_v.append(new_flash)
+
+        # Running flash matching and caching the results
+        start = time.time()
+        matches = self.fm.run_flash_matching()
+        print('Actual flash matching took %d s' % (time.time() - start))
+        if len(restrict_interactions) == 0:
+            self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
+        return tpc_v, new_pmt_v, matches
+    
+    def _translate(self, voxels, volume):
+        """
+        Go from 1-volume-only back to full volume coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.translate(voxels, volume)
+
+    def _untranslate(self, voxels, volume):
+        """
+        Go from full volume to 1-volume-only coordinates
+
+        Parameters
+        ==========
+        voxels: np.ndarray
+            Shape (N, 3)
+        volume: int
+
+        Returns
+        =======
+        np.ndarray
+            Shape (N, 3)
+        """
+        if self.vb is None or volume is None:
+            return voxels
+        else:
+            return self.vb.untranslate(voxels, volume)
+        
+    
 
 class FlashManager:
     """
@@ -16,7 +225,10 @@ class FlashManager:
 
     See https://github.com/drinkingkazu/OpT0Finder for more details about it.
     """
-    def __init__(self, cfg, cfg_fmatch, meta=None, detector_specs=None, reflash_merging_window=None):
+    def __init__(self, cfg, cfg_fmatch, 
+                 meta=None, 
+                 detector_specs=None, 
+                 reflash_merging_window=None):
         """
         Expects that the environment variable `FMATCH_BASEDIR` is set.
         You can either set it by hand (to the path where one can find
@@ -60,6 +272,7 @@ class FlashManager:
 
         self.min_x, self.min_y, self.min_z = None, None, None
         self.size_voxel_x, self.size_voxel_y, self.size_voxel_z = None, None, None
+        # print(f"META = {meta}")
         if meta is not None:
             self.min_x = meta[0]
             self.min_y = meta[1]

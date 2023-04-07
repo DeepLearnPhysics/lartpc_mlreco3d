@@ -5,15 +5,19 @@ import numpy as np
 import sys
 
 from mlreco.utils.globals import PID_LABEL_TO_PARTICLE, PARTICLE_TO_PID_LABEL
-from analysis.classes import TruthInteraction, TruthParticle
+from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):
+    """Tags a function with a str indicator for truth inputs only,
+    reco inputs only, or both.
+    """
     def tags_decorator(func):
         func._tag = tag_name
         return func
     return tags_decorator
 
 def attach_prefix(update_dict, prefix):
+    """Simple function that adds a prefix to all keys in update_dict"""
     if prefix is None:
         return update_dict
     out = OrderedDict({})
@@ -25,6 +29,9 @@ def attach_prefix(update_dict, prefix):
     return out
 
 class AnalysisLogger:
+    """
+    Base class for analysis tools logger interface.
+    """
 
     def __init__(self, fieldnames: dict):
         self.fieldnames = fieldnames
@@ -321,4 +328,22 @@ class InteractionLogger(AnalysisLogger):
         if ia is not None:
             if ia.nu_id == 1 and isinstance(ia.nu_info, dict):
                 out.update(ia.nu_info)
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def flash_match_info(ia):
+        assert (ia is None) or (type(ia) is Interaction)
+        out = {
+            'fmatched': False,
+            'fmatch_time': -sys.maxsize,
+            'fmatch_total_pE': -sys.maxsize,
+            'fmatch_id': -sys.maxsize
+        }
+        if ia is not None:
+            if hasattr(ia, 'fmatched'):
+                out['fmatched'] = ia.fmatched
+                out['fmatch_time'] = ia.fmatch_time
+                out['fmatch_total_pE'] = ia.fmatch_total_pE
+                out['fmatch_id'] = ia.fmatch_id
         return out

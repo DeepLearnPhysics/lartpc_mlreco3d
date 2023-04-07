@@ -9,8 +9,29 @@ from pprint import pprint
 
 @write_to(['interactions', 'particles'])
 def run_inference(data_blob, res, **kwargs):
-    """
-    Example of analysis script for nue analysis.
+    """General logging script for particle and interaction level
+    information. 
+
+    Parameters
+    ----------
+    data_blob: dict
+        Data dictionary after both model forwarding post-processing
+    res: dict
+        Result dictionary after both model forwarding and post-processing
+
+    Returns
+    -------
+    interactions: List[List[dict]]
+        List of list of dicts, with length batch_size in the top level
+        and length num_interactions (max between true and reco) in the second
+        lvel. Each dict corresponds to a row in the generated output file.
+
+    particles: List[List[dict]]
+        List of list of dicts, with same structure as <interactions> but with
+        per-particle information.
+
+    Information in <interactions> will be saved to $log_dir/interactions.csv
+    and <particles> to $log_dir/particles.csv.
     """
     # List of ordered dictionaries for output logging
     # Interaction and particle level information
@@ -18,10 +39,7 @@ def run_inference(data_blob, res, **kwargs):
 
     # Analysis tools configuration
     primaries             = kwargs['match_primaries']
-    enable_flash_matching = kwargs.get('enable_flash_matching', False)
-    ADC_to_MeV            = kwargs.get('ADC_to_MeV', 1./350.)
     matching_mode         = kwargs['matching_mode']
-    flash_matching_cfg    = kwargs.get('flash_matching_cfg', '')
     boundaries            = kwargs.get('boundaries', [[1376.3], None, None])
 
     # FullChainEvaluator config
@@ -31,19 +49,10 @@ def run_inference(data_blob, res, **kwargs):
     int_fieldnames        = kwargs['logger'].get('interactions', {})
 
     # Load data into evaluator
-    if enable_flash_matching:
-        predictor = FullChainEvaluator(data_blob, res, 
-                predictor_cfg=evaluator_cfg,
-                enable_flash_matching=enable_flash_matching,
-                flash_matching_cfg=flash_matching_cfg,
-                opflash_keys=['opflash_cryoE', 'opflash_cryoW'])
-    else:
-        predictor = FullChainEvaluator(data_blob, res, 
-                                       evaluator_cfg=evaluator_cfg,
-                                       boundaries=boundaries)
-
+    predictor = FullChainEvaluator(data_blob, res, 
+                                   evaluator_cfg=evaluator_cfg,
+                                   boundaries=boundaries)
     image_idxs = data_blob['index']
-    spatial_size = predictor.spatial_size
 
     # Loop over images
     for idx, index in enumerate(image_idxs):
@@ -53,11 +62,6 @@ def run_inference(data_blob, res, **kwargs):
             # 'subrun': data_blob['run_info'][idx][1],
             # 'event': data_blob['run_info'][idx][2]
         }
-        if enable_flash_matching:
-            flash_matches_cryoE = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=0,
-                    use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
-            flash_matches_cryoW = predictor.get_flash_matches(idx, use_true_tpc_objects=False, volume=1,
-                    use_depositions_MeV=False, ADC_to_MeV=ADC_to_MeV)
 
         # 1. Match Interactions and log interaction-level information
         matches, icounts = predictor.match_interactions(idx,
