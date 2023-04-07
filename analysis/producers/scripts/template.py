@@ -1,10 +1,10 @@
 from collections import OrderedDict
 
-from analysis.algorithms.decorator import write_to
+from analysis.producers.decorator import write_to
 from analysis.classes.evaluator import FullChainEvaluator
 from analysis.classes.TruthInteraction import TruthInteraction
 from analysis.classes.Interaction import Interaction
-from analysis.algorithms.logger import ParticleLogger, InteractionLogger
+from analysis.producers.logger import ParticleLogger, InteractionLogger
 from pprint import pprint
 
 @write_to(['interactions', 'particles'])

@@ -1,6 +1,6 @@
 from analysis.classes.evaluator import FullChainEvaluator
 
-from analysis.algorithms.decorator import write_to
+from analysis.producers.decorator import write_to
 
 from pprint import pprint
 import time

@@ -14,7 +14,7 @@ from analysis.classes import (Particle,
                               ParticleBuilder, 
                               InteractionBuilder, 
                               FragmentBuilder)
-from analysis.algorithms.point_matching import *
+from analysis.producers.point_matching import *
 
 from scipy.special import softmax
 
@@ -50,7 +50,7 @@ class FullChainPredictor:
 
         self.build_representations()
 
-        self.num_images = len(result['input_rescaled'])
+        self.num_images = len(self.data_blob['index'])
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg.get('spatial_size', 6144)
@@ -104,7 +104,7 @@ class FullChainPredictor:
         #     self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
 
     def __repr__(self):
-        msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
+        msg = "FullChainEvaluator(num_images={})".format(int(self.num_images))
         return msg
 
     def _fit_predict_ppn(self, entry):

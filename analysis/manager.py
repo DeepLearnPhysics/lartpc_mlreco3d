@@ -8,9 +8,9 @@ from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter
 
 from analysis import post_processing
-from analysis.algorithms import scripts
+from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
-from analysis.algorithms.common import ScriptProcessor
+from analysis.producers.common import ScriptProcessor
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 class AnaToolsManager:

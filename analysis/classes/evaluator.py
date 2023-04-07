@@ -9,7 +9,7 @@ from analysis.classes.particle_utils import (match_particles_fn,
                                              group_particles_to_interactions_fn, 
                                              match_interactions_optimal, 
                                              match_particles_optimal)
-from analysis.algorithms.point_matching import *
+from analysis.producers.point_matching import *
 
 from mlreco.utils.vertex import get_vertex
 

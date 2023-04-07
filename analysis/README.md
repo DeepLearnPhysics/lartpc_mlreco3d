@@ -7,7 +7,7 @@ Features described in this documentation are separated by the priority in which 
    * ex. vertex reconstruction, direction reconstruction, calorimetry, PMT flash-matching, etc.
  * `analysis.classes`: data structures and user interface for organizing ML output data into human readable format.
    * ex. Particles, Interactions.
- * `analysis.algorithms` (will be renamed to `analysis.producers`): all procedures that involve extracting and writing information from reconstruction to files. 
+ * `analysis.producers`: all procedures that involve extracting and writing information from reconstruction to files. 
 
 # I. Overview
 
@@ -251,7 +251,8 @@ which gives all the reconstructed particle directions in image #0 (in order). As
 
 ## 4. Evaluating reconstruction and writing outputs CSVs. 
 
-While HDF5 format is suitable for saving large amounts of data to be used in the future, for high level analysis we generally save per-image, per-interaction, or per-particle attributes and features in tabular form (such as CSVs). Also, some operation are needed after post-processing to evaluate the model with respect to truth information. These include:
+While HDF5 format is suitable for saving large amounts of data to be used in the future, for high level analysis we generally save per-image, per-interaction, or per-particle attributes and features in tabular form (such as CSVs). Also, there's a need to compute different evaluation metrics once the all the post-processors return their reconstruction outputs. We group all these that happen after post-processing under `analysis.producers.scripts`:
  * Matching reconstructed particles to corresponding true particles.
- * Retrieving labels from truth information.
- * Evaluating module performance 
+ * Retrieving properly structured labels from truth information.
+ * Evaluating module performance against truth labels
+Here is an example `template.py` under `analysis.producers.scripts`
