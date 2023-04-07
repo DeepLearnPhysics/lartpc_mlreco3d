@@ -147,7 +147,7 @@ class AnaToolsManager:
             lcheck_reco = self._build_reco_reps(data, result)
         elif mode == 'truth':
             lcheck_truth = self._build_truth_reps(data, result)
-        elif mode is None:
+        elif mode is None or mode == 'all':
             lcheck_reco = self._build_reco_reps(data, result)
             lcheck_truth = self._build_truth_reps(data, result)
         else:

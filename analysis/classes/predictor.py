@@ -53,7 +53,7 @@ class FullChainPredictor:
         self.num_images = len(result['input_rescaled'])
         self.index = self.data_blob['index']
 
-        self.spatial_size             = predictor_cfg['spatial_size']
+        self.spatial_size             = predictor_cfg.get('spatial_size', 6144)
         # For matching particles and interactions
         self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
         # Idem, can be 'count' or 'iou'
@@ -100,8 +100,8 @@ class FullChainPredictor:
             self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
         if 'Interactions' not in self.result:
             self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
-        if 'ParticleFragments' not in self.result:
-            self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
+        # if 'ParticleFragments' not in self.result:
+        #     self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
