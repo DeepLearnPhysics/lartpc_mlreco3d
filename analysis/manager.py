@@ -39,7 +39,7 @@ class AnaToolsManager:
         Whether to print out execution times.
     
     """
-    def __init__(self, cfg, ana_cfg, profile=True):
+    def __init__(self, ana_cfg, profile=True, cfg=None):
         self.config = cfg
         self.ana_config = ana_cfg
         self.max_iteration = self.ana_config['analysis']['iteration']

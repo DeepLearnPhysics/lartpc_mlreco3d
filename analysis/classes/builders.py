@@ -135,13 +135,13 @@ class ParticleBuilder(Builder):
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
-            pid = PDG_TO_PID.get(lpart.pdg_code(), -1)
+            pdg = PDG_TO_PID.get(lpart.pdg_code(), -1)
             is_primary = lpart.group_id() == lpart.parent_id()
-            mask_nonghost = labels_nonghost[:, 6].astype(int) == pid
+            mask_nonghost = labels_nonghost[:, 6].astype(int) == id
             if np.count_nonzero(mask_nonghost) <= 0:
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
-            if pid not in particle_ids:
+            if id not in particle_ids:
                 particle = handle_empty_true_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
@@ -150,7 +150,7 @@ class ParticleBuilder(Builder):
                 continue
 
             # 1. Process voxels
-            mask = labels[:, 6].astype(int) == pid
+            mask = labels[:, 6].astype(int) == id
             # If particle is Michel electron, we have the option to
             # only consider the primary ionization.
             # Semantic labels only label the primary ionization as Michel.
@@ -181,8 +181,8 @@ class ParticleBuilder(Builder):
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_true_particle_labels(labels, 
                                                                     mask, 
-                                                                    pid=pid)
-
+                                                                    pid=id)
+            
             particle = TruthParticle(coords,
                                      id,
                                      semantic_type, 
@@ -197,7 +197,7 @@ class ParticleBuilder(Builder):
                                      depositions=depositions,
                                      volume=volume_id,
                                      is_primary=is_primary,
-                                     pid=pid)
+                                     pid=pdg)
 
             particle.p = np.array([lpart.px(), lpart.py(), lpart.pz()])
             # particle.fragments = fragments

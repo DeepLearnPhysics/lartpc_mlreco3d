@@ -129,6 +129,6 @@ class Interaction:
         return msg + self.particles_summary
 
     def __repr__(self):
-        return "Interaction(id={}, vertex={}, nu_id={}, Particles={})".format(
-            self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
+        return "Interaction(id={}, vertex={}, size={}, nu_id={}, Particles={})".format(
+            self.id, str(self.vertex), self.size, self.nu_id, str(self.particle_ids))
 

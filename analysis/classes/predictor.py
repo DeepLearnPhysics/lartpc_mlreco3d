@@ -34,12 +34,7 @@ class FullChainPredictor:
     Instructions
     -----------------------------------------------------------------------
     '''
-    def __init__(self, data_blob, result, 
-                 predictor_cfg={},
-                 enable_flash_matching=False, 
-                 flash_matching_cfg="", 
-                 opflash_keys=[],
-                 boundaries=None):
+    def __init__(self, data_blob, result, predictor_cfg={}):
 
         self.data_blob = data_blob
         self.result = result
@@ -48,27 +43,30 @@ class FullChainPredictor:
         self.interaction_builder = InteractionBuilder()
         self.fragment_builder    = FragmentBuilder()
 
+        build_reps = predictor_cfg.get('build_reps', ['Particles', 'Interactions'])
+        self.builders = {}
+        for key in build_reps:
+            if key == 'Particles':
+                self.builders[key] = ParticleBuilder()
+            if key == 'Interactions':
+                self.builders[key] = InteractionBuilder()
+            if key == 'Fragments':
+                self.builders[key] = FragmentBuilder()
+            
+
         self.build_representations()
 
         self.num_images = len(self.data_blob['index'])
         self.index = self.data_blob['index']
 
         self.spatial_size             = predictor_cfg.get('spatial_size', 6144)
-        # For matching particles and interactions
-        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
-        # Idem, can be 'count' or 'iou'
-        self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
-        if self.overlap_mode == 'iou':
-            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
-        if self.overlap_mode == 'counts':
-            assert self.min_overlap_count >= 0
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
         # as primary particles
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
 
-        self.primary_score_threshold = predictor_cfg.get('primary_score_threshold', None)
+        self.primary_score_threshold  = predictor_cfg.get('primary_score_threshold', None)
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.vb = predictor_cfg.get('volume_boundaries', None)
@@ -96,12 +94,11 @@ class FullChainPredictor:
 
 
     def build_representations(self):
-        if 'Particles' not in self.result:
-            self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
-        if 'Interactions' not in self.result:
-            self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
-        # if 'ParticleFragments' not in self.result:
-        #     self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
+        for key in self.builders:
+            if key not in self.result:
+                self.result[key] = self.builders[key].build(self.data_blob, 
+                                                            self.result, 
+                                                            mode='reco')
 
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images))

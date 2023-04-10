@@ -1,6 +1,7 @@
 import numpy as np
 from functools import partial
 from collections import defaultdict, OrderedDict
+import warnings
 
 
 class PostProcessor:
@@ -17,6 +18,7 @@ class PostProcessor:
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
         pf                           = partial(f, **processor_cfg)
+        pf.__name__                  = f.__name__
         pf._data_capture             = data_capture
         pf._result_capture           = result_capture
         pf._result_capture_optional  = result_capture_optional
@@ -24,6 +26,7 @@ class PostProcessor:
             self._batch_funcs[priority].append(pf)
         else:
             self._funcs[priority].append(pf)
+        print(f"Registered post-processor {f.__name__}")
 
     def process_event(self, image_id, f_list):
 
@@ -32,9 +35,19 @@ class PostProcessor:
         for f in f_list:
             data_one_event, result_one_event = {}, {}
             for data_key in f._data_capture:
-                data_one_event[data_key] = self.data[data_key][image_id]
+                if data_key in self.data:
+                    data_one_event[data_key] = self.data[data_key][image_id]
+                else:
+                    msg = f"Unable to find {data_key} in data dictionary while "\
+                        f"running post-processor {f.__name__}."
+                    warnings.warn(msg)
             for result_key in f._result_capture:
-                result_one_event[result_key] = self.result[result_key][image_id]
+                if result_key in self.result:
+                    result_one_event[result_key] = self.result[result_key][image_id]
+                else:
+                    msg = f"Unable to find {result_key} in result dictionary while "\
+                        f"running post-processor {f.__name__}."
+                    warnings.warn(msg)
             for result_key in f._result_capture_optional:
                 if result_key in self.result:
                     result_one_event[result_key] = self.result[result_key][image_id]

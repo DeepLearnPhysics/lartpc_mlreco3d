@@ -13,7 +13,7 @@ Features described in this documentation are separated by the priority in which 
 
 Modules under Analysis Tools may be used in two ways. You can import each module separately in a Jupyter notebook, for instance, and use them to examine the ML chain output. Analysis tools also provides a `run.py` main python executable that can run the entire reconstruction inference process, from ML chain forwarding to saving quantities of interest to CSV/HDF5 files. The latter process is divided into three parts:
  1. **DataBuilders**: The ML chain output is organized into human readable representation. 
- 2. **Post-processing**: post-ML chain reconstruction algorithms are perform on **DataBuilder** products.
+ 2. **Post-processing**: post-ML chain reconstruction algorithms are performed on **DataBuilder** products.
  3. **Producers**: Reconstruction information from the ML chain and **post_processing** scripts are aggregated and save to CSV files. 
 
 ![Full chain](../images/anatools.png)
@@ -167,7 +167,10 @@ def particle_direction(data_dict,
                        neighborhood_radius=5,
                        optimize=False):
 
-    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
+    if 'input_rescaled' not in result_dict:
+        input_data = data_dict['input_data']
+    else:
+        input_data = result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
     start_points   = result_dict['particle_start_points']
     end_points     = result_dict['particle_end_points']
@@ -255,4 +258,146 @@ While HDF5 format is suitable for saving large amounts of data to be used in the
  * Matching reconstructed particles to corresponding true particles.
  * Retrieving properly structured labels from truth information.
  * Evaluating module performance against truth labels
-Here is an example `template.py` under `analysis.producers.scripts`
+As an example, we will write a `script` function called `run_inference` to demonstrate coding conventions:
+(`scripts/run_inference.py`)
+```python
+from analysis.producers.decorator import write_to
+
+@write_to(['interactions', 'particles'])
+def run_inference(data, result, **kwargs):
+    """General logging script for particle and interaction level
+    information. 
+
+    Parameters
+    ----------
+    data_blob: dict
+        Data dictionary after both model forwarding post-processing
+    res: dict
+        Result dictionary after both model forwarding and post-processing
+    """
+    # List of ordered dictionaries for output logging
+    # Interaction and particle level information
+    interactions, particles = [], []
+    return [interactions, particles]
+```
+
+The `@write_to` decorator lists the name of the output files (in this case, will be `interactions.csv` and `particles.csv`) that will be generated in your pre-defined AnaTools log directory:
+```yaml
+analysis:
+...
+  log_dir: /sdf/group/neutrino/koh0207/logs/nu_selection/trash
+```
+
+### 4.1 Running inference using the `Evaluator` and `Predictor` interface. 
+
+Each function inside `analysis.producers.scripts` has `data` and `result` dictionary as its input arguments, so all reconstructed quantities from both the ML chain and the post-processing subroutines are accessible through its keys. At this stage of accessing reconstruction outputs, it is generally up to the user to define the evaluation metrics and/or quantities of interest that will be written to output files. Still, analysis tools have additional user interfaces--`FullChainPredictor` and `FullChainEvaluator`--for easy and consistent evaluation of full chain outputs. 
+ * `FullChainPredictor`: user interface class for accessing full chain predictions. This class is reserved for prediction on non-MC data as it does not have any reference to truth labels or MC information. 
+ * `FullChainEvaluator`: user interface class for accessing full chain predictions, truth labels, and prediction to truth matching functions. Has access to label and MC truth information. 
+
+Example in Jupyter:
+```python
+data, result = manager.forward(iteration=3)
+
+from analysis.classes.predictor import FullChainEvaluator
+evaluator = FullChainEvaluator(data, result, evaluator_cfg={})
+```
+The `evaluator_cfg` is an optional dictionary containing 
+additional configuration settings for evaluator methods such as 
+`Particle` to `TruthParticle` matching, and in most cases it is not
+necessary to set it manually. More detailed information on all available 
+methods for both the predictor and the evaluator can be found in 
+their docstrings 
+(under `analysis.classes.predictor` and `analysis.classes.evaluator`).
+
+We first list some auxiliary arguments needed for logging:
+```python
+    # Analysis tools configuration
+    primaries             = kwargs.get('match_primaries', False)
+    matching_mode         = kwargs.get('matching_mode', 'optimal')
+    # FullChainEvaluator config
+    evaluator_cfg         = kwargs.get('evaluator_cfg', {})
+    # Particle and Interaction processor names
+    particle_fieldnames   = kwargs['logger'].get('particles', {})
+    int_fieldnames        = kwargs['logger'].get('interactions', {})
+    # Load data into evaluator
+    predictor = FullChainEvaluator(data_blob, res, 
+                                   evaluator_cfg=evaluator_cfg)
+    image_idxs = data_blob['index']
+```
+Now we loop over the images in the current batch and match reconstructed
+interactions against true interactions. 
+```python
+    # Loop over images
+    for idx, index in enumerate(image_idxs):
+
+        # For saving per image information
+        index_dict = {
+            'Index': index,
+            # 'run': data_blob['run_info'][idx][0],
+            # 'subrun': data_blob['run_info'][idx][1],
+            # 'event': data_blob['run_info'][idx][2]
+        }
+
+        # 1. Match Interactions and log interaction-level information
+        matches, icounts = predictor.match_interactions(idx,
+            mode='true_to_pred',
+            match_particles=True,
+            drop_nonprimary_particles=primaries,
+            return_counts=True,
+            overlap_mode=predictor.overlap_mode,
+            matching_mode=matching_mode)
+
+        # 1 a) Check outputs from interaction matching 
+        if len(matches) == 0:
+            continue
+
+        # We access the particle matching information, which is already
+        # done by called match_interactions.
+        pmatches = predictor._matched_particles
+        pcounts  = predictor._matched_particles_counts
+```
+Here, `matches` contain pairs (`TruthInteraction`, `Interaction`) which 
+are matched based on 
+### 4.2 Using Loggers to organize CSV output fields. 
+```python
+        # 2. Process interaction level information
+        interaction_logger = InteractionLogger(int_fieldnames)
+        interaction_logger.prepare()
+        
+        # 2-1 Loop over matched interaction pairs
+        for i, interaction_pair in enumerate(matches):
+
+            int_dict = OrderedDict()
+            int_dict.update(index_dict)
+            int_dict['interaction_match_counts'] = icounts[i]
+            true_int, pred_int = interaction_pair[0], interaction_pair[1]
+
+            assert (type(true_int) is TruthInteraction) or (true_int is None)
+            assert (type(pred_int) is Interaction) or (pred_int is None)
+
+            true_int_dict = interaction_logger.produce(true_int, mode='true')
+            pred_int_dict = interaction_logger.produce(pred_int, mode='reco')
+            int_dict.update(true_int_dict)
+            int_dict.update(pred_int_dict)
+            interactions.append(int_dict)
+
+        # 3. Process particle level information
+        particle_logger = ParticleLogger(particle_fieldnames)
+        particle_logger.prepare()
+
+        # Loop over matched particle pairs
+        for i, mparticles in enumerate(pmatches):
+            true_p, pred_p = mparticles[0], mparticles[1]
+
+            true_p_dict = particle_logger.produce(true_p, mode='true')
+            pred_p_dict = particle_logger.produce(pred_p, mode='reco')
+
+            part_dict = OrderedDict()
+            part_dict.update(index_dict)
+            part_dict['particle_match_counts'] = pcounts[i]
+            part_dict.update(true_p_dict)
+            part_dict.update(pred_p_dict)
+            particles.append(part_dict)
+
+    return [interactions, particles]
+```

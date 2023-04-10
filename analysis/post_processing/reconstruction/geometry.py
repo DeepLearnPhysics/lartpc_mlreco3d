@@ -14,7 +14,10 @@ def particle_direction(data_dict,
                        neighborhood_radius=5,
                        optimize=False):
 
-    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
+    if 'input_rescaled' not in result_dict:
+        input_data = data_dict['input_data']
+    else:
+        input_data = result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
     start_points   = result_dict['particle_start_points']
     end_points     = result_dict['particle_end_points']

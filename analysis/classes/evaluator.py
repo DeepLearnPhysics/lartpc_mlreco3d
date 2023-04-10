@@ -80,6 +80,14 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, evaluator_cfg, **kwargs)
         self.build_representations()
         self.michel_primary_ionization_only = evaluator_cfg.get('michel_primary_ionization_only', False)
+        # For matching particles and interactions
+        self.min_overlap_count        = evaluator_cfg.get('min_overlap_count', 0)
+        # Idem, can be 'count' or 'iou'
+        self.overlap_mode             = evaluator_cfg.get('overlap_mode', 'iou')
+        if self.overlap_mode == 'iou':
+            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
+        if self.overlap_mode == 'counts':
+            assert self.min_overlap_count >= 0
 
     def build_representations(self):
         if 'Particles' not in self.result:
@@ -267,9 +275,6 @@ class FullChainEvaluator(FullChainPredictor):
             Must be either 'pred_to_true' or 'true_to_pred'
         volume: int, default None
         '''
-        all_matches = []
-        all_counts = []
-        # print('matching', entries, volume)
         if mode == 'pred_to_true':
             # Match each pred to one in true
             particles_from = self.get_particles(entry, 
@@ -293,7 +298,9 @@ class FullChainEvaluator(FullChainPredictor):
             matched_pairs, counts = match_particles_optimal(particles_from, particles_to,
                                                         **all_kwargs)
         else:
-            raise ValueError
+            raise ValueError(f"Particle matching mode {matching_mode} not suppored!")
+        self._matched_particles = matched_pairs
+        self._matched_particles_counts = counts
         if return_counts:
             return matched_pairs, counts
         else:
@@ -301,7 +308,7 @@ class FullChainEvaluator(FullChainPredictor):
 
     
     def match_interactions(self, entry, mode='pred_to_true',
-                           drop_nonprimary_particles=True,
+                           drop_nonprimary_particles=False,
                            match_particles=True,
                            return_counts=False,
                            matching_mode='one_way',
@@ -312,7 +319,7 @@ class FullChainEvaluator(FullChainPredictor):
         entry: int
         mode: str, default 'pred_to_true'
             Must be either 'pred_to_true' or 'true_to_pred'.
-        drop_nonprimary_particles: bool, default True
+        drop_nonprimary_particles: bool, default False
         match_particles: bool, default True
         return_counts: bool, default False
         volume: int, default None
@@ -368,7 +375,15 @@ class FullChainEvaluator(FullChainPredictor):
                                                                     min_overlap=self.min_overlap_count,
                                                                     overlap_mode=self.overlap_mode)
                 else:
-                    raise ValueError
+                    raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
+
+            pmatches, pcounts = self.match_parts_within_ints(matched_interactions)
+            
+            self._matched_particles = pmatches
+            self._matched_particles_counts = pcounts
+            
+        self._matched_interactions = matched_interactions
+        self._matched_interactions_counts = counts
 
         if return_counts:
             return matched_interactions, counts

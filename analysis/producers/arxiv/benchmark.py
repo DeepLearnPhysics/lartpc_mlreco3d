@@ -8,7 +8,7 @@ import numpy as np
 import os, sys
 
 @write_to(['test'])
-def benchmark(data_blob, res, data_idx, analysis_cfg, cfg):
+def benchmark(data_blob, res, **kwargs):
     """
     Dummy script to see how long FullChainEvaluator initialization takes.
     Feel free to benchmark other things using this as a template.

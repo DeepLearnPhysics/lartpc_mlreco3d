@@ -50,12 +50,12 @@ def run_inference(data_blob, res, **kwargs):
 
     # Load data into evaluator
     predictor = FullChainEvaluator(data_blob, res, 
-                                   evaluator_cfg=evaluator_cfg,
-                                   boundaries=boundaries)
+                                   evaluator_cfg=evaluator_cfg)
     image_idxs = data_blob['index']
 
-    # Loop over images
     for idx, index in enumerate(image_idxs):
+      
+        # For saving per image information
         index_dict = {
             'Index': index,
             # 'run': data_blob['run_info'][idx][0],
@@ -76,12 +76,16 @@ def run_inference(data_blob, res, **kwargs):
         if len(matches) == 0:
             continue
 
-        pmatches, pcounts = predictor.match_parts_within_ints(matches)
+        # We access the particle matching information, which is already
+        # done by called match_interactions.
+        pmatches = predictor._matched_particles
+        pcounts  = predictor._matched_particles_counts
 
         # 2. Process interaction level information
         interaction_logger = InteractionLogger(int_fieldnames)
         interaction_logger.prepare()
         
+        # 2-1 Loop over matched interaction pairs
         for i, interaction_pair in enumerate(matches):
 
             int_dict = OrderedDict()
@@ -102,6 +106,7 @@ def run_inference(data_blob, res, **kwargs):
         particle_logger = ParticleLogger(particle_fieldnames)
         particle_logger.prepare()
 
+        # Loop over matched particle pairs
         for i, mparticles in enumerate(pmatches):
             true_p, pred_p = mparticles[0], mparticles[1]
 
