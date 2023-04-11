@@ -200,7 +200,9 @@ class ParticleBuilder(Builder):
                                      pid=pdg)
 
             particle.p = np.array([lpart.px(), lpart.py(), lpart.pz()])
-            # particle.fragments = fragments
+            particle.pmag = np.linalg.norm(particle.p)
+            if particle.pmag > 0:
+                particle.direction = particle.p / particle.pmag
 
             particle.startpoint = np.array([lpart.first_step().x(),
                                             lpart.first_step().y(),

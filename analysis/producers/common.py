@@ -5,14 +5,22 @@ from collections import defaultdict, OrderedDict
 from pprint import pprint
 
 class ScriptProcessor:
-
-    def __init__(self, data, result, debug=True):
+    """Simple class for handling script functions used to
+    generate output csv files for high level analysis. 
+    
+    Parameters
+    ----------
+    data : dict
+        data dictionary from either model forwarding or HDF5 reading.
+    result: dict
+        result dictionary containing ML chain outputs
+    """
+    def __init__(self, data, result):
         self._funcs = defaultdict(list)
         self._num_batches = len(data['index'])
         self.data = data
         self.index = data['index']
         self.result = result
-        self.debug = debug
 
     def register_function(self, f, priority, script_cfg={}):
         filenames     = f._filenames
