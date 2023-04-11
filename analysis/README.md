@@ -58,7 +58,7 @@ analysis_cfg_path = $PATH_TO_ANALYSIS_CFG
 analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
 
 from analysis.manager import AnaToolsManager
-manager = AnaToolsManager(cfg, analysis_config)
+manager = AnaToolsManager(analysis_config, cfg=cfg)
 
 manager.initialize()
 ```

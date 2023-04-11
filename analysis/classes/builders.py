@@ -24,14 +24,27 @@ from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
 from mlreco.utils.gnn.cluster import get_cluster_label
 
-class Builder(ABC):
+class DataBuilder(ABC):
     """Abstract base class for building all data structures
 
-    A Builder takes input data and full chain output dictionaries
+    A DataBuilder takes input data and full chain output dictionaries
     and processes them into human-readable data structures.
     
     """
     def build(self, data: dict, result: dict, mode='reco'):
+        """Process all images in the current batch and change representation
+        into each respective data format.
+        
+        Parameters
+        ----------
+        data: dict
+        result: dict
+        mode: str
+            Indicator for building reconstructed vs true data formats.
+            In other words, mode='reco' will produce <Particle> and
+            <Interaction> data formats, while mode='truth' is reserved for
+            <TruthParticle> and <TruthInteraction>
+        """
         output = []
         num_batches = len(data['index'])
         for bidx in range(num_batches):
@@ -40,7 +53,13 @@ class Builder(ABC):
         return output
 
     def build_image(self, entry: int, data: dict, result: dict, mode='reco'):
-
+        """Build data format for a single image.
+        
+        Parameters
+        ----------
+        entry: int
+            Batch id number for the image.
+        """
         if mode == 'truth':
             entities = self._build_true(entry, data, result)
         elif mode == 'reco':
@@ -59,7 +78,7 @@ class Builder(ABC):
         raise NotImplementedError
 
 
-class ParticleBuilder(Builder):
+class ParticleBuilder(DataBuilder):
     """
     Eats data, result and makes List of Particles per image.
     """
@@ -217,7 +236,7 @@ class ParticleBuilder(Builder):
         return out
 
 
-class InteractionBuilder(Builder):
+class InteractionBuilder(DataBuilder):
 
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
@@ -290,7 +309,7 @@ class InteractionBuilder(Builder):
         return out
 
 
-class FragmentBuilder(Builder):
+class FragmentBuilder(DataBuilder):
 
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
