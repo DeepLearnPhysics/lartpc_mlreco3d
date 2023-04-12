@@ -109,7 +109,8 @@ class Mask3dLoss(nn.Module):
         self.xentropy = nn.CrossEntropyLoss(weight=self.weight_class, reduction='mean')
         self.dice_loss_mode = self.model_config.get('dice_loss_mode', 'log_dice')
 
-        self.loss_fn = LinearSumAssignmentLoss(mode=self.dice_loss_mode)
+        # self.loss_fn = LinearSumAssignmentLoss(mode=self.dice_loss_mode)
+        self.loss_fn = CEDiceLoss(mode=self.dice_loss_mode)
 
     def filter_class(self, cluster_label):
         '''
@@ -119,7 +120,7 @@ class Mask3dLoss(nn.Module):
         clabel = [cluster_label[0][mask]]
         return clabel
     
-    def compute_layerwise_loss(self, aux_masks, aux_classes, clabel):
+    def compute_layerwise_loss(self, aux_masks, aux_classes, clabel, query_index):
         
         batch_col = clabel[0][:, BATCH_COL].int()
         num_batches = batch_col.unique().shape[0]
@@ -130,19 +131,20 @@ class Mask3dLoss(nn.Module):
         for bidx in range(num_batches):
             for layer, mask_layer in enumerate(aux_masks):
                 batch_mask = batch_col == bidx
-                
+                labels = clabel[0][batch_mask][:, GROUP_COL].long()
+                query_idx_batch = query_index[bidx]
                 # Compute instance mask loss
-                targets = get_instance_masks(clabel[0][batch_mask][:, GROUP_COL].long()).float()
-                loss_batch, acc_batch, indices = self.loss_fn(mask_layer[batch_mask], targets)
+                targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
+                loss_batch, acc_batch = self.loss_fn(mask_layer[batch_mask], targets)
                 loss[bidx].append(loss_batch)
                 
                 # Compute instance class loss 
-                logits_batch = aux_classes[layer][bidx]
-                targets_class = torch.zeros(logits_batch.shape[0]).to(
-                    dtype=torch.long, device=logits_batch.device)
-                targets_class[indices[0]] = 1
-                loss_class_batch = self.xentropy(logits_batch, targets_class)
-                loss_class[bidx].append(loss_class_batch)
+                # logits_batch = aux_classes[layer][bidx]
+                # targets_class = torch.zeros(logits_batch.shape[0]).to(
+                #     dtype=torch.long, device=logits_batch.device)
+                # targets_class[indices[0]] = 1
+                # loss_class_batch = self.xentropy(logits_batch, targets_class)
+                # loss_class[bidx].append(loss_class_batch)
         
         return loss, loss_class
 
@@ -155,6 +157,7 @@ class Mask3dLoss(nn.Module):
 
         aux_masks = result['aux_masks'][0]
         aux_classes = result['aux_classes'][0]
+        query_index = result['query_index'][0]
         
         batch_col = clabel[0][:, BATCH_COL].int()
         num_batches = batch_col.unique().shape[0]
@@ -164,10 +167,11 @@ class Mask3dLoss(nn.Module):
         
         loss_layer, loss_class_layer = self.compute_layerwise_loss(aux_masks, 
                                                             aux_classes, 
-                                                            clabel)
+                                                            clabel,
+                                                            query_index)
         
         loss.update(loss_layer)
-        loss_class.update(loss_class_layer)
+        # loss_class.update(loss_class_layer)
         
         acc_class = 0
         
@@ -177,42 +181,44 @@ class Mask3dLoss(nn.Module):
             output_mask = result['pred_masks'][0][batch_mask]
             output_class = result['pred_logits'][0][bidx]
             
-            targets = get_instance_masks(clabel[0][batch_mask][:, GROUP_COL].long()).float()
+            labels = clabel[0][batch_mask][:, GROUP_COL].long()
+            
+            # targets = get_instance_masks(labels).float()
+            query_idx_batch = query_index[bidx]
+            targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
+            
+            # print(output_mask, targets)
         
-            loss_batch, acc_batch, indices = self.loss_fn(output_mask, targets)
+            loss_batch, acc_batch = self.loss_fn(output_mask, targets)
             loss[bidx].append(loss_batch)
             acc[bidx].append(acc_batch)
             
             # Compute instance class loss 
-            targets_class = torch.zeros(output_class.shape[0]).to(
-                dtype=torch.long, device=output_class.device)
-            targets_class[indices[0]] = 1
-            loss_class_batch = self.xentropy(output_class, targets_class)
-            loss_class[bidx].append(loss_class_batch)
+            # targets_class = torch.zeros(output_class.shape[0]).to(
+            #     dtype=torch.long, device=output_class.device)
+            # targets_class[indices[0]] = 1
+            # loss_class_batch = self.xentropy(output_class, targets_class)
+            # loss_class[bidx].append(loss_class_batch)
             
-            with torch.no_grad():
-                pred = torch.argmax(output_class, dim=1)
-                obj_acc = (pred == targets_class).sum() / pred.shape[0]
-                acc_class += obj_acc / num_batches
+            # with torch.no_grad():
+            #     pred = torch.argmax(output_class, dim=1)
+            #     obj_acc = (pred == targets_class).sum() / pred.shape[0]
+            #     acc_class += obj_acc / num_batches
             
         loss = [sum(val) / len(val) for val in loss.values()]
         acc =  [sum(val) / len(val) for val in acc.values()]
-        loss_class = [sum(val) / len(val) for val in loss_class.values()]
+        # loss_class = [sum(val) / len(val) for val in loss_class.values()]
         
         loss = sum(loss) / len(loss)
-        loss_class = sum(loss_class) / len(loss_class)
+        # loss_class = sum(loss_class) / len(loss_class)
         acc = sum(acc) / len(acc)
-        
-        print(loss, loss_class)
             
         res = {
-            'loss': loss + loss_class,
+            'loss': loss,
             'accuracy': acc,
-            'loss_class': float(loss_class),
+            # 'loss_class': float(loss_class),
             'loss_mask': float(loss),
-            'acc_class': float(acc_class)
+            # 'acc_class': float(acc_class)
         }
-        
-        pprint(res)
         
         return res

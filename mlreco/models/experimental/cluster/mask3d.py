@@ -84,7 +84,7 @@ class QueryModule(nn.Module):
         else:
             raise ValueError("Query type {} is not supported!".format(self.query_type))
         
-        return queries.permute((0, 2, 1)), query_pos.permute((0, 2, 1))
+        return queries.permute((0, 2, 1)), query_pos.permute((0, 2, 1)), fps_idx
 
 class Mask3d(nn.Module):
 
@@ -109,6 +109,11 @@ class Mask3d(nn.Module):
         self.num_heads = self.model_config.get('num_heads', 8)
         self.dropout = self.model_config.get('dropout', 0.0)
         self.normalize_before = self.model_config.get('normalize_before', False)
+        
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        
+        self.spatial_size = self.model_config.get('spatial_size', [2753, 1056, 5966])
+        self.spatial_size = torch.Tensor(self.spatial_size).float().to(device)
 
         self.depth = self.model_config.get('depth', 5)
         self.mask_head = ME.MinkowskiConvolution(num_features, self.mask_dim, 
@@ -155,6 +160,7 @@ class Mask3d(nn.Module):
                                                         normalize_before=self.normalize_before))
             
         self.sample_sizes = [200, 800, 3200, 12800, 51200]
+        self.adc_to_mev = 1./350
         
         num_params = sum(p.numel() for p in self.parameters())
         print(f"Number of Total Parameters = {num_params}")
@@ -289,14 +295,15 @@ class Mask3d(nn.Module):
         coords = point_cloud[:, COORD_COLS].int()
         feats = point_cloud[:, VALUE_COL].float().view(-1, 1)
 
-        normed_coords = get_normalized_coordinates(coords)
-        features = torch.cat([normed_coords, feats], dim=1)
+        normed_coords = get_normalized_coordinates(coords, self.spatial_size)
+        normed_feats = feats * self.adc_to_mev 
+        features = torch.cat([normed_coords, normed_feats], dim=1)
         x = ME.SparseTensor(coordinates=point_cloud[:, :VALUE_COL].int(), 
                             features=features)
         encoderOutput = self.encoder(x)
         decoderOutput = self.decoder(encoderOutput['finalTensor'], 
                                      encoderOutput['encoderTensors'])
-        queries, query_pos = self.query_module(x, decoderOutput[-1])
+        queries, query_pos, query_index = self.query_module(x, decoderOutput[-1])
 
         total_num_pooling = len(decoderOutput)-1
 
@@ -347,7 +354,8 @@ class Mask3d(nn.Module):
             'pred_masks' :  [output_mask.F],
             'pred_logits': [output_class],
             'aux_masks': [predictions_mask],
-            'aux_classes': [predictions_class]
+            'aux_classes': [predictions_class],
+            'query_index': [query_index]
         }
         
         return res

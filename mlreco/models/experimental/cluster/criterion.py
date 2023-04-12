@@ -11,7 +11,7 @@ from mlreco.models.layers.cluster_cnn.losses.misc import iou_batch, LovaszHingeL
 
 class LinearSumAssignmentLoss(nn.Module):
     
-    def __init__(self, weight_dice=1.0, weight_ce=1.0, mode='dice'):
+    def __init__(self, weight_dice=2.0, weight_ce=5.0, mode='dice'):
         super(LinearSumAssignmentLoss, self).__init__()
         self.weight_dice = weight_dice
         self.weight_ce = weight_ce
@@ -35,20 +35,55 @@ class LinearSumAssignmentLoss(nn.Module):
             cost_matrix = self.weight_dice * dice_loss + self.weight_ce * ce_loss
             indices = linear_sum_assignment(cost_matrix.detach().cpu())
         
-        if self.mode == 'log_dice':
-            dice_loss = batch_log_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
-        elif self.mode == 'dice':
-            dice_loss = batch_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
-        elif self.mode == 'lovasz':
-            dice_loss = self.lovasz(masks[:, indices[0]], targets[:, indices[1]])
-        else:
-            raise ValueError(f"LSA loss mode {self.mode} is not supported!")
-        ce_loss = batch_sigmoid_ce_loss(masks.T[indices[0]], targets.T[indices[1]])
-        cost_matrix = self.weight_dice * dice_loss + self.weight_ce * ce_loss
-        loss = torch.diag(cost_matrix).mean()
+        dice_loss = dice_loss_flat(masks[:, indices[0]], targets[:, indices[1]])
+        # if self.mode == 'log_dice':
+        #     dice_loss = batch_log_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
+        # elif self.mode == 'dice':
+        #     dice_loss = batch_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
+        # elif self.mode == 'lovasz':
+        #     dice_loss = self.lovasz(masks[:, indices[0]], targets[:, indices[1]])
+        # else:
+        #     raise ValueError(f"LSA loss mode {self.mode} is not supported!")
+        ce_loss = sigmoid_ce_loss(masks.T[indices[0]], targets.T[indices[1]])
+        loss = self.weight_dice * dice_loss + self.weight_ce * ce_loss
         acc = self.compute_accuracy(masks, targets, indices)
         
         return loss, acc, indices
+    
+    
+class CEDiceLoss(nn.Module):
+    
+    def __init__(self, weight_dice=1.0, weight_ce=1.0, mode='dice'):
+        super(CEDiceLoss, self).__init__()
+        self.weight_dice = weight_dice
+        self.weight_ce = weight_ce
+        self.lovasz = LovaszHingeLoss()
+        self.mode = mode
+        print(f"Setting LinearSumAssignment loss to '{self.mode}'")
+        
+    def compute_accuracy(self, masks, targets):
+        with torch.no_grad():
+            valid_masks = masks > 0
+            valid_targets = targets > 0.5
+            iou = iou_batch(valid_masks, valid_targets, eps=1e-6)
+            return float(iou)
+        
+    def forward(self, masks, targets):
+        
+        dice_loss = self.lovasz(masks, targets)
+        # if self.mode == 'log_dice':
+        #     dice_loss = batch_log_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
+        # elif self.mode == 'dice':
+        #     dice_loss = batch_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
+        # elif self.mode == 'lovasz':
+        #     dice_loss = self.lovasz(masks[:, indices[0]], targets[:, indices[1]])
+        # else:
+        #     raise ValueError(f"LSA loss mode {self.mode} is not supported!")
+        ce_loss = sigmoid_ce_loss(masks.T, targets.T)
+        loss = self.weight_dice * dice_loss + self.weight_ce * ce_loss
+        acc = self.compute_accuracy(masks, targets)
+        
+        return loss, acc
 
 
 @torch.jit.script
@@ -71,6 +106,20 @@ def get_instance_masks(cluster_label : torch.LongTensor,
         instance_masks[:, i] = (cluster_label == group_id).to(torch.bool)
         
     return instance_masks
+
+
+@torch.jit.script
+def get_instance_masks_from_queries(cluster_label: torch.LongTensor,
+                                    query_index: torch.Tensor):
+    max_num_instances = query_index.shape[0]
+    instance_masks = torch.zeros((cluster_label.shape[0], 
+                                  max_num_instances)).to(device=cluster_label.device, 
+                                                         dtype=torch.bool)  
+    for i, qidx in enumerate(query_index):
+        instance_masks[:, i] = (cluster_label == cluster_label[qidx]).to(torch.bool)
+    
+    return instance_masks
+    
 
 
 def dice_loss(logits, targets):
@@ -145,14 +194,36 @@ def batch_sigmoid_ce_loss(inputs: torch.Tensor, targets: torch.Tensor):
 
     return loss / hw
 
-
-def batch_ce(inputs, targets):
+@torch.jit.script
+def sigmoid_ce_loss(
+        inputs: torch.Tensor,
+        targets: torch.Tensor
+    ):
     """
-    Only for testing purposes (brute force calculation)
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+    Returns:
+        Loss tensor
     """
     num_masks = inputs.shape[0]
-    out = torch.zeros((num_masks, num_masks))
-    for i in range(num_masks):
-        for j in range(num_masks):
-            out[i,j] = F.binary_cross_entropy_with_logits(inputs[i], targets[j], reduction='mean')
-    return out
+    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    return loss.mean(1).sum() / num_masks
+
+@torch.jit.script
+def dice_loss_flat(logits, targets):
+    """
+    
+    Parameters
+    ----------
+    logits: (N x num_queries)
+    targets: (N x num_queries)
+    """
+    num_masks = logits.shape[1]
+    scores = torch.sigmoid(logits)
+    numerator = (2 * scores * targets).sum(dim=0)
+    denominator = scores.sum(dim=0) + targets.sum(dim=0)
+    return (1 - (numerator + 1) / (denominator + 1)).sum() / num_masks
