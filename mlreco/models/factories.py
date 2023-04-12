@@ -19,6 +19,7 @@ def model_dict():
     from . import bayes_uresnet
 
     from . import vertex
+    from . import mask3d
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -53,7 +54,9 @@ def model_dict():
         # Vertex PPN
         'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss),
         # Vertex Pointnet
-        'vertex_pointnet': (vertex.VertexPointNet, vertex.VertexPointNetLoss)
+        'vertex_pointnet': (vertex.VertexPointNet, vertex.VertexPointNetLoss),
+        # Mask3d
+        'mask3d': (mask3d.Mask3DModel, mask3d.Mask3dLoss)
     }
     return models
 
