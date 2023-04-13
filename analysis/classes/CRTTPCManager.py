@@ -120,25 +120,21 @@ class CRTTPCManager:
             track_id = particle.id
             image_id = particle.image_id
             interaction_id = particle.interaction_id
+            points  = particle.points
+            depositions = particle.depositions
             start_x = particle.startpoint[0][0]
             start_y = particle.startpoint[0][1]
             start_z = particle.startpoint[0][2]
             end_x   = particle.endpoint[0][0]
             end_y   = particle.endpoint[0][1]
             end_z   = particle.endpoint[0][2]
-            points  = particle.points
-            depositions = particle.depositions
             this_track = Track(
                 id=track_id, image_id=image_id, interaction_id=interaction_id, 
-                start_x=start_x, start_y=start_y, start_z=start_z, 
-                end_x=end_x, end_y=end_y, end_z=end_z, 
                 points=points, depositions=depositions
+                #start_x=start_x, start_y=start_y, start_z=start_z, 
+                #end_x=end_x, end_y=end_y, end_z=end_z, 
             )
-            start, end = this_track.get_endpoints()
             trk_v.append(this_track)
-            print('[MAKETPCTRACK]', this_track)
-            print('[MAKETPCTRACK] alternative start/end:\n')
-            print('\t', start, end)
 
         self.trk_v = trk_v
         return trk_v
@@ -160,8 +156,19 @@ class CRTTPCManager:
         from matcha import match_maker
 
         distance_threshold = 50
+        dca_method = 'simple'
+        pca_radius = 10
+        min_points_in_radius = 10
+        trigger_timestamp = None # Only necessary if isdata=True
+        isdata = False
+        save_to_file = True
+        file_path = '.'
         crt_tpc_matches = match_maker.get_track_crthit_matches(
-            tracks, crthits, approach_distance_threshold=50, save_to_file=True
+            tracks, crthits, 
+            approach_distance_threshold=distance_threshold, dca_method=dca_method, 
+            pca_radius=pca_radius, min_points_in_radius=min_points_in_radius,
+            trigger_timestamp=trigger_timestamp, isdata=isdata,
+            save_to_file=save_to_file, file_path=file_path
         )
 
         return crt_tpc_matches
