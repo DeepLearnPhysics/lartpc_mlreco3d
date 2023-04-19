@@ -104,48 +104,6 @@ class FullChainPredictor:
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images))
         return msg
 
-    def _fit_predict_ppn(self, entry):
-        '''
-        Method for predicting ppn predictions.
-
-        Inputs:
-            - entry: Batch number to retrieve example.
-
-        Returns:
-            - df (pd.DataFrame): pandas dataframe of ppn points, with
-            x, y, z, coordinates, Score, Type, and sample index.
-        '''
-        # Deghosting is already applied during initialization
-        ppn = uresnet_ppn_type_point_selector(self.result['input_rescaled'][entry],
-                                              self.result,
-                                              entry=entry, apply_deghosting=False)
-        ppn_voxels = ppn[:, 1:4]
-        ppn_score = ppn[:, 5]
-        ppn_type = ppn[:, 12]
-        if 'ppn_classify_endpoints' in self.result:
-            ppn_endpoint = ppn[:, 13:]
-            assert ppn_endpoint.shape[1] == 2
-
-        ppn_candidates = []
-        for i, pred_point in enumerate(ppn_voxels):
-            pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
-            x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            if 'ppn_classify_endpoints' in self.result:
-                ppn_candidates.append(np.array([x, y, z, 
-                                                pred_point_score, 
-                                                pred_point_type, 
-                                                ppn_endpoint[i][0],
-                                                ppn_endpoint[i][1]]))
-            else:
-                ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
-
-        if len(ppn_candidates):
-            ppn_candidates = np.vstack(ppn_candidates)
-        else:
-            enable_classify_endpoints = 'ppn_classify_endpoints' in self.result
-            ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 6), dtype=np.float32)
-        return ppn_candidates
-
 
     def _fit_predict_semantics(self, entry):
         '''
@@ -499,11 +457,6 @@ class FullChainPredictor:
 
         if len(out) == 0:
             return out
-        
-        # Get ppn candidates for particle
-        # ppn_results = self._fit_predict_ppn(entry)
-        # match_points_to_particles(ppn_results, out,
-        #     ppn_distance_threshold=kwargs['attaching_threshold'])
 
         volume = kwargs.get('volume', None)
         if volume is not None:
