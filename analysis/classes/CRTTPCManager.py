@@ -51,7 +51,7 @@ class CRTTPCManager:
         self.crt_tpc_matches = None
         self.tpc_v, self.crt_v, self.trk_v = None, None, None
 
-    def make_crthit(self, larcv_crthits):
+    def make_crthit(self, larcv_crthits, minimum_pe=50):
         """
         Parameters
         ==========
@@ -70,6 +70,7 @@ class CRTTPCManager:
         crt_v = []
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
+            if larcv_crthit.peshit() < minimum_pe: continue
             crthit_id  = larcv_crthit.id()
             t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
             t0_ns      = larcv_crthit.ts0_ns()  # nanoseconds part of timestamp
@@ -108,10 +109,8 @@ class CRTTPCManager:
         -------
         list of matcha::Track()
         '''
-
         trk_v = []
 
-        #'image_id', 'interaction_id', 'points', and 'depositions'
         for idx, particle in enumerate(muon_candidates):
             print('-----TRACK', particle.id, '-------')
             particle.points     = self.points_to_cm(particle.points)
@@ -157,6 +156,7 @@ class CRTTPCManager:
 
         distance_threshold = 50
         dca_method = 'simple'
+        direction_method = 'pca'
         pca_radius = 10
         min_points_in_radius = 10
         trigger_timestamp = None # Only necessary if isdata=True
@@ -165,7 +165,8 @@ class CRTTPCManager:
         file_path = '.'
         crt_tpc_matches = match_maker.get_track_crthit_matches(
             tracks, crthits, 
-            approach_distance_threshold=distance_threshold, dca_method=dca_method, 
+            approach_distance_threshold=distance_threshold, 
+            direction_method=direction_method, dca_method=dca_method, 
             pca_radius=pca_radius, min_points_in_radius=min_points_in_radius,
             trigger_timestamp=trigger_timestamp, isdata=isdata,
             save_to_file=save_to_file, file_path=file_path
