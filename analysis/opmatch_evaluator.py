@@ -37,7 +37,7 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         print('----Image', i, '-----')
         print('Starting flash matching...')
         fmatches = predictor.get_flash_matches(i, use_true_tpc_objects=True,
-                                               volume=1, ADC_to_MeV=0.00285714285)
+                                               volume=None, ADC_to_MeV=0.00285714285)
         cached_interactions = []
         for (interaction, flash, match) in fmatches:
             entry = OrderedDict(flash_fields)
@@ -50,7 +50,7 @@ def opmatch_evaluator(data, res, data_id, ana_cfg, mod_cfg):
         # Use interactions from flash matching as input to CRT-TPC matching
         print('Starting crt-tpc matching...')
         crt_tpc_matches = predictor.get_crt_tpc_matches(i, use_true_tpc_objects=True,
-                                                        volume=1, ADC_to_MeV=0.00285714285,
+                                                        volume=None, ADC_to_MeV=0.00285714285,
                                                         interaction_list=cached_interactions)
         for match in crt_tpc_matches:
             entry = OrderedDict(crt_fields)
