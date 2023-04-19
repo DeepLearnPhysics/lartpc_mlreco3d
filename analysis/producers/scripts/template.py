@@ -112,9 +112,6 @@ def run_inference(data_blob, res, **kwargs):
 
             true_p_dict = particle_logger.produce(true_p, mode='true')
             pred_p_dict = particle_logger.produce(pred_p, mode='reco')
-            
-            pprint(true_p_dict)
-            assert False
 
             part_dict = OrderedDict()
             part_dict.update(index_dict)

@@ -79,8 +79,25 @@ class DataBuilder(ABC):
 
 
 class ParticleBuilder(DataBuilder):
-    """
-    Eats data, result and makes List of Particles per image.
+    """Builder for constructing Particle and TruthParticle instances
+    from full chain output dicts. 
+    
+    Required result keys:
+
+        reco:
+            - input_rescaled
+            - particle_clusts
+            - particle_seg
+            - particle_start_points
+            - particle_end_points
+            - particle_group_pred
+            - particle_node_pred_type
+            - particle_node_pred_vtx
+        truth:
+            - cluster_label
+            - cluster_label_adapted
+            - particles_asis
+            - input_rescaled
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
@@ -89,7 +106,13 @@ class ParticleBuilder(DataBuilder):
                     entry: int, 
                     data: dict, 
                     result: dict) -> List[Particle]:
-
+        """
+        Returns
+        -------
+        out : List[Particle]
+            list of reco Particle instances of length equal to the
+            batch size. 
+        """
         out = []
 
         # Essential Information
@@ -141,6 +164,13 @@ class ParticleBuilder(DataBuilder):
                     entry: int, 
                     data: dict, 
                     result: dict) -> List[TruthParticle]:
+        """
+        Returns
+        -------
+        out : List[TruthParticle]
+            list of true TruthParticle instances of length equal to the
+            batch size. 
+        """
 
         out = []
 
@@ -237,7 +267,17 @@ class ParticleBuilder(DataBuilder):
 
 
 class InteractionBuilder(DataBuilder):
+    """Builder for constructing Interaction and TruthInteraction instances.
+    
+    Required result keys:
 
+        reco:
+            - Particles
+        truth:
+            - TruthParticles
+            - cluster_label
+            - neutrino_asis (optional)
+    """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
 
@@ -265,6 +305,10 @@ class InteractionBuilder(DataBuilder):
         return out
     
     def decorate_true_interactions(self, entry, data, interactions):
+        """
+        Helper function for attaching additional information to
+        TruthInteraction instances. 
+        """
         vertices = self.get_true_vertices(entry, data)
         for ia in interactions:
             if ia.id in vertices:
@@ -291,6 +335,9 @@ class InteractionBuilder(DataBuilder):
         return interactions
         
     def get_true_vertices(self, entry, data: dict):
+        """
+        Helper function for retrieving true vertex information. 
+        """
         out = {}
         inter_idxs = np.unique(
             data['cluster_label'][entry][:, INTER_COL].astype(int))
@@ -310,7 +357,26 @@ class InteractionBuilder(DataBuilder):
 
 
 class FragmentBuilder(DataBuilder):
+    """Builder for constructing Particle and TruthParticle instances
+    from full chain output dicts. 
+    
+    Required result keys:
 
+        reco:
+            - input_rescaled
+            - fragment_clusts
+            - fragment_seg
+            - shower_fragment_start_points
+            - track_fragment_start_points
+            - track_fragment_end_points
+            - shower_fragment_group_pred
+            - track_fragment_group_pred
+            - shower_fragment_node_pred
+        truth:
+            - cluster_label
+            - cluster_label_adapted
+            - input_rescaled
+    """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
         self.allow_nodes = self.cfg.get('allow_nodes', [0,2,3])
@@ -501,6 +567,26 @@ def handle_empty_true_particles(labels_noghost,
                                 p, 
                                 entry, 
                                 verbose=False):
+    """
+    Function for handling true larcv::Particle instances with valid 
+    true nonghost voxels but with no predicted nonghost voxels.
+    
+    Parameters
+    ----------
+    labels_noghost: np.ndarray
+        Label information for true nonghost coordinates
+    mask_noghost: np.ndarray
+        True nonghost mask for this particle.
+    p: larcv::Particle
+        larcv::Particle object from particles_asis, containing truth
+        information for this particle
+    entry: int
+        Image ID of this particle (for consistent TruthParticle attributes)
+        
+    Returns
+    -------
+    particle: TruthParticle
+    """
     pid = int(p.id())
     pdg = PDG_TO_PID.get(p.pdg_code(), -1)
     is_primary = p.group_id() == p.parent_id()
@@ -551,6 +637,19 @@ def handle_empty_true_particles(labels_noghost,
 
 
 def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
+    """
+    Helper function for fetching true particle labels from 
+    voxel label array. 
+    
+    Parameters
+    ----------
+    labels: np.ndarray
+        Predicted nonghost voxel label information
+    mask: np.ndarray
+        Voxel index mask
+    pid: int, optional
+        Unique id of this particle (for debugging)
+    """
     semantic_type, sem_counts = np.unique(labels[mask][:, -1].astype(int), 
                                             return_counts=True)
     if semantic_type.shape[0] > 1:

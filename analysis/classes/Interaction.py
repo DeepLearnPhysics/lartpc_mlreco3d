@@ -74,13 +74,22 @@ class Interaction:
 
     @property
     def particles(self):
+        """
+        List of <Particle> objects that constitute this interaction.
+        """
         return list(self._particles.values())
 
     def check_particle_input(self, x):
+        """
+        Consistency check for particle interaction id and self.id
+        """
         assert isinstance(x, Particle)
         assert x.interaction_id == self.id
 
     def update_info(self):
+        """
+        Method for updating basic interaction particle count information.
+        """
         self.particle_ids = list(self._particles.keys())
         self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
         self.particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values()])

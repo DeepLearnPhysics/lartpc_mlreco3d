@@ -1,20 +1,40 @@
 import numpy as np
-from functools import partial
+from functools import partial, wraps
 from collections import defaultdict, OrderedDict
 import warnings
+import time
 
 
 class PostProcessor:
-
-    def __init__(self, data, result, debug=True):
+    """Manager for handling post-processing scripts.
+    
+    """
+    def __init__(self, data, result, debug=True, profile=False):
         self._funcs = defaultdict(list)
         self._batch_funcs = defaultdict(list)
         self._num_batches = len(data['index'])
         self.data = data
         self.result = result
         self.debug = debug
+        
+        self._profile = defaultdict(float)
+        
+    def profile(self, func): 
+        '''Decorator that reports the execution time. '''
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.time()
+            result = func(*args, **kwargs) 
+            end = time.time() 
+            dt = end - start
+            self._profile[func.__name__] += dt
+            return result
+        return wrapper
 
-    def register_function(self, f, priority, processor_cfg={}, run_on_batch=False):
+    def register_function(self, f, priority, 
+                          processor_cfg={}, 
+                          run_on_batch=False,
+                          profile=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
         pf                           = partial(f, **processor_cfg)
@@ -22,6 +42,8 @@ class PostProcessor:
         pf._data_capture             = data_capture
         pf._result_capture           = result_capture
         pf._result_capture_optional  = result_capture_optional
+        if profile:
+            pf = self.profile(pf)
         if run_on_batch:
             self._batch_funcs[priority].append(pf)
         else:
