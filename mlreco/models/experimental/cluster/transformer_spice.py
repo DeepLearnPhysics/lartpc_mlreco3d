@@ -6,7 +6,7 @@ import MinkowskiEngine.MinkowskiOps as me
 
 from mlreco.models.layers.common.uresnet_layers import UResNetDecoder, UResNetEncoder
 from mlreco.models.experimental.transformers.positional_encodings import FourierEmbeddings
-from mlreco.models.experimental.cluster.pointnet2.pointnet2_utils import furthest_point_sample
+# from mlreco.models.experimental.cluster.pointnet2.pointnet2_utils import furthest_point_sample
 from mlreco.models.experimental.transformers.positional_encodings import get_normalized_coordinates
 from mlreco.utils.globals import *
 from mlreco.models.experimental.transformers.transformer import GenericMLP
@@ -65,9 +65,10 @@ class QueryModule(nn.Module):
 
         if self.query_type == 'fps':
             # Sample query points via FPS
-            fps_idx = [furthest_point_sample(x.decomposed_coordinates[i][None, ...].float(), 
-                       self.num_queries).squeeze(0).long() \
-               for i in range(len(x.decomposed_coordinates))]
+            fps_idx = None
+            # fps_idx = [furthest_point_sample(x.decomposed_coordinates[i][None, ...].float(), 
+            #            self.num_queries).squeeze(0).long() \
+            #    for i in range(len(x.decomposed_coordinates))]
             # B, nqueries, 3
             sampled_coords = torch.stack([x.decomposed_coordinates[i][fps_idx[i], :] \
                                           for i in range(len(x.decomposed_coordinates))], axis=0)
