@@ -31,7 +31,7 @@ Analysis tools need two configuration files to function: one for the full ML cha
 ```yaml
 analysis:
   iteration: -1
-  log_dir: /sdf/group/neutrino/koh0207/logs/nu_selection/trash
+  log_dir: $PATH_TO_LOG_DIR
 ```
 Here, `iteration: -1` is a shorthand for "iterate over the full dataset", and `log_dir` is the output directory in which all products of analysis tools (if one decides to write something to files) will be saved to. 
 
@@ -254,6 +254,8 @@ which gives all the reconstructed particle directions in image #0 (in order). As
 
 ## 4. Evaluating reconstruction and writing outputs CSVs. 
 
+-----
+
 While HDF5 format is suitable for saving large amounts of data to be used in the future, for high level analysis we generally save per-image, per-interaction, or per-particle attributes and features in tabular form (such as CSVs). Also, there's a need to compute different evaluation metrics once the all the post-processors return their reconstruction outputs. We group all these that happen after post-processing under `analysis.producers.scripts`:
  * Matching reconstructed particles to corresponding true particles.
  * Retrieving properly structured labels from truth information.
@@ -289,6 +291,8 @@ analysis:
 ```
 
 ### 4.1 Running inference using the `Evaluator` and `Predictor` interface. 
+
+------
 
 Each function inside `analysis.producers.scripts` has `data` and `result` dictionary as its input arguments, so all reconstructed quantities from both the ML chain and the post-processing subroutines are accessible through its keys. At this stage of accessing reconstruction outputs, it is generally up to the user to define the evaluation metrics and/or quantities of interest that will be written to output files. Still, analysis tools have additional user interfaces--`FullChainPredictor` and `FullChainEvaluator`--for easy and consistent evaluation of full chain outputs. 
  * `FullChainPredictor`: user interface class for accessing full chain predictions. This class is reserved for prediction on non-MC data as it does not have any reference to truth labels or MC information. 
@@ -367,7 +371,12 @@ The same convention holds for matched particle pairs (`TruthParticle`, `Particle
 > 3D spacepoints from G4), one must set **`overlap_mode="chamfer"`** to allow the 
 > evaluator to use the chamfer distance to match non-overlapping 3D coordinates
 > between true nonghost and predicted nonghost coordinates. 
+
+
 ### 4.2 Using Loggers to organize CSV output fields. 
+
+----
+
 Loggers are objects that take a `DataBuilder` product and returns an `OrderedDict`
 instance representing a single row of an output CSV file. For example:
 ```python
@@ -497,6 +506,8 @@ implementation of `run_inference` is located in `analysis/producers/scripts/temp
 
 ### 4.3 Launching analysis tools job for large statistics inference.
 
+-----
+
 To run analysis tools on (already generated) full chain output stored as HDF5 files:
 ```bash
 python3 analysis/run.py $PATH_TO_ANALYSIS_CONFIG
@@ -511,3 +522,49 @@ To run analysis tools in tandem with full chain forwarding, you need an addition
 ```bash
 python3 analysis/run.py $PATH_TO_ANALYSIS_CONFIG --chain_config $PATH_TO_FULL_CHAIN_CONFIG
 ```
+---------
+
+## 5. Profiling Reconstruction workflow
+
+Include a `profile=True` field under `analysis` to obtain the wall-clock time for each stage of reconstruction:
+```yaml
+analysis:
+  profile: True
+  iteration: -1
+  log_dir: $PATH_TO_LOG_DIR
+...
+```
+This will generate a `log.csv` file under `log_dir`, which contain timing information (in seconds) for each stage in analysis tools:
+
+(`log.csv`)
+| iteration | forward_time | build_reps_time | post_processing_time | write_csv_time |
+| --------- | ------------ | --------------- | -------------------- | -------------- |
+| 0         | 8.9698       | 0.19047         | 33.654               | 0.26532        |
+| 1         | 3.7952       | 0.78680         | 25.417               | 0.87310        |
+| ...       | ...          | ...             | ...                  | ...            |
+
+
+### 5.1 Profiling each post-processing functions separately.
+-----
+
+Include a `profile=True` field under the post-processor name to log the timing information separately. For example:
+```
+analysis:
+  profile: True
+  iteration: -1
+  log_dir: $PATH_TO_LOG_DIR
+post_processing:
+  particle_direction:
+    profile: True
+    optimize: True
+    priority: 1
+```
+
+This will add a column "particle_direction" in `log.csv`:
+
+(`log.csv`)
+| iteration | forward_time | build_reps_time | particle_direction | post_processing_time | write_csv_time |
+| --------- | ------------ | --------------- | ------------------ | -------------------- | -------------- |
+| 0         | 8.9698       | 0.19047         | 0.10811            | 33.654               | 0.26532        |
+| 1         | 3.7952       | 0.78680         | 0.23974            | 25.417               | 0.87310        |
+| ...       | ...          | ...             | ...                | ...                  | ...            |
