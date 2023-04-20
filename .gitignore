@@ -1,5 +1,6 @@
 # typical files made in repo
 log*
+!logger.py
 weights*
 *.txt
 *.csv

@@ -27,6 +27,13 @@ class EdgeChannelLoss(torch.nn.Module):
             target          : <type of target adjacency matrix: 'group', 'forest', 'particle_forest' (default 'group')>
             high_purity     : <only penalize loss on groups with a primary (default False)>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'n_edges': ['scalar']
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(EdgeChannelLoss, self).__init__()
 

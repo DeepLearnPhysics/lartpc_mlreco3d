@@ -120,7 +120,9 @@ def parse_run_info(sparse_event):
     tuple
          (run, subrun, event)
     """
-    return sparse_event.run(), sparse_event.subrun(), sparse_event.event()
+    return [sparse_event.run(),
+            sparse_event.subrun(),
+            sparse_event.event()]
 
 
 def parse_opflash(opflash_event):

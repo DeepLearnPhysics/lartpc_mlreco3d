@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from collections import OrderedDict, Counter
+from collections import OrderedDict
 from . import Interaction, TruthParticle
 
 
@@ -18,7 +18,7 @@ class TruthInteraction(Interaction):
             self.depositions_MeV.append(p.depositions_MeV)
             if p.is_primary: self.num_primaries += 1
         self.depositions_MeV = np.hstack(self.depositions_MeV)
-
+        self.nu_info = None
 
     @property
     def particles(self):
@@ -50,6 +50,6 @@ class TruthInteraction(Interaction):
         return msg + self.particles_summary
 
     def __repr__(self):
-        return "TruthInteraction(id={}, vertex={}, nu_id={}, Particles={})".format(
-            self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
+        return "TruthInteraction(id={}, vertex={}, size={}, nu_id={}, Particles={})".format(
+            self.id, str(self.vertex), self.size, self.nu_id, str(self.particle_ids))
 

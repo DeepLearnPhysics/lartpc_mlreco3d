@@ -101,15 +101,7 @@ print(df.columns.values)
 ```
 
 ### Recording network output or running analysis
-The `post_processing` configuration block allows you to run scripts on input data and/or network outputs.
-It also supports storing your scripts output in a CSV file for offline analysis.
-
-```yaml
-post_processing:
-  script_compute_something:
-    parameter1: True
-```  
-See the [postprocessing](./mlreco/post_processing/README.md) instructions for more information.
+We use [LArTPC MLReco3D Analysis Tools](./analysis/README.md) for all inference and high-level analysis related work. 
 
 ## Repository Structure
 * `bin` contains very simple scripts that run the training/inference functions.
@@ -117,6 +109,7 @@ See the [postprocessing](./mlreco/post_processing/README.md) instructions for mo
 * `docs` Documentation (in progress)
 * `mlreco` the main code lives there!
 * `test` some testing using Pytest
+* `analysis`: [LArTPC MLReco3D Analysis Tools](./analysis/README.md), a pure python interface for inference, high-level analysis, and visualization using the full chain. 
 
 Please consult the README of each folder respectively for more information.
 

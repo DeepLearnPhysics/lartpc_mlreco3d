@@ -4,5 +4,5 @@ from .TruthParticle import TruthParticle
 from .TruthParticleFragment import TruthParticleFragment
 from .Interaction import Interaction
 from .TruthInteraction import TruthInteraction
-from .FlashManager import FlashManager
-from .CRTTPCManager import CRTTPCManager
+from .builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
+# from .FlashManager import FlashManager

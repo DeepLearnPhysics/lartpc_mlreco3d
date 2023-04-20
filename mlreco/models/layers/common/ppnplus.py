@@ -6,6 +6,7 @@ import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
 from mlreco.utils import local_cdist
+from mlreco.utils.globals import *
 from mlreco.models.layers.common.blocks import ResNetBlock, SPP, ASPP
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
@@ -196,23 +197,33 @@ class PPN(torch.nn.Module):
 
     Output
     ------
-    points: torch.Tensor
+    ppn_points: torch.Tensor
         Contains  X, Y, Z predictions, semantic class prediction logits, and prob score
-    mask_ppn: list of torch.Tensor
-        Binary mask at various spatial scales of PPN predictions (voxel-wise score > some threshold)
+    ppn_masks: list of torch.Tensor
+        Binary masks at various spatial scales of PPN predictions (voxel-wise score > some threshold)
     ppn_coords: list of torch.Tensor
         List of XYZ coordinates at various spatial scales.
     ppn_layers: list of torch.Tensor
         List of score features at various spatial scales.
-    ppn_output_coordinates: torch.Tensor
+    ppn_output_coords: torch.Tensor
         XYZ coordinates tensor at the very last layer of PPN (initial spatial scale)
-    classify_endpoints: torch.Tensor
+    ppn_classify_endpoints: torch.Tensor
         Logits for end/start point classification.
 
     See Also
     --------
     PPNLonelyLoss, mlreco.models.uresnet_ppn_chain
     '''
+
+    RETURNS = {
+        'ppn_points': ['tensor', 'ppn_output_coords'],
+        'ppn_masks': ['tensor_list', 'ppn_coords'],
+        'ppn_layers': ['tensor_list', 'ppn_coords'],
+        'ppn_coords': ['tensor_list', 'ppn_coords', False, True],
+        'ppn_output_coords': ['tensor', 'ppn_output_coords', False, True],
+        'ppn_classify_endpoints': ['tensor', 'ppn_output_coords']
+    }
+
     def __init__(self, cfg, name='ppn'):
         super(PPN, self).__init__()
         setup_cnn_configuration(self, cfg, name)
@@ -313,7 +324,7 @@ class PPN(torch.nn.Module):
     def forward(self, final, decoderTensors, ghost=None, ghost_labels=None):
         ppn_layers, ppn_coords = [], []
         tmp = []
-        mask_ppn = []
+        ppn_masks = []
         device = final.device
 
         # We need to make labels on-the-fly to include true points in the
@@ -370,7 +381,7 @@ class PPN(torch.nn.Module):
             s_expanded = self.expand_as(mask, x.F.shape, 
                                         propagate_all=self.propagate_all,
                                         use_binary_mask=self.use_binary_mask_ppn)
-            mask_ppn.append((mask.F > self.ppn_score_threshold))
+            ppn_masks.append((mask.F > self.ppn_score_threshold))
             x = x * s_expanded.detach()
 
         # Note that we skipped ghost masking for the final sparse tensor,
@@ -378,7 +389,7 @@ class PPN(torch.nn.Module):
         # This is done at the full chain cnn stage, for consistency with SCN
 
         device = x.F.device
-        ppn_output_coordinates = x.C
+        ppn_output_coords = x.C
         # print(x.tensor_stride, x.shape, "ppn_score_threshold = ", self.ppn_score_threshold)
         for p in tmp:
             a = p.to(dtype=torch.float32, device=device)
@@ -392,17 +403,17 @@ class PPN(torch.nn.Module):
             ppn_endpoint = self.ppn_endpoint(x)
 
         # X, Y, Z, logits, and prob score
-        points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
+        ppn_points = torch.cat([pixel_pred.F, ppn_type.F, ppn_final_score.F], dim=1)
 
         res = {
-            'points': [points],
-            'mask_ppn': [mask_ppn],
+            'ppn_points': [ppn_points],
+            'ppn_masks':  [ppn_masks],
             'ppn_layers': [ppn_layers],
             'ppn_coords': [ppn_coords],
-            'ppn_output_coordinates': [ppn_output_coordinates],
+            'ppn_output_coords': [ppn_output_coords],
         }
         if self._classify_endpoints:
-            res['classify_endpoints'] = [ppn_endpoint.F]
+            res['ppn_classify_endpoints'] = [ppn_endpoint.F]
 
         return res
 
@@ -413,19 +424,37 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
     Output
     ------
-    reg_loss: float
+    reg_loss : float
         Distance loss
-    mask_loss: float
-        Binary voxel-wise prediction (is there an object of interest or not)
-    type_loss: float
-        Semantic prediction loss.
-    classify_endpoints_loss: float
-    classify_endpoints_acc: float
+    mask_loss : float
+        Binary voxel-wise prediction loss (is there an object of interest or not)
+    classify_endpoints_loss : float
+        Endpoint classification loss
+    type_loss : float
+        Semantic prediction loss
+    output_mask_accuracy: float
+        Binary voxel-wise prediction accuracy in the last layer
+    type_accuracy : float
+        Semantic prediction accuracy
+    classify_endpoints_accuracy : float
+        Endpoint classification accuracy
 
     See Also
     --------
     PPN, mlreco.models.uresnet_ppn_chain
     """
+
+    RETURNS = {
+        'reg_loss': ['scalar'],
+        'mask_loss': ['scalar'],
+        'type_loss': ['scalar'],
+        'classify_endpoints_loss': ['scalar'],
+        'output_mask_accuracy': ['scalar'],
+        'type_accuracy': ['scalar'],
+        'classify_endpoints_accuracy': ['scalar'],
+        'num_positives': ['scalar'],
+        'num_voxels': ['scalar']
+    }
 
     def __init__(self, cfg, name='ppn'):
         super(PPNLonelyLoss, self).__init__()
@@ -458,14 +487,14 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
         self.point_type_loss_weight = self.loss_config.get('point_type_loss_weight', 1.0)
         self.classify_endpoints_loss_weight = self.loss_config.get('classify_endpoints_loss_weight', 1.0)
 
-        print("Mask Loss Weight = ", self.mask_loss_weight)
+        #print("Mask Loss Weight = ", self.mask_loss_weight)
 
 
     def forward(self, result, segment_label, particles_label):
         # TODO Add weighting
         assert len(particles_label) == len(segment_label)
 
-        ppn_output_coordinates = result['ppn_output_coordinates']
+        ppn_output_coords = result['ppn_output_coords']
         batch_ids = [result['ppn_coords'][0][-1][:, 0]]
         num_batches = len(batch_ids[0].unique())
         num_layers = len(result['ppn_layers'][0])
@@ -478,11 +507,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
             'mask_loss': 0.,
             'type_loss': 0.,
             'classify_endpoints_loss': 0.,
-            'classify_endpoints_accuracy': 0.,
+            'output_mask_accuracy': 0.,
             'type_accuracy': 0.,
-            'mask_accuracy': 0.,
-            'mask_final_accuracy': 0.,
-            'regression_accuracy': 0.,
+            'classify_endpoints_accuracy': 0.,
             'num_positives': 0.,
             'num_voxels': 0.
         }
@@ -497,7 +524,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                 particles = particles[class_mask]
             ppn_layers = result['ppn_layers'][igpu]
             ppn_coords = result['ppn_coords'][igpu]
-            points = result['points'][igpu]
+            ppn_points = result['ppn_points'][igpu]
             loss_gpu, acc_gpu = 0.0, 0.0
             for layer in range(len(ppn_layers)):
                 # print("Layer = ", layer)
@@ -541,9 +568,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                         # Get Final Layers
                         anchors = coords_layer[batch_particle_index][:, 1:4].float().to(device) + 0.5
-                        pixel_score = points[batch_particle_index][:, -1]
-                        pixel_logits = points[batch_particle_index][:, 3:8]
-                        pixel_pred = points[batch_particle_index][:, :3] + anchors
+                        pixel_score = ppn_points[batch_particle_index][:, -1]
+                        pixel_logits = ppn_points[batch_particle_index][:, 3:8]
+                        pixel_pred = ppn_points[batch_particle_index][:, :3] + anchors
 
                         d = local_cdist(points_label, pixel_pred)
                         positives = (d < self.resolution).any(dim=0)
@@ -561,7 +588,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         with torch.no_grad():
                             mask_final_acc = ((pixel_score > 0).long() == positives.long()).sum()\
                                         / float(pixel_score.shape[0])
-                            res['mask_final_accuracy'] += float(mask_final_acc) / float(num_batches)
+                            res['output_mask_accuracy'] += float(mask_final_acc) / float(num_batches)
                             res['num_positives'] += float(torch.sum(positives)) / float(num_batches)
                             res['num_voxels'] += float(pixel_pred.shape[0]) / float(num_batches)
 
@@ -607,7 +634,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
 
                                         true = particles[particles[:, 0].int() == b][point_class_mask][point_class_index, -1]
                                         #pred = result['classify_endpoints'][i][batch_index][event_mask][positives]
-                                        pred = result['classify_endpoints'][igpu][batch_index_layer][point_class_positives]
+                                        pred = result['ppn_classify_endpoints'][igpu][batch_index_layer][point_class_positives]
                                         tracks = event_types_label[point_class_index] == self._track_label
                                         if tracks.sum().item():
                                             loss_point_class += torch.mean(self.segloss(pred[tracks], true[tracks].long()))
