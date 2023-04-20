@@ -1,7 +1,6 @@
 # Configuration file for the Sphinx documentation builder.
 #
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
+# For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
@@ -15,13 +14,13 @@ import sys
 sys.path.insert(0, os.path.abspath('../../'))
 sys.path.insert(0, os.path.abspath('./'))
 
-
 # -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'lartpc_mlreco3d'
-copyright = '2021-2022, DeepLearnPhysics collaboration'
-author = 'DeepLearnPhysics collaboration'
-
+copyright = '2023, DeepLearningPhysics Collaboration'
+author = 'DeepLearningPhysics Collaboration'
+release = '0.1'
 
 # -- General configuration ---------------------------------------------------
 
@@ -34,7 +33,7 @@ extensions = [
     'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    #'numpydoc',
+    'numpydoc',
     #'sphinx.ext.autosummary',
     'sphinx_copybutton',
     'sphinx.ext.autosectionlabel',
@@ -57,7 +56,7 @@ autodoc_default_options = {
     'exclude-members': None,
 }
 autodoc_mock_imports = [
-    "sparseconvnet",
+    # "sparseconvnet",
     "larcv",
     "numba",
     "torch_geometric",
@@ -77,7 +76,7 @@ autodoc_mock_imports = [
 #
 # html_theme = 'alabaster'
 # html_theme = "sphinx_rtd_theme"
-html_theme = "sphinx_book_theme"
+html_theme = "sphinx_rtd_theme"
 html_theme_options = {
     "show_toc_level": 5
 }

@@ -13,14 +13,16 @@ Submodules
    :maxdepth: 4
 
    mlreco.utils.adabound
-   mlreco.utils.data_parallel
    mlreco.utils.dbscan
    mlreco.utils.deghosting
-   mlreco.utils.groups
+   mlreco.utils.globals
+   mlreco.utils.inference
    mlreco.utils.metrics
-   mlreco.utils.numba
+   mlreco.utils.numba_local
    mlreco.utils.ppn
    mlreco.utils.track_clustering
    mlreco.utils.unwrap
    mlreco.utils.utils
    mlreco.utils.vertex
+   mlreco.utils.volumes
+   mlreco.utils.wrapper
