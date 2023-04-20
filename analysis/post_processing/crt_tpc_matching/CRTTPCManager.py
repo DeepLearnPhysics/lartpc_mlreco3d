@@ -1,4 +1,5 @@
 import numpy as np
+from analysis.classes.FullChainPredictor import is_contained
 
 class CRTTPCMatcherInterface:
     """
@@ -37,10 +38,8 @@ class CRTTPCMatcherInterface:
                                              use_true_tpc_objects=use_true_tpc_objects, 
                                              restrict_interactions=restrict_interactions)
 
-        # TODO Figure out caching if interaction list is not specified
         if len(restrict_interactions) == 0:
             print('[CRTTPC] len(restrict_interactions) is 0')
-            #trk_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
             matches = self.crt_tpc_matches[(entry, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
             print('[CRTTPC] Not cached')
@@ -65,13 +64,9 @@ class CRTTPCMatcherInterface:
                     tpc_v_select.append(interaction)
             tpc_v = tpc_v_select
         
-        # From interactions, get non-contained muon candidates for CRT-TPC matching
-        # Candidate selection criteria:
-        #   - pid >= 2: avoids electrons and photons, but includes pions and protons since mu/pi separation isn't perfect
-        #   - Uncontained track: cosmic tracks shouldn't be contained
-        muon_candidates = [particle for interaction in restrict_interactions
+        muon_candidates = [particle for interaction in tpc_v
                            for particle in interaction.particles 
-                           if particle.pid >= 2 and not self.is_contained(particle.points)
+                           if particle.pid >= 2 and not is_contained(particle.points)
         ]
 
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
@@ -133,7 +128,7 @@ class CRTTPCManager:
             self.size_voxel_z = meta[8]
 
         self.crt_tpc_matches = None
-        self.tpc_v, self.crt_v, self.trk_v = None, None, None
+        self.tpc_v, self.crt_v, = None, None 
 
     def make_crthit(self, larcv_crthits, minimum_pe=50):
         """
@@ -193,7 +188,7 @@ class CRTTPCManager:
         -------
         list of matcha::Track()
         '''
-        trk_v = []
+        tpc_v = []
 
         for idx, particle in enumerate(muon_candidates):
             print('-----TRACK', particle.id, '-------')
@@ -217,10 +212,10 @@ class CRTTPCManager:
                 #start_x=start_x, start_y=start_y, start_z=start_z, 
                 #end_x=end_x, end_y=end_y, end_z=end_z, 
             )
-            trk_v.append(this_track)
+            tpc_v.append(this_track)
 
-        self.trk_v = trk_v
-        return trk_v
+        self.tpc_v = tpc_v
+        return tpc_v
 
     def run_crt_tpc_matching(self, tracks, crthits):
         """
