@@ -4,7 +4,7 @@ import numpy as np
 import MinkowskiEngine as ME
 
 from pprint import pprint
-from mlreco.models.experimental.cluster.mask3d import Mask3d
+from mlreco.models.experimental.cluster.transformer_spice import TransformerSPICE
 from mlreco.models.experimental.cluster.criterion import *
 from mlreco.utils.globals import *
 from scipy.optimize import linear_sum_assignment
@@ -30,17 +30,8 @@ class Mask3DModel(nn.Module):
 
     def __init__(self, cfg, name='mask3d'):
         super(Mask3DModel, self).__init__()
-        self.net = Mask3d(cfg)
+        self.net = TransformerSPICE(cfg)
         self.skip_classes = cfg[name].get('skip_classes')
-
-    def weight_initialization(self):
-        for m in self.modules():
-            if isinstance(m, ME.MinkowskiConvolution):
-                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
-
-            if isinstance(m, ME.MinkowskiBatchNorm):
-                nn.init.constant_(m.bn.weight, 1)
-                nn.init.constant_(m.bn.bias, 0)
 
     def filter_class(self, x):
         '''
@@ -109,8 +100,8 @@ class Mask3dLoss(nn.Module):
         self.xentropy = nn.CrossEntropyLoss(weight=self.weight_class, reduction='mean')
         self.dice_loss_mode = self.model_config.get('dice_loss_mode', 'log_dice')
 
-        # self.loss_fn = LinearSumAssignmentLoss(mode=self.dice_loss_mode)
-        self.loss_fn = CEDiceLoss(mode=self.dice_loss_mode)
+        self.loss_fn = LinearSumAssignmentLoss(mode=self.dice_loss_mode)
+        # self.loss_fn = CEDiceLoss(mode=self.dice_loss_mode)
 
     def filter_class(self, cluster_label):
         '''
@@ -134,7 +125,8 @@ class Mask3dLoss(nn.Module):
                 labels = clabel[0][batch_mask][:, GROUP_COL].long()
                 query_idx_batch = query_index[bidx]
                 # Compute instance mask loss
-                targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
+                targets = get_instance_masks(labels).float()
+                # targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
                 loss_batch, acc_batch = self.loss_fn(mask_layer[batch_mask], targets)
                 loss[bidx].append(loss_batch)
                 
@@ -183,11 +175,9 @@ class Mask3dLoss(nn.Module):
             
             labels = clabel[0][batch_mask][:, GROUP_COL].long()
             
-            # targets = get_instance_masks(labels).float()
+            targets = get_instance_masks(labels).float()
             query_idx_batch = query_index[bidx]
-            targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
-            
-            # print(output_mask, targets)
+            # targets = get_instance_masks_from_queries(labels, query_idx_batch).float()
         
             loss_batch, acc_batch = self.loss_fn(output_mask, targets)
             loss[bidx].append(loss_batch)
