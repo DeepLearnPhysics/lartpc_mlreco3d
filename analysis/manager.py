@@ -5,7 +5,7 @@ from mlreco.iotools.factories import loader_factory
 from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle
 from mlreco.iotools.readers import HDF5Reader
-from mlreco.iotools.writers import CSVWriter
+from mlreco.iotools.writers import CSVWriter, HDF5Writer
 
 from analysis import post_processing
 from analysis.algorithms import scripts
@@ -33,9 +33,9 @@ class AnaToolsManager:
     ----------
     cfg : dict
         Processed full chain config (after applying process_config)
-    ana_cfg: dict
+    ana_cfg : dict
         Analysis config that specifies configurations for steps 1-4.
-    profile: bool
+    profile : bool
         Whether to print out execution times.
     
     """
@@ -58,6 +58,7 @@ class AnaToolsManager:
 
         self._data_reader = None
         self._reader_state = None
+        self._data_writer = None
         self.profile = profile
         self.writers = {}
 
@@ -91,6 +92,14 @@ class AnaToolsManager:
             self._data_reader = Reader
             self._reader_state = 'hdf5'
             self._set_iteration(Reader)
+
+        if 'writer' in self.ana_config:
+            writer_cfg = copy.deepcopy(self.ana_config['writer'])
+            assert 'name' in writer_cfg
+            writer_cfg.pop('name')
+
+            Writer = HDF5Writer(**writer_cfg)
+            self._data_writer = Writer
 
     def forward(self, iteration=None):
         if self.profile:
@@ -252,8 +261,11 @@ class AnaToolsManager:
             print("No output from analysis scripts.")
         self.write(ana_output)
 
+        # 5. Write output, if requested
+        if self._data_writer:
+            self._data_writer.append(data, res)
+
+
     def run(self):
-        iteration = 0
-        while iteration < self.max_iteration:
+        for iteration in range(self.max_iteration):
             self.step(iteration)
-        

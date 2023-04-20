@@ -10,69 +10,66 @@ class TruthParticle(Particle):
     Data structure mirroring <Particle>, reserved for true particles
     derived from true labels / true MC information.
 
+    See <Particle> documentation for shared attributes.
+    Below are attributes exclusive to TruthParticle.
+
     Attributes
     ----------
-    See <Particle> documentation for shared attributes.
-    Below are attributes exclusive to TruthParticle
-
-    asis: larcv.Particle C++ object (Optional)
-        Raw larcv.Particle C++ object as retrived from parse_particles_asis.
-    match: List[int]
-        List of Particle IDs that match to this TruthParticle
-    coords_noghost:
-        Coordinates using true labels (not adapted to deghosting output)
-    depositions_noghost:
-        Depositions using true labels (not adapted to deghosting output), in MeV.
-    depositions_MeV:
+    depositions_MeV : np.ndarray
         Similar as `depositions`, i.e. using adapted true labels.
         Using true MeV energy deposits instead of rescaled ADC units.
+    true_depositions : np.ndarray
+        Rescaled charge depositions in the set of true voxels associated
+        with the particle.
+    true_depositions_MeV : np.ndarray
+        MeV charge depositions in the set of true voxels associated
+        with the particle.
+    start_position : np.ndarray
+        True start position of the particle
+    end_position : np.ndarray
+        True end position of the particle
     '''
-    def __init__(self, *args, particle_asis=None, coords_noghost=None, depositions_noghost=None,
-                depositions_MeV=None, **kwargs):
+    def __init__(self, 
+                 *args, 
+                 depositions_MeV=np.empty(0, dtype=np.float32),
+                 true_index=np.empty(0, dtype=np.int64), 
+                 true_depositions=np.empty(0, dtype=np.float32),
+                 true_depositions_MeV=np.empty(0, dtype=np.float32),
+                 particle_asis=None, 
+                 **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
-        self.asis = particle_asis
-        self.match = []
-        self._match_counts = {}
-        self.coords_noghost = coords_noghost
-        self.depositions_noghost = depositions_noghost
-        self.depositions_MeV = depositions_MeV
-        self.startpoint = None
-        self.endpoint = None
 
+        # Initialize attributes
+        self.depositions_MeV      = depositions_MeV
+        self.true_index           = true_index
+        self.true_depositions     = true_depositions
+        self.true_depositions_MeV = true_depositions_MeV
+        if particle_asis is not None:
+            self.start_position = particle_asis.position()
+            self.end_position   = particle_asis.end_position()
 
     def __repr__(self):
-        msg = "TruthParticle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self.pid, self.size)
-        return msg
-
+        msg = super(TruthParticle, self).__repr__()
+        return 'Truth'+msg
 
     def __str__(self):
-        fmt = "TruthParticle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
-                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
-        msg = fmt.format(self.image_id, self.id,
-                         self.semantic_keys[self.semantic_type] if self.semantic_type in self.semantic_keys else "None",
-                         self.pid_keys[self.pid] if self.pid in self.pid_keys else "None",
-                         self.is_primary,
-                         self.interaction_id,
-                         self.points.shape[0],
-                         self.volume)
-        return msg
-
+        msg = super(TruthParticle, self).__str__()
+        return 'Truth'+msg
 
     def is_contained(self, spatial_size):
 
-        p = self.asis
-        check_contained = p.position().x() >= 0 and p.position().x() <= spatial_size \
-            and p.position().y() >= 0 and p.position().y() <= spatial_size \
-            and p.position().z() >= 0 and p.position().z() <= spatial_size \
-            and p.end_position().x() >= 0 and p.end_position().x() <= spatial_size \
-            and p.end_position().y() >= 0 and p.end_position().y() <= spatial_size \
-            and p.end_position().z() >= 0 and p.end_position().z() <= spatial_size
+        check_contained = self.start_position.x() >= 0 and self.start_position.x() <= spatial_size \
+                      and self.start_position.y() >= 0 and self.start_position.y() <= spatial_size \
+                      and self.start_position.z() >= 0 and self.start_position.z() <= spatial_size \
+                      and self.end_position.x()   >= 0 and self.end_position.x()   <= spatial_size \
+                      and self.end_position.y()   >= 0 and self.end_position.y()   <= spatial_size \
+                      and self.end_position.z()   >= 0 and self.end_position.z()   <= spatial_size
         return check_contained
 
     def purity_efficiency(self, other_particle):
-        overlap = len(np.intersect1d(self.voxel_indices, other_particle.voxel_indices))
+        overlap = len(np.intersect1d(self.index, other_particle.index))
         return {
-            "purity": overlap / len(other_particle.voxel_indices),
-            "efficiency": overlap / len(self.voxel_indices)
+            "purity": overlap / len(other_particle.index),
+            "efficiency": overlap / len(self.index)
         }
 

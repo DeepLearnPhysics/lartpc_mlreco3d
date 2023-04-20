@@ -3,7 +3,6 @@ import argparse
 import os, sys
 import numpy as np
 import copy
-from pprint import pprint
 
 # Setup OpT0Finder for flash matching as needed
 if os.getenv('FMATCH_BASEDIR') is not None:
@@ -26,8 +25,8 @@ def main(analysis_cfg_path, model_cfg_path):
     analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
     config = yaml.safe_load(open(model_cfg_path, 'r'))
     process_config(config, verbose=False)
-    
-    pprint(analysis_config)
+
+    print(yaml.dump(analysis_config, default_flow_style=None))
     if 'analysis' not in analysis_config:
         raise Exception('Analysis configuration needs to live under `analysis` section.')
     
