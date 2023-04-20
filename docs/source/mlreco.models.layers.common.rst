@@ -21,6 +21,7 @@ Submodules
    mlreco.models.layers.common.extract_feature_map
    mlreco.models.layers.common.fpn
    mlreco.models.layers.common.gnn_full_chain
+   mlreco.models.layers.common.mlp_factories
    mlreco.models.layers.common.mobilenet
    mlreco.models.layers.common.momentum
    mlreco.models.layers.common.nonlinearities
@@ -30,3 +31,4 @@ Submodules
    mlreco.models.layers.common.sparse_generator
    mlreco.models.layers.common.uresnet_layers
    mlreco.models.layers.common.uresnext
+   mlreco.models.layers.common.vertex_ppn

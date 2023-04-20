@@ -16,4 +16,5 @@ Submodules
    mlreco.visualization.gnn
    mlreco.visualization.plotly_layouts
    mlreco.visualization.points
+   mlreco.visualization.training
    mlreco.visualization.voxels

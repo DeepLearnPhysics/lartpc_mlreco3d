@@ -27,5 +27,7 @@ Submodules
    mlreco.models.grappa
    mlreco.models.singlep
    mlreco.models.spice
+   mlreco.models.transformer
    mlreco.models.uresnet
    mlreco.models.uresnet_ppn_chain
+   mlreco.models.vertex
