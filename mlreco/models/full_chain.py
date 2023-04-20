@@ -91,6 +91,7 @@ class FullChain(FullChainGNN):
             self.deghost_input_features = self.uresnet_deghost.net.num_input
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
             self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
+            self.RETURNS['input_rescaled_coll'] = ['tensor', 'input_rescaled', False, True]
             self.RETURNS['segmentation'][1] = 'input_rescaled'
             self.RETURNS['segment_label_tmp'][1] = 'input_rescaled'
             self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
@@ -233,8 +234,17 @@ class FullChain(FullChainGNN):
 
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
-            input[0][deghost, 4] = charges
-            result.update({'input_rescaled':[input[0][deghost,:5]]})
+            charges_coll = compute_rescaled_charge(input[0], deghost, last_index=last_index, collection_only=True)
+            #input[0][deghost, 4] = charges
+            input[0][deghost, 4] = charges_coll
+
+            input_rescaled = input[0][deghost,:5].clone()
+            input_rescaled[:,4] = charges
+            input_rescaled_coll = input[0][deghost,:5].clone()
+            input_rescaled_coll[:,4] = charges_coll
+
+            result.update({'input_rescaled':[input_rescaled]})
+            result.update({'input_rescaled_coll':[input_rescaled_coll]})
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -427,4 +437,4 @@ class FullChainLoss(FullChainLoss):
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg.get('graph_spice_loss', {}).get('skip_classes', [])
+            self._gspice_skip_classes = cfg.get('graph_spice', {}).get('skip_classes', [])
