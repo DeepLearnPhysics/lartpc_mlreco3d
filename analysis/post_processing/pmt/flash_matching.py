@@ -69,7 +69,13 @@ def run_flash_matching(data_dict, result_dict,
                                boundaries=volume_boundaries,
                                opflash_keys=opflash_keys, 
                                reflash_merging_window=reflash_merging_window)
-    fm.initialize_flash_manager(data_dict['meta'][0])
+    if isinstance(data_dict['meta'][0], float):
+        fm.initialize_flash_manager(data_dict['meta'])
+    elif isinstance(data_dict['meta'][0], list):
+        fm.initialize_flash_manager(data_dict['meta'][0])
+    else:
+        print(type(data_dict['meta'][0]))
+        raise AssertionError
 
     update_dict = {}
 
