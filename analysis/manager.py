@@ -1,9 +1,10 @@
-import time, os, sys, copy
+import time, os, sys, copy, yaml
 from collections import defaultdict
+from functools import lru_cache
 
 from mlreco.iotools.factories import loader_factory
 from mlreco.trainval import trainval
-from mlreco.main_funcs import cycle
+from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter
 
@@ -11,7 +12,10 @@ from analysis import post_processing
 from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
 from analysis.producers.common import ScriptProcessor
+from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
+
+SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
 
 class AnaToolsManager:
     """
@@ -40,30 +44,33 @@ class AnaToolsManager:
     
     """
     def __init__(self, ana_cfg, verbose=True, cfg=None):
-        self.config = cfg
-        self.ana_config = ana_cfg
+        self.config        = cfg
+        self.ana_config    = ana_cfg
         self.max_iteration = self.ana_config['analysis']['iteration']
-        self.log_dir = self.ana_config['analysis']['log_dir']
-        self.ana_mode = self.ana_config['analysis'].get('run_mode', None)
+        self.log_dir       = self.ana_config['analysis']['log_dir']
+        self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
 
         # Initialize data product builders
         self.data_builders = self.ana_config['analysis']['data_builders']
-        self.builders = {}
-        supported_builders = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
+        self.builders      = {}
         for builder_name in self.data_builders:
-            if builder_name not in supported_builders:
-                raise ValueError(f"{builder_name} is not a valid data product builder!")
+            if builder_name not in SUPPORTED_BUILDERS:
+                msg = f"{builder_name} is not a valid data product builder!"
+                raise ValueError(msg)
             builder = eval(builder_name)()
             self.builders[builder_name] = builder
 
-        self._data_reader = None
+        self._data_reader  = None
         self._reader_state = None
-        self.verbose = verbose
-        self.writers = {}
+        self.verbose       = verbose
+        self.writers       = {}
+        self.profile       = self.ana_config['analysis'].get('profile', False)
+        self.logger        = CSVWriter(os.path.join(self.log_dir, 'log.csv'))
+        self.logger_dict   = {}
         
-        self.profile = self.ana_config['analysis'].get('profile', False)
-        self.logger = CSVWriter(os.path.join(self.log_dir, 'log.csv'))
-        self.logger_dict = {}
+        self.flash_manager_initialized = False
+        self.fm = None
+        
 
     def _set_iteration(self, dataset):
         """Sets maximum number of iteration given dataset
@@ -77,6 +84,7 @@ class AnaToolsManager:
         if self.max_iteration == -1:
             self.max_iteration = len(dataset)
         assert self.max_iteration <= len(dataset)
+        
 
     def initialize(self):
         """Initializer for setting up inference mode full chain forwarding
@@ -106,6 +114,7 @@ class AnaToolsManager:
             self._data_reader = Reader
             self._reader_state = 'hdf5'
             self._set_iteration(Reader)
+            
 
     def forward(self, iteration=None):
         """Read one minibatch worth of image from dataset.
@@ -132,6 +141,7 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
+    
     
     def _build_reco_reps(self, data, result):
         """Build representations for reconstructed objects.
@@ -161,6 +171,7 @@ class AnaToolsManager:
             length_check.append(len(result['ParticleFragments']))
         return length_check
     
+    
     def _build_truth_reps(self, data, result):
         """Build representations for true objects.
 
@@ -188,6 +199,7 @@ class AnaToolsManager:
             result['TruthParticleFragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
             length_check.append(len(result['TruthParticleFragments']))
         return length_check
+    
 
     def build_representations(self, data, result, mode='all'):
         """Build human readable data structures from full chain output.
@@ -221,6 +233,27 @@ class AnaToolsManager:
             assert lreco == num_batches
         for ltruth in lcheck_truth:
             assert ltruth == num_batches
+            
+
+    def initialize_flash_manager(self, meta):
+        
+        # Only run once, to save time
+        if not self.flash_manager_initialized:
+        
+            pp_flash_matching = self.ana_config['post_processing']['run_flash_matching']
+            opflash_keys      = pp_flash_matching['opflash_keys']
+            volume_boundaries = pp_flash_matching['volume_boundaries']
+            ADC_to_MeV        = pp_flash_matching['ADC_to_MeV']
+            self.fm_config    = pp_flash_matching['fmatch_config']
+
+            self.fm = FlashMatcherInterface(self.config, 
+                                            self.fm_config, 
+                                            boundaries=volume_boundaries, 
+                                            opflash_keys=opflash_keys,
+                                            ADC_to_MeV=ADC_to_MeV)
+            self.fm.initialize_flash_manager(meta)
+            self.flash_manager_initialized = True
+        
         
     def run_post_processing(self, data, result):
         """Run all registered post-processing scripts.
@@ -232,6 +265,10 @@ class AnaToolsManager:
         result : dict
             Result dictionary
         """
+        
+        meta = data['meta'][0]
+        self.initialize_flash_manager(meta)
+        
         if 'post_processing' in self.ana_config:
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
@@ -240,17 +277,22 @@ class AnaToolsManager:
                 local_pcfg = copy.deepcopy(pcfg)
                 priority = local_pcfg.pop('priority', -1)
                 profile = local_pcfg.pop('profile', False)
-                run_on_batch = local_pcfg.pop('run_on_batch', False)
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
+                # Exception for Flash Matching
+                if processor_name == 'run_flash_matching':
+                    local_pcfg = {
+                        'fm': self.fm,
+                        'opflash_keys': local_pcfg['opflash_keys']
+                    }
                 post_processor_interface.register_function(processor, 
-                                                        priority,
-                                                        processor_cfg=local_pcfg,
-                                                        run_on_batch=run_on_batch,
-                                                        profile=profile)
+                                                           priority,
+                                                           processor_cfg=local_pcfg,
+                                                           profile=profile)
 
             post_processor_interface.process_and_modify()
             self.logger_dict.update(post_processor_interface._profile)
+            
 
     def run_ana_scripts(self, data, result):
         """Run all registered analysis scripts (under producers/scripts)
@@ -281,6 +323,7 @@ class AnaToolsManager:
             fname_to_update_list = script_processor.process()
             out[processor_name] = fname_to_update_list
         return out
+    
     
     def write(self, ana_output):
         """Method to gather logging information from each analysis script 
@@ -365,6 +408,7 @@ class AnaToolsManager:
         end = time.time()
         self.logger_dict['write_csv_time'] = end-start
         
+        
     def log(self, iteration):
         """Generate analysis tools iteration log. This is a separate logging
         operation from the subroutines in analysis.producers.loggers. 
@@ -377,6 +421,7 @@ class AnaToolsManager:
         row_dict = {'iteration': iteration}
         row_dict.update(self.logger_dict)
         self.logger.append(row_dict)
+
 
     def run(self):
         iteration = 0

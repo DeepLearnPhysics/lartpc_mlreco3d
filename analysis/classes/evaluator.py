@@ -394,9 +394,10 @@ class FullChainEvaluator(FullChainPredictor):
                 domain_particles = [p for p in domain_particles if p.points.shape[0] > 0]
                 codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
                 if matching_mode == 'one_way':
-                    matched_particles, _ = match_particles_fn(domain_particles, codomain_particles,
-                                                                min_overlap=self.min_overlap_count,
-                                                                overlap_mode=self.overlap_mode)
+                    matched_particles, _ = match_particles_fn(domain_particles, 
+                                                              codomain_particles,
+                                                              min_overlap=self.min_overlap_count,
+                                                              overlap_mode=self.overlap_mode)
                 elif matching_mode == 'optimal':
                     matched_particles, _ = match_particles_optimal(domain_particles, codomain_particles,
                                                                     min_overlap=self.min_overlap_count,

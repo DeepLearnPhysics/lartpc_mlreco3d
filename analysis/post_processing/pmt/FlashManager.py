@@ -28,8 +28,9 @@ class FlashMatcherInterface:
         self.reflash_merging_window = kwargs.get('reflash_merging_window', None)
         self.detector_specs = kwargs.get('detector_specs', None)
         self.ADC_to_MeV = kwargs.get('ADC_to_MeV', 1.)
+        self.ADC_to_MeV = eval(self.ADC_to_MeV)
         self.use_depositions_MeV = kwargs.get('use_depositions_MeV', False)
-        self.boundaries = kwargs.get('boundaries', None)
+        self.boundaries = boundaries
 
         self.flash_matches = {}
         if self.boundaries is not None:
@@ -51,8 +52,6 @@ class FlashMatcherInterface:
                           opflashes,
                           use_true_tpc_objects=False,
                           volume=None,
-                          use_depositions_MeV=False,
-                          ADC_to_MeV=1.,
                           restrict_interactions=[]):
         """
         If flash matches has not yet been computed for this volume, then it will
@@ -81,18 +80,19 @@ class FlashMatcherInterface:
         list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
         """
         # No caching done if matching a subset of interactions
-        if (entry, volume, use_true_tpc_objects) not in self.flash_matches or len(restrict_interactions):
+        if (entry, volume, use_true_tpc_objects) not in self.flash_matches \
+            or len(restrict_interactions):
             out = self._run_flash_matching(entry, 
-                                           interactions,
-                                           opflashes,
-                                           use_true_tpc_objects=use_true_tpc_objects, 
-                                           volume=volume,
-                                           use_depositions_MeV=use_depositions_MeV, 
-                                           ADC_to_MeV=ADC_to_MeV, 
-                                           restrict_interactions=restrict_interactions)
+                interactions,
+                opflashes,
+                use_true_tpc_objects=use_true_tpc_objects, 
+                volume=volume,
+                restrict_interactions=restrict_interactions)
 
         if len(restrict_interactions) == 0:
-            tpc_v, pmt_v, matches = self.flash_matches[(entry, volume, use_true_tpc_objects)]
+            tpc_v, pmt_v, matches = self.flash_matches[(entry, 
+                                                        volume, 
+                                                        use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
             tpc_v, pmt_v, matches = out
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
@@ -102,8 +102,6 @@ class FlashMatcherInterface:
             opflashes, 
             use_true_tpc_objects=False,
             volume=None,
-            use_depositions_MeV=False,
-            ADC_to_MeV=1.,
             restrict_interactions=[]):
         """
         Parameters
@@ -133,11 +131,16 @@ class FlashMatcherInterface:
         # back to the reference of the first volume.
         if volume is not None:
             for tpc_object in tpc_v:
-                tpc_object.points = self._untranslate(tpc_object.points, volume)
-        input_tpc_v = self.fm.make_qcluster(tpc_v, use_depositions_MeV=use_depositions_MeV, ADC_to_MeV=ADC_to_MeV)
+                tpc_object.points = self._untranslate(tpc_object.points, 
+                                                      volume)
+        input_tpc_v = self.fm.make_qcluster(
+            tpc_v, 
+            use_depositions_MeV=self.use_depositions_MeV, 
+            ADC_to_MeV=self.ADC_to_MeV)
         if volume is not None:
             for tpc_object in tpc_v:
-                tpc_object.points = self._translate(tpc_object.points, volume)
+                tpc_object.points = self._translate(tpc_object.points, 
+                                                    volume)
 
         # Now making Flash_t objects
         selected_opflash_keys = self.opflash_keys
@@ -146,8 +149,8 @@ class FlashMatcherInterface:
             selected_opflash_keys = [self.opflash_keys[volume]]
         pmt_v = []
         for key in selected_opflash_keys:
-            pmt_v.extend(opflashes[key][entry])
-        input_pmt_v = self.fm.make_flash([opflashes[key][entry] for key in selected_opflash_keys])
+            pmt_v.extend(opflashes[key])
+        input_pmt_v = self.fm.make_flash([opflashes[key] for key in selected_opflash_keys])
 
         # input_pmt_v might be a filtered version of pmt_v,
         # and we want to store larcv::Flash objects not
@@ -347,6 +350,7 @@ class FlashManager:
         =======
         list of flashmatch::QCluster_t
         """
+        
         from flashmatch import flashmatch
 
         if self.min_x is None:
@@ -359,11 +363,15 @@ class FlashManager:
             qcluster.time = 0  # assumed time w.r.t. trigger for reconstruction
             for i in range(p.size):
                 # Create a geoalgo::QPoint_t
+                if not use_depositions_MeV:
+                    light_yield = p.depositions[i] * ADC_to_MeV * self.det.LightYield()
+                else:
+                    light_yield = p.depositions_MeV[i] * self.det.LightYield()
                 qpoint = flashmatch.QPoint_t(
                     p.points[i, 0] * self.size_voxel_x + self.min_x,
                     p.points[i, 1] * self.size_voxel_y + self.min_y,
                     p.points[i, 2] * self.size_voxel_z + self.min_z,
-                    p.depositions[i]*ADC_to_MeV*self.det.LightYield() if not use_depositions_MeV else p.depositions_MeV[i]*self.det.LightYield())
+                    light_yield)
                 # Add it to geoalgo::QCluster_t
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)
