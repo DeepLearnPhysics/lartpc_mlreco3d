@@ -548,7 +548,7 @@ This will generate a `log.csv` file under `log_dir`, which contain timing inform
 -----
 
 Include a `profile=True` field under the post-processor name to log the timing information separately. For example:
-```yaml
+```
 analysis:
   profile: True
   iteration: -1

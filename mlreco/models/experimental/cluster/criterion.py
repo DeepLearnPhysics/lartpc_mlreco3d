@@ -35,19 +35,20 @@ class LinearSumAssignmentLoss(nn.Module):
             cost_matrix = self.weight_dice * dice_loss + self.weight_ce * ce_loss
             indices = linear_sum_assignment(cost_matrix.detach().cpu())
         
-        if self.mode == 'log_dice':
-            dice_loss = log_dice_loss_flat(masks[:, indices[0]], targets[:, indices[1]])
-        elif self.mode == 'dice':
-            dice_loss = dice_loss_flat(masks[:, indices[0]], targets[:, indices[1]])
+        dice_loss = dice_loss_flat(masks[:, indices[0]], targets[:, indices[1]])
+        # if self.mode == 'log_dice':
+        #     dice_loss = batch_log_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
+        # elif self.mode == 'dice':
+        #     dice_loss = batch_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
         # elif self.mode == 'lovasz':
         #     dice_loss = self.lovasz(masks[:, indices[0]], targets[:, indices[1]])
-        else:
-            raise ValueError(f"LSA loss mode {self.mode} is not supported!")
+        # else:
+        #     raise ValueError(f"LSA loss mode {self.mode} is not supported!")
         ce_loss = sigmoid_ce_loss(masks.T[indices[0]], targets.T[indices[1]])
         loss = self.weight_dice * dice_loss + self.weight_ce * ce_loss
         acc = self.compute_accuracy(masks, targets, indices)
         
-        return loss, acc
+        return loss, acc, indices
     
     
 class CEDiceLoss(nn.Module):
@@ -56,6 +57,7 @@ class CEDiceLoss(nn.Module):
         super(CEDiceLoss, self).__init__()
         self.weight_dice = weight_dice
         self.weight_ce = weight_ce
+        self.lovasz = LovaszHingeLoss()
         self.mode = mode
         print(f"Setting LinearSumAssignment loss to '{self.mode}'")
         
@@ -63,16 +65,12 @@ class CEDiceLoss(nn.Module):
         with torch.no_grad():
             valid_masks = masks > 0
             valid_targets = targets > 0.5
-            
-            print(masks.sum(dim=0))
-            print(targets.sum(dim=0))
-        
             iou = iou_batch(valid_masks, valid_targets, eps=1e-6)
             return float(iou)
         
     def forward(self, masks, targets):
         
-        dice_loss = dice_loss_flat(masks, targets)
+        dice_loss = self.lovasz(masks, targets)
         # if self.mode == 'log_dice':
         #     dice_loss = batch_log_dice_loss(masks.T[indices[0]], targets.T[indices[1]])
         # elif self.mode == 'dice':
@@ -229,18 +227,3 @@ def dice_loss_flat(logits, targets):
     numerator = (2 * scores * targets).sum(dim=0)
     denominator = scores.sum(dim=0) + targets.sum(dim=0)
     return (1 - (numerator + 1) / (denominator + 1)).sum() / num_masks
-
-@torch.jit.script
-def log_dice_loss_flat(logits, targets):
-    """
-    
-    Parameters
-    ----------
-    logits: (N x num_queries)
-    targets: (N x num_queries)
-    """
-    num_masks = logits.shape[1]
-    scores = torch.sigmoid(logits)
-    numerator = (2 * scores * targets).sum(dim=0)
-    denominator = scores.sum(dim=0) + targets.sum(dim=0)
-    return (-torch.log(1 - (numerator + 1) / (denominator + 1))).sum() / num_masks

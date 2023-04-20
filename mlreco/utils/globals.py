@@ -19,7 +19,6 @@ PSHOW_COL  = 10
 PGRP_COL   = 11
 VTX_COLS   = (12,13,14)
 MOM_COL    = 15
-SEG_COL    = -1
 
 # Colum which specifies the shape ID of a voxel in a sparse tensor 
 SHAPE_COL  = -1
