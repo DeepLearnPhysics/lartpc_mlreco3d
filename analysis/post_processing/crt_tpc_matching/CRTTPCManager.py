@@ -11,9 +11,6 @@ class CRTTPCMatcherInterface:
         self.config = config
         self.crthit_keys = crthit_keys
 
-        self.detector_specs = kwargs.get('detector_specs', None)
-        self.ADC_to_MeV = kwargs.get('ADC_to_MeV', 1.)
-        self.use_depositions_MeV = kwargs.get('use_depositions_MeV', False)
         self.boundaries = kwargs.get('boundaries', None)
 
         self.crt_tpc_matches = {}
@@ -25,9 +22,67 @@ class CRTTPCMatcherInterface:
             self._num_volumes = 1
 
     def initialize_crt_tpc_manager(self, meta):
-        self.crt_tpc_manager = CRTTPCManager(self.config, self.fm_config, 
-                                             meta=meta,
-                                             detector_specs=self.detector_specs)
+        self.crt_tpc_manager = CRTTPCManager(self.config,  
+                                             meta=meta)
+
+    def get_crt_tpc_matches(self, entry, interactions,
+                            use_true_tpc_objects=False,
+                            restrict_interactions=[]):
+
+        # No caching done if matching a subset of interactions
+        if (entry, use_true_tpc_objects) not in self.crt_tpc_matches or len(restrict_interactions):
+            print('[CRTTPC] No caching done')
+            out = self._run_crt_tpc_matching(entry, 
+                                             interactions,
+                                             use_true_tpc_objects=use_true_tpc_objects, 
+                                             restrict_interactions=restrict_interactions)
+
+        # TODO Figure out caching if interaction list is not specified
+        if len(restrict_interactions) == 0:
+            print('[CRTTPC] len(restrict_interactions) is 0')
+            #trk_v, crt_v, matches = self.crt_tpc_matches[(entry, volume, use_true_tpc_objects)]
+            matches = self.crt_tpc_matches[(entry, use_true_tpc_objects)]
+        else: # it wasn't cached, we just computed it
+            print('[CRTTPC] Not cached')
+            matches = out
+
+        return matches
+
+    def _run_crt_tpc_matching(self, entry, interactions,
+                              use_true_tpc_objects=False,
+                              restrict_interactions=[]):
+
+        if use_true_tpc_objects:
+            if not hasattr(self, 'get_true_interactions'):
+                raise Exception('This Predictor does not know about truth info.')
+
+        tpc_v = [ia for ia in interactions if volume is None or ia.volume == volume]
+
+        if len(restrict_interactions) > 0: # by default, use all interactions
+            tpc_v_select = []
+            for interaction in tpc_v:
+                if interaction.id in restrict_interactions:
+                    tpc_v_select.append(interaction)
+            tpc_v = tpc_v_select
+        
+        # From interactions, get non-contained muon candidates for CRT-TPC matching
+        # Candidate selection criteria:
+        #   - pid >= 2: avoids electrons and photons, but includes pions and protons since mu/pi separation isn't perfect
+        #   - Uncontained track: cosmic tracks shouldn't be contained
+        muon_candidates = [particle for interaction in restrict_interactions
+                           for particle in interaction.particles 
+                           if particle.pid >= 2 and not self.is_contained(particle.points)
+        ]
+
+        trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
+        crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
+
+        matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
+
+        if len(restrict_interactions) == 0:
+            self.crt_tpc_matches[(entry, use_true_tpc_objects)] = (matches)
+
+        return matches
 
 class CRTTPCManager:
     """
