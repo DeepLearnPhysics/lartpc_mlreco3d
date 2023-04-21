@@ -30,6 +30,8 @@ class Interaction:
         ID of the image the interaction lives in
     index : np.ndarray, default np.array([])
         (N) IDs of voxels that correspondn to the particle within the image coordinate tensor that
+    points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this interaction in the input tensor
     vertex : np.ndarray, optional
         3D coordinates of the predicted interaction vertex
         in reconstruction (used for debugging)
@@ -43,6 +45,9 @@ class Interaction:
                  vertex: np.ndarray = -np.ones(3, dtype=np.float32),
                  is_neutrino: bool = False):
 
+        # Initialize private attributes to be set by setter only
+        self._particles   = None
+
         # Initialize attributes
         self.id           = interaction_id
         self.nu_id        = nu_id
@@ -55,24 +60,10 @@ class Interaction:
         self.num_particles = 0
         self.num_primaries = 0
         self.index         = np.empty(0, dtype=np.int64)
+        self.points        = np.empty((0,3), dtype=np.float32)
         self.depositions   = np.empty(0, dtype=np.float32)
-        if particles is not None:
-            id_list, index_list, depositions_list = [], [], []
-            for p in particles:
-                if p.size > 0:
-                    id_list.append(p.id)
-                    index_list.append(p.index)
-                    depositions_list.append(p.depositions)
-                    self.num_primaries += int(p.is_primary)
-
-            self.particle_ids = np.array(id_list, dtype=np.int64)
-            self.num_particles = len(particles)
-            self.index = np.concatenate(index_list)
-            self.depositions = np.concatenate(depositions_list)
-
-            self._get_particles_summary(particles)
-
-        self.size = len(self.index)
+        self.particles     = particles
+        self.size          = len(self.index)
 
         # Quantities to be set by the particle matcher
         self.match = np.empty(0, np.int64)
@@ -100,18 +91,34 @@ class Interaction:
         else:
             self.is_valid = False
 
-#    @particles.setter
-#    def particles(self, value):
-#        assert isinstance(value, OrderedDict)
-#        parts = {}
-#        for p in value.values():
-#            self.check_particle_input(p)
-#            # Clear match information since Interaction is rebuilt
-#            p.match = []
-#            p._match_counts = {}
-#            parts[p.id] = p
-#        self._particles = OrderedDict(sorted(parts.items(), key=lambda t: t[0]))
-#        self.update_info()
+    @property
+    def particles(self):
+        return self._particles
+
+    @particles.setter
+    def particles(self, particles):
+        '''
+        <Particle> list getter/setter. The setter also sets
+        the general interaction properties
+        '''
+        self._particles    = particles
+
+        if particles is not None:
+            id_list, index_list, points_list, depositions_list = [], [], [], []
+            for p in particles:
+                id_list.append(p.id)
+                index_list.append(p.index)
+                points_list.append(p.points)
+                depositions_list.append(p.depositions)
+                self.num_primaries += int(p.is_primary)
+
+            self.particle_ids = np.array(id_list, dtype=np.int64)
+            self.num_particles = len(particles)
+            self.index = np.concatenate(index_list)
+            self.points = np.vstack(points_list)
+            self.depositions = np.concatenate(depositions_list)
+
+        self._get_particles_summary(particles)
 
     def __getitem__(self, key):
         return self._particles[key]
@@ -127,8 +134,10 @@ class Interaction:
         return msg + self._particles_summary
 
     def _get_particles_summary(self, particles):
+
         primary_str = {True: '*', False: '-'}
         self._particles_summary = ""
+        if particles is None: return
         for p in sorted(particles, key=lambda x: x.is_primary, reverse=True):
             pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
                 primary_str[p.is_primary], p.id, PID_LABELS[p.pid], p.size, str(p.match))

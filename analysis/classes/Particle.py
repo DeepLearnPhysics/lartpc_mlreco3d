@@ -29,9 +29,11 @@ class Particle:
     size : int
         Total number of voxels that belong to this particle
     index : np.ndarray, default np.array([])
-        (N) IDs of voxels that correspondn to the particle within the image coordinate tensor that
+        (N) IDs of voxels that correspond to the particle within the input tensor
+    points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this particle in the input tensor
     depositions : np.ndarray, defaul np.array([])
-        (N) Array of energy deposition values for each voxel (rescaled, ADC units)
+        (N) Array of charge deposition values for each voxel
     depositions_sum : float
         Sum of energy depositions
     semantic_type : int, default -1
@@ -74,6 +76,7 @@ class Particle:
                  pid: int = -1,
                  is_primary: int = -1,
                  index: np.ndarray = np.empty(0, dtype=np.int64), 
+                 points: np.ndarray = np.empty(0, dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32), 
                  pid_scores: np.ndarray = -np.ones(np.max(list((PID_LABELS.keys())))+1, dtype=np.float32),
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
@@ -89,6 +92,7 @@ class Particle:
         self._size = None
         self._index = None
         self._depositions = None
+        self._depositions_sum = None
         self._pid_scores = None
         self._primary_scores = None
 
@@ -102,6 +106,7 @@ class Particle:
         self.semantic_type  = semantic_type
 
         self.index          = index
+        self.points         = points
         self.depositions    = depositions
 
         self.pid_scores     = pid_scores
@@ -152,7 +157,7 @@ class Particle:
         ParticleFragment indices getter/setter. The setter also sets
         the number of fragments.
         '''
-        return self._index
+        return self._fragment_ids
 
     @fragment_ids.setter
     def fragment_ids(self, fragment_ids):
@@ -188,7 +193,7 @@ class Particle:
         Total amount of charge/energy deposited. This attribute has no setter,
         as it can only be set by providing a set of depositions.
         '''
-        return self._size
+        return self._depositions_sum
 
     @property
     def depositions(self):
