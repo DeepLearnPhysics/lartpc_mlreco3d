@@ -67,8 +67,9 @@ class Interaction:
 
             self.particle_ids = np.array(id_list, dtype=np.int64)
             self.num_particles = len(particles)
-            self.index = np.concatenate(index_list)
-            self.depositions = np.concatenate(depositions_list)
+            if len(index_list) > 0:
+                self.index       = np.concatenate(index_list)
+                self.depositions = np.concatenate(depositions_list)
 
             self._get_particles_summary(particles)
 
@@ -91,7 +92,7 @@ class Interaction:
         """
         self.particle_ids = list(self._particles.keys())
         self.particle_counts = Counter({ PID_LABELS[i] : 0 for i in PID_LABELS.keys() })
-        self.particle_counts.update([PID_LAEBLS[p.pid] for p in self._particles.values()])
+        self.particle_counts.update([PID_LABELS[p.pid] for p in self._particles.values()])
 
         self.primary_particle_counts = Counter({ PID_LABELS[i] : 0 for i in PID_LABELS.keys() })
         self.primary_particle_counts.update([PID_LABELS[p.pid] for p in self._particles.values() if p.is_primary])

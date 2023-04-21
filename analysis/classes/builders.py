@@ -679,6 +679,7 @@ def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
 
     return semantic_type, interaction_id, nu_id
 
+
 def match_points_to_particles(ppn_points : np.ndarray,
                               particles : List[Particle],
                               semantic_type=None, ppn_distance_threshold=2):
@@ -718,5 +719,3 @@ def match_points_to_particles(ppn_points : np.ndarray,
         dist = cdist(ppn_coords, particle.points)
         matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
         particle.ppn_candidates = matches.reshape(-1, 7)
-
-    return semantic_type, interaction_id, nu_id

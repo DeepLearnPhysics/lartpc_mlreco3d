@@ -188,7 +188,7 @@ class Particle:
         Total amount of charge/energy deposited. This attribute has no setter,
         as it can only be set by providing a set of depositions.
         '''
-        return self._size
+        return self._depositions_sum
 
     @property
     def depositions(self):

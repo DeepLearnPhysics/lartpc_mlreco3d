@@ -275,10 +275,9 @@ class AnaToolsManager:
             Result dictionary
         """
         
-        meta = data['meta'][0]
-        self.initialize_flash_manager(meta)
-        
         if 'post_processing' in self.ana_config:
+            meta = data['meta'][0]
+            self.initialize_flash_manager(meta)
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
 
