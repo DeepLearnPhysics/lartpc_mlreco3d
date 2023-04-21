@@ -1,14 +1,8 @@
 import numpy as np
-import yaml
-from pprint import pprint
 from collections import defaultdict
-
-from mlreco.utils.gnn.cluster import get_cluster_directions
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from mlreco.main_funcs import process_config
-from . import FlashMatcherInterface
-
+from .filters import filter_opflashes
 
 @post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
                  result_capture=['Interactions'])
@@ -55,7 +49,9 @@ def run_flash_matching(data_dict, result_dict,
     
     interactions = result_dict['Interactions']
     entry        = data_dict['index']
-
+    
+    opflashes = filter_opflashes(opflashes)
+    
     fmatches_E = fm.get_flash_matches(entry, 
                                       interactions,
                                       opflashes,
