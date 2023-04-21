@@ -50,7 +50,7 @@ def run_flash_matching(data_dict, result_dict,
     interactions = result_dict['Interactions']
     entry        = data_dict['index']
     
-    opflashes = filter_opflashes(opflashes)
+    # opflashes = filter_opflashes(opflashes)
     
     fmatches_E = fm.get_flash_matches(entry, 
                                       interactions,

@@ -1,7 +1,7 @@
 import numpy as np
 from collections import defaultdict
 
-def filter_opflashes(opflashes, beam_window=(0, 1.6)):
+def filter_opflashes(opflashes, beam_window=(0, 1.6), tolerance=0.4):
     """Python implementation for filtering opflashes.
     
     Only meant to be temporary, will be implemented in C++ to OpT0Finder. 
@@ -19,17 +19,11 @@ def filter_opflashes(opflashes, beam_window=(0, 1.6)):
     """
     
     out_flashes = defaultdict(list)
-    flash_dist_dict = {}
     
     for key in opflashes:
         for flash in opflashes[key]:
-            if (flash.time() < beam_window[1]) and (flash.time() > beam_window[0]):
-                flash_dist_dict[flash.id()] = 0
-            else:
-                dt1 = flash.time() - beam_window[0]
-                dt2 = flash.time() - beam_window[1]
-                dt = max(dt1, dt2)
-                flash_dist_dict[flash.id()] = dt
+            if (flash.time() < beam_window[1] + tolerance) and \
+               (flash.time() > beam_window[0] - tolerance):
+                out_flashes[key].append(flash)
                 
-            
     return out_flashes
