@@ -5,6 +5,7 @@ import inspect
 import numpy as np
 from collections import defaultdict
 from larcv import larcv
+from analysis import classes as analysis
 
 
 class HDF5Writer:
@@ -17,14 +18,31 @@ class HDF5Writer:
     More documentation to come.
     '''
 
+    CPP_DATAOBJS = [
+        larcv.Particle,
+        larcv.Neutrino,
+        larcv.Flash,
+        larcv.CRTHit
+    ]
+
+    ANA_DATAOBJS = [
+        analysis.ParticleFragment,
+        analysis.TruthParticleFragment,
+        analysis.Particle,
+        analysis.TruthParticle,
+        analysis.Interaction,
+        analysis.TruthInteraction
+    ]
+
+    DATAOBJS = CPP_DATAOBJS + ANA_DATAOBJS
+
     def __init__(self,
                  file_name: str = 'output.h5',
                  input_keys: list = None,
                  skip_input_keys: list = [],
                  result_keys: list = None,
                  skip_result_keys: list = [],
-                 append_file: bool = False,
-                 add_results: bool = False):
+                 append_file: bool = False):
         '''
         Initializes the basics of the output file
 
@@ -42,8 +60,6 @@ class HDF5Writer:
             List of result keys to skip
         append_file: bool, default False
             Add new values to the end of an existing file
-        add_results: bool, default False
-            Add new keys to an existing file (must match existing length)
         '''
         # Store attributes
         self.file_name        = file_name
@@ -52,10 +68,8 @@ class HDF5Writer:
         self.result_keys      = result_keys
         self.skip_result_keys = skip_result_keys
         self.append_file      = append_file
-        self.add_results      = add_results
         self.ready            = False
-
-        assert not (append_file and add_results), 'Cannot append a file with new keys'
+        self.object_dtypes    = {}
 
     def create(self, data_blob, result_blob=None, cfg=None):
         '''
@@ -177,29 +191,12 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
-                if isinstance(blob[key][0][0], larcv.Particle):
-                    # List containing a single list of larcv.Particle object per batch ID
-                    if not hasattr(self, 'particle_dtype'):
-                        self.particle_dtype = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.particle_dtype
-
-                elif isinstance(blob[key][0][0], larcv.Neutrino):
-                    # List containing a single list of larcv.Neutrino object per batch ID
-                    if not hasattr(self, 'neutrino_dtype'):
-                        self.neutrino_dtype = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.neutrino_dtype
-
-                elif isinstance(blob[key][0][0], larcv.Flash):
-                    # List containing a single list of larcv.Flash object per batch ID
-                    if not hasattr(self, 'flash_dtype'):
-                        self.flash_dtype = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.flash_dtype
-
-                elif isinstance(blob[key][0][0], larcv.CRTHit):
-                    # List containing a single list of larcv.CRTHit object per batch ID
-                    if not hasattr(self, 'crthit_dtype'):
-                        self.crthit_dtype = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.crthit_dtype
+                if isinstance(blob[key][0][0], tuple(self.DATAOBJS)):
+                    # List containing a single list of dataclass objects per batch ID
+                    object_type = type(blob[key][0][0])
+                    if not object_type in self.object_dtypes:
+                        self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
 
                 elif not hasattr(blob[key][0][0], '__len__'):
                     # List containing a single list of scalars per batch ID
@@ -243,19 +240,38 @@ class HDF5Writer:
         members = inspect.getmembers(obj)
         skip_keys = ['add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d'] +\
                 [k+a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
-        attr_names = [k for k, _ in members if '__' not in k and k not in skip_keys]
+        attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
+        is_cpp = type(obj) in self.CPP_DATAOBJS
         for key in attr_names:
-            val = getattr(obj, key)()
-            if isinstance(val, (int, float)):
-                object_dtype.append((key, type(val)))
-            elif isinstance(val, str):
+            # Fetch the attribute value
+            if is_cpp:
+                val = getattr(obj, key)()
+            else:
+                val = getattr(obj, key)
+                if callable(val):
+                    continue
+
+            # Append the relevant data type
+            if isinstance(val, str):
+                # String
                 object_dtype.append((key, h5py.string_dtype()))
+            elif np.isscalar(val):
+                # Scalar
+                object_dtype.append((key, type(val)))
             elif isinstance(val, larcv.Vertex):
+                # Three-vector
                 object_dtype.append((key, h5py.vlen_dtype(np.float32)))
-            elif hasattr(val, '__len__') and len(val) and isinstance(val[0], (int, float)):
-                object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
             elif hasattr(val, '__len__'):
-                pass # Empty list, no point in storing
+                # List/array of values
+                if hasattr(val, 'dtype'):
+                    # Numpy array
+                    object_dtype.append((key, h5py.vlen_dtype(val.dtype)))
+                elif len(val) and np.isscalar(val[0]):
+                    # List of scalars
+                    object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+                else:
+                    # Empty list (typing unknown, cannot store)
+                    pass
             else:
                 raise ValueError('Unexpected key')
 
@@ -321,12 +337,8 @@ class HDF5Writer:
             Dictionary containing the ML chain configuration
         '''
         # If this function has never been called, initialiaze the HDF5 file
-        if not self.ready:
-            if not self.add_results:
-                if not self.append_file or not os.path.isfile(self.file_name):
-                    self.create(data_blob, result_blob, cfg)
-            else:
-                self.add_keys(result_blob)
+        if not self.ready and (not self.append_file or os.path.isfile(self.file_name)):
+            self.create(data_blob, result_blob, cfg)
             self.ready = True
 
         # Append file
@@ -378,14 +390,8 @@ class HDF5Writer:
             if not hasattr(obj, '__len__'):
                 obj = [obj]
 
-            if hasattr(self, 'particle_dtype') and val['dtype'] == self.particle_dtype:
-                self.store_objects(file[cat], event, key, obj, self.particle_dtype)
-            elif hasattr(self, 'neutrino_dtype') and val['dtype'] == self.neutrino_dtype:
-                self.store_objects(file[cat], event, key, obj, self.neutrino_dtype)
-            elif hasattr(self, 'flash_dtype') and val['dtype'] == self.flash_dtype:
-                self.store_objects(file[cat], event, key, obj, self.flash_dtype)
-            elif hasattr(self, 'crthit_dtype') and val['dtype'] == self.crthit_dtype:
-                self.store_objects(file[cat], event, key, obj, self.crthit_dtype)
+            if val['dtype'] in self.object_dtypes.values():
+                self.store_objects(file[cat], event, key, obj, val['dtype'])
             else:
                 self.store(file[cat], event, key, obj)
 
@@ -542,14 +548,14 @@ class HDF5Writer:
         objects = np.empty(len(array), obj_dtype)
         for i, o in enumerate(array):
             for k, dtype in obj_dtype:
-                attr = getattr(o, k)()
+                attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
                 if isinstance(attr, (int, float, str)):
                     objects[i][k] = attr
                 elif isinstance(attr, larcv.Vertex):
                     vertex = np.array([getattr(attr, a)() for a in ['x', 'y', 'z', 't']], dtype=np.float32)
                     objects[i][k] = vertex
                 elif hasattr(attr, '__len__'):
-                    vals = np.array([attr[i] for i in range(len(attr))], dtype=np.int32)
+                    vals = np.array([attr[i] for i in range(len(attr))])
                     objects[i][k] = vals
 
         # Extend the dataset, store array

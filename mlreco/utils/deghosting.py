@@ -4,8 +4,10 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 from torch_cluster import knn
 
+from .globals import *
 
-def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, batch_col = 0):
+
+def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, collection_only=False):
     """
     Computes rescaled charge after deghosting
 
@@ -21,7 +23,8 @@ def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, batch_col 
         Shape (N,), N_deghost is the predicted deghosted voxel count
     last_index: int, default 6
         Indexes where hit-related features start @ 4 + deghost_input_features
-    batch_col: int, default 0
+    collection_only : bool, default False
+        Only use the collection plane to estimate the rescaled charge
 
     Returns
     -------
@@ -38,16 +41,20 @@ def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, batch_col 
         empty = np.empty
         sum = lambda x: np.sum(x, axis=1)
 
-    batches = unique(input_data[:, batch_col])
+    batches = unique(input_data[:, BATCH_COL])
     hit_charges  = input_data[deghost_mask, last_index  :last_index+3]
     hit_ids      = input_data[deghost_mask, last_index+3:last_index+6]
     multiplicity = empty(hit_charges.shape, )
     for b in batches:
-        batch_mask = input_data[deghost_mask, batch_col] == b
+        batch_mask = input_data[deghost_mask, BATCH_COL] == b
         _, inverse, counts = unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
         multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
-    pmask   = hit_ids > -1
-    charges = sum((hit_charges*pmask)/multiplicity)/sum(pmask) # Take average estimate
+    if not collection_only:
+        pmask   = hit_ids > -1
+        charges = sum((hit_charges*pmask)/multiplicity)/sum(pmask) # Take average estimate
+    else:
+        charges = hit_charges[:,-1]/multiplicity[:,-1] # Only use the collection plate measurement
+
     return charges
 
 

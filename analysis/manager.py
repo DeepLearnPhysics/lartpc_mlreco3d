@@ -6,7 +6,7 @@ from mlreco.iotools.factories import loader_factory
 from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
-from mlreco.iotools.writers import CSVWriter
+from mlreco.iotools.writers import CSVWriter, HDF5Writer
 
 from analysis import post_processing
 from analysis.producers import scripts
@@ -37,9 +37,9 @@ class AnaToolsManager:
     ----------
     cfg : dict
         Processed full chain config (after applying process_config)
-    ana_cfg: dict
+    ana_cfg : dict
         Analysis config that specifies configurations for steps 1-4.
-    profile: bool
+    profile : bool
         Whether to print out execution times.
     
     """
@@ -70,6 +70,7 @@ class AnaToolsManager:
         
         self.flash_manager_initialized = False
         self.fm = None
+        self._data_writer = None
         
 
     def _set_iteration(self, dataset):
@@ -115,6 +116,14 @@ class AnaToolsManager:
             self._reader_state = 'hdf5'
             self._set_iteration(Reader)
             
+
+        if 'writer' in self.ana_config:
+            writer_cfg = copy.deepcopy(self.ana_config['writer'])
+            assert 'name' in writer_cfg
+            writer_cfg.pop('name')
+
+            Writer = HDF5Writer(**writer_cfg)
+            self._data_writer = Writer
 
     def forward(self, iteration=None):
         """Read one minibatch worth of image from dataset.
@@ -362,7 +371,7 @@ class AnaToolsManager:
                     self.writers[fname].append(row_dict)
 
 
-    def write_to_hdf5(self):
+    def write_to_hdf5(self, data, res):
         """Method to write reconstruction outputs (data and result dicts)
         to HDF5 files. 
 
@@ -371,7 +380,9 @@ class AnaToolsManager:
         NotImplementedError
             _description_
         """
-        raise NotImplementedError
+        # 5. Write output, if requested
+        if self._data_writer:
+            self._data_writer.append(data, res)
     
 
     def step(self, iteration):
@@ -390,17 +401,24 @@ class AnaToolsManager:
         end = time.time()
         self.logger_dict['forward_time'] = end-start
         start = end
+
         # 2. Build data representations
         self.build_representations(data, res)
         end = time.time()
         self.logger_dict['build_reps_time'] = end-start
         start = end
+
         # 3. Run post-processing, if requested
         self.run_post_processing(data, res)
         end = time.time()
         self.logger_dict['post_processing_time'] = end-start
         start = end
-        # 4. Run scripts, if requested
+
+        # 4. Write updated results to file, if requested 
+        if self._data_writer is not None:
+            self._data_writer.append(data, res)
+
+        # 5. Run scripts, if requested
         ana_output = self.run_ana_scripts(data, res)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
@@ -424,9 +442,7 @@ class AnaToolsManager:
 
 
     def run(self):
-        iteration = 0
-        while iteration < self.max_iteration:
+        for iteration in range(self.max_iteration):
             self.step(iteration)
             if self.profile:
                 self.log(iteration)
-            iteration += 1

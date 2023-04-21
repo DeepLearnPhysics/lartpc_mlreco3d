@@ -133,28 +133,23 @@ class ParticleBuilder(DataBuilder):
         primary_scores = softmax(primary_logits, axis=1)
 
         for i, p in enumerate(particles):
-            voxels = point_cloud[p]
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             seg_label = particle_seg[i]
-            pid = np.argmax(pid_scores[i])
-            if seg_label == 2 or seg_label == 3:
+            if seg_label == 2 or seg_label == 3: # DANGEROUS
                 pid = 1
             interaction_id = inter_ids[i]
-            part = Particle(voxels,
-                            i,
-                            seg_label, 
-                            interaction_id,
-                            entry,
-                            pid=pid,
-                            voxel_indices=p,
+            part = Particle(group_id=i,
+                            interaction_id=interaction_id,
+                            image_id=entry,
+                            semantic_type=seg_label, 
+                            index=p,
                             depositions=depositions[p],
-                            volume=volume_id,
+                            volume_id=volume_id,
+                            pid_scores=pid_scores[i],
                             primary_scores=primary_scores[i],
-                            pid_scores=pid_scores[i])
-
-            part.startpoint = particle_start_points[i]
-            part.endpoint   = particle_end_points[i]
+                            start_point = particle_start_points[i],
+                            end_point = particle_end_points[i])
 
             out.append(part)
 
@@ -214,6 +209,7 @@ class ParticleBuilder(DataBuilder):
             depositions_MeV     = labels[mask][:, VALUE_COL]
             depositions         = rescaled_charge[mask] # Will be in ADC
             coords_noghost      = labels_nonghost[mask_nonghost][:, COORD_COLS]
+            true_voxel_indices  = np.where(mask_nonghost)[0]
             depositions_noghost = labels_nonghost[mask_nonghost][:, VALUE_COL].squeeze()
 
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
@@ -230,37 +226,37 @@ class ParticleBuilder(DataBuilder):
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_true_particle_labels(labels, 
                                                                     mask, 
-                                                                    pid=id)
-            
-            particle = TruthParticle(coords,
-                                     id,
-                                     semantic_type, 
-                                     int_id, 
-                                     entry,
-                                     particle_asis=lpart,
-                                     coords_noghost=coords_noghost,
-                                     depositions_noghost=depositions_noghost,
-                                     depositions_MeV=depositions_MeV,
+                                                                    pid=pdg)
+
+            particle = TruthParticle(group_id=id,
+                                     interaction_id=int_id, 
                                      nu_id=nu_id,
-                                     voxel_indices=voxel_indices,
+                                     image_id=entry,
+                                     volume_id=volume_id,
+                                     semantic_type=semantic_type, 
+                                     index=voxel_indices,
                                      depositions=depositions,
-                                     volume=volume_id,
+                                     depositions_MeV=depositions_MeV,
+                                     true_index=true_voxel_indices,
+                                     true_depositions=np.empty(0, dtype=np.float32), #TODO
+                                     true_depositions_MeV=depositions_noghost,
                                      is_primary=is_primary,
-                                     pid=pdg)
+                                     pid=pdg,
+                                     particle_asis=lpart)
 
-            particle.p = np.array([lpart.px(), lpart.py(), lpart.pz()])
-            particle.pmag = np.linalg.norm(particle.p)
-            if particle.pmag > 0:
-                particle.direction = particle.p / particle.pmag
+            particle.momentum = np.array([lpart.px(), lpart.py(), lpart.pz()])
+            pmag = np.linalg.norm(particle.momentum)
+            if pmag > 0:
+                particle.start_dir = particle.momentum/pmag
 
-            particle.startpoint = np.array([lpart.first_step().x(),
-                                            lpart.first_step().y(),
-                                            lpart.first_step().z()])
+            particle.start_point = np.array([lpart.first_step().x(),
+                                             lpart.first_step().y(),
+                                             lpart.first_step().z()])
 
             if semantic_type == 1:
-                particle.endpoint = np.array([lpart.last_step().x(),
-                                              lpart.last_step().y(),
-                                              lpart.last_step().z()])
+                particle.end_point = np.array([lpart.last_step().x(),
+                                               lpart.last_step().y(),
+                                               lpart.last_step().z()])
             out.append(particle)
 
         return out
@@ -326,12 +322,11 @@ class InteractionBuilder(DataBuilder):
                 # true_particles_track_ids = [p.track_id() for p in true_particles]
                 # for nu in neutrinos:
                 #     if nu.mct_index() not in true_particles_track_ids: continue
-                ia.nu_info = {
-                    'nu_interaction_type': nu.interaction_type(),
-                    'nu_interaction_mode': nu.interaction_mode(),
-                    'nu_current_type': nu.current_type(),
-                    'nu_energy_init': nu.energy_init()
-                }
+                ia.nu_interaction_type = nu.interaction_type()
+                ia.nu_interation_mode  = nu.interacion_mode()
+                ia.nu_current_type        = nu.current_type()
+                ia.nu_energy_init         = nu.energy_init()
+
         return interactions
         
     def get_true_vertices(self, entry, data: dict):
@@ -400,9 +395,9 @@ class FragmentBuilder(DataBuilder):
         shower_frag_primary = np.argmax(
             result['shower_fragment_node_pred'][entry], axis=1)
 
-        shower_startpoints = result['shower_fragment_start_points'][entry][:, COORD_COLS]
-        track_startpoints = result['track_fragment_start_points'][entry][:, COORD_COLS]
-        track_endpoints = result['track_fragment_end_points'][entry][:, COORD_COLS]
+        shower_start_points = result['shower_fragment_start_points'][entry][:, COORD_COLS]
+        track_start_points = result['track_fragment_start_points'][entry][:, COORD_COLS]
+        track_end_points = result['track_fragment_end_points'][entry][:, COORD_COLS]
 
         assert len(fragments_seg) == len(fragments)
 
@@ -420,43 +415,41 @@ class FragmentBuilder(DataBuilder):
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             
-            part = ParticleFragment(voxels,
-                            i, seg_label,
-                            group_id=group_ids[i],
-                            interaction_id=inter_ids[i],
-                            image_id=entry,
-                            voxel_indices=p,
-                            depositions=depositions[p],
-                            is_primary=False,
-                            pid_conf=-1,
-                            alias='Fragment',
-                            volume=volume_id)
+            part = ParticleFragment(fragment_id=i,
+                                    group_id=group_ids[i],
+                                    interaction_id=inter_ids[i],
+                                    image_id=entry,
+                                    volume_id=volume_id,
+                                    semantic_type=seg_label,
+                                    index=p,
+                                    depositions=depositions[p],
+                                    is_primary=False)
             temp.append(part)
 
-        # Label shower fragments as primaries and attach startpoint
+        # Label shower fragments as primaries and attach start_point
         shower_counter = 0
         for p in np.array(temp)[shower_mask]:
             is_primary = shower_frag_primary[shower_counter]
             p.is_primary = bool(is_primary)
-            p.startpoint = shower_startpoints[shower_counter]
+            p.start_point = shower_start_points[shower_counter]
             # p.group_id = int(shower_group_pred[shower_counter])
             shower_counter += 1
         assert shower_counter == shower_frag_primary.shape[0]
 
-        # Attach endpoint to track fragments
+        # Attach end_point to track fragments
         track_counter = 0
         for p in temp:
             if p.semantic_type == 1:
                 # p.group_id = int(track_group_pred[track_counter])
-                p.startpoint = track_startpoints[track_counter]
-                p.endpoint = track_endpoints[track_counter]
+                p.start_point = track_start_points[track_counter]
+                p.end_point = track_end_points[track_counter]
                 track_counter += 1
         # assert track_counter == track_group_pred.shape[0]
 
         # Apply fragment voxel cut
         out = []
         for p in temp:
-            if p.points.shape[0] < self.min_particle_voxel_count:
+            if p.size < self.min_particle_voxel_count:
                 continue
             out.append(p)
 
@@ -543,18 +536,16 @@ class FragmentBuilder(DataBuilder):
             else:
                 is_primary = is_primary[0]
 
-            part = TruthParticleFragment(points,
-                                         fid, 
-                                         semantic_type,
-                                         interaction_id,
-                                         group_id,
+            part = TruthParticleFragment(fragment_id=fid, 
+                                         group_id=group_id,
+                                         interaction_id=interaction_id,
+                                         semantic_type=semantic_type,
                                          image_id=entry,
-                                         voxel_indices=voxel_indices,
+                                         volume_id=volume_id,
+                                         index=voxel_indices,
                                          depositions=depositions,
                                          depositions_MeV=depositions_MeV,
-                                         is_primary=is_primary,
-                                         volume=volume_id,
-                                         alias='Fragment')
+                                         is_primary=is_primary)
 
             fragments.append(part)
         return fragments
@@ -596,6 +587,7 @@ def handle_empty_true_particles(labels_noghost,
     coords_noghost, depositions_noghost = np.array([]), np.array([])
     if np.count_nonzero(mask_noghost) > 0:
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
+        true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
         semantic_type, interaction_id, nu_id = get_true_particle_labels(labels_noghost, 
                                                                         mask_noghost, 
@@ -604,33 +596,33 @@ def handle_empty_true_particles(labels_noghost,
         volume_id, cts = np.unique(labels_noghost[:, BATCH_COL][mask_noghost].astype(int), 
                                     return_counts=True)
         volume_id = int(volume_id[cts.argmax()])
-    particle = TruthParticle(coords,
-                                pid,
-                                semantic_type, 
-                                interaction_id, 
-                                entry,
-                                particle_asis=p,
-                                coords_noghost=coords_noghost,
-                                depositions_noghost=depositions_noghost,
-                                depositions_MeV=np.array([]),
-                                nu_id=nu_id,
-                                voxel_indices=voxel_indices,
-                                depositions=depositions,
-                                volume=volume_id,
-                                is_primary=is_primary,
-                                pid=pdg)
+    particle = TruthParticle(group_id=pid,
+                             interaction_id=interaction_id,
+                             nu_id=nu_id,
+                             volume_id=volume_id,
+                             image_id=entry,
+                             semantic_type=semantic_type, 
+                             index=voxel_indices,
+                             depositions=depositions,
+                             depositions_MeV=np.empty(0, dtype=np.float32),
+                             true_index=true_voxel_indices,
+                             true_depositions=np.empty(0, dtype=np.float32), #TODO
+                             true_depositions_MeV=depositions_noghost,
+                             is_primary=is_primary,
+                             pid=pdg,
+                             particle_asis=p)
     particle.p = np.array([p.px(), p.py(), p.pz()])
     # particle.fragments = []
     # particle.particle_asis = p
     # particle.nu_id = nu_id
     # particle.voxel_indices = voxel_indices
 
-    particle.startpoint = np.array([p.first_step().x(),
+    particle.start_point = np.array([p.first_step().x(),
                                     p.first_step().y(),
                                     p.first_step().z()])
 
     if semantic_type == 1:
-        particle.endpoint = np.array([p.last_step().x(),
+        particle.end_point = np.array([p.last_step().x(),
                                     p.last_step().y(),
                                     p.last_step().z()])
     return particle
@@ -684,5 +676,47 @@ def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
         nu_id = nu_id[perm]
     else:
         nu_id = nu_id[0]
+
+    return semantic_type, interaction_id, nu_id
+
+def match_points_to_particles(ppn_points : np.ndarray,
+                              particles : List[Particle],
+                              semantic_type=None, ppn_distance_threshold=2):
+    """Function for matching ppn points to particles.
+
+    For each particle, match ppn_points that have hausdorff distance
+    less than <threshold> and inplace update particle.ppn_candidates
+
+    If semantic_type is set to a class integer value,
+    points will be matched to particles with the same
+    predicted semantic type.
+
+    Parameters
+    ----------
+    ppn_points : (N x 4 np.array)
+        PPN point array with (coords, point_type)
+    particles : list of <Particle> objects
+        List of particles for which to match ppn points.
+    semantic_type: int
+        If set to an integer, only match ppn points with prescribed
+        semantic type
+    ppn_distance_threshold: int or float
+        Maximum distance required to assign ppn point to particle.
+
+    Returns
+    -------
+        None (operation is in-place)
+    """
+    if semantic_type is not None:
+        ppn_points_type = ppn_points[ppn_points[:, 5] == semantic_type]
+    else:
+        ppn_points_type = ppn_points
+        # TODO: Fix semantic type ppn selection
+
+    ppn_coords = ppn_points_type[:, :3]
+    for particle in particles:
+        dist = cdist(ppn_coords, particle.points)
+        matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
+        particle.ppn_candidates = matches.reshape(-1, 7)
 
     return semantic_type, interaction_id, nu_id

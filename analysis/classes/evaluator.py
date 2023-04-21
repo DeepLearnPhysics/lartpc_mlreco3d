@@ -38,7 +38,7 @@ class FullChainEvaluator(FullChainPredictor):
         'fragment': CLUST_COL,
         'group': GROUP_COL,
         'interaction': INTER_COL,
-        'pdg': TYPE_COL,
+        'pdg': PID_COL,
         'nu': NU_COL
     }
 

@@ -45,9 +45,8 @@ class HDF5Reader:
                 print('Registered', path)
         self.file_index = np.concatenate(self.file_index)
 
-        # Build an entry list to access
-        self.entry_list = self.get_entry_list(entry_list, skip_entry_list)
-        self.file_index = self.file_index[self.entry_list]
+        # Build an entry index to access, modify file index accordingly
+        self.entry_index = self.get_entry_list(entry_list, skip_entry_list)
 
         # Set whether or not to initialize LArCV objects as such
         self.to_larcv = to_larcv
@@ -100,8 +99,8 @@ class HDF5Reader:
             Ditionary of result data products corresponding to one event
         '''
         # Get the appropriate entry index
-        assert idx < len(self.entry_list)
-        entry_idx = self.entry_list[idx]
+        assert idx < len(self.entry_index)
+        entry_idx = self.entry_index[idx]
         file_idx  = self.file_index[idx]
 
         # Use the events tree to find out what needs to be loaded
@@ -144,6 +143,7 @@ class HDF5Reader:
 
         if entry_list:
             entry_index = entry_index[entry_list]
+            self.file_index = self.file_index[entry_list]
 
         assert len(entry_index), 'Must at least have one entry to load'
         return entry_index

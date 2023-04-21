@@ -4,7 +4,7 @@ from functools import partial
 import numpy as np
 import sys
 
-from mlreco.utils.globals import PID_LABEL_TO_PARTICLE, PARTICLE_TO_PID_LABEL
+from mlreco.utils.globals import PID_LABELS
 from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):
@@ -253,7 +253,7 @@ class InteractionLogger(AnalysisLogger):
     
     @staticmethod
     def count_primary_particles(ia, ptypes=None):
-        all_types = sorted(list(PID_LABEL_TO_PARTICLE.keys()))
+        all_types = list(PID_LABELS.keys())
         if ptypes is None:
             ptypes = all_types
         elif set(ptypes).issubset(set(all_types)):
@@ -265,15 +265,16 @@ class InteractionLogger(AnalysisLogger):
                              either be None or a list of particle type ids \
                              to be counted.')
         
+        ptypes = [PID_LABELS[p] for p in ptypes]
         out = OrderedDict({'count_primary_'+name.lower() : 0 \
-                           for name in PARTICLE_TO_PID_LABEL.keys() \
-                            if PARTICLE_TO_PID_LABEL[name] in ptypes})
+                           for name in PID_LABELS.values() \
+                            if name.capitalize() in ptypes})
 
         if ia is not None and hasattr(ia, 'primary_particle_counts'):
             out.update({'count_primary_'+key.lower() : val \
                         for key, val in ia.primary_particle_counts.items() \
-                        if key.upper() != 'OTHER' \
-                            and PARTICLE_TO_PID_LABEL[key.upper()] in ptypes})
+                        if key.capitalize() != 'Other' \
+                            and key.capitalize() in ptypes})
         return out
             
     
