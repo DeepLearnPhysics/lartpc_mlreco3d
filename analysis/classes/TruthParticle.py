@@ -16,25 +16,29 @@ class TruthParticle(Particle):
     Attributes
     ----------
     depositions_MeV : np.ndarray
-        Similar as `depositions`, i.e. using adapted true labels.
-        Using true MeV energy deposits instead of rescaled ADC units.
+        (N) Array of energy deposition values for each voxel in MeV
+    true_index : np.ndarray, default np.array([])
+        (N) IDs of voxels that correspond to the particle within the label tensor
+    true_points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this particle in the label tensor
     true_depositions : np.ndarray
-        Rescaled charge depositions in the set of true voxels associated
-        with the particle.
+        (N) Array of charge deposition values for each true voxel
     true_depositions_MeV : np.ndarray
-        MeV charge depositions in the set of true voxels associated
-        with the particle.
+        (N) Array of energy deposition values for each true voxel in MeV
     start_position : np.ndarray
         True start position of the particle
     end_position : np.ndarray
         True end position of the particle
     momentum : float, default np.array([-1,-1,-1])
         True 3-momentum of the particle
+    asis : larcv.Particle, optional
+        Original larcv.Paticle instance which contains all the truth information
     '''
     def __init__(self, 
                  *args, 
                  depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  true_index: np.ndarray = np.empty(0, dtype=np.int64), 
+                 true_points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  true_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  true_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  momentum: np.ndarray = -np.ones(3, dtype=np.float32),
@@ -45,11 +49,22 @@ class TruthParticle(Particle):
         # Initialize attributes
         self.depositions_MeV      = depositions_MeV
         self.true_index           = true_index
+        self.true_points          = true_points
         self.true_depositions     = true_depositions
         self.true_depositions_MeV = true_depositions_MeV
         if particle_asis is not None:
             self.start_position = particle_asis.position()
             self.end_position   = particle_asis.end_position()
+
+        self.asis = particle_asis
+
+        self.start_point = np.array([getattr(particle_asis.first_step(), a)() for a in ['x', 'y', 'z']], dtype=np.float32)
+        if self.semantic_type == 1:
+            self.end_point = np.array([getattr(particle_asis.last_step(), a)() for a in ['x', 'y', 'z']], dtype=np.float32)
+
+        self.momentum    = np.array([getattr(particle_asis, a)() for a in ['x', 'y', 'z']], dtype=np.float32)
+        if np.linalg.norm(self.momentum) > 0.:
+            self.start_dir = self.momentum = self.momentum/np.linalg.norm(self.momentum)
 
     def __repr__(self):
         msg = super(TruthParticle, self).__repr__()

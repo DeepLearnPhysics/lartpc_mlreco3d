@@ -18,13 +18,27 @@ class HDF5Writer:
     More documentation to come.
     '''
 
-    CPP_DATAOBJS = [
+    # LArCV object attributes that do not need to be stored to HDF5
+    LARCV_SKIP = [
+            'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
+            *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
+    ]
+
+    # Analysis object attributes that do not need to be stored to HDF5
+    ANA_SKIP = [
+        'index', 'true_index', 'points', 'true_points', 'particles', 'fragments', 'asis',
+        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV'
+    ]
+
+    # List of recognized LArCV objects
+    LARCV_DATAOBJS = [
         larcv.Particle,
         larcv.Neutrino,
         larcv.Flash,
         larcv.CRTHit
     ]
 
+    # List of recognized Analysis objects
     ANA_DATAOBJS = [
         analysis.ParticleFragment,
         analysis.TruthParticleFragment,
@@ -34,7 +48,8 @@ class HDF5Writer:
         analysis.TruthInteraction
     ]
 
-    DATAOBJS = CPP_DATAOBJS + ANA_DATAOBJS
+    # List of recognized objects
+    DATAOBJS = LARCV_DATAOBJS + ANA_DATAOBJS
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -238,13 +253,12 @@ class HDF5Writer:
         '''
         object_dtype = []
         members = inspect.getmembers(obj)
-        skip_keys = ['add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d'] +\
-                [k+a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
+        is_larcv = type(obj) in self.LARCV_DATAOBJS
+        skip_keys = self.LARCV_SKIP if is_larcv else self.ANA_SKIP
         attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
-        is_cpp = type(obj) in self.CPP_DATAOBJS
         for key in attr_names:
             # Fetch the attribute value
-            if is_cpp:
+            if is_larcv:
                 val = getattr(obj, key)()
             else:
                 val = getattr(obj, key)
@@ -555,7 +569,9 @@ class HDF5Writer:
                     vertex = np.array([getattr(attr, a)() for a in ['x', 'y', 'z', 't']], dtype=np.float32)
                     objects[i][k] = vertex
                 elif hasattr(attr, '__len__'):
-                    vals = np.array([attr[i] for i in range(len(attr))])
+                    vals = attr
+                    if not isinstance(attr, np.ndarray):
+                        vals = np.array([attr[i] for i in range(len(attr))])
                     objects[i][k] = vals
 
         # Extend the dataset, store array

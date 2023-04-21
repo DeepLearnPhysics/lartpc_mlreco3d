@@ -144,6 +144,7 @@ class ParticleBuilder(DataBuilder):
                             image_id=entry,
                             semantic_type=seg_label, 
                             index=p,
+                            points=point_cloud[p],
                             depositions=depositions[p],
                             volume_id=volume_id,
                             pid_scores=pid_scores[i],
@@ -235,28 +236,17 @@ class ParticleBuilder(DataBuilder):
                                      volume_id=volume_id,
                                      semantic_type=semantic_type, 
                                      index=voxel_indices,
+                                     points=coords,
                                      depositions=depositions,
                                      depositions_MeV=depositions_MeV,
                                      true_index=true_voxel_indices,
+                                     true_points=coords_noghost,
                                      true_depositions=np.empty(0, dtype=np.float32), #TODO
                                      true_depositions_MeV=depositions_noghost,
                                      is_primary=is_primary,
                                      pid=pdg,
                                      particle_asis=lpart)
 
-            particle.momentum = np.array([lpart.px(), lpart.py(), lpart.pz()])
-            pmag = np.linalg.norm(particle.momentum)
-            if pmag > 0:
-                particle.start_dir = particle.momentum/pmag
-
-            particle.start_point = np.array([lpart.first_step().x(),
-                                             lpart.first_step().y(),
-                                             lpart.first_step().z()])
-
-            if semantic_type == 1:
-                particle.end_point = np.array([lpart.last_step().x(),
-                                               lpart.last_step().y(),
-                                               lpart.last_step().z()])
             out.append(particle)
 
         return out
@@ -422,6 +412,7 @@ class FragmentBuilder(DataBuilder):
                                     volume_id=volume_id,
                                     semantic_type=seg_label,
                                     index=p,
+                                    points=point_cloud[p],
                                     depositions=depositions[p],
                                     is_primary=False)
             temp.append(part)
@@ -543,6 +534,7 @@ class FragmentBuilder(DataBuilder):
                                          image_id=entry,
                                          volume_id=volume_id,
                                          index=voxel_indices,
+                                         points=points,
                                          depositions=depositions,
                                          depositions_MeV=depositions_MeV,
                                          is_primary=is_primary)
@@ -583,8 +575,8 @@ def handle_empty_true_particles(labels_noghost,
     is_primary = p.group_id() == p.parent_id()
 
     semantic_type, interaction_id, nu_id = -1, -1, -1
-    coords, depositions, voxel_indices = np.array([]), np.array([]), np.array([])
-    coords_noghost, depositions_noghost = np.array([]), np.array([])
+    coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
+    coords_noghost, depositions_noghost = np.empty((0,3)), np.array([])
     if np.count_nonzero(mask_noghost) > 0:
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
@@ -603,9 +595,11 @@ def handle_empty_true_particles(labels_noghost,
                              image_id=entry,
                              semantic_type=semantic_type, 
                              index=voxel_indices,
+                             points=coords,
                              depositions=depositions,
                              depositions_MeV=np.empty(0, dtype=np.float32),
                              true_index=true_voxel_indices,
+                             true_points=coords_noghost,
                              true_depositions=np.empty(0, dtype=np.float32), #TODO
                              true_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,

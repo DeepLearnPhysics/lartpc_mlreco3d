@@ -27,6 +27,8 @@ class ParticleFragment:
         Total number of voxels that belong to this particle
     index : np.ndarray, default np.array([])
         (N) IDs of voxels that correspondn to the fragment within the image coordinate tensor that
+    points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this fragment in the input tensor
     depositions : np.ndarray, defaul np.array([])
         (N) Array of energy deposition values for each voxel (rescaled, ADC units)
     is_primary: bool
@@ -42,6 +44,7 @@ class ParticleFragment:
                  volume_id: int = -1,
                  semantic_type: int = -1,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
+                 points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  is_primary: int = -1,
                  start_point: np.ndarray = -np.ones(3, dtype=np.float32),
