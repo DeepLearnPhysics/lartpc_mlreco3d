@@ -16,6 +16,24 @@ from mlreco.utils.globals import *
 def calorimetric_energy(data_dict,
                         result_dict,
                         conversion_factor=1.):
+    """Compute calorimetric energy by summing the charge depositions and
+    scaling by the ADC to MeV conversion factor.
+
+    Parameters
+    ----------
+    data_dict : dict
+        Data dictionary (contains one image-worth of data)
+    result_dict : dict
+        Result dictionary (contains one image-worth of data)
+    conversion_factor : float, optional
+        ADC to MeV conversion factor (MeV / ADC), by default 1.
+
+    Returns
+    -------
+    update_dict: dict
+        Dictionary to be included into result dictionary, containing the
+        computed energy under the key 'particle_calo_energy'.
+    """
 
     input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
@@ -34,6 +52,30 @@ def calorimetric_energy(data_dict,
                                  'particle_node_pred_type'])
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, include_pids=[2, 3, 4], table_path=''):
+    """Compute track energy by the CSDA (continuous slowing-down approximation)
+    range-based method. 
+
+    Parameters
+    ----------
+    data_dict : dict
+        Data dictionary (contains one image-worth of data)
+    result_dict : dict
+        Result dictionary (contains one image-worth of data)
+    bin_size : int, optional
+        Bin size used to perform local PCA along the track, by default 17
+    include_pids : list, optional
+        Particle PDG codes (converted to 0-5 labels) to include in 
+        computing the energies, by default [2, 3, 4]
+    table_path : str, optional
+        Path to muon/proton/pion CSDARange vs. energy table, by default ''
+
+    Returns
+    -------
+    update_dict: dict
+        Dictionary to be included into result dictionary, containing the
+        particle's estimated length ('particle_length') and the estimated
+        CSDA energy ('particle_range_based_energy') using cubic splines. 
+    """
 
     input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
@@ -72,9 +114,21 @@ def range_based_track_energy(data_dict, result_dict,
 # Helper Functions
 @lru_cache(maxsize=10)
 def get_splines(particle_type, table_path):
-    '''
-    Returns CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
-    '''
+    """_summary_
+
+    Parameters
+    ----------
+    particle_type : int
+        Particle type ID to construct splines. 
+        Only one of [2,3,4] are available. 
+    table_path : str
+        Path to CSDARange vs Kinetic E table. 
+
+    Returns
+    -------
+    f: Callable
+        Function mapping CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
+    """
     if particle_type == PDG_TO_PID[2212]:
         path = os.path.join(table_path, 'pE_liquid_argon.txt')
         tab = pd.read_csv(path, 
@@ -94,10 +148,8 @@ def get_splines(particle_type, table_path):
 
 
 def compute_track_length(points, bin_size=17):
-    """
-    Compute track length by dividing it into segments
-    and computing a local PCA axis, then summing the
-    local lengths of the segments.
+    """Compute track length by dividing it into segments and computing 
+    a local PCA axis, then summing the local lengths of the segments.
 
     Parameters
     ----------

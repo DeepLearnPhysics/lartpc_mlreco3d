@@ -24,14 +24,27 @@ from analysis.classes.particle_utils import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
 from mlreco.utils.gnn.cluster import get_cluster_label
 
-class Builder(ABC):
+class DataBuilder(ABC):
     """Abstract base class for building all data structures
 
-    A Builder takes input data and full chain output dictionaries
+    A DataBuilder takes input data and full chain output dictionaries
     and processes them into human-readable data structures.
     
     """
     def build(self, data: dict, result: dict, mode='reco'):
+        """Process all images in the current batch and change representation
+        into each respective data format.
+        
+        Parameters
+        ----------
+        data: dict
+        result: dict
+        mode: str
+            Indicator for building reconstructed vs true data formats.
+            In other words, mode='reco' will produce <Particle> and
+            <Interaction> data formats, while mode='truth' is reserved for
+            <TruthParticle> and <TruthInteraction>
+        """
         output = []
         num_batches = len(data['index'])
         for bidx in range(num_batches):
@@ -40,7 +53,13 @@ class Builder(ABC):
         return output
 
     def build_image(self, entry: int, data: dict, result: dict, mode='reco'):
-
+        """Build data format for a single image.
+        
+        Parameters
+        ----------
+        entry: int
+            Batch id number for the image.
+        """
         if mode == 'truth':
             entities = self._build_true(entry, data, result)
         elif mode == 'reco':
@@ -59,9 +78,26 @@ class Builder(ABC):
         raise NotImplementedError
 
 
-class ParticleBuilder(Builder):
-    """
-    Eats data, result and makes List of Particles per image.
+class ParticleBuilder(DataBuilder):
+    """Builder for constructing Particle and TruthParticle instances
+    from full chain output dicts. 
+    
+    Required result keys:
+
+        reco:
+            - input_rescaled
+            - particle_clusts
+            - particle_seg
+            - particle_start_points
+            - particle_end_points
+            - particle_group_pred
+            - particle_node_pred_type
+            - particle_node_pred_vtx
+        truth:
+            - cluster_label
+            - cluster_label_adapted
+            - particles_asis
+            - input_rescaled
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
@@ -70,7 +106,13 @@ class ParticleBuilder(Builder):
                     entry: int, 
                     data: dict, 
                     result: dict) -> List[Particle]:
-
+        """
+        Returns
+        -------
+        out : List[Particle]
+            list of reco Particle instances of length equal to the
+            batch size. 
+        """
         out = []
 
         # Essential Information
@@ -117,6 +159,13 @@ class ParticleBuilder(Builder):
                     entry: int, 
                     data: dict, 
                     result: dict) -> List[TruthParticle]:
+        """
+        Returns
+        -------
+        out : List[TruthParticle]
+            list of true TruthParticle instances of length equal to the
+            batch size. 
+        """
 
         out = []
 
@@ -130,13 +179,13 @@ class ParticleBuilder(Builder):
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
-            pid = PDG_TO_PID.get(lpart.pdg_code(), -1)
+            pdg = PDG_TO_PID.get(lpart.pdg_code(), -1)
             is_primary = lpart.group_id() == lpart.parent_id()
-            mask_nonghost = labels_nonghost[:, 6].astype(int) == pid
+            mask_nonghost = labels_nonghost[:, 6].astype(int) == id
             if np.count_nonzero(mask_nonghost) <= 0:
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
-            if pid not in particle_ids:
+            if id not in particle_ids:
                 particle = handle_empty_true_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
@@ -145,7 +194,7 @@ class ParticleBuilder(Builder):
                 continue
 
             # 1. Process voxels
-            mask = labels[:, 6].astype(int) == pid
+            mask = labels[:, 6].astype(int) == id
             # If particle is Michel electron, we have the option to
             # only consider the primary ionization.
             # Semantic labels only label the primary ionization as Michel.
@@ -177,7 +226,7 @@ class ParticleBuilder(Builder):
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_true_particle_labels(labels, 
                                                                     mask, 
-                                                                    pid=pid)
+                                                                    pid=pdg)
 
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
@@ -192,27 +241,39 @@ class ParticleBuilder(Builder):
                                      true_depositions=np.empty(0, dtype=np.float32), #TODO
                                      true_depositions_MeV=depositions_noghost,
                                      is_primary=is_primary,
-                                     pid=pid,
+                                     pid=pdg,
                                      particle_asis=lpart)
 
-            particle.p = np.array([lpart.px(), lpart.py(), lpart.pz()])
-            # particle.fragments = fragments
+            particle.momentum = np.array([lpart.px(), lpart.py(), lpart.pz()])
+            pmag = np.linalg.norm(particle.momentum)
+            if pmag > 0:
+                particle.start_dir = particle.momentum/pmag
 
             particle.start_point = np.array([lpart.first_step().x(),
-                                            lpart.first_step().y(),
-                                            lpart.first_step().z()])
+                                             lpart.first_step().y(),
+                                             lpart.first_step().z()])
 
             if semantic_type == 1:
                 particle.end_point = np.array([lpart.last_step().x(),
-                                              lpart.last_step().y(),
-                                              lpart.last_step().z()])
+                                               lpart.last_step().y(),
+                                               lpart.last_step().z()])
             out.append(particle)
 
         return out
 
 
-class InteractionBuilder(Builder):
+class InteractionBuilder(DataBuilder):
+    """Builder for constructing Interaction and TruthInteraction instances.
+    
+    Required result keys:
 
+        reco:
+            - Particles
+        truth:
+            - TruthParticles
+            - cluster_label
+            - neutrino_asis (optional)
+    """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
 
@@ -240,6 +301,10 @@ class InteractionBuilder(Builder):
         return out
     
     def decorate_true_interactions(self, entry, data, interactions):
+        """
+        Helper function for attaching additional information to
+        TruthInteraction instances. 
+        """
         vertices = self.get_true_vertices(entry, data)
         for ia in interactions:
             if ia.id in vertices:
@@ -265,6 +330,9 @@ class InteractionBuilder(Builder):
         return interactions
         
     def get_true_vertices(self, entry, data: dict):
+        """
+        Helper function for retrieving true vertex information. 
+        """
         out = {}
         inter_idxs = np.unique(
             data['cluster_label'][entry][:, INTER_COL].astype(int))
@@ -283,8 +351,27 @@ class InteractionBuilder(Builder):
         return out
 
 
-class FragmentBuilder(Builder):
+class FragmentBuilder(DataBuilder):
+    """Builder for constructing Particle and TruthParticle instances
+    from full chain output dicts. 
+    
+    Required result keys:
 
+        reco:
+            - input_rescaled
+            - fragment_clusts
+            - fragment_seg
+            - shower_fragment_start_points
+            - track_fragment_start_points
+            - track_fragment_end_points
+            - shower_fragment_group_pred
+            - track_fragment_group_pred
+            - shower_fragment_node_pred
+        truth:
+            - cluster_label
+            - cluster_label_adapted
+            - input_rescaled
+    """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
         self.allow_nodes = self.cfg.get('allow_nodes', [0,2,3])
@@ -366,7 +453,7 @@ class FragmentBuilder(Builder):
                 continue
             out.append(p)
 
-        # Check primaries and assign ppn points
+        # Check primaries
         if self.only_primaries:
             out = [p for p in out if p.is_primary]
 
@@ -471,6 +558,26 @@ def handle_empty_true_particles(labels_noghost,
                                 p, 
                                 entry, 
                                 verbose=False):
+    """
+    Function for handling true larcv::Particle instances with valid 
+    true nonghost voxels but with no predicted nonghost voxels.
+    
+    Parameters
+    ----------
+    labels_noghost: np.ndarray
+        Label information for true nonghost coordinates
+    mask_noghost: np.ndarray
+        True nonghost mask for this particle.
+    p: larcv::Particle
+        larcv::Particle object from particles_asis, containing truth
+        information for this particle
+    entry: int
+        Image ID of this particle (for consistent TruthParticle attributes)
+        
+    Returns
+    -------
+    particle: TruthParticle
+    """
     pid = int(p.id())
     pdg = PDG_TO_PID.get(p.pdg_code(), -1)
     is_primary = p.group_id() == p.parent_id()
@@ -522,6 +629,19 @@ def handle_empty_true_particles(labels_noghost,
 
 
 def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
+    """
+    Helper function for fetching true particle labels from 
+    voxel label array. 
+    
+    Parameters
+    ----------
+    labels: np.ndarray
+        Predicted nonghost voxel label information
+    mask: np.ndarray
+        Voxel index mask
+    pid: int, optional
+        Unique id of this particle (for debugging)
+    """
     semantic_type, sem_counts = np.unique(labels[mask][:, -1].astype(int), 
                                             return_counts=True)
     if semantic_type.shape[0] > 1:
@@ -598,3 +718,5 @@ def match_points_to_particles(ppn_points : np.ndarray,
         dist = cdist(ppn_coords, particle.points)
         matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
         particle.ppn_candidates = matches.reshape(-1, 7)
+
+    return semantic_type, interaction_id, nu_id

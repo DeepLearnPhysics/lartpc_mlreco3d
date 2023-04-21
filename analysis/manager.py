@@ -8,9 +8,9 @@ from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter, HDF5Writer
 
 from analysis import post_processing
-from analysis.algorithms import scripts
+from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
-from analysis.algorithms.common import ScriptProcessor
+from analysis.producers.common import ScriptProcessor
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 class AnaToolsManager:
@@ -39,7 +39,7 @@ class AnaToolsManager:
         Whether to print out execution times.
     
     """
-    def __init__(self, cfg, ana_cfg, profile=True):
+    def __init__(self, ana_cfg, verbose=True, cfg=None):
         self.config = cfg
         self.ana_config = ana_cfg
         self.max_iteration = self.ana_config['analysis']['iteration']
@@ -59,15 +59,30 @@ class AnaToolsManager:
         self._data_reader = None
         self._reader_state = None
         self._data_writer = None
-        self.profile = profile
+        self.verbose = verbose
         self.writers = {}
+        
+        self.profile = self.ana_config['analysis'].get('profile', False)
+        self.logger = CSVWriter(os.path.join(self.log_dir, 'log.csv'))
+        self.logger_dict = {}
 
     def _set_iteration(self, dataset):
+        """Sets maximum number of iteration given dataset
+        and max_iteration input.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            Torch dataset containing images. 
+        """
         if self.max_iteration == -1:
             self.max_iteration = len(dataset)
         assert self.max_iteration <= len(dataset)
 
     def initialize(self):
+        """Initializer for setting up inference mode full chain forwarding
+        or reading data from HDF5. 
+        """
         if 'reader' not in self.ana_config:
             event_list = self.config['iotool']['dataset'].get('event_list', None)
             if event_list is not None:
@@ -102,8 +117,22 @@ class AnaToolsManager:
             self._data_writer = Writer
 
     def forward(self, iteration=None):
-        if self.profile:
-            start = time.time()
+        """Read one minibatch worth of image from dataset.
+
+        Parameters
+        ----------
+        iteration : int, optional
+            Iteration number, needed for reading entries from 
+            HDF5 files, by default None.
+
+        Returns
+        -------
+        data: dict
+            Data dictionary containing network inputs (and labels if available).
+        res: dict
+            Result dictionary containing full chain outputs
+            
+        """
         if self._reader_state == 'hdf5':
             assert iteration is not None
             data, res = self._data_reader.get(iteration, nested=True)
@@ -111,12 +140,24 @@ class AnaToolsManager:
             data, res = self._data_reader.forward(self._dataset)
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
-        if self.profile:
-            end = time.time()
-            print("Forwarding data took %.2f s" % (end - start))
         return data, res
     
     def _build_reco_reps(self, data, result):
+        """Build representations for reconstructed objects.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        length_check: List[int]
+            List of integers representing the length of each data structure
+            from DataBuilders, used for checking validity. 
+        """
         length_check = []
         if 'ParticleBuilder' in self.builders:
             result['Particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
@@ -130,6 +171,21 @@ class AnaToolsManager:
         return length_check
     
     def _build_truth_reps(self, data, result):
+        """Build representations for true objects.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        length_check: List[int]
+            List of integers representing the length of each data structure
+            from DataBuilders, used for checking validity. 
+        """
         length_check = []
         if 'ParticleBuilder' in self.builders:
             result['TruthParticles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
@@ -142,21 +198,30 @@ class AnaToolsManager:
             length_check.append(len(result['TruthParticleFragments']))
         return length_check
 
-    def build_representations(self, data, result, mode=None):
+    def build_representations(self, data, result, mode='all'):
+        """Build human readable data structures from full chain output.
 
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+        mode : str, optional
+            Whether to build only reconstructed or true objects.
+            'reco', 'truth', and 'all' are available (by default 'all').
+            
+        """
         num_batches = len(data['index'])
-
         lcheck_reco, lcheck_truth = [], []
 
         if self.ana_mode is not None:
             mode = self.ana_mode
-        if self.profile:
-            start = time.time()
         if mode == 'reco':
             lcheck_reco = self._build_reco_reps(data, result)
         elif mode == 'truth':
             lcheck_truth = self._build_truth_reps(data, result)
-        elif mode is None:
+        elif mode is None or mode == 'all':
             lcheck_reco = self._build_reco_reps(data, result)
             lcheck_truth = self._build_truth_reps(data, result)
         else:
@@ -165,13 +230,17 @@ class AnaToolsManager:
             assert lreco == num_batches
         for ltruth in lcheck_truth:
             assert ltruth == num_batches
-        if self.profile:
-            end = time.time()
-            print("Data representation change took %.2f s" % (end - start))
         
     def run_post_processing(self, data, result):
-        if self.profile:
-            start = time.time()
+        """Run all registered post-processing scripts.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+        """
         if 'post_processing' in self.ana_config:
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
@@ -179,24 +248,36 @@ class AnaToolsManager:
             for processor_name, pcfg in self.ana_config['post_processing'].items():
                 local_pcfg = copy.deepcopy(pcfg)
                 priority = local_pcfg.pop('priority', -1)
+                profile = local_pcfg.pop('profile', False)
                 run_on_batch = local_pcfg.pop('run_on_batch', False)
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
                 post_processor_interface.register_function(processor, 
                                                         priority,
                                                         processor_cfg=local_pcfg,
-                                                        run_on_batch=run_on_batch)
+                                                        run_on_batch=run_on_batch,
+                                                        profile=profile)
 
             post_processor_interface.process_and_modify()
-        if self.profile:
-            end = time.time()
-            print("Post-processing took %.2f s" % (end - start))
+            self.logger_dict.update(post_processor_interface._profile)
 
     def run_ana_scripts(self, data, result):
-        if self.profile:
-            start = time.time()
-        out = {}
+        """Run all registered analysis scripts (under producers/scripts)
 
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        out: dict
+            Dictionary of column name : value mapping, which corresponds to
+            each row in the output csv file. 
+        """
+        out = {}
         if 'scripts' in self.ana_config:
             script_processor = ScriptProcessor(data, result)
             for processor_name, pcfg in self.ana_config['scripts'].items():
@@ -208,16 +289,23 @@ class AnaToolsManager:
                                                    script_cfg=pcfg)
             fname_to_update_list = script_processor.process()
             out[processor_name] = fname_to_update_list
-
-        if self.profile:
-            end = time.time()
-            print("Analysis scripts took %.2f s" % (end - start))
         return out
     
     def write(self, ana_output):
+        """Method to gather logging information from each analysis script 
+        and save to csv files. 
 
-        if self.profile:
-            start = time.time()
+        Parameters
+        ----------
+        ana_output : dict
+            Dictionary of column name : value mapping, which corresponds to
+            each row in the output csv file. 
+
+        Raises
+        ------
+        RuntimeError
+            If two filenames specified by the user point to the same path. 
+        """
 
         if not self.writers:
             self.writers = {}
@@ -239,27 +327,72 @@ class AnaToolsManager:
                 for row_dict in ana_output[script_name][fname]:
                     self.writers[fname].append(row_dict)
 
-        if self.profile:
-            end = time.time()
-            print("Writing to csvs took %.2f s" % (end - start))
-
 
     def write_to_hdf5(self):
+        """Method to write reconstruction outputs (data and result dicts)
+        to HDF5 files. 
+
+        Raises
+        ------
+        NotImplementedError
+            _description_
+        """
         raise NotImplementedError
     
 
     def step(self, iteration):
+        """Run single step of analysis tools workflow. This includes
+        data forwarding, building data structures, running post-processing, 
+        and appending desired information to each row of output csv files. 
+
+        Parameters
+        ----------
+        iteration : int
+            Iteration number for current step. 
+        """
         # 1. Run forward
+        start = time.time()
         data, res = self.forward(iteration=iteration)
+        end = time.time()
+        self.logger_dict['forward_time'] = end-start
+        start = end
+
         # 2. Build data representations
         self.build_representations(data, res)
+        end = time.time()
+        self.logger_dict['build_reps_time'] = end-start
+        start = end
+
         # 3. Run post-processing, if requested
         self.run_post_processing(data, res)
-        # 4. Run scripts, if requested
+        end = time.time()
+        self.logger_dict['post_processing_time'] = end-start
+        start = end
+
+        # 4. Write updated results to file, if requested 
+        if self._data_writer is not None:
+            self._data_writer.append(data, res)
+
+        # 5. Run scripts, if requested
         ana_output = self.run_ana_scripts(data, res)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
+        end = time.time()
+        self.logger_dict['write_csv_time'] = end-start
+        
+    def log(self, iteration):
+        """Generate analysis tools iteration log. This is a separate logging
+        operation from the subroutines in analysis.producers.loggers. 
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number
+        """
+        row_dict = {'iteration': iteration}
+        row_dict.update(self.logger_dict)
+        self.logger.append(row_dict)
 
         # 5. Write output, if requested
         if self._data_writer:
@@ -269,3 +402,5 @@ class AnaToolsManager:
     def run(self):
         for iteration in range(self.max_iteration):
             self.step(iteration)
+            if self.profile:
+                self.log(iteration)

@@ -14,7 +14,6 @@ Subpackages
 
    mlreco.iotools
    mlreco.models
-   mlreco.post_processing
    mlreco.utils
    mlreco.visualization
 

@@ -10,11 +10,11 @@ You can write your own sampling function in `samplers.py`.
 
 ### 1. Writing and Reading HDF5 Files
 
-```
+```yaml
 iotool:
   writer:
     name: HDF5Writer
-    filename: output.h5
+    file_name: output.h5
     input_keys: None
     skip_input_keys: []
     result_keys: None

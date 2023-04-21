@@ -1,78 +1,45 @@
 from typing import List
 import numpy as np
 
-from mlreco.utils.globals import VTX_COLS, INTER_COL, COORD_COLS, PDG_TO_PID
-
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.particle_utils import (match_particles_fn, 
                                              match_interactions_fn, 
-                                             group_particles_to_interactions_fn, 
                                              match_interactions_optimal, 
                                              match_particles_optimal)
-from analysis.algorithms.point_matching import *
-
-from mlreco.utils.vertex import get_vertex
 
 from analysis.classes.predictor import FullChainPredictor
+from mlreco.utils.globals import *
+from analysis.classes.data import *
 
 
 class FullChainEvaluator(FullChainPredictor):
     '''
-    Helper class for full chain prediction and evaluation.
+    User Interface for full chain prediction and evaluation.
+    
+    The FullChainEvaluator shares the same methods as FullChainPredictor,
+    but with additional methods to retrieve ground truth information and
+    evaluate performance metrics.
 
     Usage:
 
-        model = Trainer._net.module
-        entry = 0   # batch id
-        predictor = FullChainEvaluator(model, data_blob, res, cfg)
-        pred_seg = predictor.get_true_label(entry, mode='segmentation')
-
-    To avoid confusion between different quantities, the label namings under
-    iotools.schema must be set as follows:
-
-        schema:
-            input_data:
-                - parse_sparse3d_scn
-                - sparse3d_pcluster
-            segment_label:
-                - parse_sparse3d_scn
-                - sparse3d_pcluster_semantics
-            cluster_label:
-                - parse_cluster3d_clean_full
-                #- parse_cluster3d_full
-                - cluster3d_pcluster
-                - particle_pcluster
-                #- particle_mpv
-                - sparse3d_pcluster_semantics
-            particles_label:
-                - parse_particle_points_with_tagging
-                - sparse3d_pcluster
-                - particle_corrected
-            particle_graph:
-                - parse_particle_graph_corrected
-                - particle_corrected
-                - cluster3d_pcluster
-            particles_asis:
-                - parse_particles
-                - particle_pcluster
-                - cluster3d_pcluster
-
-
-    Instructions
-    ----------------------------------------------------------------
-
-    The FullChainEvaluator share the same methods as FullChainPredictor,
-    with additional methods to retrieve ground truth information for each
-    abstraction level.
+        # <data>, <result> are full chain input/output dictionaries.
+        evaluator = FullChainEvaluator(data, result)
+        
+        # Get labels
+        pred_seg = evaluator.get_true_label(entry, mode='segmentation')
+        # Get Particle instances
+        matched_particles = evaluator.match_particles(entry)
+        # Get Interaction instances
+        matched_interactions = evaluator.match_interactions(entry)
     '''
     LABEL_TO_COLUMN = {
-        'segment': -1,
-        'charge': 4,
-        'fragment': 5,
-        'group': 6,
-        'interaction': 7,
-        'pdg': 9,
-        'nu': 8
+        'segment': SEG_COL,
+        'charge': VALUE_COL,
+        'fragment': CLUST_COL,
+        'group': GROUP_COL,
+        'interaction': INTER_COL,
+        'pdg': PID_COL,
+        'nu': NU_COL
     }
 
 
@@ -80,8 +47,32 @@ class FullChainEvaluator(FullChainPredictor):
         super(FullChainEvaluator, self).__init__(data_blob, result, evaluator_cfg, **kwargs)
         self.build_representations()
         self.michel_primary_ionization_only = evaluator_cfg.get('michel_primary_ionization_only', False)
+        # For matching particles and interactions
+        self.min_overlap_count        = evaluator_cfg.get('min_overlap_count', 0)
+        # Idem, can be 'count' or 'iou'
+        self.overlap_mode             = evaluator_cfg.get('overlap_mode', 'iou')
+        if self.overlap_mode == 'iou':
+            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
+        if self.overlap_mode == 'counts':
+            assert self.min_overlap_count >= 0
 
     def build_representations(self):
+        """
+        Method using DataBuilders to construct high level data structures. 
+        The constructed data structures are stored inside result dict. 
+        
+        Will not build data structures if the key corresponding to 
+        the data structure class is already contained in the result dictionary.
+        
+        For example, if result['Particles'] exists and contains lists of
+        reconstructed <Particle> instances, then methods inside the 
+        Evaluator will use the already existing result['Particles'] 
+        rather than building new lists from scratch. 
+        
+        Returns
+        -------
+        None (operation is in-place)
+        """
         if 'Particles' not in self.result:
             self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
         if 'TruthParticles' not in self.result:
@@ -100,7 +91,7 @@ class FullChainEvaluator(FullChainPredictor):
         Retrieve tensor in data blob, labelled with `schema`.
 
         Parameters
-        ==========
+        ----------
         entry: int
         name: str
             Must be a predefined name within `['segment', 'fragment', 'group',
@@ -110,7 +101,7 @@ class FullChainEvaluator(FullChainPredictor):
         volume: int, default None
 
         Returns
-        =======
+        -------
         np.array
         """
         if name not in self.LABEL_TO_COLUMN:
@@ -143,34 +134,16 @@ class FullChainEvaluator(FullChainPredictor):
         return pred[name]
 
 
-    def _apply_true_voxel_cut(self, entry):
-
-        labels = self.data_blob['cluster_label'][entry]
-
-        particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
-        particles_exclude = []
-
-        for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
-            pid = int(p.id())
-            if pid not in particle_ids:
-                continue
-            is_primary = p.group_id() == p.parent_id()
-            if p.pdg_code() not in PDG_TO_PID:
-                continue
-            mask = labels[:, 6].astype(int) == pid
-            coords = labels[mask][:, 1:4]
-            if coords.shape[0] < self.min_particle_voxel_count:
-                particles_exclude.append(p.id())
-
-        return set(particles_exclude)
-
-
     def get_true_fragments(self, entry) -> List[TruthParticleFragment]:
         '''
-        Get list of <TruthParticleFragment> instances for given <entry> batch id.
+        Get list of <TruthParticleFragment> instances for given batch id.
+        
+        Returns
+        -------
+        fragments: List[TruthParticleFragment]
+            All track/shower fragments contained in image #<entry>.
         '''
-
-        fragments = self.result['ParticleFragments'][entry]
+        fragments = self.result['TruthParticleFragments'][entry]
         return fragments
 
 
@@ -179,20 +152,27 @@ class FullChainEvaluator(FullChainPredictor):
                            volume=None) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id.
-
-        The method will return particles only if its id number appears in
-        the group_id column of cluster_label.
-
-        Each TruthParticle will contain the following information (attributes):
-
-            points: N x 3 coordinate array for particle's full image.
-            id: group_id
-            semantic_type: true semantic type
-            interaction_id: true interaction id
-            pid: PDG type (photons: 0, electrons: 1, ...)
-            fragments: list of integers corresponding to constituent fragment
-                id number
-            p: true momentum vector
+        
+        Can construct TruthParticles with no TruthParticle.points attribute
+        (predicted nonghost coordinates), if the corresponding larcv::Particle
+        object has nonzero true nonghost voxel depositions. 
+        
+        See TruthParticle for more information.
+        
+        Parameters
+        ----------
+        entry: int
+            Image # (batch id) to fetch true particles.
+        only_primaries: bool, optional
+            If True, discards non-primary true particles from output.
+        volume: int, optional
+            Indicator for fetching TruthParticles only within a given cryostat. 
+            Currently, 0 corresponds to east and 1 to west.
+            
+        Returns
+        -------
+        out_particles_list: List[TruthParticle]
+            List of TruthParticles in image #<entry>
         '''
         out_particles_list = []
         particles = self.result['TruthParticles'][entry]
@@ -206,17 +186,40 @@ class FullChainEvaluator(FullChainPredictor):
 
 
     def get_true_interactions(self, entry) -> List[Interaction]:
+        '''
+        Get list of <TruthInteraction> instances for given <entry> batch id.
         
+        Can construct TruthInteraction with no TruthInteraction.points
+        (predicted nonghost coordinates), if all particles that compose the
+        interaction has no predicted nonghost coordinates and nonzero
+        true nonghost coordinates. 
+        
+        See TruthInteraction for more information.
+        
+        Parameters
+        ----------
+        entry: int
+            Image # (batch id) to fetch true particles.
+            
+        Returns
+        -------
+        out: List[Interaction]
+            List of TruthInteraction in image #<entry>
+        '''
         out = self.result['TruthInteractions'][entry]
         return out
+    
     
     @staticmethod
     def match_parts_within_ints(int_matches):
         '''
-        Given list of Tuple[(Truth)Interaction, (Truth)Interaction], 
+        Given list of matches Tuple[(Truth)Interaction, (Truth)Interaction], 
         return list of particle matches Tuple[TruthParticle, Particle]. 
 
-        If no match, (Truth)Particle is replaced with None.
+        This means rather than matching all predicted particles againts
+        all true particles, it has an additional constraint that only
+        particles within a matched interaction pair can be considered
+        for matching. 
         '''
 
         matched_particles, match_counts = [], []
@@ -257,19 +260,35 @@ class FullChainEvaluator(FullChainPredictor):
                         return_counts=False,
                         **kwargs):
         '''
-        Returns (<Particle>, None) if no match was found
-
+        Method for matching reco and true particles by 3D voxel coordinate.
+        
         Parameters
-        ==========
+        ----------
         entry: int
-        only_primaries: bool, default False
-        mode: str, default 'pred_to_true'
-            Must be either 'pred_to_true' or 'true_to_pred'
-        volume: int, default None
+            Image # (batch id)
+        only_primaries: bool (default False)
+            If true, non-primary particles will be discarded from beginning.
+        mode: str (default "pred_to_true")
+            Whether to match reco to true, or true to reco. This 
+            affects the output if matching_mode="one_way".
+        matching_mode: str (default "one_way")
+            The algorithm used to establish matches. Currently there are
+            only two options:
+                - one_way: loops over true/reco particles, and chooses a
+                reco/true particle with the highest overlap.
+                - optimal: finds an optimal assignment between reco/true
+                particles so that the sum of overlap metric (counts or IoU)
+                is maximized. 
+        return_counts: bool (default False)
+            If True, returns the overlap metric (counts or IoU) value for
+            each match. 
+            
+        Returns
+        -------
+        matched_pairs: List[Tuple[Particle, TruthParticle]]
+        counts: np.ndarray
+            overlap metric values corresponding to each matched pair. 
         '''
-        all_matches = []
-        all_counts = []
-        # print('matching', entries, volume)
         if mode == 'pred_to_true':
             # Match each pred to one in true
             particles_from = self.get_particles(entry, 
@@ -293,7 +312,9 @@ class FullChainEvaluator(FullChainPredictor):
             matched_pairs, counts = match_particles_optimal(particles_from, particles_to,
                                                         **all_kwargs)
         else:
-            raise ValueError
+            raise ValueError(f"Particle matching mode {matching_mode} not suppored!")
+        self._matched_particles = matched_pairs
+        self._matched_particles_counts = counts
         if return_counts:
             return matched_pairs, counts
         else:
@@ -301,26 +322,39 @@ class FullChainEvaluator(FullChainPredictor):
 
     
     def match_interactions(self, entry, mode='pred_to_true',
-                           drop_nonprimary_particles=True,
+                           drop_nonprimary_particles=False,
                            match_particles=True,
                            return_counts=False,
                            matching_mode='one_way',
                            **kwargs):
         """
+        Method for matching reco and true interactions.
+        
         Parameters
-        ==========
+        ----------
         entry: int
-        mode: str, default 'pred_to_true'
-            Must be either 'pred_to_true' or 'true_to_pred'.
-        drop_nonprimary_particles: bool, default True
-        match_particles: bool, default True
-        return_counts: bool, default False
-        volume: int, default None
-
+            Image # (batch id)
+        drop_nonprimary_particles: bool (default False)
+            If true, non-primary particles will be discarded from beginning.
+        match_particles: bool (default True)
+            Option to match particles within matched interactions.
+        matching_mode: str (default "one_way")
+            The algorithm used to establish matches. Currently there are
+            only two options:
+                - one_way: loops over true/reco particles, and chooses a
+                reco/true particle with the highest overlap.
+                - optimal: finds an optimal assignment between reco/true
+                particles so that the sum of overlap metric (counts or IoU)
+                is maximized. 
+        return_counts: bool (default False)
+            If True, returns the overlap metric (counts or IoU) value for
+            each match. 
+            
         Returns
-        =======
-        List[Tuple[Interaction, Interaction]]
-            List of tuples, indicating the matched interactions.
+        -------
+        matched_pairs: List[Tuple[Particle, TruthParticle]]
+        counts: np.ndarray
+            overlap metric values corresponding to each matched pair. 
         """
 
         all_matches, all_counts = [], []
@@ -368,7 +402,15 @@ class FullChainEvaluator(FullChainPredictor):
                                                                     min_overlap=self.min_overlap_count,
                                                                     overlap_mode=self.overlap_mode)
                 else:
-                    raise ValueError
+                    raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
+
+            pmatches, pcounts = self.match_parts_within_ints(matched_interactions)
+            
+            self._matched_particles = pmatches
+            self._matched_particles_counts = pcounts
+            
+        self._matched_interactions = matched_interactions
+        self._matched_interactions_counts = counts
 
         if return_counts:
             return matched_interactions, counts

@@ -28,14 +28,17 @@ class TruthParticle(Particle):
         True start position of the particle
     end_position : np.ndarray
         True end position of the particle
+    momentum : float, default np.array([-1,-1,-1])
+        True 3-momentum of the particle
     '''
     def __init__(self, 
                  *args, 
-                 depositions_MeV=np.empty(0, dtype=np.float32),
-                 true_index=np.empty(0, dtype=np.int64), 
-                 true_depositions=np.empty(0, dtype=np.float32),
-                 true_depositions_MeV=np.empty(0, dtype=np.float32),
-                 particle_asis=None, 
+                 depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 true_index: np.ndarray = np.empty(0, dtype=np.int64), 
+                 true_depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 true_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 momentum: np.ndarray = -np.ones(3, dtype=np.float32),
+                 particle_asis: List[object] = None, 
                  **kwargs):
         super(TruthParticle, self).__init__(*args, **kwargs)
 

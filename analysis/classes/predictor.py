@@ -14,7 +14,7 @@ from analysis.classes import (Particle,
                               ParticleBuilder, 
                               InteractionBuilder, 
                               FragmentBuilder)
-from analysis.algorithms.point_matching import *
+from analysis.producers.point_matching import *
 
 from scipy.special import softmax
 
@@ -34,12 +34,7 @@ class FullChainPredictor:
     Instructions
     -----------------------------------------------------------------------
     '''
-    def __init__(self, data_blob, result, 
-                 predictor_cfg={},
-                 enable_flash_matching=False, 
-                 flash_matching_cfg="", 
-                 opflash_keys=[],
-                 boundaries=None):
+    def __init__(self, data_blob, result, predictor_cfg={}):
 
         self.data_blob = data_blob
         self.result = result
@@ -48,27 +43,30 @@ class FullChainPredictor:
         self.interaction_builder = InteractionBuilder()
         self.fragment_builder    = FragmentBuilder()
 
+        build_reps = predictor_cfg.get('build_reps', ['Particles', 'Interactions'])
+        self.builders = {}
+        for key in build_reps:
+            if key == 'Particles':
+                self.builders[key] = ParticleBuilder()
+            if key == 'Interactions':
+                self.builders[key] = InteractionBuilder()
+            if key == 'Fragments':
+                self.builders[key] = FragmentBuilder()
+            
+
         self.build_representations()
 
-        self.num_images = len(result['input_rescaled'])
+        self.num_images = len(self.data_blob['index'])
         self.index = self.data_blob['index']
 
-        self.spatial_size             = predictor_cfg['spatial_size']
-        # For matching particles and interactions
-        self.min_overlap_count        = predictor_cfg.get('min_overlap_count', 0)
-        # Idem, can be 'count' or 'iou'
-        self.overlap_mode             = predictor_cfg.get('overlap_mode', 'iou')
-        if self.overlap_mode == 'iou':
-            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
-        if self.overlap_mode == 'counts':
-            assert self.min_overlap_count >= 0
+        self.spatial_size             = predictor_cfg.get('spatial_size', 6144)
         # Minimum voxel count for a true non-ghost particle to be considered
         self.min_particle_voxel_count = predictor_cfg.get('min_particle_voxel_count', 20)
         # We want to count how well we identify interactions with some PDGs
         # as primary particles
         self.primary_pdgs             = np.unique(predictor_cfg.get('primary_pdgs', []))
 
-        self.primary_score_threshold = predictor_cfg.get('primary_score_threshold', None)
+        self.primary_score_threshold  = predictor_cfg.get('primary_score_threshold', None)
         # This is used to apply fiducial volume cuts.
         # Min/max boundaries in each dimension haev to be specified.
         self.vb = predictor_cfg.get('volume_boundaries', None)
@@ -96,58 +94,15 @@ class FullChainPredictor:
 
 
     def build_representations(self):
-        if 'Particles' not in self.result:
-            self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
-        if 'Interactions' not in self.result:
-            self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
-        if 'ParticleFragments' not in self.result:
-            self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
+        for key in self.builders:
+            if key not in self.result:
+                self.result[key] = self.builders[key].build(self.data_blob, 
+                                                            self.result, 
+                                                            mode='reco')
 
     def __repr__(self):
-        msg = "FullChainEvaluator(num_images={})".format(int(self.num_images/self._num_volumes))
+        msg = "FullChainEvaluator(num_images={})".format(int(self.num_images))
         return msg
-
-    def _fit_predict_ppn(self, entry):
-        '''
-        Method for predicting ppn predictions.
-
-        Inputs:
-            - entry: Batch number to retrieve example.
-
-        Returns:
-            - df (pd.DataFrame): pandas dataframe of ppn points, with
-            x, y, z, coordinates, Score, Type, and sample index.
-        '''
-        # Deghosting is already applied during initialization
-        ppn = uresnet_ppn_type_point_selector(self.result['input_rescaled'][entry],
-                                              self.result,
-                                              entry=entry, apply_deghosting=False)
-        ppn_voxels = ppn[:, 1:4]
-        ppn_score = ppn[:, 5]
-        ppn_type = ppn[:, 12]
-        if 'ppn_classify_endpoints' in self.result:
-            ppn_endpoint = ppn[:, 13:]
-            assert ppn_endpoint.shape[1] == 2
-
-        ppn_candidates = []
-        for i, pred_point in enumerate(ppn_voxels):
-            pred_point_type, pred_point_score = ppn_type[i], ppn_score[i]
-            x, y, z = ppn_voxels[i][0], ppn_voxels[i][1], ppn_voxels[i][2]
-            if 'ppn_classify_endpoints' in self.result:
-                ppn_candidates.append(np.array([x, y, z, 
-                                                pred_point_score, 
-                                                pred_point_type, 
-                                                ppn_endpoint[i][0],
-                                                ppn_endpoint[i][1]]))
-            else:
-                ppn_candidates.append(np.array([x, y, z, pred_point_score, pred_point_type]))
-
-        if len(ppn_candidates):
-            ppn_candidates = np.vstack(ppn_candidates)
-        else:
-            enable_classify_endpoints = 'ppn_classify_endpoints' in self.result
-            ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 6), dtype=np.float32)
-        return ppn_candidates
 
 
     def _fit_predict_semantics(self, entry):
@@ -502,11 +457,6 @@ class FullChainPredictor:
 
         if len(out) == 0:
             return out
-        
-        # Get ppn candidates for particle
-        # ppn_results = self._fit_predict_ppn(entry)
-        # match_points_to_particles(ppn_results, out,
-        #     ppn_distance_threshold=kwargs['attaching_threshold'])
 
         volume = kwargs.get('volume', None)
         if volume is not None:
