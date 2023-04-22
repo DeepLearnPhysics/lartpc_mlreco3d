@@ -182,7 +182,7 @@ class HDF5Reader:
                 # If the dataset has multiple attributes, it contains an object
                 array = group[key][region_ref]
                 names = array.dtype.names
-                if self.to_larcv:
+                if self.to_larcv and ('larcv' not in group[key].attrs or group[key].attrs['larcv']):
                     blob[key] = self.make_larcv_objects(array, names)
                 else:
                     blob[key] = []
