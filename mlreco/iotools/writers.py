@@ -7,6 +7,8 @@ from collections import defaultdict
 from larcv import larcv
 from analysis import classes as analysis
 
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+
 
 class HDF5Writer:
     '''
@@ -29,6 +31,12 @@ class HDF5Writer:
         'index', 'true_index', 'points', 'true_points', 'particles', 'fragments', 'asis',
         'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV'
     ]
+
+    # Analysis object attributes to be stored as enumerators and their associated rules
+    ANA_ENUM = {
+        'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
+        'pid': {v:k for k, v in PID_LABELS.items()}
+    }
 
     # List of recognized LArCV objects
     LARCV_DATAOBJS = [
@@ -270,6 +278,9 @@ class HDF5Writer:
             if isinstance(val, str):
                 # String
                 object_dtype.append((key, h5py.string_dtype()))
+            elif not is_larcv and key in self.ANA_ENUM:
+                # Known enumerator
+                object_dtype.append((key, h5py.enum_dtype(self.ANA_ENUM[key], basetype=type(val))))
             elif np.isscalar(val):
                 # Scalar
                 object_dtype.append((key, type(val)))
