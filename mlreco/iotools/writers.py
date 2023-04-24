@@ -49,7 +49,7 @@ class HDF5Writer:
     ]
 
     # List of recognized objects
-    DATAOBJS = LARCV_DATAOBJS + ANA_DATAOBJS
+    DATAOBJS = tuple(LARCV_DATAOBJS + ANA_DATAOBJS)
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -106,7 +106,7 @@ class HDF5Writer:
         self.batch_size = len(data_blob['index'])
 
         # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
+        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False, 'larcv':False})
 
         # If requested, loop over input_keys and add them to what needs to be tracked
         if self.input_keys is None: self.input_keys = data_blob.keys()
@@ -206,12 +206,13 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
-                if isinstance(blob[key][0][0], tuple(self.DATAOBJS)):
+                if isinstance(blob[key][0][0], self.DATAOBJS):
                     # List containing a single list of dataclass objects per batch ID
                     object_type = type(blob[key][0][0])
                     if not object_type in self.object_dtypes:
                         self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
                     self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
+                    self.key_dict[key]['larcv'] = object_type in self.LARCV_DATAOBJS
 
                 elif not hasattr(blob[key][0][0], '__len__'):
                     # List containing a single list of scalars per batch ID
@@ -311,8 +312,8 @@ class HDF5Writer:
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
                 grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
-                if val['scalar']:
-                    grp[key].attrs['scalar'] = True
+                grp[key].attrs['scalar'] = val['scalar']
+                grp[key].attrs['larcv']  = val['larcv']
 
             elif not val['merge']:
                 # If the elements of the list are of variable widths, refer to one
