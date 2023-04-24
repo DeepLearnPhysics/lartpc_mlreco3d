@@ -4,6 +4,7 @@ from typing import List
 import numpy as np
 from scipy.special import softmax
 from scipy.spatial.distance import cdist
+import copy
 
 from mlreco.utils.globals import (BATCH_COL, 
                                   COORD_COLS, 
@@ -76,6 +77,66 @@ class DataBuilder(ABC):
     @abstractmethod
     def _build_reco(self, entry, data: dict, result: dict):
         raise NotImplementedError
+    
+    # @abstractmethod
+    # def _load_reco(self, entry, data: dict, result: dict):
+    #     raise NotImplementedError
+    
+    # @abstractmethod
+    # def _load_true(self, entry, data: dict, result: dict):
+    #     raise NotImplementedError
+    
+    def load_image(self, entry: int, data: dict, result: dict, mode='reco'):
+        """Load single image worth of entity blueprint from HDF5 
+        and construct original data structure instance.
+
+        Parameters
+        ----------
+        entry : int
+            Image ID
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+        mode : str, optional
+            Whether to load reco or true entities, by default 'reco'
+
+        Returns
+        -------
+        entities: List[Any]
+            List of constructed entities from their HDF5 blueprints. 
+        """
+        if mode == 'truth':
+            entities = self._load_true(entry, data, result)
+        elif mode == 'reco':
+            entities = self._load_reco(entry, data, result)
+        else:
+            raise ValueError(f"Particle loader mode {mode} not supported!")
+        
+        return entities
+    
+    def load(self, data: dict, result: dict, mode='reco'):
+        """Process all images in the current batch of HDF5 data and
+        construct original data structures.
+        
+        Parameters
+        ----------
+        data: dict
+            Data dictionary
+        result: dict
+            Result dictionary
+        mode: str
+            Indicator for building reconstructed vs true data formats.
+            In other words, mode='reco' will produce <Particle> and
+            <Interaction> data formats, while mode='truth' is reserved for
+            <TruthParticle> and <TruthInteraction>
+        """
+        output = []
+        num_batches = len(data['index'])
+        for bidx in range(num_batches):
+            entities = self.load_image(bidx, data, result, mode=mode)
+            output.append(entities)
+        return output
 
 
 class ParticleBuilder(DataBuilder):
@@ -101,6 +162,86 @@ class ParticleBuilder(DataBuilder):
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
+        
+    def _load_reco(self, entry, data: dict, result: dict):
+        """Construct Particle objects from loading HDF5 blueprints.
+
+        Parameters
+        ----------
+        entry : int
+            Image ID
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        out : List[Particle]
+            List of restored particle instances built from HDF5 blueprints.
+        """
+        if 'input_rescaled' in result:
+            point_cloud = result['input_rescaled']
+        elif 'input_data' in data:
+            point_cloud = data['input_data']
+        else:
+            msg = "To build Particle objects from HDF5 data, need either "\
+                "input_data inside data dictionary or input_rescaled inside"\
+                " result dictionary."
+            raise KeyError(msg)
+        out  = []
+        blueprints = result['Particles'][0]
+        for i, bp in enumerate(blueprints):
+            mask = bp['index']
+            prepared_bp = copy.deepcopy(bp)
+            prepared_bp.pop('depositions_sum', None)
+            group_id = prepared_bp.pop('id', -1)
+            prepared_bp['group_id'] = group_id
+            prepared_bp.update({
+                'points': point_cloud[mask][:, COORD_COLS],
+                'depositions': point_cloud[mask][:, VALUE_COL],
+            })
+            particle = Particle(**prepared_bp)
+            assert particle.image_id == entry
+            out.append(particle)
+        
+        return out
+    
+    
+    def _load_true(self, entry, data, result):
+        out = []
+        true_nonghost = data['cluster_label'][0]
+        particles_asis = data['particles_asis'][0]
+        pred_nonghost = result['cluster_label_adapted'][0]
+        blueprints = result['TruthParticles'][0]
+        for i, bp in enumerate(blueprints):
+            mask = bp['index']
+            true_mask = bp['true_index']
+            pasis_selected = None
+            # Find particles_asis
+            for pasis in particles_asis:
+                if pasis.id() == bp['id']:
+                    pasis_selected = pasis
+            assert pasis_selected is not None
+            prepared_bp = copy.deepcopy(bp)
+            group_id = prepared_bp.pop('id', -1)
+            prepared_bp['group_id'] = group_id
+            prepared_bp.pop('depositions_sum', None)
+            prepared_bp.update({
+                
+                'points': pred_nonghost[mask][:, COORD_COLS],
+                'depositions': pred_nonghost[mask][:, VALUE_COL],
+                'true_points': true_nonghost[true_mask][:, COORD_COLS],
+                'true_depositions': true_nonghost[true_mask][:, VALUE_COL],
+                'particle_asis': pasis_selected
+            })
+            truth_particle = TruthParticle(**prepared_bp)
+            assert truth_particle.image_id == entry
+            assert truth_particle.true_size > 0
+            out.append(truth_particle)
+            
+        return out
+        
 
     def _build_reco(self, 
                     entry: int, 

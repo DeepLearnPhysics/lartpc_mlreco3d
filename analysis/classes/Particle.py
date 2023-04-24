@@ -85,7 +85,7 @@ class Particle:
                  start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  momentum_range: float = -1.,
-                 momentum_mcs: float = -1.):
+                 momentum_mcs: float = -1., **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments = None
@@ -124,8 +124,12 @@ class Particle:
         self.momentum_mcs   = momentum_mcs
 
         # Quantities to be set by the particle matcher
-        self.match = np.empty(0, np.int64)
-        self._match_counts = np.empty(0, np.float32)
+        self.match = kwargs.get('match', np.empty(0, np.int64))
+        self._match_counts = kwargs.get('match_counts', np.empty(0, np.float32))
+        
+        # ADC to MeV
+        self._ADC_to_MeV       = kwargs.get('ADC_to_MeV', 1./350.)
+        self._depositions_MeV = self.depositions * self._ADC_to_MeV
 
     def __repr__(self):
         msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self.pid, self.size)
@@ -142,6 +146,15 @@ class Particle:
                          self.size,
                          self.volume_id)
         return msg
+    
+    @property
+    def ADC_to_MeV(self):
+        return self._ADC_to_MeV
+    
+    @ADC_to_MeV.setter
+    def ADC_to_MeV(self, value):
+        assert value > 0
+        self._ADC_to_MeV = value
 
     @property
     def num_fragments(self):
@@ -194,6 +207,16 @@ class Particle:
         as it can only be set by providing a set of depositions.
         '''
         return self._depositions_sum
+    
+    @property
+    def depositions_MeV(self):
+        self._depositions_MeV = self._depositions * self._ADC_to_MeV
+        return self._depositions_MeV
+    
+    @depositions_MeV.setter
+    def depositions_MeV(self, value):
+        self._depositions_MeV = value
+        self._depositions = value * 1./ self._ADC_to_MeV
 
     @property
     def depositions(self):
