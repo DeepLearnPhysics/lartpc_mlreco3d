@@ -243,6 +243,64 @@ class AnaToolsManager:
         for ltruth in lcheck_truth:
             assert ltruth == num_batches
             
+            
+    def _load_reco_reps(self, data, result):
+        """Load representations for reconstructed objects.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        length_check: List[int]
+            List of integers representing the length of each data structure
+            from DataBuilders, used for checking validity. 
+        """
+        if 'ParticleBuilder' in self.builders:
+            result['Particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+        if 'InteractionBuilder' in self.builders:
+            result['Interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')
+            
+            
+    def _load_truth_reps(self, data, result):
+        """Load representations for true objects.
+
+        Parameters
+        ----------
+        data : dict
+            Data dictionary
+        result : dict
+            Result dictionary
+
+        Returns
+        -------
+        length_check: List[int]
+            List of integers representing the length of each data structure
+            from DataBuilders, used for checking validity. 
+        """
+        if 'ParticleBuilder' in self.builders:
+            result['TruthParticles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
+        if 'InteractionBuilder' in self.builders:
+            result['TruthInteractions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
+
+            
+    def load_representations(self, data, result, mode='all'):
+        if self.ana_mode is not None:
+            mode = self.ana_mode
+        if mode == 'reco':
+            self._load_reco_reps(data, result)
+        elif mode == 'truth':
+            self._load_truth_reps(data, result)
+        elif mode is None or mode == 'all':
+            self._load_reco_reps(data, result)
+            self._load_truth_reps(data, result)
+        else:
+            raise ValueError(f"DataBuilder mode {mode} is not supported!")
+            
 
     def initialize_flash_manager(self, meta):
         
@@ -402,7 +460,10 @@ class AnaToolsManager:
         start = end
 
         # 2. Build data representations
-        self.build_representations(data, res)
+        if self._reader_state == 'hdf5':
+            self.load_representations(data, res)
+        else:
+            self.build_representations(data, res)
         end = time.time()
         self.logger_dict['build_reps_time'] = end-start
         start = end
