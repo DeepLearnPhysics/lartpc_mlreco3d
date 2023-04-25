@@ -36,7 +36,7 @@ class TruthInteraction(Interaction):
         self.particles   = particles
         
         if self._particles is None:
-            self._depositions_MeV       = depositions_MeV
+            self._depositions_MeV        = depositions_MeV
             self._truth_depositions      = truth_depositions
             self._truth_depositions_MeV  = truth_depositions_MeV
             self.truth_points = truth_points
@@ -85,17 +85,17 @@ class TruthInteraction(Interaction):
                 true_depositions_list.append(p.truth_depositions)
                 true_depositions_MeV_list.append(p.truth_depositions_MeV)
 
-            self._particle_ids         = np.array(id_list, dtype=np.int64)
-            self._num_particles        = len(value)
-            self._num_primaries        = len([1 for p in value if p.is_primary])
-            self.index                 = np.concatenate(index_list)
-            self.points                = np.vstack(points_list)
-            self.depositions           = np.concatenate(depositions_list)
-            self.truth_points           = np.concatenate(true_points_list)
-            self.truth_index            = np.concatenate(true_index_list)
-            self._depositions_MeV      = np.concatenate(depositions_MeV_list)
-            self._truth_depositions     = np.concatenate(true_depositions_list)
-            self._truth_depositions_MeV = np.concatenate(true_depositions_MeV_list)
+            self._particle_ids          = np.array(id_list, dtype=np.int64)
+            self._num_particles         = len(value)
+            self._num_primaries         = len([1 for p in value if p.is_primary])
+            self.index                  = np.atleast_1d(np.concatenate(index_list))
+            self.points                 = np.atleast_1d(np.vstack(points_list))
+            self.depositions            = np.atleast_1d(np.concatenate(depositions_list))
+            self.truth_points           = np.atleast_1d(np.concatenate(true_points_list))
+            self.truth_index            = np.atleast_1d(np.concatenate(true_index_list))
+            self._depositions_MeV       = np.atleast_1d(np.concatenate(depositions_MeV_list))
+            self._truth_depositions     = np.atleast_1d(np.concatenate(true_depositions_list))
+            self._truth_depositions_MeV = np.atleast_1d(np.concatenate(true_depositions_MeV_list))
         
     @classmethod
     def from_particles(cls, particles, verbose=False, **kwargs):
@@ -105,7 +105,7 @@ class TruthInteraction(Interaction):
         reserved_attributes = [
             'interaction_id', 'nu_id', 'volume_id', 
             'image_id', 'points', 'index', 'depositions', 'depositions_MeV',
-            'truth_depositions_MeV', 'truth_depositions'
+            'truth_depositions_MeV', 'truth_depositions', 'truth_index'
         ]
         
         processed_args = {'particles': []}
@@ -120,8 +120,13 @@ class TruthInteraction(Interaction):
         
         _process_interaction_attributes(init_args, processed_args, **kwargs)
         
+        for i, t in enumerate(init_args['truth_depositions_MeV']):
+            if len(t.shape) == 0:
+                print(t, t.shape)
+                print(init_args['truth_index'][i])
+        
         # Handle depositions_MeV for TruthParticles
-        processed_args['depositions_MeV']      = np.concatenate(init_args['depositions_MeV'])
+        processed_args['depositions_MeV']       = np.concatenate(init_args['depositions_MeV'])
         processed_args['truth_depositions']     = np.concatenate(init_args['truth_depositions'])
         processed_args['truth_depositions_MeV'] = np.concatenate(init_args['truth_depositions_MeV'])
         

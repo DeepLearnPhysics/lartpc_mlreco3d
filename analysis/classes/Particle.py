@@ -108,7 +108,7 @@ class Particle:
 
         self.index          = index
         self.points         = points
-        self.depositions    = depositions
+        self.depositions    = np.atleast_1d(depositions)
 
         self._force_pid     = False
         if pid > 0:

@@ -102,9 +102,9 @@ class PostProcessor:
                 assert len(val) == self._num_batches
                 if key in self.result:
                     msg = "Post processing script output key {} "\
-                    "is already in result_dict, you may want"\
-                    "to rename it.".format(key)
-                    raise RuntimeError(msg)
+                    "is already in result_dict, it will be overwritten "\
+                    "unless you rename it.".format(key)
+                    # raise RuntimeError(msg)
                 else:
                     self.result[key] = val
 

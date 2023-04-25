@@ -474,7 +474,11 @@ class InteractionBuilder(DataBuilder):
                 'is_neutrino': bp['is_neutrino'],
                 'nu_id': bp['nu_id'],
                 'volume_id': bp['volume_id'],
-                'vertex': bp['vertex']
+                'vertex': bp['vertex'],
+                'fmatch_time': bp['fmatch_time'],
+                'fmatched': bp['fmatched'],
+                'fmatch_id': bp['fmatch_id'],
+                'fmatch_total_pE': bp['fmatch_total_pE']
             }
             if use_particles:
                 particles = []
@@ -579,7 +583,7 @@ class InteractionBuilder(DataBuilder):
                 # for nu in neutrinos:
                 #     if nu.mct_index() not in true_particles_track_ids: continue
                 ia.nu_interaction_type = nu.interaction_type()
-                ia.nu_interation_mode  = nu.interacion_mode()
+                ia.nu_interation_mode  = nu.interaction_mode()
                 ia.nu_current_type        = nu.current_type()
                 ia.nu_energy_init         = nu.energy_init()
 

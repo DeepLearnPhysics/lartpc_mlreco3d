@@ -1,7 +1,6 @@
 import numpy as np
-import pandas as pd
-
 from typing import Counter, List, Union
+import sys
 from collections import OrderedDict, Counter, defaultdict
 from . import Particle
 from mlreco.utils.globals import PID_LABELS
@@ -47,7 +46,11 @@ class Interaction:
                  is_neutrino: bool = False,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
-                 depositions: np.ndarray = np.empty(0, dtype=np.float32)):
+                 depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 fmatch_time: float = -float(sys.maxsize),
+                 fmatched: bool = False,
+                 fmatch_total_pE: float = -1,
+                 fmatch_id: int = -1):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -68,14 +71,20 @@ class Interaction:
             self._particle_ids   = np.empty(0, dtype=np.int64)
             self._num_particles  = 0
             self._num_primaries  = 0
-            self.index           = index
-            self.points          = points
-            self.depositions     = depositions
+            self.index           = np.atleast_1d(index)
+            self.points          = np.atleast_1d(points)
+            self.depositions     = np.atleast_1d(depositions)
             self._particles      = particles
 
         # Quantities to be set by the particle matcher
         # self._match         = []
         self._match_counts  = OrderedDict()
+        
+        # Flash matching quantities
+        self.fmatch_time     = fmatch_time
+        self.fmatched        = fmatched
+        self.fmatch_total_pE = fmatch_total_pE
+        self.fmatch_id       = fmatch_id
         
     @property
     def size(self):
@@ -158,9 +167,9 @@ class Interaction:
             # self._particle_ids = np.array(id_list, dtype=np.int64)
             self._num_particles = len(value)
             self._num_primaries = len([1 for p in value if p.is_primary])
-            self.index = np.concatenate(index_list)
+            self.index = np.atleast_1d(np.concatenate(index_list))
             self.points = np.vstack(points_list)
-            self.depositions = np.concatenate(depositions_list)
+            self.depositions = np.atleast_1d(np.concatenate(depositions_list))
         
     @property
     def particle_ids(self):

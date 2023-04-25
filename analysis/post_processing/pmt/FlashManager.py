@@ -115,9 +115,9 @@ class FlashMatcherInterface:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
 
-            tpc_v = [ia for ia in interactions if volume is None or ia.volume == volume]
+            tpc_v = [ia for ia in interactions if volume is None or ia.volume_id == volume]
         else:
-            tpc_v = [ia for ia in interactions if volume is None or ia.volume == volume]
+            tpc_v = [ia for ia in interactions if volume is None or ia.volume_id == volume]
 
         if len(restrict_interactions) > 0: # by default, use all interactions
             tpc_v_select = []

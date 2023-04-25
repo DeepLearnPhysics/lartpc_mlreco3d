@@ -23,6 +23,9 @@ from analysis.manager import AnaToolsManager
 def main(analysis_cfg_path, model_cfg_path=None):
 
     analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
+    if 'chain_config' in analysis_config['analysis']:
+        if model_cfg_path is None:
+            model_cfg_path = analysis_config['analysis']['chain_config']
     config = None
     if model_cfg_path is not None:
         config = yaml.safe_load(open(model_cfg_path, 'r'))

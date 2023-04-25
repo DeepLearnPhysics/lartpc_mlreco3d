@@ -69,21 +69,25 @@ def run_flash_matching(data_dict, result_dict,
     for ia, flash, match in fmatches_E:
         flash_dict_E[ia.id] = (flash, match)
         ia.fmatched = True
-        ia.fmatch_time = flash.time()
-        ia.fmatch_total_pE = flash.TotalPE()
-        ia.fmatch_id = flash.id()
+        ia.fmatch_time = float(flash.time())
+        ia.fmatch_total_pE = float(flash.TotalPE())
+        ia.fmatch_id = int(flash.id())
+        update_dict['Interactions'].append(ia)
     update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
     flash_dict_W = {}
     for ia, flash, match in fmatches_W:
         flash_dict_W[ia.id] = (flash, match)
         ia.fmatched = True
-        ia.fmatch_time = flash.time()
-        ia.fmatch_total_pE = flash.TotalPE()
-        ia.fmatch_id = flash.id()
+        ia.fmatch_time = float(flash.time())
+        ia.fmatch_total_pE = float(flash.TotalPE())
+        ia.fmatch_id = int(flash.id())
+        update_dict['Interactions'].append(ia)
     update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
     assert len(update_dict['flash_matches_cryoE'])\
            == len(update_dict['flash_matches_cryoW'])
+           
+    # print(update_dict)
 
     return update_dict

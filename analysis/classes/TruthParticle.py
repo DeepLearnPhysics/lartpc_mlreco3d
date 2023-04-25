@@ -47,12 +47,12 @@ class TruthParticle(Particle):
         super(TruthParticle, self).__init__(*args, **kwargs)
 
         # Initialize attributes
-        self.depositions_MeV       = depositions_MeV
+        self.depositions_MeV        = np.atleast_1d(depositions_MeV)
         self.truth_index            = truth_index
         self.truth_points           = truth_points
         self._truth_size            = truth_points.shape[0]
-        self._truth_depositions     = truth_depositions   # Must be ADC
-        self._truth_depositions_MeV = truth_depositions_MeV   # Must be MeV
+        self._truth_depositions     = np.atleast_1d(truth_depositions)   # Must be ADC
+        self._truth_depositions_MeV = np.atleast_1d(truth_depositions_MeV)   # Must be MeV
         if particle_asis is not None:
             self.start_position    = particle_asis.position()
             self.end_position      = particle_asis.end_position()
@@ -89,7 +89,7 @@ class TruthParticle(Particle):
     @truth_depositions.setter
     def truth_depositions(self, value):
         assert value.shape[0] == self._truth_size
-        self._truth_depositions = value
+        self._truth_depositions = np.atleast_1d(value)
     
     @property
     def truth_depositions_MeV(self):
@@ -98,7 +98,7 @@ class TruthParticle(Particle):
     @truth_depositions_MeV.setter
     def truth_depositions_MeV(self, value):
         assert value.shape[0] == self._truth_size
-        self._truth_depositions_MeV = value
+        self._truth_depositions_MeV = np.atleast_1d(value)
     
     def is_contained(self, spatial_size):
 
