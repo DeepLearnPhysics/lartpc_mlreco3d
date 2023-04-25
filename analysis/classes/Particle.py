@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from typing import Counter, List, Union
+from collections import OrderedDict
 from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
 
 
@@ -128,8 +129,17 @@ class Particle:
         self.momentum_mcs   = momentum_mcs
 
         # Quantities to be set by the particle matcher
-        self.match = kwargs.get('match', np.empty(0, np.int64))
-        self._match_counts = kwargs.get('match_counts', np.empty(0, np.float32))
+        self._match = list(kwargs.get('match', []))
+        self._match_counts = kwargs.get('match_counts', OrderedDict())
+        
+    @property
+    def match(self):
+        self._match = list(self._match_counts.keys())
+        return np.array(self._match, dtype=np.int64)
+    
+    @property
+    def match_counts(self):
+        return np.array(self._match_counts.values(), dtype=np.float32)
 
     def __repr__(self):
         msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)

@@ -2,7 +2,7 @@ from typing import List
 import numpy as np
 
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
-from analysis.classes.particle_utils import (match_particles_fn, 
+from analysis.classes.matching import (match_particles_fn, 
                                              match_interactions_fn, 
                                              match_interactions_optimal, 
                                              match_particles_optimal)
@@ -56,7 +56,7 @@ class FullChainEvaluator(FullChainPredictor):
         if self.overlap_mode == 'counts':
             assert self.min_overlap_count >= 0
 
-    def build_representations(self):
+    def build_representations(self, mode='all'):
         """
         Method using DataBuilders to construct high level data structures. 
         The constructed data structures are stored inside result dict. 
@@ -73,18 +73,11 @@ class FullChainEvaluator(FullChainPredictor):
         -------
         None (operation is in-place)
         """
-        if 'Particles' not in self.result:
-            self.result['Particles'] = self.particle_builder.build(self.data_blob, self.result, mode='reco')
-        if 'TruthParticles' not in self.result:
-            self.result['TruthParticles'] = self.particle_builder.build(self.data_blob, self.result, mode='truth')
-        if 'Interactions' not in self.result:
-            self.result['Interactions'] = self.interaction_builder.build(self.data_blob, self.result, mode='reco')
-        if 'TruthInteractions' not in self.result:
-            self.result['TruthInteractions'] = self.interaction_builder.build(self.data_blob, self.result, mode='truth')
-        if 'ParticleFragments' not in self.result:
-            self.result['ParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='reco')
-        if 'TruthParticleFragments' not in self.result:
-            self.result['TruthParticleFragments'] = self.fragment_builder.build(self.data_blob, self.result, mode='truth')
+        for key in self.builders:
+            if key not in self.result and key in self.scope:
+                self.result[key] = self.builders[key].build(self.data_blob, 
+                                                            self.result, 
+                                                            mode=mode)
 
     def get_true_label(self, entry, name, schema='cluster_label_adapted'):
         """
@@ -179,9 +172,11 @@ class FullChainEvaluator(FullChainPredictor):
 
         if only_primaries:
             out_particles_list = [p for p in particles if p.is_primary]
+        else:
+            out_particles_list = [p for p in particles]
+            
         if volume is not None:
-            out_particles_list = [p for p in particles if p.volume == volume]
-
+            out_particles_list = [p for p in out_particles_list if p.volume_id == volume]
         return out_particles_list
 
 
@@ -304,6 +299,7 @@ class FullChainEvaluator(FullChainPredictor):
         else:
             raise ValueError("Mode {} is not valid. For matching each"\
                 " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+            
         all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
         if matching_mode == 'one_way':
             matched_pairs, counts = match_particles_fn(particles_from, particles_to,

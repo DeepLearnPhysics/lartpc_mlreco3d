@@ -37,10 +37,10 @@ class TruthParticle(Particle):
     def __init__(self, 
                  *args, 
                  depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
-                 true_index: np.ndarray = np.empty(0, dtype=np.int64), 
-                 true_points: np.ndarray = np.empty((0,3), dtype=np.float32),
-                 true_depositions: np.ndarray = np.empty(0, dtype=np.float32),
-                 true_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 truth_index: np.ndarray = np.empty(0, dtype=np.int64), 
+                 truth_points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  momentum: np.ndarray = -np.ones(3, dtype=np.float32),
                  particle_asis: object = None, 
                  **kwargs):
@@ -48,11 +48,11 @@ class TruthParticle(Particle):
 
         # Initialize attributes
         self.depositions_MeV       = depositions_MeV
-        self.true_index            = true_index
-        self.true_points           = true_points
-        self._true_size            = true_points.shape[0]
-        self._true_depositions     = true_depositions   # Must be ADC
-        self._true_depositions_MeV = true_depositions_MeV   # Must be MeV
+        self.truth_index            = truth_index
+        self.truth_points           = truth_points
+        self._truth_size            = truth_points.shape[0]
+        self._truth_depositions     = truth_depositions   # Must be ADC
+        self._truth_depositions_MeV = truth_depositions_MeV   # Must be MeV
         if particle_asis is not None:
             self.start_position    = particle_asis.position()
             self.end_position      = particle_asis.end_position()
@@ -79,26 +79,26 @@ class TruthParticle(Particle):
         return 'Truth'+msg
     
     @property
-    def true_size(self):
-        return self._true_size
+    def truth_size(self):
+        return self._truth_size
     
     @property
-    def true_depositions(self):
-        return self._true_depositions
+    def truth_depositions(self):
+        return self._truth_depositions
     
-    @true_depositions.setter
-    def true_depositions(self, value):
-        assert value.shape[0] == self._true_size
-        self._true_depositions = value
+    @truth_depositions.setter
+    def truth_depositions(self, value):
+        assert value.shape[0] == self._truth_size
+        self._truth_depositions = value
     
     @property
-    def true_depositions_MeV(self):
-        return self._true_depositions_MeV
+    def truth_depositions_MeV(self):
+        return self._truth_depositions_MeV
     
-    @true_depositions_MeV.setter
-    def true_depositions_MeV(self, value):
-        assert value.shape[0] == self._true_size
-        self._true_depositions_MeV = value
+    @truth_depositions_MeV.setter
+    def truth_depositions_MeV(self, value):
+        assert value.shape[0] == self._truth_size
+        self._truth_depositions_MeV = value
     
     def is_contained(self, spatial_size):
 

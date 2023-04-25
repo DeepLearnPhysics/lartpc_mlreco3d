@@ -71,6 +71,9 @@ class FullChainPredictor:
         # Min/max boundaries in each dimension haev to be specified.
         self.vb = predictor_cfg.get('volume_boundaries', None)
         self.set_volume_boundaries()
+        
+        # Data Structure Scopes
+        self.scope = predictor_cfg.get('scope', ['Particles', 'Interactions'])
 
 
     def set_volume_boundaries(self):
@@ -95,7 +98,7 @@ class FullChainPredictor:
 
     def build_representations(self):
         for key in self.builders:
-            if key not in self.result:
+            if key not in self.result and key in self.scope:
                 self.result[key] = self.builders[key].build(self.data_blob, 
                                                             self.result, 
                                                             mode='reco')

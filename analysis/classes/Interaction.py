@@ -59,6 +59,7 @@ class Interaction:
         
         # Initialize private attributes to be set by setter only
         self._particles  = None
+        self._size       = None
         # Invoke particles setter
         self.particles   = particles
 
@@ -71,12 +72,24 @@ class Interaction:
             self.points          = points
             self.depositions     = depositions
             self._particles      = particles
-            self.size            = len(self.index)
 
         # Quantities to be set by the particle matcher
-        self.match = np.empty(0, np.int64)
-        self._match_counts = np.empty(0, np.float32)
+        # self._match         = []
+        self._match_counts  = OrderedDict()
         
+    @property
+    def size(self):
+        if self._size is None:
+            self._size = len(self.index)
+        return self._size
+        
+    @property
+    def match(self):
+        return np.array(list(self._match_counts.keys()), dtype=np.int64)
+    
+    @property
+    def match_counts(self):
+        return np.array(list(self._match_counts.values()), dtype=np.float32)
         
     @classmethod
     def from_particles(cls, particles, verbose=False, **kwargs):
@@ -114,7 +127,7 @@ class Interaction:
 
     @property
     def particles(self):
-        return self._particles
+        return self._particles.values()
 
     @particles.setter
     def particles(self, value):
@@ -122,6 +135,7 @@ class Interaction:
         <Particle> list getter/setter. The setter also sets
         the general interaction properties
         '''
+        assert isinstance(value, list)
         
         if self._particles is not None:
             msg = f"Interaction {self.id} already has a populated list of "\
@@ -130,7 +144,9 @@ class Interaction:
             raise AttributeError(msg)
 
         if value is not None:
-            self._particles = value
+            self._particles = {p.id : p for p in value}
+            self._particle_ids = np.array(list(self._particles.keys()), 
+                                          dtype=np.int64)
             id_list, index_list, points_list, depositions_list = [], [], [], []
             for p in value:
                 self.check_particle_input(p)
@@ -139,7 +155,7 @@ class Interaction:
                 points_list.append(p.points)
                 depositions_list.append(p.depositions)
 
-            self._particle_ids = np.array(id_list, dtype=np.int64)
+            # self._particle_ids = np.array(id_list, dtype=np.int64)
             self._num_particles = len(value)
             self._num_primaries = len([1 for p in value if p.is_primary])
             self.index = np.concatenate(index_list)
@@ -202,8 +218,7 @@ class Interaction:
         return self._particles[key]
 
     def __repr__(self):
-        return "Interaction(id={}, vertex={}, nu_id={}, Particles={})".format(
-            self.id, str(self.vertex), self.nu_id, str(self.particle_ids))
+        return f"Interaction(id={self.id}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size}, Particles={str(self.particle_ids)})"
 
     def __str__(self):
         msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
@@ -217,7 +232,7 @@ class Interaction:
         primary_str = {True: '*', False: '-'}
         self._particles_summary = ""
         if self._particles is None: return
-        for p in sorted(self._particles, key=lambda x: x.is_primary, reverse=True):
+        for p in sorted(self._particles.values(), key=lambda x: x.is_primary, reverse=True):
             pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
                 primary_str[p.is_primary], p.id, PID_LABELS[p.pid], p.size, str(p.match))
             self._particles_summary += pmsg

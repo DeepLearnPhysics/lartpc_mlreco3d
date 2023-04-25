@@ -22,7 +22,7 @@ from analysis.classes import (Particle,
                               TruthInteraction,
                               ParticleFragment,
                               TruthParticleFragment)
-from analysis.classes.particle_utils import group_particles_to_interactions_fn
+from analysis.classes.matching import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
 from mlreco.utils.gnn.cluster import get_cluster_label
 
@@ -63,7 +63,7 @@ class DataBuilder(ABC):
             Batch id number for the image.
         """
         if mode == 'truth':
-            entities = self._build_true(entry, data, result)
+            entities = self._build_truth(entry, data, result)
         elif mode == 'reco':
             entities = self._build_reco(entry, data, result)
         else:
@@ -72,7 +72,7 @@ class DataBuilder(ABC):
         return entities
         
     @abstractmethod
-    def _build_true(self, entry, data: dict, result: dict):
+    def _build_truth(self, entry, data: dict, result: dict):
         raise NotImplementedError
     
     @abstractmethod
@@ -108,7 +108,7 @@ class DataBuilder(ABC):
             List of constructed entities from their HDF5 blueprints. 
         """
         if mode == 'truth':
-            entities = self._load_true(entry, data, result)
+            entities = self._load_truth(entry, data, result)
         elif mode == 'reco':
             entities = self._load_reco(entry, data, result)
         else:
@@ -209,7 +209,7 @@ class ParticleBuilder(DataBuilder):
         return out
     
     
-    def _load_true(self, entry, data, result):
+    def _load_truth(self, entry, data, result):
         out = []
         true_nonghost = data['cluster_label'][0]
         particles_asis = data['particles_asis'][0]
@@ -217,7 +217,7 @@ class ParticleBuilder(DataBuilder):
         blueprints = result['TruthParticles'][0]
         for i, bp in enumerate(blueprints):
             mask = bp['index']
-            true_mask = bp['true_index']
+            true_mask = bp['truth_index']
             pasis_selected = None
             # Find particles_asis
             for pasis in particles_asis:
@@ -232,13 +232,13 @@ class ParticleBuilder(DataBuilder):
                 
                 'points': pred_nonghost[mask][:, COORD_COLS],
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
-                'true_points': true_nonghost[true_mask][:, COORD_COLS],
-                'true_depositions': true_nonghost[true_mask][:, VALUE_COL],
+                'truth_points': true_nonghost[true_mask][:, COORD_COLS],
+                'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
                 'particle_asis': pasis_selected
             })
             truth_particle = TruthParticle(**prepared_bp)
             # assert truth_particle.image_id == entry
-            assert truth_particle.true_size > 0
+            assert truth_particle.truth_size > 0
             out.append(truth_particle)
             
         return out
@@ -300,7 +300,7 @@ class ParticleBuilder(DataBuilder):
 
         return out
     
-    def _build_true(self, 
+    def _build_truth(self, 
                     entry: int, 
                     data: dict, 
                     result: dict) -> List[TruthParticle]:
@@ -331,7 +331,7 @@ class ParticleBuilder(DataBuilder):
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
             if id not in particle_ids:
-                particle = handle_empty_true_particles(labels_nonghost, 
+                particle = handle_empty_truth_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
                                                        entry)
@@ -369,7 +369,7 @@ class ParticleBuilder(DataBuilder):
             #     continue
     
             # 2. Process particle-level labels
-            semantic_type, int_id, nu_id = get_true_particle_labels(labels, 
+            semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
                                                                     mask, 
                                                                     pid=pdg)
 
@@ -383,10 +383,10 @@ class ParticleBuilder(DataBuilder):
                                      points=coords,
                                      depositions=depositions,
                                      depositions_MeV=depositions_MeV,
-                                     true_index=true_voxel_indices,
-                                     true_points=coords_noghost,
-                                     true_depositions=np.empty(0, dtype=np.float32), #TODO
-                                     true_depositions_MeV=depositions_noghost,
+                                     truth_index=true_voxel_indices,
+                                     truth_points=coords_noghost,
+                                     truth_depositions=np.empty(0, dtype=np.float32), #TODO
+                                     truth_depositions_MeV=depositions_noghost,
                                      is_primary=is_primary,
                                      pid=pdg,
                                      particle_asis=lpart)
@@ -466,15 +466,15 @@ class InteractionBuilder(DataBuilder):
             out.append(ia)
         return out
     
-    def _build_true(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
+    def _build_truth(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
         particles = result['TruthParticles'][entry]
         out = group_particles_to_interactions_fn(particles, 
                                                  get_nu_id=True, 
                                                  mode='truth')
-        out = self.decorate_true_interactions(entry, data, out)
+        out = self.decorate_truth_interactions(entry, data, out)
         return out
     
-    def _load_true(self, entry, data, result):
+    def _load_truth(self, entry, data, result):
         true_nonghost = data['cluster_label'][0]
         pred_nonghost = result['cluster_label_adapted'][0]
         
@@ -507,32 +507,32 @@ class InteractionBuilder(DataBuilder):
                                                      **info)
             else:
                 mask = bp['index']
-                true_mask = bp['true_index']
+                true_mask = bp['truth_index']
                 info.update({
                     'index': mask,
-                    'true_index': true_mask,
+                    'truth_index': true_mask,
                     'points': pred_nonghost[mask][:, COORD_COLS],
                     'depositions': pred_nonghost[mask][:, VALUE_COL],
-                    'true_points': true_nonghost[true_mask][:, COORD_COLS],
-                    'true_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL],
+                    'truth_points': true_nonghost[true_mask][:, COORD_COLS],
+                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL],
                 })
                 ia = TruthInteraction(**info)
             out.append(ia)
         return out
     
-    def build_true_using_particles(self, entry, data, particles):
+    def build_truth_using_particles(self, entry, data, particles):
         out = group_particles_to_interactions_fn(particles, 
                                                  get_nu_id=True, 
                                                  mode='truth')
-        out = self.decorate_true_interactions(entry, data, out)
+        out = self.decorate_truth_interactions(entry, data, out)
         return out
     
-    def decorate_true_interactions(self, entry, data, interactions):
+    def decorate_truth_interactions(self, entry, data, interactions):
         """
         Helper function for attaching additional information to
         TruthInteraction instances. 
         """
-        vertices = self.get_true_vertices(entry, data)
+        vertices = self.get_truth_vertices(entry, data)
         for ia in interactions:
             if ia.id in vertices:
                 ia.vertex = vertices[ia.id]
@@ -556,7 +556,7 @@ class InteractionBuilder(DataBuilder):
 
         return interactions
         
-    def get_true_vertices(self, entry, data: dict):
+    def get_truth_vertices(self, entry, data: dict):
         """
         Helper function for retrieving true vertex information. 
         """
@@ -690,7 +690,7 @@ class FragmentBuilder(DataBuilder):
 
         return out
     
-    def _build_true(self, entry, data: dict, result: dict):
+    def _build_truth(self, entry, data: dict, result: dict):
         
         fragments = []
 
@@ -782,7 +782,7 @@ class FragmentBuilder(DataBuilder):
 
 # --------------------------Helper functions---------------------------
 
-def handle_empty_true_particles(labels_noghost,  
+def handle_empty_truth_particles(labels_noghost,  
                                 mask_noghost, 
                                 p, 
                                 entry, 
@@ -818,7 +818,7 @@ def handle_empty_true_particles(labels_noghost,
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
-        semantic_type, interaction_id, nu_id = get_true_particle_labels(labels_noghost, 
+        semantic_type, interaction_id, nu_id = get_truth_particle_labels(labels_noghost, 
                                                                         mask_noghost, 
                                                                         pid=pid, 
                                                                         verbose=verbose)
@@ -835,10 +835,10 @@ def handle_empty_true_particles(labels_noghost,
                              points=coords,
                              depositions=depositions,
                              depositions_MeV=np.empty(0, dtype=np.float32),
-                             true_index=true_voxel_indices,
-                             true_points=coords_noghost,
-                             true_depositions=np.empty(0, dtype=np.float32), #TODO
-                             true_depositions_MeV=depositions_noghost,
+                             truth_index=true_voxel_indices,
+                             truth_points=coords_noghost,
+                             truth_depositions=np.empty(0, dtype=np.float32), #TODO
+                             truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
                              pid=pdg,
                              particle_asis=p)
@@ -859,7 +859,7 @@ def handle_empty_true_particles(labels_noghost,
     return particle
 
 
-def get_true_particle_labels(labels, mask, pid=-1, verbose=False):
+def get_truth_particle_labels(labels, mask, pid=-1, verbose=False):
     """
     Helper function for fetching true particle labels from 
     voxel label array. 

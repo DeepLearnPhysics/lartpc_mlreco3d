@@ -26,10 +26,10 @@ class HDF5Writer:
 
     # Analysis object attributes that do not need to be stored to HDF5
     ANA_SKIP = [
-        'points', 'true_points', 'particles', 'fragments', 'asis',
-        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV',
+        'points', 'truth_points', 'particles', 'fragments', 'asis',
+        'depositions', 'depositions_MeV', 'truth_depositions', 'truth_depositions_MeV',
         'particles_summary'
-        # 'index', 'true_index'
+        # 'index', 'truth_index'
     ]
 
     # List of recognized LArCV objects
