@@ -40,8 +40,8 @@ class HDF5Writer:
 
     # Analysis particle object attributes that do not need to be stored to HDF5
     ANA_SKIP_ATTRS = [
-        'points', 'true_points', 'particles', 'fragments', 'asis',
-        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV',
+        'points', 'truth_points', 'particles', 'fragments', 'asis',
+        'depositions', 'depositions_MeV', 'truth_depositions', 'truth_depositions_MeV',
         'particles_summary'
     ]
 
@@ -50,8 +50,8 @@ class HDF5Writer:
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
         analysis.TruthParticle:         ANA_SKIP_ATTRS,
-        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'true_index'],
-        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'true_index']
+        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index'],
+        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index']
     }
 
     # List of recognized objects
