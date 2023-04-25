@@ -32,7 +32,7 @@ class HDF5Writer:
         'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV'
     ]
 
-    # Analysis object attributes to be stored as enumerators and their associated rules
+    # Analysis object attributes to be stored as enumerated types and their associated rules
     ANA_ENUM = {
         'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
         'pid': {v:k for k, v in PID_LABELS.items()}
@@ -65,7 +65,8 @@ class HDF5Writer:
                  skip_input_keys: list = [],
                  result_keys: list = None,
                  skip_result_keys: list = [],
-                 append_file: bool = False):
+                 append_file: bool = False,
+                 merge_groups: bool = False):
         '''
         Initializes the basics of the output file
 
@@ -83,6 +84,8 @@ class HDF5Writer:
             List of result keys to skip
         append_file: bool, default False
             Add new values to the end of an existing file
+        merge_groups: bool, default False
+            Merge `data` and `result` blobs in the root directory of the HDF5 file
         '''
         # Store attributes
         self.file_name        = file_name
@@ -91,6 +94,7 @@ class HDF5Writer:
         self.result_keys      = result_keys
         self.skip_result_keys = skip_result_keys
         self.append_file      = append_file
+        self.merge_groups     = merge_groups
         self.ready            = False
         self.object_dtypes    = {}
 
@@ -143,37 +147,6 @@ class HDF5Writer:
                 file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
                 file['info'].attrs['cfg'] = yaml.dump(cfg)
 
-            # Initialize the event dataset and the corresponding reference array datasets
-            self.initialize_datasets(file)
-
-            # Mark file as ready for use
-            self.ready = True
-
-    def add_keys(self, result_blob):
-        '''
-        Add more keys to the results group of an existing file.
-
-        Parameters
-        ----------
-        result_blob : dict
-            Dictionary containing the additional output to store
-        '''
-        # Make sure there is something to store
-        assert result_blob, 'Must provide a non-empty result blob'
-
-        # Get the expected batch_size from the data_blob (index must be present)
-        self.batch_size = 1
-
-        # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
-
-        # Loop over the result_keys and add them to what needs to be tracked
-        self.result_keys = list(result_blob.keys())
-        for key in self.result_keys:
-            self.register_key(result_blob, key, 'result')
-
-        # Initialize the output HDF5 file
-        with h5py.File(self.file_name, 'a') as file:
             # Initialize the event dataset and the corresponding reference array datasets
             self.initialize_datasets(file)
 
@@ -315,37 +288,40 @@ class HDF5Writer:
         self.event_dtype = []
         ref_dtype = h5py.special_dtype(ref=h5py.RegionReference)
         for key, val in self.key_dict.items():
-            cat = val['category']
-            grp = file[cat] if cat in file else file.create_group(cat)
+            group = file
+            if not self.merge_groups:
+                cat   = val['category']
+                group = file[cat] if cat in file else file.create_group(cat)
             self.event_dtype.append((key, ref_dtype))
+
             if not val['merge'] and not isinstance(val['width'], list):
                 # If the key contains a list of objects of identical shape
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
-                grp[key].attrs['scalar'] = val['scalar']
-                grp[key].attrs['larcv']  = val['larcv']
+                group.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
+                group[key].attrs['scalar'] = val['scalar']
+                group[key].attrs['larcv']  = val['larcv']
 
             elif not val['merge']:
                 # If the elements of the list are of variable widths, refer to one
                 # dataset per element. An index is stored alongside the dataset to break
                 # each element downstream.
                 n_arrays = len(val['width'])
-                subgrp = grp.create_group(key)
-                subgrp.create_dataset(f'index', (0, n_arrays), maxshape=(None, n_arrays), dtype=ref_dtype)
+                subgroup = group.create_group(key)
+                subgroup.create_dataset(f'index', (0, n_arrays), maxshape=(None, n_arrays), dtype=ref_dtype)
                 for i, w in enumerate(val['width']):
                     shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                    subgrp.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
+                    subgroup.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
 
             else:
                 # If the  elements of the list are of equal width, store them all 
                 # to one dataset. An index is stored alongside the dataset to break
                 # it into individual elements downstream.
-                subgrp = grp.create_group(key)
+                subgroup = group.create_group(key)
                 w = val['width'][0]
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                subgrp.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
-                subgrp.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
+                subgroup.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
+                subgroup.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
 
         file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
@@ -405,8 +381,12 @@ class HDF5Writer:
         batch_id : int
             Batch ID to be stored
         '''
-        val = self.key_dict[key]
-        cat = val['category']
+        val   = self.key_dict[key]
+        group = file
+        if not self.merge_groups:
+            cat   = val['category']
+            group = file[cat]
+
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single object
             if self.is_scalar(blob[key]):
@@ -417,17 +397,17 @@ class HDF5Writer:
                 obj = [obj]
 
             if val['dtype'] in self.object_dtypes.values():
-                self.store_objects(file[cat], event, key, obj, val['dtype'])
+                self.store_objects(group, event, key, obj, val['dtype'])
             else:
-                self.store(file[cat], event, key, obj)
+                self.store(group, event, key, obj)
 
         elif not val['merge']:
             # Store the array and its reference for each element in the list
-            self.store_jagged(file[cat], event, key, blob[key][batch_id])
+            self.store_jagged(group, event, key, blob[key][batch_id])
 
         else:
             # Store one array of for all in the list and a index to break them
-            self.store_flat(file[cat], event, key, blob[key][batch_id])
+            self.store_flat(group, event, key, blob[key][batch_id])
 
     @staticmethod
     def is_scalar(obj):

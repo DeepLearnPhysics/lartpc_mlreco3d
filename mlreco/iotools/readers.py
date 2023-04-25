@@ -35,13 +35,21 @@ class HDF5Reader:
             self.file_paths.extend(sorted(file_paths))
 
         # Loop over the input files, build a map from index to file ID
-        self.num_entries = 0
-        self.file_index  = []
+        self.num_entries  = 0
+        self.file_index   = []
+        self.split_groups = None
         for i, path in enumerate(self.file_paths):
             with h5py.File(path, 'r') as file:
+                # Check that there are events in the file and the storage mode
                 assert 'events' in file, 'File does not contain an event tree'
+                split_groups = 'data' in file and 'result' in file
+                assert self.split_groups is None or self.split_groups == split_groups,\
+                        'Cannot load files with different storing schemes'
+                self.split_groups = split_groups
+
                 self.num_entries += len(file['events'])
                 self.file_index.append(i*np.ones(len(file['events']), dtype=np.int32))
+
                 print('Registered', path)
         self.file_index = np.concatenate(self.file_index)
 
@@ -110,7 +118,10 @@ class HDF5Reader:
             for key in event.dtype.names:
                 self.load_key(file, event, data_blob, result_blob, key, nested)
 
-        return data_blob, result_blob
+        if self.split_groups:
+            return data_blob, result_blob
+        else:
+            return dict(data_blob, **result_blob)
 
     def get_entry_list(self, entry_list, skip_entry_list):
         '''
@@ -169,9 +180,12 @@ class HDF5Reader:
         '''
         # The event-level information is a region reference: fetch it
         region_ref = event[key]
-        cat = 'data' if key in file['data'] else 'result'
-        blob = data_blob if cat == 'data' else result_blob
-        group = file[cat]
+        group = file
+        blob  = result_blob
+        if self.split_groups:
+            cat   = 'data' if key in file['data'] else 'result'
+            blob  = data_blob if cat == 'data' else result_blob
+            group = file[cat]
         if isinstance(group[key], h5py.Dataset):
             if not group[key].dtype.names:
                 # If the reference points at a simple dataset, return
