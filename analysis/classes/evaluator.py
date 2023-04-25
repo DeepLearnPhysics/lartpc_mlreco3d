@@ -381,6 +381,8 @@ class FullChainEvaluator(FullChainPredictor):
         if match_particles:
             for interactions in matched_interactions:
                 domain, codomain = interactions
+                print(domain)
+                print(codomain)
                 domain_particles, codomain_particles = [], []
                 if domain is not None:
                     domain_particles = domain.particles

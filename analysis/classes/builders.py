@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from pprint import pprint
+from collections import OrderedDict
 
 import numpy as np
 from scipy.special import softmax
@@ -195,6 +196,11 @@ class ParticleBuilder(DataBuilder):
         for i, bp in enumerate(blueprints):
             mask = bp['index']
             prepared_bp = copy.deepcopy(bp)
+            
+            match = prepared_bp.pop('match', [])
+            match_counts = prepared_bp.pop('match_counts', [])
+            assert len(match) == len(match_counts)
+            
             prepared_bp.pop('depositions_sum', None)
             group_id = prepared_bp.pop('id', -1)
             prepared_bp['group_id'] = group_id
@@ -203,6 +209,9 @@ class ParticleBuilder(DataBuilder):
                 'depositions': point_cloud[mask][:, VALUE_COL],
             })
             particle = Particle(**prepared_bp)
+            if len(match) > 0:
+                particle.match_counts = OrderedDict({
+                    key : val for key, val in zip(match, match_counts)})
             # assert particle.image_id == entry
             out.append(particle)
         
@@ -224,7 +233,20 @@ class ParticleBuilder(DataBuilder):
                 if pasis.id() == bp['id']:
                     pasis_selected = pasis
             assert pasis_selected is not None
+            
+            # recipe = {
+            #     'index': mask,
+            #     'truth_index': true_mask,
+            #     'points': pred_nonghost[mask][:, COORD_COLS],
+            #     'depositions': pred_nonghost[mask][:, VALUE_COL],
+            #     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
+            #     'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
+            #     'particle_asis': pasis_selected,
+            #     'group_id': group_id
+            # }
+            
             prepared_bp = copy.deepcopy(bp)
+            
             group_id = prepared_bp.pop('id', -1)
             prepared_bp['group_id'] = group_id
             prepared_bp.pop('depositions_sum', None)
@@ -236,7 +258,14 @@ class ParticleBuilder(DataBuilder):
                 'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
                 'particle_asis': pasis_selected
             })
+            
+            match = prepared_bp.pop('match', [])
+            match_counts = prepared_bp.pop('match_counts', [])
+            
             truth_particle = TruthParticle(**prepared_bp)
+            if len(match) > 0:
+                truth_particle.match_counts = OrderedDict({
+                    key : val for key, val in zip(match, match_counts)})
             # assert truth_particle.image_id == entry
             assert truth_particle.truth_size > 0
             out.append(truth_particle)

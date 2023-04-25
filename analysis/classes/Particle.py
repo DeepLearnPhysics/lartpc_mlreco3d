@@ -131,6 +131,8 @@ class Particle:
         # Quantities to be set by the particle matcher
         self._match = list(kwargs.get('match', []))
         self._match_counts = kwargs.get('match_counts', OrderedDict())
+        if not isinstance(self._match_counts, dict):
+            raise ValueError(f"{type(self._match_counts)}")
         
     @property
     def match(self):
@@ -139,7 +141,12 @@ class Particle:
     
     @property
     def match_counts(self):
-        return np.array(self._match_counts.values(), dtype=np.float32)
+        return np.array(list(self._match_counts.values()), dtype=np.float32)
+    
+    @match_counts.setter
+    def match_counts(self, value):
+        assert type(value) is OrderedDict
+        self._match_counts = value
 
     def __repr__(self):
         msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)
