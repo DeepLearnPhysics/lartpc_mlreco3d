@@ -19,45 +19,42 @@ class HDF5Writer:
 
     More documentation to come.
     '''
-
-    # LArCV object attributes that do not need to be stored to HDF5
-    LARCV_SKIP = [
-            'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
-            *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
-    ]
-
-    # Analysis object attributes that do not need to be stored to HDF5
-    ANA_SKIP = [
-        'index', 'true_index', 'points', 'true_points', 'particles', 'fragments', 'asis',
-        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV'
-    ]
-
     # Analysis object attributes to be stored as enumerated types and their associated rules
     ANA_ENUM = {
         'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
         'pid': {v:k for k, v in PID_LABELS.items()}
     }
 
-    # List of recognized LArCV objects
-    LARCV_DATAOBJS = [
-        larcv.Particle,
-        larcv.Neutrino,
-        larcv.Flash,
-        larcv.CRTHit
+    # LArCV object attributes that do not need to be stored to HDF5
+    LARCV_SKIP_ATTRS = [
+        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
+        *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
-    # List of recognized Analysis objects
-    ANA_DATAOBJS = [
-        analysis.ParticleFragment,
-        analysis.TruthParticleFragment,
-        analysis.Particle,
-        analysis.TruthParticle,
-        analysis.Interaction,
-        analysis.TruthInteraction
+    LARCV_SKIP = {
+        larcv.Particle: LARCV_SKIP_ATTRS,
+        larcv.Neutrino: LARCV_SKIP_ATTRS,
+        larcv.Flash:    LARCV_SKIP_ATTRS,
+        larcv.CRTHit:   LARCV_SKIP_ATTRS
+    }
+
+    # Analysis particle object attributes that do not need to be stored to HDF5
+    ANA_SKIP_ATTRS = [
+        'points', 'true_points', 'particles', 'fragments', 'asis',
+        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV'
     ]
+
+    ANA_SKIP = {
+        analysis.ParticleFragment:      ANA_SKIP_ATTRS,
+        analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
+        analysis.Particle:              ANA_SKIP_ATTRS,
+        analysis.TruthParticle:         ANA_SKIP_ATTRS,
+        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'true_index'],
+        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'true_index']
+    }
 
     # List of recognized objects
-    DATAOBJS = tuple(LARCV_DATAOBJS + ANA_DATAOBJS)
+    DATAOBJS = tuple(list(LARCV_SKIP.keys()) + list(ANA_SKIP.keys()))
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -193,7 +190,7 @@ class HDF5Writer:
                     if not object_type in self.object_dtypes:
                         self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
                     self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
-                    self.key_dict[key]['larcv'] = object_type in self.LARCV_DATAOBJS
+                    self.key_dict[key]['larcv'] = object_type in self.LARCV_SKIP
 
                 elif not hasattr(blob[key][0][0], '__len__'):
                     # List containing a single list of scalars per batch ID
@@ -235,8 +232,8 @@ class HDF5Writer:
         '''
         object_dtype = []
         members = inspect.getmembers(obj)
-        is_larcv = type(obj) in self.LARCV_DATAOBJS
-        skip_keys = self.LARCV_SKIP if is_larcv else self.ANA_SKIP
+        is_larcv = type(obj) in self.LARCV_SKIP
+        skip_keys = self.LARCV_SKIP[type(obj)] if is_larcv else self.ANA_SKIP[type(obj)]
         attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
         for key in attr_names:
             # Fetch the attribute value
