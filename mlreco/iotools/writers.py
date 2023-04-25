@@ -7,6 +7,8 @@ from collections import defaultdict
 from larcv import larcv
 from analysis import classes as analysis
 
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+
 
 class HDF5Writer:
     '''
@@ -17,41 +19,43 @@ class HDF5Writer:
 
     More documentation to come.
     '''
+    # Analysis object attributes to be stored as enumerated types and their associated rules
+    ANA_ENUM = {
+        'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
+        'pid': {v:k for k, v in PID_LABELS.items()}
+    }
 
     # LArCV object attributes that do not need to be stored to HDF5
-    LARCV_SKIP = [
-            'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
-            *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
+    LARCV_SKIP_ATTRS = [
+        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
+        *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
-    # Analysis object attributes that do not need to be stored to HDF5
-    ANA_SKIP = [
-        'points', 'truth_points', 'particles', 'fragments', 'asis',
-        'depositions', 'depositions_MeV', 'truth_depositions', 'truth_depositions_MeV',
+    LARCV_SKIP = {
+        larcv.Particle: LARCV_SKIP_ATTRS,
+        larcv.Neutrino: LARCV_SKIP_ATTRS,
+        larcv.Flash:    LARCV_SKIP_ATTRS,
+        larcv.CRTHit:   LARCV_SKIP_ATTRS
+    }
+
+    # Analysis particle object attributes that do not need to be stored to HDF5
+    ANA_SKIP_ATTRS = [
+        'points', 'true_points', 'particles', 'fragments', 'asis',
+        'depositions', 'depositions_MeV', 'true_depositions', 'true_depositions_MeV',
         'particles_summary'
-        # 'index', 'truth_index'
     ]
 
-    # List of recognized LArCV objects
-    LARCV_DATAOBJS = [
-        larcv.Particle,
-        larcv.Neutrino,
-        larcv.Flash,
-        larcv.CRTHit
-    ]
-
-    # List of recognized Analysis objects
-    ANA_DATAOBJS = [
-        analysis.ParticleFragment,
-        analysis.TruthParticleFragment,
-        analysis.Particle,
-        analysis.TruthParticle,
-        analysis.Interaction,
-        analysis.TruthInteraction
-    ]
+    ANA_SKIP = {
+        analysis.ParticleFragment:      ANA_SKIP_ATTRS,
+        analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
+        analysis.Particle:              ANA_SKIP_ATTRS,
+        analysis.TruthParticle:         ANA_SKIP_ATTRS,
+        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'true_index'],
+        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'true_index']
+    }
 
     # List of recognized objects
-    DATAOBJS = tuple(LARCV_DATAOBJS + ANA_DATAOBJS)
+    DATAOBJS = tuple(list(LARCV_SKIP.keys()) + list(ANA_SKIP.keys()))
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -59,7 +63,8 @@ class HDF5Writer:
                  skip_input_keys: list = [],
                  result_keys: list = None,
                  skip_result_keys: list = [],
-                 append_file: bool = False):
+                 append_file: bool = False,
+                 merge_groups: bool = False):
         '''
         Initializes the basics of the output file
 
@@ -77,6 +82,8 @@ class HDF5Writer:
             List of result keys to skip
         append_file: bool, default False
             Add new values to the end of an existing file
+        merge_groups: bool, default False
+            Merge `data` and `result` blobs in the root directory of the HDF5 file
         '''
         # Store attributes
         self.file_name        = file_name
@@ -85,6 +92,7 @@ class HDF5Writer:
         self.result_keys      = result_keys
         self.skip_result_keys = skip_result_keys
         self.append_file      = append_file
+        self.merge_groups     = merge_groups
         self.ready            = False
         self.object_dtypes    = {}
 
@@ -143,37 +151,6 @@ class HDF5Writer:
             # Mark file as ready for use
             self.ready = True
 
-    def add_keys(self, result_blob):
-        '''
-        Add more keys to the results group of an existing file.
-
-        Parameters
-        ----------
-        result_blob : dict
-            Dictionary containing the additional output to store
-        '''
-        # Make sure there is something to store
-        assert result_blob, 'Must provide a non-empty result blob'
-
-        # Get the expected batch_size from the data_blob (index must be present)
-        self.batch_size = 1
-
-        # Initialize a dictionary to store keys and their properties (dtype and shape)
-        self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False})
-
-        # Loop over the result_keys and add them to what needs to be tracked
-        self.result_keys = list(result_blob.keys())
-        for key in self.result_keys:
-            self.register_key(result_blob, key, 'result')
-
-        # Initialize the output HDF5 file
-        with h5py.File(self.file_name, 'a') as file:
-            # Initialize the event dataset and the corresponding reference array datasets
-            self.initialize_datasets(file)
-
-            # Mark file as ready for use
-            self.ready = True
-
     def register_key(self, blob, key, category):
         '''
         Identify the dtype and shape objects to be dealt with.
@@ -214,7 +191,7 @@ class HDF5Writer:
                     if not object_type in self.object_dtypes:
                         self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
                     self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
-                    self.key_dict[key]['larcv'] = object_type in self.LARCV_DATAOBJS
+                    self.key_dict[key]['larcv'] = object_type in self.LARCV_SKIP
 
                 elif not hasattr(blob[key][0][0], '__len__'):
                     # List containing a single list of scalars per batch ID
@@ -256,8 +233,8 @@ class HDF5Writer:
         '''
         object_dtype = []
         members = inspect.getmembers(obj)
-        is_larcv = type(obj) in self.LARCV_DATAOBJS
-        skip_keys = self.LARCV_SKIP if is_larcv else self.ANA_SKIP
+        is_larcv = type(obj) in self.LARCV_SKIP
+        skip_keys = self.LARCV_SKIP[type(obj)] if is_larcv else self.ANA_SKIP[type(obj)]
         attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
         for key in attr_names:
             # Fetch the attribute value
@@ -272,6 +249,9 @@ class HDF5Writer:
             if isinstance(val, str):
                 # String
                 object_dtype.append((key, h5py.string_dtype()))
+            elif not is_larcv and key in self.ANA_ENUM:
+                # Known enumerator
+                object_dtype.append((key, h5py.enum_dtype(self.ANA_ENUM[key], basetype=type(val))))
             elif np.isscalar(val):
                 # Scalar
                 object_dtype.append((key, type(val)))
@@ -306,37 +286,40 @@ class HDF5Writer:
         self.event_dtype = []
         ref_dtype = h5py.special_dtype(ref=h5py.RegionReference)
         for key, val in self.key_dict.items():
-            cat = val['category']
-            grp = file[cat] if cat in file else file.create_group(cat)
+            group = file
+            if not self.merge_groups:
+                cat   = val['category']
+                group = file[cat] if cat in file else file.create_group(cat)
             self.event_dtype.append((key, ref_dtype))
+
             if not val['merge'] and not isinstance(val['width'], list):
                 # If the key contains a list of objects of identical shape
                 w = val['width']
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                grp.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
-                grp[key].attrs['scalar'] = val['scalar']
-                grp[key].attrs['larcv']  = val['larcv']
+                group.create_dataset(key, shape, maxshape=maxshape, dtype=val['dtype'])
+                group[key].attrs['scalar'] = val['scalar']
+                group[key].attrs['larcv']  = val['larcv']
 
             elif not val['merge']:
                 # If the elements of the list are of variable widths, refer to one
                 # dataset per element. An index is stored alongside the dataset to break
                 # each element downstream.
                 n_arrays = len(val['width'])
-                subgrp = grp.create_group(key)
-                subgrp.create_dataset(f'index', (0, n_arrays), maxshape=(None, n_arrays), dtype=ref_dtype)
+                subgroup = group.create_group(key)
+                subgroup.create_dataset(f'index', (0, n_arrays), maxshape=(None, n_arrays), dtype=ref_dtype)
                 for i, w in enumerate(val['width']):
                     shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                    subgrp.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
+                    subgroup.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
 
             else:
                 # If the  elements of the list are of equal width, store them all 
                 # to one dataset. An index is stored alongside the dataset to break
                 # it into individual elements downstream.
-                subgrp = grp.create_group(key)
+                subgroup = group.create_group(key)
                 w = val['width'][0]
                 shape, maxshape = [(0, w), (None, w)] if w else [(0,), (None,)]
-                subgrp.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
-                subgrp.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
+                subgroup.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
+                subgroup.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
 
         file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
@@ -396,8 +379,12 @@ class HDF5Writer:
         batch_id : int
             Batch ID to be stored
         '''
-        val = self.key_dict[key]
-        cat = val['category']
+        val   = self.key_dict[key]
+        group = file
+        if not self.merge_groups:
+            cat   = val['category']
+            group = file[cat]
+
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single object
             if self.is_scalar(blob[key]):
@@ -408,17 +395,17 @@ class HDF5Writer:
                 obj = [obj]
 
             if val['dtype'] in self.object_dtypes.values():
-                self.store_objects(file[cat], event, key, obj, val['dtype'])
+                self.store_objects(group, event, key, obj, val['dtype'])
             else:
-                self.store(file[cat], event, key, obj)
+                self.store(group, event, key, obj)
 
         elif not val['merge']:
             # Store the array and its reference for each element in the list
-            self.store_jagged(file[cat], event, key, blob[key][batch_id])
+            self.store_jagged(group, event, key, blob[key][batch_id])
 
         else:
             # Store one array of for all in the list and a index to break them
-            self.store_flat(file[cat], event, key, blob[key][batch_id])
+            self.store_flat(group, event, key, blob[key][batch_id])
 
     @staticmethod
     def is_scalar(obj):

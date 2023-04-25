@@ -79,7 +79,7 @@ class ParticleFragment:
         fmt = "ParticleFragment( Image ID={:<3} | Fragment ID={:<3} | Semantic_type: {:<15}"\
                 " | Group ID: {:<3} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2})"
         msg = fmt.format(self.image_id, self.id,
-                         SHAPE_LABELS[self.semantic_type] if self.semantic_type in list(range(len(SHAPE_LABELS))) else "None",
+                         SHAPE_LABELS[self.semantic_type] if self.semantic_type in SHAPE_LABELS else "None",
                          self.group_id,
                          self.is_primary,
                          self.interaction_id,

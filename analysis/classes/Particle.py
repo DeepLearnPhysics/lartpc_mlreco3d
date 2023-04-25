@@ -79,7 +79,7 @@ class Particle:
                  index: np.ndarray = np.empty(0, dtype=np.int64), 
                  points: np.ndarray = np.empty(0, dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32), 
-                 pid_scores: np.ndarray = -np.ones(np.max(list((PID_LABELS.keys())))+1, dtype=np.float32),
+                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32),
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
                  start_point: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_point: np.ndarray = -np.ones(3, dtype=np.float32),
@@ -156,8 +156,8 @@ class Particle:
         fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
                 " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,
-                         SHAPE_LABELS[self.semantic_type] if self.semantic_type in list(range(len(SHAPE_LABELS))) else "None",
-                         PID_LABELS[self._pid] if self._pid in PID_LABELS else "None",
+                         SHAPE_LABELS[self.semantic_type] if self.semantic_type in SHAPE_LABELS else "None",
+                         PID_LABELS[self.pid] if self.pid in PID_LABELS else "None",
                          self.is_primary,
                          self.interaction_id,
                          self.size,

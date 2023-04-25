@@ -38,7 +38,15 @@ UNKWN_SHP  = larcv.kShapeUnknown   # 6
 SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP]
 
 # Shape labels
-SHAPE_LABELS = ['Shower', 'Track', 'Michel', 'Delta', 'Low Energy', 'Ghost', 'Unkown']
+SHAPE_LABELS = {
+   0:  'Shower',
+   1:  'Track',
+   2:  'Michel',
+   3:  'Delta',
+   4:  'Low Energy',
+   5:  'Ghost',
+   6:  'Unknown'
+}
 
 # Invalid larcv.Particle labels
 INVAL_ID   = larcv.kINVALID_INSTANCEID # Particle group/parent/interaction ID
@@ -56,16 +64,18 @@ PDG_TO_PID.update({
     211:  3,  # pi+
     -211: 3,  # pi-
     2212: 4,  # protons
+    #321:  5,  # K+
+    #-321: 5   # K-
 })
 
 # Particle type labels
 PID_LABELS = {
-    -1: 'Unknown',
     0:  'Photon',
     1:  'Electron',
     2:  'Muon',
     3:  'Pion',
-    4:  'Proton'
+    4:  'Proton',
+    #5:  'Kaon'
 }
 
 # Physical constants
