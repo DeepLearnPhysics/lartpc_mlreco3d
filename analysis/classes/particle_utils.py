@@ -405,31 +405,39 @@ def group_particles_to_interactions_fn(particles : List[Particle],
     interactions = defaultdict(list)
     for p in particles:
         interactions[p.interaction_id].append(p)
-
-    nu_id = -1
+        
     for int_id, particles in interactions.items():
-        if get_nu_id:
-            nu_id = np.unique([p.nu_id for p in particles])
-            if nu_id.shape[0] > 1:
-                if verbose:
-                    print("Interaction {} has non-unique particle "\
-                        "nu_ids: {}".format(int_id, str(nu_id)))
-                nu_id = nu_id[0]
-            else:
-                nu_id = nu_id[0]
-
-        counter = Counter([p.volume_id for p in particles if p.volume_id != -1])
-        if not bool(counter):
-            volume_id = -1
-        else:
-            volume_id = counter.most_common(1)[0][0]
-        particles_dict = OrderedDict({p.id : p for p in particles})
         if mode == 'pred':
-            interactions[int_id] = Interaction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+            interactions[int_id] = Interaction.from_particles(particles)
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+            interactions[int_id] = TruthInteraction.from_particles(particles)
         else:
-            raise ValueError
+            raise ValueError(f"Unknown aggregation mode {mode}.")
+
+    # nu_id = -1
+    # for int_id, particles in interactions.items():
+    #     if get_nu_id:
+    #         nu_id = np.unique([p.nu_id for p in particles])
+    #         if nu_id.shape[0] > 1:
+    #             if verbose:
+    #                 print("Interaction {} has non-unique particle "\
+    #                     "nu_ids: {}".format(int_id, str(nu_id)))
+    #             nu_id = nu_id[0]
+    #         else:
+    #             nu_id = nu_id[0]
+
+    #     counter = Counter([p.volume_id for p in particles if p.volume_id != -1])
+    #     if not bool(counter):
+    #         volume_id = -1
+    #     else:
+    #         volume_id = counter.most_common(1)[0][0]
+    #     particles_dict = OrderedDict({p.id : p for p in particles})
+    #     if mode == 'pred':
+    #         interactions[int_id] = Interaction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+    #     elif mode == 'truth':
+    #         interactions[int_id] = TruthInteraction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+    #     else:
+    #         raise ValueError
         
 
     return list(interactions.values())

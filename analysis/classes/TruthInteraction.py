@@ -1,8 +1,9 @@
+from typing import List
 import numpy as np
 import pandas as pd
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from . import Interaction, TruthParticle
-
+from .Interaction import _process_interaction_attributes
 
 class TruthInteraction(Interaction):
     """
@@ -20,24 +21,126 @@ class TruthInteraction(Interaction):
     """
 
     def __init__(self,
-                 interaction_id, 
-                 particles,
+                 interaction_id: int = -1, 
+                 particles: List[TruthParticle] = None,
+                 depositions_MeV : np.ndarray = np.empty(0, dtype=np.float32),
+                 true_index: np.ndarray = np.empty(0, dtype=np.int64),
+                 true_points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 true_depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 true_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  **kwargs):
+        
+        # Initialize private attributes to be set by setter only
+        self._particles  = None
+        # Invoke particles setter
+        self.particles   = particles
+        
+        if self._particles is None:
+            self._depositions_MeV       = depositions_MeV
+            self._true_depositions      = true_depositions
+            self._true_depositions_MeV  = true_depositions_MeV
+            self.true_points = true_points
+            self.true_index = true_index
+            
         super(TruthInteraction, self).__init__(interaction_id, particles, **kwargs)
-
-        self.depositions_MeV = np.empty(0, dtype=np.float32)
-        if particles is not None:
-            depositions_MeV_list = []
-            for p in particles:
-                depositions_MeV_list.append(p.depositions_MeV)
-            self.depositions_MeV = np.concatenate(depositions_MeV_list)
 
         # Neutrino-specific information to be filled elsewhere
         self.nu_interaction_type = -1
         self.nu_interaction_mode = -1
         self.nu_current_type = -1
         self.nu_energy_init = -1.
+        
+    @property
+    def particles(self):
+        return self._particles
+    
+    @particles.setter
+    def particles(self, value):
+        '''
+        <Particle> list getter/setter. The setter also sets
+        the general interaction properties
+        '''
+        
+        if self._particles is not None:
+            msg = f"Interaction {self.id} already has a populated list of "\
+                "particles. You cannot change the list of particles in a "\
+                "given Interaction once it has been set."
+            raise AttributeError(msg)
 
+        if value is not None:
+            self._particles = value
+            id_list, index_list, points_list, depositions_list = [], [], [], []
+            true_index_list, true_points_list = [], []
+            true_depositions_list, true_depositions_MeV_list = [], []
+            depositions_MeV_list = []
+            for p in value:
+                self.check_particle_input(p)
+                id_list.append(p.id)
+                index_list.append(p.index)
+                points_list.append(p.points)
+                depositions_list.append(p.depositions)
+                depositions_MeV_list.append(p.depositions_MeV)
+                true_index_list.append(p.true_index)
+                true_points_list.append(p.true_points)
+                true_depositions_list.append(p.true_depositions)
+                true_depositions_MeV_list.append(p.true_depositions_MeV)
+
+            self._particle_ids         = np.array(id_list, dtype=np.int64)
+            self._num_particles        = len(value)
+            self._num_primaries        = len([1 for p in value if p.is_primary])
+            self.index                 = np.concatenate(index_list)
+            self.points                = np.vstack(points_list)
+            self.depositions           = np.concatenate(depositions_list)
+            self.true_points           = np.concatenate(true_points_list)
+            self.true_index            = np.concatenate(true_index_list)
+            self._depositions_MeV      = np.concatenate(depositions_MeV_list)
+            self._true_depositions     = np.concatenate(true_depositions_list)
+            self._true_depositions_MeV = np.concatenate(true_depositions_MeV_list)
+        
+    @classmethod
+    def from_particles(cls, particles, verbose=False, **kwargs):
+        
+        assert len(particles) > 0
+        init_args = defaultdict(list)
+        reserved_attributes = [
+            'interaction_id', 'nu_id', 'volume_id', 
+            'image_id', 'points', 'index', 'depositions', 'depositions_MeV',
+            'true_depositions_MeV', 'true_depositions'
+        ]
+        
+        processed_args = {'particles': []}
+        for key, val in kwargs.items():
+            processed_args[key] = val
+        for p in particles:
+            assert type(p) is TruthParticle
+            for key in reserved_attributes:
+                if key not in kwargs:
+                    init_args[key].append(getattr(p, key))
+            processed_args['particles'].append(p)
+        
+        _process_interaction_attributes(init_args, processed_args, **kwargs)
+        
+        # Handle depositions_MeV for TruthParticles
+        processed_args['depositions_MeV']      = np.concatenate(init_args['depositions_MeV'])
+        processed_args['true_depositions']     = np.concatenate(init_args['true_depositions'])
+        processed_args['true_depositions_MeV'] = np.concatenate(init_args['true_depositions_MeV'])
+        
+        truth_interaction = cls(**processed_args)
+        
+        return truth_interaction
+
+    @property
+    def depositions_MeV(self):
+        return self._depositions_MeV
+    
+    @property
+    def true_depositions(self):
+        return self._true_depositions
+
+    @property
+    def true_depositions_MeV(self):
+        return self._true_depositions_MeV
+    
 #    @property
 #    def particles(self):
 #        return list(self._particles.values())

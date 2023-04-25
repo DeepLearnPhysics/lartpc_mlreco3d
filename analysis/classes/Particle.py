@@ -97,21 +97,25 @@ class Particle:
         self._primary_scores = None
 
         # Initialize attributes
-        self.id             = group_id
+        self.id             = int(group_id)
         self.fragment_ids   = fragment_ids
-        self.interaction_id = interaction_id
-        self.nu_id          = nu_id
-        self.image_id       = image_id
-        self.volume_id      = volume_id
-        self.semantic_type  = semantic_type
+        self.interaction_id = int(interaction_id)
+        self.nu_id          = int(nu_id)
+        self.image_id       = int(image_id)
+        self.volume_id      = int(volume_id)
+        self.semantic_type  = int(semantic_type)
 
         self.index          = index
         self.points         = points
         self.depositions    = depositions
 
+        self._force_pid     = False
+        if pid > 0:
+            self._force_pid = True
+            self._pid = pid
         self.pid_scores     = pid_scores
         if np.all(pid_scores < 0):
-            self.pid = pid
+            self._pid = pid
         self.primary_scores = primary_scores
         if np.all(primary_scores < 0):
             self.is_primary = is_primary
@@ -126,13 +130,9 @@ class Particle:
         # Quantities to be set by the particle matcher
         self.match = kwargs.get('match', np.empty(0, np.int64))
         self._match_counts = kwargs.get('match_counts', np.empty(0, np.float32))
-        
-        # ADC to MeV
-        self._ADC_to_MeV       = kwargs.get('ADC_to_MeV', 1./350.)
-        self._depositions_MeV = self.depositions * self._ADC_to_MeV
 
     def __repr__(self):
-        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self.pid, self.size)
+        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)
         return msg
 
     def __str__(self):
@@ -140,21 +140,12 @@ class Particle:
                 " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
         msg = fmt.format(self.image_id, self.id,
                          SHAPE_LABELS[self.semantic_type] if self.semantic_type in list(range(len(SHAPE_LABELS))) else "None",
-                         PID_LABELS[self.pid] if self.pid in PID_LABELS else "None",
+                         PID_LABELS[self._pid] if self._pid in PID_LABELS else "None",
                          self.is_primary,
                          self.interaction_id,
                          self.size,
                          self.volume_id)
         return msg
-    
-    @property
-    def ADC_to_MeV(self):
-        return self._ADC_to_MeV
-    
-    @ADC_to_MeV.setter
-    def ADC_to_MeV(self, value):
-        assert value > 0
-        self._ADC_to_MeV = value
 
     @property
     def num_fragments(self):
@@ -184,7 +175,7 @@ class Particle:
         Particle size (i.e. voxel count) getter. This attribute has no setter,
         as it can only be set by providing a set of voxel indices.
         '''
-        return self._size
+        return int(self._size)
 
     @property
     def index(self):
@@ -207,16 +198,6 @@ class Particle:
         as it can only be set by providing a set of depositions.
         '''
         return self._depositions_sum
-    
-    @property
-    def depositions_MeV(self):
-        self._depositions_MeV = self._depositions * self._ADC_to_MeV
-        return self._depositions_MeV
-    
-    @depositions_MeV.setter
-    def depositions_MeV(self, value):
-        self._depositions_MeV = value
-        self._depositions = value * 1./ self._ADC_to_MeV
 
     @property
     def depositions(self):
@@ -245,12 +226,17 @@ class Particle:
         # If no PID scores are providen, the PID is unknown
         if pid_scores[0] < 0.:
             self._pid_scores = pid_scores
-            self.pid = -1
+            self._pid = -1
         
-        # Store the PID scores and give a best guess
+        # Store the PID scores
         self._pid_scores = pid_scores
-        self.pid = np.argmax(pid_scores)
-
+        if not self._force_pid:
+            self._pid = int(np.argmax(pid_scores))
+        
+    @property
+    def pid(self):
+        return int(self._pid)
+    
     @property
     def primary_scores(self):
         '''

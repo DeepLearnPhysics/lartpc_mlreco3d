@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
+from pprint import pprint
 
 import numpy as np
 from scipy.special import softmax
@@ -181,9 +182,9 @@ class ParticleBuilder(DataBuilder):
             List of restored particle instances built from HDF5 blueprints.
         """
         if 'input_rescaled' in result:
-            point_cloud = result['input_rescaled']
+            point_cloud = result['input_rescaled'][0]
         elif 'input_data' in data:
-            point_cloud = data['input_data']
+            point_cloud = data['input_data'][0]
         else:
             msg = "To build Particle objects from HDF5 data, need either "\
                 "input_data inside data dictionary or input_rescaled inside"\
@@ -202,7 +203,7 @@ class ParticleBuilder(DataBuilder):
                 'depositions': point_cloud[mask][:, VALUE_COL],
             })
             particle = Particle(**prepared_bp)
-            assert particle.image_id == entry
+            # assert particle.image_id == entry
             out.append(particle)
         
         return out
@@ -236,7 +237,7 @@ class ParticleBuilder(DataBuilder):
                 'particle_asis': pasis_selected
             })
             truth_particle = TruthParticle(**prepared_bp)
-            assert truth_particle.image_id == entry
+            # assert truth_particle.image_id == entry
             assert truth_particle.true_size > 0
             out.append(truth_particle)
             
@@ -257,6 +258,7 @@ class ParticleBuilder(DataBuilder):
         out = []
 
         # Essential Information
+        image_index      = data['index'][entry]
         volume_labels    = result['input_rescaled'][entry][:, BATCH_COL]
         point_cloud      = result['input_rescaled'][entry][:, COORD_COLS]
         depositions      = result['input_rescaled'][entry][:, 4]
@@ -277,12 +279,13 @@ class ParticleBuilder(DataBuilder):
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             seg_label = particle_seg[i]
-            if seg_label == 2 or seg_label == 3: # DANGEROUS
-                pid = 1
+            # pid = -1
+            # if seg_label == 2 or seg_label == 3: # DANGEROUS
+            #     pid = 1
             interaction_id = inter_ids[i]
             part = Particle(group_id=i,
                             interaction_id=interaction_id,
-                            image_id=entry,
+                            image_id=image_index,
                             semantic_type=seg_label, 
                             index=p,
                             points=point_cloud[p],
@@ -310,7 +313,7 @@ class ParticleBuilder(DataBuilder):
         """
 
         out = []
-
+        image_index     = data['index'][entry]
         labels          = result['cluster_label_adapted'][entry]
         labels_nonghost = data['cluster_label'][entry]
         larcv_particles = data['particles_asis'][entry]
@@ -373,7 +376,7 @@ class ParticleBuilder(DataBuilder):
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
                                      nu_id=nu_id,
-                                     image_id=entry,
+                                     image_id=image_index,
                                      volume_id=volume_id,
                                      semantic_type=semantic_type, 
                                      index=voxel_indices,
@@ -415,13 +418,106 @@ class InteractionBuilder(DataBuilder):
                                                  mode='pred')
         return out
     
+    def _load_reco(self, entry, data, result):
+        if 'input_rescaled' in result:
+            point_cloud = result['input_rescaled'][0]
+        elif 'input_data' in data:
+            point_cloud = data['input_data'][0]
+        else:
+            msg = "To build Particle objects from HDF5 data, need either "\
+                "input_data inside data dictionary or input_rescaled inside"\
+                " result dictionary."
+            raise KeyError(msg)
+        
+        out = []
+        blueprints = result['Interactions'][0]
+        use_particles = 'Particles' in result
+        
+        if not use_particles:
+            msg = "Loading Interactions without building Particles. "\
+            "This means Interaction.particles will be empty!"
+            print(msg)
+            
+        for i, bp in enumerate(blueprints):
+            info = {
+                'interaction_id': bp['id'],
+                'image_id': bp['image_id'],
+                'is_neutrino': bp['is_neutrino'],
+                'nu_id': bp['nu_id'],
+                'volume_id': bp['volume_id'],
+                'vertex': bp['vertex']
+            }
+            if use_particles:
+                particles = []
+                for p in result['Particles'][0]:
+                    if p.interaction_id == bp['id']:
+                        particles.append(p)
+                        continue
+                ia = Interaction.from_particles(particles, 
+                                                verbose=False, **info)
+            else:
+                mask = bp['index']
+                info.update({
+                    'index': mask, 
+                    'points': point_cloud[mask][:, COORD_COLS],
+                    'depositions': point_cloud[mask][:, VALUE_COL]
+                })
+                ia = Interaction(**info)
+            out.append(ia)
+        return out
+    
     def _build_true(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
         particles = result['TruthParticles'][entry]
         out = group_particles_to_interactions_fn(particles, 
                                                  get_nu_id=True, 
                                                  mode='truth')
-        
         out = self.decorate_true_interactions(entry, data, out)
+        return out
+    
+    def _load_true(self, entry, data, result):
+        true_nonghost = data['cluster_label'][0]
+        pred_nonghost = result['cluster_label_adapted'][0]
+        
+        out = []
+        blueprints = result['TruthInteractions'][0]
+        use_particles = 'TruthParticles' in result
+        
+        if not use_particles:
+            msg = "Loading TruthInteractions without building TruthParticles. "\
+            "This means TruthInteraction.particles will be empty!"
+            print(msg)
+            
+        for i, bp in enumerate(blueprints):
+            info = {
+                'interaction_id': bp['id'],
+                'image_id': bp['image_id'],
+                'is_neutrino': bp['is_neutrino'],
+                'nu_id': bp['nu_id'],
+                'volume_id': bp['volume_id'],
+                'vertex': bp['vertex']
+            }
+            if use_particles:
+                particles = []
+                for p in result['TruthParticles'][0]:
+                    if p.interaction_id == bp['id']:
+                        particles.append(p)
+                        continue
+                ia = TruthInteraction.from_particles(particles,
+                                                     verbose=False, 
+                                                     **info)
+            else:
+                mask = bp['index']
+                true_mask = bp['true_index']
+                info.update({
+                    'index': mask,
+                    'true_index': true_mask,
+                    'points': pred_nonghost[mask][:, COORD_COLS],
+                    'depositions': pred_nonghost[mask][:, VALUE_COL],
+                    'true_points': true_nonghost[true_mask][:, COORD_COLS],
+                    'true_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL],
+                })
+                ia = TruthInteraction(**info)
+            out.append(ia)
         return out
     
     def build_true_using_particles(self, entry, data, particles):

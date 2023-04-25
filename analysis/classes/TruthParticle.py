@@ -90,7 +90,6 @@ class TruthParticle(Particle):
     def true_depositions(self, value):
         assert value.shape[0] == self._true_size
         self._true_depositions = value
-        self._true_depositions_MeV = value * self._ADC_to_MeV
     
     @property
     def true_depositions_MeV(self):
@@ -100,7 +99,6 @@ class TruthParticle(Particle):
     def true_depositions_MeV(self, value):
         assert value.shape[0] == self._true_size
         self._true_depositions_MeV = value
-        self._true_depositions = value * 1./ self._ADC_to_MeV
     
     def is_contained(self, spatial_size):
 
