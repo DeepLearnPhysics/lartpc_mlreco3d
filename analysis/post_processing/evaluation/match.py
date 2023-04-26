@@ -23,7 +23,13 @@ def match_interactions(data_dict,
                        overlap_mode='iou'):
 
     pred_interactions = result_dict['interactions']
-    true_interactions = result_dict['truth_interactions']
+    if overlap_mode == 'chamfer':
+        true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
+    else:
+        true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.size > 0]
+    
+    # Only consider interactions with nonzero predicted nonghost
+    matched_particles = []
     
     if matching_mode == 'optimal':
         matched_interactions, counts = match_interactions_optimal(
@@ -56,18 +62,24 @@ def match_interactions(data_dict,
                 codomain_particles = codomain.particles
             domain_particles   = [p for p in domain_particles if p.points.shape[0] > 0]
             codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
+            # print('-------------------------------')
+            # pprint(list(domain_particles))
+            # print("Domain = ", domain.size if domain is not None else None)
+            # pprint(list(codomain_particles))
+            # print("Codomain = ", codomain.size if codomain is not None else None)
             if matching_mode == 'one_way':
-                matched_particles, _ = match_particles_fn(domain_particles, 
+                mparticles, _ = match_particles_fn(domain_particles, 
                                                           codomain_particles,
                                                           min_overlap=min_overlap,
                                                           overlap_mode=overlap_mode)
             elif matching_mode == 'optimal':
-                matched_particles, _ = match_particles_optimal(domain_particles, 
+                mparticles, _ = match_particles_optimal(domain_particles, 
                                                                codomain_particles,
                                                                min_overlap=min_overlap,
                                                                overlap_mode=overlap_mode)
             else:
                 raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
+            matched_particles.extend(mparticles)
 
         pmatches, pcounts = match_parts_within_ints(matched_interactions)
         
