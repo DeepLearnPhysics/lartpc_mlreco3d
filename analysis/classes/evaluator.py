@@ -45,7 +45,6 @@ class FullChainEvaluator(FullChainPredictor):
 
     def __init__(self, data_blob, result, evaluator_cfg={}, **kwargs):
         super(FullChainEvaluator, self).__init__(data_blob, result, evaluator_cfg, **kwargs)
-        self.build_representations()
         self.michel_primary_ionization_only = evaluator_cfg.get('michel_primary_ionization_only', False)
         # For matching particles and interactions
         self.min_overlap_count        = evaluator_cfg.get('min_overlap_count', 0)
@@ -201,7 +200,7 @@ class FullChainEvaluator(FullChainPredictor):
         out: List[Interaction]
             List of TruthInteraction in image #<entry>
         '''
-        out = self.result['truth_interactions'][entry]
+        out = self.result['TruthInteractions'][entry]
         return out
     
     
