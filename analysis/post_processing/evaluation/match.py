@@ -60,23 +60,19 @@ def match_interactions(data_dict,
                 domain_particles = domain.particles
             if codomain is not None:
                 codomain_particles = codomain.particles
-            domain_particles   = [p for p in domain_particles if p.points.shape[0] > 0]
-            codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
-            # print('-------------------------------')
-            # pprint(list(domain_particles))
-            # print("Domain = ", domain.size if domain is not None else None)
-            # pprint(list(codomain_particles))
-            # print("Codomain = ", codomain.size if codomain is not None else None)
+            domain_particles_masked   = [p for p in domain_particles if p.points.shape[0] > 0]
+            codomain_particles_masked = [p for p in codomain_particles if p.points.shape[0] > 0]
+
             if matching_mode == 'one_way':
-                mparticles, _ = match_particles_fn(domain_particles, 
-                                                          codomain_particles,
-                                                          min_overlap=min_overlap,
-                                                          overlap_mode=overlap_mode)
+                mparticles, _ = match_particles_fn(domain_particles_masked, 
+                                                   codomain_particles_masked,
+                                                   min_overlap=min_overlap,
+                                                   overlap_mode=overlap_mode)
             elif matching_mode == 'optimal':
-                mparticles, _ = match_particles_optimal(domain_particles, 
-                                                               codomain_particles,
-                                                               min_overlap=min_overlap,
-                                                               overlap_mode=overlap_mode)
+                mparticles, _ = match_particles_optimal(domain_particles_masked, 
+                                                        codomain_particles_masked,
+                                                        min_overlap=min_overlap,
+                                                        overlap_mode=overlap_mode)
             else:
                 raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
             matched_particles.extend(mparticles)

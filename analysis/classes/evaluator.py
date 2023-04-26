@@ -54,6 +54,26 @@ class FullChainEvaluator(FullChainPredictor):
             assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
         if self.overlap_mode == 'counts':
             assert self.min_overlap_count >= 0
+            
+    def _build_reco_reps(self):
+        if 'particles' not in self.result and 'particles' in self.scope:
+            self.result['particles'] = self.builders['particles'].build(self.data_blob, 
+                                                                        self.result, 
+                                                                        mode='reco')
+        if 'interactions' not in self.result and 'interactions' in self.scope:
+            self.result['interactions'] = self.builders['interactions'].build(self.data_blob,
+                                                                              self.result, 
+                                                                              mode='reco')
+            
+    def _build_truth_reps(self):
+        if 'truth_particles' not in self.result and 'particles' in self.scope:
+            self.result['truth_particles'] = self.builders['particles'].build(self.data_blob, 
+                                                                        self.result, 
+                                                                        mode='truth')
+        if 'truth_interactions' not in self.result and 'interactions' in self.scope:
+            self.result['truth_interactions'] = self.builders['interactions'].build(self.data_blob,
+                                                                              self.result, 
+                                                                              mode='truth')
 
     def build_representations(self, mode='all'):
         """
@@ -72,11 +92,15 @@ class FullChainEvaluator(FullChainPredictor):
         -------
         None (operation is in-place)
         """
-        for key in self.builders:
-            if key not in self.result and key in self.scope:
-                self.result[key] = self.builders[key].build(self.data_blob, 
-                                                            self.result, 
-                                                            mode=mode)
+        if mode == 'reco':
+            self._build_reco_reps()
+        elif mode == 'truth':
+            self._build_truth_reps()
+        elif mode == 'all':
+            self._build_reco_reps()
+            self._build_truth_reps()
+        else:
+            raise ValueError(f"Data structure building mode {mode} not supported!")
 
     def get_true_label(self, entry, name, schema='cluster_label_adapted'):
         """
@@ -200,7 +224,7 @@ class FullChainEvaluator(FullChainPredictor):
         out: List[Interaction]
             List of TruthInteraction in image #<entry>
         '''
-        out = self.result['TruthInteractions'][entry]
+        out = self.result['truth_interactions'][entry]
         return out
     
     
@@ -215,7 +239,10 @@ class FullChainEvaluator(FullChainPredictor):
         particles within a matched interaction pair can be considered
         for matching. 
         '''
-
+        for m in int_matches:
+            print('-------------------')
+            print(m[0])
+            print(m[1])
         matched_particles, match_counts = [], []
 
         for m in int_matches:
@@ -239,6 +266,7 @@ class FullChainEvaluator(FullChainPredictor):
                         matched_particles.append((p, None))
                         match_counts.append(-1)
                 for match_id in p.match:
+                    # print(ia1[match_id], match_id, p.match, p.id, p.size)
                     if type(p) is Particle:
                         matched_particles.append((ia1[match_id], p))
                     else:
@@ -250,7 +278,7 @@ class FullChainEvaluator(FullChainPredictor):
     def match_particles(self, entry,
                         only_primaries=False,
                         mode='pred_to_true',
-                        matching_mode='one_way', 
+                        matching_mode='optimal', 
                         return_counts=False,
                         **kwargs):
         '''
@@ -320,7 +348,7 @@ class FullChainEvaluator(FullChainPredictor):
                            drop_nonprimary_particles=False,
                            match_particles=True,
                            return_counts=False,
-                           matching_mode='one_way',
+                           matching_mode='optimal',
                            **kwargs):
         """
         Method for matching reco and true interactions.
@@ -353,28 +381,35 @@ class FullChainEvaluator(FullChainPredictor):
         """
 
         all_matches, all_counts = [], []
-        if mode == 'pred_to_true':
-            ints_from = self.get_interactions(entry, 
-                                              drop_nonprimary_particles=drop_nonprimary_particles)
-            ints_to = self.get_true_interactions(entry)
-        elif mode == 'true_to_pred':
-            ints_to = self.get_interactions(entry, 
+        pred_interactions = self.get_interactions(entry, 
                                             drop_nonprimary_particles=drop_nonprimary_particles)
-            ints_from = self.get_true_interactions(entry)
-        else:
-            raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-
+        true_interactions = self.get_true_interactions(entry)
+        
         all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
         
+        if all_kwargs['overlap_mode'] == 'chamfer':
+            true_interactions_masked = [ia for ia in true_interactions if ia.truth_size > 0]
+        else:
+            true_interactions_masked = [ia for ia in true_interactions if ia.size > 0]
+        
         if matching_mode == 'one_way':
-            matched_interactions, counts = match_interactions_fn(ints_from, ints_to,
-                                                                    **all_kwargs)
-        elif matching_mode == 'optimal':
-            matched_interactions, counts = match_interactions_optimal(ints_from, ints_to,
+            if mode == 'pred_to_true':
+                matched_interactions, counts = match_interactions_fn(pred_interactions, 
+                                                                     true_interactions_masked,
                                                                         **all_kwargs)
+            elif mode == 'true_to_pred':
+                matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
+                                                                     pred_interactions,
+                                                                        **all_kwargs)
+            else:
+                raise ValueError(f"One-way matching mode {mode} not supported, either use 'pred_to_true' or 'true_to_pred'.")
+        elif matching_mode == 'optimal':
+            matched_interactions, counts = match_interactions_optimal(pred_interactions, 
+                                                                      true_interactions_masked,
+                                                                      **all_kwargs)
         else:
             raise ValueError
+
         if len(matched_interactions) == 0:
             return [], []
         if match_particles:
@@ -386,20 +421,20 @@ class FullChainEvaluator(FullChainPredictor):
                 if codomain is not None:
                     codomain_particles = codomain.particles
                     # continue
-                domain_particles = [p for p in domain_particles if p.points.shape[0] > 0]
-                codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
+                domain_particles_masked = [p for p in domain_particles if p.points.shape[0] > 0]
+                codomain_particles_masked = [p for p in codomain_particles if p.points.shape[0] > 0]
                 if matching_mode == 'one_way':
-                    matched_particles, _ = match_particles_fn(domain_particles, 
-                                                              codomain_particles,
+                    matched_particles, _ = match_particles_fn(domain_particles_masked, 
+                                                              codomain_particles_masked,
                                                               min_overlap=self.min_overlap_count,
                                                               overlap_mode=self.overlap_mode)
                 elif matching_mode == 'optimal':
-                    matched_particles, _ = match_particles_optimal(domain_particles, codomain_particles,
+                    matched_particles, _ = match_particles_optimal(domain_particles_masked, codomain_particles_masked,
                                                                     min_overlap=self.min_overlap_count,
                                                                     overlap_mode=self.overlap_mode)
                 else:
                     raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
-
+                
             pmatches, pcounts = self.match_parts_within_ints(matched_interactions)
             
             self._matched_particles = pmatches

@@ -44,7 +44,7 @@ class FullChainPredictor:
         self.fragment_builder    = FragmentBuilder()
 
         build_reps = predictor_cfg.get('build_reps', ['particles', 'interactions'])
-        self.builders = {}
+        self.builders = OrderedDict()
         for key in build_reps:
             if key == 'particles':
                 self.builders[key] = ParticleBuilder()

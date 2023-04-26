@@ -300,6 +300,7 @@ def match_interactions_fn(ints_from : List[Interaction],
         overlap_matrix = matrix_iou(ints_x, ints_y)
     else:
         raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
+    
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 
@@ -316,12 +317,13 @@ def match_interactions_fn(ints_from : List[Interaction],
             interaction._match_counts[matched_truth.id] = intersections[j]
             # matched_truth._match.append(interaction.id)
             matched_truth._match_counts[interaction.id] = intersections[j]
-        matches.append((interaction, matched_truth))
+            match = (interaction, matched_truth)
+            matches.append(match)
 
-    # for interaction in ints_y:
-    #     interaction._match = sorted(list(interaction._match_counts.keys()),
-    #                                 key=lambda x: interaction._match_counts[x],
-    #                                 reverse=True)
+        # if (type(match[0]) is Interaction) or (type(match[1]) is TruthInteraction):
+        #     p1, p2 = match[1], match[0]
+        #     match = (p1, p2)
+        # matches.append(match)
 
     return matches, intersections
 
