@@ -15,7 +15,7 @@ from mlreco.utils.globals import COORD_COLS
                                  'particle_group_pred',
                                  'particle_node_pred_vtx',
                                  'input_rescaled',
-                                 'Interactions'],
+                                 'interactions'],
                  result_capture_optional=['particle_dirs'])
 def reconstruct_vertex(data_dict, result_dict,
                        mode='all',
@@ -116,7 +116,7 @@ def reconstruct_vertex(data_dict, result_dict,
 
     vertices = {key: val for key, val in zip(interaction_ids.squeeze(), vertices)}
 
-    for i, ia in enumerate(result_dict['Interactions']):
+    for i, ia in enumerate(result_dict['interactions']):
         ia.vertex = vertices[ia.id]
 
     return {}

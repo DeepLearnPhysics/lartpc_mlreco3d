@@ -5,7 +5,7 @@ from mlreco.utils.globals import *
 from .filters import filter_opflashes
 
 @post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
-                 result_capture=['Interactions'])
+                 result_capture=['interactions'])
 def run_flash_matching(data_dict, result_dict, 
                        fm=None,
                        opflash_keys=[]):
@@ -47,7 +47,7 @@ def run_flash_matching(data_dict, result_dict,
 
     update_dict = {}
     
-    interactions = result_dict['Interactions']
+    interactions = result_dict['interactions']
     entry        = data_dict['index']
     
     # opflashes = filter_opflashes(opflashes)
@@ -72,7 +72,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.fmatch_time = float(flash.time())
         ia.fmatch_total_pE = float(flash.TotalPE())
         ia.fmatch_id = int(flash.id())
-        update_dict['Interactions'].append(ia)
+        update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
     flash_dict_W = {}
@@ -82,7 +82,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.fmatch_time = float(flash.time())
         ia.fmatch_total_pE = float(flash.TotalPE())
         ia.fmatch_id = int(flash.id())
-        update_dict['Interactions'].append(ia)
+        update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
     assert len(update_dict['flash_matches_cryoE'])\

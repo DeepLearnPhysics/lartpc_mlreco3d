@@ -10,10 +10,10 @@ from analysis.classes.matching import (match_particles_fn,
 from analysis.classes.data import *
 
 @post_processing(data_capture=['index'], 
-                 result_capture=['Particles',
-                                 'TruthParticles',
-                                 'Interactions',
-                                 'TruthInteractions'])
+                 result_capture=['particles',
+                                 'truth_particles',
+                                 'interactions',
+                                 'truth_interactions'])
 def match_interactions(data_dict,
                        result_dict,
                        matching_mode='optimal',
@@ -22,8 +22,8 @@ def match_interactions(data_dict,
                        min_overlap=0,
                        overlap_mode='iou'):
 
-    pred_interactions = result_dict['Interactions']
-    true_interactions = result_dict['TruthInteractions']
+    pred_interactions = result_dict['interactions']
+    true_interactions = result_dict['truth_interactions']
     
     if matching_mode == 'optimal':
         matched_interactions, counts = match_interactions_optimal(

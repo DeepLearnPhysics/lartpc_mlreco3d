@@ -25,7 +25,6 @@ from analysis.classes import (Particle,
                               TruthParticleFragment)
 from analysis.classes.matching import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
-from mlreco.utils.gnn.cluster import get_cluster_label
 
 class DataBuilder(ABC):
     """Abstract base class for building all data structures
@@ -192,7 +191,7 @@ class ParticleBuilder(DataBuilder):
                 " result dictionary."
             raise KeyError(msg)
         out  = []
-        blueprints = result['Particles'][0]
+        blueprints = result['particles'][0]
         for i, bp in enumerate(blueprints):
             mask = bp['index']
             prepared_bp = copy.deepcopy(bp)
@@ -223,7 +222,7 @@ class ParticleBuilder(DataBuilder):
         true_nonghost = data['cluster_label'][0]
         particles_asis = data['particles_asis'][0]
         pred_nonghost = result['cluster_label_adapted'][0]
-        blueprints = result['TruthParticles'][0]
+        blueprints = result['truth_particles'][0]
         for i, bp in enumerate(blueprints):
             mask = bp['index']
             true_mask = bp['truth_index']
@@ -441,7 +440,7 @@ class InteractionBuilder(DataBuilder):
         self.cfg = builder_cfg
 
     def _build_reco(self, entry: int, data: dict, result: dict) -> List[Interaction]:
-        particles = result['Particles'][entry]
+        particles = result['particles'][entry]
         out = group_particles_to_interactions_fn(particles, 
                                                  get_nu_id=True, 
                                                  mode='pred')
@@ -459,8 +458,8 @@ class InteractionBuilder(DataBuilder):
             raise KeyError(msg)
         
         out = []
-        blueprints = result['Interactions'][0]
-        use_particles = 'Particles' in result
+        blueprints = result['interactions'][0]
+        use_particles = 'particles' in result
         
         if not use_particles:
             msg = "Loading Interactions without building Particles. "\
@@ -475,14 +474,14 @@ class InteractionBuilder(DataBuilder):
                 'nu_id': bp['nu_id'],
                 'volume_id': bp['volume_id'],
                 'vertex': bp['vertex'],
-                'fmatch_time': bp['fmatch_time'],
+                'flash_time': bp['flash_time'],
                 'fmatched': bp['fmatched'],
-                'fmatch_id': bp['fmatch_id'],
-                'fmatch_total_pE': bp['fmatch_total_pE']
+                'flash_id': bp['flash_id'],
+                'flash_total_pE': bp['flash_total_pE']
             }
             if use_particles:
                 particles = []
-                for p in result['Particles'][0]:
+                for p in result['particles'][0]:
                     if p.interaction_id == bp['id']:
                         particles.append(p)
                         continue
@@ -500,7 +499,7 @@ class InteractionBuilder(DataBuilder):
         return out
     
     def _build_truth(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
-        particles = result['TruthParticles'][entry]
+        particles = result['truth_particles'][entry]
         out = group_particles_to_interactions_fn(particles, 
                                                  get_nu_id=True, 
                                                  mode='truth')
@@ -512,8 +511,8 @@ class InteractionBuilder(DataBuilder):
         pred_nonghost = result['cluster_label_adapted'][0]
         
         out = []
-        blueprints = result['TruthInteractions'][0]
-        use_particles = 'TruthParticles' in result
+        blueprints = result['truth_interactions'][0]
+        use_particles = 'truth_particles' in result
         
         if not use_particles:
             msg = "Loading TruthInteractions without building TruthParticles. "\
@@ -531,7 +530,7 @@ class InteractionBuilder(DataBuilder):
             }
             if use_particles:
                 particles = []
-                for p in result['TruthParticles'][0]:
+                for p in result['truth_particles'][0]:
                     if p.interaction_id == bp['id']:
                         particles.append(p)
                         continue

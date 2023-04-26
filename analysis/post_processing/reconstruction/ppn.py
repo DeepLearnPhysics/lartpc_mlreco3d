@@ -12,7 +12,7 @@ PPN_LOGITS_COLS = (3,4,5,6,7)
 PPN_SCORE_COL   = (8,9)
 
 @post_processing(data_capture=[], result_capture=['input_rescaled',
-                                                  'Particles',
+                                                  'particles',
                                                   'ppn_classify_endpoints',
                                                   'ppn_output_coords',
                                                   'ppn_points',
@@ -72,7 +72,7 @@ def assign_ppn_candidates(data_dict, result_dict):
         ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 7), 
                                   dtype=np.float32)
         
-    match_points_to_particles(ppn_candidates, result_dict['Particles'])
+    match_points_to_particles(ppn_candidates, result_dict['particles'])
     
     return {}
     

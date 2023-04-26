@@ -120,16 +120,16 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 volume = true_int.volume if true_int is not None else pred_int.volume
                 flash_matches = flash_matches_cryoW if volume == 1 else flash_matches_cryoE
                 pred_int_dict['fmatched'] = False
-                pred_int_dict['fmatch_time'] = None
+                pred_int_dict['flash_time'] = None
                 pred_int_dict['fmatch_total_pe'] = None
-                pred_int_dict['fmatch_id'] = None
+                pred_int_dict['flash_id'] = None
                 if pred_int is not None:
                     for interaction, flash, match in flash_matches:
                         if interaction.id != pred_int.id: continue
                         pred_int_dict['fmatched'] = True
-                        pred_int_dict['fmatch_time'] = flash.time()
+                        pred_int_dict['flash_time'] = flash.time()
                         pred_int_dict['fmatch_total_pe'] = flash.TotalPE()
-                        pred_int_dict['fmatch_id'] = flash.id()
+                        pred_int_dict['flash_id'] = flash.id()
                         break
 
             interactions_dict = OrderedDict(index_dict.copy())

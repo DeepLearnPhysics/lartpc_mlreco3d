@@ -337,14 +337,14 @@ class InteractionLogger(AnalysisLogger):
         assert (ia is None) or (type(ia) is Interaction)
         out = {
             'fmatched': False,
-            'fmatch_time': -sys.maxsize,
-            'fmatch_total_pE': -sys.maxsize,
-            'fmatch_id': -sys.maxsize
+            'flash_time': -sys.maxsize,
+            'flash_total_pE': -sys.maxsize,
+            'flash_id': -sys.maxsize
         }
         if ia is not None:
             if hasattr(ia, 'fmatched'):
                 out['fmatched'] = ia.fmatched
-                out['fmatch_time'] = ia.fmatch_time
-                out['fmatch_total_pE'] = ia.fmatch_total_pE
-                out['fmatch_id'] = ia.fmatch_id
+                out['flash_time'] = ia.fmatch_time
+                out['flash_total_pE'] = ia.fmatch_total_pE
+                out['flash_id'] = ia.fmatch_id
         return out

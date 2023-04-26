@@ -9,7 +9,7 @@ from mlreco.utils.globals import *
                                                               'particle_clusts',
                                                               'particle_start_points',
                                                               'particle_end_points',
-                                                              'Particles'])
+                                                              'particles'])
 def particle_direction(data_dict,
                        result_dict,
                        neighborhood_radius=5,
@@ -36,7 +36,7 @@ def particle_direction(data_dict,
                                                             optimize)
     }
     
-    for i, p in enumerate(result_dict['Particles']):
+    for i, p in enumerate(result_dict['particles']):
         p.start_dir = update_dict['particle_start_directions'][i]
         p.end_dir   = update_dict['particle_end_directions'][i]
             

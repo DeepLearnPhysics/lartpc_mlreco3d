@@ -64,9 +64,9 @@ class FullChainEvaluator(FullChainPredictor):
         Will not build data structures if the key corresponding to 
         the data structure class is already contained in the result dictionary.
         
-        For example, if result['Particles'] exists and contains lists of
+        For example, if result['particles'] exists and contains lists of
         reconstructed <Particle> instances, then methods inside the 
-        Evaluator will use the already existing result['Particles'] 
+        Evaluator will use the already existing result['particles'] 
         rather than building new lists from scratch. 
         
         Returns
@@ -168,7 +168,7 @@ class FullChainEvaluator(FullChainPredictor):
             List of TruthParticles in image #<entry>
         '''
         out_particles_list = []
-        particles = self.result['TruthParticles'][entry]
+        particles = self.result['truth_particles'][entry]
 
         if only_primaries:
             out_particles_list = [p for p in particles if p.is_primary]
@@ -201,7 +201,7 @@ class FullChainEvaluator(FullChainPredictor):
         out: List[Interaction]
             List of TruthInteraction in image #<entry>
         '''
-        out = self.result['TruthInteractions'][entry]
+        out = self.result['truth_interactions'][entry]
         return out
     
     

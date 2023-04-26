@@ -170,11 +170,11 @@ class AnaToolsManager:
         """
         length_check = []
         if 'ParticleBuilder' in self.builders:
-            result['Particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
-            length_check.append(len(result['Particles']))
+            result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
+            length_check.append(len(result['particles']))
         if 'InteractionBuilder' in self.builders:
-            result['Interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
-            length_check.append(len(result['Interactions']))
+            result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
+            length_check.append(len(result['interactions']))
         if 'FragmentBuilder' in self.builders:
             result['ParticleFragments']      = self.builders['FragmentBuilder'].build(data, result, mode='reco')
             length_check.append(len(result['ParticleFragments']))
@@ -199,11 +199,11 @@ class AnaToolsManager:
         """
         length_check = []
         if 'ParticleBuilder' in self.builders:
-            result['TruthParticles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
-            length_check.append(len(result['TruthParticles']))
+            result['truth_particles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
+            length_check.append(len(result['truth_particles']))
         if 'InteractionBuilder' in self.builders:
-            result['TruthInteractions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
-            length_check.append(len(result['TruthInteractions']))
+            result['truth_interactions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
+            length_check.append(len(result['truth_interactions']))
         if 'FragmentBuilder' in self.builders:
             result['TruthParticleFragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
             length_check.append(len(result['TruthParticleFragments']))
@@ -261,10 +261,15 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            result['Particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+            if 'particles' not in result:
+                result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
+            else:
+                result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
         if 'InteractionBuilder' in self.builders:
-            result['Interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')
-            
+            if 'interactions' not in result:
+                result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
+            else:
+                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')            
             
     def _load_truth_reps(self, data, result):
         """Load representations for true objects.
@@ -283,10 +288,15 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            result['TruthParticles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
+            if 'truth_particles' not in result:
+                result['truth_particles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
+            else:
+                result['truth_particles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
         if 'InteractionBuilder' in self.builders:
-            result['TruthInteractions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
-
+            if 'truth_interactions' not in result:
+                result['truth_interactions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
+            else:
+                result['truth_interactions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
             
     def load_representations(self, data, result, mode='all'):
         if self.ana_mode is not None:
@@ -335,7 +345,8 @@ class AnaToolsManager:
         
         if 'post_processing' in self.ana_config:
             meta = data['meta'][0]
-            self.initialize_flash_manager(meta)
+            if 'run_flash_matching' in self.ana_config['post_processing']:
+                self.initialize_flash_manager(meta)
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
 
