@@ -47,10 +47,10 @@ class Interaction:
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
-                 fmatch_time: float = -float(sys.maxsize),
+                 flash_time: float = -float(sys.maxsize),
                  fmatched: bool = False,
-                 fmatch_total_pE: float = -1,
-                 fmatch_id: int = -1):
+                 flash_total_pE: float = -1,
+                 flash_id: int = -1):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -64,6 +64,8 @@ class Interaction:
         self._particles  = None
         self._size       = None
         # Invoke particles setter
+        self._particle_counts = np.zeros(6, dtype=np.int64)
+        self._primary_counts  = np.zeros(6, dtype=np.int64)
         self.particles   = particles
 
         # Aggregate individual particle information 
@@ -81,10 +83,10 @@ class Interaction:
         self._match_counts  = OrderedDict()
         
         # Flash matching quantities
-        self.fmatch_time     = fmatch_time
-        self.fmatched        = fmatched
-        self.fmatch_total_pE = fmatch_total_pE
-        self.fmatch_id       = fmatch_id
+        self.flash_time     = flash_time
+        self.fmatched       = fmatched
+        self.flash_total_pE = flash_total_pE
+        self.flash_id       = flash_id
         
     @property
     def size(self):
@@ -163,6 +165,12 @@ class Interaction:
                 index_list.append(p.index)
                 points_list.append(p.points)
                 depositions_list.append(p.depositions)
+                if p.pid >= 0:
+                    self._particle_counts[p.pid] += 1
+                    self._primary_counts[p.pid] += int(p.is_primary)
+                else:
+                    self._particle_counts[-1] += 1
+                    self._primary_counts[-1] += int(p.is_primary)
 
             # self._particle_ids = np.array(id_list, dtype=np.int64)
             self._num_particles = len(value)
@@ -183,31 +191,11 @@ class Interaction:
         
     @property
     def particle_counts(self):
-        if self._particles is not None:
-            self._particle_counts = Counter({ PID_LABELS[i] : 0 for i in PID_LABELS.keys() })
-            self._particle_counts.update([PID_LABELS[p.pid] for p in self._particles.values()])
-            self._num_particles = sum(self._particle_counts.values())
-            return self._particle_counts
-        else:
-            msg = "Need full list of Particle instances under "\
-                " self.particles to count particles. Returning None."
-            print(msg)
-            return None
+        return self._particle_counts
         
     @property
     def primary_counts(self):
-        if self._particles is not None:
-            self._primary_particle_counts = Counter({ PID_LABELS[i] : 0 \
-                for i in PID_LABELS.keys() })
-            self._primary_particle_counts.update([PID_LABELS[p.pid] \
-                for p in self._particles.values() if p.is_primary])
-            self._num_primaries = sum(self._primary_particle_counts.values())
-            return self._primary_particle_counts
-        else:
-            msg = "Need full list of Particle instances under "\
-                "self.particles to count primary particles. Returning None."
-            print(msg)
-            return None
+        return self._primary_counts
         
     @property
     def num_primaries(self):

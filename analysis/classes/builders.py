@@ -298,8 +298,8 @@ class ParticleBuilder(DataBuilder):
         particle_end_points   = result['particle_end_points'][entry][:, COORD_COLS]
         inter_ids             = result['particle_group_pred'][entry]
 
-        type_logits            = result['particle_node_pred_type'][entry]
-        primary_logits         = result['particle_node_pred_vtx'][entry]
+        type_logits           = result['particle_node_pred_type'][entry]
+        primary_logits        = result['particle_node_pred_vtx'][entry]
 
         pid_scores     = softmax(type_logits, axis=1)
         primary_scores = softmax(primary_logits, axis=1)

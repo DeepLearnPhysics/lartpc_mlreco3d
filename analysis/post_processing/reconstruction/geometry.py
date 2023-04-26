@@ -37,6 +37,7 @@ def particle_direction(data_dict,
     }
     
     for i, p in enumerate(result_dict['Particles']):
-        p.direction = update_dict['particle_start_directions'][i]
+        p.start_dir = update_dict['particle_start_directions'][i]
+        p.end_dir   = update_dict['particle_end_directions'][i]
             
     return update_dict
