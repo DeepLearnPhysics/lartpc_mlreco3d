@@ -206,7 +206,8 @@ class HDF5Reader:
             # If the reference points at a group, unpack
             el_refs = group[key]['index'][region_ref].flatten()
             if len(group[key]['index'].shape) == 1:
-                ret = [group[key]['elements'][r] for r in el_refs]
+                ret = np.empty(len(el_refs), dtype=np.object)
+                ret[:] = [group[key]['elements'][r] for r in el_refs]
             else:
                 ret = [group[key][f'element_{i}'][r] for i, r in enumerate(el_refs)]
             blob[key] = ret

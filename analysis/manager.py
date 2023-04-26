@@ -92,6 +92,7 @@ class AnaToolsManager:
         or reading data from HDF5. 
         """
         if 'reader' not in self.ana_config:
+            assert self.config is not None, 'Must specify `chain_config` path under the `analysis` block'
             event_list = self.config['iotool']['dataset'].get('event_list', None)
             if event_list is not None:
                 event_list = eval(event_list)
