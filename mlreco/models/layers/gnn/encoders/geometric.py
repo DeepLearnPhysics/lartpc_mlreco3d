@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from torch_scatter import scatter_min
 
-from mlreco.utils import local_cdist
 from mlreco.utils.gnn.data import cluster_features, cluster_edge_features
 
 class ClustGeoNodeEncoder(torch.nn.Module):
@@ -144,7 +143,7 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
                 x2 = voxels[clusts[e[1]]]
 
                 # Find the closest set point in each cluster
-                d12 = local_cdist(x1,x2)
+                d12 = torch.cdist(x1, x2, compute_mode='donot_use_mm_for_euclid_dist')
                 imin = torch.argmin(d12)
                 i1, i2 = imin//len(x2), imin%len(x2)
                 v1 = x1[i1,:] # closest point in c1
