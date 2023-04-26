@@ -1,6 +1,8 @@
 import numpy as np
 from analysis.classes.FullChainPredictor import is_contained
 
+@post_processing(data_capture=['meta', 'index', 'crthits'], 
+                 result_capture=['Interactions'])
 class CRTTPCMatcherInterface:
     """
     Adapter class between full chain outputs and matcha (Python package
@@ -69,6 +71,7 @@ class CRTTPCMatcherInterface:
                            if particle.pid >= 2 and not is_contained(particle.points)
         ]
 
+        
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
         crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
 
