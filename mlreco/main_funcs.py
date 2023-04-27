@@ -23,7 +23,6 @@ class Handlers:
     data_io_iter = None
     csv_logger   = None
     weight_io    = None
-    train_logger = None
     watch        = None
     writer       = None
     iteration    = 0
@@ -206,7 +205,6 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     Log relevant information to CSV files and stdout.
     """
     import torch
-    from mlreco.utils import utils
 
     report_step  = cfg['trainval']['report_step'] and \
                 ((handlers.iteration+1) % cfg['trainval']['report_step'] == 0)
@@ -227,7 +225,7 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
 
     mem = 0.
     if torch.cuda.is_available():
-        mem = utils.round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
+        mem = round(torch.cuda.max_memory_allocated()/1.e9, 3)
 
     # Organize time info
     t_iter  = handlers.watch.time('iteration')
@@ -262,11 +260,11 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
 
     # Report (stdout)
     if report_step:
-        acc   = utils.round_decimals(np.mean(res.get('accuracy',-1)), 4)
-        loss  = utils.round_decimals(np.mean(res.get('loss',    -1)), 4)
-        tfrac = utils.round_decimals(t_net/t_iter*100., 2)
-        tabs  = utils.round_decimals(t_net, 3)
-        epoch = utils.round_decimals(epoch, 2)
+        acc   = round(np.mean(res.get('accuracy',-1)), 4)
+        loss  = round(np.mean(res.get('loss',    -1)), 4)
+        tfrac = round(t_net/t_iter*100., 2)
+        tabs  = round(t_net, 3)
+        epoch = round(epoch, 2)
 
         if cfg['trainval']['train']:
             msg = 'Iter. %d (epoch %g) @ %s ... train time %g%% (%g [s]) mem. %g GB \n'
@@ -278,7 +276,6 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         print(msg)
         sys.stdout.flush()
         if handlers.csv_logger: handlers.csv_logger.flush()
-        if handlers.train_logger: handlers.train_logger.flush()
 
 
 def train_loop(handlers):

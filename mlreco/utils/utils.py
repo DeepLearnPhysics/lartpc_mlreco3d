@@ -1,10 +1,15 @@
 import numpy as np
 import torch
 import time
-import torch_geometric
 
 
 def to_numpy(s):
+    '''
+    Function which casts an array-like object
+    to a `numpy.ndarray`.
+
+
+    '''
     import MinkowskiEngine as ME
 
     if isinstance(s, np.ndarray):
@@ -15,11 +20,6 @@ def to_numpy(s):
         return torch.cat([s.C.float(), s.F], dim=1).detach().cpu().numpy()
     else:
         raise TypeError("Unknown return type %s" % type(s))
-
-
-def round_decimals(val, digits):
-    factor = float(np.power(10, digits))
-    return int(val * factor+0.5) / factor
 
 
 # Compute moving average
@@ -50,10 +50,10 @@ def progress_bar(count, total, message=''):
 
 # Memory usage print function
 def print_memory(msg=''):
-    max_allocated = round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
-    allocated = round_decimals(torch.cuda.memory_allocated()/1.e9, 3)
-    max_cached = round_decimals(torch.cuda.max_memory_cached()/1.e9, 3)
-    cached = round_decimals(torch.cuda.memory_cached()/1.e9, 3)
+    max_allocated = round(torch.cuda.max_memory_allocated()/1.e9, 3)
+    allocated = round(torch.cuda.memory_allocated()/1.e9, 3)
+    max_cached = round(torch.cuda.max_memory_cached()/1.e9, 3)
+    cached = round(torch.cuda.memory_cached()/1.e9, 3)
     print(max_allocated, allocated, max_cached, cached, msg)
 
 
