@@ -72,6 +72,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
+        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
         update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
@@ -82,6 +83,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
+        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
         update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
