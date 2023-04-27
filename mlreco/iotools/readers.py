@@ -9,7 +9,7 @@ class HDF5Reader:
 
     More documentation to come.
     '''
-    
+
     def __init__(self, file_keys, entry_list=[], skip_entry_list=[], to_larcv=False):
         '''
         Load up the HDF5 file.
@@ -32,7 +32,8 @@ class HDF5Reader:
         for file_key in file_keys:
             file_paths = glob.glob(file_key)
             assert len(file_paths), f'File key {file_key} yielded no compatible path'
-            self.file_paths.extend(sorted(file_paths))
+            self.file_paths.extend(file_paths)
+        self.file_paths = sorted(self.file_paths)
 
         # Loop over the input files, build a map from index to file ID
         self.num_entries  = 0
@@ -225,7 +226,7 @@ class HDF5Reader:
         ----------
         array : list
             List of dictionary of larcv object attributes
-        names: 
+        names:
             List of class attribute names
 
         Returns

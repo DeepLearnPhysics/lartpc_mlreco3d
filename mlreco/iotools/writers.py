@@ -27,7 +27,7 @@ class HDF5Writer:
 
     # LArCV object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
-        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d', 
+        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
         *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
@@ -35,7 +35,7 @@ class HDF5Writer:
         larcv.Particle: LARCV_SKIP_ATTRS,
         larcv.Neutrino: LARCV_SKIP_ATTRS,
         larcv.Flash:    ['wireCenters', 'wireWidths'],
-        larcv.CRTHit:   ['feb_id', 'pesmap'] # feb_id should be storable
+        larcv.CRTHit:   ['feb_id', 'pesmap']
     }
 
     # Analysis particle object attributes that do not need to be stored to HDF5
@@ -166,7 +166,7 @@ class HDF5Writer:
         '''
         # Store the necessary information to know how to store a key
         self.key_dict[key]['category'] = category
-        if self.is_scalar(blob[key]):
+        if np.isscalar(blob[key]):
             # Single scalar
             self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key], str) else type(blob[key])
             self.key_dict[key]['scalar'] = True
@@ -174,11 +174,11 @@ class HDF5Writer:
         else:
             if len(blob[key]) != self.batch_size: # TODO: Get rid of this possibility upstream
                 # List with a single scalar, regardless of batch_size
-                assert len(blob[key]) == 1 and self.is_scalar(blob[key][0]),\
+                assert len(blob[key]) == 1 and np.isscalar(blob[key][0]),\
                         'If there is an array of length mismatched with batch_size, '+\
                         'it must contain a single scalar.'
 
-            if self.is_scalar(blob[key][0]):
+            if np.isscalar(blob[key][0]):
                 # List containing a single scalar per batch ID
                 self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key][0], str) else type(blob[key][0])
                 self.key_dict[key]['scalar'] = True
@@ -312,7 +312,7 @@ class HDF5Writer:
                     subgroup.create_dataset(f'element_{i}', shape, maxshape=maxshape, dtype=val['dtype'])
 
             else:
-                # If the  elements of the list are of equal width, store them all 
+                # If the  elements of the list are of equal width, store them all
                 # to one dataset. An index is stored alongside the dataset to break
                 # it into individual elements downstream.
                 subgroup = group.create_group(key)
@@ -387,7 +387,7 @@ class HDF5Writer:
 
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single object
-            if self.is_scalar(blob[key]):
+            if np.isscalar(blob[key]):
                 obj = blob[key]
             else:
                 obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
@@ -406,24 +406,6 @@ class HDF5Writer:
         else:
             # Store one array of for all in the list and a index to break them
             self.store_flat(group, event, key, blob[key][batch_id])
-
-    @staticmethod
-    def is_scalar(obj):
-        '''
-        Returns true if the object has no __len__
-        attribute or is a string object.
-
-        Parameters
-        ----------
-        object : class instance
-            Instance of an object used to check typing
-
-        Returns
-        -------
-        bool
-            True if the object is a scalar or a string
-        '''
-        return not hasattr(obj, '__len__') or isinstance(obj, str)
 
     @staticmethod
     def store(group, event, key, array):
@@ -532,7 +514,7 @@ class HDF5Writer:
     @staticmethod
     def store_objects(group, event, key, array, obj_dtype):
         '''
-        Stores a list of objects with understandable attributes in 
+        Stores a list of objects with understandable attributes in
         the file and stores its mapping in the event dataset.
 
         Parameters
@@ -553,7 +535,7 @@ class HDF5Writer:
         for i, o in enumerate(array):
             for k, dtype in obj_dtype:
                 attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
-                if isinstance(attr, (int, float, str)):
+                if np.isscalar(attr):
                     objects[i][k] = attr
                 elif isinstance(attr, larcv.Vertex):
                     vertex = np.array([getattr(attr, a)() for a in ['x', 'y', 'z', 't']], dtype=np.float32)
@@ -563,6 +545,8 @@ class HDF5Writer:
                     if not isinstance(attr, np.ndarray):
                         vals = np.array([attr[i] for i in range(len(attr))])
                     objects[i][k] = vals
+                else:
+                    raise ValueError(f'Type {type(attr)} of attribute {k} of object {o} does not match an expected dtype')
 
         # Extend the dataset, store array
         dataset = group[key]
