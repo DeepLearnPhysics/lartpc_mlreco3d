@@ -2,6 +2,7 @@ import numpy as np
 
 from mlreco.utils.globals import SHAPE_LABELS
 
+
 class ParticleFragment:
     '''
     Data structure for managing fragment-level

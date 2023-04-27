@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 from typing import Counter, List, Union
 from . import Particle

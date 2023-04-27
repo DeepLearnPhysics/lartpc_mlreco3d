@@ -1,10 +1,12 @@
-import numpy as np
-from typing import Counter, List, Union
 import sys
+import numpy as np
+
+from typing import Counter, List, Union
 from collections import OrderedDict, Counter, defaultdict
+from functools import cached_property
+
 from . import Particle
 from mlreco.utils.globals import PID_LABELS
-from functools import cached_property
 
 
 class Interaction:

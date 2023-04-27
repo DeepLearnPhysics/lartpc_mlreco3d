@@ -1,8 +1,8 @@
 import numpy as np
-import pandas as pd
 
 from typing import Counter, List, Union
 from collections import OrderedDict
+
 from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
 
 

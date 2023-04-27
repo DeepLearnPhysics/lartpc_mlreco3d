@@ -5,7 +5,7 @@ import torch
 from typing import Tuple
 
 import mlreco.utils.numba_local as nbl
-from mlreco.utils.wrapper import numba_wrapper
+from mlreco.utils.decorators import numbafy
 from mlreco.utils.ppn import get_track_endpoints_geo
 
 from .cluster import get_cluster_features, get_cluster_features_extended
@@ -261,7 +261,7 @@ def _get_extra_gnn_features(fragments,
     return mask, kwargs
 
 
-@numba_wrapper(list_args=['clusts'])
+@numbafy(list_args=['clusts'])
 def split_clusts(clusts, batch_ids, batches, counts):
     """
     Splits a batched list of clusters into individual

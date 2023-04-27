@@ -350,6 +350,7 @@ class Unwrapper:
         else:
             raise TypeError('Unexpected data type', type(data[0]))
 
+
 def prefix_unwrapper_rules(rules, prefix):
     '''
     Modifies the default rules of a module to account for
@@ -359,8 +360,9 @@ def prefix_unwrapper_rules(rules, prefix):
     ----------
     rules : dict
         Dictionary which contains a set of unwrapping rules for each
-        output key of the reconstruction chain. If there is no rule
-        associated with a key, the list is concatenated.
+        output key of a given module in the reconstruction chain.
+    prefix : str
+        Prefix to add in front of all output names
 
     Returns
     -------

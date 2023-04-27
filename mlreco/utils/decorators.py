@@ -2,10 +2,31 @@ import numpy as np
 import numba as nb
 import torch
 import inspect
+from time import time
 from functools import wraps
 
 
-def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
+def timing(fn):
+    '''
+    Function which wraps any function and times it.
+
+    Returns
+    -------
+    callable
+        Timed function
+    '''
+    @wraps(fn)
+    def wrap(*args, **kwargs):
+        ts = time()
+        result = fn(*args, **kwargs)
+        te = time()
+        print('func:%r args:[%r, %r] took: %2.f sec' % \
+          (fn.__name__, args, kwargs, te-ts))
+        return result
+    return wrap
+
+
+def numbafy(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     '''
     Function which wraps a *numba* function with some checks on the input
     to make the relevant conversions to numpy where necessary.
@@ -24,7 +45,7 @@ def numba_wrapper(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):
     Returns
     -------
     callable
-        Wrapped function
+        Wrapped function which ensures input type compatibility with numba
     '''
     def outer(fn):
         @wraps(fn)

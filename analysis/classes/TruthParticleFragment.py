@@ -1,6 +1,7 @@
 import numpy as np
 
 from typing import Counter, List, Union
+
 from . import ParticleFragment
 
 

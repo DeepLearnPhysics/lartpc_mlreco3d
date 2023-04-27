@@ -3,10 +3,10 @@ import numpy as np
 import numba as nb
 
 import mlreco.utils.numba_local as nbl
-from mlreco.utils.wrapper import numba_wrapper
+from mlreco.utils.decorators import numbafy
 
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def get_voxel_features(data, max_dist=5.0):
     """
     Function that returns the an array of 16 features for

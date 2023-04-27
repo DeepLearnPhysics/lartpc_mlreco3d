@@ -1,9 +1,11 @@
-from typing import List
 import numpy as np
-import pandas as pd
+
+from typing import List
 from collections import OrderedDict, defaultdict
+
 from . import Interaction, TruthParticle
 from .Interaction import _process_interaction_attributes
+
 
 class TruthInteraction(Interaction):
     """

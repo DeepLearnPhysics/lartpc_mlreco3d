@@ -7,7 +7,7 @@ from scipy.spatial import Delaunay
 from scipy.sparse.csgraph import minimum_spanning_tree
 
 import mlreco.utils.numba_local as nbl
-from mlreco.utils.wrapper import numba_wrapper
+from mlreco.utils.decorators import numbafy
 
 
 @nb.njit(cache=True)
@@ -260,7 +260,7 @@ def restrict_graph(edge_index: nb.int64[:,:],
         return edge_index[:, edge_dists < edge_max_dists]
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_edge_features(data, clusts, edge_index, closest_index=None, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
@@ -348,7 +348,7 @@ def _get_cluster_edge_features_vec(data: nb.float32[:,:],
     return np.hstack((v1, v2, disp, lend, B))
 
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def get_voxel_edge_features(data, edge_index, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
@@ -390,7 +390,7 @@ def _get_voxel_edge_features(data: nb.float32[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
+@numbafy(cast_args=['voxels'], list_args=['clusts'])
 def get_edge_distances(voxels, clusts, edge_index):
     """
     For each edge, finds the closest points of approach (CPAs) between the
@@ -430,7 +430,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
     return lend, resi, resj
 
 
-@numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
+@numbafy(cast_args=['voxels'], list_args=['clusts'])
 def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', algorithm='brute', return_index=False):
     """
     Finds the inter-cluster distance between every pair of clusters within
@@ -506,7 +506,7 @@ def _inter_cluster_distance_index(voxels: nb.float32[:,:],
     return dist_mat, closest_index
 
 
-@numba_wrapper(cast_args=['graph'])
+@numbafy(cast_args=['graph'])
 def get_fragment_edges(graph, clust_ids):
     """
     Function that converts a set of edges between cluster ids
