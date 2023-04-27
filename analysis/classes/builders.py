@@ -874,7 +874,7 @@ def handle_empty_truth_particles(labels_noghost,
                              is_primary=is_primary,
                              pid=pdg,
                              particle_asis=p)
-    particle.p = np.array([p.px(), p.py(), p.pz()])
+    # particle.p = np.array([p.px(), p.py(), p.pz()])
     # particle.fragments = []
     # particle.particle_asis = p
     # particle.nu_id = nu_id

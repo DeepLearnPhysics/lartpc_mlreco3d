@@ -1,18 +1,66 @@
 import numpy as np
-from pprint import pprint
+from collections import OrderedDict
 
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from analysis.classes.matching import (match_particles_fn, 
-                                       match_interactions_fn, 
-                                       match_interactions_optimal, 
-                                       match_particles_optimal)
+from analysis.classes.matching import (match_particles_fn,
+                                       match_particles_optimal,
+                                       match_interactions_fn,
+                                       match_interactions_optimal)
 from analysis.classes.data import *
 
 @post_processing(data_capture=['index'], 
                  result_capture=['particles',
-                                 'truth_particles',
-                                 'interactions',
+                                 'truth_particles'])
+def match_particles(data_dict,
+                    result_dict,
+                    matching_mode='optimal',
+                    matching_direction='pred_to_true',
+                    match_particles=True,
+                    min_overlap=0,
+                    overlap_mode='iou'):
+    pred_particles = result_dict['particles']
+    
+    if overlap_mode == 'chamfer':
+        true_particles = [ia for ia in result_dict['truth_particles'] if ia.truth_size > 0]
+    else:
+        true_particles = [ia for ia in result_dict['truth_particles'] if ia.size > 0]
+    
+    # Only consider interactions with nonzero predicted nonghost
+    matched_particles = []
+    
+    if matching_mode == 'optimal':
+        matched_particles, counts = match_particles_optimal(
+            pred_particles, 
+            true_particles, 
+            min_overlap=min_overlap, 
+            overlap_mode=overlap_mode)
+        
+    if matching_mode == 'one_way':
+        if matching_direction == 'pred_to_true':
+            matched_particles, counts = match_particles_fn(
+                pred_particles, 
+                true_particles, 
+                min_overlap=min_overlap, 
+                overlap_mode=overlap_mode)
+        elif matching_direction == 'true_to_pred':
+            matched_particles, counts = match_particles_fn(
+                true_particles, 
+                pred_particles, 
+                min_overlap=min_overlap, 
+                overlap_mode=overlap_mode)
+        
+    update_dict = {
+        # 'matched_particles': matched_particles,
+        'particle_match_values': np.array(counts, dtype=np.float32),
+    }
+
+    return update_dict
+    
+
+
+@post_processing(data_capture=['index'], 
+                 result_capture=['interactions',
                                  'truth_interactions'])
 def match_interactions(data_dict,
                        result_dict,
@@ -23,7 +71,13 @@ def match_interactions(data_dict,
                        overlap_mode='iou'):
 
     pred_interactions = result_dict['interactions']
-    true_interactions = result_dict['truth_interactions']
+    
+    if overlap_mode == 'chamfer':
+        true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
+    else:
+        true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.size > 0]
+    
+    # Only consider interactions with nonzero predicted nonghost
     
     if matching_mode == 'optimal':
         matched_interactions, counts = match_interactions_optimal(
@@ -45,37 +99,10 @@ def match_interactions(data_dict,
                 pred_interactions, 
                 min_overlap=min_overlap, 
                 overlap_mode=overlap_mode)
-            
-    if match_particles:
-        for interactions in matched_interactions:
-            domain, codomain = interactions
-            domain_particles, codomain_particles = [], []
-            if domain is not None:
-                domain_particles = domain.particles
-            if codomain is not None:
-                codomain_particles = codomain.particles
-            domain_particles   = [p for p in domain_particles if p.points.shape[0] > 0]
-            codomain_particles = [p for p in codomain_particles if p.points.shape[0] > 0]
-            if matching_mode == 'one_way':
-                matched_particles, _ = match_particles_fn(domain_particles, 
-                                                          codomain_particles,
-                                                          min_overlap=min_overlap,
-                                                          overlap_mode=overlap_mode)
-            elif matching_mode == 'optimal':
-                matched_particles, _ = match_particles_optimal(domain_particles, 
-                                                               codomain_particles,
-                                                               min_overlap=min_overlap,
-                                                               overlap_mode=overlap_mode)
-            else:
-                raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
-
-        pmatches, pcounts = match_parts_within_ints(matched_interactions)
         
     update_dict = {
-        'matched_interactions': matched_interactions,
-        'matched_particles': matched_particles,
-        'interaction_match_values': counts,
-        'particle_match_values': pcounts
+        # 'matched_interactions': matched_interactions,
+        'interaction_match_values': np.array(counts, dtype=np.float32),
     }
     
     return update_dict
@@ -123,3 +150,21 @@ def match_parts_within_ints(int_matches):
                     matched_particles.append((p, ia1[match_id]))
                 match_counts.append(p._match_counts[match_id])
     return matched_particles, np.array(match_counts)
+
+
+def check_particle_matches(loaded_particles, clear=False):
+    match_dict = OrderedDict({})
+    for p in loaded_particles:
+        for i, m in enumerate(p.match):
+            match_dict[int(m)] = p.match_counts[i]
+        if clear:
+            p._match = []
+            p._match_counts = OrderedDict()
+
+    match_counts = np.array(list(match_dict.values()))
+    match = np.array(list(match_dict.keys())).astype(int)
+    perm = np.argsort(match_counts)[::-1]
+    match_counts = match_counts[perm]
+    match = match[perm]
+
+    return match, match_counts

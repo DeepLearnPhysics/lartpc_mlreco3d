@@ -44,7 +44,7 @@ class FullChainPredictor:
         self.fragment_builder    = FragmentBuilder()
 
         build_reps = predictor_cfg.get('build_reps', ['particles', 'interactions'])
-        self.builders = {}
+        self.builders = OrderedDict()
         for key in build_reps:
             if key == 'particles':
                 self.builders[key] = ParticleBuilder()
@@ -52,9 +52,11 @@ class FullChainPredictor:
                 self.builders[key] = InteractionBuilder()
             if key == 'Fragments':
                 self.builders[key] = FragmentBuilder()
-            
 
-        self.build_representations()
+        # Data Structure Scopes
+        self.scope = predictor_cfg.get('scope', ['particles', 'interactions'])
+
+        # self.build_representations()
 
         self.num_images = len(self.data_blob['index'])
         self.index = self.data_blob['index']
@@ -71,9 +73,6 @@ class FullChainPredictor:
         # Min/max boundaries in each dimension haev to be specified.
         self.vb = predictor_cfg.get('volume_boundaries', None)
         self.set_volume_boundaries()
-        
-        # Data Structure Scopes
-        self.scope = predictor_cfg.get('scope', ['particles', 'interactions'])
 
 
     def set_volume_boundaries(self):

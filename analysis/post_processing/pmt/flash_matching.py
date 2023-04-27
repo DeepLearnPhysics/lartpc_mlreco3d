@@ -52,12 +52,12 @@ def run_flash_matching(data_dict, result_dict,
     
     # opflashes = filter_opflashes(opflashes)
     
-    fmatches_E = fm.get_flash_matches(entry, 
+    fmatches_E = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=0,
                                       restrict_interactions=[])
-    fmatches_W = fm.get_flash_matches(entry, 
+    fmatches_W = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=1,
@@ -69,9 +69,9 @@ def run_flash_matching(data_dict, result_dict,
     for ia, flash, match in fmatches_E:
         flash_dict_E[ia.id] = (flash, match)
         ia.fmatched = True
-        ia.fmatch_time = float(flash.time())
-        ia.fmatch_total_pE = float(flash.TotalPE())
-        ia.fmatch_id = int(flash.id())
+        ia.flash_time = float(flash.time())
+        ia.flash_total_pE = float(flash.TotalPE())
+        ia.flash_id = int(flash.id())
         update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
@@ -79,15 +79,13 @@ def run_flash_matching(data_dict, result_dict,
     for ia, flash, match in fmatches_W:
         flash_dict_W[ia.id] = (flash, match)
         ia.fmatched = True
-        ia.fmatch_time = float(flash.time())
-        ia.fmatch_total_pE = float(flash.TotalPE())
-        ia.fmatch_id = int(flash.id())
+        ia.flash_time = float(flash.time())
+        ia.flash_total_pE = float(flash.TotalPE())
+        ia.flash_id = int(flash.id())
         update_dict['interactions'].append(ia)
     update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
     assert len(update_dict['flash_matches_cryoE'])\
            == len(update_dict['flash_matches_cryoW'])
-           
-    # print(update_dict)
 
     return update_dict
