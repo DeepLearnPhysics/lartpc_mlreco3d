@@ -52,7 +52,8 @@ class Interaction:
                  flash_time: float = -float(sys.maxsize),
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
-                 flash_id: int = -1):
+                 flash_id: int = -1,
+                 flash_hypothesis: float = -1):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -89,6 +90,7 @@ class Interaction:
         self.fmatched       = fmatched
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
+        self.flash_hypothesis = flash_hypothesis
         
     @property
     def size(self):
