@@ -85,6 +85,13 @@ class TruthInteraction(Interaction):
                 true_depositions_list.append(p.truth_depositions)
                 true_depositions_MeV_list.append(p.truth_depositions_MeV)
 
+                if p.pid >= 0:
+                    self._particle_counts[p.pid] += 1
+                    self._primary_counts[p.pid] += int(p.is_primary)
+                else:
+                    self._particle_counts[-1] += 1
+                    self._primary_counts[-1] += int(p.is_primary)
+
             self._particle_ids          = np.array(id_list, dtype=np.int64)
             self._num_particles         = len(value)
             self._num_primaries         = len([1 for p in value if p.is_primary])

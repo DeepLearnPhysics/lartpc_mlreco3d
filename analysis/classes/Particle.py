@@ -132,7 +132,7 @@ class Particle:
         
     @property
     def is_primary(self):
-        return int(self._is_primary)
+        return bool(self._is_primary)
 
     @property
     def match(self):
@@ -214,7 +214,7 @@ class Particle:
         Total amount of charge/energy deposited. This attribute has no setter,
         as it can only be set by providing a set of depositions.
         '''
-        return self._depositions_sum
+        return float(self._depositions_sum)
 
     @property
     def depositions(self):
