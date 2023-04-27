@@ -27,7 +27,8 @@ class HDF5Writer:
 
     # LArCV object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
-        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
+        'add_trajectory_point', 'dump', 'momentum',
+        'boundingbox_2d', 'boundingbox_3d', 'feb_id', 'pesmap',
         *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
@@ -268,9 +269,9 @@ class HDF5Writer:
                     object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
                 else:
                     # Empty list (typing unknown, cannot store)
-                    pass
+                    raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
             else:
-                raise ValueError('Unexpected key')
+                raise ValueError(f'Attribute {key} of {obj} has unrecognized type {type(val)}')
 
         return object_dtype
 
