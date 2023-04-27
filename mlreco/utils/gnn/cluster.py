@@ -4,9 +4,11 @@ import numba as nb
 import torch
 from typing import List
 
-from mlreco.utils.numba import numba_wrapper, cdist_nb, mean_nb, unique_nb
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.decorators import numbafy
 
-@numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
+
+@numbafy(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -61,7 +63,7 @@ def _form_clusters(data: nb.float64[:,:],
     return clusts
 
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -89,7 +91,7 @@ def _reform_clusters(data: nb.float64[:,:],
     return clusts
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_batch(data, clusts, batch_index=0):
     """
     Function that returns the batch ID of each cluster.
@@ -118,7 +120,7 @@ def _get_cluster_batch(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_label(data, clusts, column=5):
     """
     Function that returns the majority label of each cluster,
@@ -140,12 +142,12 @@ def _get_cluster_label(data: nb.float64[:,:],
 
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        v, cts = unique_nb(data[c, column])
-        labels[i] = v[np.argmax(np.array(cts))]
+        v, cts = nbl.unique(data[c, column])
+        labels[i] = v[np.argmax(cts)]
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_primary_label(data, clusts, column, cluster_column=5, group_column=6):
     """
     Function that returns the majority label of the primary component
@@ -177,15 +179,15 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
         cluster_ids  = data[clusts[i], cluster_column]
         primary_mask = cluster_ids == group_ids[i]
         if len(data[clusts[i][primary_mask]]):
-            v, cts = unique_nb(data[clusts[i][primary_mask], column])
+            v, cts = nbl.unique(data[clusts[i][primary_mask], column])
         else: # If the primary is empty, use group
-            v, cts = unique_nb(data[clusts[i], column])
-        labels[i] = v[np.argmax(np.array(cts))]
+            v, cts = nbl.unique(data[clusts[i], column])
+        labels[i] = v[np.argmax(cts)]
 
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_momenta_label(data, clusts, column=8):
     """
     Function that returns the momentum unit vector of each cluster
@@ -209,7 +211,7 @@ def _get_momenta_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
 def get_cluster_centers(data, clusts, coords_index=[1, 4]):
     """
     Function that returns the coordinate of the centroid
@@ -233,7 +235,7 @@ def _get_cluster_centers(data: nb.float64[:,:],
     return centers
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_sizes(data, clusts):
     """
     Function that returns the sizes of
@@ -256,7 +258,7 @@ def _get_cluster_sizes(data: nb.float64[:,:],
     return sizes
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_energies(data, clusts):
     """
     Function that returns the energies deposited by
@@ -279,7 +281,7 @@ def _get_cluster_energies(data: nb.float64[:,:],
     return energies
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
                          clusts: nb.types.List(nb.int64[:]),
                          batch_col: nb.int64 = 0,
@@ -296,7 +298,7 @@ def get_cluster_features(data: nb.float64[:,:],
     """
     return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
-@nb.njit(cache=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:]),
                           batch_col: nb.int64 = 0,
@@ -310,11 +312,11 @@ def _get_cluster_features(data: nb.float64[:,:],
         x = data[clust, coords_col[0]:coords_col[1]]
 
         # Center data
-        center = mean_nb(x, 0)
+        center = nbl.mean(x, 0)
         x = x - center
 
         # Get orientation matrix
-        A = x.T.dot(x)
+        A = np.dot(x.T, x)
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
         # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
@@ -329,7 +331,7 @@ def _get_cluster_features(data: nb.float64[:,:],
         v0 = v[:,2]
 
         # Projection all points, x, along the principal axis
-        x0 = x.dot(v0)
+        x0 = np.dot(x, v0)
 
         # Evaluate the distance from the points to the principal axis
         xp0 = x - np.outer(x0, v0)
@@ -351,7 +353,7 @@ def _get_cluster_features(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
@@ -365,6 +367,7 @@ def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
 
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    batch_col: nb.int64 = 0,
@@ -378,7 +381,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
         std_value = np.std(data[clust,4])
 
         # Get the cluster semantic class
-        types, cnts = unique_nb(data[clust,-1])
+        types, cnts = nbl.unique(data[clust,-1])
         major_sem_type = types[np.argmax(cnts)]
 
         feats[k] = [mean_value, std_value, major_sem_type]
@@ -386,7 +389,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
 def get_cluster_points_label(data, particles, clusts, random_order=True, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
@@ -417,16 +420,18 @@ def _get_cluster_points_label(data: nb.float64[:,:],
     # Get start and end points (one and the same for all but track class)
     batch_ids = _get_cluster_batch(data, clusts)
     points = np.empty((len(clusts), 6), dtype=data.dtype)
-    for i, c in enumerate(clusts):
-        batch_mask = np.where(particles[:,batch_col] == batch_ids[i])[0]
-        clust_ids  = np.unique(data[c, 5]).astype(np.int64)
-        minid = np.argmin(particles[batch_mask][clust_ids,-2]) # Pick the first cluster in time
-        order = np.arange(6) if (np.random.choice(2) or not random_order) else np.array([3, 4, 5, 0, 1, 2])
-        points[i] = particles[batch_mask][clust_ids[minid]][order+1] # The first column is the batch ID
+    for b in np.unique(batch_ids):
+        batch_particles = particles[particles[:,batch_col] == b]
+        for i in np.where(batch_ids == b)[0]:
+            c = clusts[i]
+            clust_ids = np.unique(data[c, 5]).astype(np.int64)
+            minid = np.argmin(batch_particles[clust_ids,-2])
+            order = np.arange(6) if (np.random.choice(2) or not random_order) else np.array([3, 4, 5, 0, 1, 2])
+            points[i] = batch_particles[clust_ids[minid]][order+1] # The first column is the batch ID
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
-        dist_mat = cdist_nb(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
+        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
         argmins  = np.empty(len(dist_mat), dtype=np.int64)
         for j in range(len(dist_mat)):
             argmins[j] = np.argmin(dist_mat[j])
@@ -435,7 +440,7 @@ def _get_cluster_points_label(data: nb.float64[:,:],
     return points
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_start_points(data, clusts):
     """
     Function that estimates the start point of clusters
@@ -459,7 +464,7 @@ def _get_cluster_start_points(data: nb.float64[:,:],
     return points
 
 
-@numba_wrapper(cast_args=['data','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     """
     Finds the orientation of all the clusters.
@@ -491,7 +496,7 @@ def _get_cluster_directions(data: nb.float64[:,:],
     return dirs
 
 
-@numba_wrapper(cast_args=['data','values','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','values','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     """
     Finds the start dEdxs of all the clusters.
@@ -507,7 +512,7 @@ def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     """
     return _get_cluster_dedxs(data, values, starts, clusts, max_dist)
 
-@nb.njit(parallel=True)
+@nb.njit(parallel=True, cache=True)
 def _get_cluster_dedxs(data: nb.float64[:,:],
                        values: nb.float64[:],
                        starts: nb.float64[:,:],
@@ -580,7 +585,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     """
     # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
     if not optimize and max_dist > 0:
-        dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+        dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:
             return np.zeros(3, dtype=voxels.dtype)
@@ -588,14 +593,14 @@ def cluster_direction(voxels: nb.float64[:,:],
     # If optimize is set, select the radius by minimizing the transverse spread
     elif optimize:
         # Order the cluster points by increasing distance to the start point
-        dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+        dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         order = np.argsort(dist_mat)
         voxels = voxels[order]
         dist_mat = dist_mat[order]
 
         # Find the PCA relative secondary spread for each point
         labels = np.zeros(len(voxels), dtype=voxels.dtype)
-        meank = mean_nb(voxels[:3], 0)
+        meank = nbl.mean(voxels[:3], 0)
         covk = (np.transpose(voxels[:3]-meank) @ (voxels[:3]-meank))/3
         for i in range(2, len(voxels)):
             # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
@@ -617,7 +622,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     rel_voxels = np.empty((len(voxels), 3), dtype=voxels.dtype)
     for i in range(len(voxels)):
         rel_voxels[i] = voxels[i]-start
-    mean = mean_nb(rel_voxels, 0)
+    mean = nbl.mean(rel_voxels, 0)
     if np.linalg.norm(mean):
         return mean/np.linalg.norm(mean)
     return mean
@@ -658,18 +663,18 @@ def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
         int: (3) Coordinates of the principal axis
     """
     # Center data
-    center = mean_nb(voxels, 0)
+    center = nbl.mean(voxels, 0)
     x = voxels - center
 
     # Get orientation matrix
-    A = x.T.dot(x)
+    A = np.dot(x.T, x)
 
     # Get eigenvectors, select the one which corresponds to the maximal spread
     _, v = np.linalg.eigh(A)
     return v[:,2]
 
 
-@nb.njit
+@nb.njit(cache=True)
 def cluster_dedx(voxels: nb.float64[:,:],
                  values: nb.float64[:],
                  start: nb.float64[:],
@@ -686,7 +691,7 @@ def cluster_dedx(voxels: nb.float64[:,:],
         torch.tensor: (3) Orientation
     """
     # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
-    dist_mat = cdist_nb(start.reshape(1,-1), voxels).flatten()
+    dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
     if max_dist > 0:
         voxels = voxels[dist_mat <= max_dist]
         if len(voxels) < 2:

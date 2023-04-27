@@ -6,7 +6,8 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.sparse.csgraph import minimum_spanning_tree
 
-from mlreco.utils.numba import numba_wrapper, submatrix_nb, cdist_nb, mean_nb
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.decorators import numbafy
 
 
 @nb.njit(cache=True)
@@ -52,10 +53,11 @@ def complete_graph(batch_ids: nb.int64[:],
     # Create the sparse incidence matrix
     ret = np.empty((edge_count,2), dtype=np.int64)
     k = 0
-    for i in range(len(batch_ids)):
-        for j in range(i+1, len(batch_ids)):
-            if batch_ids[i] == batch_ids[j]:
-                ret[k] = [i,j]
+    for b in np.unique(batch_ids):
+        clust_ids = np.where(batch_ids == b)[0]
+        for i in range(len(clust_ids)):
+            for j in range(i+1, len(clust_ids)):
+                ret[k] = [clust_ids[i], clust_ids[j]]
                 k += 1
 
     # Add the reciprocal edges as to create an undirected graph, if requested
@@ -131,7 +133,7 @@ def mst_graph(batch_ids: nb.int64[:],
     for b in np.unique(batch_ids):
         clust_ids = np.where(batch_ids == b)[0]
         if len(clust_ids) > 1:
-            submat = np.triu(submatrix_nb(dist_mat, clust_ids, clust_ids))
+            submat = np.triu(nbl.submatrix(dist_mat, clust_ids, clust_ids))
             with nb.objmode(mst_mat = 'float32[:,:]'): # Suboptimal. Ideally want to reimplement in Numba, but tall order...
                 mst_mat = minimum_spanning_tree(submat).toarray().astype(np.float32)
             edges = np.where(mst_mat > 0.)
@@ -168,7 +170,7 @@ def knn_graph(batch_ids: nb.int64[:],
         clust_ids = np.where(batch_ids == b)[0]
         if len(clust_ids) > 1:
             subk = min(k+1, len(clust_ids))
-            submat = submatrix_nb(dist_mat, clust_ids, clust_ids)
+            submat = nbl.submatrix(dist_mat, clust_ids, clust_ids)
             for i in range(len(submat)):
                 idxs = np.argsort(submat[i])[1:subk]
                 edges = np.empty((subk-1,2), dtype=np.int64)
@@ -258,39 +260,41 @@ def restrict_graph(edge_index: nb.int64[:,:],
         return edge_index[:, edge_dists < edge_max_dists]
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_edge_features(data, clusts, edge_index, batch_col=0, coords_col=(1, 4)):
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_edge_features(data, clusts, edge_index, closest_index=None, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
     edges connecting clusters in the graph.
 
     Args:
-        data (np.ndarray)      : (N,8) [x, y, z, batchid, value, id, groupid, shape]
-        clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
-        edge_index (np.ndarray): (2,E) Incidence matrix
+        data (np.ndarray)         : (N,8) [x, y, z, batchid, value, id, groupid, shape]
+        clusts ([np.ndarray])     : (C) List of arrays of voxel IDs in each cluster
+        edge_index (np.ndarray)   : (2,E) Incidence matrix
+        closest_index (np.ndarray): (E) Index of closest pair of voxels for each edge
     Returns:
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
-    return _get_cluster_edge_features(data, clusts, edge_index)
+    return _get_cluster_edge_features(data, clusts, edge_index, closest_index)
     #return _get_cluster_edge_features_vec(data, clusts, edge_index)
 
 @nb.njit(parallel=True, cache=True)
 def _get_cluster_edge_features(data: nb.float32[:,:],
                                clusts: nb.types.List(nb.int64[:]),
                                edge_index: nb.int64[:,:],
+                               closest_index: nb.int64[:] = None,
                                batch_col: nb.int64 = 0,
                                coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float32[:,:]:
 
     feats = np.empty((len(edge_index), 19), dtype=data.dtype)
     for k in nb.prange(len(edge_index)):
         # Get the voxels in the clusters connected by the edge
-        x1 = data[clusts[edge_index[k,0]], coords_col[0]:coords_col[1]]
-        x2 = data[clusts[edge_index[k,1]], coords_col[0]:coords_col[1]]
+        c1, c2 = edge_index[k]
+        x1 = data[clusts[c1], coords_col[0]:coords_col[1]]
+        x2 = data[clusts[c2], coords_col[0]:coords_col[1]]
 
         # Find the closest set point in each cluster
-        d12 = cdist_nb(x1, x2)
-        imin = np.argmin(d12)
-        i1, i2 = imin//d12.shape[1], imin%d12.shape[1]
+        imin = np.argmin(nbl.cdist(x1, x2)) if closest_index is None else closest_index[k]
+        i1, i2 = imin//len(x2), imin%len(x2)
         v1 = x1[i1,:]
         v2 = x2[i2,:]
 
@@ -344,7 +348,7 @@ def _get_cluster_edge_features_vec(data: nb.float32[:,:],
     return np.hstack((v1, v2, disp, lend, B))
 
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def get_voxel_edge_features(data, edge_index, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns a tensor of edge features for each of the
@@ -386,7 +390,7 @@ def _get_voxel_edge_features(data: nb.float32[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
+@numbafy(cast_args=['voxels'], list_args=['clusts'])
 def get_edge_distances(voxels, clusts, edge_index):
     """
     For each edge, finds the closest points of approach (CPAs) between the
@@ -416,7 +420,7 @@ def _get_edge_distances(voxels: nb.float32[:,:],
             ii = jj = 0
             lend[k] = 0.
         else:
-            dist_mat = cdist_nb(voxels[clusts[i]], voxels[clusts[j]])
+            dist_mat = nbl.cdist(voxels[clusts[i]], voxels[clusts[j]])
             idx = np.argmin(dist_mat)
             ii, jj = idx//len(clusts[j]), idx%len(clusts[j])
             lend[k] = dist_mat[ii, jj]
@@ -426,8 +430,8 @@ def _get_edge_distances(voxels: nb.float32[:,:],
     return lend, resi, resj
 
 
-@numba_wrapper(cast_args=['voxels'], list_args=['clusts'])
-def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
+@numbafy(cast_args=['voxels'], list_args=['clusts'])
+def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel', algorithm='brute', return_index=False):
     """
     Finds the inter-cluster distance between every pair of clusters within
     each batch, returned as a block-diagonal matrix.
@@ -437,6 +441,8 @@ def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
         clusts ([np.ndarray]) : (C) List of arrays of voxel IDs in each cluster
         batch_ids (np.ndarray): (C) List of cluster batch IDs
         mode (str)            : Eiher use closest voxel distance (`voxel`) or centroid distance (`centroid`)
+        algorithm (str)       : `brute` is exact but slow, `recursive` uses a fast but approximate proxy
+        return_index (bool)   : If True, returns the combined index of the closest voxel pair
     Returns:
         torch.tensor: (C,C) Tensor of pair-wise cluster distances
     """
@@ -444,13 +450,18 @@ def inter_cluster_distance(voxels, clusts, batch_ids=None, mode='voxel'):
     if batch_ids is None:
         batch_ids = np.zeros(len(clusts), dtype=np.int64) 
 
-    return _inter_cluster_distance(voxels, clusts, batch_ids, mode)
+    if not return_index:
+        return _inter_cluster_distance(voxels, clusts, batch_ids, mode, algorithm)
+    else:
+        assert mode == 'voxel', 'Cannot return index for centroid method'
+        return _inter_cluster_distance_index(voxels, clusts, batch_ids, algorithm)
 
 @nb.njit(parallel=True, cache=True)
 def _inter_cluster_distance(voxels: nb.float32[:,:],
                             clusts: nb.types.List(nb.int64[:]),
                             batch_ids: nb.int64[:],
-                            mode: str = 'voxel') -> nb.float64[:,:]:
+                            mode: str = 'voxel',
+                            algorithm: str = 'brute') -> nb.float32[:,:]:
 
     assert len(clusts) == len(batch_ids)
     dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
@@ -458,11 +469,11 @@ def _inter_cluster_distance(voxels: nb.float32[:,:],
     if mode == 'voxel':
         for k in nb.prange(len(indxi)):
             i, j = indxi[k], indxj[k]
-            dist_mat[i,j] = dist_mat[j,i] = np.min(cdist_nb(voxels[clusts[i]], voxels[clusts[j]]))
+            dist_mat[i,j] = dist_mat[j,i] = nbl.closest_pair(voxels[clusts[i]], voxels[clusts[j]], algorithm)[-1]
     elif mode == 'centroid':
         centroids = np.empty((len(batch_ids), voxels.shape[1]), dtype=voxels.dtype)
         for i in nb.prange(len(batch_ids)):
-            centroids[i] = mean_nb(voxels[clusts[i]], axis=0)
+            centroids[i] = nbl.mean(voxels[clusts[i]], axis=0)
         for k in nb.prange(len(indxi)):
             i, j = indxi[k], indxj[k]
             dist_mat[i,j] = dist_mat[j,i] = np.sqrt(np.sum((centroids[j]-centroids[i])**2))
@@ -472,7 +483,30 @@ def _inter_cluster_distance(voxels: nb.float32[:,:],
     return dist_mat
 
 
-@numba_wrapper(cast_args=['graph'])
+@nb.njit(parallel=True, cache=True)
+def _inter_cluster_distance_index(voxels: nb.float32[:,:],
+                                  clusts: nb.types.List(nb.int64[:]),
+                                  batch_ids: nb.int64[:],
+                                  algorithm: str = 'brute') -> (nb.float32[:,:], nb.int64[:,:]):
+
+    assert len(clusts) == len(batch_ids)
+    dist_mat = np.zeros((len(batch_ids), len(batch_ids)), dtype=voxels.dtype)
+    closest_index = np.empty((len(batch_ids), len(batch_ids)), dtype=nb.int64)
+    for i in range(len(clusts)):
+        closest_index[i,i] = i
+    indxi, indxj = complete_graph(batch_ids, directed=True)
+    for k in nb.prange(len(indxi)):
+        i, j = indxi[k], indxj[k]
+        ii, jj, dist = nbl.closest_pair(voxels[clusts[i]], voxels[clusts[j]], algorithm)
+        index = ii*len(clusts[j]) + jj
+
+        closest_index[i,j] = closest_index[j,i] = index
+        dist_mat[i,j] = dist_mat[j,i] = dist
+
+    return dist_mat, closest_index
+
+
+@numbafy(cast_args=['graph'])
 def get_fragment_edges(graph, clust_ids):
     """
     Function that converts a set of edges between cluster ids

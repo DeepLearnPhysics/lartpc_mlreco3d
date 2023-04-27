@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from mlreco.utils.globals import *
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask
 
@@ -24,13 +25,20 @@ class NodePrimaryLoss(torch.nn.Module):
             use_group_pred  : <redifines group ids according to edge predictions (default False)>
             group_pred_alg  : <algorithm used to predict cluster labels: 'threshold' or 'score' (default 'score')>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'n_clusts': ['scalar']
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodePrimaryLoss, self).__init__()
 
         # Set the loss
         self.batch_col = batch_col
         self.coords_col = coords_col
-        self.primary_col = loss_config.get('primary_col', 10)
+        self.primary_col = loss_config.get('primary_col', PSHOW_COL)
 
         self.loss = loss_config.get('loss', 'CE')
         self.reduction = loss_config.get('reduction', 'sum')

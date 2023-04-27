@@ -2,10 +2,11 @@
 import numpy as np
 import numba as nb
 
-from mlreco.utils.numba import submatrix_nb, argmax_nb, softmax_nb, log_loss_nb
+import mlreco.utils.numba_local as nbl
 from mlreco.utils.metrics import SBD, AMI, ARI, purity_efficiency
 
 int_array = nb.int64[:]
+
 
 @nb.njit(cache=True)
 def edge_assignment(edge_index: nb.int64[:,:],
@@ -138,10 +139,10 @@ def primary_assignment(node_scores: nb.float32[:,:],
         np.ndarray: (C) Primary labels
     """
     if group_ids is None:
-        return argmax_nb(node_scores, axis=1).astype(np.bool_)
+        return nbl.argmax(node_scores, axis=1).astype(np.bool_)
 
     primary_labels = np.zeros(len(node_scores), dtype=np.bool_)
-    node_scores = softmax_nb(node_scores, axis=1)
+    node_scores = nbl.softmax(node_scores, axis=1)
     for g in np.unique(group_ids):
         mask = np.where(group_ids == g)[0]
         idx  = np.argmax(node_scores[mask][:,1])
@@ -187,7 +188,7 @@ def grouping_loss(pred_mat: nb.float32[:],
         int: Graph grouping loss
     """
     if loss == 'ce':
-        return log_loss_nb(target_mat, pred_mat)
+        return nbl.log_loss(target_mat, pred_mat)
     elif loss == 'l1':
         return np.mean(np.absolute(pred_mat-target_mat))
     elif loss == 'l2':
@@ -222,7 +223,7 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
     adj_mat = adjacency_matrix(edge_index, n)
 
     # Interpret the softmax score as a dense adjacency matrix probability
-    edge_scores = softmax_nb(edge_scores, axis=1)
+    edge_scores = nbl.softmax(edge_scores, axis=1)
     pred_mat    = np.eye(n, dtype=np.float32)
     for k, e in enumerate(edge_index):
         pred_mat[e[0],e[1]] = edge_scores[k,1]
@@ -244,8 +245,8 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
 
         # Restrict the adjacency matrix and the predictions to the nodes in the two candidate groups
         node_mask = np.where((best_groups == group_a) | (best_groups == group_b))[0]
-        sub_pred = submatrix_nb(pred_mat, node_mask, node_mask).flatten()
-        sub_adj  = submatrix_nb(adj_mat, node_mask, node_mask).flatten()
+        sub_pred = nbl.submatrix(pred_mat, node_mask, node_mask).flatten()
+        sub_adj  = nbl.submatrix(adj_mat, node_mask, node_mask).flatten()
 
         # Compute the current adjacency matrix between the two groups
         current_adj = (best_groups[node_mask] == best_groups[node_mask].reshape(-1,1)).flatten()

@@ -1,8 +1,8 @@
 import numpy as np
 from larcv import larcv
-from mlreco.utils.ppn import get_ppn_info
-from mlreco.utils.groups import type_labels as TYPE_LABELS
 
+from mlreco.utils.globals import PDG_TO_PID
+from mlreco.utils.ppn import get_ppn_info
 
 def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     """
@@ -37,7 +37,7 @@ def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     if voxel_coordinates:
         assert cluster_event is not None
         meta = cluster_event.meta()
-        funcs = ['first_step', 'last_step', 'position', 'end_position', 'ancestor_position']
+        funcs = ['first_step', 'last_step', 'position', 'end_position', 'parent_position', 'ancestor_position']
         for p in particles:
             for f in funcs:
                 pos = getattr(p,f)()
@@ -302,8 +302,8 @@ def parse_particle_singlep_pdg(particle_event):
     pdg = -1
     for p in particle_event.as_vector():
         if not p.track_id() == 1: continue
-        if int(p.pdg_code()) in TYPE_LABELS.keys():
-            pdg = TYPE_LABELS[int(p.pdg_code())]
+        if int(p.pdg_code()) in PDG_TO_PID.keys():
+            pdg = PDG_TO_PID[int(p.pdg_code())]
         else: pdg = -1
         return np.asarray([pdg])
 
@@ -331,8 +331,11 @@ def parse_particle_singlep_einit(particle_event):
     np.ndarray
         List of true initial energy for each particle in TTree.
     """
+    einits = []
+    einit = -1
     for p in particle_event.as_vector():
         is_primary = p.track_id() == p.parent_track_id()
         if not p.track_id() == 1: continue
-        return p.energy_init()
-    return -1
+        return np.asarray([p.energy_init()])
+
+    return np.asarray([einit])

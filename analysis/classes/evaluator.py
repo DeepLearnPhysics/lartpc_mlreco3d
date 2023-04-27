@@ -1,109 +1,113 @@
-from typing import Callable, Tuple, List
+from typing import List
 import numpy as np
-import os
-import time
 
-from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-from mlreco.utils.ppn import uresnet_ppn_type_point_selector
-from mlreco.utils.metrics import unique_label
-from collections import defaultdict
-
-from scipy.special import softmax
-from analysis.classes import Particle, ParticleFragment, TruthParticleFragment, \
-        TruthParticle, Interaction, TruthInteraction, FlashManager
-from analysis.classes.particle import matrix_counts, matrix_iou, \
-        match_particles_fn, match_interactions_fn, group_particles_to_interactions_fn, \
-        match_interactions_optimal, match_particles_optimal
-from analysis.algorithms.point_matching import *
-
-from mlreco.utils.groups import type_labels as TYPE_LABELS
-from mlreco.utils.vertex import get_vertex
-from analysis.algorithms.vertex import estimate_vertex
-from analysis.algorithms.utils import correct_track_points
-from mlreco.utils.deghosting import deghost_labels_and_predictions
-
-from mlreco.utils.gnn.cluster import get_cluster_label, form_clusters
-from mlreco.iotools.collates import VolumeBoundaries
+from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
+from analysis.classes.matching import (match_particles_fn, 
+                                             match_interactions_fn, 
+                                             match_interactions_optimal, 
+                                             match_particles_optimal)
 
 from analysis.classes.predictor import FullChainPredictor
+from mlreco.utils.globals import *
+from analysis.classes.data import *
 
 
 class FullChainEvaluator(FullChainPredictor):
     '''
-    Helper class for full chain prediction and evaluation.
+    User Interface for full chain prediction and evaluation.
+    
+    The FullChainEvaluator shares the same methods as FullChainPredictor,
+    but with additional methods to retrieve ground truth information and
+    evaluate performance metrics.
 
     Usage:
 
-        model = Trainer._net.module
-        entry = 0   # batch id
-        predictor = FullChainEvaluator(model, data_blob, res, cfg)
-        pred_seg = predictor.get_true_label(entry, mode='segmentation')
-
-    To avoid confusion between different quantities, the label namings under
-    iotools.schema must be set as follows:
-
-        schema:
-            input_data:
-                - parse_sparse3d_scn
-                - sparse3d_pcluster
-            segment_label:
-                - parse_sparse3d_scn
-                - sparse3d_pcluster_semantics
-            cluster_label:
-                - parse_cluster3d_clean_full
-                #- parse_cluster3d_full
-                - cluster3d_pcluster
-                - particle_pcluster
-                #- particle_mpv
-                - sparse3d_pcluster_semantics
-            particles_label:
-                - parse_particle_points_with_tagging
-                - sparse3d_pcluster
-                - particle_corrected
-            kinematics_label:
-                - parse_cluster3d_kinematics_clean
-                - cluster3d_pcluster
-                - particle_corrected
-                #- particle_mpv
-                - sparse3d_pcluster_semantics
-            particle_graph:
-                - parse_particle_graph_corrected
-                - particle_corrected
-                - cluster3d_pcluster
-            particles_asis:
-                - parse_particles
-                - particle_pcluster
-                - cluster3d_pcluster
-
-
-    Instructions
-    ----------------------------------------------------------------
-
-    The FullChainEvaluator share the same methods as FullChainPredictor,
-    with additional methods to retrieve ground truth information for each
-    abstraction level.
+        # <data>, <result> are full chain input/output dictionaries.
+        evaluator = FullChainEvaluator(data, result)
+        
+        # Get labels
+        pred_seg = evaluator.get_true_label(entry, mode='segmentation')
+        # Get Particle instances
+        matched_particles = evaluator.match_particles(entry)
+        # Get Interaction instances
+        matched_interactions = evaluator.match_interactions(entry)
     '''
     LABEL_TO_COLUMN = {
-        'segment': -1,
-        'charge': 4,
-        'fragment': 5,
-        'group': 6,
-        'interaction': 7,
-        'pdg': 9,
-        'nu': 8
+        'segment': SEG_COL,
+        'charge': VALUE_COL,
+        'fragment': CLUST_COL,
+        'group': GROUP_COL,
+        'interaction': INTER_COL,
+        'pdg': PID_COL,
+        'nu': NU_COL
     }
 
 
-    def __init__(self, data_blob, result, cfg, processor_cfg={}, **kwargs):
-        super(FullChainEvaluator, self).__init__(data_blob, result, cfg, processor_cfg, **kwargs)
-        self.michel_primary_ionization_only = processor_cfg.get('michel_primary_ionization_only', False)
+    def __init__(self, data_blob, result, evaluator_cfg={}, **kwargs):
+        super(FullChainEvaluator, self).__init__(data_blob, result, evaluator_cfg, **kwargs)
+        self.michel_primary_ionization_only = evaluator_cfg.get('michel_primary_ionization_only', False)
+        # For matching particles and interactions
+        self.min_overlap_count        = evaluator_cfg.get('min_overlap_count', 0)
+        # Idem, can be 'count' or 'iou'
+        self.overlap_mode             = evaluator_cfg.get('overlap_mode', 'iou')
+        if self.overlap_mode == 'iou':
+            assert self.min_overlap_count <= 1 and self.min_overlap_count >= 0
+        if self.overlap_mode == 'counts':
+            assert self.min_overlap_count >= 0
+            
+    def _build_reco_reps(self):
+        if 'particles' not in self.result and 'particles' in self.scope:
+            self.result['particles'] = self.builders['particles'].build(self.data_blob, 
+                                                                        self.result, 
+                                                                        mode='reco')
+        if 'interactions' not in self.result and 'interactions' in self.scope:
+            self.result['interactions'] = self.builders['interactions'].build(self.data_blob,
+                                                                              self.result, 
+                                                                              mode='reco')
+            
+    def _build_truth_reps(self):
+        if 'truth_particles' not in self.result and 'particles' in self.scope:
+            self.result['truth_particles'] = self.builders['particles'].build(self.data_blob, 
+                                                                        self.result, 
+                                                                        mode='truth')
+        if 'truth_interactions' not in self.result and 'interactions' in self.scope:
+            self.result['truth_interactions'] = self.builders['interactions'].build(self.data_blob,
+                                                                              self.result, 
+                                                                              mode='truth')
 
-    def get_true_label(self, entry, name, schema='cluster_label', volume=None):
+    def build_representations(self, mode='all'):
+        """
+        Method using DataBuilders to construct high level data structures. 
+        The constructed data structures are stored inside result dict. 
+        
+        Will not build data structures if the key corresponding to 
+        the data structure class is already contained in the result dictionary.
+        
+        For example, if result['particles'] exists and contains lists of
+        reconstructed <Particle> instances, then methods inside the 
+        Evaluator will use the already existing result['particles'] 
+        rather than building new lists from scratch. 
+        
+        Returns
+        -------
+        None (operation is in-place)
+        """
+        if mode == 'reco':
+            self._build_reco_reps()
+        elif mode == 'truth':
+            self._build_truth_reps()
+        elif mode == 'all':
+            self._build_reco_reps()
+            self._build_truth_reps()
+        else:
+            raise ValueError(f"Data structure building mode {mode} not supported!")
+
+    def get_true_label(self, entry, name, schema='cluster_label_adapted'):
         """
         Retrieve tensor in data blob, labelled with `schema`.
 
         Parameters
-        ==========
+        ----------
         entry: int
         name: str
             Must be a predefined name within `['segment', 'fragment', 'group',
@@ -113,7 +117,7 @@ class FullChainEvaluator(FullChainPredictor):
         volume: int, default None
 
         Returns
-        =======
+        -------
         np.array
         """
         if name not in self.LABEL_TO_COLUMN:
@@ -122,16 +126,11 @@ class FullChainEvaluator(FullChainPredictor):
                     name, str(list(self.LABEL_TO_COLUMN.keys()))))
         column_idx = self.LABEL_TO_COLUMN[name]
 
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-        out = []
-        for entry in entries:
-            out.append(self.data_blob[schema][entry][:, column_idx])
+        out = self.result[schema][entry][:, column_idx]
         return np.concatenate(out, axis=0)
 
 
-    def get_predicted_label(self, entry, name, volume=None):
+    def get_predicted_label(self, entry, name):
         """
         Returns predicted quantities to label a plot.
 
@@ -147,482 +146,299 @@ class FullChainEvaluator(FullChainPredictor):
         =======
         np.array
         """
-        pred = self.fit_predict_labels(entry, volume=volume)
+        pred = self.fit_predict_labels(entry)
         return pred[name]
 
 
-    def _apply_true_voxel_cut(self, entry):
-
-        labels = self.data_blob['cluster_label_true_nonghost'][entry]
-
-        particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
-        particles_exclude = []
-
-        for idx, p in enumerate(self.data_blob['particles_asis'][entry]):
-            pid = int(p.id())
-            if pid not in particle_ids:
-                continue
-            is_primary = p.group_id() == p.parent_id()
-            if p.pdg_code() not in TYPE_LABELS:
-                continue
-            mask = labels[:, 6].astype(int) == pid
-            coords = labels[mask][:, 1:4]
-            if coords.shape[0] < self.min_particle_voxel_count:
-                particles_exclude.append(p.id())
-
-        return set(particles_exclude)
-
-
-    def get_true_fragments(self, entry, verbose=False, volume=None) -> List[TruthParticleFragment]:
+    def get_true_fragments(self, entry) -> List[TruthParticleFragment]:
         '''
-        Get list of <TruthParticleFragment> instances for given <entry> batch id.
+        Get list of <TruthParticleFragment> instances for given batch id.
+        
+        Returns
+        -------
+        fragments: List[TruthParticleFragment]
+            All track/shower fragments contained in image #<entry>.
         '''
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-
-        out_fragments_list = []
-        for entry in entries:
-            volume = entry % self._num_volumes
-
-            # Both are "adapted" labels
-            labels = self.data_blob['cluster_label'][entry]
-            segment_label = self.data_blob['segment_label'][entry][:, -1]
-            rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
-
-            fragment_ids = set(list(np.unique(labels[:, 5]).astype(int)))
-            fragments = []
-
-            for fid in fragment_ids:
-                mask = labels[:, 5] == fid
-
-                semantic_type, counts = np.unique(labels[:, -1][mask], return_counts=True)
-                if semantic_type.shape[0] > 1:
-                    if verbose:
-                        print("Semantic Type of Fragment {} is not "\
-                            "unique: {}, {}".format(fid,
-                                                    str(semantic_type),
-                                                    str(counts)))
-                    perm = counts.argmax()
-                    semantic_type = semantic_type[perm]
-                else:
-                    semantic_type = semantic_type[0]
-
-                points = labels[mask][:, 1:4]
-                size = points.shape[0]
-                depositions = rescaled_input_charge[mask]
-                depositions_MeV = labels[mask][:, 4]
-                voxel_indices = np.where(mask)[0]
-
-                group_id, counts = np.unique(labels[:, 6][mask].astype(int), return_counts=True)
-                if group_id.shape[0] > 1:
-                    if verbose:
-                        print("Group ID of Fragment {} is not "\
-                            "unique: {}, {}".format(fid,
-                                                    str(group_id),
-                                                    str(counts)))
-                    perm = counts.argmax()
-                    group_id = group_id[perm]
-                else:
-                    group_id = group_id[0]
-
-                interaction_id, counts = np.unique(labels[:, 7][mask].astype(int), return_counts=True)
-                if interaction_id.shape[0] > 1:
-                    if verbose:
-                        print("Interaction ID of Fragment {} is not "\
-                            "unique: {}, {}".format(fid,
-                                                    str(interaction_id),
-                                                    str(counts)))
-                    perm = counts.argmax()
-                    interaction_id = interaction_id[perm]
-                else:
-                    interaction_id = interaction_id[0]
+        fragments = self.result['TruthParticleFragments'][entry]
+        return fragments
 
 
-                is_primary, counts = np.unique(labels[:, -2][mask].astype(bool), return_counts=True)
-                if is_primary.shape[0] > 1:
-                    if verbose:
-                        print("Primary label of Fragment {} is not "\
-                            "unique: {}, {}".format(fid,
-                                                    str(is_primary),
-                                                    str(counts)))
-                    perm = counts.argmax()
-                    is_primary = is_primary[perm]
-                else:
-                    is_primary = is_primary[0]
-
-                part = TruthParticleFragment(self._translate(points, volume),
-                                fid, semantic_type,
-                                interaction_id=interaction_id,
-                                group_id=group_id,
-                                image_id=entry,
-                                voxel_indices=voxel_indices,
-                                depositions=depositions,
-                                depositions_MeV=depositions_MeV,
-                                is_primary=is_primary,
-                                alias='Fragment',
-                                volume=volume)
-
-                fragments.append(part)
-            out_fragments_list.extend(fragments)
-
-        return out_fragments_list
-
-
-    def get_true_particles(self, entry, only_primaries=True,
-                           verbose=False, volume=None) -> List[TruthParticle]:
+    def get_true_particles(self, entry, 
+                           only_primaries=True, 
+                           volume=None) -> List[TruthParticle]:
         '''
         Get list of <TruthParticle> instances for given <entry> batch id.
-
-        The method will return particles only if its id number appears in
-        the group_id column of cluster_label.
-
-        Each TruthParticle will contain the following information (attributes):
-
-            points: N x 3 coordinate array for particle's full image.
-            id: group_id
-            semantic_type: true semantic type
-            interaction_id: true interaction id
-            pid: PDG type (photons: 0, electrons: 1, ...)
-            fragments: list of integers corresponding to constituent fragment
-                id number
-            p: true momentum vector
+        
+        Can construct TruthParticles with no TruthParticle.points attribute
+        (predicted nonghost coordinates), if the corresponding larcv::Particle
+        object has nonzero true nonghost voxel depositions. 
+        
+        See TruthParticle for more information.
+        
+        Parameters
+        ----------
+        entry: int
+            Image # (batch id) to fetch true particles.
+        only_primaries: bool, optional
+            If True, discards non-primary true particles from output.
+        volume: int, optional
+            Indicator for fetching TruthParticles only within a given cryostat. 
+            Currently, 0 corresponds to east and 1 to west.
+            
+        Returns
+        -------
+        out_particles_list: List[TruthParticle]
+            List of TruthParticles in image #<entry>
         '''
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-
         out_particles_list = []
-        global_entry = entry
-        for entry in entries:
-            volume = entry % self._num_volumes
-
-            labels = self.data_blob['cluster_label'][entry]
-            if self.deghosting:
-                labels_noghost = self.data_blob['cluster_label_true_nonghost'][entry]
-            segment_label = self.data_blob['segment_label'][entry][:, -1]
-            particle_ids = set(list(np.unique(labels[:, 6]).astype(int)))
-            rescaled_input_charge = self.result['input_rescaled'][entry][:, 4]
-
-            particles = []
-            exclude_ids = set([])
-
-            for idx, p in enumerate(self.data_blob['particles_asis'][global_entry]):
-                pid = int(p.id())
-                # 1. Check if current pid is one of the existing group ids
-                if pid not in particle_ids:
-                    # print("PID {} not in particle_ids".format(pid))
-                    continue
-                is_primary = p.group_id() == p.parent_id()
-                if p.pdg_code() not in TYPE_LABELS:
-                    # print("PID {} not in TYPE LABELS".format(pid))
-                    continue
-                # For deghosting inputs, perform voxel cut with true nonghost coords.
-                if self.deghosting:
-                    exclude_ids = self._apply_true_voxel_cut(global_entry)
-                    if pid in exclude_ids:
-                        # Skip this particle if its below the voxel minimum requirement
-                        # print("PID {} was excluded from the list of particles due"\
-                        #     " to true nonghost voxel cut. Exclude IDS = {}".format(
-                        #         p.id(), str(exclude_ids)
-                        #     ))
-                        continue
-
-                pdg = TYPE_LABELS[p.pdg_code()]
-                mask = labels[:, 6].astype(int) == pid
-                if self.deghosting:
-                    mask_noghost = labels_noghost[:, 6].astype(int) == pid
-                # If particle is Michel electron, we have the option to
-                # only consider the primary ionization.
-                # Semantic labels only label the primary ionization as Michel.
-                # Cluster labels will have the entire Michel together.
-                if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
-                    mask = mask & (labels[:, -1].astype(int) == 2)
-                    if self.deghosting:
-                        mask_noghost = mask_noghost & (labels_noghost[:, -1].astype(int) == 2)
-
-                # Check semantics
-                semantic_type, sem_counts = np.unique(
-                    labels[mask][:, -1].astype(int), return_counts=True)
-
-                if semantic_type.shape[0] > 1:
-                    if verbose:
-                        print("Semantic Type of Particle {} is not "\
-                            "unique: {}, {}".format(pid,
-                                                    str(semantic_type),
-                                                    str(sem_counts)))
-                    perm = sem_counts.argmax()
-                    semantic_type = semantic_type[perm]
-                else:
-                    semantic_type = semantic_type[0]
-
-
-
-                coords = self.data_blob['input_data'][entry][mask][:, 1:4]
-
-                interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
-                                                       return_counts=True)
-                if interaction_id.shape[0] > 1:
-                    if verbose:
-                        print("Interaction ID of Particle {} is not "\
-                            "unique: {}".format(pid, str(interaction_id)))
-                    perm = int_counts.argmax()
-                    interaction_id = interaction_id[perm]
-                else:
-                    interaction_id = interaction_id[0]
-
-                nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
-                                             return_counts=True)
-                if nu_id.shape[0] > 1:
-                    if verbose:
-                        print("Neutrino ID of Particle {} is not "\
-                            "unique: {}".format(pid, str(nu_id)))
-                    perm = nu_counts.argmax()
-                    nu_id = nu_id[perm]
-                else:
-                    nu_id = nu_id[0]
-
-                fragments = np.unique(labels[mask][:, 5].astype(int))
-                depositions_MeV = labels[mask][:, 4]
-                depositions = rescaled_input_charge[mask] # Will be in ADC
-                coords_noghost, depositions_noghost = None, None
-                if self.deghosting:
-                    coords_noghost = labels_noghost[mask_noghost][:, 1:4]
-                    depositions_noghost = labels_noghost[mask_noghost][:, 4].squeeze()
-
-                particle = TruthParticle(self._translate(coords, volume),
-                    pid,
-                    semantic_type, interaction_id, pdg, entry,
-                    particle_asis=p,
-                    depositions=depositions,
-                    is_primary=is_primary,
-                    coords_noghost=coords_noghost,
-                    depositions_noghost=depositions_noghost,
-                    depositions_MeV=depositions_MeV,
-                    volume=entry % self._num_volumes)
-
-                particle.p = np.array([p.px(), p.py(), p.pz()])
-                particle.fragments = fragments
-                particle.particle_asis = p
-                particle.nu_id = nu_id
-                particle.voxel_indices = np.where(mask)[0]
-
-                particle.startpoint = np.array([p.first_step().x(),
-                                                p.first_step().y(),
-                                                p.first_step().z()])
-
-                if semantic_type == 1:
-                    particle.endpoint = np.array([p.last_step().x(),
-                                                  p.last_step().y(),
-                                                  p.last_step().z()])
-
-                if particle.voxel_indices.shape[0] >= self.min_particle_voxel_count:
-                    particles.append(particle)
-
-            out_particles_list.extend(particles)
+        particles = self.result['truth_particles'][entry]
 
         if only_primaries:
-            out_particles_list = [p for p in out_particles_list if p.is_primary]
-
+            out_particles_list = [p for p in particles if p.is_primary]
+        else:
+            out_particles_list = [p for p in particles]
+            
+        if volume is not None:
+            out_particles_list = [p for p in out_particles_list if p.volume_id == volume]
         return out_particles_list
 
 
-    def get_true_interactions(self, entry, drop_nonprimary_particles=True,
-                              min_particle_voxel_count=-1,
-                              volume=None,
-                              compute_vertex=True) -> List[Interaction]:
-        self._check_volume(volume)
-        if min_particle_voxel_count < 0:
-            min_particle_voxel_count = self.min_particle_voxel_count
-
-        entries = self._get_entries(entry, volume)
-        out_interactions_list = []
-        for e in entries:
-            volume = e % self._num_volumes if self.vb is not None else volume
-            true_particles = self.get_true_particles(entry, only_primaries=drop_nonprimary_particles, volume=volume)
-            out = group_particles_to_interactions_fn(true_particles,
-                                                     get_nu_id=True, mode='truth')
-            if compute_vertex:
-                vertices = self.get_true_vertices(entry, volume=volume)
-            for ia in out:
-                if compute_vertex:
-                    ia.vertex = vertices[ia.id]
-                ia.volume = volume
-            out_interactions_list.extend(out)
-
-        return out_interactions_list
-
-
-    def get_true_vertices(self, entry, volume=None):
-        """
+    def get_true_interactions(self, entry) -> List[Interaction]:
+        '''
+        Get list of <TruthInteraction> instances for given <entry> batch id.
+        
+        Can construct TruthInteraction with no TruthInteraction.points
+        (predicted nonghost coordinates), if all particles that compose the
+        interaction has no predicted nonghost coordinates and nonzero
+        true nonghost coordinates. 
+        
+        See TruthInteraction for more information.
+        
         Parameters
-        ==========
+        ----------
         entry: int
-        volume: int, default None
-
+            Image # (batch id) to fetch true particles.
+            
         Returns
-        =======
-        dict
-            Keys are true interactions ids, values are np.array of shape (N, 3)
-            with true vertices coordinates.
-        """
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-        out = {}
-        for entry in entries:
-            volume = entry % self._num_volumes if self.vb is not None else volume
-            inter_idxs = np.unique(
-                self.data_blob['cluster_label'][entry][:, 7].astype(int))
-            for inter_idx in inter_idxs:
-                if inter_idx < 0:
-                    continue
-                vtx = get_vertex(self.data_blob['kinematics_label'],
-                                self.data_blob['cluster_label'],
-                                data_idx=entry,
-                                inter_idx=inter_idx)
-                out[inter_idx] = self._translate(vtx, volume)
-
+        -------
+        out: List[Interaction]
+            List of TruthInteraction in image #<entry>
+        '''
+        out = self.result['truth_interactions'][entry]
         return out
+    
+    
+    @staticmethod
+    def match_parts_within_ints(int_matches):
+        '''
+        Given list of matches Tuple[(Truth)Interaction, (Truth)Interaction], 
+        return list of particle matches Tuple[TruthParticle, Particle]. 
+
+        This means rather than matching all predicted particles againts
+        all true particles, it has an additional constraint that only
+        particles within a matched interaction pair can be considered
+        for matching. 
+        '''
+        matched_particles, match_counts = [], []
+
+        for m in int_matches:
+            ia1, ia2 = m[0], m[1]
+            num_parts_1, num_parts_2 = -1, -1
+            if m[0] is not None:
+                num_parts_1 = len(m[0].particles)
+            if m[1] is not None:
+                num_parts_2 = len(m[1].particles)
+            if num_parts_1 <= num_parts_2:
+                ia1, ia2 = m[0], m[1]
+            else:
+                ia1, ia2 = m[1], m[0]
+                
+            for p in ia2.particles:
+                if len(p.match) == 0:
+                    if type(p) is Particle:
+                        matched_particles.append((None, p))
+                        match_counts.append(-1)
+                    else:
+                        matched_particles.append((p, None))
+                        match_counts.append(-1)
+                for match_id in p.match:
+                    if type(p) is Particle:
+                        matched_particles.append((ia1[match_id], p))
+                    else:
+                        matched_particles.append((p, ia1[match_id]))
+                    match_counts.append(p._match_counts[match_id])
+        return matched_particles, np.array(match_counts)
 
 
     def match_particles(self, entry,
                         only_primaries=False,
                         mode='pred_to_true',
-                        volume=None, 
-                        matching_mode='one_way', 
+                        matching_mode='optimal', 
+                        return_counts=False,
                         **kwargs):
         '''
-        Returns (<Particle>, None) if no match was found
-
+        Method for matching reco and true particles by 3D voxel coordinate.
+        
         Parameters
-        ==========
+        ----------
         entry: int
-        only_primaries: bool, default False
-        mode: str, default 'pred_to_true'
-            Must be either 'pred_to_true' or 'true_to_pred'
-        volume: int, default None
+            Image # (batch id)
+        only_primaries: bool (default False)
+            If true, non-primary particles will be discarded from beginning.
+        mode: str (default "pred_to_true")
+            Whether to match reco to true, or true to reco. This 
+            affects the output if matching_mode="one_way".
+        matching_mode: str (default "one_way")
+            The algorithm used to establish matches. Currently there are
+            only two options:
+                - one_way: loops over true/reco particles, and chooses a
+                reco/true particle with the highest overlap.
+                - optimal: finds an optimal assignment between reco/true
+                particles so that the sum of overlap metric (counts or IoU)
+                is maximized. 
+        return_counts: bool (default False)
+            If True, returns the overlap metric (counts or IoU) value for
+            each match. 
+            
+        Returns
+        -------
+        matched_pairs: List[Tuple[Particle, TruthParticle]]
+        counts: np.ndarray
+            overlap metric values corresponding to each matched pair. 
         '''
-        self._check_volume(volume)
-
-        entries = self._get_entries(entry, volume)
-        all_matches = []
-        for e in entries:
-            volume = e % self._num_volumes if self.vb is not None else volume
-            print('matching', entries, volume)
-            if mode == 'pred_to_true':
-                # Match each pred to one in true
-                particles_from = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
-                particles_to = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
-            elif mode == 'true_to_pred':
-                # Match each true to one in pred
-                particles_to = self.get_particles(entry, only_primaries=only_primaries, volume=volume)
-                particles_from = self.get_true_particles(entry, only_primaries=only_primaries, volume=volume)
-            else:
-                raise ValueError("Mode {} is not valid. For matching each"\
-                    " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-            all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
-            if matching_mode == 'one_way':
-                matched_pairs, _ = match_particles_fn(particles_from, particles_to,
+        if mode == 'pred_to_true':
+            # Match each pred to one in true
+            particles_from = self.get_particles(entry, 
+                                                only_primaries=only_primaries)
+            particles_to = self.get_true_particles(entry,
+                                                   only_primaries=only_primaries)
+        elif mode == 'true_to_pred':
+            # Match each true to one in pred
+            particles_to = self.get_particles(entry, 
+                                              only_primaries=only_primaries)
+            particles_from = self.get_true_particles(entry, 
+                                                     only_primaries=only_primaries)
+        else:
+            raise ValueError("Mode {} is not valid. For matching each"\
+                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+            
+        all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
+        if matching_mode == 'one_way':
+            matched_pairs, counts = match_particles_fn(particles_from, particles_to,
+                                                    **all_kwargs)
+        elif matching_mode == 'optimal':
+            matched_pairs, counts = match_particles_optimal(particles_from, particles_to,
                                                         **all_kwargs)
-            elif matching_mode == 'optimal':
-                matched_pairs, _ = match_particles_optimal(particles_from, particles_to,
-                                                           **all_kwargs)
-            else:
-                raise ValueError
-            all_matches.extend(matched_pairs)
-        return all_matches
+        else:
+            raise ValueError(f"Particle matching mode {matching_mode} not suppored!")
+        self._matched_particles = matched_pairs
+        self._matched_particles_counts = counts
+        if return_counts:
+            return matched_pairs, counts
+        else:
+            return matched_pairs
 
     
     def match_interactions(self, entry, mode='pred_to_true',
-                           drop_nonprimary_particles=True,
-                           match_particles=True,
+                           drop_nonprimary_particles=False,
+                           match_particles=False,
                            return_counts=False,
-                           volume=None,
-                           compute_vertex=True,
-                           vertex_mode='all',
-                           matching_mode='one_way',
+                           matching_mode='optimal',
                            **kwargs):
         """
+        Method for matching reco and true interactions.
+        
         Parameters
-        ==========
+        ----------
         entry: int
-        mode: str, default 'pred_to_true'
-            Must be either 'pred_to_true' or 'true_to_pred'.
-        drop_nonprimary_particles: bool, default True
-        match_particles: bool, default True
-        return_counts: bool, default False
-        volume: int, default None
-
+            Image # (batch id)
+        drop_nonprimary_particles: bool (default False)
+            If true, non-primary particles will be discarded from beginning.
+        match_particles: bool (default True)
+            Option to match particles within matched interactions.
+        matching_mode: str (default "one_way")
+            The algorithm used to establish matches. Currently there are
+            only two options:
+                - one_way: loops over true/reco particles, and chooses a
+                reco/true particle with the highest overlap.
+                - optimal: finds an optimal assignment between reco/true
+                particles so that the sum of overlap metric (counts or IoU)
+                is maximized. 
+        return_counts: bool (default False)
+            If True, returns the overlap metric (counts or IoU) value for
+            each match. 
+            
         Returns
-        =======
-        List[Tuple[Interaction, Interaction]]
-            List of tuples, indicating the matched interactions.
+        -------
+        matched_pairs: List[Tuple[Particle, TruthParticle]]
+        counts: np.ndarray
+            overlap metric values corresponding to each matched pair. 
         """
-        self._check_volume(volume)
 
-        entries = self._get_entries(entry, volume)
         all_matches, all_counts = [], []
-        for e in entries:
-            volume = e % self._num_volumes if self.vb is not None else volume
+        pred_interactions = self.get_interactions(entry, 
+                                            drop_nonprimary_particles=drop_nonprimary_particles)
+        true_interactions = self.get_true_interactions(entry)
+        
+        all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
+        
+        if all_kwargs['overlap_mode'] == 'chamfer':
+            true_interactions_masked = [ia for ia in true_interactions if ia.truth_size > 0]
+        else:
+            true_interactions_masked = [ia for ia in true_interactions if ia.size > 0]
+        
+        if matching_mode == 'one_way':
             if mode == 'pred_to_true':
-                ints_from = self.get_interactions(entry, 
-                                                  drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                  volume=volume, 
-                                                  compute_vertex=compute_vertex,
-                                                  vertex_mode=vertex_mode)
-                ints_to = self.get_true_interactions(entry, 
-                                                     drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                     volume=volume, 
-                                                     compute_vertex=compute_vertex)
-            elif mode == 'true_to_pred':
-                ints_to = self.get_interactions(entry, 
-                                                drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                volume=volume, 
-                                                compute_vertex=compute_vertex,
-                                                vertex_mode=vertex_mode)
-                ints_from = self.get_true_interactions(entry, 
-                                                       drop_nonprimary_particles=drop_nonprimary_particles, 
-                                                       volume=volume, 
-                                                       compute_vertex=compute_vertex)
-            else:
-                raise ValueError("Mode {} is not valid. For matching each"\
-                    " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
-
-            all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
-            if matching_mode == 'one_way':
-                matched_interactions, counts = match_interactions_fn(ints_from, ints_to,
+                matched_interactions, counts = match_interactions_fn(pred_interactions, 
+                                                                     true_interactions_masked,
                                                                         **all_kwargs)
-            elif matching_mode == 'optimal':
-                matched_interactions, counts = match_interactions_optimal(ints_from, ints_to,
-                                                                          **all_kwargs)
+            elif mode == 'true_to_pred':
+                matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
+                                                                     pred_interactions,
+                                                                        **all_kwargs)
             else:
-                raise ValueError
-            if len(matched_interactions) == 0:
-                continue
-            if match_particles:
-                for interactions in matched_interactions:
-                    domain, codomain = interactions
-                    domain_particles, codomain_particles = [], []
-                    if domain is not None:
-                        domain_particles = domain.particles
-                    if codomain is not None:
-                        codomain_particles = codomain.particles
-                        # continue
-                    if matching_mode == 'one_way':
-                        matched_particles, _ = match_particles_fn(domain_particles, codomain_particles,
+                raise ValueError(f"One-way matching mode {mode} not supported, either use 'pred_to_true' or 'true_to_pred'.")
+        elif matching_mode == 'optimal':
+            matched_interactions, counts = match_interactions_optimal(pred_interactions, 
+                                                                      true_interactions_masked,
+                                                                      **all_kwargs)
+        else:
+            raise ValueError
+
+        if len(matched_interactions) == 0:
+            return [], []
+        if match_particles:
+            for interactions in matched_interactions:
+                domain, codomain = interactions
+                domain_particles, codomain_particles = [], []
+                if domain is not None:
+                    domain_particles = domain.particles
+                if codomain is not None:
+                    codomain_particles = codomain.particles
+                    # continue
+                domain_particles_masked = [p for p in domain_particles if p.points.shape[0] > 0]
+                codomain_particles_masked = [p for p in codomain_particles if p.points.shape[0] > 0]
+                if matching_mode == 'one_way':
+                    matched_particles, _ = match_particles_fn(domain_particles_masked, 
+                                                              codomain_particles_masked,
+                                                              min_overlap=self.min_overlap_count,
+                                                              overlap_mode=self.overlap_mode)
+                elif matching_mode == 'optimal':
+                    matched_particles, _ = match_particles_optimal(domain_particles_masked, codomain_particles_masked,
                                                                     min_overlap=self.min_overlap_count,
                                                                     overlap_mode=self.overlap_mode)
-                    elif matching_mode == 'optimal':
-                        matched_particles, _ = match_particles_optimal(domain_particles, codomain_particles,
-                                                                       min_overlap=self.min_overlap_count,
-                                                                       overlap_mode=self.overlap_mode)
-                    else:
-                        raise ValueError
-            all_matches.extend(matched_interactions)
-            all_counts.extend(counts)
+                else:
+                    raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
+                
+            pmatches, pcounts = self.match_parts_within_ints(matched_interactions)
+            
+            self._matched_particles = pmatches
+            self._matched_particles_counts = pcounts
+            
+        self._matched_interactions = matched_interactions
+        self._matched_interactions_counts = counts
 
         if return_counts:
-            return all_matches, all_counts
+            return matched_interactions, counts
         else:
-            return all_matches
+            return matched_interactions

@@ -5,7 +5,6 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
-from mlreco.utils import local_cdist
 from mlreco.models.layers.common.blocks import ResNetBlock
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
 from mlreco.models.layers.common.configuration import setup_cnn_configuration
@@ -168,14 +167,14 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
 
     Output
     ------
-    reg_loss: float
+    vertex_reg_loss : float
         Distance loss
-    mask_loss: float
+    vertex_mask_loss : float
         Binary voxel-wise prediction (is there an object of interest or not)
-    type_loss: float
-        Semantic prediction loss.
-    classify_endpoints_loss: float
-    classify_endpoints_acc: float
+    vertex_loss : float
+        Combined loss
+    vertex_accuracy : float
+        Combined accuracy
 
     See Also
     --------
@@ -345,5 +344,5 @@ class VertexPPNLoss(torch.nn.modules.loss._Loss):
 
         total_acc /= num_batches
         res['vertex_loss'] = total_loss
-        res['vertex_acc'] = float(total_acc)
+        res['vertex_accuracy'] = float(total_acc)
         return res

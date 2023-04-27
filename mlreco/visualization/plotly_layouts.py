@@ -3,6 +3,19 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 
+def high_contrast_colorscale():
+    import plotly.express as px
+    colorscale = []
+    step = 1./48
+    for i, c in enumerate(px.colors.qualitative.Dark24):
+        colorscale.append([i*step, c])
+        colorscale.append([(i+1)*step, c])
+    for i, c in enumerate(px.colors.qualitative.Light24):
+        colorscale.append([(i+24)*step, c])
+        colorscale.append([(i+25)*step, c])
+    return colorscale
+
+
 def white_layout():
     bg_color = 'rgba(0,0,0,0)'
     grid_color = 'rgba(220,220,220,100)'
@@ -73,7 +86,7 @@ def trace_particles(particles, color='id', size=1,
                     scatter_points=False,
                     scatter_ppn=False,
                     highlight_primaries=False,
-                    colorscale='rainbow'):
+                    colorscale='rainbow', prefix=''):
     '''
     Get Scatter3d traces for a list of <Particle> instances.
     Each <Particle> will be drawn with the color specified
@@ -92,6 +105,8 @@ def trace_particles(particles, color='id', size=1,
     cmin, cmax = int(colors.min()), int(colors.max())
     opacity = 1
     for p in particles:
+        if p.points.shape[0] <= 0:
+            continue
         c = int(getattr(p, color)) * np.ones(p.points.shape[0])
         if highlight_primaries:
             if p.is_primary:
@@ -110,7 +125,7 @@ def trace_particles(particles, color='id', size=1,
                                 # reversescale=True,
                                 opacity=opacity),
                                hovertext=int(getattr(p, color)),
-                       name='Particle {}'.format(p.id)
+                       name='{}Particle {}'.format(prefix, p.id)
                               )
         traces.append(plot)
         if scatter_points:
@@ -125,7 +140,7 @@ def trace_particles(particles, color='id', size=1,
                         # colorscale=colorscale,
                         opacity=0.6),
                         # hovertext=p.ppn_candidates[:, 4],
-                    name='Startpoint {}'.format(p.id))
+                    name='{}Startpoint {}'.format(prefix, p.id))
                 traces.append(plot)
             if p.endpoint is not None:
                 plot = go.Scatter3d(x=np.array([p.endpoint[0]]),
@@ -140,7 +155,7 @@ def trace_particles(particles, color='id', size=1,
                         # colorscale=colorscale,
                         opacity=0.6),
                         # hovertext=p.ppn_candidates[:, 4],
-                    name='Endpoint {}'.format(p.id))
+                    name='Endpoint {}'.format(prefix, p.id))
                 traces.append(plot)
         elif scatter_ppn:
             plot = go.Scatter3d(x=p.ppn_candidates[:, 0],
@@ -153,12 +168,12 @@ def trace_particles(particles, color='id', size=1,
                         # colorscale=colorscale,
                         opacity=1),
                         # hovertext=p.ppn_candidates[:, 4],
-                    name='PPN {}'.format(p.id))
+                    name='{}PPN {}'.format(prefix, p.id))
             traces.append(plot)
     return traces
 
 
-def trace_interactions(interactions, color='id', colorscale="rainbow"):
+def trace_interactions(interactions, color='id', colorscale="rainbow", prefix=''):
     '''
     Get Scatter3d traces for a list of <Interaction> instances.
     Each <Interaction> will be drawn with the color specified
@@ -181,7 +196,8 @@ def trace_interactions(interactions, color='id', colorscale="rainbow"):
         voxels = []
         # Merge all particles' voxels into one tensor
         for p in particles:
-            voxels.append(p.points)
+            if p.points.shape[0] > 0:
+                voxels.append(p.points)
         voxels = np.vstack(voxels)
         plot = go.Scatter3d(x=voxels[:,0],
                             y=voxels[:,1],
@@ -195,7 +211,7 @@ def trace_interactions(interactions, color='id', colorscale="rainbow"):
                                 reversescale=True,
                                 opacity=1),
                                hovertext=int(getattr(inter, color)),
-                       name='Interaction {}'.format(getattr(inter, color))
+                       name='{}Interaction {}'.format(prefix, getattr(inter, color))
                               )
         traces.append(plot)
         if inter.vertex is not None and (inter.vertex > -1).all():
@@ -209,7 +225,7 @@ def trace_interactions(interactions, color='id', colorscale="rainbow"):
                     # colorscale=colorscale,
                     opacity=0.6),
                     # hovertext=p.ppn_candidates[:, 4],
-                name='Vertex {}'.format(inter.id))
+                name='{}Vertex {}'.format(prefix, inter.id))
             traces.append(plot)
     return traces
 

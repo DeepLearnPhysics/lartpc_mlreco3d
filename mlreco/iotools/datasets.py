@@ -40,8 +40,11 @@ class LArCVDataset(Dataset):
 
         # Create file list
         self._files = []
+        if isinstance(data_keys, str):
+            with open(data_keys, 'r') as f:
+                data_keys = f.read().splitlines()
         for key in data_keys:
-            fs = glob.glob(key)
+            fs = sorted(glob.glob(key))
             for f in fs:
                 self._files.append(f)
                 if len(self._files) >= limit_num_files: break

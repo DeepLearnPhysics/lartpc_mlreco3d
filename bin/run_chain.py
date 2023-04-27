@@ -14,7 +14,7 @@ from mlreco.main_funcs import process_config, train_loop, inference_loop, prepar
 def load(filename, limit=None):
     import glob
     logs = []
-    files = glob.glob(filename)
+    files = sorted(glob.glob(filename))
     print(filename)
     for f in files:
         #print(f)

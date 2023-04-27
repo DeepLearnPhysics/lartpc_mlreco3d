@@ -37,7 +37,7 @@ sample_dir = os.path.join("/sdf/group/neutrino/ldomine/ICARUS_Analysis_MC", "cor
 input_files = [os.path.join(sample_dir, "larcv*.root")]
 file_list = []
 for f in input_files:
-    file_list.extend(glob.glob(f))
+    file_list.extend(sorted(glob.glob(f)))
 file_list.sort()
 #file_list = file_list[(task_id-1) * file_count_per_task:task_id * file_count_per_task]
 io_cfg['iotool']['dataset']['data_keys'] = file_list

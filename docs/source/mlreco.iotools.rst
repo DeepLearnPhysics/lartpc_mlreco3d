@@ -21,6 +21,9 @@ Submodules
    :maxdepth: 4
 
    mlreco.iotools.collates
+   mlreco.iotools.data_parallel
    mlreco.iotools.datasets
    mlreco.iotools.factories
+   mlreco.iotools.readers
    mlreco.iotools.samplers
+   mlreco.iotools.writers

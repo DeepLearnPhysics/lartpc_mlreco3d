@@ -1,9 +1,11 @@
 # typical files made in repo
 log*
+!logger.py
 weights*
 *.txt
 *.csv
 *.root
+*.rst
 *.hdf5
 *.h5
 *.ipynb

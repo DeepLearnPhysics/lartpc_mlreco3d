@@ -88,6 +88,17 @@ class GraphSPICEEmbeddingLoss(nn.Module):
     Loss function for Sparse Spatial Embeddings Model, with fixed
     centroids and symmetric gaussian kernels.
     '''
+
+    RETURNS = {
+        'loss' : ['scalar'],
+        'accuracy': ['scalar'],
+        'ft_inter_loss': ['scalar'],
+        'ft_intra_loss': ['scalar'],
+        'ft_reg_loss': ['scalar'],
+        'sp_inter_loss': ['scalar'],
+        'sp_intra_loss': ['scalar'],
+    }
+
     def __init__(self, cfg, name='graph_spice_loss'):
         super(GraphSPICEEmbeddingLoss, self).__init__()
         self.loss_config = cfg #[name]
@@ -259,17 +270,17 @@ class GraphSPICEEmbeddingLoss(nn.Module):
                 sp_centroids, ft_centroids, eps=self.eps)
             occ_loss = self.occupancy_loss(occ, groups_unique)
             # TODO: Combine loss with weighting, keep track for logging
-            loss['ft_intra'].append(ft_out['intracluster_loss'])
-            loss['ft_inter'].append(ft_out['intercluster_loss'])
-            loss['ft_reg'].append(ft_out['regularization_loss'])
-            loss['sp_intra'].append(sp_out['intracluster_loss'])
-            loss['sp_inter'].append(sp_out['intercluster_loss'])
+            loss['ft_intra_loss'].append(ft_out['intracluster_loss'])
+            loss['ft_inter_loss'].append(ft_out['intercluster_loss'])
+            loss['ft_reg_loss'].append(ft_out['regularization_loss'])
+            loss['sp_intra_loss'].append(sp_out['intracluster_loss'])
+            loss['sp_inter_loss'].append(sp_out['intercluster_loss'])
             loss['cov_loss'].append(float(cov_loss))
             loss['occ_loss'].append(float(occ_loss))
             loss['loss'].append(
                 ft_out['loss'] + sp_out['loss'] + cov_loss + occ_loss)
             # TODO: Implement train-time accuracy estimation
-            accuracy['acc_{}'.format(int(sc))] = acc
+            accuracy['accuracy_{}'.format(int(sc))] = acc
             accuracy['accuracy'] += acc
             counts += 1
 
@@ -365,6 +376,11 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
     '''
     Combined Node + Edge Loss
     '''
+
+    RETURNS = {
+        'edge_accuracy' : ['scalar']
+    }
+
     def __init__(self, cfg, name='graph_spice_loss'):
         super(NodeEdgeHybridLoss, self).__init__()
         # print("CFG + ", cfg)
@@ -376,6 +392,8 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         # self.is_eval = cfg['eval']
         self.acc_fn = IoUScore()
         self.use_cluster_labels = cfg.get('use_cluster_labels', True)
+
+        self.RETURNS.update(self.loss_fn.RETURNS)
 
     def forward(self, result, segment_label, cluster_label):
 

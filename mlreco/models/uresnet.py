@@ -53,14 +53,14 @@ class UResNet_Chain(nn.Module):
     beta: float, default 1.0
         Weight for ghost/non-ghost segmentation loss.
 
-    Output
+    Returns
     ------
-    segmentation: torch.Tensor
-    finalTensor: torch.Tensor
-    encoderTensors: list of torch.Tensor
-    decoderTensors: list of torch.Tensor
-    ghost: torch.Tensor
-    ghost_sptensor: torch.Tensor
+    segmentation : torch.Tensor
+    finalTensor : torch.Tensor
+    encoderTensors : list of torch.Tensor
+    decoderTensors : list of torch.Tensor
+    ghost : torch.Tensor
+    ghost_sptensor : torch.Tensor
 
     See Also
     --------
@@ -68,10 +68,19 @@ class UResNet_Chain(nn.Module):
     """
 
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (float,), (3, 1)]
+        ['parse_sparse3d', (float,), (3, 1)]
     ]
 
     MODULES = ['uresnet_lonely']
+
+    RETURNS = {
+        'segmentation': ['tensor', 'input_data'],
+        'finalTensor': ['tensor'],
+        'encoderTensors': ['tensor_list'],
+        'decoderTensors': ['tensor_list'],
+        'ghost': ['tensor', 'input_data'],
+        'ghost_sptensor': ['tensor']
+    }
 
     def __init__(self, cfg, name='uresnet_lonely'):
         super(UResNet_Chain, self).__init__()
@@ -140,8 +149,19 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
     UResNet_Chain
     """
     INPUT_SCHEMA = [
-        ["parse_sparse3d_scn", (int,), (3, 1)]
+        ['parse_sparse3d', (int,), (3, 1)]
     ]
+
+    RETURNS = {
+        'accuracy': ('scalar',),
+        'loss': ('scalar', ),
+        'ghost_mask_accuracy': ('scalar',),
+        'ghost_mask_loss': ('scalar',),
+        'uresnet_accuracy': ('scalar',),
+        'uresnet_loss': ('scalar',),
+        'ghost2ghost_accuracy': ('scalar',),
+        'nonghost2nonghost_accuracy' : ('scalar',)
+    }
 
     def __init__(self, cfg, reduction='sum', batch_col=0):
         super(SegmentationLoss, self).__init__(reduction=reduction)
@@ -154,6 +174,9 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
         self._weight_loss = self._cfg.get('weight_loss', False)
         self.cross_entropy = torch.nn.CrossEntropyLoss(reduction='none')
         self._batch_col = batch_col
+
+        for c in range(self._num_classes):
+            self.RETURNS[f'accuracy_class_{c}'] = ('scalar',)
 
     def forward(self, result, label, weights=None):
         """
@@ -288,8 +311,8 @@ class SegmentationLoss(torch.nn.modules.loss._Loss):
                 'ghost_mask_loss': self._beta * mask_loss / count if count else self._beta * mask_loss,
                 'uresnet_accuracy': uresnet_acc / count if count else 1.,
                 'uresnet_loss': self._alpha * uresnet_loss / count if count else self._alpha * uresnet_loss,
-                'ghost2ghost': ghost2ghost / count if count else 1.,
-                'nonghost2nonghost': nonghost2nonghost / count if count else 1.
+                'ghost2ghost_accuracy': ghost2ghost / count if count else 1.,
+                'nonghost2nonghost_accuracy': nonghost2nonghost / count if count else 1.
             }
         else:
             results = {

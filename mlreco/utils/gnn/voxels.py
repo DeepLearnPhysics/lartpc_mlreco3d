@@ -1,9 +1,12 @@
 # Defines voxel feature extraction
 import numpy as np
 import numba as nb
-from mlreco.utils.numba import numba_wrapper, cdist_nb
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+import mlreco.utils.numba_local as nbl
+from mlreco.utils.decorators import numbafy
+
+
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def get_voxel_features(data, max_dist=5.0):
     """
     Function that returns the an array of 16 features for
@@ -22,7 +25,7 @@ def _get_voxel_features(data: nb.float32[:,:], max_dist=5.0):
 
     # Compute intervoxel distance matrix
     voxels = data[:,:3]
-    dist_mat = cdist_nb(voxels, voxels)
+    dist_mat = nbl.cdist(voxels, voxels)
 
     # Get local geometrical features for each voxel
     feats = np.empty((len(voxels), 16), dtype=data.dtype)

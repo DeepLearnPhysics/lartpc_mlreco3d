@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from mlreco.utils.globals import *
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.models.experimental.bayes.evidential import EVDLoss
 
@@ -22,6 +23,13 @@ class NodeTypeLoss(torch.nn.Module):
             reduction       : <loss reduction method: 'mean' or 'sum' (default 'sum')>
             balance_classes : <balance loss per class: True or False (default False)>
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar'],
+        'n_clusts': ['scalar']
+    }
+
     def __init__(self, loss_config, batch_col=0, coords_col=(1, 4)):
         super(NodeTypeLoss, self).__init__()
 
@@ -29,8 +37,8 @@ class NodeTypeLoss(torch.nn.Module):
         self.batch_col = batch_col
         self.coords_col = coords_col
 
-        self.group_col = loss_config.get('group_col', 6)
-        self.target_col = loss_config.get('target_col', 7)
+        self.group_col = loss_config.get('group_col', GROUP_COL)
+        self.target_col = loss_config.get('target_col', INTER_COL)
 
         # Set the loss
         self.loss = loss_config.get('loss', 'CE')

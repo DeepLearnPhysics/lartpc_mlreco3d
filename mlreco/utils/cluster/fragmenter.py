@@ -41,16 +41,17 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
                         dtype=object if not same_length[idx] else np.int64) \
                         for idx, b in enumerate(bcids)]
 
-    frags_seg = [frag_seg_np[b] for idx, b in enumerate(bcids)]
+    frags_seg = [frag_seg_np[b].astype(np.int32) for idx, b in enumerate(bcids)]
 
     out = {
-        'frags'         : [fragments_np],
-        'frag_seg'      : [frag_seg_np],
-        'fragments'     : [frags],
-        'fragments_seg' : [frags_seg],
-        'frag_batch_ids': [frag_batch_ids_np],
-        'vids'          : [vids],
-        'counts'        : [counts]
+        'frags'             : [fragments_np],
+        'frag_seg'          : [frag_seg_np],
+        'frag_batch_ids'    : [frag_batch_ids_np],
+        'fragment_clusts'   : [frags],
+        'fragment_seg'      : [frags_seg],
+        'fragment_batch_ids': [frag_batch_ids_np],
+        'vids'              : [vids],
+        'counts'            : [counts]
     }
 
     return out
@@ -77,8 +78,8 @@ class FragmentManager(nn.Module):
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
             - cnn_result: dict of List[torch.Tensor], containing:
                 - segmentation
-                - points
-                - mask_ppn2
+                - ppn_points
+                - ppn_masks
 
         Returns:
             - fragment_data
@@ -109,8 +110,8 @@ class DBSCANFragmentManager(FragmentManager):
             - input (torch.Tensor): N x 6 (coords, edep, semantic_labels)
             - cnn_result: dict of List[torch.Tensor], containing:
                 - segmentation
-                - points
-                - mask_ppn2
+                - ppn_points
+                - ppn_masks
 
         Returns:
             - fragments

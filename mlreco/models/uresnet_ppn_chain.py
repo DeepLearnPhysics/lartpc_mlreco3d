@@ -67,6 +67,8 @@ class UResNetPPN(nn.Module):
     """
     MODULES = ['mink_uresnet', 'mink_uresnet_ppn_chain', 'mink_ppn']
 
+    RETURNS = dict(UResNet_Chain.RETURNS, **PPN.RETURNS)
+
     def __init__(self, cfg):
         super(UResNetPPN, self).__init__()
         self.model_config = cfg
@@ -74,10 +76,6 @@ class UResNetPPN(nn.Module):
         assert self.ghost == cfg.get('ppn', {}).get('ghost', False)
         self.backbone = UResNet_Chain(cfg)
         self.ppn = PPN(cfg)
-        self.num_classes = self.backbone.num_classes
-        self.num_filters = self.backbone.F
-        self.segmentation = ME.MinkowskiLinear(
-            self.num_filters, self.num_classes)
 
     def forward(self, input):
 
@@ -94,9 +92,9 @@ class UResNetPPN(nn.Module):
         out = defaultdict(list)
 
         for igpu, x in enumerate(input_tensors):
-            # input_data = x[:, :5]
             res = self.backbone([x])
-            out.update({'ghost': res['ghost']})
+            out.update({'ghost': res['ghost'],
+                        'segmentation': res['segmentation']})
             if self.ghost:
                 if self.ppn.use_true_ghost_mask:
                     res_ppn = self.ppn(res['finalTensor'][igpu],
@@ -111,12 +109,6 @@ class UResNetPPN(nn.Module):
             else:
                 res_ppn = self.ppn(res['finalTensor'][igpu],
                                    res['decoderTensors'][igpu])
-            # if self.training:
-            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'], particles_label)
-            # else:
-            #     res_ppn = self.ppn(res['finalTensor'], res['encoderTensors'])
-            segmentation = self.segmentation(res['decoderTensors'][igpu][-1])
-            out['segmentation'].append(segmentation.F)
             out.update(res_ppn)
 
         return out
@@ -128,10 +120,19 @@ class UResNetPPNLoss(nn.Module):
     --------
     mlreco.models.uresnet.SegmentationLoss, mlreco.models.layers.common.ppnplus.PPNLonelyLoss
     """
+
+    RETURNS = {
+        'loss': ['scalar'],
+        'accuracy': ['scalar']
+    }
+
     def __init__(self, cfg):
         super(UResNetPPNLoss, self).__init__()
         self.ppn_loss = PPNLonelyLoss(cfg)
         self.segmentation_loss = SegmentationLoss(cfg)
+
+        self.RETURNS.update({'segmentation_'+k:v for k, v in self.segmentation_loss.RETURNS.items()})
+        self.RETURNS.update({'ppn_'+k:v for k, v in self.ppn_loss.RETURNS.items()})
 
     def forward(self, outputs, segment_label, particles_label, weights=None):
 
@@ -149,8 +150,8 @@ class UResNetPPNLoss(nn.Module):
         res.update({'segmentation_'+k:v for k, v in res_segmentation.items()})
         res.update({'ppn_'+k:v for k, v in res_ppn.items()})
 
-        for key, val in res.items():
-            if 'ppn' in key:
-                print('{}: {}'.format(key, val))
+        #for key, val in res.items():
+        #    if 'ppn' in key:
+        #        print('{}: {}'.format(key, val))
 
         return res

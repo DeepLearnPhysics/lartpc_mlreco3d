@@ -8,24 +8,23 @@ def model_dict():
     -------
     dict
     """
-    from . import grappa
-
-    from . import uresnet
-    from . import uresnet_ppn_chain
-    from . import spice
-    from . import singlep
-    from . import graph_spice
-    from . import bayes_uresnet
 
     from . import full_chain
+    from . import uresnet
+    from . import uresnet_ppn_chain
+    from . import singlep
+    from . import spice
+    from . import graph_spice
+    from . import grappa
+    from . import bayes_uresnet
+
     from . import vertex
+    from . import transformer
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
         # Full reconstruction chain, including an option for deghosting
         "full_chain": (full_chain.FullChain, full_chain.FullChainLoss),
-
-        # --------------------MinkowskiEngine Backend----------------------
         # UresNet
         "uresnet": (uresnet.UResNet_Chain, uresnet.SegmentationLoss),
         # UResNet + PPN
@@ -35,11 +34,11 @@ def model_dict():
         # Multi Particle Classifier
         "multip": (singlep.MultiParticleImageClassifier, singlep.MultiParticleTypeLoss),
         # SPICE
-        "spice": (spice.MinkSPICE, spice.SPICELoss),
+        "spice": (spice.SPICE, spice.SPICELoss),
+        # Graph SPICE
+        "graph_spice": (graph_spice.GraphSPICE, graph_spice.GraphSPICELoss),
         # Graph neural network Particle Aggregation (GrapPA)
         "grappa": (grappa.GNN, grappa.GNNLoss),
-        # Graph SPICE
-        "graph_spice": (graph_spice.MinkGraphSPICE, graph_spice.GraphSPICELoss),
         # Bayesian Classifier
         "bayes_singlep": (singlep.BayesianParticleClassifier, singlep.ParticleTypeLoss),
         # Bayesian UResNet
@@ -53,7 +52,11 @@ def model_dict():
         # Deep Single Pass Uncertainty Quantification
         'duq_singlep': (singlep.DUQParticleClassifier, singlep.MultiLabelCrossEntropy),
         # Vertex PPN
-        'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss)
+        'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss),
+        # Vertex Pointnet
+        'vertex_pointnet': (vertex.VertexPointNet, vertex.VertexPointNetLoss),
+        # TransformerSPICE
+        'mask3d': (transformer.Mask3DModel, transformer.Mask3dLoss)
     }
     return models
 
