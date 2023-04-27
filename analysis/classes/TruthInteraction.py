@@ -32,6 +32,8 @@ class TruthInteraction(Interaction):
         
         # Initialize private attributes to be set by setter only
         self._particles  = None
+        self._particle_counts = np.zeros(6, dtype=np.int64)
+        self._primary_counts  = np.zeros(6, dtype=np.int64)
         # Invoke particles setter
         self.particles   = particles
         
@@ -126,11 +128,6 @@ class TruthInteraction(Interaction):
             processed_args['particles'].append(p)
         
         _process_interaction_attributes(init_args, processed_args, **kwargs)
-        
-        for i, t in enumerate(init_args['truth_depositions_MeV']):
-            if len(t.shape) == 0:
-                print(t, t.shape)
-                print(init_args['truth_index'][i])
         
         # Handle depositions_MeV for TruthParticles
         processed_args['depositions_MeV']       = np.concatenate(init_args['depositions_MeV'])
