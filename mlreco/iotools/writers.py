@@ -27,16 +27,15 @@ class HDF5Writer:
 
     # LArCV object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
-        'add_trajectory_point', 'dump', 'momentum',
-        'boundingbox_2d', 'boundingbox_3d', 'feb_id', 'pesmap',
+        'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d', 
         *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
     LARCV_SKIP = {
         larcv.Particle: LARCV_SKIP_ATTRS,
         larcv.Neutrino: LARCV_SKIP_ATTRS,
-        larcv.Flash:    LARCV_SKIP_ATTRS,
-        larcv.CRTHit:   LARCV_SKIP_ATTRS
+        larcv.Flash:    ['wireCenters', 'wireWidths'],
+        larcv.CRTHit:   ['feb_id', 'pesmap'] # feb_id should be storable
     }
 
     # Analysis particle object attributes that do not need to be stored to HDF5
