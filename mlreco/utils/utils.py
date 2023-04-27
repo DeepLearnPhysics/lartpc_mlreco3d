@@ -3,23 +3,37 @@ import torch
 import time
 
 
-def to_numpy(s):
+def to_numpy(array):
     '''
     Function which casts an array-like object
     to a `numpy.ndarray`.
 
+    Parameters
+    ----------
+    array : object
+        Array-like object (can be either `np.ndarray`, `torch.Tensor` or `ME.SparseTensor`)
 
+    Returns
+    -------
+    np.ndarray
+        Array cast to np.ndarray
     '''
     import MinkowskiEngine as ME
 
-    if isinstance(s, np.ndarray):
-        return s
-    if isinstance(s, torch.Tensor):
-        return s.cpu().detach().numpy()
-    elif isinstance(s, ME.SparseTensor):
-        return torch.cat([s.C.float(), s.F], dim=1).detach().cpu().numpy()
+    if isinstance(array, np.ndarray):
+        return array
+    if isinstance(array, torch.Tensor):
+        return array.cpu().detach().numpy()
+    elif isinstance(array, ME.SparseTensor):
+        return torch.cat([array.C.float(), array.F], dim=1).detach().cpu().numpy()
     else:
-        raise TypeError("Unknown return type %s" % type(s))
+        raise TypeError("Unknown return type %s" % type(array))
+
+
+def local_cdist(v1, v2):
+    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
+    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
+    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
 # Compute moving average

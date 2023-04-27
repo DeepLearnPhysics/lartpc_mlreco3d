@@ -5,6 +5,7 @@ import torch.nn as nn
 import MinkowskiEngine as ME
 import MinkowskiFunctional as MF
 
+from mlreco.utils import local_cdist
 from mlreco.utils.globals import *
 from mlreco.models.layers.common.blocks import ResNetBlock, SPP, ASPP
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
@@ -543,10 +544,9 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                     if len(scores_event.shape) == 0:
                         continue
 
-                    d_true = torch.cdist(
+                    d_true = local_cdist(
                         points_label,
-                        points_event[:, 1:4].float().to(device),
-                        compute_mode='donot_use_mm_for_euclid_dist')
+                        points_event[:, 1:4].float().to(device))
 
                     d_positives = (d_true < self.resolution * \
                                    2**(len(ppn_layers) - layer)).any(dim=0)
@@ -572,7 +572,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                         pixel_logits = ppn_points[batch_particle_index][:, 3:8]
                         pixel_pred = ppn_points[batch_particle_index][:, :3] + anchors
 
-                        d = torch.cdist(points_label, pixel_pred, compute_mode='donot_use_mm_for_euclid_dist')
+                        d = local_cdist(points_label, pixel_pred)
                         positives = (d < self.resolution).any(dim=0)
                         if (torch.sum(positives) < 1):
                             continue
@@ -593,7 +593,7 @@ class PPNLonelyLoss(torch.nn.modules.loss._Loss):
                             res['num_voxels'] += float(pixel_pred.shape[0]) / float(num_batches)
 
                         # Type Segmentation Loss
-                        # d = torch.cdist(points_label, pixel_pred, compute_mode='donot_use_mm_for_euclid_dist')
+                        # d = local_cdist(points_label, pixel_pred)
                         # positives = (d < self.resolution).any(dim=0)
                         distance_positives = d[:, positives]
                         event_types_label = particles[particles[:, 0] == b]\
