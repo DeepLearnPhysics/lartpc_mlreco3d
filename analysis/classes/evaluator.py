@@ -239,10 +239,6 @@ class FullChainEvaluator(FullChainPredictor):
         particles within a matched interaction pair can be considered
         for matching. 
         '''
-        for m in int_matches:
-            print('-------------------')
-            print(m[0])
-            print(m[1])
         matched_particles, match_counts = [], []
 
         for m in int_matches:
@@ -266,7 +262,6 @@ class FullChainEvaluator(FullChainPredictor):
                         matched_particles.append((p, None))
                         match_counts.append(-1)
                 for match_id in p.match:
-                    # print(ia1[match_id], match_id, p.match, p.id, p.size)
                     if type(p) is Particle:
                         matched_particles.append((ia1[match_id], p))
                     else:
@@ -346,7 +341,7 @@ class FullChainEvaluator(FullChainPredictor):
     
     def match_interactions(self, entry, mode='pred_to_true',
                            drop_nonprimary_particles=False,
-                           match_particles=True,
+                           match_particles=False,
                            return_counts=False,
                            matching_mode='optimal',
                            **kwargs):

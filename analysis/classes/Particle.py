@@ -90,12 +90,12 @@ class Particle:
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments = None
-        self._size = None
-        self._index = None
-        self._depositions = None
-        self._depositions_sum = None
-        self._pid_scores = None
-        self._primary_scores = None
+        self._index = np.array(index, dtype=np.int64)
+        self._size = len(self._index)
+        self._depositions = np.atleast_1d(depositions)
+        self._depositions_sum = np.sum(self._depositions)
+        self._pid_scores = pid_scores
+        self._primary_scores = primary_scores
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -105,21 +105,17 @@ class Particle:
         self.image_id       = int(image_id)
         self.volume_id      = int(volume_id)
         self.semantic_type  = int(semantic_type)
-
-        self.index          = index
         self.points         = points
-        self.depositions    = np.atleast_1d(depositions)
 
-        self._force_pid     = False
-        if pid > 0:
-            self._force_pid = True
-            self._pid = pid
-        self.pid_scores     = pid_scores
         if np.all(pid_scores < 0):
             self._pid = pid
-        self.primary_scores = primary_scores
+        else:
+            self._pid = int(np.argmax(pid_scores))
+
         if np.all(primary_scores < 0):
-            self.is_primary = is_primary
+            self._is_primary = is_primary
+        else:
+            self._is_primary = int(np.argmax(primary_scores))
 
         self.start_point    = start_point
         self.end_point      = end_point
@@ -134,6 +130,10 @@ class Particle:
         if not isinstance(self._match_counts, dict):
             raise ValueError(f"{type(self._match_counts)}")
         
+    @property
+    def is_primary(self):
+        return int(self._is_primary)
+
     @property
     def match(self):
         self._match = list(self._match_counts.keys())
@@ -247,8 +247,7 @@ class Particle:
         
         # Store the PID scores
         self._pid_scores = pid_scores
-        if not self._force_pid:
-            self._pid = int(np.argmax(pid_scores))
+        self._pid = int(np.argmax(pid_scores))
         
     @property
     def pid(self):

@@ -5,7 +5,6 @@ from collections import defaultdict, OrderedDict, Counter
 
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
-
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
 
@@ -56,7 +55,7 @@ def matrix_iou(particles_x, particles_y):
         for j, px in enumerate(particles_x):
             cap = np.intersect1d(py.index, px.index)
             cup = np.union1d(py.index, px.index)
-            overlap_matrix[i, j] = float(cap.shape[0] / cup.shape[0])
+            overlap_matrix[i, j] = float(cap.shape[0]) / float(cup.shape[0])
     return overlap_matrix
 
 
@@ -443,3 +442,21 @@ def group_particles_to_interactions_fn(particles : List[Particle],
         
 
     return list(interactions.values())
+
+
+def check_particle_matches(loaded_particles, clear=False):
+    match_dict = OrderedDict({})
+    for p in loaded_particles:
+        for i, m in enumerate(p.match):
+            match_dict[int(m)] = p.match_counts[i]
+        if clear:
+            p._match = []
+            p._match_counts = OrderedDict()
+
+    match_counts = np.array(list(match_dict.values()))
+    match = np.array(list(match_dict.keys())).astype(int)
+    perm = np.argsort(match_counts)[::-1]
+    match_counts = match_counts[perm]
+    match = match[perm]
+
+    return match, match_counts
