@@ -353,6 +353,7 @@ class ParticleBuilder(DataBuilder):
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
             pdg = PDG_TO_PID.get(lpart.pdg_code(), -1)
+            # print(pdg)
             is_primary = lpart.group_id() == lpart.parent_id()
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
             if np.count_nonzero(mask_nonghost) <= 0:

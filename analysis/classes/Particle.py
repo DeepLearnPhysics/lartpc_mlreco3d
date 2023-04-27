@@ -74,8 +74,6 @@ class Particle:
                  volume_id: int = -1,
                  image_id: int = -1, 
                  semantic_type: int = -1, 
-                 pid: int = -1,
-                 is_primary: int = -1,
                  index: np.ndarray = np.empty(0, dtype=np.int64), 
                  points: np.ndarray = np.empty(0, dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32), 
@@ -90,12 +88,12 @@ class Particle:
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments = None
-        self._index = np.array(index, dtype=np.int64)
-        self._size = len(self._index)
-        self._depositions = np.atleast_1d(depositions)
-        self._depositions_sum = np.sum(self._depositions)
-        self._pid_scores = pid_scores
-        self._primary_scores = primary_scores
+        self._index = None
+        self._depositions = None
+        self._depositions_sum = -1
+        self._pid = -1
+        self._size = -1
+        self._is_primary = -1
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -107,15 +105,20 @@ class Particle:
         self.semantic_type  = int(semantic_type)
         self.points         = points
 
-        if np.all(pid_scores < 0):
-            self._pid = pid
-        else:
-            self._pid = int(np.argmax(pid_scores))
+        self.index = index
+        self.depositions = depositions
+        self.pid_scores = pid_scores
+        self.primary_scores = primary_scores
 
-        if np.all(primary_scores < 0):
-            self._is_primary = is_primary
-        else:
-            self._is_primary = int(np.argmax(primary_scores))
+        # if np.all(pid_scores < 0):
+        #     self._pid = pid
+        # else:
+        #     self._pid = int(np.argmax(pid_scores))
+
+        # if np.all(primary_scores < 0):
+        #     self._is_primary = is_primary
+        # else:
+        #     self._is_primary = int(np.argmax(primary_scores))
 
         self.start_point    = start_point
         self.end_point      = end_point
@@ -205,7 +208,7 @@ class Particle:
     @index.setter
     def index(self, index):
         # Count the number of voxels
-        self._index = index
+        self._index = np.array(index, dtype=np.int64)
         self._size = len(index)
 
     @property
@@ -214,7 +217,7 @@ class Particle:
         Total amount of charge/energy deposited. This attribute has no setter,
         as it can only be set by providing a set of depositions.
         '''
-        return self._depositions_sum
+        return float(self._depositions_sum)
 
     @property
     def depositions(self):
@@ -240,14 +243,13 @@ class Particle:
 
     @pid_scores.setter
     def pid_scores(self, pid_scores):
+        self._pid_scores = pid_scores
         # If no PID scores are providen, the PID is unknown
         if pid_scores[0] < 0.:
-            self._pid_scores = pid_scores
             self._pid = -1
-        
+        else:
         # Store the PID scores
-        self._pid_scores = pid_scores
-        self._pid = int(np.argmax(pid_scores))
+            self._pid = int(np.argmax(pid_scores))
         
     @property
     def pid(self):
@@ -266,8 +268,8 @@ class Particle:
         # If no primary scores are given, the primary status is unknown
         if primary_scores[0] < 0.:
             self._primary_scores = primary_scores
-            self.is_primary = -1
+            self._is_primary = -1
         
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
-        self.is_primary = np.argmax(primary_scores)
+        self._is_primary = np.argmax(primary_scores)

@@ -2,7 +2,7 @@ import numpy as np
 
 from typing import Counter, List, Union
 from . import Particle
-
+from mlreco.utils.globals import PDG_TO_PID
 
 class TruthParticle(Particle):
     '''
@@ -36,6 +36,8 @@ class TruthParticle(Particle):
     def __init__(self, 
                  *args, 
                  depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 pid: int = -1,
+                 is_primary: int = -1,
                  truth_index: np.ndarray = np.empty(0, dtype=np.int64), 
                  truth_points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
@@ -43,7 +45,11 @@ class TruthParticle(Particle):
                  momentum: np.ndarray = -np.ones(3, dtype=np.float32),
                  particle_asis: object = None, 
                  **kwargs):
+
         super(TruthParticle, self).__init__(*args, **kwargs)
+
+        self._pid = pid
+        self._is_primary = is_primary
 
         # Initialize attributes
         self.depositions_MeV        = np.atleast_1d(depositions_MeV)
@@ -57,6 +63,7 @@ class TruthParticle(Particle):
             self.end_position      = particle_asis.end_position()
 
         self.asis = particle_asis
+        assert PDG_TO_PID[int(self.asis.pdg_code())] == self.pid
 
         self.start_point = np.array([getattr(particle_asis.first_step(), a)() \
             for a in ['x', 'y', 'z']], dtype=np.float32)
@@ -68,6 +75,15 @@ class TruthParticle(Particle):
             for a in ['x', 'y', 'z']], dtype=np.float32)
         if np.linalg.norm(self.momentum) > 0.:
             self.start_dir = self.momentum/np.linalg.norm(self.momentum)
+
+
+    @property
+    def pid(self):
+        return int(self._pid)
+    
+    @property
+    def is_primary(self):
+        return self._is_primary
 
     def __repr__(self):
         msg = super(TruthParticle, self).__repr__()

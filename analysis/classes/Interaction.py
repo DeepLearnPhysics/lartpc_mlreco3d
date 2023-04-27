@@ -233,7 +233,7 @@ class Interaction:
         if self._particles is None: return
         for p in sorted(self._particles.values(), key=lambda x: x.is_primary, reverse=True):
             pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
-                primary_str[p.is_primary], p.id, PID_LABELS[p.pid], p.size, str(p.match))
+                primary_str[p.is_primary], p.id, p.pid, p.size, str(p.match))
             self._particles_summary += pmsg
         return self._particles_summary
 
