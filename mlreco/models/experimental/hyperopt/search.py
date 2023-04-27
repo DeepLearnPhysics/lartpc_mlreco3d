@@ -206,10 +206,8 @@ class HyperparameterSearch(ABC):
 
             data_blob, result_blob = trainer.train_step(self.train_io_iter)
 
-            acc   = utils.round_decimals(
-                np.mean(result_blob.get('accuracy',-1)), 4)
-            loss  = utils.round_decimals(
-                np.mean(result_blob.get('loss',    -1)), 4)
+            acc   = round(np.mean(result_blob.get('accuracy',-1)), 4)
+            loss  = round(np.mean(result_blob.get('loss',    -1)), 4)
 
             end = time.time()
             tabs = end-start
@@ -217,8 +215,7 @@ class HyperparameterSearch(ABC):
             epoch = iteration / float(len(self.train_io))
 
             if torch.cuda.is_available():
-                mem = utils.round_decimals(
-                    torch.cuda.max_memory_allocated()/1.e9, 3)
+                mem = round(torch.cuda.max_memory_allocated()/1.e9, 3)
 
             tstamp_iteration = datetime.datetime.fromtimestamp(
                 time.time()).strftime('%Y-%m-%d %H:%M:%S')

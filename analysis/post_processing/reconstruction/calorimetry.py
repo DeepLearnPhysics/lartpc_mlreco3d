@@ -49,7 +49,8 @@ def calorimetric_energy(data_dict,
                  result_capture=['particle_clusts', 
                                  'particle_seg', 
                                  'input_rescaled', 
-                                 'particle_node_pred_type'])
+                                 'particle_node_pred_type',
+                                 'particles'])
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, include_pids=[2, 3, 4], table_path=''):
     """Compute track energy by the CSDA (continuous slowing-down approximation)
@@ -104,6 +105,7 @@ def range_based_track_energy(data_dict, result_dict,
             length = compute_track_length(points, bin_size=bin_size)
             particle_length[i] = length
             particle_energy[i] = splines[pred_ptypes[i]](length * PIXELS_TO_CM)
+            result_dict['particles'][i].momentum_range = particle_energy[i]
             
     update_dict['particle_length'] = particle_length
     update_dict['particle_range_based_energy'] = particle_energy

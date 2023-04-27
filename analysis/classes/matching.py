@@ -5,7 +5,6 @@ from collections import defaultdict, OrderedDict, Counter
 
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
-
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
 
@@ -28,8 +27,8 @@ def matrix_counts(particles_x, particles_y):
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.int64)
     for i, py in enumerate(particles_y):
         for j, px in enumerate(particles_x):
-            overlap_matrix[i, j] = len(np.intersect1d(py.voxel_indices,
-                                                      px.voxel_indices))
+            overlap_matrix[i, j] = len(np.intersect1d(py.index,
+                                                      px.index))
     return overlap_matrix
 
 
@@ -54,9 +53,9 @@ def matrix_iou(particles_x, particles_y):
     overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.float32)
     for i, py in enumerate(particles_y):
         for j, px in enumerate(particles_x):
-            cap = np.intersect1d(py.voxel_indices, px.voxel_indices)
-            cup = np.union1d(py.voxel_indices, px.voxel_indices)
-            overlap_matrix[i, j] = float(cap.shape[0] / cup.shape[0])
+            cap = np.intersect1d(py.index, px.index)
+            cup = np.union1d(py.index, px.index)
+            overlap_matrix[i, j] = float(cap.shape[0]) / float(cup.shape[0])
     return overlap_matrix
 
 
@@ -91,13 +90,13 @@ def matrix_chamfer(particles_x, particles_y, mode='default'):
                 dist = cdist(px.points, py.points)
             elif mode == 'true_nonghost':
                 if type(px) == TruthParticle and type(py) == Particle:
-                    dist = cdist(px.coords_noghost, py.points)
+                    dist = cdist(px.truth_points, py.points)
                 elif type(px) == Particle and type(py) == TruthParticle:
-                    dist = cdist(px.points, py.coords_noghost)
+                    dist = cdist(px.points, py.truth_points)
                 elif type(px) == Particle and type(py) == Particle:
                     dist = cdist(px.points, py.points)
                 else:
-                    dist = cdist(px.coords_noghost, py.coords_noghost)
+                    dist = cdist(px.truth_points, py.truth_points)
             else:
                 raise ValueError('Particle overlap computation mode {} is not implemented!'.format(mode))
             loss_x = np.min(dist, axis=0)
@@ -198,15 +197,15 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
             matched_truth = None
         else:
             matched_truth = particles_y[select_idx]
-            px.match.append(matched_truth.id)
+            # px._match.append(matched_truth.id)
             px._match_counts[matched_truth.id] = intersections[j]
-            matched_truth.match.append(px.id)
+            # matched_truth._match.append(px.id)
             matched_truth._match_counts[px.id] = intersections[j]
         matches.append((px, matched_truth))
 
-    for p in particles_y:
-        p.match = sorted(p.match, key=lambda x: p._match_counts[x],
-                                  reverse=True)
+    # for p in particles_y:
+    #     p._match = sorted(list(p._match_counts.keys()), key=lambda x: p._match_counts[x],
+    #                               reverse=True)
 
     return matches, intersections
 
@@ -216,14 +215,14 @@ def match_particles_optimal(particles_from : Union[List[Particle], List[TruthPar
                             min_overlap=0, 
                             num_classes=5, 
                             verbose=False, 
-                            overlap_mode='iou',
-                            use_true_nonghost_voxels=False):
+                            overlap_mode='iou'):
     '''
     Match particles so that the final resulting sum of the overlap matrix
     is optimal. 
 
     The number of matches will be equal to length of the longer list.
     '''
+    
     if len(particles_from) <= len(particles_to):
         particles_x, particles_y = particles_from, particles_to
     else:
@@ -263,8 +262,8 @@ def match_particles_optimal(particles_from : Union[List[Particle], List[TruthPar
         else:
             overlap = overlap_matrix[i, j]
             intersections.append(overlap)
-            particles_y[j].match.append(particles_x[i].id)
-            particles_x[i].match.append(particles_y[j].id)
+            # particles_y[j]._match.append(particles_x[i].id)
+            # particles_x[i]._match.append(particles_y[j].id)
             particles_y[j]._match_counts[particles_x[i].id] = overlap
             particles_x[i]._match_counts[particles_y[j].id] = overlap
             match = (particles_x[i], particles_y[j])
@@ -300,6 +299,7 @@ def match_interactions_fn(ints_from : List[Interaction],
         overlap_matrix = matrix_iou(ints_x, ints_y)
     else:
         raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
+    
     idx = overlap_matrix.argmax(axis=0)
     intersections = overlap_matrix.max(axis=0)
 
@@ -312,16 +312,17 @@ def match_interactions_fn(ints_from : List[Interaction],
             matched_truth = None
         else:
             matched_truth = ints_y[select_idx]
-            interaction.match.append(matched_truth.id)
+            # interaction._match.append(matched_truth.id)
             interaction._match_counts[matched_truth.id] = intersections[j]
-            matched_truth.match.append(interaction.id)
+            # matched_truth._match.append(interaction.id)
             matched_truth._match_counts[interaction.id] = intersections[j]
-        matches.append((interaction, matched_truth))
+            match = (interaction, matched_truth)
+            matches.append(match)
 
-    for interaction in ints_y:
-        interaction.match = sorted(interaction.match,
-                                   key=lambda x: interaction._match_counts[x],
-                                   reverse=True)
+        # if (type(match[0]) is Interaction) or (type(match[1]) is TruthInteraction):
+        #     p1, p2 = match[1], match[0]
+        #     match = (p1, p2)
+        # matches.append(match)
 
     return matches, intersections
 
@@ -363,8 +364,8 @@ def match_interactions_optimal(ints_from : List[Interaction],
         else:
             overlap = overlap_matrix[i, j]
             intersections.append(overlap)
-            ints_y[j].match.append(ints_x[i].id)
-            ints_x[i].match.append(ints_y[j].id)
+            # ints_y[j]._match.append(ints_x[i].id)
+            # ints_x[i]._match.append(ints_y[j].id)
             ints_y[j]._match_counts[ints_x[i].id] = overlap
             ints_x[i]._match_counts[ints_y[j].id] = overlap
             match = (ints_x[i], ints_y[j])
@@ -405,31 +406,57 @@ def group_particles_to_interactions_fn(particles : List[Particle],
     interactions = defaultdict(list)
     for p in particles:
         interactions[p.interaction_id].append(p)
-
-    nu_id = -1
+        
     for int_id, particles in interactions.items():
-        if get_nu_id:
-            nu_id = np.unique([p.nu_id for p in particles])
-            if nu_id.shape[0] > 1:
-                if verbose:
-                    print("Interaction {} has non-unique particle "\
-                        "nu_ids: {}".format(int_id, str(nu_id)))
-                nu_id = nu_id[0]
-            else:
-                nu_id = nu_id[0]
-
-        counter = Counter([p.volume for p in particles if p.volume != -1])
-        if not bool(counter):
-            volume_id = -1
-        else:
-            volume_id = counter.most_common(1)[0][0]
-        particles_dict = OrderedDict({p.id : p for p in particles})
         if mode == 'pred':
-            interactions[int_id] = Interaction(int_id, particles_dict, nu_id=nu_id, volume=volume_id)
+            interactions[int_id] = Interaction.from_particles(particles)
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction(int_id, particles_dict, nu_id=nu_id, volume=volume_id)
+            interactions[int_id] = TruthInteraction.from_particles(particles)
         else:
-            raise ValueError
+            raise ValueError(f"Unknown aggregation mode {mode}.")
+
+    # nu_id = -1
+    # for int_id, particles in interactions.items():
+    #     if get_nu_id:
+    #         nu_id = np.unique([p.nu_id for p in particles])
+    #         if nu_id.shape[0] > 1:
+    #             if verbose:
+    #                 print("Interaction {} has non-unique particle "\
+    #                     "nu_ids: {}".format(int_id, str(nu_id)))
+    #             nu_id = nu_id[0]
+    #         else:
+    #             nu_id = nu_id[0]
+
+    #     counter = Counter([p.volume_id for p in particles if p.volume_id != -1])
+    #     if not bool(counter):
+    #         volume_id = -1
+    #     else:
+    #         volume_id = counter.most_common(1)[0][0]
+    #     particles_dict = OrderedDict({p.id : p for p in particles})
+    #     if mode == 'pred':
+    #         interactions[int_id] = Interaction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+    #     elif mode == 'truth':
+    #         interactions[int_id] = TruthInteraction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
+    #     else:
+    #         raise ValueError
         
 
     return list(interactions.values())
+
+
+def check_particle_matches(loaded_particles, clear=False):
+    match_dict = OrderedDict({})
+    for p in loaded_particles:
+        for i, m in enumerate(p.match):
+            match_dict[int(m)] = p.match_counts[i]
+        if clear:
+            p._match = []
+            p._match_counts = OrderedDict()
+
+    match_counts = np.array(list(match_dict.values()))
+    match = np.array(list(match_dict.keys())).astype(int)
+    perm = np.argsort(match_counts)[::-1]
+    match_counts = match_counts[perm]
+    match = match[perm]
+
+    return match, match_counts

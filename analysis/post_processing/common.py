@@ -11,7 +11,7 @@ class PostProcessor:
     """
     def __init__(self, data, result, debug=True, profile=False):
         self._funcs = defaultdict(list)
-        self._batch_funcs = defaultdict(list)
+        # self._batch_funcs = defaultdict(list)
         self._num_batches = len(data['index'])
         self.data = data
         self.result = result
@@ -44,10 +44,7 @@ class PostProcessor:
         pf._result_capture_optional  = result_capture_optional
         if profile:
             pf = self.profile(pf)
-        if run_on_batch:
-            self._batch_funcs[priority].append(pf)
-        else:
-            self._funcs[priority].append(pf)
+        self._funcs[priority].append(pf)
         print(f"Registered post-processor {f.__name__}")
 
     def process_event(self, image_id, f_list):
@@ -85,24 +82,6 @@ class PostProcessor:
 
         return image_dict
     
-    def process_batch(self):
-        out_dict = defaultdict(list)
-        sorted_processors = sorted([x for x in self._batch_funcs.items()], reverse=True)
-        for priority, f_list in sorted_processors:
-            for f in f_list:
-
-                data_batch, result_batch = {}, {}
-                for data_key in f._data_capture:
-                    data_batch[data_key] = self.data[data_key]
-                for result_key in f._result_capture:
-                    result_batch[result_key] = self.result[result_key]
-                for result_key in f._result_capture_optional:
-                    if result_key in self.result:
-                        result_batch[result_key] = self.result[result_key]
-                update_dict = f(data_batch, result_batch)
-                out_dict.update(update_dict)
-        return out_dict
-    
     def process_and_modify(self):
         """
         
@@ -123,22 +102,11 @@ class PostProcessor:
                 assert len(val) == self._num_batches
                 if key in self.result:
                     msg = "Post processing script output key {} "\
-                    "is already in result_dict, you may want"\
-                    "to rename it.".format(key)
-                    raise RuntimeError(msg)
+                    "is already in result_dict, it will be overwritten "\
+                    "unless you rename it.".format(key)
+                    # raise RuntimeError(msg)
                 else:
                     self.result[key] = val
-        batch_fn_output = self.process_batch()
-        # Check batch processed output length agrees with batch size
-        for key, val in batch_fn_output.items():
-            assert len(val) == self._num_batches
-            if key in self.result:
-                msg = 'Output {} in post-processing function {},'\
-                    ' caused a dictionary key conflict. You may '\
-                    'want to change the output dict key for that function.'
-                raise ValueError(msg)
-            else:
-                self.result[key] = val
 
 
 def extent(voxels):

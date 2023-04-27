@@ -9,7 +9,7 @@ class HDF5Reader:
 
     More documentation to come.
     '''
-    
+
     def __init__(self, file_keys, entry_list=[], skip_entry_list=[], to_larcv=False):
         '''
         Load up the HDF5 file.
@@ -32,22 +32,30 @@ class HDF5Reader:
         for file_key in file_keys:
             file_paths = glob.glob(file_key)
             assert len(file_paths), f'File key {file_key} yielded no compatible path'
-            self.file_paths.extend(sorted(file_paths))
+            self.file_paths.extend(file_paths)
+        self.file_paths = sorted(self.file_paths)
 
         # Loop over the input files, build a map from index to file ID
-        self.num_entries = 0
-        self.file_index  = []
+        self.num_entries  = 0
+        self.file_index   = []
+        self.split_groups = None
         for i, path in enumerate(self.file_paths):
             with h5py.File(path, 'r') as file:
+                # Check that there are events in the file and the storage mode
                 assert 'events' in file, 'File does not contain an event tree'
+                split_groups = 'data' in file and 'result' in file
+                assert self.split_groups is None or self.split_groups == split_groups,\
+                        'Cannot load files with different storing schemes'
+                self.split_groups = split_groups
+
                 self.num_entries += len(file['events'])
                 self.file_index.append(i*np.ones(len(file['events']), dtype=np.int32))
+
                 print('Registered', path)
         self.file_index = np.concatenate(self.file_index)
 
-        # Build an entry list to access
-        self.entry_list = self.get_entry_list(entry_list, skip_entry_list)
-        self.file_index = self.file_index[self.entry_list]
+        # Build an entry index to access, modify file index accordingly
+        self.entry_index = self.get_entry_list(entry_list, skip_entry_list)
 
         # Set whether or not to initialize LArCV objects as such
         self.to_larcv = to_larcv
@@ -100,8 +108,8 @@ class HDF5Reader:
             Ditionary of result data products corresponding to one event
         '''
         # Get the appropriate entry index
-        assert idx < len(self.entry_list)
-        entry_idx = self.entry_list[idx]
+        assert idx < len(self.entry_index)
+        entry_idx = self.entry_index[idx]
         file_idx  = self.file_index[idx]
 
         # Use the events tree to find out what needs to be loaded
@@ -111,7 +119,10 @@ class HDF5Reader:
             for key in event.dtype.names:
                 self.load_key(file, event, data_blob, result_blob, key, nested)
 
-        return data_blob, result_blob
+        if self.split_groups:
+            return data_blob, result_blob
+        else:
+            return dict(data_blob, **result_blob)
 
     def get_entry_list(self, entry_list, skip_entry_list):
         '''
@@ -144,6 +155,7 @@ class HDF5Reader:
 
         if entry_list:
             entry_index = entry_index[entry_list]
+            self.file_index = self.file_index[entry_list]
 
         assert len(entry_index), 'Must at least have one entry to load'
         return entry_index
@@ -169,9 +181,12 @@ class HDF5Reader:
         '''
         # The event-level information is a region reference: fetch it
         region_ref = event[key]
-        cat = 'data' if key in file['data'] else 'result'
-        blob = data_blob if cat == 'data' else result_blob
-        group = file[cat]
+        group = file
+        blob  = result_blob
+        if self.split_groups:
+            cat   = 'data' if key in file['data'] else 'result'
+            blob  = data_blob if cat == 'data' else result_blob
+            group = file[cat]
         if isinstance(group[key], h5py.Dataset):
             if not group[key].dtype.names:
                 # If the reference points at a simple dataset, return
@@ -182,7 +197,7 @@ class HDF5Reader:
                 # If the dataset has multiple attributes, it contains an object
                 array = group[key][region_ref]
                 names = array.dtype.names
-                if self.to_larcv:
+                if self.to_larcv and ('larcv' not in group[key].attrs or group[key].attrs['larcv']):
                     blob[key] = self.make_larcv_objects(array, names)
                 else:
                     blob[key] = []
@@ -192,7 +207,8 @@ class HDF5Reader:
             # If the reference points at a group, unpack
             el_refs = group[key]['index'][region_ref].flatten()
             if len(group[key]['index'].shape) == 1:
-                ret = [group[key]['elements'][r] for r in el_refs]
+                ret = np.empty(len(el_refs), dtype=np.object)
+                ret[:] = [group[key]['elements'][r] for r in el_refs]
             else:
                 ret = [group[key][f'element_{i}'][r] for i, r in enumerate(el_refs)]
             blob[key] = ret
@@ -210,7 +226,7 @@ class HDF5Reader:
         ----------
         array : list
             List of dictionary of larcv object attributes
-        names: 
+        names:
             List of class attribute names
 
         Returns

@@ -97,12 +97,12 @@ manager.build_representation(data, result) # This will save 'Particle' and 'Inte
 ```python
 from analysis.classes.builders import ParticleBuilder
 particle_builder         = ParticleBuilder()
-result['Particles']      = particle_builder.build(data, result, mode='reco')
-result['TruthParticles'] = particle_builder.build(data, result, mode='truth')
+result['particles']      = particle_builder.build(data, result, mode='reco')
+result['truth_particles'] = particle_builder.build(data, result, mode='truth')
 ```
 We can try printing out the third particle in the first image:
 ```python
-print(result['Particles'][0][3])
+print(result['particles'][0][3])
 -----------------------------
 Particle( Image ID=0   | Particle ID=3   | Semantic_type: Shower Fragment | PID: Electron | Primary: 1  | Interaction ID: 3  | Size: 302   | Volume: 0  )
 ```
@@ -112,12 +112,12 @@ We may further organize information by aggregating particles the same interactio
 ```python
 from analysis.classes.builders import InteractionBuilder
 interaction_builder         = InteractionBuilder()
-result['Interactions']      = interaction_builder.build(data, result, mode='reco')
-result['TruthInteractions'] = interaction_builder.build(data, result, mode='truth')
+result['interactions']      = interaction_builder.build(data, result, mode='reco')
+result['truth_interactions'] = interaction_builder.build(data, result, mode='truth')
 ```
 Since `Interactions` are built using `Particle` instances, one has to build `Particles` first to build `Interactions`. 
 ```python
-for ia in result['Interactions'][0]:
+for ia in result['interactions'][0]:
     print(ia)
 -----------------------------
 Interaction 4, Vertex: x=-1.00, y=-1.00, z=-1.00

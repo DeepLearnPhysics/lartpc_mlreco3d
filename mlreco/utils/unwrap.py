@@ -61,7 +61,8 @@ class Unwrapper:
     class Rule:
         '''
         Simple dataclass which stores the relevant
-        rule attributes with human-readable names.
+        unwrapping rule attributes for a speicific
+        data product human-readable names.
 
         Attributes
         ----------
@@ -149,7 +150,7 @@ class Unwrapper:
             # For an index tensor, only need to record the batch offsets within the wrapped tensor
             elif self.rules[key].method == 'index_tensor':
                 ref_key = self.rules[key].ref_key
-                assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}' 
+                assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
                 if not self.rules[key].done and ref_key not in self.masks:
                     self.masks[ref_key] = [self._batch_masks(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
                 if ref_key not in self.offsets:
@@ -349,6 +350,7 @@ class Unwrapper:
         else:
             raise TypeError('Unexpected data type', type(data[0]))
 
+
 def prefix_unwrapper_rules(rules, prefix):
     '''
     Modifies the default rules of a module to account for
@@ -358,8 +360,9 @@ def prefix_unwrapper_rules(rules, prefix):
     ----------
     rules : dict
         Dictionary which contains a set of unwrapping rules for each
-        output key of the reconstruction chain. If there is no rule
-        associated with a key, the list is concatenated.
+        output key of a given module in the reconstruction chain.
+    prefix : str
+        Prefix to add in front of all output names
 
     Returns
     -------

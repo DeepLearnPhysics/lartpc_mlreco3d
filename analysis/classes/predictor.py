@@ -43,18 +43,20 @@ class FullChainPredictor:
         self.interaction_builder = InteractionBuilder()
         self.fragment_builder    = FragmentBuilder()
 
-        build_reps = predictor_cfg.get('build_reps', ['Particles', 'Interactions'])
-        self.builders = {}
+        build_reps = predictor_cfg.get('build_reps', ['particles', 'interactions'])
+        self.builders = OrderedDict()
         for key in build_reps:
-            if key == 'Particles':
+            if key == 'particles':
                 self.builders[key] = ParticleBuilder()
-            if key == 'Interactions':
+            if key == 'interactions':
                 self.builders[key] = InteractionBuilder()
             if key == 'Fragments':
                 self.builders[key] = FragmentBuilder()
-            
 
-        self.build_representations()
+        # Data Structure Scopes
+        self.scope = predictor_cfg.get('scope', ['particles', 'interactions'])
+
+        # self.build_representations()
 
         self.num_images = len(self.data_blob['index'])
         self.index = self.data_blob['index']
@@ -95,7 +97,7 @@ class FullChainPredictor:
 
     def build_representations(self):
         for key in self.builders:
-            if key not in self.result:
+            if key not in self.result and key in self.scope:
                 self.result[key] = self.builders[key].build(self.data_blob, 
                                                             self.result, 
                                                             mode='reco')
@@ -428,7 +430,7 @@ class FullChainPredictor:
             List of <Particle> instances (see Particle class definition).
         '''
         self._check_volume(volume)
-        out = self.result['Particles'][entry]
+        out = self.result['particles'][entry]
         out = self._decorate_particles(entry, out,
                                        only_primaries=only_primaries,
                                        volume=volume)
@@ -492,7 +494,7 @@ class FullChainPredictor:
         Returns:
             - out: List of <Interaction> instances (see particle.Interaction).
         '''
-        out = self.result['Interactions'][entry]
+        out = self.result['interactions'][entry]
         return out
 
 

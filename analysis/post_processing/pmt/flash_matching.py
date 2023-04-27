@@ -1,23 +1,13 @@
 import numpy as np
-import yaml
-from pprint import pprint
 from collections import defaultdict
-
-from mlreco.utils.gnn.cluster import get_cluster_directions
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from mlreco.main_funcs import process_config
-from . import FlashMatcherInterface
-
+from .filters import filter_opflashes
 
 @post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
-                 result_capture=['Interactions'])
+                 result_capture=['interactions'])
 def run_flash_matching(data_dict, result_dict, 
-                       config_path=None,
-                       fmatch_config=None, 
-                       reflash_merging_window=None,
-                       volume_boundaries=None,
-                       ADC_to_MeV=1.,
+                       fm=None,
                        opflash_keys=[]):
     """
     Post processor for running flash matching using OpT0Finder.
@@ -49,82 +39,51 @@ def run_flash_matching(data_dict, result_dict,
         interaction.fmatch_total_pE: float
         interaction.fmatch_id: int
     """
+    
     opflashes = {}
+    assert len(opflash_keys) > 0
     for key in opflash_keys:
         opflashes[key] = data_dict[key]
 
-    ADC_to_MeV = ADC_TO_MEV
-    
-    if config_path is None:
-        raise ValueError("You need to give the path to your full chain config.")
-    if fmatch_config is None:
-        raise ValueError("You need a flash matching config to run flash matching.")
-    if volume_boundaries is None:
-        raise ValueError("You need to set volume boundaries to run flash matching.")
-    
-    config = yaml.safe_load(open(config_path, 'r'))
-    process_config(config, verbose=False)
-
-    fm = FlashMatcherInterface(config, fmatch_config, 
-                               boundaries=volume_boundaries,
-                               opflash_keys=opflash_keys, 
-                               reflash_merging_window=reflash_merging_window)
-    if isinstance(data_dict['meta'][0], float):
-        fm.initialize_flash_manager(data_dict['meta'])
-    elif isinstance(data_dict['meta'][0], list):
-        fm.initialize_flash_manager(data_dict['meta'][0])
-    else:
-        print(type(data_dict['meta'][0]))
-        raise AssertionError
-
     update_dict = {}
-
-    flash_matches_cryoE = []
-    flash_matches_cryoW = []
     
-    for entry, image_id in enumerate(data_dict['index']):
-        interactions = result_dict['Interactions'][entry]
-
-        fmatches_E = fm.get_flash_matches(entry, 
-                                          interactions,
-                                          opflashes,
-                                          use_true_tpc_objects=False,
-                                          volume=0,
-                                          use_depositions_MeV=False,
-                                          ADC_to_MeV=ADC_to_MeV,
-                                          restrict_interactions=[])
-        fmatches_W = fm.get_flash_matches(entry, 
-                                          interactions,
-                                          opflashes,
-                                          use_true_tpc_objects=False,
-                                          volume=1,
-                                          use_depositions_MeV=False,
-                                          ADC_to_MeV=ADC_to_MeV,
-                                          restrict_interactions=[])
-        flash_matches_cryoE.append(fmatches_E)
-        flash_matches_cryoW.append(fmatches_W)
+    interactions = result_dict['interactions']
+    entry        = data_dict['index']
+    
+    # opflashes = filter_opflashes(opflashes)
+    
+    fmatches_E = fm.get_flash_matches(int(entry), 
+                                      interactions,
+                                      opflashes,
+                                      volume=0,
+                                      restrict_interactions=[])
+    fmatches_W = fm.get_flash_matches(int(entry), 
+                                      interactions,
+                                      opflashes,
+                                      volume=1,
+                                      restrict_interactions=[])
 
     update_dict = defaultdict(list)
 
-    for tuple_list in flash_matches_cryoE:
-        flash_dict_E = {}
-        for ia, flash, match in tuple_list:
-            flash_dict_E[ia.id] = (flash, match)
-            ia.fmatched = True
-            ia.fmatch_time = flash.time()
-            ia.fmatch_total_pE = flash.TotalPE()
-            ia.fmatch_id = flash.id()
-        update_dict['flash_matches_cryoE'].append(flash_dict_E)
+    flash_dict_E = {}
+    for ia, flash, match in fmatches_E:
+        flash_dict_E[ia.id] = (flash, match)
+        ia.fmatched = True
+        ia.flash_time = float(flash.time())
+        ia.flash_total_pE = float(flash.TotalPE())
+        ia.flash_id = int(flash.id())
+        update_dict['interactions'].append(ia)
+    update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
-    for tuple_list in flash_matches_cryoW:
-        flash_dict_W = {}
-        for ia, flash, match in tuple_list:
-            flash_dict_W[ia.id] = (flash, match)
-            ia.fmatched = True
-            ia.fmatch_time = flash.time()
-            ia.fmatch_total_pE = flash.TotalPE()
-            ia.fmatch_id = flash.id()
-        update_dict['flash_matches_cryoW'].append(flash_dict_W)
+    flash_dict_W = {}
+    for ia, flash, match in fmatches_W:
+        flash_dict_W[ia.id] = (flash, match)
+        ia.fmatched = True
+        ia.flash_time = float(flash.time())
+        ia.flash_total_pE = float(flash.TotalPE())
+        ia.flash_id = int(flash.id())
+        update_dict['interactions'].append(ia)
+    update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
     assert len(update_dict['flash_matches_cryoE'])\
            == len(update_dict['flash_matches_cryoW'])

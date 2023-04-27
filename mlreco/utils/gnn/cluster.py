@@ -5,10 +5,10 @@ import torch
 from typing import List
 
 import mlreco.utils.numba_local as nbl
-from mlreco.utils.wrapper import numba_wrapper
+from mlreco.utils.decorators import numbafy
 
 
-@numba_wrapper(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
 def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -63,7 +63,7 @@ def _form_clusters(data: nb.float64[:,:],
     return clusts
 
 
-@numba_wrapper(cast_args=['data'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
 def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     """
     Function that returns a list of of arrays of voxel IDs
@@ -91,7 +91,7 @@ def _reform_clusters(data: nb.float64[:,:],
     return clusts
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_batch(data, clusts, batch_index=0):
     """
     Function that returns the batch ID of each cluster.
@@ -120,7 +120,7 @@ def _get_cluster_batch(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_label(data, clusts, column=5):
     """
     Function that returns the majority label of each cluster,
@@ -147,7 +147,7 @@ def _get_cluster_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_primary_label(data, clusts, column, cluster_column=5, group_column=6):
     """
     Function that returns the majority label of the primary component
@@ -187,7 +187,7 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_momenta_label(data, clusts, column=8):
     """
     Function that returns the momentum unit vector of each cluster
@@ -211,7 +211,7 @@ def _get_momenta_label(data: nb.float64[:,:],
     return labels
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
 def get_cluster_centers(data, clusts, coords_index=[1, 4]):
     """
     Function that returns the coordinate of the centroid
@@ -235,7 +235,7 @@ def _get_cluster_centers(data: nb.float64[:,:],
     return centers
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'])
+@numbafy(cast_args=['data'], list_args=['clusts'])
 def get_cluster_sizes(data, clusts):
     """
     Function that returns the sizes of
@@ -258,7 +258,7 @@ def _get_cluster_sizes(data: nb.float64[:,:],
     return sizes
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_energies(data, clusts):
     """
     Function that returns the energies deposited by
@@ -281,7 +281,7 @@ def _get_cluster_energies(data: nb.float64[:,:],
     return energies
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
                          clusts: nb.types.List(nb.int64[:]),
                          batch_col: nb.int64 = 0,
@@ -353,7 +353,7 @@ def _get_cluster_features(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     """
     Function that returns the an array of 3 additional features for
@@ -389,7 +389,7 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
     return feats
 
 
-@numba_wrapper(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
 def get_cluster_points_label(data, particles, clusts, random_order=True, batch_col=0, coords_index=[1, 4]):
     """
     Function that gets label points for each cluster.
@@ -440,7 +440,7 @@ def _get_cluster_points_label(data: nb.float64[:,:],
     return points
 
 
-@numba_wrapper(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_start_points(data, clusts):
     """
     Function that estimates the start point of clusters
@@ -464,7 +464,7 @@ def _get_cluster_start_points(data: nb.float64[:,:],
     return points
 
 
-@numba_wrapper(cast_args=['data','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     """
     Finds the orientation of all the clusters.
@@ -496,7 +496,7 @@ def _get_cluster_directions(data: nb.float64[:,:],
     return dirs
 
 
-@numba_wrapper(cast_args=['data','values','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+@numbafy(cast_args=['data','values','starts'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     """
     Finds the start dEdxs of all the clusters.

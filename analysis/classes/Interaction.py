@@ -1,9 +1,12 @@
+import sys
 import numpy as np
-import pandas as pd
 
 from typing import Counter, List, Union
-from collections import OrderedDict, Counter
+from collections import OrderedDict, Counter, defaultdict
+from functools import cached_property
+
 from . import Particle
+from mlreco.utils.globals import PID_LABELS
 
 
 class Interaction:
@@ -13,131 +16,257 @@ class Interaction:
 
     Attributes
     ----------
-    id: int
+    id : int, default -1
         Unique ID (Interaction ID) of this interaction.
-    particles: List[Particle]
-        List of <Particle> objects that belong to this Interaction.
-    vertex: (1,3) np.array (Optional)
+    particle_ids : np.ndarray, default np.array([])
+        List of Particle IDs that make up this interaction
+    num_particles: int, default 0
+        Total number of particles in this interaction
+    num_primaries: int, default 0
+        Total number of primary particles in this interaction
+    nu_id : int, default -1
+        ID of the particle's parent neutrino
+    volume_id : int, default -1
+        ID of the detector volume the interaction lives in
+    image_id : int, default -1
+        ID of the image the interaction lives in
+    index : np.ndarray, default np.array([])
+        (N) IDs of voxels that correspondn to the particle within the image coordinate tensor that
+    points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this interaction in the input tensor
+    vertex : np.ndarray, optional
         3D coordinates of the predicted interaction vertex
-    nu_id: int (Optional, TODO)
-        Label indicating whether this interaction is a neutrino interaction
-        WARNING: The nu_id label is most likely unreliable. Don't use this
         in reconstruction (used for debugging)
-    num_particles: int
-        total number of particles in this interaction.
     """
-    def __init__(self, interaction_id: int, particles : OrderedDict, vertex=None, nu_id=-1, volume=0):
-        self.id = interaction_id
-        self.pid_keys = {
-            0: 'Photon',
-            1: 'Electron',
-            2: 'Muon',
-            3: 'Pion',
-            4: 'Proton',
-            -1: 'Other'
-        }
-        self.particles = particles
-        self.match = []
-        self._match_counts = {}
-        # Voxel indices of an interaction is defined by the union of
-        # constituent particle voxel indices
-        self.voxel_indices = []
-        self.points = []
-        self.depositions = []
-        for p in self.particles:
-            if p.points.shape[0] > 0:
-                self.voxel_indices.append(p.voxel_indices)
-                self.points.append(p.points)
-                self.depositions.append(p.depositions)
-                assert p.interaction_id == interaction_id
-        if len(self.voxel_indices) > 0:
-            self.voxel_indices = np.hstack(self.voxel_indices)
-        if len(self.points) > 0:
-            self.points = np.concatenate(self.points, axis=0)
-        if len(self.depositions) > 0:
-            self.depositions = np.hstack(self.depositions)
+    def __init__(self,
+                 interaction_id: int = -1,
+                 particles: List[Particle] = None,
+                 nu_id: int = -1,
+                 volume_id: int = -1,
+                 image_id: int = -1,
+                 vertex: np.ndarray = -np.ones(3, dtype=np.float32),
+                 is_neutrino: bool = False,
+                 index: np.ndarray = np.empty(0, dtype=np.int64),
+                 points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 flash_time: float = -float(sys.maxsize),
+                 fmatched: bool = False,
+                 flash_total_pE: float = -1,
+                 flash_id: int = -1):
 
-        self.size = len(self.voxel_indices)
-        self.num_particles = len(self.particles)
+        # Initialize attributes
+        self.id           = int(interaction_id)
+        self.nu_id        = int(nu_id)
+        self.volume_id    = int(volume_id)
+        self.image_id     = int(image_id)
+        self.vertex       = vertex
+        self.is_neutrino  = is_neutrino # TODO: Not implemented
+        
+        # Initialize private attributes to be set by setter only
+        self._particles  = None
+        self._size       = None
+        # Invoke particles setter
+        self._particle_counts = np.zeros(6, dtype=np.int64)
+        self._primary_counts  = np.zeros(6, dtype=np.int64)
+        self.particles   = particles
 
-        self.get_particles_summary()
+        # Aggregate individual particle information 
+        if self._particles is None:
+            self._particle_ids   = np.empty(0, dtype=np.int64)
+            self._num_particles  = 0
+            self._num_primaries  = 0
+            self.index           = np.atleast_1d(index)
+            self.points          = np.atleast_1d(points)
+            self.depositions     = np.atleast_1d(depositions)
+            self._particles      = particles
 
-        self.vertex = vertex
-        self.vertex_candidate_count = -1
-        if self.vertex is None:
-            self.vertex = np.array([-1, -1, -1])
-
-        self.nu_id = nu_id
-        self.volume = volume
-        self._pi0_tagged_photons = []
-
-
+        # Quantities to be set by the particle matcher
+        # self._match         = []
+        self._match_counts  = OrderedDict()
+        
+        # Flash matching quantities
+        self.flash_time     = flash_time
+        self.fmatched       = fmatched
+        self.flash_total_pE = flash_total_pE
+        self.flash_id       = flash_id
+        
     @property
-    def particles(self):
-        """
-        List of <Particle> objects that constitute this interaction.
-        """
-        return list(self._particles.values())
+    def size(self):
+        if self._size is None:
+            self._size = len(self.index)
+        return self._size
+        
+    @property
+    def match(self):
+        return np.array(list(self._match_counts.keys()), dtype=np.int64)
+    
+    @property
+    def match_counts(self):
+        return np.array(list(self._match_counts.values()), dtype=np.float32)
+        
+    @classmethod
+    def from_particles(cls, particles, verbose=False, **kwargs):
+        
+        assert len(particles) > 0
+        init_args = defaultdict(list)
+        reserved_attributes = [
+            'interaction_id', 'nu_id', 'volume_id', 
+            'image_id', 'points', 'index', 'depositions'
+        ]
+        
+        processed_args = {'particles': []}
+        for key, val in kwargs.items():
+            processed_args[key] = val
+            
+        for p in particles:
+            assert type(p) is Particle
+            for key in reserved_attributes:
+                if key not in kwargs:
+                    init_args[key].append(getattr(p, key))
+            processed_args['particles'].append(p)
+        
+        _process_interaction_attributes(init_args, processed_args, **kwargs)
+        
+        interaction = cls(**processed_args)
+        return interaction
+        
 
     def check_particle_input(self, x):
         """
         Consistency check for particle interaction id and self.id
         """
-        assert isinstance(x, Particle)
+        assert type(x) is Particle
         assert x.interaction_id == self.id
 
-    def update_info(self):
-        """
-        Method for updating basic interaction particle count information.
-        """
-        self.particle_ids = list(self._particles.keys())
-        self.particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
-        self.particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values()])
-
-        self.primary_particle_counts = Counter({ self.pid_keys[i] : 0 for i in list(self.pid_keys.keys())})
-        self.primary_particle_counts.update([self.pid_keys[p.pid] for p in self._particles.values() if p.is_primary])
-        if sum(self.primary_particle_counts.values()) > 0:
-            self.is_valid = True
-        else:
-            self.is_valid = False
-
+    @property
+    def particles(self):
+        return self._particles.values()
 
     @particles.setter
     def particles(self, value):
-        assert isinstance(value, OrderedDict)
-        parts = {}
-        for p in value.values():
-            self.check_particle_input(p)
-            # Clear match information since Interaction is rebuilt
-            p.match = []
-            p._match_counts = {}
-            parts[p.id] = p
-        self._particles = OrderedDict(sorted(parts.items(), key=lambda t: t[0]))
-        self.update_info()
+        '''
+        <Particle> list getter/setter. The setter also sets
+        the general interaction properties
+        '''
+        assert isinstance(value, list)
+        
+        if self._particles is not None:
+            msg = f"Interaction {self.id} already has a populated list of "\
+                "particles. You cannot change the list of particles in a "\
+                "given Interaction once it has been set."
+            raise AttributeError(msg)
 
+        if value is not None:
+            self._particles = {p.id : p for p in value}
+            self._particle_ids = np.array(list(self._particles.keys()), 
+                                          dtype=np.int64)
+            id_list, index_list, points_list, depositions_list = [], [], [], []
+            for p in value:
+                self.check_particle_input(p)
+                id_list.append(p.id)
+                index_list.append(p.index)
+                points_list.append(p.points)
+                depositions_list.append(p.depositions)
+                if p.pid >= 0:
+                    self._particle_counts[p.pid] += 1
+                    self._primary_counts[p.pid] += int(p.is_primary)
+                else:
+                    self._particle_counts[-1] += 1
+                    self._primary_counts[-1] += int(p.is_primary)
 
-    def get_particles_summary(self):
-        primary_str = {True: '*', False: '-'}
-        self.particles_summary = ""
-        for p in sorted(self.particles, key=lambda x: x.is_primary, reverse=True):
-            pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
-                primary_str[p.is_primary], p.id, self.pid_keys[p.pid], p.points.shape[0], str(p.match))
-            self.particles_summary += pmsg
-
+            # self._particle_ids = np.array(id_list, dtype=np.int64)
+            self._num_particles = len(value)
+            self._num_primaries = len([1 for p in value if p.is_primary])
+            self.index = np.atleast_1d(np.concatenate(index_list))
+            self.points = np.vstack(points_list)
+            self.depositions = np.atleast_1d(np.concatenate(depositions_list))
+        
+    @property
+    def particle_ids(self):
+        return self._particle_ids
+    
+    @particle_ids.setter
+    def particle_ids(self, value):
+        # If particles exist as attribute, disallow manual assignment
+        assert self._particles is None
+        self._particle_ids = value
+        
+    @property
+    def particle_counts(self):
+        return self._particle_counts
+        
+    @property
+    def primary_counts(self):
+        return self._primary_counts
+        
+    @property
+    def num_primaries(self):
+        return self._num_primaries
+    
+    @property
+    def num_particles(self):
+        return self._num_particles
 
     def __getitem__(self, key):
+        if self._particles is None:
+            msg = "You can't access member particles of an interactions by "\
+                "__getitem__ method if <Particle> instances are missing. "\
+                "Either initialize Interactions with the <from_particles> "\
+                "constructor or manually assign particles. "
+            raise KeyError(msg)
         return self._particles[key]
 
+    def __repr__(self):
+        return f"Interaction(id={self.id}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size}, Particles={str(self.particle_ids)})"
 
     def __str__(self):
-
-        self.get_particles_summary()
         msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "--------------------------------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
 
-    def __repr__(self):
-        return "Interaction(id={}, vertex={}, size={}, nu_id={}, Particles={})".format(
-            self.id, str(self.vertex), self.size, self.nu_id, str(self.particle_ids))
+    @cached_property
+    def particles_summary(self):
 
+        primary_str = {True: '*', False: '-'}
+        self._particles_summary = ""
+        if self._particles is None: return
+        for p in sorted(self._particles.values(), key=lambda x: x.is_primary, reverse=True):
+            pmsg = "    {} Particle {}: PID = {}, Size = {}, Match = {} \n".format(
+                primary_str[p.is_primary], p.id, p.pid, p.size, str(p.match))
+            self._particles_summary += pmsg
+        return self._particles_summary
+
+
+# ------------------------------Helper Functions---------------------------
+
+def _process_interaction_attributes(init_args, processed_args, **kwargs):
+    
+    # Interaction ID
+    if 'interaction_id' not in kwargs:
+        int_id, counts = np.unique(init_args['interaction_id'], 
+                                    return_counts=True)
+        int_id = int_id[np.argsort(counts)[::-1]]
+        if len(int_id) > 1:
+            msg = "When constructing interaction {} from list of its "\
+                "constituent particles, encountered non-unique interaction "\
+                "id: {}".format(int_id[0], str(int_id))
+            raise AssertionError(msg)
+        processed_args['interaction_id'] = int_id[0]
+    
+    if 'nu_id' not in kwargs:
+        nu_id, counts = np.unique(init_args['nu_id'], return_counts=True)
+        processed_args['nu_id'] = nu_id[np.argmax(counts)]
+    
+    if 'volume_id' not in kwargs:
+        volume_id, counts = np.unique(init_args['volume_id'], 
+                                        return_counts=True)
+        processed_args['volume_id'] = volume_id[np.argmax(counts)]
+    
+    if 'image_id' not in kwargs:
+        image_id, counts = np.unique(init_args['image_id'], return_counts=True)
+        processed_args['image_id'] = image_id[np.argmax(counts)]
+    
+    processed_args['points'] = np.vstack(init_args['points'])
+    processed_args['index'] = np.concatenate(init_args['index'])
+    processed_args['depositions'] = np.concatenate(init_args['depositions'])
