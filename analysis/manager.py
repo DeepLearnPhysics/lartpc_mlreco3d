@@ -13,6 +13,7 @@ from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
 from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
+from analysis.post_processing.crt_tpc_matching.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
@@ -70,6 +71,8 @@ class AnaToolsManager:
         
         self.flash_manager_initialized = False
         self.fm = None
+        self.crt_tpc_manager_initialized = False
+        self.crt_tpc_manager = None
         self._data_writer = None
         
 
@@ -331,6 +334,21 @@ class AnaToolsManager:
                                             ADC_to_MeV=ADC_to_MeV)
             self.fm.initialize_flash_manager(meta)
             self.flash_manager_initialized = True
+
+    def initialize_crt_tpc_manager(self, meta):
+        
+        # Only run once, to save time
+        if not self.crt_tpc_manager_initialized:
+        
+            pp_crt_tpc_matching = self.ana_config['post_processing']['run_flash_matching']
+            crthit_keys         = pp_crt_tpc_matching['crthit_keys']
+            volume_boundaries   = pp_crt_tpc_matching['volume_boundaries']
+
+            self.crt_tpc_manager = CRTTPCMatcherInterface(self.config, 
+                                                          boundaries=volume_boundaries,
+                                                          crthit_keys=crthit_keys)
+            self.crt_tpc_manager.initialize_crt_tpc_manager(meta)
+            self.crt_tpc_manager_initialized = True
         
         
     def run_post_processing(self, data, result):
@@ -348,6 +366,8 @@ class AnaToolsManager:
             meta = data['meta'][0]
             if 'run_flash_matching' in self.ana_config['post_processing']:
                 self.initialize_flash_manager(meta)
+            if 'run_crt_tpc_matching' in self.ana_config['post_processing']:
+                self.initialize_crt_tpc_manager(meta)
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
 
@@ -357,12 +377,17 @@ class AnaToolsManager:
                 profile = local_pcfg.pop('profile', False)
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
-                # Exception for Flash Matching
+                # Exceptions for Flash Matching and CRT-TPC Matching
                 if processor_name == 'run_flash_matching':
                     local_pcfg = {
                         'fm': self.fm,
                         'opflash_keys': local_pcfg['opflash_keys']
                     }
+                if processor_name == 'run_crt_tpc_matching':
+                    local_pcfg.update({
+                        'crt_tpc_manager': self.crt_tpc_manager,
+                        'crthit_keys': local_pcfg['crthit_keys']
+                    })
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
