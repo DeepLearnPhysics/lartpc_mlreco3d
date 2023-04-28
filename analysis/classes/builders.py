@@ -363,7 +363,7 @@ class ParticleBuilder(DataBuilder):
                 particle = handle_empty_truth_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
-                                                       entry)
+                                                       image_index)
                 out.append(particle)
                 continue
 
