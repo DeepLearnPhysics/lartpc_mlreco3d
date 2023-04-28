@@ -45,7 +45,8 @@ def calorimetric_energy(data_dict,
     return update_dict
 
 
-@post_processing(data_capture=['input_data'], 
+@post_processing(data_capture=['meta',
+                               'input_data'], 
                  result_capture=['particle_clusts', 
                                  'particle_seg', 
                                  'input_rescaled', 
@@ -77,6 +78,10 @@ def range_based_track_energy(data_dict, result_dict,
         particle's estimated length ('particle_length') and the estimated
         CSDA energy ('particle_range_based_energy') using cubic splines. 
     """
+    assert 'meta' in data_dict, 'Must provide meta information to convert from pixel to cm'
+    pixels_to_cm   = data_dict['meta'][-3:]
+    assert np.all(np.isclose(pixels_to_cm, pixels_to_cm[0])), 'Voxels must be cubes'
+    pixels_to_cm   = pixels_to_cm[0]
 
     input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
@@ -104,7 +109,7 @@ def range_based_track_energy(data_dict, result_dict,
             points = input_data[p][:, 1:4]
             length = compute_track_length(points, bin_size=bin_size)
             particle_length[i] = length
-            particle_energy[i] = splines[pred_ptypes[i]](length * PIXELS_TO_CM)
+            particle_energy[i] = splines[pred_ptypes[i]](length * pixels_to_cm)
             result_dict['particles'][i].momentum_range = particle_energy[i]
             
     update_dict['particle_length'] = particle_length

@@ -266,18 +266,21 @@ class HDF5Writer:
                 object_dtype.append((key, np.float32, 4)) # x, y, z, t
             elif hasattr(val, '__len__'):
                 # List/array of values
+                dtype, shape = None, None
                 if hasattr(val, 'dtype'):
                     # Numpy array
-                    if key in self.ANA_FIXED_LENGTH:
-                        object_dtype.append((key, val.dtype, val.shape))
-                    else:
-                        object_dtype.append((key, h5py.vlen_dtype(val.dtype)))
+                    dtype, shape = val.dtype, val.shape
                 elif len(val) and np.isscalar(val[0]):
                     # List of scalars
-                    object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+                    dtype, shape = type(val[0]), len(val)
                 else:
                     # Empty list (typing unknown, cannot store)
                     raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
+
+                if key in self.ANA_FIXED_LENGTH:
+                    object_dtype.append((key, dtype, shape))
+                else:
+                    object_dtype.append((key, h5py.vlen_dtype(dtype)))
             else:
                 raise ValueError(f'Attribute {key} of {obj} has unrecognized type {type(val)}')
 

@@ -78,16 +78,7 @@ PID_LABELS = {
     #5:  'Kaon'
 }
 
-# Physical constants
-ELECTRON_MASS = 0.511998  # [MeV/c^2]
-MUON_MASS     = 105.7     # [MeV/c^2]
-PROTON_MASS   = 938.272   # [MeV/c^2]
-
-ARGON_DENSITY = 1.396     # [g/cm^3]
-
-ADC_TO_MEV    = 1. / 350. # < MUST GO
-PIXELS_TO_CM  = 0.3       # < MUST GO
-
+# Neutrino interaction type labels
 NU_INTERACTION_TYPE = {
     1001: 'CCQE',
     1000: 'Undefined',
@@ -105,3 +96,11 @@ NU_INTERACTION_TYPE = {
     1098: 'NuElectronElastic',
     -1: 'N/A'
 }
+
+# Particle masses
+ELECTRON_MASS = 0.511998  # [MeV/c^2]
+MUON_MASS     = 105.7     # [MeV/c^2]
+PROTON_MASS   = 938.272   # [MeV/c^2]
+
+# Physical constants
+ARGON_DENSITY = 1.396     # [g/cm^3]
