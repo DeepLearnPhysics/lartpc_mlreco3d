@@ -1,8 +1,6 @@
 import numpy as np
-from analysis.classes.FullChainPredictor import is_contained
+from mlreco.utils.volumes import VolumeBoundaries
 
-@post_processing(data_capture=['meta', 'index', 'crthits'], 
-                 result_capture=['Interactions'])
 class CRTTPCMatcherInterface:
     """
     Adapter class between full chain outputs and matcha (Python package
@@ -71,9 +69,11 @@ class CRTTPCMatcherInterface:
                            if particle.pid >= 2 and not is_contained(particle.points)
         ]
 
-        
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
-        crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
+        crthit_keys = self.crthit_keys
+        #crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
+        crt_v = self.crt_tpc_manager.make_crthit([self.data_blob[key][entry] for key in crthit_keys])
+        input_pmt_v = self.fm.make_flash([opflashes[key] for key in selected_opflash_keys])
 
         matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
 
@@ -279,6 +279,36 @@ class CRTTPCManager:
             points_in_cm[ip][2] = point[2] * self.size_voxel_z + self.min_z
 
         return points_in_cm
+
+    def is_contained(self, points, threshold=30):
+        """
+        Parameters
+        ----------
+        points: np.ndarray
+            Shape (N, 3). Coordinates in voxel units.
+        threshold: float or np.ndarray
+            Distance (in voxels) from boundaries beyond which
+            an object is contained. Can be an array if different
+            threshold must be applied in x, y and z (shape (3,)).
+
+        Returns
+        -------
+        bool
+        """
+        if not isinstance(threshold, np.ndarray):
+            threshold = threshold * np.ones((3,))
+        else:
+            assert threshold.shape[0] == 3
+            assert len(threshold.shape) == 1
+
+        if self.volume_boundaries is None:
+            raise Exception("Please define volume boundaries before using containment method.")
+
+        x_contained = (self.volume_boundaries[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.volume_boundaries[0, 1] - threshold[0])
+        y_contained = (self.volume_boundaries[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.volume_boundaries[1, 1] - threshold[1])
+        z_contained = (self.volume_boundaries[2, 0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= self.volume_boundaries[2, 1] - threshold[2])
+
+        return (x_contained & y_contained & z_contained).all()
 
 
 
