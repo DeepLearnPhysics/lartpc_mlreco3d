@@ -260,7 +260,8 @@ class HDF5Writer:
                 object_dtype.append((key, h5py.enum_dtype(self.ANA_ENUM[key], basetype=type(val))))
             elif np.isscalar(val):
                 # Scalar
-                object_dtype.append((key, type(val)))
+                dtype = type(val) if not isinstance(val, bool) else np.uint8
+                object_dtype.append((key, dtype))
             elif isinstance(val, larcv.Vertex):
                 # Three-vector
                 object_dtype.append((key, np.float32, 4)) # x, y, z, t
