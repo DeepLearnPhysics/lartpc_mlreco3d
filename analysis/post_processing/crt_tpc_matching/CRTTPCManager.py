@@ -7,35 +7,43 @@ class CRTTPCMatcherInterface:
     for matching tracks to CRT hits)
     """
     def __init__(self, config, 
-                 boundaries=None, crthit_keys=[], **kwargs):
+                 volume_boundaries=None, crthit_keys=[], **kwargs):
 
         self.config = config
         self.crthit_keys = crthit_keys
 
-        self.boundaries = kwargs.get('boundaries', None)
-
         self.crt_tpc_matches = {}
+
+        self.boundaries = volume_boundaries
         if self.boundaries is not None:
-            self.volume_bounds = VolumeBoundaries(self.boundaries)
-            self._num_volumes = self.volume_bounds.num_volumes()
+            self.vb = VolumeBoundaries(self.boundaries)
+            self._num_volumes = self.vb.num_volumes()
         else:
-            self.volume_bounds = None
+            self.vb = None
             self._num_volumes = 1
 
     def initialize_crt_tpc_manager(self, meta):
         self.crt_tpc_manager = CRTTPCManager(self.config,  
                                              meta=meta)
 
-    def get_crt_tpc_matches(self, entry, interactions,
+    def get_crt_tpc_matches(self, entry, 
+                            interactions,
+                            crthits,
                             use_true_tpc_objects=False,
                             restrict_interactions=[]):
 
+        print('[GETMATCHES] types:')
+        print('entry', type(entry))
+        print('use_true_tpc_objects type', type(use_true_tpc_objects))
+        print('use_true_tpc_objects', use_true_tpc_objects)
         # No caching done if matching a subset of interactions
         if (entry, use_true_tpc_objects) not in self.crt_tpc_matches or len(restrict_interactions):
             print('[CRTTPC] No caching done')
             out = self._run_crt_tpc_matching(entry, 
                                              interactions,
+                                             crthits,
                                              use_true_tpc_objects=use_true_tpc_objects, 
+                                             volume=None,
                                              restrict_interactions=restrict_interactions)
 
         if len(restrict_interactions) == 0:
@@ -47,8 +55,11 @@ class CRTTPCMatcherInterface:
 
         return matches
 
-    def _run_crt_tpc_matching(self, entry, interactions,
+    def _run_crt_tpc_matching(self, entry, 
+                              interactions,
+                              crthits,
                               use_true_tpc_objects=False,
+                              volume=None,
                               restrict_interactions=[]):
 
         if use_true_tpc_objects:
@@ -66,7 +77,8 @@ class CRTTPCMatcherInterface:
         
         muon_candidates = [particle for interaction in tpc_v
                            for particle in interaction.particles 
-                           if particle.pid >= 2 and not is_contained(particle.points)
+                           if particle.pid >= 2 
+                           and not self.crt_tpc_manager.is_contained(particle.points)
         ]
 
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
@@ -301,12 +313,12 @@ class CRTTPCManager:
             assert threshold.shape[0] == 3
             assert len(threshold.shape) == 1
 
-        if self.volume_boundaries is None:
+        if self.vb is None:
             raise Exception("Please define volume boundaries before using containment method.")
 
-        x_contained = (self.volume_boundaries[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.volume_boundaries[0, 1] - threshold[0])
-        y_contained = (self.volume_boundaries[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.volume_boundaries[1, 1] - threshold[1])
-        z_contained = (self.volume_boundaries[2, 0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= self.volume_boundaries[2, 1] - threshold[2])
+        x_contained = (self.vb[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.vb[0, 1] - threshold[0])
+        y_contained = (self.vb[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.vb[1, 1] - threshold[1])
+        z_contained = (self.vb[2, 0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= self.vb[2, 1] - threshold[2])
 
         return (x_contained & y_contained & z_contained).all()
 

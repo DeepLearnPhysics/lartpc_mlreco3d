@@ -9,7 +9,9 @@ from mlreco.utils.globals import *
 @post_processing(data_capture=['meta', 'index', 'crthits'], 
                  result_capture=['interactions'])
 def run_crt_tpc_matching(data_dict, result_dict, 
-                         crt_tpc_manager=None):
+                         crt_tpc_manager=None,
+                         volume_boundaries=None,
+                         crthit_keys=[]):
     """
     Post processor for running CRT-TPC matching using matcha.
     
@@ -42,6 +44,7 @@ def run_crt_tpc_matching(data_dict, result_dict,
     crt_tpc_matches = crt_tpc_manager.get_crt_tpc_matches(int(entry), 
                                                           interactions,
                                                           crthits,
+                                                          use_true_tpc_objects=False,
                                                           restrict_interactions=[])
 
     assert all(isinstance(item, MatchCandidate) for item in crt_tpc_matches)
