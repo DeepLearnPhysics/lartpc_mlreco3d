@@ -107,7 +107,7 @@ def process_config(cfg, verbose=True):
 
 
 def make_directories(cfg, loaded_iteration, handlers=None):
-    from mlreco.utils import CSVData
+    from mlreco.iotools.writers import CSVWriter
     if 'trainval' in cfg:
         # Weight save directory
         if cfg['trainval']['weight_prefix']:
@@ -123,9 +123,7 @@ def make_directories(cfg, loaded_iteration, handlers=None):
             if not cfg['trainval']['train']:
                 logname = '%s/inference_log-%07d.csv' % (cfg['trainval']['log_dir'], loaded_iteration)
             if handlers is not None:
-                if hasattr(handlers,'csv_logger') and handlers.csv_logger:
-                    handlers.csv_logger.close()
-                handlers.csv_logger = CSVData(logname)
+                handlers.csv_logger = CSVWriter(logname)
 
 
 def prepare(cfg, event_list=None):
@@ -232,31 +230,44 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     t_io    = handlers.watch.time('io')
     t_save  = handlers.watch.time('save')
     t_net   = handlers.watch.time('train' if cfg['trainval']['train'] else 'forward')
-    t_forward_cpu = handlers.watch.time_cputime('forward_cpu')
-    t_backward_cpu = handlers.watch.time_cputime('backward_cpu')
+    t_forward_cpu = handlers.watch.time_cpu('forward_cpu')
+    t_backward_cpu = handlers.watch.time_cpu('backward_cpu')
 
     # Report (logger)
     if handlers.csv_logger:
 
         tsum_map = handlers.trainer.tspent_sum
 
-        handlers.csv_logger.record(('iter', 'first_id', 'epoch', 'titer', 'tsumiter'),
-                                   (handlers.iteration, first_id, epoch, t_iter, tsum))
-        handlers.csv_logger.record(('tio', 'tsumio'), (t_io,tsum_map['io']))
-        handlers.csv_logger.record(('mem', ), (mem, ))
-        handlers.csv_logger.record(('tforwardcpu', ), (t_forward_cpu, ))
-        handlers.csv_logger.record(('tbackwardcpu', ), (t_backward_cpu, ))
+        log_dict = {
+            'iter': handlers.iteration,
+            'first_id': first_id,
+            'epoch': epoch,
+            'titer': t_iter,
+            'tsum': tsum,
+            'tio': t_io,
+            'tsumio': tsum_map['io'],
+            'mem': mem,
+            'tforwardcpu': t_forward_cpu,
+            'tbackwardcpu': t_backward_cpu
+        }
 
         if cfg['trainval']['train']:
-            handlers.csv_logger.record(('ttrain', 'tsave', 'tsumtrain', 'tsumsave'),
-                                       (t_net, t_save, tsum_map['train'], tsum_map['save']))
+            log_dict.update({
+                'ttrain': t_net,
+                'tsave': t_save,
+                'tsumtrain': tsum_map['train'],
+                'tsumsave': tsum_map['save']
+            })
         else:
-            handlers.csv_logger.record(('tforward', 'tsumforward'), (t_net, tsum_map['forward']))
+            log_dict.update({
+                'tforward': t_net,
+                'tsumforward': tsum_map['forward'],
+            })
 
+        print(log_dict)
 
         for key in res_dict:
-            handlers.csv_logger.record((key,), (res_dict[key],))
-        handlers.csv_logger.write()
+            handlers.csv_logger.append(log_dict)
 
     # Report (stdout)
     if report_step:
@@ -275,7 +286,6 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
         msg += '   loss %g accuracy %g\n' % (loss, acc)
         print(msg)
         sys.stdout.flush()
-        if handlers.csv_logger: handlers.csv_logger.flush()
 
 
 def train_loop(handlers):
@@ -327,10 +337,6 @@ def train_loop(handlers):
         # Increment iteration counter
         handlers.iteration += 1
 
-    # Finalize
-    if handlers.csv_logger:
-        handlers.csv_logger.close()
-
 
 def inference_loop(handlers):
     """
@@ -381,9 +387,3 @@ def inference_loop(handlers):
                 handlers.writer.append(data_blob, result_blob, handlers.cfg)
 
             handlers.iteration += 1
-
-    # Metrics
-    # TODO
-    # Finalize
-    if handlers.csv_logger:
-        handlers.csv_logger.close()

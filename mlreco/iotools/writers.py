@@ -600,9 +600,9 @@ class CSVWriter:
         self.result_keys = None
         if self.append_file:
             if not os.path.isfile(file_name):
-                msg = "File not found at path: {}. When using append=True "\
-                "in CSVWriter, the file must exist at the prescribed path "\
-                "before data is written to it.".format(file_name)
+                msg = 'File not found at path: {}. When using append=True '\
+                'in CSVWriter, the file must exist at the prescribed path '\
+                'before data is written to it.'.format(file_name)
                 raise FileNotFoundError(msg)
             with open(self.file_name, 'r') as file:
                 self.result_keys = file.readline().split(', ')
@@ -637,6 +637,9 @@ class CSVWriter:
         # If this function has never been called, initialiaze the CSV file
         if self.result_keys is None:
             self.create(result_blob)
+        else:
+            assert list(result_blob).keys() == self.result_keys,\
+                    'Must provide a dictionary with the expected set of keys'
 
         # Append file
         with open(self.file_name, 'a') as file:
