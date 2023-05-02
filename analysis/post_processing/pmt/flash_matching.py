@@ -2,7 +2,6 @@ import numpy as np
 from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from .filters import filter_opflashes
 
 @post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
                  result_capture=['interactions'])

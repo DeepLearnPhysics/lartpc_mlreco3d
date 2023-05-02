@@ -83,7 +83,8 @@ class Particle:
                  end_point: np.ndarray = -np.ones(3, dtype=np.float32),
                  start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
-                 momentum_range: float = -1.,
+                 length: float = -1.,
+                 csda_kinetic_energy: float = -1.,
                  momentum_mcs: float = -1., **kwargs):
 
         # Initialize private attributes to be assigned through setters only
@@ -109,23 +110,16 @@ class Particle:
         self.depositions = depositions
         self.pid_scores = pid_scores
         self.primary_scores = primary_scores
+        
+        # Quantities to be set during post_processing
 
-        # if np.all(pid_scores < 0):
-        #     self._pid = pid
-        # else:
-        #     self._pid = int(np.argmax(pid_scores))
-
-        # if np.all(primary_scores < 0):
-        #     self._is_primary = is_primary
-        # else:
-        #     self._is_primary = int(np.argmax(primary_scores))
-
-        self.start_point    = start_point
-        self.end_point      = end_point
-        self.start_dir      = start_dir
-        self.end_dir        = end_dir
-        self.momentum_range = momentum_range
-        self.momentum_mcs   = momentum_mcs
+        self.start_point         = start_point
+        self.end_point           = end_point
+        self.start_dir           = start_dir
+        self.end_dir             = end_dir
+        self.length              = length
+        self.csda_kinetic_energy = csda_kinetic_energy
+        self.momentum_mcs        = momentum_mcs
 
         # Quantities to be set by the particle matcher
         self._match = list(kwargs.get('match', []))

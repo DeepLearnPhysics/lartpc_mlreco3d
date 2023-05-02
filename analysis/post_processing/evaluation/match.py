@@ -108,7 +108,7 @@ def match_interactions(data_dict,
     return update_dict
 
 
-# ----------------------------- Helper functions -------------------------------
+# ----------------------------- Helper functions -----------------------------
 
 def match_parts_within_ints(int_matches):
     '''

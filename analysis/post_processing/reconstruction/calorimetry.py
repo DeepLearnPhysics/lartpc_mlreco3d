@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import UnivariateSpline, CubicSpline
 from functools import lru_cache
 
 from analysis.post_processing import post_processing
@@ -113,8 +113,39 @@ def range_based_track_energy(data_dict, result_dict,
     return update_dict
 
 
-# Helper Functions
-@lru_cache(maxsize=10)
+@post_processing(data_capture=[], result_capture=['particles', 'truth_particles'])
+def range_based_track_energy_spline(data_dict,
+                                    result_dict,
+                                    bin_size=17,
+                                    include_pids=[2,3,4],
+                                    table_path='',
+                                    mode='reco'):
+    
+    if mode == 'truth':
+        particles = result_dict['truth_particles']
+    elif mode == 'reco':
+        particles = result_dict['particles']
+    else:
+        raise ValueError(f"Invalid Range based energy reconstruction mode {mode}.")
+    
+    if len(particles) == 0: return {}
+    
+    splines = {ptype: get_splines(ptype, table_path) for ptype in include_pids}
+    
+    for i, p in enumerate(particles):
+        if p.semantic_type == 1 and p.pid in include_pids:
+            pts = p.points
+            curve_data = compute_curve(pts, bin_size=bin_size)
+            length = curve_data[3]
+            p.length = length
+            p.csda_kinetic_energy = splines[p.pid](length * PIXELS_TO_CM)
+            
+    return {}
+    
+
+# ----------------------------- Helper functions -----------------------------
+
+@lru_cache
 def get_splines(particle_type, table_path):
     """_summary_
 
@@ -147,6 +178,28 @@ def get_splines(particle_type, table_path):
     # print(tab)
     f = CubicSpline(tab['CSDARange'] / ARGON_DENSITY, tab['T'])
     return f
+
+
+def compute_curve(points, s=None, bin_size=20):
+    
+    pca = PCA(n_components=1)
+    proj_1d = pca.fit_transform(points)
+    perm = np.argsort(proj_1d.squeeze())
+    u = proj_1d[perm]
+    spx = UnivariateSpline(u, points[perm][:, 0], s=s)
+    spy = UnivariateSpline(u, points[perm][:, 1], s=s)
+    spz = UnivariateSpline(u, points[perm][:, 2], s=s)
+    sppoints = np.hstack([spx(u), spy(u), spz(u)])
+    
+    splines = [spx, spy, spz]
+    
+    bins = np.arange(u.min(), u.max(), bin_size)
+    bins = np.hstack([bins, np.array([u.max()])])
+    pt_approx = np.hstack([sp(bins).reshape(-1, 1) for sp in splines])
+    segments = np.linalg.norm(pt_approx[1:] - pt_approx[:-1], axis=1)
+    length = segments.sum()
+
+    return u.squeeze(), sppoints, splines, length
 
 
 def compute_track_length(points, bin_size=17):
