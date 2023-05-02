@@ -7,16 +7,18 @@ class CRTTPCMatcherInterface:
     for matching tracks to CRT hits)
     """
     def __init__(self, config, 
-                 volume_boundaries=None, crthit_keys=[], **kwargs):
+                 boundaries=None, crthit_keys=[], **kwargs):
 
         self.config = config
         self.crthit_keys = crthit_keys
 
         self.crt_tpc_matches = {}
 
-        self.boundaries = volume_boundaries
+        self.boundaries = boundaries
         if self.boundaries is not None:
+            print('[INTERFACE] self.boundaries is not None')
             self.vb = VolumeBoundaries(self.boundaries)
+            print('[INTERFACE] VolumeBoundaries:', self.vb)
             self._num_volumes = self.vb.num_volumes()
         else:
             self.vb = None
@@ -78,21 +80,59 @@ class CRTTPCMatcherInterface:
         muon_candidates = [particle for interaction in tpc_v
                            for particle in interaction.particles 
                            if particle.pid >= 2 
-                           and not self.crt_tpc_manager.is_contained(particle.points)
+                           and not self._is_contained(particle.points, self.vb.boundaries)
         ]
+
+        print('[_RUN] crthits:', crthits)
 
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
         crthit_keys = self.crthit_keys
-        #crt_v = self.crt_tpc_manager.make_crthit(self.data_blob['crthits'][entry])
-        crt_v = self.crt_tpc_manager.make_crthit([self.data_blob[key][entry] for key in crthit_keys])
-        input_pmt_v = self.fm.make_flash([opflashes[key] for key in selected_opflash_keys])
+        #crt_v = self.crt_tpc_manager.make_crthit([crthits[key][entry] for key in crthit_keys])
+        crt_v = self.crt_tpc_manager.make_crthit([crthits[key] for key in crthit_keys])
+
+        print('[_RUN] About to run matching for {} tracks and {} crthits'.format(len(trk_v), len(crt_v)))
 
         matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
+        print('[_RUN] Done')
 
         if len(restrict_interactions) == 0:
             self.crt_tpc_matches[(entry, use_true_tpc_objects)] = (matches)
 
+        print('Returning matches type:', type(matches))
+        print('Returning matches:', matches)
         return matches
+
+    def _is_contained(self, points, bounds, threshold=30):
+        """
+        Parameters
+        ----------
+        points: np.ndarray
+            Shape (N, 3). Coordinates in voxel units.
+        threshold: float or np.ndarray
+            Distance (in voxels) from boundaries beyond which
+            an object is contained. Can be an array if different
+            threshold must be applied in x, y and z (shape (3,)).
+
+        Returns
+        -------
+        bool
+        """
+        if not isinstance(threshold, np.ndarray):
+            threshold = threshold * np.ones((3,))
+        else:
+            assert threshold.shape[0] == 3
+            assert len(threshold.shape) == 1
+
+        if bounds is None:
+            raise Exception("Please define volume boundaries before using containment method.")
+
+        print('bounds:', bounds)
+
+        x_contained = (bounds[0][0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= bounds[0][1] - threshold[0])
+        y_contained = (bounds[1][0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= bounds[1][1] - threshold[1])
+        z_contained = (bounds[2][0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= bounds[2][1] - threshold[2])
+
+        return (x_contained & y_contained & z_contained).all()
 
 class CRTTPCManager:
     """
@@ -206,26 +246,33 @@ class CRTTPCManager:
         tpc_v = []
 
         for idx, particle in enumerate(muon_candidates):
-            print('-----TRACK', particle.id, '-------')
             particle.points     = self.points_to_cm(particle.points)
-            particle.startpoint = self.points_to_cm(np.array(particle.startpoint).reshape(1, 3))
-            particle.endpoint   = self.points_to_cm(np.array(particle.endpoint).reshape(1, 3))
+            particle.start_point = self.points_to_cm(particle.start_point.reshape(1, 3))
+            particle.end_point   = self.points_to_cm(particle.end_point.reshape(1, 3))
             track_id = particle.id
             image_id = particle.image_id
             interaction_id = particle.interaction_id
             points  = particle.points
             depositions = particle.depositions
-            start_x = particle.startpoint[0][0]
-            start_y = particle.startpoint[0][1]
-            start_z = particle.startpoint[0][2]
-            end_x   = particle.endpoint[0][0]
-            end_y   = particle.endpoint[0][1]
-            end_z   = particle.endpoint[0][2]
+            start_x = particle.start_point[0][0]
+            start_y = particle.start_point[0][1]
+            start_z = particle.start_point[0][2]
+            start_dir_x = particle.start_dir[0]
+            start_dir_y = particle.start_dir[1]
+            start_dir_z = particle.start_dir[2]
+            end_x = particle.end_point[0][0]
+            end_y = particle.end_point[0][1]
+            end_z = particle.end_point[0][2]
+            end_dir_x = particle.end_dir[0]
+            end_dir_y = particle.end_dir[1]
+            end_dir_z = particle.end_dir[2]
             this_track = Track(
                 id=track_id, image_id=image_id, interaction_id=interaction_id, 
-                points=points, depositions=depositions
-                #start_x=start_x, start_y=start_y, start_z=start_z, 
-                #end_x=end_x, end_y=end_y, end_z=end_z, 
+                points=points, depositions=depositions,
+                start_x=start_x, start_y=start_y, start_z=start_z, 
+                start_dir_x=start_dir_x, start_dir_y=start_dir_y, start_dir_z=start_dir_z, 
+                end_x=end_x, end_y=end_y, end_z=end_z, 
+                end_dir_x=end_dir_x, end_dir_y=end_dir_y, end_dir_z=end_dir_z
             )
             tpc_v.append(this_track)
 
@@ -292,35 +339,6 @@ class CRTTPCManager:
 
         return points_in_cm
 
-    def is_contained(self, points, threshold=30):
-        """
-        Parameters
-        ----------
-        points: np.ndarray
-            Shape (N, 3). Coordinates in voxel units.
-        threshold: float or np.ndarray
-            Distance (in voxels) from boundaries beyond which
-            an object is contained. Can be an array if different
-            threshold must be applied in x, y and z (shape (3,)).
-
-        Returns
-        -------
-        bool
-        """
-        if not isinstance(threshold, np.ndarray):
-            threshold = threshold * np.ones((3,))
-        else:
-            assert threshold.shape[0] == 3
-            assert len(threshold.shape) == 1
-
-        if self.vb is None:
-            raise Exception("Please define volume boundaries before using containment method.")
-
-        x_contained = (self.vb[0, 0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= self.vb[0, 1] - threshold[0])
-        y_contained = (self.vb[1, 0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= self.vb[1, 1] - threshold[1])
-        z_contained = (self.vb[2, 0] + threshold[2] <= points[:, 2]) & (points[:, 2] <= self.vb[2, 1] - threshold[2])
-
-        return (x_contained & y_contained & z_contained).all()
 
 
 

@@ -2,9 +2,7 @@ import numpy as np
 from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-#from matcha.match_candidate import MatchCandidate
-#from matcha.track import Track
-#from matcha.crthit import CRTHit
+from matcha.match_candidate import MatchCandidate
 
 @post_processing(data_capture=['meta', 'index', 'crthits'], 
                  result_capture=['interactions'])
@@ -47,6 +45,8 @@ def run_crt_tpc_matching(data_dict, result_dict,
                                                           use_true_tpc_objects=False,
                                                           restrict_interactions=[])
 
+    print('type crt_tpc_matches', type(crt_tpc_matches))
+    print('crt_tpc_matches', crt_tpc_matches)
     assert all(isinstance(item, MatchCandidate) for item in crt_tpc_matches)
     print('Interactions:\n')
     print(interactions)
@@ -54,7 +54,10 @@ def run_crt_tpc_matching(data_dict, result_dict,
     # crt_tpc_matches is a list of matcha.MatchCandidates. Each MatchCandidate
     # contains a Track and CRTHit instance. The Track class contains the 
     # interaction_id.
-    matched_interaction_ids = [int_id for int_id in crt_tpc_matches.track.interaction_id]
+    #matched_interaction_ids = [int_id for int_id in crt_tpc_matches.track.interaction_id]
+    matched_interaction_ids = []
+    for match in crt_tpc_matches:
+        matched_interaction_ids.append(match.track.interaction_id)
     
     matched_interactions = [i for i in interactions 
                             if i.id in matched_interaction_ids]
