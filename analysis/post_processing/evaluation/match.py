@@ -4,7 +4,7 @@ from collections import OrderedDict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 from analysis.classes.matching import (match_particles_fn,
-                                       match_particles_optimal,
+                                       match_particles_recursive,
                                        match_interactions_fn,
                                        match_interactions_optimal)
 from analysis.classes.data import *
@@ -30,29 +30,27 @@ def match_particles(data_dict,
     matched_particles = []
     
     if matching_mode == 'optimal':
-        matched_particles, counts = match_particles_optimal(
+        matched_particles, intersections = match_particles_recursive(
             pred_particles, 
             true_particles, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            min_overlap=min_overlap)
         
     if matching_mode == 'one_way':
         if matching_direction == 'pred_to_true':
-            matched_particles, counts = match_particles_fn(
+            matched_particles, intersections = match_particles_fn(
                 pred_particles, 
                 true_particles, 
                 min_overlap=min_overlap, 
                 overlap_mode=overlap_mode)
         elif matching_direction == 'true_to_pred':
-            matched_particles, counts = match_particles_fn(
+            matched_particles, intersections = match_particles_fn(
                 true_particles, 
                 pred_particles, 
                 min_overlap=min_overlap, 
                 overlap_mode=overlap_mode)
         
     update_dict = {
-        # 'matched_particles': matched_particles,
-        'particle_match_values': np.array(counts, dtype=np.float32),
+        'matched_particles': matched_particles
     }
 
     return update_dict

@@ -181,6 +181,36 @@ def get_splines(particle_type, table_path):
 
 
 def compute_curve(points, s=None, bin_size=20):
+    """Estimate the best approximating curve defined by a point cloud 
+    using univariate 3D splines. 
+    
+    The length is computed by measuring the length of the piecewise linear
+    interpolation of the spline at points defined by the bin size. 
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N x 3) point cloud
+    s : float, optional
+        The smoothing factor to be used in spline regression, by default None
+    bin_size : int, optional
+        The subdivision length at which to sample points from the spline.
+        If the track length is less than the bin_size, then the returned
+        length will be computed from the farthest two projected points along
+        the track's principal direction.
+
+    Returns
+    -------
+    u : np.ndarray
+        The principal axis parametrization (N, ) of the curve 
+        C(u) = (spx(u), spy(u), spz(u))
+    sppoints: np.ndarray
+        The graph (N, 3) of the spline at points u.
+    splines: scipy.interpolate.UnivariateSpline
+        Approximating splines for the point cloud defined by points. 
+    length: float
+        The estimate of the total length of the curve. 
+    """
     
     pca = PCA(n_components=1)
     proj_1d = pca.fit_transform(points)
@@ -193,11 +223,17 @@ def compute_curve(points, s=None, bin_size=20):
     
     splines = [spx, spy, spz]
     
-    bins = np.arange(u.min(), u.max(), bin_size)
-    bins = np.hstack([bins, np.array([u.max()])])
-    pt_approx = np.hstack([sp(bins).reshape(-1, 1) for sp in splines])
-    segments = np.linalg.norm(pt_approx[1:] - pt_approx[:-1], axis=1)
-    length = segments.sum()
+    start, end = u.min(), u.max()
+    length = end - start
+    
+    # If track length is less than bin_size, just return length.
+    # Otherwise estimate length by piecewise linear interpolation. 
+    if length > bin_size:
+        bins = np.arange(u.min(), u.max(), bin_size)
+        bins = np.hstack([bins, np.array([u.max()])])
+        pt_approx = np.hstack([sp(bins).reshape(-1, 1) for sp in splines])
+        segments = np.linalg.norm(pt_approx[1:] - pt_approx[:-1], axis=1)
+        length = segments.sum()
 
     return u.squeeze(), sppoints, splines, length
 

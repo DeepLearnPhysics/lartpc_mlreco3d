@@ -88,13 +88,13 @@ class Particle:
                  momentum_mcs: float = -1., **kwargs):
 
         # Initialize private attributes to be assigned through setters only
-        self._num_fragments = None
-        self._index = None
-        self._depositions = None
+        self._num_fragments   = None
+        self._index           = None
+        self._depositions     = None
         self._depositions_sum = -1
-        self._pid = -1
-        self._size = -1
-        self._is_primary = -1
+        self._pid             = -1
+        self._size            = -1
+        self._is_primary      = -1
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -106,9 +106,9 @@ class Particle:
         self.semantic_type  = int(semantic_type)
         self.points         = points
 
-        self.index = index
-        self.depositions = depositions
-        self.pid_scores = pid_scores
+        self.index          = index
+        self.depositions    = depositions
+        self.pid_scores     = pid_scores
         self.primary_scores = primary_scores
         
         # Quantities to be set during post_processing
@@ -120,6 +120,7 @@ class Particle:
         self.length              = length
         self.csda_kinetic_energy = csda_kinetic_energy
         self.momentum_mcs        = momentum_mcs
+        self.matched             = False
 
         # Quantities to be set by the particle matcher
         self._match = list(kwargs.get('match', []))
@@ -144,6 +145,11 @@ class Particle:
     def match_counts(self, value):
         assert type(value) is OrderedDict
         self._match_counts = value
+        
+    def clear_match_info(self):
+        self._match = []
+        self._match_counts = OrderedDict()
+        self.matched = False
 
     def __repr__(self):
         msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)

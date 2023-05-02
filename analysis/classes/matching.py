@@ -106,6 +106,37 @@ def matrix_chamfer(particles_x, particles_y, mode='default'):
     return overlap_matrix
 
 
+def weighted_matrix_iou(particles_x, particles_y):
+    """Function for computing the IoU matrix, where each IoU value is
+    weighted by the factor w = (|size_x + size_y| / (|size_x - size_y| + 1).
+
+    Parameters
+    ----------
+    particles_x: List[Particle]
+        List of N particles to match with <particles_y>
+    particles_y: List[Particle]
+        List of M particles to match with <particles_x>
+
+    Returns
+    -------
+    overlap_matrix: np.ndarray
+        (M, N) array of IoU values
+    cost_matrix: np.ndarray
+        (M, N) array of weighted IoU values. 
+    """
+    overlap_matrix = np.zeros((len(particles_y), len(particles_x)), dtype=np.float32)
+    cost_matrix = np.zeros_like(overlap_matrix)
+    for i, py in enumerate(particles_y):
+        for j, px in enumerate(particles_x):
+            cap = np.intersect1d(py.index, px.index)
+            cup = np.union1d(py.index, px.index)
+            n, m = px.index.shape[0], py.index.shape[0]
+            overlap_matrix[i, j] = (float(cap.shape[0]) / float(cup.shape[0]))
+            w = float(abs(n+m)) / float(1.0 + abs(n-m))
+            cost_matrix[i,j] = overlap_matrix[i,j] * w
+    return overlap_matrix, cost_matrix
+
+
 def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]],
                        particles_to   : Union[List[Particle], List[TruthParticle]],
                        min_overlap=0, num_classes=5, verbose=False, overlap_mode='iou'):
@@ -460,3 +491,100 @@ def check_particle_matches(loaded_particles, clear=False):
     match = match[perm]
 
     return match, match_counts
+
+
+def match_particles_recursive(particles_x, particles_y,
+                              min_overlap=0.0):
+    """Match particle using the optimal linear assignment method.
+    
+    Once the initial optimal assignments are found, the remaining 
+    unmatched particles will undergo multiple rounds of matching against
+    their counterparts until all remaining particles cannot be matched to
+    any entities (zero overlap). 
+
+    Parameters
+    ----------
+    particles_x : List[Union[Particle, TruthParticle]]
+        List of Particles/TruthParticles to perform matching
+    particles_y : List[Union[TruthParticle, Particle]]
+        List of TruthParticles/Particles to perform matching
+
+    Returns
+    -------
+    matches: List[Tuple(TruthParticle, Particle)]
+        List of matched TruthParticle, Particle pairs. 
+    intersections: Dict[Tuple(int, int), float]
+        Dict of matched particle ids (keys) and match IoU values (values). 
+    """
+    
+    particles_less = [p for p in particles_x if p.size > 0]
+    particles_many = [p for p in particles_y if p.size > 0]
+    
+    if len(particles_x) <= len(particles_y):
+        particles_less, particles_many = particles_x, particles_y
+    else:
+        particles_less, particles_many = particles_y, particles_x
+    
+    if len(particles_less) == 0 or len(particles_many) == 0:
+        return [], {}
+    
+    overlap_matrix, cost_matrix = weighted_matrix_iou(particles_many, particles_less)
+    
+    matches = []
+    ix, iy = linear_sum_assignment(cost_matrix, maximize=True)
+    
+    mapping = dict(zip(ix, iy)) # iy is the index over the larger dimension
+    intersections = {}
+    
+    less_ids = {p.id: p for p in particles_less}
+    many_ids = {p.id: p for p in particles_many}
+    
+    for i in np.arange(overlap_matrix.shape[0]):
+        j = mapping[i]
+        val = overlap_matrix[i,j]
+        if val > min_overlap:
+            if type(particles_less[i]) is Particle:
+                match = (particles_less[i], particles_many[j])
+                key = (particles_less[i].id, particles_many[j].id)
+            elif type(particles_less[i]) is TruthParticle:
+                match = (particles_many[j], particles_less[i])
+                key = (particles_many[j].id, particles_less[i].id)
+            else:
+                msg = "Some entries in your input lists is neither a "\
+                    "Particle nor a TruthParticle."
+                raise ValueError(msg)
+            matches.append(match)
+            particles_less[i]._match.append(particles_many[j].id)
+            particles_many[j]._match.append(particles_less[i].id)
+            particles_less[i]._match_counts[particles_many[j].id] = val
+            particles_many[j]._match_counts[particles_less[i].id] = val
+            less_ids[particles_less[i].id].matched = True
+            many_ids[particles_many[j].id].matched = True
+            intersections[key] = val
+            
+    if len(matches) == 0:
+        # All particles in domain have no viable match
+        for part_id in less_ids:
+            if type(less_ids[part_id]) is TruthParticle:
+                matches.append((less_ids[part_id], None))
+            elif type(less_ids[part_id]) is Particle:
+                matches.append((None, less_ids[part_id]))
+            else:
+                msg = "Some entries in your input lists is neither a "\
+                    "Particle nor a TruthParticle."
+                raise ValueError(msg)
+        return matches, intersections
+            
+    unmatched_less = [p for p in particles_less if not less_ids[p.id].matched]
+    nested_matches, nested_ints = match_particles_recursive(unmatched_less, particles_many)
+    
+    matches.extend(nested_matches)
+    intersections.update(nested_ints)
+    
+    unmatched_many = [p for p in particles_many if not many_ids[p.id].matched]
+    nested_matches, nested_ints = match_particles_recursive(unmatched_many, particles_less)
+    
+    matches.extend(nested_matches)
+    intersections.update(nested_ints)
+            
+    return matches, intersections

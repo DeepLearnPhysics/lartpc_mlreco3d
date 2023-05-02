@@ -51,14 +51,16 @@ class AnaToolsManager:
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
 
         # Initialize data product builders
-        self.data_builders = self.ana_config['analysis']['data_builders']
-        self.builders      = {}
-        for builder_name in self.data_builders:
-            if builder_name not in SUPPORTED_BUILDERS:
-                msg = f"{builder_name} is not a valid data product builder!"
-                raise ValueError(msg)
-            builder = eval(builder_name)()
-            self.builders[builder_name] = builder
+        self.data_builders = None
+        if 'data_builders' in self.ana_config['analysis']:
+            self.data_builders = self.ana_config['analysis']['data_builders']
+            self.builders      = {}
+            for builder_name in self.data_builders:
+                if builder_name not in SUPPORTED_BUILDERS:
+                    msg = f"{builder_name} is not a valid data product builder!"
+                    raise ValueError(msg)
+                builder = eval(builder_name)()
+                self.builders[builder_name] = builder
 
         self._data_reader  = None
         self._reader_state = None
@@ -471,14 +473,15 @@ class AnaToolsManager:
         self.logger_dict['forward_time'] = end-start
         start = end
 
-        # 2. Build data representations
-        if self._reader_state == 'hdf5':
-            self.load_representations(data, res)
-        else:
-            self.build_representations(data, res)
-        end = time.time()
-        self.logger_dict['build_reps_time'] = end-start
-        start = end
+        # 2. Build data representations'
+        if self.data_builders is not None:
+            if self._reader_state == 'hdf5':
+                self.load_representations(data, res)
+            else:
+                self.build_representations(data, res)
+            end = time.time()
+            self.logger_dict['build_reps_time'] = end-start
+            start = end
 
         # 3. Run post-processing, if requested
         self.run_post_processing(data, res)
