@@ -638,7 +638,7 @@ class CSVWriter:
         if self.result_keys is None:
             self.create(result_blob)
         else:
-            assert list(result_blob).keys() == self.result_keys,\
+            assert list(result_blob.keys()) == self.result_keys,\
                     'Must provide a dictionary with the expected set of keys'
 
         # Append file

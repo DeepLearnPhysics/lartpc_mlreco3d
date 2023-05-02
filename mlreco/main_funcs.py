@@ -236,8 +236,8 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
     # Report (logger)
     if handlers.csv_logger:
 
+        # Record timing
         tsum_map = handlers.trainer.tspent_sum
-
         log_dict = {
             'iter': handlers.iteration,
             'first_id': first_id,
@@ -264,10 +264,11 @@ def log(handlers, tstamp_iteration, #tspent_io, tspent_iteration,
                 'tsumforward': tsum_map['forward'],
             })
 
-        print(log_dict)
+        # Update with res_dict
+        log_dict.update(res_dict)
 
-        for key in res_dict:
-            handlers.csv_logger.append(log_dict)
+        # Record
+        handlers.csv_logger.append(log_dict)
 
     # Report (stdout)
     if report_step:
