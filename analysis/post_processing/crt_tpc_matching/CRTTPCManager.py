@@ -1,4 +1,5 @@
 import numpy as np
+import yaml
 from mlreco.utils.volumes import VolumeBoundaries
 
 class CRTTPCMatcherInterface:
@@ -6,19 +7,18 @@ class CRTTPCMatcherInterface:
     Adapter class between full chain outputs and matcha (Python package
     for matching tracks to CRT hits)
     """
-    def __init__(self, config, 
+    def __init__(self, config, crt_tpc_config_path,
                  boundaries=None, crthit_keys=[], **kwargs):
 
         self.config = config
+        self.crt_tpc_config_path = crt_tpc_config_path
         self.crthit_keys = crthit_keys
 
         self.crt_tpc_matches = {}
 
         self.boundaries = boundaries
         if self.boundaries is not None:
-            print('[INTERFACE] self.boundaries is not None')
             self.vb = VolumeBoundaries(self.boundaries)
-            print('[INTERFACE] VolumeBoundaries:', self.vb)
             self._num_volumes = self.vb.num_volumes()
         else:
             self.vb = None
@@ -26,6 +26,7 @@ class CRTTPCMatcherInterface:
 
     def initialize_crt_tpc_manager(self, meta):
         self.crt_tpc_manager = CRTTPCManager(self.config,  
+                                             self.crt_tpc_config_path,
                                              meta=meta)
 
     def get_crt_tpc_matches(self, entry, 
@@ -143,7 +144,7 @@ class CRTTPCManager:
     Methods
     =======
     """
-    def __init__(self, cfg, meta=None):
+    def __init__(self, cfg, crt_tpc_config_path, meta=None):
         """
         Constructor
 
@@ -178,6 +179,20 @@ class CRTTPCManager:
             self.size_voxel_x = meta[6]
             self.size_voxel_y = meta[7]
             self.size_voxel_z = meta[8]
+
+        # Setup matcha config parameters
+        self.crt_tpc_config = yaml.safe_load(open(crt_tpc_config_path, 'r'))
+        self.distance_threshold = self.crt_tpc_config['distance_threshold']
+
+        #distance_threshold: 50
+        #dca_method: 'simple'
+        #direction_method: 'pca'
+        #pca_radius: 10
+        #min_points_in_radius: 10
+        #trigger_timestamp: None # Only necessary if isdata=True
+        #isdata: False
+        #save_to_file: True
+        #file_path: '.'
 
         self.crt_tpc_matches = None
         self.tpc_v, self.crt_v, = None, None 
@@ -299,18 +314,18 @@ class CRTTPCManager:
         """
         from matcha import match_maker
 
-        distance_threshold = 50
-        dca_method = 'simple'
-        direction_method = 'pca'
-        pca_radius = 10
-        min_points_in_radius = 10
-        trigger_timestamp = None # Only necessary if isdata=True
-        isdata = False
-        save_to_file = True
-        file_path = '.'
+        #distance_threshold = 50
+        #dca_method = 'simple'
+        #direction_method = 'pca'
+        #pca_radius = 10
+        #min_points_in_radius = 10
+        #trigger_timestamp = None # Only necessary if isdata=True
+        #isdata = False
+        #save_to_file = True
+        #file_path = '.'
         crt_tpc_matches = match_maker.get_track_crthit_matches(
             tracks, crthits, 
-            approach_distance_threshold=distance_threshold, 
+            approach_distance_threshold=self.distance_threshold, 
             direction_method=direction_method, dca_method=dca_method, 
             pca_radius=pca_radius, min_points_in_radius=min_points_in_radius,
             trigger_timestamp=trigger_timestamp, isdata=isdata,

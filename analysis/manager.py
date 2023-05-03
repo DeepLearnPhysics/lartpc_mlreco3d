@@ -340,11 +340,13 @@ class AnaToolsManager:
         # Only run once, to save time
         if not self.crt_tpc_manager_initialized:
         
-            pp_crt_tpc_matching = self.ana_config['post_processing']['run_crt_tpc_matching']
-            crthit_keys         = pp_crt_tpc_matching['crthit_keys']
-            volume_boundaries   = pp_crt_tpc_matching['volume_boundaries']
+            pp_crt_tpc_matching      = self.ana_config['post_processing']['run_crt_tpc_matching']
+            crthit_keys              = pp_crt_tpc_matching['crthit_keys']
+            volume_boundaries        = pp_crt_tpc_matching['volume_boundaries']
+            self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
 
             self.crt_tpc_manager = CRTTPCMatcherInterface(self.config, 
+                                                          self.crt_tpc_config_path,
                                                           boundaries=volume_boundaries,
                                                           crthit_keys=crthit_keys)
             self.crt_tpc_manager.initialize_crt_tpc_manager(meta)

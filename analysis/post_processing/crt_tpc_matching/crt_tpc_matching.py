@@ -9,6 +9,15 @@ from matcha.match_candidate import MatchCandidate
 def run_crt_tpc_matching(data_dict, result_dict, 
                          crt_tpc_manager=None,
                          volume_boundaries=None,
+			 #distance_threshold=50,
+                         #dca_method='simple',
+                         #direction_method='pca',
+                         #pca_radius=10,
+                         #min_points_in_radius=10,
+                         #trigger_timestamp=None, # Only necessary if isdata=True
+                         #isdata=False,
+                         #save_to_file=True,
+                         #file_path='.',
                          crthit_keys=[]):
     """
     Post processor for running CRT-TPC matching using matcha.
