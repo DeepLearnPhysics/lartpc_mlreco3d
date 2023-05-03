@@ -181,17 +181,31 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def reco_direction(particle):
+    def reco_start_dir(particle):
         out = {
-            'particle_dir_x': 0,
-            'particle_dir_y': 0,
-            'particle_dir_z': 0
+            'particle_start_dir_x': 0,
+            'particle_start_dir_y': 0,
+            'particle_start_dir_z': 0
         }
-        if particle is not None and hasattr(particle, 'direction'):
-            v = particle.direction
-            out['particle_dir_x'] = v[0]
-            out['particle_dir_y'] = v[1]
-            out['particle_dir_z'] = v[2]
+        if particle is not None and hasattr(particle, 'start_dir'):
+            v = particle.start_dir
+            out['particle_start_dir_x'] = v[0]
+            out['particle_start_dir_y'] = v[1]
+            out['particle_start_dir_z'] = v[2]
+        return out
+    
+    @staticmethod
+    def reco_end_dir(particle):
+        out = {
+            'particle_end_dir_x': 0,
+            'particle_end_dir_y': 0,
+            'particle_end_dir_z': 0
+        }
+        if particle is not None and hasattr(particle, 'end_dir'):
+            v = particle.start_dir
+            out['particle_end_dir_x'] = v[0]
+            out['particle_end_dir_y'] = v[1]
+            out['particle_end_dir_z'] = v[2]
         return out
     
     @staticmethod
@@ -200,6 +214,12 @@ class ParticleLogger(AnalysisLogger):
         if particle is not None and hasattr(particle, 'length'):
             out['particle_length'] = particle.length
         return out
+    
+    @staticmethod
+    def csda_kinetic_energy(particle):
+        out = {'csda_kinetic_energy': -1}
+        if particle is not None:
+            out['csda_kinetic_energy'] = particle.csda_kinetic_energy
     
     @staticmethod
     def is_contained(particle, vb, threshold=30):
@@ -247,36 +267,61 @@ class InteractionLogger(AnalysisLogger):
     @staticmethod
     def size(ia):
         out = {'interaction_size': -1}
-        if hasattr(ia, 'size'):
+        if ia is not None:
             out['interaction_size'] = ia.size
         return out
     
     @staticmethod
     def count_primary_particles(ia, ptypes=None):
-        all_types = list(PID_LABELS.keys())
-        if ptypes is None:
-            ptypes = all_types
-        elif set(ptypes).issubset(set(all_types)):
-            pass
-        elif len(ptypes) == 0:
-            return {}
-        else:
-            raise ValueError('"ptypes under count_primary_particles must \
-                             either be None or a list of particle type ids \
-                             to be counted.')
         
-        ptypes = [PID_LABELS[p] for p in ptypes]
-        out = OrderedDict({'count_primary_'+name.lower() : 0 \
-                           for name in PID_LABELS.values() \
-                            if name.capitalize() in ptypes})
+        mapping = {
+            0: 'num_primary_photons',
+            1: 'num_primary_electrons',
+            2: 'num_primary_muons',
+            3: 'num_primary_pions',
+            4: 'num_primary_protons'
+        }
+        
+        if ptypes is not None:
+            out = {mapping[pid] : -1 for pid in ptypes}
+        else:
+            ptypes = list(mapping.keys())
+            out = {mapping[pid] : -1 for pid in ptypes}
 
-        if ia is not None and hasattr(ia, 'primary_particle_counts'):
-            out.update({'count_primary_'+key.lower() : val \
-                        for key, val in ia.primary_particle_counts.items() \
-                        if key.capitalize() != 'Other' \
-                            and key.capitalize() in ptypes})
-        return out
+        if ia is not None:
+            for pid in ptypes:
+                out[mapping[pid]] = ia.primary_counts[pid]
             
+        return out
+    
+    @staticmethod
+    def count_particles(ia, ptypes=None):
+        
+        mapping = {
+            0: 'num_photons',
+            1: 'num_electrons',
+            2: 'num_muons',
+            3: 'num_pions',
+            4: 'num_protons'
+        }
+        
+        if ptypes is not None:
+            out = {mapping[pid] : -1 for pid in ptypes}
+        else:
+            ptypes = list(mapping.keys())
+            out = {mapping[pid] : -1 for pid in ptypes}
+
+        if ia is not None:
+            for pid in ptypes:
+                out[mapping[pid]] = ia.primary_counts[pid]
+            
+        return out
+    
+    @staticmethod
+    def topology(ia):
+        out = 'N/A'
+        if ia is not None:
+            out['topology'] = ia.topology
     
     @staticmethod
     def is_contained(ia, vb, threshold=30):
@@ -339,7 +384,8 @@ class InteractionLogger(AnalysisLogger):
             'fmatched': False,
             'flash_time': -sys.maxsize,
             'flash_total_pE': -sys.maxsize,
-            'flash_id': -sys.maxsize
+            'flash_id': -sys.maxsize,
+            'flash_hypothesis': -sys.maxsize
         }
         if ia is not None:
             if hasattr(ia, 'fmatched'):
@@ -347,4 +393,5 @@ class InteractionLogger(AnalysisLogger):
                 out['flash_time'] = ia.fmatch_time
                 out['flash_total_pE'] = ia.fmatch_total_pE
                 out['flash_id'] = ia.fmatch_id
+                out['flash_hypothesis'] = ia.flash_hypothesis
         return out
