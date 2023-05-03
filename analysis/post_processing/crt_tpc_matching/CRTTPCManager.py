@@ -64,6 +64,8 @@ class CRTTPCMatcherInterface:
                               volume=None,
                               restrict_interactions=[]):
 
+        print('[_RUN] Entry:', entry)
+
         if use_true_tpc_objects:
             if not hasattr(self, 'get_true_interactions'):
                 raise Exception('This Predictor does not know about truth info.')
@@ -83,8 +85,6 @@ class CRTTPCMatcherInterface:
                            and not self._is_contained(particle.points, self.vb.boundaries)
         ]
 
-        print('[_RUN] crthits:', crthits)
-
         trk_v = self.crt_tpc_manager.make_tpctrack(muon_candidates)
         crthit_keys = self.crthit_keys
         #crt_v = self.crt_tpc_manager.make_crthit([crthits[key][entry] for key in crthit_keys])
@@ -93,7 +93,6 @@ class CRTTPCMatcherInterface:
         print('[_RUN] About to run matching for {} tracks and {} crthits'.format(len(trk_v), len(crt_v)))
 
         matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
-        print('[_RUN] Done')
 
         if len(restrict_interactions) == 0:
             self.crt_tpc_matches[(entry, use_true_tpc_objects)] = (matches)
@@ -125,8 +124,6 @@ class CRTTPCMatcherInterface:
 
         if bounds is None:
             raise Exception("Please define volume boundaries before using containment method.")
-
-        print('bounds:', bounds)
 
         x_contained = (bounds[0][0] + threshold[0] <= points[:, 0]) & (points[:, 0] <= bounds[0][1] - threshold[0])
         y_contained = (bounds[1][0] + threshold[1] <= points[:, 1]) & (points[:, 1] <= bounds[1][1] - threshold[1])
@@ -197,13 +194,20 @@ class CRTTPCManager:
         """
         from matcha.crthit import CRTHit
 
+        print('len larcv_crthits', len(larcv_crthits))
+
         crthits = []
-        for branch in larcv_crthits:
-            crthits.append(branch)
+        # Flatten larcv_crthits, which contains one list per crthit key
+        for list in larcv_crthits:
+            for item in list:
+                crthits.append(item)
+        print('[MAKE] crthits', crthits)
 
         crt_v = []
+
         # Convert larcv::CRTHit to matcha::CRTHit
         for idx, larcv_crthit in enumerate(crthits):
+        #for idx, larcv_crthit in enumerate(larcv_crthits):
             if larcv_crthit.peshit() < minimum_pe: continue
             crthit_id  = larcv_crthit.id()
             t0_sec     = larcv_crthit.ts0_s()   # seconds-only part of CRTHit timestamp
