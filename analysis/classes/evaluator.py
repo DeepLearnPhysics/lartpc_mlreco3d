@@ -5,7 +5,8 @@ from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.matching import (match_particles_fn, 
                                              match_interactions_fn, 
                                              match_interactions_optimal, 
-                                             match_particles_optimal)
+                                             match_particles_optimal,
+                                             match_recursive)
 
 from analysis.classes.predictor import FullChainPredictor
 from mlreco.utils.globals import *
@@ -272,7 +273,6 @@ class FullChainEvaluator(FullChainPredictor):
 
     def match_particles(self, entry,
                         only_primaries=False,
-                        mode='pred_to_true',
                         matching_mode='optimal', 
                         return_counts=False,
                         **kwargs):
@@ -306,29 +306,24 @@ class FullChainEvaluator(FullChainPredictor):
         counts: np.ndarray
             overlap metric values corresponding to each matched pair. 
         '''
-        if mode == 'pred_to_true':
-            # Match each pred to one in true
-            particles_from = self.get_particles(entry, 
-                                                only_primaries=only_primaries)
-            particles_to = self.get_true_particles(entry,
-                                                   only_primaries=only_primaries)
-        elif mode == 'true_to_pred':
-            # Match each true to one in pred
-            particles_to = self.get_particles(entry, 
-                                              only_primaries=only_primaries)
-            particles_from = self.get_true_particles(entry, 
-                                                     only_primaries=only_primaries)
-        else:
-            raise ValueError("Mode {} is not valid. For matching each"\
-                " prediction to truth, use 'pred_to_true' (and vice versa).".format(mode))
+        reco_particles = self.get_particles(entry, 
+                                            only_primaries=only_primaries)
+        truth_particles = self.get_true_particles(entry,
+                                                  only_primaries=only_primaries)
             
         all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
-        if matching_mode == 'one_way':
-            matched_pairs, counts = match_particles_fn(particles_from, particles_to,
-                                                    **all_kwargs)
+        if matching_mode == 'true_to_pred':
+            matched_pairs, counts = match_particles_fn(truth_particles, reco_particles,
+                                                       **all_kwargs)
+        elif matching_mode == 'pred_to_true':
+            matched_pairs, counts = match_particles_fn(reco_particles, truth_particles,
+                                                       **all_kwargs)
         elif matching_mode == 'optimal':
-            matched_pairs, counts = match_particles_optimal(particles_from, particles_to,
-                                                        **all_kwargs)
+            matched_pairs, counts = match_particles_optimal(reco_particles, truth_particles,
+                                                            **all_kwargs)
+        elif matching_mode == 'recursive':
+            matched_pairs, counts = match_recursive(reco_particles, truth_particles,
+                                                    **all_kwargs)
         else:
             raise ValueError(f"Particle matching mode {matching_mode} not suppored!")
         self._matched_particles = matched_pairs
@@ -339,9 +334,8 @@ class FullChainEvaluator(FullChainPredictor):
             return matched_pairs
 
     
-    def match_interactions(self, entry, mode='pred_to_true',
+    def match_interactions(self, entry,
                            drop_nonprimary_particles=False,
-                           match_particles=False,
                            return_counts=False,
                            matching_mode='optimal',
                            **kwargs):
@@ -377,7 +371,7 @@ class FullChainEvaluator(FullChainPredictor):
 
         all_matches, all_counts = [], []
         pred_interactions = self.get_interactions(entry, 
-                                            drop_nonprimary_particles=drop_nonprimary_particles)
+            drop_nonprimary_particles=drop_nonprimary_particles)
         true_interactions = self.get_true_interactions(entry)
         
         all_kwargs = {"min_overlap": self.min_overlap_count, "overlap_mode": self.overlap_mode, **kwargs}
@@ -387,53 +381,27 @@ class FullChainEvaluator(FullChainPredictor):
         else:
             true_interactions_masked = [ia for ia in true_interactions if ia.size > 0]
         
-        if matching_mode == 'one_way':
-            if mode == 'pred_to_true':
-                matched_interactions, counts = match_interactions_fn(pred_interactions, 
-                                                                     true_interactions_masked,
-                                                                        **all_kwargs)
-            elif mode == 'true_to_pred':
-                matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
-                                                                     pred_interactions,
-                                                                        **all_kwargs)
-            else:
-                raise ValueError(f"One-way matching mode {mode} not supported, either use 'pred_to_true' or 'true_to_pred'.")
+        if matching_mode == 'pred_to_true':
+            matched_interactions, counts = match_interactions_fn(pred_interactions, 
+                                                                 true_interactions_masked,
+                                                                 **all_kwargs)
+        elif matching_mode == 'true_to_pred':
+            matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
+                                                                 pred_interactions,
+                                                                 **all_kwargs)
         elif matching_mode == 'optimal':
             matched_interactions, counts = match_interactions_optimal(pred_interactions, 
                                                                       true_interactions_masked,
                                                                       **all_kwargs)
+        elif matching_mode == 'recursive':
+            matched_interactions, counts = match_recursive(pred_interactions, 
+                                                           true_interactions,
+                                                           min_overlap=self.min_overlap_count)
         else:
-            raise ValueError
+            raise ValueError(f"Unknown interaction matching mode {matching_mode}.")
 
         if len(matched_interactions) == 0:
             return [], []
-        if match_particles:
-            for interactions in matched_interactions:
-                domain, codomain = interactions
-                domain_particles, codomain_particles = [], []
-                if domain is not None:
-                    domain_particles = domain.particles
-                if codomain is not None:
-                    codomain_particles = codomain.particles
-                    # continue
-                domain_particles_masked = [p for p in domain_particles if p.points.shape[0] > 0]
-                codomain_particles_masked = [p for p in codomain_particles if p.points.shape[0] > 0]
-                if matching_mode == 'one_way':
-                    matched_particles, _ = match_particles_fn(domain_particles_masked, 
-                                                              codomain_particles_masked,
-                                                              min_overlap=self.min_overlap_count,
-                                                              overlap_mode=self.overlap_mode)
-                elif matching_mode == 'optimal':
-                    matched_particles, _ = match_particles_optimal(domain_particles_masked, codomain_particles_masked,
-                                                                    min_overlap=self.min_overlap_count,
-                                                                    overlap_mode=self.overlap_mode)
-                else:
-                    raise ValueError(f"Particle matching mode {matching_mode} is not supported!")
-                
-            pmatches, pcounts = self.match_parts_within_ints(matched_interactions)
-            
-            self._matched_particles = pmatches
-            self._matched_particles_counts = pcounts
             
         self._matched_interactions = matched_interactions
         self._matched_interactions_counts = counts

@@ -51,8 +51,8 @@ class TruthInteraction(Interaction):
         # Neutrino-specific information to be filled elsewhere
         self.nu_interaction_type = -1
         self.nu_interaction_mode = -1
-        self.nu_current_type = -1
-        self.nu_energy_init = -1.
+        self.nu_current_type     = -1
+        self.nu_energy_init      = -1.
         
     @property
     def particles(self):

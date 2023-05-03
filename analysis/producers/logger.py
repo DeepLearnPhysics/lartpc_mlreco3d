@@ -59,6 +59,7 @@ class AnalysisLogger:
                 if f._tag is not None and f._tag != mode:
                     continue
             update_dict = f(particle)
+            # print(f, update_dict)
             out.update(update_dict)
 
         out = attach_prefix(out, mode)
@@ -220,6 +221,7 @@ class ParticleLogger(AnalysisLogger):
         out = {'csda_kinetic_energy': -1}
         if particle is not None:
             out['csda_kinetic_energy'] = particle.csda_kinetic_energy
+        return out
     
     @staticmethod
     def is_contained(particle, vb, threshold=30):
@@ -319,9 +321,10 @@ class InteractionLogger(AnalysisLogger):
     
     @staticmethod
     def topology(ia):
-        out = 'N/A'
+        out = {'topology': 'N/A'}
         if ia is not None:
             out['topology'] = ia.topology
+        return out
     
     @staticmethod
     def is_contained(ia, vb, threshold=30):
@@ -372,8 +375,11 @@ class InteractionLogger(AnalysisLogger):
             'nu_energy_init': 'N/A'
         }
         if ia is not None:
-            if ia.nu_id == 1 and isinstance(ia.nu_info, dict):
-                out.update(ia.nu_info)
+            if ia.nu_id == 1:
+                out['nu_interaction_type'] = ia.nu_interaction_type
+                out['nu_interaction_mode'] = ia.nu_interaction_mode
+                out['nu_current_type']     = ia.nu_current_type
+                out['nu_energy_init']      = ia.nu_energy_init
         return out
     
     @staticmethod
@@ -390,8 +396,8 @@ class InteractionLogger(AnalysisLogger):
         if ia is not None:
             if hasattr(ia, 'fmatched'):
                 out['fmatched'] = ia.fmatched
-                out['flash_time'] = ia.fmatch_time
-                out['flash_total_pE'] = ia.fmatch_total_pE
-                out['flash_id'] = ia.fmatch_id
+                out['flash_time'] = ia.flash_time
+                out['flash_total_pE'] = ia.flash_total_pE
+                out['flash_id'] = ia.flash_id
                 out['flash_hypothesis'] = ia.flash_hypothesis
         return out

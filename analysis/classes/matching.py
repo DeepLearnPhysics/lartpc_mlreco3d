@@ -7,6 +7,7 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
+from pprint import pprint
 
 def matrix_counts(particles_x, particles_y):
     """Function for computing the M x N overlap matrix by counts.
@@ -493,7 +494,24 @@ def check_particle_matches(loaded_particles, clear=False):
     return match, match_counts
 
 
-def match_recursive(particles_x, particles_y, min_overlap=0.0):
+def match_recursive(particles_x, particles_y, 
+                    min_overlap=0.0, overlap_mode='iou'):
+    triplets = match_recursive_(particles_x,
+                               particles_y,
+                               min_overlap=min_overlap,
+                               overlap_mode=overlap_mode)
+    
+    matches, counts = [], []
+    for t in triplets:
+        m1, m2, val = triplets[t]
+        matches.append((m1, m2))
+        counts.append(val)
+    
+    return matches, counts
+
+
+def match_recursive_(particles_x, particles_y, 
+                     min_overlap=0.0, overlap_mode='iou'):
     """Match particle using the optimal linear assignment method.
     
     Once the initial optimal assignments are found, the remaining 
@@ -523,17 +541,18 @@ def match_recursive(particles_x, particles_y, min_overlap=0.0):
         particles_less, particles_many = particles_many, particles_less
     
     if len(particles_less) == 0 or len(particles_many) == 0:
-        return [], {}
+        return OrderedDict()
     
     overlap_matrix, cost_matrix = weighted_matrix_iou(particles_many, particles_less)
     
-    matches = []
+    matches = OrderedDict()
     ix, iy = linear_sum_assignment(cost_matrix, maximize=True)
     
     mapping = dict(zip(ix, iy)) # iy is the index over the larger dimension
-    intersections = {}
+    # intersections = OrderedDict()
     
     less_ids = {p.id: p for p in particles_less}
+    # print(less_ids)
     many_ids = {p.id: p for p in particles_many}
     
     for i in np.arange(overlap_matrix.shape[0]):
@@ -542,48 +561,51 @@ def match_recursive(particles_x, particles_y, min_overlap=0.0):
         if val > min_overlap:
             ptype = type(particles_less[i])
             if (ptype is TruthParticle) or (ptype is TruthInteraction):
-                match = (particles_less[i], particles_many[j])
+                match = (particles_less[i], particles_many[j], val)
                 key = (particles_less[i].id, particles_many[j].id)
             elif (ptype is Particle) or (ptype is Interaction):
-                match = (particles_many[j], particles_less[i])
+                match = (particles_many[j], particles_less[i], val)
                 key = (particles_many[j].id, particles_less[i].id)
             else:
                 msg = "Some entries in your input lists is neither a "\
                     "Particle nor a TruthParticle."
                 raise ValueError(msg)
-            matches.append(match)
+            # if key not in intersections:
+            matches[key] = match
             particles_less[i]._match.append(particles_many[j].id)
             particles_many[j]._match.append(particles_less[i].id)
             particles_less[i]._match_counts[particles_many[j].id] = val
             particles_many[j]._match_counts[particles_less[i].id] = val
             less_ids[particles_less[i].id].matched = True
             many_ids[particles_many[j].id].matched = True
-            intersections[key] = val
             
     if len(matches) == 0:
         # All particles in domain have no viable match
-        for part_id in less_ids:
+        for iids, part_id in enumerate(less_ids):
             ptype = type(less_ids[part_id])
             if (ptype is TruthParticle) or (ptype is TruthInteraction):
-                matches.append((less_ids[part_id], None))
+                key = (part_id, -1)
+                matches[key] = (less_ids[part_id], None, -1)
+                less_ids[part_id].matched = True
             elif (ptype is Particle) or (ptype is Interaction):
-                matches.append((None, less_ids[part_id]))
+                key = (-1, part_id)
+                matches[key] = (None, less_ids[part_id], -1)
+                less_ids[part_id].matched = True
             else:
                 msg = "Some entries in your input lists is neither a "\
                     "Particle nor a TruthParticle."
                 raise ValueError(msg)
-        return matches, intersections
+        return matches
             
     unmatched_less = [p for p in particles_less if not less_ids[p.id].matched]
-    nested_matches, nested_ints = match_recursive(unmatched_less, particles_many)
+    nested_matches = match_recursive_(unmatched_less, particles_many)
     
-    matches.extend(nested_matches)
-    intersections.update(nested_ints)
+    matches.update(nested_matches)
     
     unmatched_many = [p for p in particles_many if not many_ids[p.id].matched]
-    nested_matches, nested_ints = match_recursive(unmatched_many, particles_less)
+    nested_matches = match_recursive_(unmatched_many, particles_less)
     
-    matches.extend(nested_matches)
-    intersections.update(nested_ints)
+    matches.update(nested_matches)
+    # intersections.update(nested_ints)
             
-    return matches, intersections
+    return matches
