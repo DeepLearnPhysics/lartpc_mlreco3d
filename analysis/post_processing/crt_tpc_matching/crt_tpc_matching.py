@@ -55,22 +55,35 @@ def run_crt_tpc_matching(data_dict, result_dict,
     # contains a Track and CRTHit instance. The Track class contains the 
     # interaction_id.
     #matched_interaction_ids = [int_id for int_id in crt_tpc_matches.track.interaction_id]
-    matched_interaction_ids = []
-    for match in crt_tpc_matches:
-        matched_interaction_ids.append(match.track.interaction_id)
-    
-    matched_interactions = [i for i in interactions 
-                            if i.id in matched_interaction_ids]
+    #matched_interaction_ids = []
+    #for match in crt_tpc_matches:
+    #    matched_interaction_ids.append(match.track.interaction_id)
+    #
+    #matched_interactions = [i for i in interactions 
+    #                        if i.id in matched_interaction_ids]
 
     update_dict = defaultdict(list)
 
     crt_tpc_dict = {}
-    for interaction in enumerate(matched_interactions):
-        crt_tpc_dict[matched_track.id] = (matched_crthit.id)
-        interaction.crthit_matched = True
-        # TODO Get CRTHit and Track (aka larcv.Particle) IDs
-        #interaction.crthit_id = 
-        update_dict['interactions'].append(interaction)
+    print('Begin loop')
+    for match in crt_tpc_matches:
+        matched_track = match.track
+        # To modify the interaction in place, we need to find it in the interactions list
+        matched_interaction = None
+        for interaction in interactions:
+            if matched_track.interaction_id == interaction.id:
+                matched_interaction = interaction
+                break
+        matched_crthit = match.crthit
+        # Sanity check
+        if matched_interaction is None: 
+            print('AHHHHHHHH')
+            continue
+        matched_interaction.crthit_matched = True
+        matched_interaction.crthit_matched_particle_id = matched_track.id
+        matched_interaction.crthit_id = matched_crthit.id
+
+        update_dict['interactions'].append(matched_interaction)
     update_dict['crt_tpc_matches'].append(crt_tpc_dict)
         
     return update_dict
