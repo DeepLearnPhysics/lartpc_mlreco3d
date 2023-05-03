@@ -54,11 +54,7 @@ def run_crt_tpc_matching(data_dict, result_dict,
                                                           use_true_tpc_objects=False,
                                                           restrict_interactions=[])
 
-    print('type crt_tpc_matches', type(crt_tpc_matches))
-    print('crt_tpc_matches', crt_tpc_matches)
     assert all(isinstance(item, MatchCandidate) for item in crt_tpc_matches)
-    print('Interactions:\n')
-    print(interactions)
 
     # crt_tpc_matches is a list of matcha.MatchCandidates. Each MatchCandidate
     # contains a Track and CRTHit instance. The Track class contains the 
@@ -74,7 +70,6 @@ def run_crt_tpc_matching(data_dict, result_dict,
     update_dict = defaultdict(list)
 
     crt_tpc_dict = {}
-    print('Begin loop')
     for match in crt_tpc_matches:
         matched_track = match.track
         # To modify the interaction in place, we need to find it in the interactions list
@@ -85,9 +80,7 @@ def run_crt_tpc_matching(data_dict, result_dict,
                 break
         matched_crthit = match.crthit
         # Sanity check
-        if matched_interaction is None: 
-            print('AHHHHHHHH')
-            continue
+        if matched_interaction is None: continue
         matched_interaction.crthit_matched = True
         matched_interaction.crthit_matched_particle_id = matched_track.id
         matched_interaction.crthit_id = matched_crthit.id

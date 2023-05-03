@@ -35,13 +35,8 @@ class CRTTPCMatcherInterface:
                             use_true_tpc_objects=False,
                             restrict_interactions=[]):
 
-        print('[GETMATCHES] types:')
-        print('entry', type(entry))
-        print('use_true_tpc_objects type', type(use_true_tpc_objects))
-        print('use_true_tpc_objects', use_true_tpc_objects)
         # No caching done if matching a subset of interactions
         if (entry, use_true_tpc_objects) not in self.crt_tpc_matches or len(restrict_interactions):
-            print('[CRTTPC] No caching done')
             out = self._run_crt_tpc_matching(entry, 
                                              interactions,
                                              crthits,
@@ -50,10 +45,8 @@ class CRTTPCMatcherInterface:
                                              restrict_interactions=restrict_interactions)
 
         if len(restrict_interactions) == 0:
-            print('[CRTTPC] len(restrict_interactions) is 0')
             matches = self.crt_tpc_matches[(entry, use_true_tpc_objects)]
         else: # it wasn't cached, we just computed it
-            print('[CRTTPC] Not cached')
             matches = out
 
         return matches
@@ -64,8 +57,6 @@ class CRTTPCMatcherInterface:
                               use_true_tpc_objects=False,
                               volume=None,
                               restrict_interactions=[]):
-
-        print('[_RUN] Entry:', entry)
 
         if use_true_tpc_objects:
             if not hasattr(self, 'get_true_interactions'):
@@ -91,15 +82,12 @@ class CRTTPCMatcherInterface:
         #crt_v = self.crt_tpc_manager.make_crthit([crthits[key][entry] for key in crthit_keys])
         crt_v = self.crt_tpc_manager.make_crthit([crthits[key] for key in crthit_keys])
 
-        print('[_RUN] About to run matching for {} tracks and {} crthits'.format(len(trk_v), len(crt_v)))
 
         matches = self.crt_tpc_manager.run_crt_tpc_matching(trk_v, crt_v)
 
         if len(restrict_interactions) == 0:
             self.crt_tpc_matches[(entry, use_true_tpc_objects)] = (matches)
 
-        print('Returning matches type:', type(matches))
-        print('Returning matches:', matches)
         return matches
 
     def _is_contained(self, points, bounds, threshold=30):
@@ -209,14 +197,11 @@ class CRTTPCManager:
         """
         from matcha.crthit import CRTHit
 
-        print('len larcv_crthits', len(larcv_crthits))
-
         crthits = []
         # Flatten larcv_crthits, which contains one list per crthit key
         for list in larcv_crthits:
             for item in list:
                 crthits.append(item)
-        print('[MAKE] crthits', crthits)
 
         crt_v = []
 
