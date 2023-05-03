@@ -4,7 +4,7 @@ from collections import OrderedDict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 from analysis.classes.matching import (match_particles_fn,
-                                       match_particles_recursive,
+                                       match_recursive,
                                        match_interactions_fn,
                                        match_interactions_optimal)
 from analysis.classes.data import *
@@ -30,7 +30,7 @@ def match_particles(data_dict,
     matched_particles = []
     
     if matching_mode == 'optimal':
-        matched_particles, intersections = match_particles_recursive(
+        matched_particles, intersections = match_recursive(
             pred_particles, 
             true_particles, 
             min_overlap=min_overlap)
@@ -48,12 +48,8 @@ def match_particles(data_dict,
                 pred_particles, 
                 min_overlap=min_overlap, 
                 overlap_mode=overlap_mode)
-        
-    update_dict = {
-        'matched_particles': matched_particles
-    }
 
-    return update_dict
+    return {}
     
 
 
@@ -78,11 +74,10 @@ def match_interactions(data_dict,
     # Only consider interactions with nonzero predicted nonghost
     
     if matching_mode == 'optimal':
-        matched_interactions, counts = match_interactions_optimal(
+        matched_interactions, counts = match_recursive(
             pred_interactions, 
             true_interactions, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            min_overlap=min_overlap)
         
     if matching_mode == 'one_way':
         if matching_direction == 'pred_to_true':
@@ -97,13 +92,8 @@ def match_interactions(data_dict,
                 pred_interactions, 
                 min_overlap=min_overlap, 
                 overlap_mode=overlap_mode)
-        
-    update_dict = {
-        # 'matched_interactions': matched_interactions,
-        'interaction_match_values': np.array(counts, dtype=np.float32),
-    }
     
-    return update_dict
+    return {}
 
 
 # ----------------------------- Helper functions -----------------------------

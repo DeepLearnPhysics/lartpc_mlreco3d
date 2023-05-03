@@ -493,8 +493,7 @@ def check_particle_matches(loaded_particles, clear=False):
     return match, match_counts
 
 
-def match_particles_recursive(particles_x, particles_y,
-                              min_overlap=0.0):
+def match_recursive(particles_x, particles_y, min_overlap=0.0):
     """Match particle using the optimal linear assignment method.
     
     Once the initial optimal assignments are found, the remaining 
@@ -520,10 +519,8 @@ def match_particles_recursive(particles_x, particles_y,
     particles_less = [p for p in particles_x if p.size > 0]
     particles_many = [p for p in particles_y if p.size > 0]
     
-    if len(particles_x) <= len(particles_y):
-        particles_less, particles_many = particles_x, particles_y
-    else:
-        particles_less, particles_many = particles_y, particles_x
+    if len(particles_less) > len(particles_many):
+        particles_less, particles_many = particles_many, particles_less
     
     if len(particles_less) == 0 or len(particles_many) == 0:
         return [], {}
@@ -543,10 +540,11 @@ def match_particles_recursive(particles_x, particles_y,
         j = mapping[i]
         val = overlap_matrix[i,j]
         if val > min_overlap:
-            if type(particles_less[i]) is Particle:
+            ptype = type(particles_less[i])
+            if (ptype is TruthParticle) or (ptype is TruthInteraction):
                 match = (particles_less[i], particles_many[j])
                 key = (particles_less[i].id, particles_many[j].id)
-            elif type(particles_less[i]) is TruthParticle:
+            elif (ptype is Particle) or (ptype is Interaction):
                 match = (particles_many[j], particles_less[i])
                 key = (particles_many[j].id, particles_less[i].id)
             else:
@@ -565,9 +563,10 @@ def match_particles_recursive(particles_x, particles_y,
     if len(matches) == 0:
         # All particles in domain have no viable match
         for part_id in less_ids:
-            if type(less_ids[part_id]) is TruthParticle:
+            ptype = type(less_ids[part_id])
+            if (ptype is TruthParticle) or (ptype is TruthInteraction):
                 matches.append((less_ids[part_id], None))
-            elif type(less_ids[part_id]) is Particle:
+            elif (ptype is Particle) or (ptype is Interaction):
                 matches.append((None, less_ids[part_id]))
             else:
                 msg = "Some entries in your input lists is neither a "\
@@ -576,13 +575,13 @@ def match_particles_recursive(particles_x, particles_y,
         return matches, intersections
             
     unmatched_less = [p for p in particles_less if not less_ids[p.id].matched]
-    nested_matches, nested_ints = match_particles_recursive(unmatched_less, particles_many)
+    nested_matches, nested_ints = match_recursive(unmatched_less, particles_many)
     
     matches.extend(nested_matches)
     intersections.update(nested_ints)
     
     unmatched_many = [p for p in particles_many if not many_ids[p.id].matched]
-    nested_matches, nested_ints = match_particles_recursive(unmatched_many, particles_less)
+    nested_matches, nested_ints = match_recursive(unmatched_many, particles_less)
     
     matches.extend(nested_matches)
     intersections.update(nested_ints)

@@ -114,43 +114,43 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def startpoint(particle):
+    def start_point(particle):
         out = {
             'particle_has_startpoint': False,
             'particle_startpoint_x': -1,
             'particle_startpoint_y': -1,
             'particle_startpoint_z': -1
         }
-        if (particle is not None) and (particle.startpoint is not None) \
-            and (not (particle.startpoint == -1).all()):
+        if (particle is not None) and (particle.start_point is not None) \
+            and (not (particle.start_point == -1).all()):
             out['particle_has_startpoint'] = True
-            out['particle_startpoint_x'] = particle.startpoint[0]
-            out['particle_startpoint_y'] = particle.startpoint[1]
-            out['particle_startpoint_z'] = particle.startpoint[2]
+            out['particle_startpoint_x'] = particle.start_point[0]
+            out['particle_startpoint_y'] = particle.start_point[1]
+            out['particle_startpoint_z'] = particle.start_point[2]
         return out
     
     @staticmethod
-    def endpoint(particle):
+    def end_point(particle):
         out = {
             'particle_has_endpoint': False,
             'particle_endpoint_x': -1,
             'particle_endpoint_y': -1,
             'particle_endpoint_z': -1
         }
-        if (particle is not None) and (particle.endpoint is not None) \
-            and (not (particle.endpoint == -1).all()):
+        if (particle is not None) and (particle.end_point is not None) \
+            and (not (particle.end_point == -1).all()):
             out['particle_has_endpoint'] = True
-            out['particle_endpoint_x'] = particle.endpoint[0]
-            out['particle_endpoint_y'] = particle.endpoint[1]
-            out['particle_endpoint_z'] = particle.endpoint[2]
+            out['particle_endpoint_x'] = particle.end_point[0]
+            out['particle_endpoint_y'] = particle.end_point[1]
+            out['particle_endpoint_z'] = particle.end_point[2]
         return out
     
     @staticmethod
-    def startpoint_is_touching(particle, threshold=5.0):
-        out = {'particle_startpoint_is_touching': True}
+    def start_point_is_touching(particle, threshold=5.0):
+        out = {'particle_start_point_is_touching': True}
         if type(particle) is TruthParticle:
             if particle.size > 0:
-                diff = particle.points - particle.startpoint.reshape(1, -1)
+                diff = particle.points - particle.start_point.reshape(1, -1)
                 dists = np.linalg.norm(diff, axis=1)
                 min_dist = np.min(dists)
                 if min_dist > threshold:
@@ -225,10 +225,10 @@ class ParticleLogger(AnalysisLogger):
         return out
 
     @staticmethod
-    def sum_edep(particle):
-        out = {'particle_sum_edep': -1}
+    def depositions_sum(particle):
+        out = {'particle_depositions_sum': -1}
         if particle is not None:
-            out['particle_sum_edep'] = particle.sum_edep
+            out['particle_depositions_sum'] = particle.depositions_sum
         return out
     
 
