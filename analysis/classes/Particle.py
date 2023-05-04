@@ -85,7 +85,8 @@ class Particle:
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  length: float = -1.,
                  csda_kinetic_energy: float = -1.,
-                 momentum_mcs: float = -1., **kwargs):
+                 momentum_mcs: float = -1., 
+                 matched: bool = False, **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -113,20 +114,56 @@ class Particle:
         
         # Quantities to be set during post_processing
 
-        self.start_point         = start_point
-        self.end_point           = end_point
-        self.start_dir           = start_dir
-        self.end_dir             = end_dir
+        self._start_point         = start_point
+        self._end_point           = end_point
+        self._start_dir           = start_dir
+        self._end_dir             = end_dir
         self.length              = length
         self.csda_kinetic_energy = csda_kinetic_energy
         self.momentum_mcs        = momentum_mcs
-        self.matched             = False
+        self.matched             = matched
 
         # Quantities to be set by the particle matcher
         self._match = list(kwargs.get('match', []))
         self._match_counts = kwargs.get('match_counts', OrderedDict())
         if not isinstance(self._match_counts, dict):
             raise ValueError(f"{type(self._match_counts)}")
+        
+    @property
+    def start_point(self):
+        return self._start_point
+    
+    @start_point.setter
+    def start_point(self, value):
+        assert value.shape == (3,)
+        self._start_point = value
+        
+    @property
+    def end_point(self):
+        return self._end_point
+    
+    @end_point.setter
+    def end_point(self, value):
+        assert value.shape == (3,)
+        self._end_point = value
+        
+    @property
+    def start_dir(self):
+        return self._start_dir
+    
+    @start_dir.setter
+    def start_dir(self, value):
+        assert value.shape == (3,)
+        self._start_dir = value
+        
+    @property
+    def end_dir(self):
+        return self._end_dir
+    
+    @end_dir.setter
+    def end_dir(self, value):
+        assert value.shape == (3,)
+        self._end_dir = value
         
     @property
     def is_primary(self):

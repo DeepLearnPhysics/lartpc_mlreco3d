@@ -53,7 +53,7 @@ def calorimetric_energy(data_dict,
                                  'particle_node_pred_type',
                                  'particles'])
 def range_based_track_energy(data_dict, result_dict,
-                             bin_size=17, include_pids=[2, 3, 4], table_path=''):
+                             bin_size=17, include_pids=[2, 3, 4]):
     """Compute track energy by the CSDA (continuous slowing-down approximation)
     range-based method. 
 
@@ -91,7 +91,7 @@ def range_based_track_energy(data_dict, result_dict,
     if len(particles) == 0:
         return update_dict
 
-    splines = {ptype: get_splines(ptype, table_path) for ptype in include_pids}
+    splines = {ptype: get_splines(ptype) for ptype in include_pids}
 
     pred_ptypes = np.argmax(particle_types, axis=1)
     particle_length = -np.ones(len(particles))
@@ -119,7 +119,6 @@ def range_based_track_energy_spline(data_dict,
                                     result_dict,
                                     bin_size=17,
                                     include_pids=[2,3,4],
-                                    table_path='',
                                     mode='reco'):
     
     if mode == 'truth':
@@ -131,7 +130,7 @@ def range_based_track_energy_spline(data_dict,
     
     if len(particles) == 0: return {}
     
-    splines = {ptype: get_splines(ptype, table_path) for ptype in include_pids}
+    splines = {ptype: get_splines(ptype) for ptype in include_pids}
     
     for i, p in enumerate(particles):
         if p.semantic_type == 1 and p.pid in include_pids:
@@ -147,7 +146,7 @@ def range_based_track_energy_spline(data_dict,
 # ----------------------------- Helper functions -----------------------------
 
 @lru_cache
-def get_splines(particle_type, table_path):
+def get_splines(particle_type):
     """_summary_
 
     Parameters

@@ -343,12 +343,15 @@ class AnaToolsManager:
         if not self.crt_tpc_manager_initialized:
         
             pp_crt_tpc_matching      = self.ana_config['post_processing']['run_crt_tpc_matching']
-            crthit_keys              = pp_crt_tpc_matching['crthit_keys']
-            volume_boundaries        = pp_crt_tpc_matching['volume_boundaries']
-            self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
+            crthit_keys              = pp_crt_tpc_matching.get('crthit_keys', ['crthits'])
+            volume_boundaries        = pp_crt_tpc_matching.pop('volume_boundaries')
+            # self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
+            
+            # self.crt_tpc_config = yaml.safe_load(open(self.crt_tpc_config_path, 'r'))
 
+            self.crt_tpc_config  = pp_crt_tpc_matching
             self.crt_tpc_manager = CRTTPCMatcherInterface(self.config, 
-                                                          self.crt_tpc_config_path,
+                                                          self.crt_tpc_config,
                                                           boundaries=volume_boundaries,
                                                           crthit_keys=crthit_keys)
             self.crt_tpc_manager.initialize_crt_tpc_manager(meta)
@@ -388,10 +391,10 @@ class AnaToolsManager:
                         'opflash_keys': local_pcfg['opflash_keys']
                     }
                 if processor_name == 'run_crt_tpc_matching':
-                    local_pcfg.update({
+                    local_pcfg = {
                         'crt_tpc_manager': self.crt_tpc_manager,
                         'crthit_keys': local_pcfg['crthit_keys']
-                    })
+                    }
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
@@ -497,36 +500,48 @@ class AnaToolsManager:
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
-        self.logger_dict['forward_time'] = end-start
-        start = end
+        dt = end - start
+        print(f"Foward took {dt:.3f} seconds.")
+        self.logger_dict['forward_time'] = dt
 
         # 2. Build data representations'
         if self.data_builders is not None:
+            start = time.time()
             if self._reader_state == 'hdf5':
                 self.load_representations(data, res)
             else:
                 self.build_representations(data, res)
             end = time.time()
-            self.logger_dict['build_reps_time'] = end-start
-            start = end
-
+            dt = end - start
+            self.logger_dict['build_reps_time'] = dt
+        print(f"Building representations took {dt:.3f} seconds.")
+        
         # 3. Run post-processing, if requested
+        start = time.time()
         self.run_post_processing(data, res)
         end = time.time()
-        self.logger_dict['post_processing_time'] = end-start
-        start = end
+        dt = end - start
+        self.logger_dict['post_processing_time'] = dt
+        print(f"Post-processing took {dt:.3f} seconds.")
 
         # 4. Write updated results to file, if requested 
+        start = time.time()
         if self._data_writer is not None:
             self._data_writer.append(data, res)
+        end = time.time()
+        dt = end - start
+        print(f"HDF5 writing took {dt:.3f} seconds.")
 
         # 5. Run scripts, if requested
+        start = time.time()
         ana_output = self.run_ana_scripts(data, res)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
         end = time.time()
-        self.logger_dict['write_csv_time'] = end-start
+        dt = end - start
+        print(f"Scripts took {dt:.3f} seconds.")
+        self.logger_dict['write_csv_time'] = dt
         
         
     def log(self, iteration):

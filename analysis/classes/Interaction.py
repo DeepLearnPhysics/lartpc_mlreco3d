@@ -56,7 +56,8 @@ class Interaction:
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
                  flash_id: int = -1,
-                 flash_hypothesis: float = -1):
+                 flash_hypothesis: float = -1,
+                 matched: bool = False):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -87,7 +88,7 @@ class Interaction:
         # Quantities to be set by the particle matcher
         self._match         = []
         self._match_counts  = OrderedDict()
-        self.matched        = False
+        self.matched        = matched
         
         # Flash matching quantities
         self.flash_time     = flash_time

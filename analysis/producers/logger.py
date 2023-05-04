@@ -117,14 +117,13 @@ class ParticleLogger(AnalysisLogger):
     @staticmethod
     def start_point(particle):
         out = {
-            'particle_has_startpoint': False,
+            # 'particle_has_startpoint': False,
             'particle_startpoint_x': -1,
             'particle_startpoint_y': -1,
             'particle_startpoint_z': -1
         }
-        if (particle is not None) and (particle.start_point is not None) \
-            and (not (particle.start_point == -1).all()):
-            out['particle_has_startpoint'] = True
+        if (particle is not None) and (particle.start_point is not None):
+            # out['particle_has_startpoint'] = True
             out['particle_startpoint_x'] = particle.start_point[0]
             out['particle_startpoint_y'] = particle.start_point[1]
             out['particle_startpoint_z'] = particle.start_point[2]
@@ -133,17 +132,17 @@ class ParticleLogger(AnalysisLogger):
     @staticmethod
     def end_point(particle):
         out = {
-            'particle_has_endpoint': False,
-            'particle_endpoint_x': -1,
-            'particle_endpoint_y': -1,
-            'particle_endpoint_z': -1
+            # 'particle_has_endpoint': False,
+            'particle_end_point_x': -1,
+            'particle_end_point_y': -1,
+            'particle_end_point_z': -1
         }
         if (particle is not None) and (particle.end_point is not None) \
             and (not (particle.end_point == -1).all()):
-            out['particle_has_endpoint'] = True
-            out['particle_endpoint_x'] = particle.end_point[0]
-            out['particle_endpoint_y'] = particle.end_point[1]
-            out['particle_endpoint_z'] = particle.end_point[2]
+            # out['particle_has_endpoint'] = True
+            out['particle_end_point_x'] = particle.end_point[0]
+            out['particle_end_point_y'] = particle.end_point[1]
+            out['particle_end_point_z'] = particle.end_point[2]
         return out
     
     @staticmethod
@@ -400,4 +399,19 @@ class InteractionLogger(AnalysisLogger):
                 out['flash_total_pE'] = ia.flash_total_pE
                 out['flash_id'] = ia.flash_id
                 out['flash_hypothesis'] = ia.flash_hypothesis
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def crt_match_info(ia):
+        out = {
+            'crthit_matched': False,
+            'crthit_matched_particle_id': -1,
+            'crthit_id': -1
+        }
+        assert (ia) is None or (type(ia) is Interaction)
+        if ia is not None:
+            out['crthit_id'] = ia.crthit_id
+            out['crthit_matched'] = ia.crthit_matched
+            out['crthit_matched_particle_id'] = ia.crthit_matched_particle_id
         return out

@@ -8,8 +8,6 @@ from mlreco.utils.globals import *
                  result_capture=['interactions'])
 def run_crt_tpc_matching(data_dict, result_dict, 
                          crt_tpc_manager=None,
-                         volume_boundaries=None,
-                         matcha_config='',
                          crthit_keys=[]):
     """
     Post processor for running CRT-TPC matching using matcha.
@@ -31,13 +29,13 @@ def run_crt_tpc_matching(data_dict, result_dict,
         interaction.crthit_id: (list of ints)
             List of IDs for CRT hits that were matched to one or more tracks
     """
+    print('Running CRT matching...')
     from matcha.match_candidate import MatchCandidate
 
     crthits = {}
     assert len(crthit_keys) > 0
     for key in crthit_keys:
         crthits[key] = data_dict[key]
-    update_dict = {}
     
     interactions = result_dict['interactions']
     entry        = data_dict['index']
@@ -61,9 +59,8 @@ def run_crt_tpc_matching(data_dict, result_dict,
     #matched_interactions = [i for i in interactions 
     #                        if i.id in matched_interaction_ids]
 
-    update_dict = defaultdict(list)
+    # update_dict = defaultdict(list)
 
-    crt_tpc_dict = {}
     for match in crt_tpc_matches:
         matched_track = match.track
         # To modify the interaction in place, we need to find it in the interactions list
@@ -79,10 +76,10 @@ def run_crt_tpc_matching(data_dict, result_dict,
         matched_interaction.crthit_matched_particle_id = matched_track.id
         matched_interaction.crthit_id = matched_crthit.id
 
-        update_dict['interactions'].append(matched_interaction)
-    update_dict['crt_tpc_matches'].append(crt_tpc_dict)
-        
-    return update_dict
+        # update_dict['interactions'].append(matched_interaction)
+    # update_dict['crt_tpc_matches'].append(crt_tpc_dict)
+    print('Done CRT matching.')
+    return {}
 
 
 
