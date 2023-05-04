@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from matcha.match_candidate import MatchCandidate
+#from matcha.match_candidate import MatchCandidate
 
 @post_processing(data_capture=['meta', 'index', 'crthits'], 
                  result_capture=['interactions'])
@@ -31,6 +31,8 @@ def run_crt_tpc_matching(data_dict, result_dict,
         interaction.crthit_id: (list of ints)
             List of IDs for CRT hits that were matched to one or more tracks
     """
+    from matcha.match_candidate import MatchCandidate
+
     crthits = {}
     assert len(crthit_keys) > 0
     for key in crthit_keys:
