@@ -13,7 +13,7 @@ from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
 from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
-from analysis.post_processing.crt_tpc_matching.CRTTPCManager import CRTTPCMatcherInterface
+from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
