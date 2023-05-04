@@ -101,7 +101,6 @@ class FullChainPredictor:
                 self.result[key] = self.builders[key].build(self.data_blob, 
                                                             self.result, 
                                                             mode='reco')
-
     def __repr__(self):
         msg = "FullChainEvaluator(num_images={})".format(int(self.num_images))
         return msg
