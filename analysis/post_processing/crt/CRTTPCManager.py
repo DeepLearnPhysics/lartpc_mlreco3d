@@ -171,16 +171,14 @@ class CRTTPCManager:
         # Setup matcha config parameters
         self.crt_tpc_config = yaml.safe_load(open(crt_tpc_config_path, 'r'))
         self.distance_threshold = self.crt_tpc_config['distance_threshold']
-
-        #distance_threshold: 50
-        #dca_method: 'simple'
-        #direction_method: 'pca'
-        #pca_radius: 10
-        #min_points_in_radius: 10
-        #trigger_timestamp: None # Only necessary if isdata=True
-        #isdata: False
-        #save_to_file: True
-        #file_path: '.'
+        self.dca_method = self.crt_tpc_config['dca_method']
+        self.direction_method = self.crt_tpc_config['direction_method']
+        self.pca_radius = self.crt_tpc_config['pca_radius']
+        self.min_points_in_radius = self.crt_tpc_config['min_points_in_radius']
+        self.trigger_timestamp = self.crt_tpc_config['trigger_timestamp']
+        self.isdata = self.crt_tpc_config['isdata']
+        self.save_to_file = self.crt_tpc_config['save_to_file']
+        self.file_path = self.crt_tpc_config['file_path']
 
         self.crt_tpc_matches = None
         self.tpc_v, self.crt_v, = None, None 
@@ -299,22 +297,17 @@ class CRTTPCManager:
         """
         from matcha import match_maker
 
-        #distance_threshold = 50
-        #dca_method = 'simple'
-        #direction_method = 'pca'
-        #pca_radius = 10
-        #min_points_in_radius = 10
-        #trigger_timestamp = None # Only necessary if isdata=True
-        #isdata = False
-        #save_to_file = True
-        #file_path = '.'
         crt_tpc_matches = match_maker.get_track_crthit_matches(
             tracks, crthits, 
             approach_distance_threshold=self.distance_threshold, 
-            direction_method=direction_method, dca_method=dca_method, 
-            pca_radius=pca_radius, min_points_in_radius=min_points_in_radius,
-            trigger_timestamp=trigger_timestamp, isdata=isdata,
-            save_to_file=save_to_file, file_path=file_path
+            direction_method=self.direction_method, 
+            dca_method=self.dca_method, 
+            pca_radius=self.pca_radius, 
+            min_points_in_radius=self.min_points_in_radius,
+            trigger_timestamp=self.trigger_timestamp, 
+            isdata=self.isdata,
+            save_to_file=self.save_to_file, 
+            file_path=self.file_path
         )
 
         return crt_tpc_matches
