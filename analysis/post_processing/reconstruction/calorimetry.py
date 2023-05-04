@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from scipy.interpolate import UnivariateSpline, CubicSpline
 from functools import lru_cache
+import pathlib
 
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
@@ -162,13 +163,14 @@ def get_splines(particle_type, table_path):
     f: Callable
         Function mapping CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
     """
+    path = pathlib.Path(__file__).parent
     if particle_type == PDG_TO_PID[2212]:
-        path = os.path.join(table_path, 'pE_liquid_argon.txt')
+        path = os.path.join(path, 'tables', 'pE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',
                           index_col=False)
     elif particle_type == PDG_TO_PID[13]:
-        path = os.path.join(table_path, 'muE_liquid_argon.txt')
+        path = os.path.join(path, 'tables', 'muE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',
                           index_col=False)
