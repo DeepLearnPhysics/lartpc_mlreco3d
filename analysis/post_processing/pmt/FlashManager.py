@@ -480,7 +480,7 @@ class FlashManager:
         if flashes is not None:
             self.make_flash(flashes)
 
-        assert self.tpc_v is not None and self.pmt_v is not None
+        assert self.tpc_v is not None and self.pmt_v is not None 
 
         self.mgr.Reset()
 

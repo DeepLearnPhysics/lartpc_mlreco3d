@@ -49,6 +49,9 @@ class Interaction:
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 crthit_matched: bool = False,
+                 crthit_matched_particle_id: int = -1,
+                 crthit_id: int = -1,
                  flash_time: float = -float(sys.maxsize),
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
@@ -89,6 +92,11 @@ class Interaction:
         self.fmatched       = fmatched
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
+
+        # CRT-TPC matching quantities
+        self.crthit_matched = crthit_matched
+        self.crthit_matched_particle_id = crthit_matched_particle_id
+        self.crthit_id = crthit_id
         
     @property
     def size(self):
