@@ -634,12 +634,12 @@ class FragmentBuilder(DataBuilder):
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
-        self.allow_nodes = self.cfg.get('allow_nodes', [0,2,3])
-        self.min_particle_voxel_count = self.cfg.get('min_particle_voxel_cut', -1)
-        self.only_primaries = self.cfg.get('only_primaries', False)
-        self.include_semantics = self.cfg.get('include_semantics', None)
+        self.allow_nodes         = self.cfg.get('allow_nodes', [0,2,3])
+        self.min_voxel_cut       = self.cfg.get('min_voxel_cut', -1)
+        self.only_primaries      = self.cfg.get('only_primaries', False)
+        self.include_semantics   = self.cfg.get('include_semantics', None)
         self.attaching_threshold = self.cfg.get('attaching_threshold', 5.0)
-        self.verbose = self.cfg.get('verbose', False)
+        self.verbose             = self.cfg.get('verbose', False)
 
     def _build_reco(self, entry, 
                     data: dict, 
