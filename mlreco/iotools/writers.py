@@ -503,7 +503,7 @@ class HDF5Writer:
             List of arrays to be stored
         '''
         # Extend the dataset, store combined array
-        array = np.concatenate(array_list)
+        array = np.concatenate(array_list) if len(array_list) else []
         dataset = group[key]['elements']
         first_id = len(dataset)
         dataset.resize(first_id + len(array), axis=0)
@@ -512,7 +512,7 @@ class HDF5Writer:
         # Loop over arrays in the list, create a reference for each
         index = group[key]['index']
         current_id = len(index)
-        index.resize(first_id + len(array_list), axis=0)
+        index.resize(current_id + len(array_list), axis=0)
         last_id = first_id
         for i, el in enumerate(array_list):
             first_id = last_id
