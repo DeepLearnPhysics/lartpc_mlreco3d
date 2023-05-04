@@ -2,22 +2,14 @@ import numpy as np
 from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from matcha.match_candidate import MatchCandidate
+#from matcha.match_candidate import MatchCandidate
 
 @post_processing(data_capture=['meta', 'index', 'crthits'], 
                  result_capture=['interactions'])
 def run_crt_tpc_matching(data_dict, result_dict, 
                          crt_tpc_manager=None,
                          volume_boundaries=None,
-			 #distance_threshold=50,
-                         #dca_method='simple',
-                         #direction_method='pca',
-                         #pca_radius=10,
-                         #min_points_in_radius=10,
-                         #trigger_timestamp=None, # Only necessary if isdata=True
-                         #isdata=False,
-                         #save_to_file=True,
-                         #file_path='.',
+                         matcha_config='',
                          crthit_keys=[]):
     """
     Post processor for running CRT-TPC matching using matcha.
@@ -39,6 +31,8 @@ def run_crt_tpc_matching(data_dict, result_dict,
         interaction.crthit_id: (list of ints)
             List of IDs for CRT hits that were matched to one or more tracks
     """
+    from matcha.match_candidate import MatchCandidate
+
     crthits = {}
     assert len(crthit_keys) > 0
     for key in crthit_keys:
