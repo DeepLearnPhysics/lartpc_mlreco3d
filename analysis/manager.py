@@ -497,6 +497,7 @@ class AnaToolsManager:
             Iteration number for current step. 
         """
         # 1. Run forward
+        glob_start = time.time()
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
@@ -542,6 +543,10 @@ class AnaToolsManager:
         dt = end - start
         print(f"Scripts took {dt:.3f} seconds.")
         self.logger_dict['write_csv_time'] = dt
+        
+        glob_end = time.time()
+        dt = glob_end - glob_start
+        print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
         
         
     def log(self, iteration):

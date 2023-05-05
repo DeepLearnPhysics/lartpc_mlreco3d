@@ -309,7 +309,6 @@ class CRTTPCManager:
             save_to_file=self.save_to_file, 
             file_path=self.file_path
         )
-
         return crt_tpc_matches
 
     def points_to_cm(self, points):
