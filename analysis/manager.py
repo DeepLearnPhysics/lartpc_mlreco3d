@@ -13,7 +13,7 @@ from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
 from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
-from analysis.post_processing.crt_tpc_matching.CRTTPCManager import CRTTPCMatcherInterface
+from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
@@ -52,14 +52,16 @@ class AnaToolsManager:
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
 
         # Initialize data product builders
-        self.data_builders = self.ana_config['analysis']['data_builders']
-        self.builders      = {}
-        for builder_name in self.data_builders:
-            if builder_name not in SUPPORTED_BUILDERS:
-                msg = f"{builder_name} is not a valid data product builder!"
-                raise ValueError(msg)
-            builder = eval(builder_name)()
-            self.builders[builder_name] = builder
+        self.data_builders = None
+        if 'data_builders' in self.ana_config['analysis']:
+            self.data_builders = self.ana_config['analysis']['data_builders']
+            self.builders      = {}
+            for builder_name in self.data_builders:
+                if builder_name not in SUPPORTED_BUILDERS:
+                    msg = f"{builder_name} is not a valid data product builder!"
+                    raise ValueError(msg)
+                builder = eval(builder_name)()
+                self.builders[builder_name] = builder
 
         self._data_reader  = None
         self._reader_state = None
@@ -341,12 +343,15 @@ class AnaToolsManager:
         if not self.crt_tpc_manager_initialized:
         
             pp_crt_tpc_matching      = self.ana_config['post_processing']['run_crt_tpc_matching']
-            crthit_keys              = pp_crt_tpc_matching['crthit_keys']
-            volume_boundaries        = pp_crt_tpc_matching['volume_boundaries']
-            self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
+            crthit_keys              = pp_crt_tpc_matching.get('crthit_keys', ['crthits'])
+            volume_boundaries        = pp_crt_tpc_matching.pop('volume_boundaries')
+            # self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
+            
+            # self.crt_tpc_config = yaml.safe_load(open(self.crt_tpc_config_path, 'r'))
 
+            self.crt_tpc_config  = pp_crt_tpc_matching
             self.crt_tpc_manager = CRTTPCMatcherInterface(self.config, 
-                                                          self.crt_tpc_config_path,
+                                                          self.crt_tpc_config,
                                                           boundaries=volume_boundaries,
                                                           crthit_keys=crthit_keys)
             self.crt_tpc_manager.initialize_crt_tpc_manager(meta)
@@ -386,10 +391,10 @@ class AnaToolsManager:
                         'opflash_keys': local_pcfg['opflash_keys']
                     }
                 if processor_name == 'run_crt_tpc_matching':
-                    local_pcfg.update({
+                    local_pcfg = {
                         'crt_tpc_manager': self.crt_tpc_manager,
                         'crthit_keys': local_pcfg['crthit_keys']
-                    })
+                    }
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
@@ -492,38 +497,56 @@ class AnaToolsManager:
             Iteration number for current step. 
         """
         # 1. Run forward
+        glob_start = time.time()
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
-        self.logger_dict['forward_time'] = end-start
-        start = end
+        dt = end - start
+        print(f"Foward took {dt:.3f} seconds.")
+        self.logger_dict['forward_time'] = dt
 
-        # 2. Build data representations
-        if self._reader_state == 'hdf5':
-            self.load_representations(data, res)
-        else:
-            self.build_representations(data, res)
-        end = time.time()
-        self.logger_dict['build_reps_time'] = end-start
-        start = end
-
+        # 2. Build data representations'
+        if self.data_builders is not None:
+            start = time.time()
+            if self._reader_state == 'hdf5':
+                self.load_representations(data, res)
+            else:
+                self.build_representations(data, res)
+            end = time.time()
+            dt = end - start
+            self.logger_dict['build_reps_time'] = dt
+        print(f"Building representations took {dt:.3f} seconds.")
+        
         # 3. Run post-processing, if requested
+        start = time.time()
         self.run_post_processing(data, res)
         end = time.time()
-        self.logger_dict['post_processing_time'] = end-start
-        start = end
+        dt = end - start
+        self.logger_dict['post_processing_time'] = dt
+        print(f"Post-processing took {dt:.3f} seconds.")
 
         # 4. Write updated results to file, if requested 
+        start = time.time()
         if self._data_writer is not None:
             self._data_writer.append(data, res)
+        end = time.time()
+        dt = end - start
+        print(f"HDF5 writing took {dt:.3f} seconds.")
 
         # 5. Run scripts, if requested
+        start = time.time()
         ana_output = self.run_ana_scripts(data, res)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
         end = time.time()
-        self.logger_dict['write_csv_time'] = end-start
+        dt = end - start
+        print(f"Scripts took {dt:.3f} seconds.")
+        self.logger_dict['write_csv_time'] = dt
+        
+        glob_end = time.time()
+        dt = glob_end - glob_start
+        print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
         
         
     def log(self, iteration):

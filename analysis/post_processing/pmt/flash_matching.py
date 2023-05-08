@@ -2,7 +2,6 @@ import numpy as np
 from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-from .filters import filter_opflashes
 
 @post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
                  result_capture=['interactions'])
@@ -39,7 +38,7 @@ def run_flash_matching(data_dict, result_dict,
         interaction.fmatch_total_pE: float
         interaction.fmatch_id: int
     """
-    
+    print("Running flash matching...")
     opflashes = {}
     assert len(opflash_keys) > 0
     for key in opflash_keys:
@@ -63,8 +62,6 @@ def run_flash_matching(data_dict, result_dict,
                                       volume=1,
                                       restrict_interactions=[])
 
-    update_dict = defaultdict(list)
-
     flash_dict_E = {}
     for ia, flash, match in fmatches_E:
         flash_dict_E[ia.id] = (flash, match)
@@ -72,8 +69,9 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        update_dict['interactions'].append(ia)
-    update_dict['flash_matches_cryoE'].append(flash_dict_E)
+        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
+        # update_dict['interactions'].append(ia)
+    # update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
     flash_dict_W = {}
     for ia, flash, match in fmatches_W:
@@ -82,10 +80,11 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        update_dict['interactions'].append(ia)
-    update_dict['flash_matches_cryoW'].append(flash_dict_W)
+        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
+        # update_dict['interactions'].append(ia)
+    # update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
-    assert len(update_dict['flash_matches_cryoE'])\
-           == len(update_dict['flash_matches_cryoW'])
-
-    return update_dict
+    # assert len(update_dict['flash_matches_cryoE'])\
+    #        == len(update_dict['flash_matches_cryoW'])
+    print("Done flash matching.")
+    return {}

@@ -4,7 +4,7 @@ from collections import OrderedDict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 from analysis.classes.matching import (match_particles_fn,
-                                       match_particles_optimal,
+                                       match_recursive,
                                        match_interactions_fn,
                                        match_interactions_optimal)
 from analysis.classes.data import *
@@ -15,11 +15,12 @@ from analysis.classes.data import *
 def match_particles(data_dict,
                     result_dict,
                     matching_mode='optimal',
-                    matching_direction='pred_to_true',
-                    match_particles=True,
                     min_overlap=0,
                     overlap_mode='iou'):
     pred_particles = result_dict['particles']
+    
+    out = {'matched_particles': [],
+           'particle_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_particles = [ia for ia in result_dict['truth_particles'] if ia.truth_size > 0]
@@ -30,32 +31,30 @@ def match_particles(data_dict,
     matched_particles = []
     
     if matching_mode == 'optimal':
-        matched_particles, counts = match_particles_optimal(
+        matched_particles, counts = match_recursive(
+            pred_particles, 
+            true_particles, 
+            min_overlap=min_overlap)
+        
+    elif matching_mode == 'pred_to_true':
+        matched_particles, counts = match_particles_fn(
             pred_particles, 
             true_particles, 
             min_overlap=min_overlap, 
             overlap_mode=overlap_mode)
-        
-    if matching_mode == 'one_way':
-        if matching_direction == 'pred_to_true':
-            matched_particles, counts = match_particles_fn(
-                pred_particles, 
-                true_particles, 
-                min_overlap=min_overlap, 
-                overlap_mode=overlap_mode)
-        elif matching_direction == 'true_to_pred':
-            matched_particles, counts = match_particles_fn(
-                true_particles, 
-                pred_particles, 
-                min_overlap=min_overlap, 
-                overlap_mode=overlap_mode)
-        
-    update_dict = {
-        # 'matched_particles': matched_particles,
-        'particle_match_values': np.array(counts, dtype=np.float32),
-    }
+    elif matching_mode == 'true_to_pred':
+        matched_particles, counts = match_particles_fn(
+            true_particles, 
+            pred_particles, 
+            min_overlap=min_overlap, 
+            overlap_mode=overlap_mode)
+    else:
+        raise ValueError
+            
+    out.update({'matched_particles': matched_particles})
+    out.update({'particle_match_counts': counts})
 
-    return update_dict
+    return out
     
 
 
@@ -65,12 +64,13 @@ def match_particles(data_dict,
 def match_interactions(data_dict,
                        result_dict,
                        matching_mode='optimal',
-                       matching_direction='pred_to_true',
-                       match_particles=True,
                        min_overlap=0,
                        overlap_mode='iou'):
 
     pred_interactions = result_dict['interactions']
+    
+    out = {'matched_interactions': [],
+           'interaction_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
@@ -80,35 +80,32 @@ def match_interactions(data_dict,
     # Only consider interactions with nonzero predicted nonghost
     
     if matching_mode == 'optimal':
-        matched_interactions, counts = match_interactions_optimal(
+        matched_interactions, counts = match_recursive(
+            pred_interactions, 
+            true_interactions, 
+            min_overlap=min_overlap)
+    elif matching_mode == 'pred_to_true':
+        matched_interactions, counts = match_interactions_fn(
             pred_interactions, 
             true_interactions, 
             min_overlap=min_overlap, 
             overlap_mode=overlap_mode)
-        
-    if matching_mode == 'one_way':
-        if matching_direction == 'pred_to_true':
-            matched_interactions, counts = match_interactions_fn(
-                pred_interactions, 
-                true_interactions, 
-                min_overlap=min_overlap, 
-                overlap_mode=overlap_mode)
-        elif matching_direction == 'true_to_pred':
-            matched_interactions, counts = match_interactions_fn(
-                true_interactions, 
-                pred_interactions, 
-                min_overlap=min_overlap, 
-                overlap_mode=overlap_mode)
-        
-    update_dict = {
-        # 'matched_interactions': matched_interactions,
-        'interaction_match_values': np.array(counts, dtype=np.float32),
-    }
+    elif matching_mode == 'true_to_pred':
+        matched_interactions, counts = match_interactions_fn(
+            true_interactions, 
+            pred_interactions, 
+            min_overlap=min_overlap, 
+            overlap_mode=overlap_mode)
+    else:
+        raise ValueError
+
+    out.update({'matched_interactions': matched_interactions})
+    out.update({'interaction_match_counts': counts})
     
-    return update_dict
+    return out
 
 
-# ----------------------------- Helper functions -------------------------------
+# ----------------------------- Helper functions -----------------------------
 
 def match_parts_within_ints(int_matches):
     '''

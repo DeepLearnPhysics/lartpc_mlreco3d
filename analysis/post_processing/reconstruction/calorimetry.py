@@ -4,8 +4,9 @@ import os
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import UnivariateSpline, CubicSpline
 from functools import lru_cache
+import pathlib
 
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
@@ -52,7 +53,7 @@ def calorimetric_energy(data_dict,
                                  'particle_node_pred_type',
                                  'particles'])
 def range_based_track_energy(data_dict, result_dict,
-                             bin_size=17, include_pids=[2, 3, 4], table_path=''):
+                             bin_size=17, include_pids=[2, 3, 4]):
     """Compute track energy by the CSDA (continuous slowing-down approximation)
     range-based method. 
 
@@ -90,7 +91,7 @@ def range_based_track_energy(data_dict, result_dict,
     if len(particles) == 0:
         return update_dict
 
-    splines = {ptype: get_splines(ptype, table_path) for ptype in include_pids}
+    splines = {ptype: get_splines(ptype) for ptype in include_pids}
 
     pred_ptypes = np.argmax(particle_types, axis=1)
     particle_length = -np.ones(len(particles))
@@ -113,9 +114,39 @@ def range_based_track_energy(data_dict, result_dict,
     return update_dict
 
 
-# Helper Functions
-@lru_cache(maxsize=10)
-def get_splines(particle_type, table_path):
+@post_processing(data_capture=[], result_capture=['particles', 'truth_particles'])
+def range_based_track_energy_spline(data_dict,
+                                    result_dict,
+                                    bin_size=17,
+                                    include_pids=[2,3,4],
+                                    mode='reco'):
+    
+    if mode == 'truth':
+        particles = result_dict['truth_particles']
+    elif mode == 'reco':
+        particles = result_dict['particles']
+    else:
+        raise ValueError(f"Invalid Range based energy reconstruction mode {mode}.")
+    
+    if len(particles) == 0: return {}
+    
+    splines = {ptype: get_splines(ptype) for ptype in include_pids}
+    
+    for i, p in enumerate(particles):
+        if p.semantic_type == 1 and p.pid in include_pids:
+            pts = p.points
+            curve_data = compute_curve(pts, bin_size=bin_size)
+            length = curve_data[3]
+            p.length = length
+            p.csda_kinetic_energy = splines[p.pid](length * PIXELS_TO_CM)
+            
+    return {}
+    
+
+# ----------------------------- Helper functions -----------------------------
+
+@lru_cache
+def get_splines(particle_type):
     """_summary_
 
     Parameters
@@ -131,13 +162,14 @@ def get_splines(particle_type, table_path):
     f: Callable
         Function mapping CSDARange (g/cm^2) vs. Kinetic E (MeV/c^2)
     """
+    path = pathlib.Path(__file__).parent
     if particle_type == PDG_TO_PID[2212]:
-        path = os.path.join(table_path, 'pE_liquid_argon.txt')
+        path = os.path.join(path, 'tables', 'pE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',
                           index_col=False)
     elif particle_type == PDG_TO_PID[13]:
-        path = os.path.join(table_path, 'muE_liquid_argon.txt')
+        path = os.path.join(path, 'tables', 'muE_liquid_argon.txt')
         tab = pd.read_csv(path, 
                           delimiter=' ',
                           index_col=False)
@@ -147,6 +179,64 @@ def get_splines(particle_type, table_path):
     # print(tab)
     f = CubicSpline(tab['CSDARange'] / ARGON_DENSITY, tab['T'])
     return f
+
+
+def compute_curve(points, s=None, bin_size=20):
+    """Estimate the best approximating curve defined by a point cloud 
+    using univariate 3D splines. 
+    
+    The length is computed by measuring the length of the piecewise linear
+    interpolation of the spline at points defined by the bin size. 
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N x 3) point cloud
+    s : float, optional
+        The smoothing factor to be used in spline regression, by default None
+    bin_size : int, optional
+        The subdivision length at which to sample points from the spline.
+        If the track length is less than the bin_size, then the returned
+        length will be computed from the farthest two projected points along
+        the track's principal direction.
+
+    Returns
+    -------
+    u : np.ndarray
+        The principal axis parametrization (N, ) of the curve 
+        C(u) = (spx(u), spy(u), spz(u))
+    sppoints: np.ndarray
+        The graph (N, 3) of the spline at points u.
+    splines: scipy.interpolate.UnivariateSpline
+        Approximating splines for the point cloud defined by points. 
+    length: float
+        The estimate of the total length of the curve. 
+    """
+    
+    pca = PCA(n_components=1)
+    proj_1d = pca.fit_transform(points)
+    perm = np.argsort(proj_1d.squeeze())
+    u = proj_1d[perm]
+    spx = UnivariateSpline(u, points[perm][:, 0], s=s)
+    spy = UnivariateSpline(u, points[perm][:, 1], s=s)
+    spz = UnivariateSpline(u, points[perm][:, 2], s=s)
+    sppoints = np.hstack([spx(u), spy(u), spz(u)])
+    
+    splines = [spx, spy, spz]
+    
+    start, end = u.min(), u.max()
+    length = end - start
+    
+    # If track length is less than bin_size, just return length.
+    # Otherwise estimate length by piecewise linear interpolation. 
+    if length > bin_size:
+        bins = np.arange(u.min(), u.max(), bin_size)
+        bins = np.hstack([bins, np.array([u.max()])])
+        pt_approx = np.hstack([sp(bins).reshape(-1, 1) for sp in splines])
+        segments = np.linalg.norm(pt_approx[1:] - pt_approx[:-1], axis=1)
+        length = segments.sum()
+
+    return u.squeeze(), sppoints, splines, length
 
 
 def compute_track_length(points, bin_size=17):

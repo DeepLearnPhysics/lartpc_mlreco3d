@@ -25,6 +25,12 @@ class HDF5Writer:
         'pid': {v:k for k, v in PID_LABELS.items()}
     }
 
+    # Analysis object array attributes which have a fixed length
+    ANA_FIXED_LENGTH = [
+        'start_point', 'end_point', 'start_dir', 'end_dir', 'start_position', 'end_position',
+        'vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
+    ]
+
     # LArCV object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
         'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
@@ -257,12 +263,15 @@ class HDF5Writer:
                 object_dtype.append((key, type(val)))
             elif isinstance(val, larcv.Vertex):
                 # Three-vector
-                object_dtype.append((key, h5py.vlen_dtype(np.float32)))
+                object_dtype.append((key, np.float32, 4)) # x, y, z, t
             elif hasattr(val, '__len__'):
                 # List/array of values
                 if hasattr(val, 'dtype'):
                     # Numpy array
-                    object_dtype.append((key, h5py.vlen_dtype(val.dtype)))
+                    if key in self.ANA_FIXED_LENGTH:
+                        object_dtype.append((key, val.dtype, val.shape))
+                    else:
+                        object_dtype.append((key, h5py.vlen_dtype(val.dtype)))
                 elif len(val) and np.isscalar(val[0]):
                     # List of scalars
                     object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
@@ -533,7 +542,8 @@ class HDF5Writer:
         # Convert list of objects to list of storable objects
         objects = np.empty(len(array), obj_dtype)
         for i, o in enumerate(array):
-            for k, dtype in obj_dtype:
+            for row in obj_dtype:
+                k, dtype, _ = row if len(row) == 3 else [*row, None]
                 attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
                 if np.isscalar(attr):
                     objects[i][k] = attr
@@ -591,7 +601,7 @@ class CSVWriter:
                 "before data is written to it.".format(file_name)
                 raise FileNotFoundError(msg)
             with open(self.file_name, 'r') as file:
-                self.result_keys = file.readline().split(', ')
+                self.result_keys = file.readline().split(',')
 
     def create(self, result_blob: dict):
         '''
@@ -608,7 +618,7 @@ class CSVWriter:
 
         # Create a header and write it to file
         with open(self.file_name, 'w') as file:
-            header_str = ', '.join(self.result_keys)+'\n'
+            header_str = ','.join(self.result_keys)+'\n'
             file.write(header_str)
 
     def append(self, result_blob: dict):
@@ -626,5 +636,5 @@ class CSVWriter:
 
         # Append file
         with open(self.file_name, 'a') as file:
-            result_str = ', '.join([str(result_blob[k]) for k in self.result_keys])+'\n'
+            result_str = ','.join([str(result_blob[k]) for k in self.result_keys])+'\n'
             file.write(result_str)

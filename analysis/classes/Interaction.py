@@ -55,7 +55,9 @@ class Interaction:
                  flash_time: float = -float(sys.maxsize),
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
-                 flash_id: int = -1):
+                 flash_id: int = -1,
+                 flash_hypothesis: float = -1,
+                 matched: bool = False):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -84,14 +86,16 @@ class Interaction:
             self._particles      = particles
 
         # Quantities to be set by the particle matcher
-        # self._match         = []
+        self._match         = []
         self._match_counts  = OrderedDict()
+        self.matched        = matched
         
         # Flash matching quantities
         self.flash_time     = flash_time
         self.fmatched       = fmatched
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
+        self.flash_hypothesis = flash_hypothesis
 
         # CRT-TPC matching quantities
         self.crthit_matched = crthit_matched
@@ -225,13 +229,22 @@ class Interaction:
         return self._particles[key]
 
     def __repr__(self):
-        return f"Interaction(id={self.id}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size}, Particles={str(self.particle_ids)})"
+        return f"Interaction(id={self.id:<3}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size:<4}, Topology={self.topology})"
 
     def __str__(self):
         msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "--------------------------------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
+    
+    @cached_property
+    def topology(self):
+        msg = ""
+        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
+        for i, count in enumerate(self._primary_counts):
+            if count > 0:
+                msg += f"{count}{encode[i]}"
+        return msg
 
     @cached_property
     def particles_summary(self):

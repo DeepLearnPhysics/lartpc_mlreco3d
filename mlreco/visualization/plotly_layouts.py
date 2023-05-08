@@ -86,7 +86,8 @@ def trace_particles(particles, color='id', size=1,
                     scatter_points=False,
                     scatter_ppn=False,
                     highlight_primaries=False,
-                    colorscale='rainbow', prefix=''):
+                    randomize_labels=False,
+                    colorscale='rainbow', prefix='', opacity=None):
     '''
     Get Scatter3d traces for a list of <Particle> instances.
     Each <Particle> will be drawn with the color specified
@@ -102,17 +103,29 @@ def trace_particles(particles, color='id', size=1,
     for p in particles:
         colors.append(getattr(p, color))
     colors = np.array(colors)
+    color_dict = {}
+    for p in particles:
+        att = getattr(p, color)
+        assert np.isscalar(att)
+        color_dict[int(att)] = int(att)
+    if randomize_labels:
+        perm = np.random.permutation(len(color_dict))
+        for i, key in enumerate(color_dict):
+            color_dict[key] = perm[i]
+    colors = np.array(list(color_dict.values()))
     cmin, cmax = int(colors.min()), int(colors.max())
-    opacity = 1
+    alpha = 1
     for p in particles:
         if p.points.shape[0] <= 0:
             continue
-        c = int(getattr(p, color)) * np.ones(p.points.shape[0])
-        if highlight_primaries:
+        c = color_dict[int(getattr(p, color))] * np.ones(p.points.shape[0])
+        if highlight_primaries and opacity is None:
             if p.is_primary:
-                opacity = 1
+                alpha = 1
             else:
-                opacity = 0.01
+                alpha = 0.01
+        else:
+            alpha = opacity
         plot = go.Scatter3d(x=p.points[:,0],
                             y=p.points[:,1],
                             z=p.points[:,2],
@@ -123,8 +136,8 @@ def trace_particles(particles, color='id', size=1,
                                 colorscale=colorscale,
                                 cmin=cmin, cmax=cmax,
                                 # reversescale=True,
-                                opacity=opacity),
-                               hovertext=int(getattr(p, color)),
+                                opacity=alpha),
+                               hovertext=c,
                        name='{}Particle {}'.format(prefix, p.id)
                               )
         traces.append(plot)

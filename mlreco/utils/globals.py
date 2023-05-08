@@ -87,3 +87,21 @@ ARGON_DENSITY = 1.396     # [g/cm^3]
 
 ADC_TO_MEV    = 1. / 350. # < MUST GO
 PIXELS_TO_CM  = 0.3       # < MUST GO
+
+NU_INTERACTION_TYPE = {
+    1001: 'CCQE',
+    1000: 'Undefined',
+    1003: 'ResCCNuProtonPiPlus',
+    1091: 'CCDIS',
+    1004: 'ResCCNuNeutronPi0',
+    1005: 'ResCCNuNeutronPiPlus',
+    1002: 'NCQE',
+    1092: 'NCDIS',
+    1006: 'ResNCNuProtonPi0',
+    1008: 'ResNCNuNeutronPi0',
+    1009: 'ResNCNuNeutronPiMinus',
+    1007: 'ResNCNuNeutronPiPlus',
+    1097: 'CCCOH',
+    1098: 'NuElectronElastic',
+    -1: 'N/A'
+}

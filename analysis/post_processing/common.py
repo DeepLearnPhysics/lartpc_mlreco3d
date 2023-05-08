@@ -76,7 +76,7 @@ class PostProcessor:
                     msg = 'Output {} in post-processing function {},'\
                          ' caused a dictionary key conflict. You may '\
                          'want to change the output dict key for that function.'
-                    raise ValueError(msg)
+                    raise ValueError(msg.format(key, f.__name__))
                 else:
                     image_dict[key] = val
 

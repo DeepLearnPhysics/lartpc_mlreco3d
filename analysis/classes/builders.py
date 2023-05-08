@@ -363,7 +363,7 @@ class ParticleBuilder(DataBuilder):
                 particle = handle_empty_truth_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
-                                                       entry)
+                                                       image_index)
                 out.append(particle)
                 continue
 
@@ -566,14 +566,16 @@ class InteractionBuilder(DataBuilder):
         TruthInteraction instances. 
         """
         vertices = self.get_truth_vertices(entry, data)
+        if 'neutrinos' not in data:
+            print("Neutrino truth information not found in label data!")
         for ia in interactions:
             if ia.id in vertices:
                 ia.vertex = vertices[ia.id]
 
-            if 'neutrino_asis' in data and ia.nu_id == 1:
+            if 'neutrinos' in data and ia.nu_id == 1:
                 # assert 'particles_asis' in data_blob
                 # particles = data_blob['particles_asis'][i]
-                neutrinos = data['neutrino_asis'][entry]
+                neutrinos = data['neutrinos'][entry]
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
                 # Get larcv::Particle objects for each
@@ -634,12 +636,12 @@ class FragmentBuilder(DataBuilder):
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
-        self.allow_nodes = self.cfg.get('allow_nodes', [0,2,3])
-        self.min_particle_voxel_count = self.cfg.get('min_particle_voxel_cut', -1)
-        self.only_primaries = self.cfg.get('only_primaries', False)
-        self.include_semantics = self.cfg.get('include_semantics', None)
+        self.allow_nodes         = self.cfg.get('allow_nodes', [0,2,3])
+        self.min_voxel_cut       = self.cfg.get('min_voxel_cut', -1)
+        self.only_primaries      = self.cfg.get('only_primaries', False)
+        self.include_semantics   = self.cfg.get('include_semantics', None)
         self.attaching_threshold = self.cfg.get('attaching_threshold', 5.0)
-        self.verbose = self.cfg.get('verbose', False)
+        self.verbose             = self.cfg.get('verbose', False)
 
     def _build_reco(self, entry, 
                     data: dict, 

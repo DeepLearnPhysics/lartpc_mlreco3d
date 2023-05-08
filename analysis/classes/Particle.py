@@ -83,17 +83,19 @@ class Particle:
                  end_point: np.ndarray = -np.ones(3, dtype=np.float32),
                  start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
-                 momentum_range: float = -1.,
-                 momentum_mcs: float = -1., **kwargs):
+                 length: float = -1.,
+                 csda_kinetic_energy: float = -1.,
+                 momentum_mcs: float = -1., 
+                 matched: bool = False, **kwargs):
 
         # Initialize private attributes to be assigned through setters only
-        self._num_fragments = None
-        self._index = None
-        self._depositions = None
+        self._num_fragments   = None
+        self._index           = None
+        self._depositions     = None
         self._depositions_sum = -1
-        self._pid = -1
-        self._size = -1
-        self._is_primary = -1
+        self._pid             = -1
+        self._size            = -1
+        self._is_primary      = -1
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -105,33 +107,63 @@ class Particle:
         self.semantic_type  = int(semantic_type)
         self.points         = points
 
-        self.index = index
-        self.depositions = depositions
-        self.pid_scores = pid_scores
+        self.index          = index
+        self.depositions    = depositions
+        self.pid_scores     = pid_scores
         self.primary_scores = primary_scores
+        
+        # Quantities to be set during post_processing
 
-        # if np.all(pid_scores < 0):
-        #     self._pid = pid
-        # else:
-        #     self._pid = int(np.argmax(pid_scores))
-
-        # if np.all(primary_scores < 0):
-        #     self._is_primary = is_primary
-        # else:
-        #     self._is_primary = int(np.argmax(primary_scores))
-
-        self.start_point    = start_point
-        self.end_point      = end_point
-        self.start_dir      = start_dir
-        self.end_dir        = end_dir
-        self.momentum_range = momentum_range
-        self.momentum_mcs   = momentum_mcs
+        self._start_point         = start_point
+        self._end_point           = end_point
+        self._start_dir           = start_dir
+        self._end_dir             = end_dir
+        self.length              = length
+        self.csda_kinetic_energy = csda_kinetic_energy
+        self.momentum_mcs        = momentum_mcs
+        self.matched             = matched
 
         # Quantities to be set by the particle matcher
         self._match = list(kwargs.get('match', []))
         self._match_counts = kwargs.get('match_counts', OrderedDict())
         if not isinstance(self._match_counts, dict):
             raise ValueError(f"{type(self._match_counts)}")
+        
+    @property
+    def start_point(self):
+        return self._start_point
+    
+    @start_point.setter
+    def start_point(self, value):
+        assert value.shape == (3,)
+        self._start_point = value
+        
+    @property
+    def end_point(self):
+        return self._end_point
+    
+    @end_point.setter
+    def end_point(self, value):
+        assert value.shape == (3,)
+        self._end_point = value
+        
+    @property
+    def start_dir(self):
+        return self._start_dir
+    
+    @start_dir.setter
+    def start_dir(self, value):
+        assert value.shape == (3,)
+        self._start_dir = value
+        
+    @property
+    def end_dir(self):
+        return self._end_dir
+    
+    @end_dir.setter
+    def end_dir(self, value):
+        assert value.shape == (3,)
+        self._end_dir = value
         
     @property
     def is_primary(self):
@@ -150,6 +182,11 @@ class Particle:
     def match_counts(self, value):
         assert type(value) is OrderedDict
         self._match_counts = value
+        
+    def clear_match_info(self):
+        self._match = []
+        self._match_counts = OrderedDict()
+        self.matched = False
 
     def __repr__(self):
         msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)

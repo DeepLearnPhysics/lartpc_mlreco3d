@@ -7,11 +7,11 @@ class CRTTPCMatcherInterface:
     Adapter class between full chain outputs and matcha (Python package
     for matching tracks to CRT hits)
     """
-    def __init__(self, config, crt_tpc_config_path,
+    def __init__(self, config, crt_tpc_config,
                  boundaries=None, crthit_keys=[], **kwargs):
 
         self.config = config
-        self.crt_tpc_config_path = crt_tpc_config_path
+        self.crt_tpc_config = crt_tpc_config
         self.crthit_keys = crthit_keys
 
         self.crt_tpc_matches = {}
@@ -26,7 +26,7 @@ class CRTTPCMatcherInterface:
 
     def initialize_crt_tpc_manager(self, meta):
         self.crt_tpc_manager = CRTTPCManager(self.config,  
-                                             self.crt_tpc_config_path,
+                                             self.crt_tpc_config,
                                              meta=meta)
 
     def get_crt_tpc_matches(self, entry, 
@@ -132,7 +132,7 @@ class CRTTPCManager:
     Methods
     =======
     """
-    def __init__(self, cfg, crt_tpc_config_path, meta=None):
+    def __init__(self, cfg, crt_tpc_config, meta=None):
         """
         Constructor
 
@@ -161,26 +161,25 @@ class CRTTPCManager:
             self.min_x = meta[0]
             self.min_y = meta[1]
             self.min_z = meta[2]
-            self.max_x = meta[0]
-            self.max_y = meta[1]
-            self.max_z = meta[2]
+            self.max_x = meta[3]
+            self.max_y = meta[4]
+            self.max_z = meta[5]
             self.size_voxel_x = meta[6]
             self.size_voxel_y = meta[7]
             self.size_voxel_z = meta[8]
 
         # Setup matcha config parameters
-        self.crt_tpc_config = yaml.safe_load(open(crt_tpc_config_path, 'r'))
-        self.distance_threshold = self.crt_tpc_config['distance_threshold']
+        self.crt_tpc_config       = crt_tpc_config
 
-        #distance_threshold: 50
-        #dca_method: 'simple'
-        #direction_method: 'pca'
-        #pca_radius: 10
-        #min_points_in_radius: 10
-        #trigger_timestamp: None # Only necessary if isdata=True
-        #isdata: False
-        #save_to_file: True
-        #file_path: '.'
+        self.distance_threshold   = self.crt_tpc_config.get('distance_threshold', 50)
+        self.dca_method           = self.crt_tpc_config.get('dca_method', 'simple')
+        self.direction_method     = self.crt_tpc_config.get('direction_method', 'pca')
+        self.pca_radius           = self.crt_tpc_config.get('pca_radius', 10)
+        self.min_points_in_radius = self.crt_tpc_config.get('min_points_in_radius', 10)
+        self.trigger_timestamp    = self.crt_tpc_config.get('trigger_timestamp', None)
+        self.isdata               = self.crt_tpc_config.get('isdata', False)
+        self.save_to_file         = self.crt_tpc_config.get('save_to_file', False)
+        self.file_path            = self.crt_tpc_config.get('file_path', '.')
 
         self.crt_tpc_matches = None
         self.tpc_v, self.crt_v, = None, None 
@@ -250,26 +249,25 @@ class CRTTPCManager:
         tpc_v = []
 
         for idx, particle in enumerate(muon_candidates):
-            particle.points     = self.points_to_cm(particle.points)
-            particle.start_point = self.points_to_cm(particle.start_point.reshape(1, 3))
-            particle.end_point   = self.points_to_cm(particle.end_point.reshape(1, 3))
-            track_id = particle.id
-            image_id = particle.image_id
+            points         = self.points_to_cm(particle.points)
+            start_point    = self.points_to_cm(particle.start_point.reshape(1, 3))
+            end_point      = self.points_to_cm(particle.end_point.reshape(1, 3))
+            track_id       = particle.id
+            image_id       = particle.image_id
             interaction_id = particle.interaction_id
-            points  = particle.points
-            depositions = particle.depositions
-            start_x = particle.start_point[0][0]
-            start_y = particle.start_point[0][1]
-            start_z = particle.start_point[0][2]
-            start_dir_x = particle.start_dir[0]
-            start_dir_y = particle.start_dir[1]
-            start_dir_z = particle.start_dir[2]
-            end_x = particle.end_point[0][0]
-            end_y = particle.end_point[0][1]
-            end_z = particle.end_point[0][2]
-            end_dir_x = particle.end_dir[0]
-            end_dir_y = particle.end_dir[1]
-            end_dir_z = particle.end_dir[2]
+            depositions    = particle.depositions
+            start_x        = start_point[0][0]
+            start_y        = start_point[0][1]
+            start_z        = start_point[0][2]
+            start_dir_x    = particle.start_dir[0]
+            start_dir_y    = particle.start_dir[1]
+            start_dir_z    = particle.start_dir[2]
+            end_x          = end_point[0][0]
+            end_y          = end_point[0][1]
+            end_z          = end_point[0][2]
+            end_dir_x      = particle.end_dir[0]
+            end_dir_y      = particle.end_dir[1]
+            end_dir_z      = particle.end_dir[2]
             this_track = Track(
                 id=track_id, image_id=image_id, interaction_id=interaction_id, 
                 points=points, depositions=depositions,
@@ -299,24 +297,18 @@ class CRTTPCManager:
         """
         from matcha import match_maker
 
-        #distance_threshold = 50
-        #dca_method = 'simple'
-        #direction_method = 'pca'
-        #pca_radius = 10
-        #min_points_in_radius = 10
-        #trigger_timestamp = None # Only necessary if isdata=True
-        #isdata = False
-        #save_to_file = True
-        #file_path = '.'
         crt_tpc_matches = match_maker.get_track_crthit_matches(
             tracks, crthits, 
             approach_distance_threshold=self.distance_threshold, 
-            direction_method=direction_method, dca_method=dca_method, 
-            pca_radius=pca_radius, min_points_in_radius=min_points_in_radius,
-            trigger_timestamp=trigger_timestamp, isdata=isdata,
-            save_to_file=save_to_file, file_path=file_path
+            direction_method=self.direction_method, 
+            dca_method=self.dca_method, 
+            pca_radius=self.pca_radius, 
+            min_points_in_radius=self.min_points_in_radius,
+            trigger_timestamp=self.trigger_timestamp, 
+            isdata=self.isdata,
+            save_to_file=self.save_to_file, 
+            file_path=self.file_path
         )
-
         return crt_tpc_matches
 
     def points_to_cm(self, points):
