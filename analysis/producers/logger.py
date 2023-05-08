@@ -261,7 +261,7 @@ class InteractionLogger(AnalysisLogger):
     @staticmethod
     def id(ia):
         out = {'interaction_id': -1}
-        if hasattr(ia, 'id'):
+        if ia is not None:
             out['interaction_id'] = ia.id
         return out
     
@@ -270,6 +270,12 @@ class InteractionLogger(AnalysisLogger):
         out = {'interaction_size': -1}
         if ia is not None:
             out['interaction_size'] = ia.size
+        return out
+    
+    def nu_id(ia):
+        out = {'nu_id': -1}
+        if ia is not None:
+            out['nu_id'] = ia.nu_id
         return out
     
     @staticmethod

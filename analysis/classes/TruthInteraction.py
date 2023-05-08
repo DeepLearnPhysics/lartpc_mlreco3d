@@ -2,6 +2,7 @@ import numpy as np
 
 from typing import List
 from collections import OrderedDict, defaultdict
+from functools import cached_property
 
 from . import Interaction, TruthParticle
 from .Interaction import _process_interaction_attributes
@@ -36,6 +37,8 @@ class TruthInteraction(Interaction):
         self._particles  = None
         self._particle_counts = np.zeros(6, dtype=np.int64)
         self._primary_counts  = np.zeros(6, dtype=np.int64)
+        self._truth_particle_counts = np.zeros(6, dtype=np.int64)
+        self._truth_primary_counts  = np.zeros(6, dtype=np.int64)
         # Invoke particles setter
         self.particles   = particles
         
@@ -90,11 +93,18 @@ class TruthInteraction(Interaction):
                 true_depositions_MeV_list.append(p.truth_depositions_MeV)
 
                 if p.pid >= 0:
-                    self._particle_counts[p.pid] += 1
-                    self._primary_counts[p.pid] += int(p.is_primary)
+                    self._truth_particle_counts[p.pid] += 1
+                    self._truth_primary_counts[p.pid] += int(p.is_primary)
+                    if len(p.index) > 0:
+                        self._particle_counts[p.pid] += 1
+                        self._primary_counts[p.pid] += int(p.is_primary)       
+                        
                 else:
-                    self._particle_counts[-1] += 1
-                    self._primary_counts[-1] += int(p.is_primary)
+                    self._truth_particle_counts[-1] += 1
+                    self._truth_primary_counts[-1] += int(p.is_primary)
+                    if len(p.index) > 0:
+                        self._particle_counts[-1] += 1
+                        self._primary_counts[-1] += int(p.is_primary)       
 
             self._particle_ids          = np.array(id_list, dtype=np.int64)
             self._num_particles         = len(value)
@@ -152,22 +162,30 @@ class TruthInteraction(Interaction):
     def truth_depositions_MeV(self):
         return self._truth_depositions_MeV
     
-#    @property
-#    def particles(self):
-#        return list(self._particles.values())
-#
-#    @particles.setter
-#    def particles(self, value):
-#        assert isinstance(value, OrderedDict)
-#        parts = {}
-#        for p in value.values():
-#            self.check_particle_input(p)
-#            # Clear match information since Interaction is rebuilt
-#            p.match = []
-#            p._match_counts = {}
-#            parts[p.id] = p
-#        self._particles = OrderedDict(sorted(parts.items(), key=lambda t: t[0]))
-#        self.update_info()
+    @property
+    def particle_counts(self):
+        return self._particle_counts
+        
+    @property
+    def primary_counts(self):
+        return self._primary_counts
+    
+    @property
+    def truth_particle_counts(self):
+        return self._truth_particle_counts
+        
+    @property
+    def truth_primary_counts(self):
+        return self._truth_primary_counts
+    
+    @cached_property
+    def truth_topology(self):
+        msg = ""
+        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
+        for i, count in enumerate(self._truth_primary_counts):
+            if count > 0:
+                msg += f"{count}{encode[i]}"
+        return msg
 
     @staticmethod
     def check_particle_input(x):

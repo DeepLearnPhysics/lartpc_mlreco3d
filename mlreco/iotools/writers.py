@@ -601,7 +601,7 @@ class CSVWriter:
                 "before data is written to it.".format(file_name)
                 raise FileNotFoundError(msg)
             with open(self.file_name, 'r') as file:
-                self.result_keys = file.readline().split(', ')
+                self.result_keys = file.readline().split(',')
 
     def create(self, result_blob: dict):
         '''
@@ -618,7 +618,7 @@ class CSVWriter:
 
         # Create a header and write it to file
         with open(self.file_name, 'w') as file:
-            header_str = ', '.join(self.result_keys)+'\n'
+            header_str = ','.join(self.result_keys)+'\n'
             file.write(header_str)
 
     def append(self, result_blob: dict):
@@ -636,5 +636,5 @@ class CSVWriter:
 
         # Append file
         with open(self.file_name, 'a') as file:
-            result_str = ', '.join([str(result_blob[k]) for k in self.result_keys])+'\n'
+            result_str = ','.join([str(result_blob[k]) for k in self.result_keys])+'\n'
             file.write(result_str)

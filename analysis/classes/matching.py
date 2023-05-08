@@ -1,4 +1,6 @@
 import numpy as np
+import numba as nb
+from numba.typed import List
 
 from typing import List, Union
 from collections import defaultdict, OrderedDict, Counter
@@ -8,6 +10,32 @@ from scipy.spatial.distance import cdist
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
 from pprint import pprint
+
+
+class VoxelMatcher:
+    
+    def __init__(self, metric='dice', algorithm='argmax'):
+        
+        self._metric_name = metric
+        self._algorithm_name = algorithm
+        
+        self._match_fn = None
+        self._value_matrix_fn = None
+        self._weight_fn = None
+        
+# --------------------------Helper Functions--------------------------
+
+def value_matrix_dict():
+    
+    out = {
+        'counts': matrix_counts,
+        'iou': matrix_iou,
+        'weighted_iou': weighted_matrix_iou,
+        'weightd_dice_nb': weighted_matrix_dice   
+    }
+    
+    return out
+
 
 def matrix_counts(particles_x, particles_y):
     """Function for computing the M x N overlap matrix by counts.
@@ -138,9 +166,29 @@ def weighted_matrix_iou(particles_x, particles_y):
     return overlap_matrix, cost_matrix
 
 
-def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle]],
-                       particles_to   : Union[List[Particle], List[TruthParticle]],
-                       min_overlap=0, num_classes=5, verbose=False, overlap_mode='iou'):
+def weighted_matrix_dice(particles_x, particles_y):
+    index_x = List([p for p in particles_x])
+    index_y = List([p for p in particles_y])
+    mat = _weighted_matrix_dice(index_x, index_y)
+    return mat
+
+
+@nb.njit(cache=True)
+def _weighted_matrix_dice(index_x : List[nb.int64[:]], 
+                          index_y : List[nb.int64[:]]) -> nb.float32[:,:]:
+    overlap_matrix = np.zeros((len(index_x), len(index_y)), dtype=np.float32)
+    for i, py in enumerate(index_x):
+        for j, px in enumerate(index_y):
+            cap = np.intersect1d(py, px)
+            cup = len(py) + len(px)
+            w = (len(px) + len(py)) / (1 + np.abs(len(px) - len(py)))
+            overlap_matrix[i, j] = (2.0 * float(cap.shape[0]) / float(cup)) * w
+    return overlap_matrix
+
+
+def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
+                       particles_y : Union[List[Particle], List[TruthParticle]],
+                       value_matrix: np.ndarray, min_overlap=0.0):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>.
@@ -197,47 +245,23 @@ def match_particles_fn(particles_from : Union[List[Particle], List[TruthParticle
         IoU/Count information for each matches.
     '''
 
-    particles_x, particles_y = particles_from, particles_to
-
-    if isinstance(min_overlap, float) or isinstance(min_overlap, int):
-        thresholds = {key : min_overlap for key in np.arange(num_classes)}
-    else:
-        assert len(min_overlap) == num_classes
-        thresholds = {key : val for key, val in zip(np.arange(num_classes), min_overlap)}
-
-    if len(particles_y) == 0 or len(particles_x) == 0:
-        if verbose:
-            print("No particles to match.")
-        return [], [0]
-
-    if overlap_mode == 'counts':
-        overlap_matrix = matrix_counts(particles_x, particles_y)
-    elif overlap_mode == 'iou':
-        overlap_matrix = matrix_iou(particles_x, particles_y)
-    else:
-        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
     # print(overlap_matrix)
-    idx = overlap_matrix.argmax(axis=0)
-    intersections = np.atleast_1d(overlap_matrix.max(axis=0))
+    idx = value_matrix.argmax(axis=0)
+    intersections = np.atleast_1d(value_matrix.max(axis=0))
 
-    matches = []
+    matches = OrderedDict()
 
     for j, px in enumerate(particles_x):
         select_idx = idx[j]
-        if intersections[j] <= thresholds[px.pid]:
+        if intersections[j] <= min_overlap:
             # If no truth could be matched, assign None
             matched_truth = None
+            matches[key] = ()
         else:
             matched_truth = particles_y[select_idx]
-            # px._match.append(matched_truth.id)
             px._match_counts[matched_truth.id] = intersections[j]
-            # matched_truth._match.append(px.id)
             matched_truth._match_counts[px.id] = intersections[j]
-        matches.append((px, matched_truth))
-
-    # for p in particles_y:
-    #     p._match = sorted(list(p._match_counts.keys()), key=lambda x: p._match_counts[x],
-    #                               reverse=True)
+        matches
 
     return matches, intersections
 

@@ -566,14 +566,16 @@ class InteractionBuilder(DataBuilder):
         TruthInteraction instances. 
         """
         vertices = self.get_truth_vertices(entry, data)
+        if 'neutrinos' not in data:
+            print("Neutrino truth information not found in label data!")
         for ia in interactions:
             if ia.id in vertices:
                 ia.vertex = vertices[ia.id]
 
-            if 'neutrino_asis' in data and ia.nu_id == 1:
+            if 'neutrinos' in data and ia.nu_id == 1:
                 # assert 'particles_asis' in data_blob
                 # particles = data_blob['particles_asis'][i]
-                neutrinos = data['neutrino_asis'][entry]
+                neutrinos = data['neutrinos'][entry]
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
                 # Get larcv::Particle objects for each
