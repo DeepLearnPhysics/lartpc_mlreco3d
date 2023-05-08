@@ -92,6 +92,32 @@ class ParticleLogger(AnalysisLogger):
         if hasattr(particle, 'pid'):
             out['particle_type'] = particle.pid
         return out
+    
+    @staticmethod
+    @tag('reco')
+    def primary_scores(particle):
+        out = {'primary_score_0': -1,
+               'primary_score_1': -1}
+        if particle is not None:
+            out['primary_score_0'] = particle.primary_scores[0]
+            out['primary_score_1'] = particle.primary_scores[1]
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def pid_scores(particle):
+        out = {'pid_score_0': -1,
+               'pid_score_1': -1,
+               'pid_score_2': -1,
+               'pid_score_3': -1,
+               'pid_score_4': -1}
+        if particle is not None:
+            out['pid_score_0'] = particle.pid_scores[0]
+            out['pid_score_1'] = particle.pid_scores[1]
+            out['pid_score_2'] = particle.pid_scores[2]
+            out['pid_score_3'] = particle.pid_scores[3]
+            out['pid_score_4'] = particle.pid_scores[4]
+        return out
 
     @staticmethod
     def semantic_type(particle):
