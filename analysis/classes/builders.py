@@ -586,10 +586,10 @@ class InteractionBuilder(DataBuilder):
                 #                     p.asis.ancestor_position().z()], dtype=np.float32)
                 #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
                     # if check_pos:
-                ia.nu_interaction_type    = nu.interaction_type()
-                ia.nu_interation_mode     = nu.interaction_mode()
-                ia.nu_current_type        = nu.current_type()
-                ia.nu_energy_init         = nu.energy_init()
+                ia.nu_interaction_type     = nu.interaction_type()
+                ia.nu_interaction_mode     = nu.interaction_mode()
+                ia.nu_current_type         = nu.current_type()
+                ia.nu_energy_init          = nu.energy_init()
 
         return interactions
         

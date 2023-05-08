@@ -332,6 +332,15 @@ class InteractionLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    @tag('true')
+    def truth_topology(ia):
+        out = {'truth_topology': 'N/A'}
+        assert (ia is None) or (type(ia) is TruthInteraction)
+        if ia is not None:
+            out['truth_topology'] = ia.truth_topology
+        return out
+    
+    @staticmethod
     def is_contained(ia, vb, threshold=30):
 
         out = {'interaction_is_contained': False}

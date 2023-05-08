@@ -271,11 +271,13 @@ class AnaToolsManager:
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+
         if 'InteractionBuilder' in self.builders:
             if 'interactions' not in result:
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
-                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')            
+                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
+            
             
     def _load_truth_reps(self, data, result):
         """Load representations for true objects.
@@ -547,6 +549,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
+        # return data, res
         
         
     def log(self, iteration):
