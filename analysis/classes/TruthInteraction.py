@@ -39,8 +39,7 @@ class TruthInteraction(Interaction):
         self._primary_counts  = np.zeros(6, dtype=np.int64)
         self._truth_particle_counts = np.zeros(6, dtype=np.int64)
         self._truth_primary_counts  = np.zeros(6, dtype=np.int64)
-        # Invoke particles setter
-        self.particles   = particles
+        # self.particles   = particles
         
         if self._particles is None:
             self._depositions_MeV        = depositions_MeV
@@ -49,6 +48,7 @@ class TruthInteraction(Interaction):
             self.truth_points = truth_points
             self.truth_index = truth_index
             
+        # Invoke particles setter
         super(TruthInteraction, self).__init__(interaction_id, particles, **kwargs)
 
         # Neutrino-specific information to be filled elsewhere
@@ -67,9 +67,8 @@ class TruthInteraction(Interaction):
         <Particle> list getter/setter. The setter also sets
         the general interaction properties
         '''
-        
         if self._particles is not None:
-            msg = f"Interaction {self.id} already has a populated list of "\
+            msg = f"TruthInteraction {self.id} already has a populated list of "\
                 "particles. You cannot change the list of particles in a "\
                 "given Interaction once it has been set."
             raise AttributeError(msg)

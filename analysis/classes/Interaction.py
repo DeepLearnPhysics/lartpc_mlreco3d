@@ -65,7 +65,7 @@ class Interaction:
         self.volume_id    = int(volume_id)
         self.image_id     = int(image_id)
         self.vertex       = vertex
-        self.is_neutrino  = is_neutrino # TODO: Not implemented
+        self.is_neutrino  = is_neutrino
         
         # Initialize private attributes to be set by setter only
         self._particles  = None

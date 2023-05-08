@@ -573,19 +573,21 @@ class InteractionBuilder(DataBuilder):
                 ia.vertex = vertices[ia.id]
 
             if 'neutrinos' in data and ia.nu_id == 1:
-                # assert 'particles_asis' in data_blob
-                # particles = data_blob['particles_asis'][i]
                 neutrinos = data['neutrinos'][entry]
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
-                # Get larcv::Particle objects for each
-                # particle of the true interaction
-                # true_particles = np.array(particles)[np.array([p.id for p in true_int.particles])]
-                # true_particles_track_ids = [p.track_id() for p in true_particles]
-                # for nu in neutrinos:
-                #     if nu.mct_index() not in true_particles_track_ids: continue
-                ia.nu_interaction_type = nu.interaction_type()
-                ia.nu_interation_mode  = nu.interaction_mode()
+                ia.is_neutrino = True
+                # nu_pos = np.array([nu.position().x(),
+                #                    nu.position().y(),
+                #                    nu.position().z()], dtype=np.float32)
+                # for p in ia.particles:
+                #     pos = np.array([p.asis.ancestor_position().x(),
+                #                     p.asis.ancestor_position().y(),
+                #                     p.asis.ancestor_position().z()], dtype=np.float32)
+                #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
+                    # if check_pos:
+                ia.nu_interaction_type    = nu.interaction_type()
+                ia.nu_interation_mode     = nu.interaction_mode()
                 ia.nu_current_type        = nu.current_type()
                 ia.nu_energy_init         = nu.energy_init()
 
