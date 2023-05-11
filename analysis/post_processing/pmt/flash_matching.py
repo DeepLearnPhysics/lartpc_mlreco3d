@@ -13,21 +13,12 @@ def run_flash_matching(data_dict, result_dict,
     
     Parameters
     ----------
-    config_path: str
-        Path to current model's .cfg file.
-    fmatch_config: str
-        Path to flash matching config
-    reflash_merging_window: float
-    volume_boundaries: np.ndarray or list
-    ADC_to_MeV: float
-    opflash_keys: list of str
+    fm : FlashManager
+    opflash_keys : List[str]
 
     Returns
     -------
-    update_dict: dict of list
-        Dictionary of a list of length batch_size, where each entry in 
-        the list is a mapping:
-            interaction_id : (larcv.Flash, flashmatch.FlashMatch_t)
+    Empty dict (operation is in-place)
         
     NOTE: This post-processor also modifies the list of Interactions
     in-place by adding the following attributes:
@@ -43,24 +34,22 @@ def run_flash_matching(data_dict, result_dict,
     assert len(opflash_keys) > 0
     for key in opflash_keys:
         opflashes[key] = data_dict[key]
-
-    update_dict = {}
     
     interactions = result_dict['interactions']
     entry        = data_dict['index']
-    
-    # opflashes = filter_opflashes(opflashes)
     
     fmatches_E = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=0,
-                                      restrict_interactions=[])
+                                      restrict_interactions=[], 
+                                      cache=True)
     fmatches_W = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=1,
-                                      restrict_interactions=[])
+                                      restrict_interactions=[],
+                                      cache=True)
 
     flash_dict_E = {}
     for ia, flash, match in fmatches_E:
@@ -69,9 +58,8 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
+        # print(match.hypothesis)
         ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
-        # update_dict['interactions'].append(ia)
-    # update_dict['flash_matches_cryoE'].append(flash_dict_E)
         
     flash_dict_W = {}
     for ia, flash, match in fmatches_W:
@@ -80,11 +68,8 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
+        # print(match.hypothesis)
         ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
-        # update_dict['interactions'].append(ia)
-    # update_dict['flash_matches_cryoW'].append(flash_dict_W)
 
-    # assert len(update_dict['flash_matches_cryoE'])\
-    #        == len(update_dict['flash_matches_cryoW'])
     print("Done flash matching.")
     return {}

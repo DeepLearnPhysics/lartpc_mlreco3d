@@ -52,7 +52,8 @@ class FlashMatcherInterface:
                           opflashes,
                           use_true_tpc_objects=False,
                           volume=None,
-                          restrict_interactions=[]):
+                          restrict_interactions=[],
+                          cache=False):
         """
         If flash matches has not yet been computed for this volume, then it will
         be run as part of this function. Otherwise, flash matching results are
@@ -87,13 +88,16 @@ class FlashMatcherInterface:
                 opflashes,
                 use_true_tpc_objects=use_true_tpc_objects, 
                 volume=volume,
-                restrict_interactions=restrict_interactions)
-
-        if len(restrict_interactions) == 0:
+                restrict_interactions=restrict_interactions,
+                cache=cache)
+            
+        if not cache:
+            tpc_v, pmt_v, matches = out
+        elif cache and len(restrict_interactions) == 0:
             tpc_v, pmt_v, matches = self.flash_matches[(entry, 
                                                         volume, 
                                                         use_true_tpc_objects)]
-        else: # it wasn't cached, we just computed it
+        else:
             tpc_v, pmt_v, matches = out
         return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
     
@@ -102,7 +106,8 @@ class FlashMatcherInterface:
             opflashes, 
             use_true_tpc_objects=False,
             volume=None,
-            restrict_interactions=[]):
+            restrict_interactions=[],
+            cache=False):
         """
         Parameters
         ==========
@@ -177,7 +182,8 @@ class FlashMatcherInterface:
         matches = self.fm.run_flash_matching()
         print('Actual flash matching took %d s' % (time.time() - start))
         if len(restrict_interactions) == 0:
-            self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
+            if cache:
+                self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
         return tpc_v, new_pmt_v, matches
     
     def _translate(self, voxels, volume):
