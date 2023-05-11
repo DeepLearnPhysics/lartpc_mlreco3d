@@ -92,7 +92,7 @@ class AnaToolsManager:
         assert self.max_iteration <= len(dataset)
         
 
-    def initialize(self):
+    def initialize(self, event_list=None):
         """Initializer for setting up inference mode full chain forwarding
         or reading data from HDF5. 
         """

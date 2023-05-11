@@ -52,6 +52,7 @@ def run_inference(data_blob, res, **kwargs):
     predictor = FullChainEvaluator(data_blob, res, 
                                    evaluator_cfg=evaluator_cfg)
     image_idxs = data_blob['index']
+    meta       = data_blob['meta'][0]
 
     for idx, index in enumerate(image_idxs):
       
@@ -112,7 +113,7 @@ def run_inference(data_blob, res, **kwargs):
             interactions.append(int_dict)
 
         # 3. Process particle level information
-        particle_logger = ParticleLogger(particle_fieldnames)
+        particle_logger = ParticleLogger(particle_fieldnames, meta=meta)
         particle_logger.prepare()
 
         # Loop over matched particle pairs
