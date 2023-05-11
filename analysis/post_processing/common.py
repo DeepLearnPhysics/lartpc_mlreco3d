@@ -33,7 +33,6 @@ class PostProcessor:
 
     def register_function(self, f, priority, 
                           processor_cfg={}, 
-                          run_on_batch=False,
                           profile=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional

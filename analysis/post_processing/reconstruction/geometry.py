@@ -1,6 +1,6 @@
 import numpy as np
 
-from mlreco.utils.gnn.cluster import get_cluster_directions
+from mlreco.utils.gnn.cluster import get_cluster_directions, cluster_direction
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
@@ -13,7 +13,7 @@ from mlreco.utils.globals import *
 def particle_direction(data_dict,
                        result_dict,
                        neighborhood_radius=5,
-                       optimize=False):
+                       optimize=True):
 
     if 'input_rescaled' not in result_dict:
         input_data = data_dict['input_data']
@@ -41,3 +41,14 @@ def particle_direction(data_dict,
         p.end_dir   = update_dict['particle_end_directions'][i]
             
     return update_dict
+
+@post_processing(data_capture=['input_data'], result_capture=['truth_particles'])
+def particle_direction_truth(data_dict,
+                             result_dict,
+                             neighborhood_radius=5,
+                             optimize=True):
+    for p in result_dict['truth_particles']:
+        p.start_dir = cluster_direction(p.points, p.start_point, 
+                                        neighborhood_radius, 
+                                        optimize=optimize)
+    return {}
