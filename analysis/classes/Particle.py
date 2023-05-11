@@ -118,16 +118,21 @@ class Particle:
         self._end_point           = end_point
         self._start_dir           = start_dir
         self._end_dir             = end_dir
-        self.length              = length
-        self.csda_kinetic_energy = csda_kinetic_energy
-        self.momentum_mcs        = momentum_mcs
-        self.matched             = matched
+        self.length               = length
+        self.csda_kinetic_energy  = csda_kinetic_energy
+        self.momentum_mcs         = momentum_mcs
 
         # Quantities to be set by the particle matcher
-        self._match = list(kwargs.get('match', []))
-        self._match_counts = kwargs.get('match_counts', OrderedDict())
+        self.matched             = matched
+        self._is_principal_match = False
+        self._match              = list(kwargs.get('match', []))
+        self._match_counts       = kwargs.get('match_counts', OrderedDict())
         if not isinstance(self._match_counts, dict):
             raise ValueError(f"{type(self._match_counts)}")
+        
+    @property
+    def is_principal_match(self):
+        return self._is_principal_match
         
     @property
     def start_point(self):
@@ -168,6 +173,10 @@ class Particle:
     @property
     def is_primary(self):
         return int(self._is_primary)
+    
+    @is_primary.setter
+    def is_primary(self, value):
+        self._is_primary = value
 
     @property
     def match(self):
@@ -291,6 +300,11 @@ class Particle:
     @property
     def pid(self):
         return int(self._pid)
+    
+    @pid.setter
+    def pid(self, value):
+        assert value in PID_LABELS
+        self._pid = value
     
     @property
     def primary_scores(self):

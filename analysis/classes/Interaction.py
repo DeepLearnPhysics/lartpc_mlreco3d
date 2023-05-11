@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from typing import Counter, List, Union
+from typing import Counter, List, Union, Dict
 from collections import OrderedDict, Counter, defaultdict
 from functools import cached_property
 
@@ -89,6 +89,7 @@ class Interaction:
         self._match         = []
         self._match_counts  = OrderedDict()
         self.matched        = matched
+        self._is_principal_match = False
         
         # Flash matching quantities
         self.flash_time     = flash_time
@@ -115,6 +116,10 @@ class Interaction:
     @property
     def match_counts(self):
         return np.array(list(self._match_counts.values()), dtype=np.float32)
+    
+    @property
+    def is_principal_match(self):
+        return self._is_principal_match
         
     @classmethod
     def from_particles(cls, particles, verbose=False, **kwargs):
@@ -192,6 +197,19 @@ class Interaction:
             self.index = np.atleast_1d(np.concatenate(index_list))
             self.points = np.vstack(points_list)
             self.depositions = np.atleast_1d(np.concatenate(depositions_list))
+            
+    def _update_particle_info(self):
+        self._particle_counts = np.zeros(6, dtype=np.int64)
+        self._primary_counts  = np.zeros(6, dtype=np.int64)
+        for p in self.particles:
+            if p.pid >= 0:
+                self._particle_counts[p.pid] += 1
+                self._primary_counts[p.pid] += int(p.is_primary)
+            else:
+                self._particle_counts[-1] += 1
+                self._primary_counts[-1] += int(p.is_primary)
+            self._num_particles = len(self.particles)
+            self._num_primaries = len([1 for p in self.particles if p.is_primary])
         
     @property
     def particle_ids(self):
@@ -237,7 +255,7 @@ class Interaction:
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
     
-    @cached_property
+    @property
     def topology(self):
         msg = ""
         encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
@@ -246,7 +264,7 @@ class Interaction:
                 msg += f"{count}{encode[i]}"
         return msg
 
-    @cached_property
+    @property
     def particles_summary(self):
 
         primary_str = {True: '*', False: '-'}

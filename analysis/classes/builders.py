@@ -496,6 +496,10 @@ class InteractionBuilder(DataBuilder):
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
                 ia = Interaction(**info)
+                
+            # Handle matches
+            match_counts = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_counts'])})
+            ia._match_counts = match_counts
             out.append(ia)
         return out
     

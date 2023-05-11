@@ -244,7 +244,7 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
     intersections: np.array of floats/ints
         IoU/Count information for each matches.
     '''
-
+    raise NotImplementedError("WIP, needs debugging.")
     # print(overlap_matrix)
     idx = value_matrix.argmax(axis=0)
     intersections = np.atleast_1d(value_matrix.max(axis=0))
@@ -256,12 +256,13 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
         if intersections[j] <= min_overlap:
             # If no truth could be matched, assign None
             matched_truth = None
-            matches[key] = ()
+            key = (px.id, None)
+            matches[key] = (px, None)
         else:
             matched_truth = particles_y[select_idx]
             px._match_counts[matched_truth.id] = intersections[j]
             matched_truth._match_counts[px.id] = intersections[j]
-        matches
+            matches
 
     return matches, intersections
 
@@ -534,8 +535,24 @@ def match_recursive(particles_x, particles_y,
     return matches, counts
 
 
+def match_recursive(particles_x, particles_y, 
+                    min_overlap=0.0, overlap_mode='iou'):
+    triplets = match_recursive_(particles_x,
+                               particles_y,
+                               min_overlap=min_overlap,
+                               overlap_mode=overlap_mode)
+    
+    matches, counts = [], []
+    for t in triplets:
+        m1, m2, val = triplets[t]
+        matches.append((m1, m2))
+        counts.append(val)
+    
+    return matches, counts
+
+
 def match_recursive_(particles_x, particles_y, 
-                     min_overlap=0.0, overlap_mode='iou'):
+                     min_overlap=0.0, overlap_mode='iou', first_call=True):
     """Match particle using the optimal linear assignment method.
     
     Once the initial optimal assignments are found, the remaining 
@@ -602,6 +619,9 @@ def match_recursive_(particles_x, particles_y,
             particles_many[j]._match_counts[particles_less[i].id] = val
             less_ids[particles_less[i].id].matched = True
             many_ids[particles_many[j].id].matched = True
+            if first_call:
+                less_ids[particles_less[i].id]._is_principal_match = True
+                many_ids[particles_many[j].id]._is_principal_match = True
             
     if len(matches) == 0:
         # All particles in domain have no viable match
@@ -622,12 +642,12 @@ def match_recursive_(particles_x, particles_y,
         return matches
             
     unmatched_less = [p for p in particles_less if not less_ids[p.id].matched]
-    nested_matches = match_recursive_(unmatched_less, particles_many)
+    nested_matches = match_recursive_(unmatched_less, particles_many, first_call=False)
     
     matches.update(nested_matches)
     
     unmatched_many = [p for p in particles_many if not many_ids[p.id].matched]
-    nested_matches = match_recursive_(unmatched_many, particles_less)
+    nested_matches = match_recursive_(unmatched_many, particles_less, first_call=False)
     
     matches.update(nested_matches)
     # intersections.update(nested_ints)
