@@ -237,6 +237,16 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    @tag('true')
+    def energy_init(particle):
+        out = {
+            'energy_init': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['energy_init'] = particle.energy_init
+        return out
+    
+    @staticmethod
     def reco_start_dir(particle):
         out = {
             'particle_start_dir_x': 0,

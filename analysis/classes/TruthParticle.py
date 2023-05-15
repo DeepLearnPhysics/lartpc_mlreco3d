@@ -66,6 +66,13 @@ class TruthParticle(Particle):
         # tng stands for true nonghost
         self.length_tng = -1.
         self.csda_kinetic_energy_tng = -1.
+        
+        # Set start_point and end_point to first and last step in case
+        # it wasn't set during initialization
+        if self._start_point is None:
+            self._start_point = self.first_step
+        if self._end_point is None:
+            self._end_point   = self.last_step
 
 
     @property
@@ -153,3 +160,11 @@ class TruthParticle(Particle):
         else:
             self._last_step = -np.ones(3)
         return self._last_step
+    
+    @cached_property
+    def energy_init(self):
+        return float(self.asis.energy_init())
+    
+    @cached_property
+    def energy_deposit(self):
+        return float(self.asis.energy_deposit())

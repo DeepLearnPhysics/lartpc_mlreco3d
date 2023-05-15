@@ -348,7 +348,7 @@ class ParticleBuilder(DataBuilder):
         rescaled_charge = result['input_rescaled'][entry][:, 4]
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
-                              
+        # point_labels   = data['point_labels'][entry]    
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
@@ -389,18 +389,14 @@ class ParticleBuilder(DataBuilder):
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
-
-            # if lpart.pdg_code() not in PDG_TO_PID:
-            #     continue
-            # exclude_ids = self._apply_true_voxel_cut(entry)
-            # if pid in exclude_ids:
-            #     # Skip this particle if its below the voxel minimum requirement
-            #     continue
     
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
                                                                     mask, 
                                                                     pid=pdg)
+            
+            # 3. Process particle start / end point labels
+            start_point, end_point = None, None
 
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
@@ -411,6 +407,8 @@ class ParticleBuilder(DataBuilder):
                                      index=voxel_indices,
                                      points=coords,
                                      depositions=depositions,
+                                     start_point=start_point,
+                                     end_point=end_point,
                                      depositions_MeV=depositions_MeV,
                                      truth_index=true_voxel_indices,
                                      truth_points=coords_noghost,

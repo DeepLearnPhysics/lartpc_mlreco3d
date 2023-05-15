@@ -58,7 +58,6 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        # print(match.hypothesis)
         ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
         
     flash_dict_W = {}
@@ -68,7 +67,6 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        # print(match.hypothesis)
         ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
 
     print("Done flash matching.")
