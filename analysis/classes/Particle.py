@@ -141,7 +141,9 @@ class Particle:
     @start_point.setter
     def start_point(self, value):
         assert value.shape == (3,)
-        self._start_point = value
+        if (np.abs(value) < 1e10).all():
+            # Only set start_point if not bogus value
+            self._start_point = value
         
     @property
     def end_point(self):
@@ -150,7 +152,9 @@ class Particle:
     @end_point.setter
     def end_point(self, value):
         assert value.shape == (3,)
-        self._end_point = value
+        if (np.abs(value) < 1e10).all():
+            # Only set start_point if not bogus value
+            self._end_point = value
         
     @property
     def start_dir(self):

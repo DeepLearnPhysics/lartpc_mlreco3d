@@ -69,10 +69,10 @@ class TruthParticle(Particle):
         
         # Set start_point and end_point to first and last step in case
         # it wasn't set during initialization
-        if self._start_point is None:
-            self._start_point = self.first_step
-        if self._end_point is None:
-            self._end_point   = self.last_step
+        # if self._start_point is None:
+        #     self._start_point = self.first_step
+        # if self._end_point is None and self.semantic_type == 1:
+        #     self._end_point   = self.last_step
 
 
     @property

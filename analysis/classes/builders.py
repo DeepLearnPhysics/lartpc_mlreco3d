@@ -396,8 +396,7 @@ class ParticleBuilder(DataBuilder):
                                                                     pid=pdg)
             
             # 3. Process particle start / end point labels
-            start_point, end_point = None, None
-
+        
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
                                      nu_id=nu_id,
@@ -407,8 +406,6 @@ class ParticleBuilder(DataBuilder):
                                      index=voxel_indices,
                                      points=coords,
                                      depositions=depositions,
-                                     start_point=start_point,
-                                     end_point=end_point,
                                      depositions_MeV=depositions_MeV,
                                      truth_index=true_voxel_indices,
                                      truth_points=coords_noghost,
@@ -417,6 +414,12 @@ class ParticleBuilder(DataBuilder):
                                      is_primary=is_primary,
                                      pid=pdg,
                                      particle_asis=lpart)
+            
+            if particle.semantic_type == 1:
+                particle.start_point = particle.first_step
+                particle.end_point   = particle.last_step
+            elif particle.semantic_type == 0:
+                particle.start_point = particle.first_step
 
             out.append(particle)
 
@@ -880,7 +883,9 @@ def handle_empty_truth_particles(labels_noghost,
                              truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
                              pid=pdg,
-                             particle_asis=p)
+                             particle_asis=p,
+                             start_point=-np.ones(3, dtype=np.float32),
+                             end_point=-np.ones(3, dtype=np.float32))
     # particle.p = np.array([p.px(), p.py(), p.pz()])
     # particle.fragments = []
     # particle.particle_asis = p

@@ -112,6 +112,7 @@ class AnaToolsManager:
             self._data_reader = Trainer
             self._reader_state = 'trainval'
             self._set_iteration(loader.dataset)
+            self._num_images = len(loader.dataset._event_list)
         else:
             # If there is a reader, simply load reconstructed data
             file_keys = self.ana_config['reader']['file_keys']
