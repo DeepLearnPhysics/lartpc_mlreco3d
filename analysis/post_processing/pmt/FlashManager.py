@@ -19,7 +19,8 @@ class FlashMatcherInterface:
     Adapter class between full chain outputs and FlashManager/OpT0Finder
     """
     def __init__(self, config, fm_config, 
-                 boundaries=None, opflash_keys=[], **kwargs):
+                 boundaries=None, opflash_keys=[], 
+                 ADC_to_MeV=1.0, **kwargs):
 
         self.config = config
         self.fm_config = fm_config
@@ -27,8 +28,7 @@ class FlashMatcherInterface:
 
         self.reflash_merging_window = kwargs.get('reflash_merging_window', None)
         self.detector_specs = kwargs.get('detector_specs', None)
-        self.ADC_to_MeV = kwargs.get('ADC_to_MeV', 1.)
-        self.ADC_to_MeV = eval(self.ADC_to_MeV)
+        self.ADC_to_MeV = ADC_to_MeV
         self.use_depositions_MeV = kwargs.get('use_depositions_MeV', False)
         self.boundaries = boundaries
 
@@ -40,9 +40,8 @@ class FlashMatcherInterface:
             self.vb = None
             self._num_volumes = 1
 
-    def initialize_flash_manager(self, meta):
+    def initialize_flash_manager(self):
         self.fm = FlashManager(self.config, self.fm_config, 
-                               meta=meta,
                                reflash_merging_window=self.reflash_merging_window, 
                                detector_specs=self.detector_specs)
         
@@ -235,7 +234,6 @@ class FlashManager:
     See https://github.com/drinkingkazu/OpT0Finder for more details about it.
     """
     def __init__(self, cfg, cfg_fmatch, 
-                 meta=None, 
                  detector_specs=None, 
                  reflash_merging_window=None):
         """
@@ -250,9 +248,6 @@ class FlashManager:
             The full chain config.
         cfg_fmatch: str
             Path to config for OpT0Finder.
-        meta: np.ndarray, optional, default is None
-            Used to shift coordinates of interactions to "real" detector
-            coordinates for QCluster_t.
         detector_specs: str, optional
             Path to `detector_specs.cfg` file which defines some geometry
             information about the detector PMT system. By default will look
@@ -276,19 +271,7 @@ class FlashManager:
         import flashmatch
         from flashmatch import flashmatch
 
-        # Setup meta
         self.cfg = cfg
-
-        self.min_x, self.min_y, self.min_z = None, None, None
-        self.size_voxel_x, self.size_voxel_y, self.size_voxel_z = None, None, None
-        # print(f"META = {meta}")
-        if meta is not None:
-            self.min_x = meta[0]
-            self.min_y = meta[1]
-            self.min_z = meta[2]
-            self.size_voxel_x = meta[6]
-            self.size_voxel_y = meta[7]
-            self.size_voxel_z = meta[8]
 
         # Setup flash matching
         print('Setting up OpT0Finder for flash matching...')
@@ -305,6 +288,9 @@ class FlashManager:
             self.det = flashmatch.DetectorSpecs.GetME(detector_specs)
         self.mgr.Configure(cfg)
         print('...done.')
+        
+        self._qcluster_algo = flashmatch.CustomAlgoFactory.get().create("LightPath","ToyMCLightPath")
+        self._qcluster_algo.Configure(cfg.get['flashmatch::PSet']("LightPath"))
 
         self.all_matches = None
         self.pmt_v, self.tpc_v = None, None
@@ -336,16 +322,40 @@ class FlashManager:
             else: return tpc
 
         raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
+    
+    def make_qcluster(self, interactions,
+                      use_depositions_MeV=False,
+                      ADC_to_MeV=1.):
+        from flashmatch import flashmatch
+        
+        if use_depositions_MeV:
+            conversion_factor = 1.
+        else:
+            conversion_factor = ADC_to_MeV
+        
+        tpc_v = []
+        for ia in interactions:
+            qcluster = flashmatch.QCluster_t()
+            qcluster.idx = int(ia.id)
+            qcluster.time = 0
+            if ia.points.shape[0] < 2:
+                continue
+            pytraj = np.hstack([ia.points, ia.depositions[..., None]])
+            traj = flashmatch.as_geoalgo_trajectory(pytraj)
+            qcluster += self._qcluster_algo.MakeQCluster(traj, conversion_factor)
+            tpc_v.append(qcluster)
+        
+        self.tpc_v = tpc_v
+        print('Made list of %d QCluster_t' % len(tpc_v))
+        return tpc_v
+    
 
-    def make_qcluster(self, interactions, 
-                      use_depositions_MeV=False, ADC_to_MeV=1.):
+    def make_qcluster_deprecated(self, interactions, 
+                                 use_depositions_MeV=False, ADC_to_MeV=1.):
         """
         Make flashmatch::QCluster_t objects from list of interactions.
-
-        Note that coordinates of `interactions` are in voxel coordinates,
-        but inside this function we shift back to real detector coordinates
-        using meta information. flashmatch::QCluster_t objects are in
-        real cm coordinates.
+        
+        Particle.points must be converted to cm units beforehand. 
 
         Parameters
         ==========
@@ -359,9 +369,6 @@ class FlashManager:
         
         from flashmatch import flashmatch
 
-        if self.min_x is None:
-            raise Exception('min_x is None')
-
         tpc_v = []
         for p in interactions:
             qcluster = flashmatch.QCluster_t()
@@ -373,11 +380,10 @@ class FlashManager:
                     light_yield = p.depositions[i] * ADC_to_MeV * self.det.LightYield()
                 else:
                     light_yield = p.depositions_MeV[i] * self.det.LightYield()
-                qpoint = flashmatch.QPoint_t(
-                    p.points[i, 0] * self.size_voxel_x + self.min_x,
-                    p.points[i, 1] * self.size_voxel_y + self.min_y,
-                    p.points[i, 2] * self.size_voxel_z + self.min_z,
-                    light_yield)
+                qpoint = flashmatch.QPoint_t(p.points[i, 0],
+                                             p.points[i, 1],
+                                             p.points[i, 2],
+                                             light_yield)
                 # Add it to geoalgo::QCluster_t
                 qcluster.push_back(qpoint)
             tpc_v.append(qcluster)

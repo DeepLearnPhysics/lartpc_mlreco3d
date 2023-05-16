@@ -75,7 +75,7 @@ class FullChainPredictor:
         self.set_volume_boundaries()
 
 
-    def set_volume_boundaries(self):
+    def set_volume_boundaries(self, use_pixels=True):
         if self.vb is None:
             # Using ICARUS Cryo 0 as a default
             pass
@@ -85,14 +85,20 @@ class FullChainPredictor:
                 msg = "Cannot use volume boundaries because meta is "\
                     "missing from iotools config."
                 raise Exception(msg)
-            else: # convert to voxel units
+            else:
                 meta = self.data_blob['meta'][0]
-                min_x, min_y, min_z = meta[0:3]
-                size_voxel_x, size_voxel_y, size_voxel_z = meta[6:9]
+                if use_pixels:
+                    min_x, min_y, min_z = meta[0:3]
+                    size_voxel_x, size_voxel_y, size_voxel_z = meta[6:9]
 
-                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
-                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
-                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+                    self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                    self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                    self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+                else:
+                    max_x, max_y, max_z = meta[3:6]
+                    self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                    self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                    self.vb[2, 0], self.vb[2, 1] = min_z, max_z
 
 
     def build_representations(self):

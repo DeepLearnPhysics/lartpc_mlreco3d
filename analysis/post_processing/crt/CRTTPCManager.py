@@ -24,10 +24,9 @@ class CRTTPCMatcherInterface:
             self.vb = None
             self._num_volumes = 1
 
-    def initialize_crt_tpc_manager(self, meta):
+    def initialize_crt_tpc_manager(self):
         self.crt_tpc_manager = CRTTPCManager(self.config,  
-                                             self.crt_tpc_config,
-                                             meta=meta)
+                                             self.crt_tpc_config)
 
     def get_crt_tpc_matches(self, entry, 
                             interactions,
@@ -132,7 +131,7 @@ class CRTTPCManager:
     Methods
     =======
     """
-    def __init__(self, cfg, crt_tpc_config, meta=None):
+    def __init__(self, cfg, crt_tpc_config):
         """
         Constructor
 
@@ -140,33 +139,12 @@ class CRTTPCManager:
         ==========
         cfg: dict
             The full chain config.
-        meta: np.ndarray, optional, default is None
-            Used to shift coordinates of interactions to "real" detector
-            coordinates for determining track containment. The structure is 
-            [0:3] = image min in detector (x,y,z), 
-            [3:6] = image max in detector (x,y,z), and 
-            [6:9] = scale in (x,y,z)
 
         Methods
         =======
         TODO INSERT
         """
-
-        # Setup meta
         self.cfg = cfg
-
-        self.min_x, self.min_y, self.min_z = None, None, None
-        self.size_voxel_x, self.size_voxel_y, self.size_voxel_z = None, None, None
-        if meta is not None:
-            self.min_x = meta[0]
-            self.min_y = meta[1]
-            self.min_z = meta[2]
-            self.max_x = meta[3]
-            self.max_y = meta[4]
-            self.max_z = meta[5]
-            self.size_voxel_x = meta[6]
-            self.size_voxel_y = meta[7]
-            self.size_voxel_z = meta[8]
 
         # Setup matcha config parameters
         self.crt_tpc_config       = crt_tpc_config
@@ -249,9 +227,12 @@ class CRTTPCManager:
         tpc_v = []
 
         for idx, particle in enumerate(muon_candidates):
-            points         = self.points_to_cm(particle.points)
-            start_point    = self.points_to_cm(particle.start_point.reshape(1, 3))
-            end_point      = self.points_to_cm(particle.end_point.reshape(1, 3))
+            points         = particle.points
+            start_point    = particle.start_point.reshape(1, 3)
+            end_point      = particle.end_point.reshape(1, 3)
+            # points         = self.points_to_cm(particle.points)
+            # start_point    = self.points_to_cm(particle.start_point.reshape(1, 3))
+            # end_point      = self.points_to_cm(particle.end_point.reshape(1, 3))
             track_id       = particle.id
             image_id       = particle.image_id
             interaction_id = particle.interaction_id
@@ -311,29 +292,29 @@ class CRTTPCManager:
         )
         return crt_tpc_matches
 
-    def points_to_cm(self, points):
-        """
-        Convert particle points from voxel units to cm
+    # def points_to_cm(self, points):
+    #     """
+    #     Convert particle points from voxel units to cm
 
-        Parameters
-        ----------
-        points: np.ndarray
-            Shape (N, 3). Coordinates in voxel units.
+    #     Parameters
+    #     ----------
+    #     points: np.ndarray
+    #         Shape (N, 3). Coordinates in voxel units.
 
-        Returns
-        -------
-        np.ndarray
-            Shape (N, 3). Coordinates in cm.
-        """
-        if points.shape[1] != 3:
-            raise ValueError("points should have shape (N,3) but has shape {}".format(points.shape))
-        points_in_cm = np.zeros(shape=(len(points), 3))
-        for ip, point in enumerate(points):
-            points_in_cm[ip][0] = point[0] * self.size_voxel_x + self.min_x
-            points_in_cm[ip][1] = point[1] * self.size_voxel_y + self.min_y
-            points_in_cm[ip][2] = point[2] * self.size_voxel_z + self.min_z
+    #     Returns
+    #     -------
+    #     np.ndarray
+    #         Shape (N, 3). Coordinates in cm.
+    #     """
+    #     if points.shape[1] != 3:
+    #         raise ValueError("points should have shape (N,3) but has shape {}".format(points.shape))
+    #     points_in_cm = np.zeros(shape=(len(points), 3))
+    #     for ip, point in enumerate(points):
+    #         points_in_cm[ip][0] = point[0] * self.size_voxel_x + self.min_x
+    #         points_in_cm[ip][1] = point[1] * self.size_voxel_y + self.min_y
+    #         points_in_cm[ip][2] = point[2] * self.size_voxel_z + self.min_z
 
-        return points_in_cm
+    #     return points_in_cm
 
 
 

@@ -69,7 +69,7 @@ class AnalysisLogger:
 
 class ParticleLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict, meta=None):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(ParticleLogger, self).__init__(fieldnames)
         self.meta = meta
         
@@ -78,12 +78,24 @@ class ParticleLogger(AnalysisLogger):
         self.vb[:, 1] = float('inf')
         
         if meta is not None:
-            min_x, min_y, min_z = self.meta[0:3]
-            size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
 
-            self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
-            self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
-            self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(particle):
@@ -304,7 +316,7 @@ class ParticleLogger(AnalysisLogger):
                 msg = "Data dictionary missing a meta information to set "\
                     "volume boundaries for checking particle containment."
                 raise AssertionError(msg)
-
+            
             x = (self.vb[0, 0] + threshold[0] <= particle.points[:, 0]) \
                         & (particle.points[:, 0] <= self.vb[0, 1] - threshold[0])
             y = (self.vb[1, 0] + threshold[1] <= particle.points[:, 1]) \
@@ -339,7 +351,7 @@ class ParticleLogger(AnalysisLogger):
 
 class InteractionLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict, meta=None):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(InteractionLogger, self).__init__(fieldnames)
         self.meta = meta
         
@@ -348,12 +360,24 @@ class InteractionLogger(AnalysisLogger):
         self.vb[:, 1] = float('inf')
         
         if meta is not None:
-            min_x, min_y, min_z = self.meta[0:3]
-            size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
 
-            self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
-            self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
-            self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(ia):

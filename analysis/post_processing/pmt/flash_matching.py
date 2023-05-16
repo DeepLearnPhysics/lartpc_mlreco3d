@@ -3,7 +3,7 @@ from collections import defaultdict
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
-@post_processing(data_capture=['meta', 'index', 'opflash_cryoE', 'opflash_cryoW'], 
+@post_processing(data_capture=['index', 'opflash_cryoE', 'opflash_cryoW'], 
                  result_capture=['interactions'])
 def run_flash_matching(data_dict, result_dict, 
                        fm=None,
