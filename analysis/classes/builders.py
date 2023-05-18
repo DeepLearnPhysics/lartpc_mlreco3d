@@ -348,7 +348,7 @@ class ParticleBuilder(DataBuilder):
         rescaled_charge = result['input_rescaled'][entry][:, 4]
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
-        meta = data['meta'][0]
+        meta            = data['meta'][0]
         # point_labels   = data['point_labels'][entry]
         unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.spatial_units == 'cm' else x
 

@@ -344,7 +344,7 @@ def _pix_to_cm(arr, meta):
     size_voxel_y = meta[7]
     size_voxel_z = meta[8]
     
-    arr[:, COORD_COLS[0]] = arr[:, COORD_COLS[0]] * size_voxel_x + min_x
-    arr[:, COORD_COLS[1]] = arr[:, COORD_COLS[1]] * size_voxel_y + min_y
-    arr[:, COORD_COLS[2]] = arr[:, COORD_COLS[2]] * size_voxel_z + min_z
+    arr[:, 0] = arr[:, 0] * size_voxel_x + min_x
+    arr[:, 1] = arr[:, 1] * size_voxel_y + min_y
+    arr[:, 2] = arr[:, 2] * size_voxel_z + min_z
     return arr

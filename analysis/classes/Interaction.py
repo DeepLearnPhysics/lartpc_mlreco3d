@@ -57,7 +57,8 @@ class Interaction:
                  flash_total_pE: float = -1,
                  flash_id: int = -1,
                  flash_hypothesis: float = -1,
-                 matched: bool = False):
+                 matched: bool = False,
+                 is_contained: bool = False):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -90,6 +91,8 @@ class Interaction:
         self._match_counts  = OrderedDict()
         self.matched        = matched
         self._is_principal_match = False
+        
+        self.is_contained   = is_contained
         
         # Flash matching quantities
         self.flash_time     = flash_time
