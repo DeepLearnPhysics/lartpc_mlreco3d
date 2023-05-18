@@ -38,7 +38,7 @@ class TruthParticle(Particle):
                  *args, 
                  depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  pid: int = -1,
-                 is_primary: int = -1,
+                 is_primary: bool = False,
                  truth_index: np.ndarray = np.empty(0, dtype=np.int64), 
                  truth_points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),

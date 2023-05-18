@@ -95,7 +95,7 @@ class Particle:
         self._depositions_sum = -1
         self._pid             = -1
         self._size            = -1
-        self._is_primary      = -1
+        self._is_primary      = False
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -211,7 +211,7 @@ class Particle:
         msg = fmt.format(self.image_id, self.id,
                          SHAPE_LABELS[self.semantic_type] if self.semantic_type in SHAPE_LABELS else "None",
                          PID_LABELS[self.pid] if self.pid in PID_LABELS else "None",
-                         self.is_primary,
+                         int(self.is_primary),
                          self.interaction_id,
                          self.size,
                          self.volume_id)
@@ -323,8 +323,8 @@ class Particle:
         # If no primary scores are given, the primary status is unknown
         if primary_scores[0] < 0.:
             self._primary_scores = primary_scores
-            self._is_primary = -1
+            self._is_primary = False
         
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
-        self._is_primary = np.argmax(primary_scores)
+        self._is_primary = bool(np.argmax(primary_scores))
