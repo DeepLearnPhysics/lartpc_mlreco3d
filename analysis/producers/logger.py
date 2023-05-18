@@ -169,15 +169,15 @@ class ParticleLogger(AnalysisLogger):
     def start_point(particle):
         out = {
             # 'particle_has_startpoint': False,
-            'particle_startpoint_x': -1,
-            'particle_startpoint_y': -1,
-            'particle_startpoint_z': -1
+            'particle_start_point_x': -1,
+            'particle_start_point_y': -1,
+            'particle_start_point_z': -1
         }
         if (particle is not None) and (particle.start_point is not None):
             # out['particle_has_startpoint'] = True
-            out['particle_startpoint_x'] = particle.start_point[0]
-            out['particle_startpoint_y'] = particle.start_point[1]
-            out['particle_startpoint_z'] = particle.start_point[2]
+            out['particle_start_point_x'] = particle.start_point[0]
+            out['particle_start_point_y'] = particle.start_point[1]
+            out['particle_start_point_z'] = particle.start_point[2]
         return out
     
     @staticmethod
