@@ -348,7 +348,7 @@ class ParticleBuilder(DataBuilder):
         rescaled_charge = result['input_rescaled'][entry][:, 4]
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
-                              
+        # point_labels   = data['point_labels'][entry]    
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
@@ -363,7 +363,7 @@ class ParticleBuilder(DataBuilder):
                 particle = handle_empty_truth_particles(labels_nonghost, 
                                                        mask_nonghost, 
                                                        lpart, 
-                                                       entry)
+                                                       image_index)
                 out.append(particle)
                 continue
 
@@ -389,19 +389,14 @@ class ParticleBuilder(DataBuilder):
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
-
-            # if lpart.pdg_code() not in PDG_TO_PID:
-            #     continue
-            # exclude_ids = self._apply_true_voxel_cut(entry)
-            # if pid in exclude_ids:
-            #     # Skip this particle if its below the voxel minimum requirement
-            #     continue
     
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
                                                                     mask, 
                                                                     pid=pdg)
-
+            
+            # 3. Process particle start / end point labels
+        
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
                                      nu_id=nu_id,
@@ -419,6 +414,12 @@ class ParticleBuilder(DataBuilder):
                                      is_primary=is_primary,
                                      pid=pdg,
                                      particle_asis=lpart)
+            
+            if particle.semantic_type == 1:
+                particle.start_point = particle.first_step
+                particle.end_point   = particle.last_step
+            elif particle.semantic_type == 0:
+                particle.start_point = particle.first_step
 
             out.append(particle)
 
@@ -496,6 +497,10 @@ class InteractionBuilder(DataBuilder):
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
                 ia = Interaction(**info)
+                
+            # Handle matches
+            match_counts = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_counts'])})
+            ia._match_counts = match_counts
             out.append(ia)
         return out
     
@@ -566,26 +571,30 @@ class InteractionBuilder(DataBuilder):
         TruthInteraction instances. 
         """
         vertices = self.get_truth_vertices(entry, data)
+        if 'neutrinos' not in data:
+            print("Neutrino truth information not found in label data!")
         for ia in interactions:
             if ia.id in vertices:
                 ia.vertex = vertices[ia.id]
 
-            if 'neutrino_asis' in data and ia.nu_id == 1:
-                # assert 'particles_asis' in data_blob
-                # particles = data_blob['particles_asis'][i]
-                neutrinos = data['neutrino_asis'][entry]
+            if 'neutrinos' in data and ia.nu_id == 1:
+                neutrinos = data['neutrinos'][entry]
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
-                # Get larcv::Particle objects for each
-                # particle of the true interaction
-                # true_particles = np.array(particles)[np.array([p.id for p in true_int.particles])]
-                # true_particles_track_ids = [p.track_id() for p in true_particles]
-                # for nu in neutrinos:
-                #     if nu.mct_index() not in true_particles_track_ids: continue
-                ia.nu_interaction_type = nu.interaction_type()
-                ia.nu_interation_mode  = nu.interaction_mode()
-                ia.nu_current_type        = nu.current_type()
-                ia.nu_energy_init         = nu.energy_init()
+                ia.is_neutrino = True
+                # nu_pos = np.array([nu.position().x(),
+                #                    nu.position().y(),
+                #                    nu.position().z()], dtype=np.float32)
+                # for p in ia.particles:
+                #     pos = np.array([p.asis.ancestor_position().x(),
+                #                     p.asis.ancestor_position().y(),
+                #                     p.asis.ancestor_position().z()], dtype=np.float32)
+                #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
+                    # if check_pos:
+                ia.nu_interaction_type     = nu.interaction_type()
+                ia.nu_interaction_mode     = nu.interaction_mode()
+                ia.nu_current_type         = nu.current_type()
+                ia.nu_energy_init          = nu.energy_init()
 
         return interactions
         
@@ -634,12 +643,12 @@ class FragmentBuilder(DataBuilder):
     """
     def __init__(self, builder_cfg={}):
         self.cfg = builder_cfg
-        self.allow_nodes = self.cfg.get('allow_nodes', [0,2,3])
-        self.min_particle_voxel_count = self.cfg.get('min_particle_voxel_cut', -1)
-        self.only_primaries = self.cfg.get('only_primaries', False)
-        self.include_semantics = self.cfg.get('include_semantics', None)
+        self.allow_nodes         = self.cfg.get('allow_nodes', [0,2,3])
+        self.min_voxel_cut       = self.cfg.get('min_voxel_cut', -1)
+        self.only_primaries      = self.cfg.get('only_primaries', False)
+        self.include_semantics   = self.cfg.get('include_semantics', None)
         self.attaching_threshold = self.cfg.get('attaching_threshold', 5.0)
-        self.verbose = self.cfg.get('verbose', False)
+        self.verbose             = self.cfg.get('verbose', False)
 
     def _build_reco(self, entry, 
                     data: dict, 
@@ -874,7 +883,9 @@ def handle_empty_truth_particles(labels_noghost,
                              truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
                              pid=pdg,
-                             particle_asis=p)
+                             particle_asis=p,
+                             start_point=-np.ones(3, dtype=np.float32),
+                             end_point=-np.ones(3, dtype=np.float32))
     # particle.p = np.array([p.px(), p.py(), p.pz()])
     # particle.fragments = []
     # particle.particle_asis = p

@@ -7,12 +7,14 @@ from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter, HDF5Writer
+from mlreco.utils.globals import *
 
 from analysis import post_processing
 from analysis.producers import scripts
 from analysis.post_processing.common import PostProcessor
 from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
+from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
@@ -49,16 +51,19 @@ class AnaToolsManager:
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
+        self.spatial_units = self.ana_config['analysis'].get('spatial_units', 'px')
 
         # Initialize data product builders
-        self.data_builders = self.ana_config['analysis']['data_builders']
-        self.builders      = {}
-        for builder_name in self.data_builders:
-            if builder_name not in SUPPORTED_BUILDERS:
-                msg = f"{builder_name} is not a valid data product builder!"
-                raise ValueError(msg)
-            builder = eval(builder_name)()
-            self.builders[builder_name] = builder
+        self.data_builders = None
+        if 'data_builders' in self.ana_config['analysis']:
+            self.data_builders = self.ana_config['analysis']['data_builders']
+            self.builders      = {}
+            for builder_name in self.data_builders:
+                if builder_name not in SUPPORTED_BUILDERS:
+                    msg = f"{builder_name} is not a valid data product builder!"
+                    raise ValueError(msg)
+                builder = eval(builder_name)()
+                self.builders[builder_name] = builder
 
         self._data_reader  = None
         self._reader_state = None
@@ -70,6 +75,8 @@ class AnaToolsManager:
         
         self.flash_manager_initialized = False
         self.fm = None
+        self.crt_tpc_manager_initialized = False
+        self.crt_tpc_manager = None
         self._data_writer = None
         
 
@@ -87,7 +94,7 @@ class AnaToolsManager:
         assert self.max_iteration <= len(dataset)
         
 
-    def initialize(self):
+    def initialize(self, event_list=None):
         """Initializer for setting up inference mode full chain forwarding
         or reading data from HDF5. 
         """
@@ -107,6 +114,7 @@ class AnaToolsManager:
             self._data_reader = Trainer
             self._reader_state = 'trainval'
             self._set_iteration(loader.dataset)
+            self._num_images = len(loader.dataset._event_list)
         else:
             # If there is a reader, simply load reconstructed data
             file_keys = self.ana_config['reader']['file_keys']
@@ -151,6 +159,61 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
+    
+    
+    @staticmethod
+    def _pix_to_cm(arr, meta):
+        
+        min_x        = meta[0]
+        min_y        = meta[1]
+        min_z        = meta[2]
+        size_voxel_x = meta[6]
+        size_voxel_y = meta[7]
+        size_voxel_z = meta[8]
+        
+        arr[:, COORD_COLS[0]] = arr[:, COORD_COLS[0]] * size_voxel_x + min_x
+        arr[:, COORD_COLS[1]] = arr[:, COORD_COLS[1]] * size_voxel_y + min_y
+        arr[:, COORD_COLS[2]] = arr[:, COORD_COLS[2]] * size_voxel_z + min_z
+        return arr
+    
+    
+    def convert_pixels_to_cm(self, data, result):
+        """Convert pixel coordinates to real world coordinates (in cm)
+        for all tensors that have spatial coordinate information, using 
+        information in meta (operation is in-place).
+
+        Parameters
+        ----------
+        data : dict
+            Data and label dictionary
+        result : dict
+            Result dictionary
+        """
+        
+        data_has_voxels = set([
+            'input_data', 'segment_label', 
+            'particles_label', 'cluster_label', 'kinematics_label', 
+        ])
+        result_has_voxels = set([
+            'input_rescaled', 
+            'cluster_label_adapted',
+            'shower_fragment_start_points',
+            'shower_fragment_end_points', 
+            'track_fragment_start_points',
+            'track_fragment_end_points',
+            'particle_start_points',
+            'particle_end_points',
+        ])
+        
+        meta = data['meta'][0]
+        assert len(meta) == 9
+        
+        for key, val in data.items():
+            if key in data_has_voxels:
+                data[key] = [self._pix_to_cm(arr, meta) for arr in val]
+        for key, val in result.items():
+            if key in result_has_voxels:
+                result[key] = [self._pix_to_cm(arr, meta) for arr in val]
     
     
     def _build_reco_reps(self, data, result):
@@ -266,11 +329,13 @@ class AnaToolsManager:
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+
         if 'InteractionBuilder' in self.builders:
             if 'interactions' not in result:
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
-                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')            
+                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
+            
             
     def _load_truth_reps(self, data, result):
         """Load representations for true objects.
@@ -313,7 +378,12 @@ class AnaToolsManager:
             raise ValueError(f"DataBuilder mode {mode} is not supported!")
             
 
-    def initialize_flash_manager(self, meta):
+    def initialize_flash_manager(self):
+        
+        if not self.spatial_units == 'cm':
+            msg = "Need to convert px to cm spatial units before running flash "\
+                "matching. Set spatial_units: cm in analysis config. "
+            raise AssertionError(msg)
         
         # Only run once, to save time
         if not self.flash_manager_initialized:
@@ -322,6 +392,8 @@ class AnaToolsManager:
             opflash_keys      = pp_flash_matching['opflash_keys']
             volume_boundaries = pp_flash_matching['volume_boundaries']
             ADC_to_MeV        = pp_flash_matching['ADC_to_MeV']
+            if isinstance(ADC_to_MeV, str):
+                ADC_to_MeV = eval(ADC_to_MeV)
             self.fm_config    = pp_flash_matching['fmatch_config']
 
             self.fm = FlashMatcherInterface(self.config, 
@@ -329,8 +401,33 @@ class AnaToolsManager:
                                             boundaries=volume_boundaries, 
                                             opflash_keys=opflash_keys,
                                             ADC_to_MeV=ADC_to_MeV)
-            self.fm.initialize_flash_manager(meta)
+            self.fm.initialize_flash_manager()
             self.flash_manager_initialized = True
+
+    def initialize_crt_tpc_manager(self):
+        
+        if not self.spatial_units == 'cm':
+            msg = "Need to convert px to cm spatial units before running CRT "\
+                "matching. Set spatial_units: cm in analysis config. "
+            raise AssertionError(msg)
+        
+        # Only run once, to save time
+        if not self.crt_tpc_manager_initialized:
+        
+            pp_crt_tpc_matching      = self.ana_config['post_processing']['run_crt_tpc_matching']
+            crthit_keys              = pp_crt_tpc_matching.get('crthit_keys', ['crthits'])
+            volume_boundaries        = pp_crt_tpc_matching.pop('volume_boundaries')
+            # self.crt_tpc_config_path = pp_crt_tpc_matching['matcha_config']
+            
+            # self.crt_tpc_config = yaml.safe_load(open(self.crt_tpc_config_path, 'r'))
+
+            self.crt_tpc_config  = pp_crt_tpc_matching
+            self.crt_tpc_manager = CRTTPCMatcherInterface(self.config, 
+                                                          self.crt_tpc_config,
+                                                          boundaries=volume_boundaries,
+                                                          crthit_keys=crthit_keys)
+            self.crt_tpc_manager.initialize_crt_tpc_manager()
+            self.crt_tpc_manager_initialized = True
         
         
     def run_post_processing(self, data, result):
@@ -347,7 +444,9 @@ class AnaToolsManager:
         if 'post_processing' in self.ana_config:
             meta = data['meta'][0]
             if 'run_flash_matching' in self.ana_config['post_processing']:
-                self.initialize_flash_manager(meta)
+                self.initialize_flash_manager()
+            if 'run_crt_tpc_matching' in self.ana_config['post_processing']:
+                self.initialize_crt_tpc_manager()
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
 
@@ -357,11 +456,16 @@ class AnaToolsManager:
                 profile = local_pcfg.pop('profile', False)
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(post_processing,str(processor_name))
-                # Exception for Flash Matching
+                # Exceptions for Flash Matching and CRT-TPC Matching
                 if processor_name == 'run_flash_matching':
                     local_pcfg = {
                         'fm': self.fm,
                         'opflash_keys': local_pcfg['opflash_keys']
+                    }
+                if processor_name == 'run_crt_tpc_matching':
+                    local_pcfg = {
+                        'crt_tpc_manager': self.crt_tpc_manager,
+                        'crthit_keys': local_pcfg['crthit_keys']
                     }
                 post_processor_interface.register_function(processor, 
                                                            priority,
@@ -465,38 +569,61 @@ class AnaToolsManager:
             Iteration number for current step. 
         """
         # 1. Run forward
+        glob_start = time.time()
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
-        self.logger_dict['forward_time'] = end-start
-        start = end
+        dt = end - start
+        print(f"Foward took {dt:.3f} seconds.")
+        self.logger_dict['forward_time'] = dt
+        
+        # 1-a. Convert units
+        if self.spatial_units == 'cm':
+            self.convert_pixels_to_cm(data, res)
 
-        # 2. Build data representations
-        if self._reader_state == 'hdf5':
-            self.load_representations(data, res)
-        else:
-            self.build_representations(data, res)
-        end = time.time()
-        self.logger_dict['build_reps_time'] = end-start
-        start = end
-
+        # 2. Build data representations'
+        if self.data_builders is not None:
+            start = time.time()
+            if self._reader_state == 'hdf5':
+                self.load_representations(data, res)
+            else:
+                self.build_representations(data, res)
+            end = time.time()
+            dt = end - start
+            self.logger_dict['build_reps_time'] = dt
+        print(f"Building representations took {dt:.3f} seconds.")
+        
         # 3. Run post-processing, if requested
+        start = time.time()
         self.run_post_processing(data, res)
         end = time.time()
-        self.logger_dict['post_processing_time'] = end-start
-        start = end
+        dt = end - start
+        self.logger_dict['post_processing_time'] = dt
+        print(f"Post-processing took {dt:.3f} seconds.")
 
         # 4. Write updated results to file, if requested 
+        start = time.time()
         if self._data_writer is not None:
             self._data_writer.append(data, res)
+        end = time.time()
+        dt = end - start
+        print(f"HDF5 writing took {dt:.3f} seconds.")
 
         # 5. Run scripts, if requested
+        start = time.time()
         ana_output = self.run_ana_scripts(data, res)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
         end = time.time()
-        self.logger_dict['write_csv_time'] = end-start
+        dt = end - start
+        print(f"Scripts took {dt:.3f} seconds.")
+        self.logger_dict['write_csv_time'] = dt
+        
+        glob_end = time.time()
+        dt = glob_end - glob_start
+        print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
+        # return data, res
         
         
     def log(self, iteration):

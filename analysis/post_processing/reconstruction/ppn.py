@@ -72,7 +72,7 @@ def assign_ppn_candidates(data_dict, result_dict):
         ppn_candidates = np.empty((0, 5 if not enable_classify_endpoints else 7), 
                                   dtype=np.float32)
         
-    match_points_to_particles(ppn_candidates, result_dict['particles'])
+    # match_points_to_particles(ppn_candidates, result_dict['particles'])
     
     return {}
     

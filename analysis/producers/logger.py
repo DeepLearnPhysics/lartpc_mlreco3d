@@ -59,6 +59,7 @@ class AnalysisLogger:
                 if f._tag is not None and f._tag != mode:
                     continue
             update_dict = f(particle)
+            # print(f, update_dict)
             out.update(update_dict)
 
         out = attach_prefix(out, mode)
@@ -68,8 +69,33 @@ class AnalysisLogger:
 
 class ParticleLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(ParticleLogger, self).__init__(fieldnames)
+        self.meta = meta
+        
+        self.vb = np.zeros((3, 2))
+        self.vb[:, 0] = -float('inf')
+        self.vb[:, 1] = float('inf')
+        
+        if meta is not None:
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(particle):
@@ -90,6 +116,32 @@ class ParticleLogger(AnalysisLogger):
         out = {'particle_type': -1}
         if hasattr(particle, 'pid'):
             out['particle_type'] = particle.pid
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def primary_scores(particle):
+        out = {'primary_score_0': -1,
+               'primary_score_1': -1}
+        if particle is not None:
+            out['primary_score_0'] = particle.primary_scores[0]
+            out['primary_score_1'] = particle.primary_scores[1]
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def pid_scores(particle):
+        out = {'pid_score_0': -1,
+               'pid_score_1': -1,
+               'pid_score_2': -1,
+               'pid_score_3': -1,
+               'pid_score_4': -1}
+        if particle is not None:
+            out['pid_score_0'] = particle.pid_scores[0]
+            out['pid_score_1'] = particle.pid_scores[1]
+            out['pid_score_2'] = particle.pid_scores[2]
+            out['pid_score_3'] = particle.pid_scores[3]
+            out['pid_score_4'] = particle.pid_scores[4]
         return out
 
     @staticmethod
@@ -114,43 +166,42 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def startpoint(particle):
+    def start_point(particle):
         out = {
-            'particle_has_startpoint': False,
+            # 'particle_has_startpoint': False,
             'particle_startpoint_x': -1,
             'particle_startpoint_y': -1,
             'particle_startpoint_z': -1
         }
-        if (particle is not None) and (particle.startpoint is not None) \
-            and (not (particle.startpoint == -1).all()):
-            out['particle_has_startpoint'] = True
-            out['particle_startpoint_x'] = particle.startpoint[0]
-            out['particle_startpoint_y'] = particle.startpoint[1]
-            out['particle_startpoint_z'] = particle.startpoint[2]
+        if (particle is not None) and (particle.start_point is not None):
+            # out['particle_has_startpoint'] = True
+            out['particle_startpoint_x'] = particle.start_point[0]
+            out['particle_startpoint_y'] = particle.start_point[1]
+            out['particle_startpoint_z'] = particle.start_point[2]
         return out
     
     @staticmethod
-    def endpoint(particle):
+    def end_point(particle):
         out = {
-            'particle_has_endpoint': False,
-            'particle_endpoint_x': -1,
-            'particle_endpoint_y': -1,
-            'particle_endpoint_z': -1
+            # 'particle_has_endpoint': False,
+            'particle_end_point_x': -1,
+            'particle_end_point_y': -1,
+            'particle_end_point_z': -1
         }
-        if (particle is not None) and (particle.endpoint is not None) \
-            and (not (particle.endpoint == -1).all()):
-            out['particle_has_endpoint'] = True
-            out['particle_endpoint_x'] = particle.endpoint[0]
-            out['particle_endpoint_y'] = particle.endpoint[1]
-            out['particle_endpoint_z'] = particle.endpoint[2]
+        if (particle is not None) and (particle.end_point is not None) \
+            and (not (particle.end_point == -1).all()):
+            # out['particle_has_endpoint'] = True
+            out['particle_end_point_x'] = particle.end_point[0]
+            out['particle_end_point_y'] = particle.end_point[1]
+            out['particle_end_point_z'] = particle.end_point[2]
         return out
     
     @staticmethod
-    def startpoint_is_touching(particle, threshold=5.0):
-        out = {'particle_startpoint_is_touching': True}
+    def start_point_is_touching(particle, threshold=5.0):
+        out = {'particle_start_point_is_touching': True}
         if type(particle) is TruthParticle:
             if particle.size > 0:
-                diff = particle.points - particle.startpoint.reshape(1, -1)
+                diff = particle.points - particle.start_point.reshape(1, -1)
                 dists = np.linalg.norm(diff, axis=1)
                 min_dist = np.min(dists)
                 if min_dist > threshold:
@@ -170,39 +221,88 @@ class ParticleLogger(AnalysisLogger):
     def momentum(particle):
         min_int = -sys.maxsize - 1
         out = {
+            'p'          : min_int,
             'particle_px': min_int,
             'particle_py': min_int,
             'particle_pz': min_int,
         }
         if type(particle) is TruthParticle:
-            out['particle_px'] = particle.asis.px()
-            out['particle_py'] = particle.asis.py()
-            out['particle_pz'] = particle.asis.pz()
+            out['particle_px'] = particle.momentum[0]
+            out['particle_py'] = particle.momentum[1]
+            out['particle_pz'] = particle.momentum[2]
+            out['p']           = np.linalg.norm(particle.momentum)
         return out
     
     @staticmethod
-    def reco_direction(particle):
+    @tag('true')
+    def truth_start_dir(particle):
+        min_int = -sys.maxsize - 1
         out = {
-            'particle_dir_x': 0,
-            'particle_dir_y': 0,
-            'particle_dir_z': 0
+            'truth_start_dir_x': min_int,
+            'truth_start_dir_y': min_int,
+            'truth_start_dir_z': min_int,
         }
-        if particle is not None and hasattr(particle, 'direction'):
-            v = particle.direction
-            out['particle_dir_x'] = v[0]
-            out['particle_dir_y'] = v[1]
-            out['particle_dir_z'] = v[2]
+        if type(particle) is TruthParticle:
+            out['truth_start_dir_x'] = particle.truth_start_dir[0]
+            out['truth_start_dir_y'] = particle.truth_start_dir[1]
+            out['truth_start_dir_z'] = particle.truth_start_dir[2]
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def energy_init(particle):
+        out = {
+            'energy_init': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['energy_init'] = particle.energy_init
+        return out
+    
+    @staticmethod
+    def reco_start_dir(particle):
+        out = {
+            'particle_start_dir_x': 0,
+            'particle_start_dir_y': 0,
+            'particle_start_dir_z': 0
+        }
+        if particle is not None and hasattr(particle, 'start_dir'):
+            v = particle.start_dir
+            out['particle_start_dir_x'] = v[0]
+            out['particle_start_dir_y'] = v[1]
+            out['particle_start_dir_z'] = v[2]
+        return out
+    
+    @staticmethod
+    def reco_end_dir(particle):
+        out = {
+            'particle_end_dir_x': 0,
+            'particle_end_dir_y': 0,
+            'particle_end_dir_z': 0
+        }
+        if particle is not None and hasattr(particle, 'end_dir'):
+            v = particle.start_dir
+            out['particle_end_dir_x'] = v[0]
+            out['particle_end_dir_y'] = v[1]
+            out['particle_end_dir_z'] = v[2]
         return out
     
     @staticmethod
     def reco_length(particle):
         out = {'particle_length': -1}
-        if particle is not None and hasattr(particle, 'length'):
+        if particle is not None:
             out['particle_length'] = particle.length
         return out
     
     @staticmethod
-    def is_contained(particle, vb, threshold=30):
+    # @tag('reco')
+    def csda_kinetic_energy(particle):
+        out = {'csda_kinetic_energy': -1}
+        if particle is not None:
+            out['csda_kinetic_energy'] = particle.csda_kinetic_energy
+        return out
+    
+    # @staticmethod
+    def is_contained(self, particle, threshold=30):
 
         out = {'particle_is_contained': False}
         if particle is not None and len(particle.points) > 0:
@@ -212,74 +312,103 @@ class ParticleLogger(AnalysisLogger):
                 assert len(threshold) == 3
                 assert len(threshold.shape) == 1
 
-            vb = np.array(vb)
-
-            x = (vb[0, 0] + threshold[0] <= particle.points[:, 0]) \
-                        & (particle.points[:, 0] <= vb[0, 1] - threshold[0])
-            y = (vb[1, 0] + threshold[1] <= particle.points[:, 1]) \
-                        & (particle.points[:, 1] <= vb[1, 1] - threshold[1])
-            z = (vb[2, 0] + threshold[2] <= particle.points[:, 2]) \
-                        & (particle.points[:, 2] <= vb[2, 1] - threshold[2])
+            if self.meta is None:
+                msg = "Data dictionary missing a meta information to set "\
+                    "volume boundaries for checking particle containment."
+                raise AssertionError(msg)
+            
+            x = (self.vb[0, 0] + threshold[0] <= particle.points[:, 0]) \
+                        & (particle.points[:, 0] <= self.vb[0, 1] - threshold[0])
+            y = (self.vb[1, 0] + threshold[1] <= particle.points[:, 1]) \
+                        & (particle.points[:, 1] <= self.vb[1, 1] - threshold[1])
+            z = (self.vb[2, 0] + threshold[2] <= particle.points[:, 2]) \
+                        & (particle.points[:, 2] <= self.vb[2, 1] - threshold[2])
 
             out['particle_is_contained'] =  (x & y & z).all()
         return out
 
     @staticmethod
-    def sum_edep(particle):
-        out = {'particle_sum_edep': -1}
+    def depositions_sum(particle):
+        out = {'particle_depositions_sum': -1}
         if particle is not None:
-            out['particle_sum_edep'] = particle.sum_edep
+            out['particle_depositions_sum'] = particle.depositions_sum
+        return out
+    
+    @staticmethod
+    def matched(particle):
+        out = {'matched': False}
+        if particle is not None:
+            out['matched'] = particle.matched
+        return out
+    
+    @staticmethod
+    def is_principal_match(particle):
+        out = {'is_principal_match': False}
+        if particle is not None:
+            out['is_principal_match'] = particle.is_principal_match
         return out
     
 
 class InteractionLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(InteractionLogger, self).__init__(fieldnames)
+        self.meta = meta
+        
+        self.vb = np.zeros((3, 2))
+        self.vb[:, 0] = -float('inf')
+        self.vb[:, 1] = float('inf')
+        
+        if meta is not None:
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(ia):
         out = {'interaction_id': -1}
-        if hasattr(ia, 'id'):
+        if ia is not None:
             out['interaction_id'] = ia.id
         return out
     
     @staticmethod
     def size(ia):
         out = {'interaction_size': -1}
-        if hasattr(ia, 'size'):
+        if ia is not None:
             out['interaction_size'] = ia.size
         return out
     
     @staticmethod
-    def count_primary_particles(ia, ptypes=None):
-        all_types = list(PID_LABELS.keys())
-        if ptypes is None:
-            ptypes = all_types
-        elif set(ptypes).issubset(set(all_types)):
-            pass
-        elif len(ptypes) == 0:
-            return {}
-        else:
-            raise ValueError('"ptypes under count_primary_particles must \
-                             either be None or a list of particle type ids \
-                             to be counted.')
-        
-        ptypes = [PID_LABELS[p] for p in ptypes]
-        out = OrderedDict({'count_primary_'+name.lower() : 0 \
-                           for name in PID_LABELS.values() \
-                            if name.capitalize() in ptypes})
-
-        if ia is not None and hasattr(ia, 'primary_particle_counts'):
-            out.update({'count_primary_'+key.lower() : val \
-                        for key, val in ia.primary_particle_counts.items() \
-                        if key.capitalize() != 'Other' \
-                            and key.capitalize() in ptypes})
+    def nu_id(ia):
+        out = {'nu_id': -1}
+        if ia is not None:
+            out['nu_id'] = ia.nu_id
         return out
-            
     
     @staticmethod
-    def is_contained(ia, vb, threshold=30):
+    def volume_id(ia):
+        out = {'volume_id': -1}
+        if ia is not None:
+            out['volume_id'] = ia.volume_id
+        return out
+    
+    # @staticmethod
+    def is_contained(self, ia, threshold=30):
 
         out = {'interaction_is_contained': False}
         if ia is not None and len(ia.points) > 0:
@@ -289,14 +418,100 @@ class InteractionLogger(AnalysisLogger):
                 assert len(threshold) == 3
                 assert len(threshold.shape) == 1
 
-            vb = np.array(vb)
+            if self.meta is None:
+                msg = "Data dictionary missing a meta information to set "\
+                    "volume boundaries for checking particle containment."
+                raise AssertionError(msg)
 
-            x = (vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
-                        & (ia.points[:, 0] <= vb[0, 1] - threshold[0])
-            y = (vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
-                        & (ia.points[:, 1] <= vb[1, 1] - threshold[1])
-            z = (vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
-                        & (ia.points[:, 2] <= vb[2, 1] - threshold[2])
+            x = (self.vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
+                        & (ia.points[:, 0] <= self.vb[0, 1] - threshold[0])
+            y = (self.vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
+                        & (ia.points[:, 1] <= self.vb[1, 1] - threshold[1])
+            z = (self.vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
+                        & (ia.points[:, 2] <= self.vb[2, 1] - threshold[2])
+
+            out['particle_is_contained'] =  (x & y & z).all()
+        return out
+    
+    @staticmethod
+    def count_primary_particles(ia, ptypes=None):
+        
+        mapping = {
+            0: 'num_primary_photons',
+            1: 'num_primary_electrons',
+            2: 'num_primary_muons',
+            3: 'num_primary_pions',
+            4: 'num_primary_protons'
+        }
+        
+        if ptypes is not None:
+            out = {mapping[pid] : -1 for pid in ptypes}
+        else:
+            ptypes = list(mapping.keys())
+            out = {mapping[pid] : -1 for pid in ptypes}
+
+        if ia is not None:
+            for pid in ptypes:
+                out[mapping[pid]] = ia.primary_counts[pid]
+            
+        return out
+    
+    @staticmethod
+    def count_particles(ia, ptypes=None):
+        
+        mapping = {
+            0: 'num_photons',
+            1: 'num_electrons',
+            2: 'num_muons',
+            3: 'num_pions',
+            4: 'num_protons'
+        }
+        
+        if ptypes is not None:
+            out = {mapping[pid] : -1 for pid in ptypes}
+        else:
+            ptypes = list(mapping.keys())
+            out = {mapping[pid] : -1 for pid in ptypes}
+
+        if ia is not None:
+            for pid in ptypes:
+                out[mapping[pid]] = ia.primary_counts[pid]
+            
+        return out
+    
+    @staticmethod
+    def topology(ia):
+        out = {'topology': 'N/A'}
+        if ia is not None:
+            out['topology'] = ia.topology
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def truth_topology(ia):
+        out = {'truth_topology': 'N/A'}
+        assert (ia is None) or (type(ia) is TruthInteraction)
+        if ia is not None:
+            out['truth_topology'] = ia.truth_topology
+        return out
+    
+    # @staticmethod
+    def is_contained(self, ia, threshold=30):
+
+        out = {'interaction_is_contained': False}
+        if ia is not None and len(ia.points) > 0:
+            if not isinstance(threshold, np.ndarray):
+                threshold = threshold * np.ones((3,))
+            else:
+                assert len(threshold) == 3
+                assert len(threshold.shape) == 1
+
+            x = (self.vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
+                        & (ia.points[:, 0] <= self.vb[0, 1] - threshold[0])
+            y = (self.vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
+                        & (ia.points[:, 1] <= self.vb[1, 1] - threshold[1])
+            z = (self.vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
+                        & (ia.points[:, 2] <= self.vb[2, 1] - threshold[2])
 
             out['interaction_is_contained'] =  (x & y & z).all()
         return out
@@ -327,8 +542,11 @@ class InteractionLogger(AnalysisLogger):
             'nu_energy_init': 'N/A'
         }
         if ia is not None:
-            if ia.nu_id == 1 and isinstance(ia.nu_info, dict):
-                out.update(ia.nu_info)
+            if ia.nu_id == 1:
+                out['nu_interaction_type'] = ia.nu_interaction_type
+                out['nu_interaction_mode'] = ia.nu_interaction_mode
+                out['nu_current_type']     = ia.nu_current_type
+                out['nu_energy_init']      = ia.nu_energy_init
         return out
     
     @staticmethod
@@ -339,12 +557,43 @@ class InteractionLogger(AnalysisLogger):
             'fmatched': False,
             'flash_time': -sys.maxsize,
             'flash_total_pE': -sys.maxsize,
-            'flash_id': -sys.maxsize
+            'flash_id': -sys.maxsize,
+            'flash_hypothesis': -sys.maxsize
         }
         if ia is not None:
             if hasattr(ia, 'fmatched'):
                 out['fmatched'] = ia.fmatched
-                out['flash_time'] = ia.fmatch_time
-                out['flash_total_pE'] = ia.fmatch_total_pE
-                out['flash_id'] = ia.fmatch_id
+                out['flash_time'] = ia.flash_time
+                out['flash_total_pE'] = ia.flash_total_pE
+                out['flash_id'] = ia.flash_id
+                out['flash_hypothesis'] = ia.flash_hypothesis
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def crt_match_info(ia):
+        out = {
+            'crthit_matched': False,
+            'crthit_matched_particle_id': -1,
+            'crthit_id': -1
+        }
+        assert (ia) is None or (type(ia) is Interaction)
+        if ia is not None:
+            out['crthit_id'] = ia.crthit_id
+            out['crthit_matched'] = ia.crthit_matched
+            out['crthit_matched_particle_id'] = ia.crthit_matched_particle_id
+        return out
+    
+    @staticmethod
+    def matched(ia):
+        out = {'matched': False}
+        if ia is not None:
+            out['matched'] = ia.matched
+        return out
+    
+    @staticmethod
+    def is_principal_match(ia):
+        out = {'is_principal_match': False}
+        if ia is not None:
+            out['is_principal_match'] = ia.is_principal_match
         return out

@@ -33,7 +33,6 @@ class PostProcessor:
 
     def register_function(self, f, priority, 
                           processor_cfg={}, 
-                          run_on_batch=False,
                           profile=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
@@ -76,7 +75,7 @@ class PostProcessor:
                     msg = 'Output {} in post-processing function {},'\
                          ' caused a dictionary key conflict. You may '\
                          'want to change the output dict key for that function.'
-                    raise ValueError(msg)
+                    raise ValueError(msg.format(key, f.__name__))
                 else:
                     image_dict[key] = val
 

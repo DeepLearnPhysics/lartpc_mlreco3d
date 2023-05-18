@@ -41,6 +41,7 @@ def run_inference(data_blob, res, **kwargs):
     primaries             = kwargs['match_primaries']
     matching_mode         = kwargs['matching_mode']
     boundaries            = kwargs.get('boundaries', [[1376.3], None, None])
+    units                 = kwargs.get('units', 'px')
 
     # FullChainEvaluator config
     evaluator_cfg         = kwargs.get('evaluator_cfg', {})
@@ -52,6 +53,7 @@ def run_inference(data_blob, res, **kwargs):
     predictor = FullChainEvaluator(data_blob, res, 
                                    evaluator_cfg=evaluator_cfg)
     image_idxs = data_blob['index']
+    meta       = data_blob['meta'][0]
 
     for idx, index in enumerate(image_idxs):
       
@@ -64,13 +66,16 @@ def run_inference(data_blob, res, **kwargs):
         }
 
         # 1. Match Interactions and log interaction-level information
-        matches, icounts = predictor.match_interactions(idx,
-            mode='true_to_pred',
-            match_particles=True,
-            drop_nonprimary_particles=primaries,
-            return_counts=True,
-            overlap_mode=predictor.overlap_mode,
-            matching_mode=matching_mode)
+        if 'matched_interactions' in res:
+            matches, icounts = res['matched_interactions'][idx], res['interaction_match_counts'][idx]
+        else:
+            print("Running interaction matching...")
+            matches, icounts = predictor.match_interactions(idx,
+                matching_mode=matching_mode,
+                drop_nonprimary_particles=primaries,
+                return_counts=True)
+
+        # pprint(matches)
 
         # 1 a) Check outputs from interaction matching 
         if len(matches) == 0:
@@ -78,11 +83,17 @@ def run_inference(data_blob, res, **kwargs):
 
         # We access the particle matching information, which is already
         # done by called match_interactions.
-        pmatches = predictor._matched_particles
-        pcounts  = predictor._matched_particles_counts
+        if 'matched_particles' in res:
+            pmatches, pcounts = res['matched_particles'][idx], res['particle_match_counts'][idx]
+        else:
+            print("Running particle matching...")
+            pmatches, pcounts = predictor.match_particles(idx,
+                matching_mode=matching_mode,
+                only_primaries=primaries,
+                return_counts=True)
 
         # 2. Process interaction level information
-        interaction_logger = InteractionLogger(int_fieldnames)
+        interaction_logger = InteractionLogger(int_fieldnames, meta=meta, units=units)
         interaction_logger.prepare()
         
         # 2-1 Loop over matched interaction pairs
@@ -103,7 +114,7 @@ def run_inference(data_blob, res, **kwargs):
             interactions.append(int_dict)
 
         # 3. Process particle level information
-        particle_logger = ParticleLogger(particle_fieldnames)
+        particle_logger = ParticleLogger(particle_fieldnames, meta=meta, units=units)
         particle_logger.prepare()
 
         # Loop over matched particle pairs

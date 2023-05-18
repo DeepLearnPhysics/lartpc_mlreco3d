@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 
-from typing import Counter, List, Union
+from typing import Counter, List, Union, Dict
 from collections import OrderedDict, Counter, defaultdict
 from functools import cached_property
 
@@ -49,11 +49,15 @@ class Interaction:
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 crthit_matched: bool = False,
+                 crthit_matched_particle_id: int = -1,
+                 crthit_id: int = -1,
                  flash_time: float = -float(sys.maxsize),
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
                  flash_id: int = -1,
-                 flash_hypothesis: float = -1):
+                 flash_hypothesis: float = -1,
+                 matched: bool = False):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -61,7 +65,7 @@ class Interaction:
         self.volume_id    = int(volume_id)
         self.image_id     = int(image_id)
         self.vertex       = vertex
-        self.is_neutrino  = is_neutrino # TODO: Not implemented
+        self.is_neutrino  = is_neutrino
         
         # Initialize private attributes to be set by setter only
         self._particles  = None
@@ -82,8 +86,10 @@ class Interaction:
             self._particles      = particles
 
         # Quantities to be set by the particle matcher
-        # self._match         = []
+        self._match         = []
         self._match_counts  = OrderedDict()
+        self.matched        = matched
+        self._is_principal_match = False
         
         # Flash matching quantities
         self.flash_time     = flash_time
@@ -91,6 +97,11 @@ class Interaction:
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
         self.flash_hypothesis = flash_hypothesis
+
+        # CRT-TPC matching quantities
+        self.crthit_matched = crthit_matched
+        self.crthit_matched_particle_id = crthit_matched_particle_id
+        self.crthit_id = crthit_id
         
     @property
     def size(self):
@@ -105,6 +116,10 @@ class Interaction:
     @property
     def match_counts(self):
         return np.array(list(self._match_counts.values()), dtype=np.float32)
+    
+    @property
+    def is_principal_match(self):
+        return self._is_principal_match
         
     @classmethod
     def from_particles(cls, particles, verbose=False, **kwargs):
@@ -182,6 +197,19 @@ class Interaction:
             self.index = np.atleast_1d(np.concatenate(index_list))
             self.points = np.vstack(points_list)
             self.depositions = np.atleast_1d(np.concatenate(depositions_list))
+            
+    def _update_particle_info(self):
+        self._particle_counts = np.zeros(6, dtype=np.int64)
+        self._primary_counts  = np.zeros(6, dtype=np.int64)
+        for p in self.particles:
+            if p.pid >= 0:
+                self._particle_counts[p.pid] += 1
+                self._primary_counts[p.pid] += int(p.is_primary)
+            else:
+                self._particle_counts[-1] += 1
+                self._primary_counts[-1] += int(p.is_primary)
+            self._num_particles = len(self.particles)
+            self._num_primaries = len([1 for p in self.particles if p.is_primary])
         
     @property
     def particle_ids(self):
@@ -219,15 +247,24 @@ class Interaction:
         return self._particles[key]
 
     def __repr__(self):
-        return f"Interaction(id={self.id}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size}, Particles={str(self.particle_ids)})"
+        return f"Interaction(id={self.id:<3}, vertex={str(self.vertex)}, nu_id={self.nu_id}, size={self.size:<4}, Topology={self.topology})"
 
     def __str__(self):
         msg = "Interaction {}, Vertex: x={:.2f}, y={:.2f}, z={:.2f}\n"\
             "--------------------------------------------------------------------\n".format(
             self.id, self.vertex[0], self.vertex[1], self.vertex[2])
         return msg + self.particles_summary
+    
+    @property
+    def topology(self):
+        msg = ""
+        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
+        for i, count in enumerate(self._primary_counts):
+            if count > 0:
+                msg += f"{count}{encode[i]}"
+        return msg
 
-    @cached_property
+    @property
     def particles_summary(self):
 
         primary_str = {True: '*', False: '-'}
