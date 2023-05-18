@@ -72,30 +72,47 @@ def fiducial_cut(data_dict, result_dict, margin=0, spatial_units='cm'):
     """
     particles = result_dict['particles']
     interactions = result_dict['interactions']
-    meta = data_dict['meta']
     
     for p in particles:
-        p.is_contained = check_containment_cm(p, meta, margin=margin)
+        p.is_contained = check_containment_cm(p, margin=margin)
         
     for ia in interactions:
-        ia.is_contained = check_containment_cm(ia, meta, margin=margin)
+        ia.is_contained = check_containment_cm(ia, margin=margin)
         
     if 'truth_particles' in result_dict:
         for p in result_dict['truth_particles']:
-            p.is_contained = check_containment_cm(p, meta, margin=margin)
+            p.is_contained = check_containment_cm(p, margin=margin)
             
     if 'truth_interactions' in result_dict:
         for ia in result_dict['truth_interactions']:
-            ia.is_contained = check_containment_cm(ia, meta, margin=margin)
+            ia.is_contained = check_containment_cm(ia, margin=margin)
             
     return {}
             
             
 # ------------------------Helper Functions----------------------------
-def check_containment_cm(obj, meta, margin=0):
-    x = (obj.points[:, 0] > meta[0] + margin) & (obj.points[:, 0] < meta[3] - margin)
-    y = (obj.points[:, 1] > meta[1] + margin) & (obj.points[:, 1] < meta[4] - margin)
-    z = (obj.points[:, 2] > meta[2] + margin) & (obj.points[:, 2] < meta[5] - margin)
+
+FIDUCIAL_VOLUME = {
+    'x1_min': -358.49,
+    'x2_min': 61.94,
+    'x1_max': -61.94,
+    'x2_max': 358.49,
+    'y_min': -181.86,
+    'y_max': 134.96,
+    'z_min': -894.95,
+    'z_max': 894.95
+}
+
+def check_containment_cm(obj, margin=0):
+    x1 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x1_min'] + margin) \
+       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x1_max'] - margin)
+    x2 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x2_min'] + margin) \
+       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x2_max'] - margin)
+    y  = (obj.points[:, 1] > FIDUCIAL_VOLUME['y_min'] + margin) \
+       & (obj.points[:, 1] < FIDUCIAL_VOLUME['y_max'] - margin)
+    z  = (obj.points[:, 2] > FIDUCIAL_VOLUME['z_min'] + margin) \
+       & (obj.points[:, 2] < FIDUCIAL_VOLUME['z_max'] - margin)
+    x  = x1 | x2
     x = x.all()
     y = y.all()
     z = z.all()
