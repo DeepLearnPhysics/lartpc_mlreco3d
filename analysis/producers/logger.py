@@ -160,7 +160,7 @@ class ParticleLogger(AnalysisLogger):
 
     @staticmethod
     def is_primary(particle):
-        out = {'particle_is_primary': -1}
+        out = {'particle_is_primary': False}
         if hasattr(particle, 'is_primary'):
             out['particle_is_primary'] = particle.is_primary
         return out

@@ -316,13 +316,13 @@ class ParticleBuilder(DataBuilder):
                             image_id=image_index,
                             semantic_type=seg_label, 
                             index=p,
-                            points=point_cloud[p],
+                            points=np.ascontiguousarray(point_cloud[p]),
                             depositions=depositions[p],
                             volume_id=volume_id,
                             pid_scores=pid_scores[i],
                             primary_scores=primary_scores[i],
-                            start_point = particle_start_points[i],
-                            end_point = particle_end_points[i])
+                            start_point = np.ascontiguousarray(particle_start_points[i]),
+                            end_point = np.ascontiguousarray(particle_end_points[i]))
 
             out.append(part)
 

@@ -178,7 +178,7 @@ class Particle:
         
     @property
     def is_primary(self):
-        return int(self._is_primary)
+        return bool(self._is_primary)
     
     @is_primary.setter
     def is_primary(self, value):
