@@ -10,10 +10,10 @@ from mlreco.utils.globals import *
                                                               'particle_start_points',
                                                               'particle_end_points',
                                                               'particles'])
-def particle_direction(data_dict,
-                       result_dict,
-                       neighborhood_radius=5,
-                       optimize=True):
+def particle_direction_deprecated(data_dict,
+                                  result_dict,
+                                  neighborhood_radius=5,
+                                  optimize=True):
 
     if 'input_rescaled' not in result_dict:
         input_data = data_dict['input_data']
@@ -42,13 +42,27 @@ def particle_direction(data_dict,
             
     return update_dict
 
-@post_processing(data_capture=['input_data'], result_capture=['truth_particles'])
-def particle_direction_truth(data_dict,
-                             result_dict,
-                             neighborhood_radius=5,
-                             optimize=True):
-    for p in result_dict['truth_particles']:
+@post_processing(data_capture=['input_data'], 
+                 result_capture=['particles'],
+                 result_capture_optional=['truth_particles'])
+def particle_direction(data_dict,
+                       result_dict,
+                       neighborhood_radius=5,
+                       optimize=True):
+    for p in result_dict['particles']:
         p.start_dir = cluster_direction(p.points, p.start_point, 
+                                        neighborhood_radius, 
+                                        optimize=optimize)
+        p.end_dir = cluster_direction(p.points, p.end_point, 
+                                      neighborhood_radius, 
+                                      optimize=optimize)
+        
+    if 'truth_particles' in result_dict:
+        for p in result_dict['truth_particles']:
+            p.start_dir = cluster_direction(p.truth_points, p.start_point, 
+                                            neighborhood_radius, 
+                                            optimize=optimize)
+            p.end_dir = cluster_direction(p.truth_points, p.end_point, 
                                         neighborhood_radius, 
                                         optimize=optimize)
     return {}

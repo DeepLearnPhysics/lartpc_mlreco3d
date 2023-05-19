@@ -8,12 +8,7 @@ from analysis.post_processing import post_processing
 from analysis.post_processing.reconstruction.calorimetry import compute_track_dedx
 
 @post_processing(data_capture=[], 
-                 result_capture=['particle_start_points',
-                                 'particle_end_points',
-                                #  'input_rescaled',
-                                #  'particle_seg',
-                                #  'particle_clusts',
-                                 'particles'])
+                 result_capture=['particles'])
 def assign_particle_extrema(data_dict, result_dict,
                             mode='local_density',
                             radius=1.5):
@@ -38,12 +33,12 @@ def assign_particle_extrema(data_dict, result_dict,
             Empty dictionary (operation is in-place)
     """
 
-    startpts       = result_dict['particle_start_points'][:, COORD_COLS]
-    endpts         = result_dict['particle_end_points'][:, COORD_COLS]
+    # startpts       = result_dict['particle_start_points'][:, COORD_COLS]
+    # endpts         = result_dict['particle_end_points'][:, COORD_COLS]
     particles      = result_dict['particles']
 
-    assert len(startpts) == len(endpts)
-    assert len(startpts) == len(particles)
+    # assert len(startpts) == len(endpts)
+    # assert len(startpts) == len(particles)
     
     for i, p in enumerate(particles):
         if p.semantic_type == 1:
