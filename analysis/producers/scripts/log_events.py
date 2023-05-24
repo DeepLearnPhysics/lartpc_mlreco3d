@@ -60,6 +60,16 @@ def event_data(data_blob, res, **kwargs):
         row_dict['num_truth_primary_showers'] = len([p for p in res['truth_particles'][idx] \
             if p.semantic_type == 0 and p.is_primary])
         
+        row_dict['num_reco_electron_showers'] = len([p for p in res['particles'][idx] \
+            if p.semantic_type == 0 and p.pid == 1])
+        row_dict['num_truth_electron_showers'] = len([p for p in res['truth_particles'][idx] \
+            if p.semantic_type == 0 and p.pid == 1])
+        
+        row_dict['num_reco_primary_electron_showers'] = len([p for p in res['particles'][idx] \
+            if p.semantic_type == 0 and p.is_primary and p.pid == 1])
+        row_dict['num_truth_primary_electron_showers'] = len([p for p in res['truth_particles'][idx] \
+            if p.semantic_type == 0 and p.is_primary and p.pid == 1])
+        
         output.append(row_dict)
         
     return [output]

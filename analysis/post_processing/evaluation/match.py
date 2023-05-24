@@ -14,13 +14,13 @@ from analysis.classes.data import *
                                  'truth_particles'])
 def match_particles(data_dict,
                     result_dict,
-                    matching_mode='optimal',
+                    matching_mode='recursive',
                     min_overlap=0,
                     overlap_mode='iou'):
     pred_particles = result_dict['particles']
     
-    out = {'matched_particles': [],
-           'particle_match_counts': []}
+    # out = {'matched_particles': [],
+    #        'particle_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_particles = [ia for ia in result_dict['truth_particles'] if ia.truth_size > 0]
@@ -30,7 +30,7 @@ def match_particles(data_dict,
     # Only consider interactions with nonzero predicted nonghost
     matched_particles = []
     
-    if matching_mode == 'optimal':
+    if matching_mode == 'recursive':
         matched_particles, counts = match_recursive(
             pred_particles, 
             true_particles, 
@@ -51,10 +51,10 @@ def match_particles(data_dict,
     else:
         raise ValueError
             
-    out.update({'matched_particles': matched_particles})
-    out.update({'particle_match_counts': counts})
+    # out.update({'matched_particles': matched_particles})
+    # out.update({'particle_match_counts': counts})
 
-    return out
+    return {}
     
 
 
@@ -63,14 +63,14 @@ def match_particles(data_dict,
                                  'truth_interactions'])
 def match_interactions(data_dict,
                        result_dict,
-                       matching_mode='optimal',
+                       matching_mode='recursive',
                        min_overlap=0,
                        overlap_mode='iou'):
 
     pred_interactions = result_dict['interactions']
     
-    out = {'matched_interactions': [],
-           'interaction_match_counts': []}
+    # out = {'matched_interactions': [],
+    #        'interaction_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
@@ -79,7 +79,7 @@ def match_interactions(data_dict,
     
     # Only consider interactions with nonzero predicted nonghost
     
-    if matching_mode == 'optimal':
+    if matching_mode == 'recursive':
         matched_interactions, counts = match_recursive(
             pred_interactions, 
             true_interactions, 
@@ -99,10 +99,10 @@ def match_interactions(data_dict,
     else:
         raise ValueError
 
-    out.update({'matched_interactions': matched_interactions})
-    out.update({'interaction_match_counts': counts})
+    # out.update({'matched_interactions': matched_interactions})
+    # out.update({'interaction_match_counts': counts})
     
-    return out
+    return {}
 
 
 # ----------------------------- Helper functions -----------------------------

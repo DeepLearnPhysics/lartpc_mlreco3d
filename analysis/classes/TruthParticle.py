@@ -44,6 +44,8 @@ class TruthParticle(Particle):
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  particle_asis: object = None, 
+                 length_tng: float = -1.,
+                 csda_kinetic_energy_tng: float = -1.,
                  **kwargs):
 
         super(TruthParticle, self).__init__(*args, **kwargs)
@@ -64,8 +66,8 @@ class TruthParticle(Particle):
             
         # Quantities to be set during post-processing
         # tng stands for true nonghost
-        self.length_tng = -1.
-        self.csda_kinetic_energy_tng = -1.
+        self.length_tng = length_tng
+        self.csda_kinetic_energy_tng = csda_kinetic_energy_tng
         
         # Set start_point and end_point to first and last step in case
         # it wasn't set during initialization

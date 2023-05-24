@@ -117,12 +117,12 @@ def range_based_track_energy(data_dict, result_dict,
                 bin_size_cm = bin_size * px_to_cm
             if pts.shape[0] > min_points:
                 length = compute_track_length(pts, bin_size=bin_size_cm)
-                p.length = length
-                p.csda_kinetic_energy = splines[p.pid](length)
+                p.length = float(length)
+                p.csda_kinetic_energy = float(splines[p.pid](length))
             if tng_pts.shape[0] > min_points:
                 length_tng = compute_track_length(tng_pts, bin_size=bin_size_cm)
-                p.length_tng = length_tng
-                p.csda_kinetic_energy_tng = splines[p.pid](length_tng)
+                p.length_tng = float(length_tng)
+                p.csda_kinetic_energy_tng = float(splines[p.pid](length_tng))
             
     return {}
 
