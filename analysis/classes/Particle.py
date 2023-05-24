@@ -86,7 +86,8 @@ class Particle:
                  length: float = -1.,
                  csda_kinetic_energy: float = -1.,
                  momentum_mcs: float = -1., 
-                 matched: bool = False, **kwargs):
+                 matched: bool = False,
+                 is_contained: bool = False, **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -121,6 +122,7 @@ class Particle:
         self.length               = length
         self.csda_kinetic_energy  = csda_kinetic_energy
         self.momentum_mcs         = momentum_mcs
+        self.is_contained         = is_contained
 
         # Quantities to be set by the particle matcher
         self.matched             = matched
@@ -176,7 +178,7 @@ class Particle:
         
     @property
     def is_primary(self):
-        return int(self._is_primary)
+        return bool(self._is_primary)
     
     @is_primary.setter
     def is_primary(self, value):

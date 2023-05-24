@@ -62,7 +62,7 @@ class AnaToolsManager:
                 if builder_name not in SUPPORTED_BUILDERS:
                     msg = f"{builder_name} is not a valid data product builder!"
                     raise ValueError(msg)
-                builder = eval(builder_name)()
+                builder = eval(builder_name)(spatial_units=self.spatial_units)
                 self.builders[builder_name] = builder
 
         self._data_reader  = None

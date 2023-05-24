@@ -160,7 +160,7 @@ class ParticleLogger(AnalysisLogger):
 
     @staticmethod
     def is_primary(particle):
-        out = {'particle_is_primary': -1}
+        out = {'particle_is_primary': False}
         if hasattr(particle, 'is_primary'):
             out['particle_is_primary'] = particle.is_primary
         return out
@@ -169,15 +169,15 @@ class ParticleLogger(AnalysisLogger):
     def start_point(particle):
         out = {
             # 'particle_has_startpoint': False,
-            'particle_startpoint_x': -1,
-            'particle_startpoint_y': -1,
-            'particle_startpoint_z': -1
+            'particle_start_point_x': -1,
+            'particle_start_point_y': -1,
+            'particle_start_point_z': -1
         }
         if (particle is not None) and (particle.start_point is not None):
             # out['particle_has_startpoint'] = True
-            out['particle_startpoint_x'] = particle.start_point[0]
-            out['particle_startpoint_y'] = particle.start_point[1]
-            out['particle_startpoint_z'] = particle.start_point[2]
+            out['particle_start_point_x'] = particle.start_point[0]
+            out['particle_start_point_y'] = particle.start_point[1]
+            out['particle_start_point_z'] = particle.start_point[2]
         return out
     
     @staticmethod
@@ -259,6 +259,16 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    @tag('true')
+    def num_children(particle):
+        out = {
+            'num_children': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['num_children'] = len(particle.asis.children_id())
+        return out
+    
+    @staticmethod
     def reco_start_dir(particle):
         out = {
             'particle_start_dir_x': 0,
@@ -301,30 +311,11 @@ class ParticleLogger(AnalysisLogger):
             out['csda_kinetic_energy'] = particle.csda_kinetic_energy
         return out
     
-    # @staticmethod
-    def is_contained(self, particle, threshold=30):
-
+    @staticmethod
+    def is_contained(particle):
         out = {'particle_is_contained': False}
-        if particle is not None and len(particle.points) > 0:
-            if not isinstance(threshold, np.ndarray):
-                threshold = threshold * np.ones((3,))
-            else:
-                assert len(threshold) == 3
-                assert len(threshold.shape) == 1
-
-            if self.meta is None:
-                msg = "Data dictionary missing a meta information to set "\
-                    "volume boundaries for checking particle containment."
-                raise AssertionError(msg)
-            
-            x = (self.vb[0, 0] + threshold[0] <= particle.points[:, 0]) \
-                        & (particle.points[:, 0] <= self.vb[0, 1] - threshold[0])
-            y = (self.vb[1, 0] + threshold[1] <= particle.points[:, 1]) \
-                        & (particle.points[:, 1] <= self.vb[1, 1] - threshold[1])
-            z = (self.vb[2, 0] + threshold[2] <= particle.points[:, 2]) \
-                        & (particle.points[:, 2] <= self.vb[2, 1] - threshold[2])
-
-            out['particle_is_contained'] =  (x & y & z).all()
+        if particle is not None:
+            out['particle_is_contained'] = particle.is_contained
         return out
 
     @staticmethod
@@ -407,32 +398,6 @@ class InteractionLogger(AnalysisLogger):
             out['volume_id'] = ia.volume_id
         return out
     
-    # @staticmethod
-    def is_contained(self, ia, threshold=30):
-
-        out = {'interaction_is_contained': False}
-        if ia is not None and len(ia.points) > 0:
-            if not isinstance(threshold, np.ndarray):
-                threshold = threshold * np.ones((3,))
-            else:
-                assert len(threshold) == 3
-                assert len(threshold.shape) == 1
-
-            if self.meta is None:
-                msg = "Data dictionary missing a meta information to set "\
-                    "volume boundaries for checking particle containment."
-                raise AssertionError(msg)
-
-            x = (self.vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
-                        & (ia.points[:, 0] <= self.vb[0, 1] - threshold[0])
-            y = (self.vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
-                        & (ia.points[:, 1] <= self.vb[1, 1] - threshold[1])
-            z = (self.vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
-                        & (ia.points[:, 2] <= self.vb[2, 1] - threshold[2])
-
-            out['particle_is_contained'] =  (x & y & z).all()
-        return out
-    
     @staticmethod
     def count_primary_particles(ia, ptypes=None):
         
@@ -495,25 +460,11 @@ class InteractionLogger(AnalysisLogger):
             out['truth_topology'] = ia.truth_topology
         return out
     
-    # @staticmethod
-    def is_contained(self, ia, threshold=30):
-
+    @staticmethod
+    def is_contained(ia):
         out = {'interaction_is_contained': False}
-        if ia is not None and len(ia.points) > 0:
-            if not isinstance(threshold, np.ndarray):
-                threshold = threshold * np.ones((3,))
-            else:
-                assert len(threshold) == 3
-                assert len(threshold.shape) == 1
-
-            x = (self.vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
-                        & (ia.points[:, 0] <= self.vb[0, 1] - threshold[0])
-            y = (self.vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
-                        & (ia.points[:, 1] <= self.vb[1, 1] - threshold[1])
-            z = (self.vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
-                        & (ia.points[:, 2] <= self.vb[2, 1] - threshold[2])
-
-            out['interaction_is_contained'] =  (x & y & z).all()
+        if ia is not None:
+            out['interaction_is_contained'] = ia.is_contained
         return out
     
     @staticmethod
