@@ -323,12 +323,14 @@ class FullChainEvaluator(FullChainPredictor):
                                                        value_matrix=value_matrix,
                                                        overlap_matrix=overlap_matrix,
                                                        **kwargs)
+            matched_pairs = list(matched_pairs.values())
         elif matching_mode == 'pred_to_true':
             overlap_matrix, value_matrix = weighted_matrix_iou(reco_particles, truth_particles)
             matched_pairs, counts = match_particles_fn(reco_particles, truth_particles,
                                                        value_matrix=value_matrix,
                                                        overlap_matrix=overlap_matrix,
                                                        **kwargs)
+            matched_pairs = list(matched_pairs.values())
         # elif matching_mode == 'optimal':
         #     matched_pairs, counts = match_particles_optimal(reco_particles, truth_particles,
         #                                                     **all_kwargs)
@@ -394,6 +396,7 @@ class FullChainEvaluator(FullChainPredictor):
                                                                  value_matrix,
                                                                  overlap_matrix,
                                                                  **kwargs)
+            matched_interactions = list(matched_interactions.values())
         elif matching_mode == 'true_to_pred':
             overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions_masked, pred_interactions)
             matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
@@ -401,6 +404,7 @@ class FullChainEvaluator(FullChainPredictor):
                                                                  value_matrix,
                                                                  overlap_matrix,
                                                                  **kwargs)
+            matched_interactions = list(matched_interactions.values())
         # elif matching_mode == 'optimal':
         #     matched_interactions, counts = match_interactions_optimal(pred_interactions, 
         #                                                               true_interactions_masked,

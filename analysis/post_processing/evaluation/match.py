@@ -45,6 +45,7 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matched_particles = list(matched_particles.values())
     elif matching_mode == 'true_to_pred':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_particles, pred_particles)
         matched_particles, counts = match_particles_fn(
@@ -53,6 +54,7 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matched_particles = list(matched_particles.values())
     else:
         raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
             
@@ -97,6 +99,7 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matched_interactions = list(matched_interactions.values())
     elif matching_mode == 'true_to_pred':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions, pred_interactions)
         matched_interactions, counts = match_interactions_fn(
@@ -105,6 +108,7 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matched_interactions = list(matched_interactions.values())
     else:
         raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
 
