@@ -188,7 +188,9 @@ def _weighted_matrix_dice(index_x : List[nb.int64[:]],
 
 def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
                        particles_y : Union[List[Particle], List[TruthParticle]],
-                       value_matrix: np.ndarray, min_overlap=0.0):
+                       value_matrix: np.ndarray, 
+                       overlap_matrix: np.ndarray,
+                       min_overlap=0.0):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>.
@@ -244,27 +246,31 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
     intersections: np.array of floats/ints
         IoU/Count information for each matches.
     '''
-    raise NotImplementedError("WIP, needs debugging.")
-    # print(overlap_matrix)
+    assert value_matrix.shape == (len(particles_y), len(particles_x))
+    
     idx = value_matrix.argmax(axis=0)
     intersections = np.atleast_1d(value_matrix.max(axis=0))
 
     matches = OrderedDict()
-
+    out_counts = []
+    
+    # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
         select_idx = idx[j]
+        out_counts.append(overlap_matrix[select_idx, j])
         if intersections[j] <= min_overlap:
-            # If no truth could be matched, assign None
-            matched_truth = None
             key = (px.id, None)
             matches[key] = (px, None)
         else:
-            matched_truth = particles_y[select_idx]
-            px._match_counts[matched_truth.id] = intersections[j]
-            matched_truth._match_counts[px.id] = intersections[j]
-            matches
+            matched = particles_y[select_idx]
+            px._match_counts[matched.id] = intersections[j]
+            matched._match_counts[px.id] = intersections[j]
+            key = (px.id, matched.id)
+            matches[key] = (px, matched)
 
-    return matches, intersections
+    out_counts = np.array(out_counts)
+            
+    return matches, out_counts
 
 
 def match_particles_optimal(particles_from : Union[List[Particle], List[TruthParticle]],
@@ -337,51 +343,38 @@ def match_particles_optimal(particles_from : Union[List[Particle], List[TruthPar
     return matches, intersections
 
 
-def match_interactions_fn(ints_from : List[Interaction],
-                          ints_to : List[Interaction],
-                          min_overlap=0, verbose=False, overlap_mode="iou"):
+def match_interactions_fn(ints_x : List[Interaction],
+                          ints_y : List[Interaction],
+                          value_matrix: np.ndarray,
+                          overlap_matrix: np.ndarray,
+                          min_overlap=0):
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
-    ints_x, ints_y = ints_from, ints_to
-
-    if len(ints_y) == 0 or len(ints_x) == 0:
-        if verbose:
-            print("No particles/interactions to match.")
-        return [], 0
-
-    if overlap_mode == 'counts':
-        overlap_matrix = matrix_counts(ints_x, ints_y)
-    elif overlap_mode == 'iou':
-        overlap_matrix = matrix_iou(ints_x, ints_y)
-    else:
-        raise ValueError("Overlap matrix mode {} is not supported.".format(overlap_mode))
+    assert value_matrix.shape == (len(ints_y), len(ints_x))
     
-    idx = overlap_matrix.argmax(axis=0)
-    intersections = overlap_matrix.max(axis=0)
+    idx = value_matrix.argmax(axis=0)
+    intersections = np.atleast_1d(value_matrix.max(axis=0))
 
-    matches = []
-
-    for j, interaction in enumerate(ints_x):
+    matches = OrderedDict()
+    out_counts = []
+    
+    # For each particle in x, choose one in y
+    for j, px in enumerate(ints_x):
         select_idx = idx[j]
+        out_counts.append(overlap_matrix[select_idx, j])
         if intersections[j] <= min_overlap:
-            # If no truth could be matched, assign None
-            matched_truth = None
+            key = (px.id, None)
+            matches[key] = (px, None)
         else:
-            matched_truth = ints_y[select_idx]
-            # interaction._match.append(matched_truth.id)
-            interaction._match_counts[matched_truth.id] = intersections[j]
-            # matched_truth._match.append(interaction.id)
-            matched_truth._match_counts[interaction.id] = intersections[j]
-            match = (interaction, matched_truth)
-            matches.append(match)
+            matched = ints_y[select_idx]
+            px._match_counts[matched.id] = intersections[j]
+            matched._match_counts[px.id] = intersections[j]
+            key = (px.id, matched.id)
+            matches[key] = (px, matched)
 
-        # if (type(match[0]) is Interaction) or (type(match[1]) is TruthInteraction):
-        #     p1, p2 = match[1], match[0]
-        #     match = (p1, p2)
-        # matches.append(match)
-
-    return matches, intersections
+    out_counts = np.array(out_counts)
+    return matches, out_counts
 
 
 def match_interactions_optimal(ints_from : List[Interaction],
@@ -471,31 +464,6 @@ def group_particles_to_interactions_fn(particles : List[Particle],
             interactions[int_id] = TruthInteraction.from_particles(particles)
         else:
             raise ValueError(f"Unknown aggregation mode {mode}.")
-
-    # nu_id = -1
-    # for int_id, particles in interactions.items():
-    #     if get_nu_id:
-    #         nu_id = np.unique([p.nu_id for p in particles])
-    #         if nu_id.shape[0] > 1:
-    #             if verbose:
-    #                 print("Interaction {} has non-unique particle "\
-    #                     "nu_ids: {}".format(int_id, str(nu_id)))
-    #             nu_id = nu_id[0]
-    #         else:
-    #             nu_id = nu_id[0]
-
-    #     counter = Counter([p.volume_id for p in particles if p.volume_id != -1])
-    #     if not bool(counter):
-    #         volume_id = -1
-    #     else:
-    #         volume_id = counter.most_common(1)[0][0]
-    #     particles_dict = OrderedDict({p.id : p for p in particles})
-    #     if mode == 'pred':
-    #         interactions[int_id] = Interaction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
-    #     elif mode == 'truth':
-    #         interactions[int_id] = TruthInteraction(int_id, particles_dict.values(), nu_id=nu_id, volume_id=volume_id)
-    #     else:
-    #         raise ValueError
         
 
     return list(interactions.values())
@@ -517,22 +485,6 @@ def check_particle_matches(loaded_particles, clear=False):
     match = match[perm]
 
     return match, match_counts
-
-
-def match_recursive(particles_x, particles_y, 
-                    min_overlap=0.0, overlap_mode='iou'):
-    triplets = match_recursive_(particles_x,
-                               particles_y,
-                               min_overlap=min_overlap,
-                               overlap_mode=overlap_mode)
-    
-    matches, counts = [], []
-    for t in triplets:
-        m1, m2, val = triplets[t]
-        matches.append((m1, m2))
-        counts.append(val)
-    
-    return matches, counts
 
 
 def match_recursive(particles_x, particles_y, 

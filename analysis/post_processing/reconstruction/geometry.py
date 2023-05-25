@@ -50,21 +50,23 @@ def particle_direction(data_dict,
                        neighborhood_radius=5,
                        optimize=True):
     for p in result_dict['particles']:
-        p.start_dir = cluster_direction(p.points, p.start_point, 
+        if len(p.points) > 0:
+            p.start_dir = cluster_direction(p.points, p.start_point, 
+                                            neighborhood_radius, 
+                                            optimize=optimize)
+            p.end_dir = cluster_direction(p.points, p.end_point, 
                                         neighborhood_radius, 
                                         optimize=optimize)
-        p.end_dir = cluster_direction(p.points, p.end_point, 
-                                      neighborhood_radius, 
-                                      optimize=optimize)
         
     if 'truth_particles' in result_dict:
         for p in result_dict['truth_particles']:
-            p.start_dir = cluster_direction(p.truth_points, p.start_point, 
+            if len(p.truth_points) > 0:
+                p.start_dir = cluster_direction(p.truth_points, p.start_point, 
+                                                neighborhood_radius, 
+                                                optimize=optimize)
+                p.end_dir = cluster_direction(p.truth_points, p.end_point, 
                                             neighborhood_radius, 
                                             optimize=optimize)
-            p.end_dir = cluster_direction(p.truth_points, p.end_point, 
-                                        neighborhood_radius, 
-                                        optimize=optimize)
     return {}
 
 @post_processing(data_capture=['meta'], 

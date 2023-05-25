@@ -6,7 +6,8 @@ from mlreco.utils.globals import *
 from analysis.classes.matching import (match_particles_fn,
                                        match_recursive,
                                        match_interactions_fn,
-                                       match_interactions_optimal)
+                                       match_interactions_optimal,
+                                       weighted_matrix_iou)
 from analysis.classes.data import *
 
 @post_processing(data_capture=['index'], 
@@ -19,8 +20,8 @@ def match_particles(data_dict,
                     overlap_mode='iou'):
     pred_particles = result_dict['particles']
     
-    # out = {'matched_particles': [],
-    #        'particle_match_counts': []}
+    out = {'matched_particles': [],
+           'particle_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_particles = [ia for ia in result_dict['truth_particles'] if ia.truth_size > 0]
@@ -37,24 +38,28 @@ def match_particles(data_dict,
             min_overlap=min_overlap)
         
     elif matching_mode == 'pred_to_true':
+        overlap_matrix, value_matrix = weighted_matrix_iou(pred_particles, true_particles)
         matched_particles, counts = match_particles_fn(
             pred_particles, 
             true_particles, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
     elif matching_mode == 'true_to_pred':
+        overlap_matrix, value_matrix = weighted_matrix_iou(true_particles, pred_particles)
         matched_particles, counts = match_particles_fn(
             true_particles, 
             pred_particles, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
     else:
-        raise ValueError
+        raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
             
-    # out.update({'matched_particles': matched_particles})
-    # out.update({'particle_match_counts': counts})
+    out.update({'matched_particles': matched_particles})
+    out.update({'particle_match_counts': counts})
 
-    return {}
+    return out
     
 
 
@@ -69,8 +74,8 @@ def match_interactions(data_dict,
 
     pred_interactions = result_dict['interactions']
     
-    # out = {'matched_interactions': [],
-    #        'interaction_match_counts': []}
+    out = {'matched_interactions': [],
+           'interaction_match_counts': []}
     
     if overlap_mode == 'chamfer':
         true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
@@ -85,24 +90,28 @@ def match_interactions(data_dict,
             true_interactions, 
             min_overlap=min_overlap)
     elif matching_mode == 'pred_to_true':
+        overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions)
         matched_interactions, counts = match_interactions_fn(
             pred_interactions, 
             true_interactions, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
     elif matching_mode == 'true_to_pred':
+        overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions, pred_interactions)
         matched_interactions, counts = match_interactions_fn(
             true_interactions, 
             pred_interactions, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
     else:
-        raise ValueError
+        raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
 
-    # out.update({'matched_interactions': matched_interactions})
-    # out.update({'interaction_match_counts': counts})
+    out.update({'matched_interactions': matched_interactions})
+    out.update({'interaction_match_counts': counts})
     
-    return {}
+    return out
 
 
 # ----------------------------- Helper functions -----------------------------
