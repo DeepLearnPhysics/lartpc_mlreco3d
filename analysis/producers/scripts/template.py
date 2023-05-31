@@ -76,6 +76,7 @@ def run_inference(data_blob, res, **kwargs):
                 return_counts=True)
 
         # pprint(matches)
+        # assert False
 
         # 1 a) Check outputs from interaction matching 
         if len(matches) == 0:
@@ -102,7 +103,13 @@ def run_inference(data_blob, res, **kwargs):
             int_dict = OrderedDict()
             int_dict.update(index_dict)
             int_dict['interaction_match_counts'] = icounts[i]
-            true_int, pred_int = interaction_pair[0], interaction_pair[1]
+            
+            if matching_mode == 'true_to_pred':
+                true_int, pred_int = interaction_pair[0], interaction_pair[1]
+            elif matching_mode == 'pred_to_true':
+                pred_int, true_int = interaction_pair[0], interaction_pair[1]
+            else:
+                raise ValueError("Matching mode {} is not supported.".format(matching_mode))
 
             assert (type(true_int) is TruthInteraction) or (true_int is None)
             assert (type(pred_int) is Interaction) or (pred_int is None)
