@@ -4,9 +4,6 @@ import numpy as np
 from analysis.classes import TruthParticleFragment, TruthParticle, Interaction
 from analysis.classes.matching import (match_particles_fn, 
                                              match_interactions_fn, 
-                                             match_interactions_optimal, 
-                                             match_particles_optimal,
-                                             match_recursive,
                                              weighted_matrix_iou)
 
 from analysis.classes.predictor import FullChainPredictor
@@ -275,7 +272,8 @@ class FullChainEvaluator(FullChainPredictor):
 
     def match_particles(self, entry,
                         only_primaries=False,
-                        matching_mode='recursive', 
+                        matching_mode='true_to_pred', 
+                        weight=False,
                         return_counts=False,
                         **kwargs):
         '''
@@ -317,7 +315,7 @@ class FullChainEvaluator(FullChainPredictor):
         
         if matching_mode == 'true_to_pred':
             
-            overlap_matrix, value_matrix = weighted_matrix_iou(truth_particles, reco_particles)
+            overlap_matrix, value_matrix = weighted_matrix_iou(truth_particles, reco_particles, weight=weight)
 
             matched_pairs, counts = match_particles_fn(truth_particles, reco_particles,
                                                        value_matrix=value_matrix,
@@ -325,18 +323,12 @@ class FullChainEvaluator(FullChainPredictor):
                                                        **kwargs)
             matched_pairs = list(matched_pairs.values())
         elif matching_mode == 'pred_to_true':
-            overlap_matrix, value_matrix = weighted_matrix_iou(reco_particles, truth_particles)
+            overlap_matrix, value_matrix = weighted_matrix_iou(reco_particles, truth_particles, weight=weight)
             matched_pairs, counts = match_particles_fn(reco_particles, truth_particles,
                                                        value_matrix=value_matrix,
                                                        overlap_matrix=overlap_matrix,
                                                        **kwargs)
             matched_pairs = list(matched_pairs.values())
-        # elif matching_mode == 'optimal':
-        #     matched_pairs, counts = match_particles_optimal(reco_particles, truth_particles,
-        #                                                     **all_kwargs)
-        elif matching_mode == 'recursive':
-            matched_pairs, counts = match_recursive(reco_particles, truth_particles,
-                                                    **kwargs)
         else:
             raise ValueError(f"Particle matching mode {matching_mode} not suppored!")
         self._matched_particles = matched_pairs
@@ -349,7 +341,8 @@ class FullChainEvaluator(FullChainPredictor):
     
     def match_interactions(self, entry,
                            return_counts=False,
-                           matching_mode='recursive',
+                           matching_mode='pred_to_true',
+                           weight=False,
                            **kwargs):
         """
         Method for matching reco and true interactions.
@@ -390,7 +383,7 @@ class FullChainEvaluator(FullChainPredictor):
         true_interactions_masked = [ia for ia in true_interactions if ia.size > 0]
         
         if matching_mode == 'pred_to_true':
-            overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions_masked)
+            overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions_masked, weight=weight)
             matched_interactions, counts = match_interactions_fn(pred_interactions, 
                                                                  true_interactions_masked,
                                                                  value_matrix,
@@ -398,21 +391,13 @@ class FullChainEvaluator(FullChainPredictor):
                                                                  **kwargs)
             matched_interactions = list(matched_interactions.values())
         elif matching_mode == 'true_to_pred':
-            overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions_masked, pred_interactions)
+            overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions_masked, pred_interactions, weight=weight)
             matched_interactions, counts = match_interactions_fn(true_interactions_masked, 
                                                                  pred_interactions,
                                                                  value_matrix,
                                                                  overlap_matrix,
                                                                  **kwargs)
             matched_interactions = list(matched_interactions.values())
-        # elif matching_mode == 'optimal':
-        #     matched_interactions, counts = match_interactions_optimal(pred_interactions, 
-        #                                                               true_interactions_masked,
-        #                                                               **all_kwargs)
-        elif matching_mode == 'recursive':
-            matched_interactions, counts = match_recursive(pred_interactions, 
-                                                           true_interactions,
-                                                           min_overlap=self.min_overlap_count)
         else:
             raise ValueError(f"Unknown interaction matching mode {matching_mode}.")
 

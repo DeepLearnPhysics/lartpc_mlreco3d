@@ -94,35 +94,44 @@ def range_based_track_energy(data_dict, result_dict,
 
     for i, p in enumerate(particles):
         if p.semantic_type == 1 and p.pid in include_pids:
-            if mode == 'cm':
-                points = p.points
-                bin_size_cm = bin_size
-            else:
-                points = _pix_to_cm(p.points, meta)
-                bin_size_cm = bin_size * px_to_cm
+            # if mode == 'cm':
+            points = p.points
+            # bin_size_cm = bin_size
+            # else:
+            #     points = _pix_to_cm(p.points, meta)
+            #     bin_size_cm = bin_size * px_to_cm
             if points.shape[0] > min_points:
-                length = compute_track_length(points, bin_size=bin_size_cm)
+                length = compute_track_length(points, bin_size=bin_size)
                 p.length = length
-                p.csda_kinetic_energy = splines[p.pid](length)
+                if mode == 'cm':
+                    p.csda_kinetic_energy = float(splines[p.pid](length))
+                else:
+                    p.csda_kinetic_energy = float(splines[p.pid](length * px_to_cm))
 
     for i, p in enumerate(truth_particles):
         if p.semantic_type == 1 and p.pid in include_pids:
-            if mode == 'cm':
-                pts = p.points
-                tng_pts = p.truth_points
-                bin_size_cm = bin_size
-            else:
-                pts = _pix_to_cm(p.points, meta)
-                tng_pts = _pix_to_cm(p.truth_points, meta)
-                bin_size_cm = bin_size * px_to_cm
+            # if mode == 'cm':
+            pts = p.points
+            tng_pts = p.truth_points
+                # bin_size_cm = bin_size
+            # else:
+            #     pts = _pix_to_cm(p.points, meta)
+            #     tng_pts = _pix_to_cm(p.truth_points, meta)
+            #     bin_size_cm = bin_size * px_to_cm
             if pts.shape[0] > min_points:
-                length = compute_track_length(pts, bin_size=bin_size_cm)
+                length = compute_track_length(pts, bin_size=bin_size)
                 p.length = float(length)
-                p.csda_kinetic_energy = float(splines[p.pid](length))
+                if mode == 'cm':
+                    p.csda_kinetic_energy = float(splines[p.pid](length))
+                else:
+                    p.csda_kinetic_energy = float(splines[p.pid](length * px_to_cm))
             if tng_pts.shape[0] > min_points:
-                length_tng = compute_track_length(tng_pts, bin_size=bin_size_cm)
+                length_tng = compute_track_length(tng_pts, bin_size=bin_size)
                 p.length_tng = float(length_tng)
-                p.csda_kinetic_energy_tng = float(splines[p.pid](length_tng))
+                if mode == 'cm':
+                    p.csda_kinetic_energy_tng = float(splines[p.pid](length_tng))
+                else:
+                    p.csda_kinetic_energy_tng = float(splines[p.pid](length_tng * px_to_cm))
             
     return {}
 
