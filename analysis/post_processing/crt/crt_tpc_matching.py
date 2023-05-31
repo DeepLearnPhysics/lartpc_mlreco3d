@@ -4,7 +4,7 @@ from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 #from matcha.match_candidate import MatchCandidate
 
-@post_processing(data_capture=['meta', 'index', 'crthits'], 
+@post_processing(data_capture=['index', 'crthits'], 
                  result_capture=['interactions'])
 def run_crt_tpc_matching(data_dict, result_dict, 
                          crt_tpc_manager=None,

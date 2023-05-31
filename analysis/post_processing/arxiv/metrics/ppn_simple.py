@@ -2,9 +2,11 @@ import numpy as np
 from scipy.spatial.distance import cdist
 import scipy
 import os
-from mlreco.post_processing import post_processing
+
+from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_points
 from mlreco.utils.ppn import uresnet_ppn_type_point_selector
+from mlreco.post_processing import post_processing
 
 
 @post_processing(['ppn-metrics-gt', 'ppn-metrics-pred'],
@@ -79,18 +81,16 @@ def ppn_simple(cfg, processor_cfg, data_blob, result, logdir, iteration,
         pred_endpoint_type = ppn_endpoint_type[i]
         segmentation_voxels = segment_label[data_idx][:, 1:4][pred_seg == pred_point_type]
         if segmentation_voxels.shape[0] > 0:
-            d_same_type = torch.cdist(
+            d_same_type = local_cdist(
                 torch.Tensor(pred_point).view(1, -1),
-                torch.Tensor(segmentation_voxels),
-                compute_mode='donot_use_mm_for_euclid_dist').numpy()
+                torch.Tensor(segmentation_voxels)).numpy()
             d_same_type_closest = d_same_type.min(axis=1)[0]
         else:
             d_same_type_closest = -1
         if true_mip_voxels.shape[0] > 0:
-            d_mip = torch.cdist(
+            d_mip = local_cdist(
                 torch.Tensor(pred_point).view(1, -1),
-                torch.Tensor(true_mip_voxels[:, 1:4]),
-                compute_mode='donot_use_mm_for_euclid_dist').numpy()
+                torch.Tensor(true_mip_voxels[:, 1:4])).numpy()
             d_closest_mip = d_mip.min(axis=1)[0]
 
         else:

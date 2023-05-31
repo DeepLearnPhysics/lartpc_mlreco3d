@@ -161,8 +161,8 @@ class ParticleBuilder(DataBuilder):
             - particles_asis
             - input_rescaled
     """
-    def __init__(self, builder_cfg={}):
-        self.cfg = builder_cfg
+    def __init__(self, spatial_units='px'):
+        self.spatial_units = spatial_units
         
     def _load_reco(self, entry, data: dict, result: dict):
         """Construct Particle objects from loading HDF5 blueprints.
@@ -316,13 +316,13 @@ class ParticleBuilder(DataBuilder):
                             image_id=image_index,
                             semantic_type=seg_label, 
                             index=p,
-                            points=point_cloud[p],
+                            points=np.ascontiguousarray(point_cloud[p]),
                             depositions=depositions[p],
                             volume_id=volume_id,
                             pid_scores=pid_scores[i],
                             primary_scores=primary_scores[i],
-                            start_point = particle_start_points[i],
-                            end_point = particle_end_points[i])
+                            start_point = np.ascontiguousarray(particle_start_points[i]),
+                            end_point = np.ascontiguousarray(particle_end_points[i]))
 
             out.append(part)
 
@@ -348,7 +348,9 @@ class ParticleBuilder(DataBuilder):
         rescaled_charge = result['input_rescaled'][entry][:, 4]
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
-                              
+        meta            = data['meta'][0]
+        # point_labels   = data['point_labels'][entry]
+        unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.spatial_units == 'cm' else x
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
@@ -361,9 +363,10 @@ class ParticleBuilder(DataBuilder):
             # 1. Check if current pid is one of the existing group ids
             if id not in particle_ids:
                 particle = handle_empty_truth_particles(labels_nonghost, 
-                                                       mask_nonghost, 
-                                                       lpart, 
-                                                       image_index)
+                                                        mask_nonghost, 
+                                                        lpart, 
+                                                        image_index,
+                                                        unit_convert=unit_convert)
                 out.append(particle)
                 continue
 
@@ -389,19 +392,14 @@ class ParticleBuilder(DataBuilder):
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
-
-            # if lpart.pdg_code() not in PDG_TO_PID:
-            #     continue
-            # exclude_ids = self._apply_true_voxel_cut(entry)
-            # if pid in exclude_ids:
-            #     # Skip this particle if its below the voxel minimum requirement
-            #     continue
     
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
                                                                     mask, 
                                                                     pid=pdg)
-
+            
+            # 3. Process particle start / end point labels
+        
             particle = TruthParticle(group_id=id,
                                      interaction_id=int_id, 
                                      nu_id=nu_id,
@@ -419,6 +417,12 @@ class ParticleBuilder(DataBuilder):
                                      is_primary=is_primary,
                                      pid=pdg,
                                      particle_asis=lpart)
+            
+            if particle.semantic_type == 1:
+                particle.start_point = unit_convert(particle.first_step)
+                particle.end_point   = unit_convert(particle.last_step)
+            elif particle.semantic_type == 0:
+                particle.start_point = unit_convert(particle.first_step)
 
             out.append(particle)
 
@@ -437,8 +441,8 @@ class InteractionBuilder(DataBuilder):
             - cluster_label
             - neutrino_asis (optional)
     """
-    def __init__(self, builder_cfg={}):
-        self.cfg = builder_cfg
+    def __init__(self, spatial_units='px'):
+        self.spatial_units = spatial_units
 
     def _build_reco(self, entry: int, data: dict, result: dict) -> List[Interaction]:
         particles = result['particles'][entry]
@@ -496,6 +500,10 @@ class InteractionBuilder(DataBuilder):
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
                 ia = Interaction(**info)
+                
+            # Handle matches
+            match_counts = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_counts'])})
+            ia._match_counts = match_counts
             out.append(ia)
         return out
     
@@ -573,21 +581,23 @@ class InteractionBuilder(DataBuilder):
                 ia.vertex = vertices[ia.id]
 
             if 'neutrinos' in data and ia.nu_id == 1:
-                # assert 'particles_asis' in data_blob
-                # particles = data_blob['particles_asis'][i]
                 neutrinos = data['neutrinos'][entry]
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
-                # Get larcv::Particle objects for each
-                # particle of the true interaction
-                # true_particles = np.array(particles)[np.array([p.id for p in true_int.particles])]
-                # true_particles_track_ids = [p.track_id() for p in true_particles]
-                # for nu in neutrinos:
-                #     if nu.mct_index() not in true_particles_track_ids: continue
-                ia.nu_interaction_type = nu.interaction_type()
-                ia.nu_interation_mode  = nu.interaction_mode()
-                ia.nu_current_type        = nu.current_type()
-                ia.nu_energy_init         = nu.energy_init()
+                ia.is_neutrino = True
+                # nu_pos = np.array([nu.position().x(),
+                #                    nu.position().y(),
+                #                    nu.position().z()], dtype=np.float32)
+                # for p in ia.particles:
+                #     pos = np.array([p.asis.ancestor_position().x(),
+                #                     p.asis.ancestor_position().y(),
+                #                     p.asis.ancestor_position().z()], dtype=np.float32)
+                #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
+                    # if check_pos:
+                ia.nu_interaction_type     = nu.interaction_type()
+                ia.nu_interaction_mode     = nu.interaction_mode()
+                ia.nu_current_type         = nu.current_type()
+                ia.nu_energy_init          = nu.energy_init()
 
         return interactions
         
@@ -821,7 +831,8 @@ def handle_empty_truth_particles(labels_noghost,
                                 mask_noghost, 
                                 p, 
                                 entry, 
-                                verbose=False):
+                                verbose=False,
+                                unit_convert=None):
     """
     Function for handling true larcv::Particle instances with valid 
     true nonghost voxels but with no predicted nonghost voxels.
@@ -845,6 +856,11 @@ def handle_empty_truth_particles(labels_noghost,
     pid = int(p.id())
     pdg = PDG_TO_PID.get(p.pdg_code(), -1)
     is_primary = p.group_id() == p.parent_id()
+    
+    if unit_convert is None:
+        f = lambda x: x
+    else:
+        f = unit_convert
 
     semantic_type, interaction_id, nu_id = -1, -1, -1
     coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
@@ -876,21 +892,18 @@ def handle_empty_truth_particles(labels_noghost,
                              truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
                              pid=pdg,
-                             particle_asis=p)
-    # particle.p = np.array([p.px(), p.py(), p.pz()])
-    # particle.fragments = []
-    # particle.particle_asis = p
-    # particle.nu_id = nu_id
-    # particle.voxel_indices = voxel_indices
+                             particle_asis=p,
+                             start_point=-np.ones(3, dtype=np.float32),
+                             end_point=-np.ones(3, dtype=np.float32))
 
-    particle.start_point = np.array([p.first_step().x(),
-                                    p.first_step().y(),
-                                    p.first_step().z()])
+    particle.start_point = f(np.array([p.first_step().x(),
+                                       p.first_step().y(),
+                                       p.first_step().z()]))
 
     if semantic_type == 1:
-        particle.end_point = np.array([p.last_step().x(),
-                                    p.last_step().y(),
-                                    p.last_step().z()])
+        particle.end_point = f(np.array([p.last_step().x(),
+                                         p.last_step().y(),
+                                         p.last_step().z()]))
     return particle
 
 
@@ -985,3 +998,10 @@ def match_points_to_particles(ppn_points : np.ndarray,
         dist = cdist(ppn_coords, particle.points)
         matches = ppn_points_type[dist.min(axis=1) < ppn_distance_threshold]
         particle.ppn_candidates = matches.reshape(-1, 7)
+
+def pixel_to_cm_1d(vec, meta):
+    out = np.zeros_like(vec)
+    out[0] = meta[0] + meta[6] * vec[0]
+    out[1] = meta[1] + meta[7] * vec[1]
+    out[2] = meta[2] + meta[8] * vec[2]
+    return out

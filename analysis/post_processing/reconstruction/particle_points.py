@@ -2,18 +2,16 @@ import numpy as np
 import numba as nb
 from scipy.spatial.distance import cdist
 from sklearn.decomposition import PCA
+from mlreco.utils.globals import COORD_COLS
 
 from analysis.post_processing import post_processing
 from analysis.post_processing.reconstruction.calorimetry import compute_track_dedx
 
 @post_processing(data_capture=[], 
-                 result_capture=['particle_start_points',
-                                 'particle_end_points',
-                                 'input_rescaled',
-                                 'particle_seg',
-                                 'particle_clusts'])
+                 result_capture=['particles'])
 def assign_particle_extrema(data_dict, result_dict,
-                            mode='local_density'):
+                            mode='local_density',
+                            radius=1.5):
     """Post processing for assigning track startpoint and endpoint, with
     added correction modules.
     
@@ -35,33 +33,27 @@ def assign_particle_extrema(data_dict, result_dict,
             Empty dictionary (operation is in-place)
     """
 
-    startpts       = result_dict['particle_start_points'][:, 1:4]
-    endpts         = result_dict['particle_end_points'][:, 1:4]
-    input_data     = result_dict['input_rescaled']
-    particle_seg   = result_dict['particle_seg']
-    particles      = result_dict['particle_clusts']
+    # startpts       = result_dict['particle_start_points'][:, COORD_COLS]
+    # endpts         = result_dict['particle_end_points'][:, COORD_COLS]
+    particles      = result_dict['particles']
 
-    update_dict = {}
-
-    assert len(startpts) == len(endpts)
-    assert len(startpts) == len(particles)
-
+    # assert len(startpts) == len(endpts)
+    # assert len(startpts) == len(particles)
+    
     for i, p in enumerate(particles):
-        semantic_type = particle_seg[i]
-        if semantic_type == 1:
-            points = input_data[p][:, 1:4]
-            depositions = input_data[p][:, 4]
-            startpoint = startpts[i]
-            endpoint = endpts[i]
-            new_startpoint, new_endpoint = get_track_points(points, 
-                                                            startpoint, 
-                                                            endpoint, 
-                                                            depositions, 
-                                                            correction_mode=mode)
-            result_dict['particle_start_points'][i][1:4] = new_startpoint
-            result_dict['particle_end_points'][i][1:4] = new_endpoint
-            
-    return update_dict
+        if p.semantic_type == 1:
+            start_point = p.start_point
+            end_point   = p.end_point
+            new_start_point, new_end_point = get_track_points(p.points,
+                                                              start_point,
+                                                              end_point, 
+                                                              p.depositions,
+                                                              correction_mode=mode,
+                                                              r=radius)
+            p.start_point = new_start_point
+            p.end_point   = new_end_point
+    
+    return {}
 
 
 

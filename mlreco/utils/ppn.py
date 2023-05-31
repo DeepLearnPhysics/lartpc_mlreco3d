@@ -2,6 +2,7 @@ import numpy as np
 import scipy
 import torch
 
+from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_types, dbscan_points
 from mlreco.utils.numba_local import farthest_pair
 
@@ -433,7 +434,7 @@ def get_track_endpoints_geo(data, f, points_tensor=None, use_numpy=False, use_pr
         sigmoid = scipy.special.expit
         cat = lambda x: np.stack(x, axis=0)
     else:
-        cdist = lambda x1, x2: torch.cdist(x1, x2, compute_mode='donot_use_mm_for_euclid_dist')
+        cdist = local_cdist
         argmax = torch.argmax
         sigmoid = torch.sigmoid
         cat = torch.cat

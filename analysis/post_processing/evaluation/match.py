@@ -6,7 +6,8 @@ from mlreco.utils.globals import *
 from analysis.classes.matching import (match_particles_fn,
                                        match_recursive,
                                        match_interactions_fn,
-                                       match_interactions_optimal)
+                                       match_interactions_optimal,
+                                       weighted_matrix_iou)
 from analysis.classes.data import *
 
 @post_processing(data_capture=['index'], 
@@ -14,7 +15,7 @@ from analysis.classes.data import *
                                  'truth_particles'])
 def match_particles(data_dict,
                     result_dict,
-                    matching_mode='optimal',
+                    matching_mode='recursive',
                     min_overlap=0,
                     overlap_mode='iou'):
     pred_particles = result_dict['particles']
@@ -30,26 +31,32 @@ def match_particles(data_dict,
     # Only consider interactions with nonzero predicted nonghost
     matched_particles = []
     
-    if matching_mode == 'optimal':
+    if matching_mode == 'recursive':
         matched_particles, counts = match_recursive(
             pred_particles, 
             true_particles, 
             min_overlap=min_overlap)
         
     elif matching_mode == 'pred_to_true':
+        overlap_matrix, value_matrix = weighted_matrix_iou(pred_particles, true_particles)
         matched_particles, counts = match_particles_fn(
             pred_particles, 
             true_particles, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
+        matched_particles = list(matched_particles.values())
     elif matching_mode == 'true_to_pred':
+        overlap_matrix, value_matrix = weighted_matrix_iou(true_particles, pred_particles)
         matched_particles, counts = match_particles_fn(
             true_particles, 
             pred_particles, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
+        matched_particles = list(matched_particles.values())
     else:
-        raise ValueError
+        raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
             
     out.update({'matched_particles': matched_particles})
     out.update({'particle_match_counts': counts})
@@ -63,7 +70,7 @@ def match_particles(data_dict,
                                  'truth_interactions'])
 def match_interactions(data_dict,
                        result_dict,
-                       matching_mode='optimal',
+                       matching_mode='recursive',
                        min_overlap=0,
                        overlap_mode='iou'):
 
@@ -79,25 +86,31 @@ def match_interactions(data_dict,
     
     # Only consider interactions with nonzero predicted nonghost
     
-    if matching_mode == 'optimal':
+    if matching_mode == 'recursive':
         matched_interactions, counts = match_recursive(
             pred_interactions, 
             true_interactions, 
             min_overlap=min_overlap)
     elif matching_mode == 'pred_to_true':
+        overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions)
         matched_interactions, counts = match_interactions_fn(
             pred_interactions, 
             true_interactions, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
+        matched_interactions = list(matched_interactions.values())
     elif matching_mode == 'true_to_pred':
+        overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions, pred_interactions)
         matched_interactions, counts = match_interactions_fn(
             true_interactions, 
             pred_interactions, 
-            min_overlap=min_overlap, 
-            overlap_mode=overlap_mode)
+            value_matrix,
+            overlap_matrix,
+            min_overlap=min_overlap)
+        matched_interactions = list(matched_interactions.values())
     else:
-        raise ValueError
+        raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
 
     out.update({'matched_interactions': matched_interactions})
     out.update({'interaction_match_counts': counts})

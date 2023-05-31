@@ -219,7 +219,7 @@ class HDF5Writer:
                     self.key_dict[key]['width'] = widths
                     self.key_dict[key]['merge'] = same_width
                 else:
-                    raise TypeError('Do not know how to store output of type', type(blob[key][0]))
+                    raise TypeError('Do not know how to store output of type in key: {}'.format(key), type(blob[key][0]))
 
     def get_object_dtype(self, obj):
         '''
@@ -260,24 +260,28 @@ class HDF5Writer:
                 object_dtype.append((key, h5py.enum_dtype(self.ANA_ENUM[key], basetype=type(val))))
             elif np.isscalar(val):
                 # Scalar
-                object_dtype.append((key, type(val)))
+                dtype = type(val) if not isinstance(val, bool) else np.uint8
+                object_dtype.append((key, dtype))
             elif isinstance(val, larcv.Vertex):
                 # Three-vector
                 object_dtype.append((key, np.float32, 4)) # x, y, z, t
             elif hasattr(val, '__len__'):
                 # List/array of values
+                dtype, shape = None, None
                 if hasattr(val, 'dtype'):
                     # Numpy array
-                    if key in self.ANA_FIXED_LENGTH:
-                        object_dtype.append((key, val.dtype, val.shape))
-                    else:
-                        object_dtype.append((key, h5py.vlen_dtype(val.dtype)))
+                    dtype, shape = val.dtype, val.shape
                 elif len(val) and np.isscalar(val[0]):
                     # List of scalars
-                    object_dtype.append((key, h5py.vlen_dtype(type(val[0]))))
+                    dtype, shape = type(val[0]), len(val)
                 else:
                     # Empty list (typing unknown, cannot store)
                     raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
+
+                if key in self.ANA_FIXED_LENGTH:
+                    object_dtype.append((key, dtype, shape))
+                else:
+                    object_dtype.append((key, h5py.vlen_dtype(dtype)))
             else:
                 raise ValueError(f'Attribute {key} of {obj} has unrecognized type {type(val)}')
 
@@ -356,7 +360,6 @@ class HDF5Writer:
             for batch_id in range(self.batch_size):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
-
                 # Initialize a dictionary of references to be passed to the event
                 # dataset and store the relevant array input and result keys
                 ref_dict = {}
@@ -364,7 +367,6 @@ class HDF5Writer:
                     self.append_key(file, event, data_blob, key, batch_id)
                 for key in self.result_keys:
                     self.append_key(file, event, result_blob, key, batch_id)
-
                 # Append event
                 event_id  = len(file['events'])
                 events_ds = file['events']
@@ -499,7 +501,7 @@ class HDF5Writer:
             List of arrays to be stored
         '''
         # Extend the dataset, store combined array
-        array = np.concatenate(array_list)
+        array = np.concatenate(array_list) if len(array_list) else []
         dataset = group[key]['elements']
         first_id = len(dataset)
         dataset.resize(first_id + len(array), axis=0)
@@ -508,7 +510,7 @@ class HDF5Writer:
         # Loop over arrays in the list, create a reference for each
         index = group[key]['index']
         current_id = len(index)
-        index.resize(first_id + len(array_list), axis=0)
+        index.resize(current_id + len(array_list), axis=0)
         last_id = first_id
         for i, el in enumerate(array_list):
             first_id = last_id
@@ -596,9 +598,9 @@ class CSVWriter:
         self.result_keys = None
         if self.append_file:
             if not os.path.isfile(file_name):
-                msg = "File not found at path: {}. When using append=True "\
-                "in CSVWriter, the file must exist at the prescribed path "\
-                "before data is written to it.".format(file_name)
+                msg = 'File not found at path: {}. When using append=True '\
+                'in CSVWriter, the file must exist at the prescribed path '\
+                'before data is written to it.'.format(file_name)
                 raise FileNotFoundError(msg)
             with open(self.file_name, 'r') as file:
                 self.result_keys = file.readline().split(',')
@@ -633,6 +635,9 @@ class CSVWriter:
         # If this function has never been called, initialiaze the CSV file
         if self.result_keys is None:
             self.create(result_blob)
+        else:
+            assert list(result_blob.keys()) == self.result_keys,\
+                    'Must provide a dictionary with the expected set of keys'
 
         # Append file
         with open(self.file_name, 'a') as file:

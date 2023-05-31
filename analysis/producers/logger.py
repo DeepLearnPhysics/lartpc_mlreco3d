@@ -69,8 +69,33 @@ class AnalysisLogger:
 
 class ParticleLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(ParticleLogger, self).__init__(fieldnames)
+        self.meta = meta
+        
+        self.vb = np.zeros((3, 2))
+        self.vb[:, 0] = -float('inf')
+        self.vb[:, 1] = float('inf')
+        
+        if meta is not None:
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(particle):
@@ -92,6 +117,32 @@ class ParticleLogger(AnalysisLogger):
         if hasattr(particle, 'pid'):
             out['particle_type'] = particle.pid
         return out
+    
+    @staticmethod
+    @tag('reco')
+    def primary_scores(particle):
+        out = {'primary_score_0': -1,
+               'primary_score_1': -1}
+        if particle is not None:
+            out['primary_score_0'] = particle.primary_scores[0]
+            out['primary_score_1'] = particle.primary_scores[1]
+        return out
+    
+    @staticmethod
+    @tag('reco')
+    def pid_scores(particle):
+        out = {'pid_score_0': -1,
+               'pid_score_1': -1,
+               'pid_score_2': -1,
+               'pid_score_3': -1,
+               'pid_score_4': -1}
+        if particle is not None:
+            out['pid_score_0'] = particle.pid_scores[0]
+            out['pid_score_1'] = particle.pid_scores[1]
+            out['pid_score_2'] = particle.pid_scores[2]
+            out['pid_score_3'] = particle.pid_scores[3]
+            out['pid_score_4'] = particle.pid_scores[4]
+        return out
 
     @staticmethod
     def semantic_type(particle):
@@ -109,7 +160,7 @@ class ParticleLogger(AnalysisLogger):
 
     @staticmethod
     def is_primary(particle):
-        out = {'particle_is_primary': -1}
+        out = {'particle_is_primary': False}
         if hasattr(particle, 'is_primary'):
             out['particle_is_primary'] = particle.is_primary
         return out
@@ -118,15 +169,15 @@ class ParticleLogger(AnalysisLogger):
     def start_point(particle):
         out = {
             # 'particle_has_startpoint': False,
-            'particle_startpoint_x': -1,
-            'particle_startpoint_y': -1,
-            'particle_startpoint_z': -1
+            'particle_start_point_x': -1,
+            'particle_start_point_y': -1,
+            'particle_start_point_z': -1
         }
         if (particle is not None) and (particle.start_point is not None):
             # out['particle_has_startpoint'] = True
-            out['particle_startpoint_x'] = particle.start_point[0]
-            out['particle_startpoint_y'] = particle.start_point[1]
-            out['particle_startpoint_z'] = particle.start_point[2]
+            out['particle_start_point_x'] = particle.start_point[0]
+            out['particle_start_point_y'] = particle.start_point[1]
+            out['particle_start_point_z'] = particle.start_point[2]
         return out
     
     @staticmethod
@@ -170,14 +221,51 @@ class ParticleLogger(AnalysisLogger):
     def momentum(particle):
         min_int = -sys.maxsize - 1
         out = {
+            'p'          : min_int,
             'particle_px': min_int,
             'particle_py': min_int,
             'particle_pz': min_int,
         }
         if type(particle) is TruthParticle:
-            out['particle_px'] = particle.asis.px()
-            out['particle_py'] = particle.asis.py()
-            out['particle_pz'] = particle.asis.pz()
+            out['particle_px'] = particle.momentum[0]
+            out['particle_py'] = particle.momentum[1]
+            out['particle_pz'] = particle.momentum[2]
+            out['p']           = np.linalg.norm(particle.momentum)
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def truth_start_dir(particle):
+        min_int = -sys.maxsize - 1
+        out = {
+            'truth_start_dir_x': min_int,
+            'truth_start_dir_y': min_int,
+            'truth_start_dir_z': min_int,
+        }
+        if type(particle) is TruthParticle:
+            out['truth_start_dir_x'] = particle.truth_start_dir[0]
+            out['truth_start_dir_y'] = particle.truth_start_dir[1]
+            out['truth_start_dir_z'] = particle.truth_start_dir[2]
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def energy_init(particle):
+        out = {
+            'energy_init': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['energy_init'] = particle.energy_init
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def num_children(particle):
+        out = {
+            'num_children': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['num_children'] = len(particle.asis.children_id())
         return out
     
     @staticmethod
@@ -211,11 +299,12 @@ class ParticleLogger(AnalysisLogger):
     @staticmethod
     def reco_length(particle):
         out = {'particle_length': -1}
-        if particle is not None and hasattr(particle, 'length'):
+        if particle is not None:
             out['particle_length'] = particle.length
         return out
     
     @staticmethod
+    # @tag('reco')
     def csda_kinetic_energy(particle):
         out = {'csda_kinetic_energy': -1}
         if particle is not None:
@@ -223,26 +312,10 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def is_contained(particle, vb, threshold=30):
-
+    def is_contained(particle):
         out = {'particle_is_contained': False}
-        if particle is not None and len(particle.points) > 0:
-            if not isinstance(threshold, np.ndarray):
-                threshold = threshold * np.ones((3,))
-            else:
-                assert len(threshold) == 3
-                assert len(threshold.shape) == 1
-
-            vb = np.array(vb)
-
-            x = (vb[0, 0] + threshold[0] <= particle.points[:, 0]) \
-                        & (particle.points[:, 0] <= vb[0, 1] - threshold[0])
-            y = (vb[1, 0] + threshold[1] <= particle.points[:, 1]) \
-                        & (particle.points[:, 1] <= vb[1, 1] - threshold[1])
-            z = (vb[2, 0] + threshold[2] <= particle.points[:, 2]) \
-                        & (particle.points[:, 2] <= vb[2, 1] - threshold[2])
-
-            out['particle_is_contained'] =  (x & y & z).all()
+        if particle is not None:
+            out['particle_is_contained'] = particle.is_contained
         return out
 
     @staticmethod
@@ -252,11 +325,50 @@ class ParticleLogger(AnalysisLogger):
             out['particle_depositions_sum'] = particle.depositions_sum
         return out
     
+    @staticmethod
+    def matched(particle):
+        out = {'matched': False}
+        if particle is not None:
+            out['matched'] = particle.matched
+        return out
+    
+    @staticmethod
+    def is_principal_match(particle):
+        out = {'is_principal_match': False}
+        if particle is not None:
+            out['is_principal_match'] = particle.is_principal_match
+        return out
+    
 
 class InteractionLogger(AnalysisLogger):
 
-    def __init__(self, fieldnames: dict):
+    def __init__(self, fieldnames: dict, meta=None, units='px'):
         super(InteractionLogger, self).__init__(fieldnames)
+        self.meta = meta
+        
+        self.vb = np.zeros((3, 2))
+        self.vb[:, 0] = -float('inf')
+        self.vb[:, 1] = float('inf')
+        
+        if meta is not None:
+            if units == 'px':
+                min_x, min_y, min_z = self.meta[0:3]
+                size_voxel_x, size_voxel_y, size_voxel_z = self.meta[6:9]
+
+                self.vb[0, :] = (self.vb[0, :] - min_x) / size_voxel_x
+                self.vb[1, :] = (self.vb[1, :] - min_y) / size_voxel_y
+                self.vb[2, :] = (self.vb[2, :] - min_z) / size_voxel_z
+            elif units == 'cm':
+                min_x, min_y, min_z = self.meta[0:3]
+                max_x, max_y, max_z = self.meta[3:6]
+
+                self.vb[0, 0], self.vb[0, 1] = min_x, max_x
+                self.vb[1, 0], self.vb[1, 1] = min_y, max_y
+                self.vb[2, 0], self.vb[2, 1] = min_z, max_z
+            else:
+                raise ValueError(f"Invalid unit {units}, must be either cm or px.")
+            
+        self._units = units
 
     @staticmethod
     def id(ia):
@@ -272,10 +384,18 @@ class InteractionLogger(AnalysisLogger):
             out['interaction_size'] = ia.size
         return out
     
+    @staticmethod
     def nu_id(ia):
         out = {'nu_id': -1}
         if ia is not None:
             out['nu_id'] = ia.nu_id
+        return out
+    
+    @staticmethod
+    def volume_id(ia):
+        out = {'volume_id': -1}
+        if ia is not None:
+            out['volume_id'] = ia.volume_id
         return out
     
     @staticmethod
@@ -332,26 +452,19 @@ class InteractionLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    def is_contained(ia, vb, threshold=30):
-
+    @tag('true')
+    def truth_topology(ia):
+        out = {'truth_topology': 'N/A'}
+        assert (ia is None) or (type(ia) is TruthInteraction)
+        if ia is not None:
+            out['truth_topology'] = ia.truth_topology
+        return out
+    
+    @staticmethod
+    def is_contained(ia):
         out = {'interaction_is_contained': False}
-        if ia is not None and len(ia.points) > 0:
-            if not isinstance(threshold, np.ndarray):
-                threshold = threshold * np.ones((3,))
-            else:
-                assert len(threshold) == 3
-                assert len(threshold.shape) == 1
-
-            vb = np.array(vb)
-
-            x = (vb[0, 0] + threshold[0] <= ia.points[:, 0]) \
-                        & (ia.points[:, 0] <= vb[0, 1] - threshold[0])
-            y = (vb[1, 0] + threshold[1] <= ia.points[:, 1]) \
-                        & (ia.points[:, 1] <= vb[1, 1] - threshold[1])
-            z = (vb[2, 0] + threshold[2] <= ia.points[:, 2]) \
-                        & (ia.points[:, 2] <= vb[2, 1] - threshold[2])
-
-            out['interaction_is_contained'] =  (x & y & z).all()
+        if ia is not None:
+            out['interaction_is_contained'] = ia.is_contained
         return out
     
     @staticmethod
@@ -420,4 +533,18 @@ class InteractionLogger(AnalysisLogger):
             out['crthit_id'] = ia.crthit_id
             out['crthit_matched'] = ia.crthit_matched
             out['crthit_matched_particle_id'] = ia.crthit_matched_particle_id
+        return out
+    
+    @staticmethod
+    def matched(ia):
+        out = {'matched': False}
+        if ia is not None:
+            out['matched'] = ia.matched
+        return out
+    
+    @staticmethod
+    def is_principal_match(ia):
+        out = {'is_principal_match': False}
+        if ia is not None:
+            out['is_principal_match'] = ia.is_principal_match
         return out

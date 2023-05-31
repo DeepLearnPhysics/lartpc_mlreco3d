@@ -86,7 +86,8 @@ class Particle:
                  length: float = -1.,
                  csda_kinetic_energy: float = -1.,
                  momentum_mcs: float = -1., 
-                 matched: bool = False, **kwargs):
+                 matched: bool = False,
+                 is_contained: bool = False, **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -95,7 +96,7 @@ class Particle:
         self._depositions_sum = -1
         self._pid             = -1
         self._size            = -1
-        self._is_primary      = -1
+        self._is_primary      = False
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -118,16 +119,22 @@ class Particle:
         self._end_point           = end_point
         self._start_dir           = start_dir
         self._end_dir             = end_dir
-        self.length              = length
-        self.csda_kinetic_energy = csda_kinetic_energy
-        self.momentum_mcs        = momentum_mcs
-        self.matched             = matched
+        self.length               = length
+        self.csda_kinetic_energy  = csda_kinetic_energy
+        self.momentum_mcs         = momentum_mcs
+        self.is_contained         = is_contained
 
         # Quantities to be set by the particle matcher
-        self._match = list(kwargs.get('match', []))
-        self._match_counts = kwargs.get('match_counts', OrderedDict())
+        self.matched             = matched
+        self._is_principal_match = False
+        self._match              = list(kwargs.get('match', []))
+        self._match_counts       = kwargs.get('match_counts', OrderedDict())
         if not isinstance(self._match_counts, dict):
             raise ValueError(f"{type(self._match_counts)}")
+        
+    @property
+    def is_principal_match(self):
+        return self._is_principal_match
         
     @property
     def start_point(self):
@@ -136,7 +143,9 @@ class Particle:
     @start_point.setter
     def start_point(self, value):
         assert value.shape == (3,)
-        self._start_point = value
+        if (np.abs(value) < 1e10).all():
+            # Only set start_point if not bogus value
+            self._start_point = value
         
     @property
     def end_point(self):
@@ -145,7 +154,9 @@ class Particle:
     @end_point.setter
     def end_point(self, value):
         assert value.shape == (3,)
-        self._end_point = value
+        if (np.abs(value) < 1e10).all():
+            # Only set start_point if not bogus value
+            self._end_point = value
         
     @property
     def start_dir(self):
@@ -167,7 +178,11 @@ class Particle:
         
     @property
     def is_primary(self):
-        return int(self._is_primary)
+        return bool(self._is_primary)
+    
+    @is_primary.setter
+    def is_primary(self, value):
+        self._is_primary = value
 
     @property
     def match(self):
@@ -198,7 +213,7 @@ class Particle:
         msg = fmt.format(self.image_id, self.id,
                          SHAPE_LABELS[self.semantic_type] if self.semantic_type in SHAPE_LABELS else "None",
                          PID_LABELS[self.pid] if self.pid in PID_LABELS else "None",
-                         self.is_primary,
+                         int(self.is_primary),
                          self.interaction_id,
                          self.size,
                          self.volume_id)
@@ -292,6 +307,11 @@ class Particle:
     def pid(self):
         return int(self._pid)
     
+    @pid.setter
+    def pid(self, value):
+        assert value in PID_LABELS
+        self._pid = value
+    
     @property
     def primary_scores(self):
         '''
@@ -305,8 +325,8 @@ class Particle:
         # If no primary scores are given, the primary status is unknown
         if primary_scores[0] < 0.:
             self._primary_scores = primary_scores
-            self._is_primary = -1
+            self._is_primary = False
         
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
-        self._is_primary = np.argmax(primary_scores)
+        self._is_primary = bool(np.argmax(primary_scores))

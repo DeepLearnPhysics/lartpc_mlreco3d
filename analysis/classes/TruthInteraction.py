@@ -31,6 +31,10 @@ class TruthInteraction(Interaction):
                  truth_points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 nu_interaction_type: int = -1,
+                 nu_interaction_mode: int = -1,
+                 nu_current_type: int = -1,
+                 nu_energy_init: float = -1.,
                  **kwargs):
         
         # Initialize private attributes to be set by setter only
@@ -39,8 +43,7 @@ class TruthInteraction(Interaction):
         self._primary_counts  = np.zeros(6, dtype=np.int64)
         self._truth_particle_counts = np.zeros(6, dtype=np.int64)
         self._truth_primary_counts  = np.zeros(6, dtype=np.int64)
-        # Invoke particles setter
-        self.particles   = particles
+        # self.particles   = particles
         
         if self._particles is None:
             self._depositions_MeV        = depositions_MeV
@@ -49,13 +52,14 @@ class TruthInteraction(Interaction):
             self.truth_points = truth_points
             self.truth_index = truth_index
             
+        # Invoke particles setter
         super(TruthInteraction, self).__init__(interaction_id, particles, **kwargs)
 
         # Neutrino-specific information to be filled elsewhere
-        self.nu_interaction_type = -1
-        self.nu_interaction_mode = -1
-        self.nu_current_type     = -1
-        self.nu_energy_init      = -1.
+        self.nu_interaction_type = nu_interaction_type
+        self.nu_interaction_mode = nu_interaction_mode
+        self.nu_current_type     = nu_current_type
+        self.nu_energy_init      = nu_energy_init
         
     @property
     def particles(self):
@@ -67,9 +71,8 @@ class TruthInteraction(Interaction):
         <Particle> list getter/setter. The setter also sets
         the general interaction properties
         '''
-        
         if self._particles is not None:
-            msg = f"Interaction {self.id} already has a populated list of "\
+            msg = f"TruthInteraction {self.id} already has a populated list of "\
                 "particles. You cannot change the list of particles in a "\
                 "given Interaction once it has been set."
             raise AttributeError(msg)

@@ -1,4 +1,5 @@
 import sys
+from itertools import combinations
 
 import numpy as np
 import numba as nb
@@ -7,6 +8,135 @@ from scipy.spatial.distance import cdist
 from mlreco.utils.gnn.cluster import cluster_direction
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import COORD_COLS
+
+
+@post_processing(data_capture=[],
+                 result_capture=['interactions'])
+def reconstruct_vertex(data_dict, result_dict,
+                       include_semantics=[0,1],
+                       use_primaries=True,
+                       r1=5.0,
+                       r2=10.0):
+    
+    for ia in result_dict['interactions']:
+        
+        candidates = []
+        
+        if use_primaries:
+            particles = [p for p in ia.particles \
+                if p.is_primary and (p.semantic_type in include_semantics)]
+        else:
+            particles = [p for p in ia.particles \
+                if p.semantic_type in include_semantics]
+            
+        cand_1 = get_adjacent_startpoint_candidate(particles, r1)
+        cand_2 = get_track_shower_candidate(particles, r2=r2)
+        cand_3 = get_pseudovertex_candidate(particles, dim=3)
+        
+        if len(cand_1) > 0:
+            candidates.append(cand_1)
+        if len(cand_2) > 0:
+            candidates.append(cand_2)
+        if len(cand_3) > 0:
+            candidates.append(cand_3)
+            
+        if len(candidates) > 0:
+            candidates = np.vstack(candidates)
+            vertex = np.mean(candidates, axis=0)
+            ia.vertex = vertex
+            
+    return {}
+
+@nb.njit(cache=True)
+def point_to_line_distance_(p1, p2, v2):
+    dist = np.sqrt(np.sum(np.cross(v2, (p2 - p1))**2)+1e-8)
+    return dist
+
+@nb.njit(cache=True)
+def point_to_line_distance(P1, P2, V2):
+    dist = np.zeros((P1.shape[0], P2.shape[0]))
+    for i, p1 in enumerate(P1):
+        for j, p2 in enumerate(P2):
+            d = point_to_line_distance_(p1, p2, V2[j])
+            dist[i, j] = d
+    return dist
+
+def get_adjacent_startpoint_candidate(particles,
+                                      r1=5.0):
+    candidates = []
+    startpoints = []
+    for p in particles:
+        startpoints.append(p.start_point)
+    if len(startpoints) == 0:
+        return np.array(candidates)
+    startpoints = np.vstack(startpoints)
+    dist = cdist(startpoints, startpoints)
+    dist += -np.eye(dist.shape[0])
+    idx, idy = np.where((dist < r1) & (dist > 0))
+    
+    # Keep track of duplicate pairs
+    duplicates = []
+    # Append barycenter of two touching points within radius r1 to candidates
+    for ix, iy in zip(idx, idy):
+        center = (startpoints[ix] + startpoints[iy]) / 2.0
+        if not((ix, iy) in duplicates or (iy, ix) in duplicates):
+            candidates.append(center)
+            duplicates.append((ix, iy))
+            
+    candidates = np.array(candidates)
+    return candidates
+
+def get_track_shower_candidate(particles,
+                               r2=5.0):
+    candidates, track_starts = [], []
+    shower_starts, shower_dirs = [], []
+    
+    for p in particles:
+        if p.semantic_type == 0 and len(p.points) > 0:
+            shower_starts.append(p.start_point)
+            shower_dirs.append(p.start_dir)
+        if p.semantic_type == 1:
+            track_starts.append(p.start_point)
+            
+    if len(shower_starts) == 0 or len(track_starts) == 0:
+        return np.array(candidates)
+    
+    shower_dirs = np.vstack(shower_dirs)
+    shower_starts = np.vstack(shower_starts)
+    track_starts = np.vstack(track_starts)
+    
+    dist = point_to_line_distance(track_starts, shower_starts, shower_dirs)
+    idx, idy = np.where(dist < r2)
+    for ix, iy in zip(idx, idy):
+        candidates.append(track_starts[ix])
+        
+    candidates = np.array(candidates)
+    return candidates
+
+def get_pseudovertex_candidate(particles, dim=3):
+    
+    if len(particles) < 2:
+        return np.array([])
+    
+    pseudovtx = np.zeros((dim, ))
+    S = np.zeros((dim, dim))
+    C = np.zeros((dim, ))
+
+    assert len(particles) >= 2
+        
+    for p in particles:
+        startpt = p.start_point
+        vec = p.start_dir
+        w = 1.0
+        S += w * (np.outer(vec, vec) - np.eye(dim))
+        C += w * (np.outer(vec, vec) - np.eye(dim)) @ startpt
+
+    pseudovtx = np.linalg.pinv(S) @ C
+    return pseudovtx
+
+
+
+# ---------------------------DEPRECATED--------------------------------
 
 @post_processing(data_capture=[],
                  result_capture=['particle_clusts',
@@ -17,7 +147,7 @@ from mlreco.utils.globals import COORD_COLS
                                  'input_rescaled',
                                  'interactions'],
                  result_capture_optional=['particle_dirs'])
-def reconstruct_vertex(data_dict, result_dict,
+def reconstruct_vertex_deprecated(data_dict, result_dict,
                        mode='all',
                        include_semantics=[0,1],
                        use_primaries=True,
@@ -120,20 +250,6 @@ def reconstruct_vertex(data_dict, result_dict,
         ia.vertex = vertices[ia.id]
 
     return {}
-
-@nb.njit(cache=True)
-def point_to_line_distance_(p1, p2, v2):
-    dist = np.sqrt(np.sum(np.cross(v2, (p2 - p1))**2)+1e-8)
-    return dist
-
-@nb.njit(cache=True)
-def point_to_line_distance(P1, P2, V2):
-    dist = np.zeros((P1.shape[0], P2.shape[0]))
-    for i, p1 in enumerate(P1):
-        for j, p2 in enumerate(P2):
-            d = point_to_line_distance_(p1, p2, V2[j])
-            dist[i, j] = d
-    return dist
 
 
 def get_centroid_adj_pairs(particle_start_points, 
@@ -257,25 +373,3 @@ def prune_vertex_candidates(candidates, pseudovtx, r=30):
     dist = np.linalg.norm(candidates - pseudovtx.reshape(1, -1), axis=1)
     pruned = candidates[dist < r]
     return pruned
-
-
-# def correct_primary_with_vertex(ia, r_adj=10, r_bt=10, start_segment_radius=10):
-#     assert type(ia) is Interaction
-#     if ia.vertex is not None and (ia.vertex > 0).all():
-#         for p in ia.particles:
-#             if p.semantic_type == 1:
-#                 dist = np.linalg.norm(p.startpoint - ia.vertex)
-#                 # print(p.id, p.is_primary, p.semantic_type, dist)
-#                 if dist < r_adj:
-#                     p.is_primary = True
-#                 else:
-#                     p.is_primary = False
-#             if p.semantic_type == 0:
-#                 vec = get_particle_direction(p, start_segment_radius=start_segment_radius)
-#                 dist = point_to_line_distance_(ia.vertex, p.startpoint, vec)
-#                 if np.linalg.norm(p.startpoint - ia.vertex) < r_adj:
-#                     p.is_primary = True
-#                 elif dist < r_bt:
-#                     p.is_primary = True
-#                 else:
-#                     p.is_primary = False

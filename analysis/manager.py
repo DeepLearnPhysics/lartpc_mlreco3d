@@ -7,6 +7,7 @@ from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter, HDF5Writer
+from mlreco.utils.globals import *
 
 from analysis import post_processing
 from analysis.producers import scripts
@@ -50,6 +51,7 @@ class AnaToolsManager:
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
+        self.spatial_units = self.ana_config['analysis'].get('spatial_units', 'px')
 
         # Initialize data product builders
         self.data_builders = None
@@ -60,7 +62,7 @@ class AnaToolsManager:
                 if builder_name not in SUPPORTED_BUILDERS:
                     msg = f"{builder_name} is not a valid data product builder!"
                     raise ValueError(msg)
-                builder = eval(builder_name)()
+                builder = eval(builder_name)(spatial_units=self.spatial_units)
                 self.builders[builder_name] = builder
 
         self._data_reader  = None
@@ -92,7 +94,7 @@ class AnaToolsManager:
         assert self.max_iteration <= len(dataset)
         
 
-    def initialize(self):
+    def initialize(self, event_list=None):
         """Initializer for setting up inference mode full chain forwarding
         or reading data from HDF5. 
         """
@@ -112,6 +114,7 @@ class AnaToolsManager:
             self._data_reader = Trainer
             self._reader_state = 'trainval'
             self._set_iteration(loader.dataset)
+            self._num_images = len(loader.dataset._event_list)
         else:
             # If there is a reader, simply load reconstructed data
             file_keys = self.ana_config['reader']['file_keys']
@@ -156,6 +159,61 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
+    
+    
+    @staticmethod
+    def _pix_to_cm(arr, meta):
+        
+        min_x        = meta[0]
+        min_y        = meta[1]
+        min_z        = meta[2]
+        size_voxel_x = meta[6]
+        size_voxel_y = meta[7]
+        size_voxel_z = meta[8]
+        
+        arr[:, COORD_COLS[0]] = arr[:, COORD_COLS[0]] * size_voxel_x + min_x
+        arr[:, COORD_COLS[1]] = arr[:, COORD_COLS[1]] * size_voxel_y + min_y
+        arr[:, COORD_COLS[2]] = arr[:, COORD_COLS[2]] * size_voxel_z + min_z
+        return arr
+    
+    
+    def convert_pixels_to_cm(self, data, result):
+        """Convert pixel coordinates to real world coordinates (in cm)
+        for all tensors that have spatial coordinate information, using 
+        information in meta (operation is in-place).
+
+        Parameters
+        ----------
+        data : dict
+            Data and label dictionary
+        result : dict
+            Result dictionary
+        """
+        
+        data_has_voxels = set([
+            'input_data', 'segment_label', 
+            'particles_label', 'cluster_label', 'kinematics_label', 
+        ])
+        result_has_voxels = set([
+            'input_rescaled', 
+            'cluster_label_adapted',
+            'shower_fragment_start_points',
+            'shower_fragment_end_points', 
+            'track_fragment_start_points',
+            'track_fragment_end_points',
+            'particle_start_points',
+            'particle_end_points',
+        ])
+        
+        meta = data['meta'][0]
+        assert len(meta) == 9
+        
+        for key, val in data.items():
+            if key in data_has_voxels:
+                data[key] = [self._pix_to_cm(arr, meta) for arr in val]
+        for key, val in result.items():
+            if key in result_has_voxels:
+                result[key] = [self._pix_to_cm(arr, meta) for arr in val]
     
     
     def _build_reco_reps(self, data, result):
@@ -271,11 +329,13 @@ class AnaToolsManager:
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+
         if 'InteractionBuilder' in self.builders:
             if 'interactions' not in result:
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
-                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')            
+                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
+            
             
     def _load_truth_reps(self, data, result):
         """Load representations for true objects.
@@ -318,7 +378,12 @@ class AnaToolsManager:
             raise ValueError(f"DataBuilder mode {mode} is not supported!")
             
 
-    def initialize_flash_manager(self, meta):
+    def initialize_flash_manager(self):
+        
+        if not self.spatial_units == 'cm':
+            msg = "Need to convert px to cm spatial units before running flash "\
+                "matching. Set spatial_units: cm in analysis config. "
+            raise AssertionError(msg)
         
         # Only run once, to save time
         if not self.flash_manager_initialized:
@@ -327,6 +392,8 @@ class AnaToolsManager:
             opflash_keys      = pp_flash_matching['opflash_keys']
             volume_boundaries = pp_flash_matching['volume_boundaries']
             ADC_to_MeV        = pp_flash_matching['ADC_to_MeV']
+            if isinstance(ADC_to_MeV, str):
+                ADC_to_MeV = eval(ADC_to_MeV)
             self.fm_config    = pp_flash_matching['fmatch_config']
 
             self.fm = FlashMatcherInterface(self.config, 
@@ -334,10 +401,15 @@ class AnaToolsManager:
                                             boundaries=volume_boundaries, 
                                             opflash_keys=opflash_keys,
                                             ADC_to_MeV=ADC_to_MeV)
-            self.fm.initialize_flash_manager(meta)
+            self.fm.initialize_flash_manager()
             self.flash_manager_initialized = True
 
-    def initialize_crt_tpc_manager(self, meta):
+    def initialize_crt_tpc_manager(self):
+        
+        if not self.spatial_units == 'cm':
+            msg = "Need to convert px to cm spatial units before running CRT "\
+                "matching. Set spatial_units: cm in analysis config. "
+            raise AssertionError(msg)
         
         # Only run once, to save time
         if not self.crt_tpc_manager_initialized:
@@ -354,7 +426,7 @@ class AnaToolsManager:
                                                           self.crt_tpc_config,
                                                           boundaries=volume_boundaries,
                                                           crthit_keys=crthit_keys)
-            self.crt_tpc_manager.initialize_crt_tpc_manager(meta)
+            self.crt_tpc_manager.initialize_crt_tpc_manager()
             self.crt_tpc_manager_initialized = True
         
         
@@ -372,9 +444,9 @@ class AnaToolsManager:
         if 'post_processing' in self.ana_config:
             meta = data['meta'][0]
             if 'run_flash_matching' in self.ana_config['post_processing']:
-                self.initialize_flash_manager(meta)
+                self.initialize_flash_manager()
             if 'run_crt_tpc_matching' in self.ana_config['post_processing']:
-                self.initialize_crt_tpc_manager(meta)
+                self.initialize_crt_tpc_manager()
             post_processor_interface = PostProcessor(data, result)
             # Gather post processing functions, register by priority
 
@@ -504,6 +576,10 @@ class AnaToolsManager:
         dt = end - start
         print(f"Foward took {dt:.3f} seconds.")
         self.logger_dict['forward_time'] = dt
+        
+        # 1-a. Convert units
+        if self.spatial_units == 'cm':
+            self.convert_pixels_to_cm(data, res)
 
         # 2. Build data representations'
         if self.data_builders is not None:
@@ -547,6 +623,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
+        # return data, res
         
         
     def log(self, iteration):

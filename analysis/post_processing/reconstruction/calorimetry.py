@@ -46,14 +46,15 @@ def calorimetric_energy(data_dict,
     return update_dict
 
 
-@post_processing(data_capture=['input_data'], 
-                 result_capture=['particle_clusts', 
-                                 'particle_seg', 
-                                 'input_rescaled', 
-                                 'particle_node_pred_type',
-                                 'particles'])
+@post_processing(data_capture=['meta'], 
+                 result_capture=['particles'],
+                 result_capture_optional=['truth_particles'])
 def range_based_track_energy(data_dict, result_dict,
-                             bin_size=17, include_pids=[2, 3, 4]):
+                             bin_size=17, 
+                             include_pids=[2, 3, 4],
+                             data=False,
+                             min_points=5,
+                             mode='px'):
     """Compute track energy by the CSDA (continuous slowing-down approximation)
     range-based method. 
 
@@ -78,67 +79,110 @@ def range_based_track_energy(data_dict, result_dict,
         particle's estimated length ('particle_length') and the estimated
         CSDA energy ('particle_range_based_energy') using cubic splines. 
     """
-
-    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
-    particles      = result_dict['particle_clusts']
-    particle_seg   = result_dict['particle_seg']
-    particle_types = result_dict['particle_node_pred_type']
-
-    update_dict = {
-        'particle_length': np.array([]),
-        'particle_range_based_energy': np.array([])
-    }
-    if len(particles) == 0:
-        return update_dict
-
+    if data:
+        particles = result_dict['particles']
+        truth_particles = []
+    else:
+        particles       = result_dict['particles']
+        truth_particles = result_dict['truth_particles']
+        
+    # Use meta info to convert units
+    
     splines = {ptype: get_splines(ptype) for ptype in include_pids}
-
-    pred_ptypes = np.argmax(particle_types, axis=1)
-    particle_length = -np.ones(len(particles))
-    particle_energy = -np.ones(len(particles))
-
-    assert len(pred_ptypes) == len(particle_types)
+    meta = data_dict['meta']
+    px_to_cm = np.mean(meta[6:9]) # TODO: ONLY TEMPORARY
 
     for i, p in enumerate(particles):
-        semantic_type = particle_seg[i]
-        if semantic_type == 1 and pred_ptypes[i] in include_pids:
-            points = input_data[p][:, 1:4]
-            length = compute_track_length(points, bin_size=bin_size)
-            particle_length[i] = length
-            particle_energy[i] = splines[pred_ptypes[i]](length * PIXELS_TO_CM)
-            result_dict['particles'][i].momentum_range = particle_energy[i]
+        if p.semantic_type == 1 and p.pid in include_pids:
+            if mode == 'cm':
+                points = p.points
+                bin_size_cm = bin_size
+            else:
+                points = _pix_to_cm(p.points, meta)
+                bin_size_cm = bin_size * px_to_cm
+            if points.shape[0] > min_points:
+                length = compute_track_length(points, bin_size=bin_size_cm)
+                p.length = length
+                p.csda_kinetic_energy = splines[p.pid](length)
+
+    for i, p in enumerate(truth_particles):
+        if p.semantic_type == 1 and p.pid in include_pids:
+            if mode == 'cm':
+                pts = p.points
+                tng_pts = p.truth_points
+                bin_size_cm = bin_size
+            else:
+                pts = _pix_to_cm(p.points, meta)
+                tng_pts = _pix_to_cm(p.truth_points, meta)
+                bin_size_cm = bin_size * px_to_cm
+            if pts.shape[0] > min_points:
+                length = compute_track_length(pts, bin_size=bin_size_cm)
+                p.length = float(length)
+                p.csda_kinetic_energy = float(splines[p.pid](length))
+            if tng_pts.shape[0] > min_points:
+                length_tng = compute_track_length(tng_pts, bin_size=bin_size_cm)
+                p.length_tng = float(length_tng)
+                p.csda_kinetic_energy_tng = float(splines[p.pid](length_tng))
             
-    update_dict['particle_length'] = particle_length
-    update_dict['particle_range_based_energy'] = particle_energy
-            
-    return update_dict
+    return {}
 
 
-@post_processing(data_capture=[], result_capture=['particles', 'truth_particles'])
+@post_processing(data_capture=['meta'], 
+                 result_capture=['particles'],
+                 result_capture_optional=['truth_particles'])
 def range_based_track_energy_spline(data_dict,
                                     result_dict,
                                     bin_size=17,
                                     include_pids=[2,3,4],
-                                    mode='reco'):
+                                    data=False,
+                                    min_points=10,
+                                    mode='px'):
     
-    if mode == 'truth':
-        particles = result_dict['truth_particles']
-    elif mode == 'reco':
+    if data:
         particles = result_dict['particles']
+        truth_particles = []
     else:
-        raise ValueError(f"Invalid Range based energy reconstruction mode {mode}.")
-    
-    if len(particles) == 0: return {}
+        particles = result_dict['particles']
+        truth_particles = result_dict['truth_particles']
     
     splines = {ptype: get_splines(ptype) for ptype in include_pids}
+    meta = data_dict['meta']
+    px_to_cm = np.mean(meta[6:9]) # TODO: ONLY TEMPORARY
     
     for i, p in enumerate(particles):
         if p.semantic_type == 1 and p.pid in include_pids:
-            pts = p.points
-            curve_data = compute_curve(pts, bin_size=bin_size)
-            length = curve_data[3]
-            p.length = length
-            p.csda_kinetic_energy = splines[p.pid](length * PIXELS_TO_CM)
+            if mode == 'cm':
+                pts = p.points
+                bin_size_cm = bin_size
+            else:
+                pts = _pix_to_cm(p.points, meta)
+                bin_size_cm = bin_size * px_to_cm
+            if pts.shape[0] > min_points:
+                curve_data = compute_curve(pts, bin_size=bin_size_cm)
+                length = curve_data[3]
+                p.length = length
+                p.csda_kinetic_energy = splines[p.pid](length)
+            
+    for i, p in enumerate(truth_particles):
+        if p.semantic_type == 1 and p.pid in include_pids:
+            if mode == 'cm':
+                pts = p.points
+                tng_pts = p.truth_points
+                bin_size_cm = bin_size
+            else:
+                pts = _pix_to_cm(p.points, meta)
+                tng_pts = _pix_to_cm(p.truth_points, meta)
+                bin_size_cm = bin_size * px_to_cm
+            if pts.shape[0] > min_points:
+                curve_data = compute_curve(pts, bin_size=bin_size)
+                length = curve_data[3]
+                p.length = length
+                p.csda_kinetic_energy = splines[p.pid](length)
+            if tng_pts.shape[0] > min_points:
+                curve_truth = compute_curve(tng_pts, bin_size=bin_size)
+                length_tng = curve_truth[3]
+                p.length_tng = length_tng
+                p.csda_kinetic_energy_tng = splines[p.pid](length_tng)
             
     return {}
     
@@ -290,3 +334,17 @@ def compute_track_dedx(points, startpoint, endpoint, depositions, bin_size=17):
         dx = proj[mask].max() - proj[mask].min()
         dedx[i] = sum_energy / dx
     return dedx
+
+def _pix_to_cm(arr, meta):
+    
+    min_x        = meta[0]
+    min_y        = meta[1]
+    min_z        = meta[2]
+    size_voxel_x = meta[6]
+    size_voxel_y = meta[7]
+    size_voxel_z = meta[8]
+    
+    arr[:, 0] = arr[:, 0] * size_voxel_x + min_x
+    arr[:, 1] = arr[:, 1] * size_voxel_y + min_y
+    arr[:, 2] = arr[:, 2] * size_voxel_z + min_z
+    return arr

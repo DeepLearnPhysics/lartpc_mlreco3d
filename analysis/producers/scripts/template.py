@@ -41,6 +41,7 @@ def run_inference(data_blob, res, **kwargs):
     primaries             = kwargs['match_primaries']
     matching_mode         = kwargs['matching_mode']
     boundaries            = kwargs.get('boundaries', [[1376.3], None, None])
+    units                 = kwargs.get('units', 'px')
 
     # FullChainEvaluator config
     evaluator_cfg         = kwargs.get('evaluator_cfg', {})
@@ -52,6 +53,7 @@ def run_inference(data_blob, res, **kwargs):
     predictor = FullChainEvaluator(data_blob, res, 
                                    evaluator_cfg=evaluator_cfg)
     image_idxs = data_blob['index']
+    meta       = data_blob['meta'][0]
 
     for idx, index in enumerate(image_idxs):
       
@@ -91,7 +93,7 @@ def run_inference(data_blob, res, **kwargs):
                 return_counts=True)
 
         # 2. Process interaction level information
-        interaction_logger = InteractionLogger(int_fieldnames)
+        interaction_logger = InteractionLogger(int_fieldnames, meta=meta, units=units)
         interaction_logger.prepare()
         
         # 2-1 Loop over matched interaction pairs
@@ -112,7 +114,7 @@ def run_inference(data_blob, res, **kwargs):
             interactions.append(int_dict)
 
         # 3. Process particle level information
-        particle_logger = ParticleLogger(particle_fieldnames)
+        particle_logger = ParticleLogger(particle_fieldnames, meta=meta, units=units)
         particle_logger.prepare()
 
         # Loop over matched particle pairs

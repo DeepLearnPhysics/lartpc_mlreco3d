@@ -33,7 +33,6 @@ class PostProcessor:
 
     def register_function(self, f, priority, 
                           processor_cfg={}, 
-                          run_on_batch=False,
                           profile=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
@@ -55,7 +54,10 @@ class PostProcessor:
             data_one_event, result_one_event = {}, {}
             for data_key in f._data_capture:
                 if data_key in self.data:
-                    data_one_event[data_key] = self.data[data_key][image_id]
+                    if data_key == 'meta':  # Handle special case for meta
+                        data_one_event[data_key] = self.data[data_key][0]
+                    else:
+                        data_one_event[data_key] = self.data[data_key][image_id]
                 else:
                     msg = f"Unable to find {data_key} in data dictionary while "\
                         f"running post-processor {f.__name__}."
