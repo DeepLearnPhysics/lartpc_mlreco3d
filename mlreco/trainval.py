@@ -267,7 +267,7 @@ class trainval(object):
             #    data.append([data_blob[key][i] for key in input_keys])
 
             self._watch.start('forward')
-            # self._watch.start_cpu('forward_cpu')
+            self._watch.start_cpu('forward_cpu')
 
             if not len(self._gpus):
                 train_blob = train_blob[0]
@@ -290,7 +290,7 @@ class trainval(object):
                     self._loss.append(loss_acc['loss'])
 
             self._watch.stop('forward')
-            # self._watch.stop_cpu('forward_cpu')
+            self._watch.stop_cpu('forward_cpu')
             self.tspent_sum['forward'] += self._watch.time('forward')
 
             # Record results

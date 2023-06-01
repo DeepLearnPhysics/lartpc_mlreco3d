@@ -360,6 +360,7 @@ class HDF5Writer:
             for batch_id in range(self.batch_size):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
+
                 # Initialize a dictionary of references to be passed to the event
                 # dataset and store the relevant array input and result keys
                 ref_dict = {}
@@ -367,6 +368,7 @@ class HDF5Writer:
                     self.append_key(file, event, data_blob, key, batch_id)
                 for key in self.result_keys:
                     self.append_key(file, event, result_blob, key, batch_id)
+
                 # Append event
                 event_id  = len(file['events'])
                 events_ds = file['events']
