@@ -145,6 +145,8 @@ def parse_cluster3d(cluster_event,
 
         particles_p   = parse_particles(particle_event, cluster_event)
 
+        assert len(particles) == num_clusters or len(particles) == num_clusters-1
+
         labels['cluster'] = np.array([p.id() for p in particles])
         labels['group']   = np.array([p.group_id() for p in particles])
         labels['inter']   = get_interaction_ids(particles)
@@ -178,7 +180,8 @@ def parse_cluster3d(cluster_event,
             features = [value]
             for k, l in labels.items():
                 size = cluster.as_vector().size()
-                features.append(np.full(shape=(size), fill_value=l[i], dtype=np.float32))
+                value = l[i] if i < len(l) else -1
+                features.append(np.full(shape=(size), fill_value=value, dtype=np.float32))
 
             # If requested, break cluster into pieces that do not touch each other
             if break_clusters:
