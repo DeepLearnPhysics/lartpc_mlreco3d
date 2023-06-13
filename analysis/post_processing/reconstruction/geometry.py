@@ -4,16 +4,39 @@ from mlreco.utils.gnn.cluster import get_cluster_directions, cluster_direction
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
+import networkx as nx
+from collections import Counter
+
 
 @post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
                                                               'particle_clusts',
                                                               'particle_start_points',
                                                               'particle_end_points',
                                                               'particles'])
-def particle_direction_deprecated(data_dict,
-                                  result_dict,
-                                  neighborhood_radius=5,
-                                  optimize=True):
+def particle_direction(data_dict,
+                       result_dict,
+                       neighborhood_radius=5,
+                       optimize=True):
+    """Estimate the direction of a particle using the startpoint.
+    This modifies the <start_dir> attribute of each Particle object in-place.
+
+    Parameters
+    ----------
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    neighborhood_radius : int, optional
+        The radius of the neighborhood around the startpoint, 
+        used to compute the direction vector , by default 5
+    optimize : bool, optional
+        Option to use the optimizing algorithm, by default True
+
+    Returns
+    -------
+    update_dict: dict
+        Dictionary containing start and end directions for all particles in the image. 
+    """
 
     if 'input_rescaled' not in result_dict:
         input_data = data_dict['input_data']
@@ -42,32 +65,48 @@ def particle_direction_deprecated(data_dict,
             
     return update_dict
 
-@post_processing(data_capture=['input_data'], 
-                 result_capture=['particles'],
-                 result_capture_optional=['truth_particles'])
-def particle_direction(data_dict,
-                       result_dict,
-                       neighborhood_radius=5,
-                       optimize=True):
-    for p in result_dict['particles']:
-        if len(p.points) > 0:
-            p.start_dir = cluster_direction(p.points, p.start_point, 
-                                            neighborhood_radius, 
-                                            optimize=optimize)
-            p.end_dir = cluster_direction(p.points, p.end_point, 
-                                        neighborhood_radius, 
-                                        optimize=optimize)
-        
-    if 'truth_particles' in result_dict:
-        for p in result_dict['truth_particles']:
-            if len(p.truth_points) > 0:
-                p.start_dir = cluster_direction(p.truth_points, p.start_point, 
-                                                neighborhood_radius, 
-                                                optimize=optimize)
-                p.end_dir = cluster_direction(p.truth_points, p.end_point, 
-                                            neighborhood_radius, 
-                                            optimize=optimize)
+@post_processing(data_capture=[],
+                 result_capture=['truth_particles'])
+def count_children(data_dict, result_dict, mode='semantic_type'):
+    """Post-processor for counting the number of children of a given particle,
+    using the particle hierarchy information from parse_particle_graph.
+
+    Parameters
+    ----------
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    mode : str, optional
+        Attribute name to categorize children, by default 'semantic_type'.
+        This will count each child particle for different semantic types
+        separately. 
+
+    Returns
+    -------
+    None
+        (Operation is in-place)
+    """
+    
+    G = nx.DiGraph()
+    edges = []
+    
+    for p in result_dict['truth_particles']:
+        G.add_node(p.id, attr=getattr(p, mode))
+    for p in result_dict['truth_particles']:
+        parent = p.asis.parent_id()
+        if parent in G:
+            edges.append((parent, p.id))
+    G.add_edges_from(edges)
+    
+    for p in result_dict['truth_particles']:
+        successors = list(G.successors(p.id))
+        counter = Counter([G.nodes[succ]['attr'] for succ in successors])
+        for key, val in counter.items():
+            p._children_counts[key] = val
+            
     return {}
+
 
 @post_processing(data_capture=['meta'], 
                  result_capture=['particles', 'interactions'],

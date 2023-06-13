@@ -260,12 +260,38 @@ class ParticleLogger(AnalysisLogger):
     
     @staticmethod
     @tag('true')
+    def energy_deposit(particle):
+        out = {
+            'energy_deposit': -1,
+        }
+        if type(particle) is TruthParticle:
+            out['energy_deposit'] = particle.energy_deposit
+        return out
+    
+    @staticmethod
+    @tag('true')
     def num_children(particle):
         out = {
             'num_children': -1,
         }
         if type(particle) is TruthParticle:
             out['num_children'] = len(particle.asis.children_id())
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def children_counts(particle):
+        out = {'children_counts_0': -1,
+               'children_counts_1': -1,
+               'children_counts_2': -1,
+               'children_counts_3': -1,
+               'children_counts_4': -1}
+        if type(particle) is TruthParticle:
+            out['children_counts_0'] = particle._children_counts[0]
+            out['children_counts_1'] = particle._children_counts[1]
+            out['children_counts_2'] = particle._children_counts[2]
+            out['children_counts_3'] = particle._children_counts[3]
+            out['children_counts_4'] = particle._children_counts[4]
         return out
     
     @staticmethod

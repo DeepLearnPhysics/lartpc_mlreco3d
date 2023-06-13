@@ -84,7 +84,7 @@ def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
 
 def trace_particles(particles, color='id', size=1,
                     scatter_points=False,
-                    scatter_ppn=False,
+                    mode='points',
                     highlight_primaries=False,
                     randomize_labels=False,
                     colorscale='rainbow', prefix='', opacity=None):
@@ -114,11 +114,13 @@ def trace_particles(particles, color='id', size=1,
             color_dict[key] = perm[i]
     colors = np.array(list(color_dict.values()))
     cmin, cmax = int(colors.min()), int(colors.max())
+    if color == 'pid':
+        cmin, cmax = 0, 6
     alpha = 1
     for p in particles:
-        if p.points.shape[0] <= 0:
+        if getattr(p, mode).shape[0] <= 0:
             continue
-        c = color_dict[int(getattr(p, color))] * np.ones(p.points.shape[0])
+        c = color_dict[int(getattr(p, color))] * np.ones(getattr(p, mode).shape[0])
         if highlight_primaries and opacity is None:
             if p.is_primary:
                 alpha = 1
@@ -126,9 +128,9 @@ def trace_particles(particles, color='id', size=1,
                 alpha = 0.01
         else:
             alpha = opacity
-        plot = go.Scatter3d(x=p.points[:,0],
-                            y=p.points[:,1],
-                            z=p.points[:,2],
+        plot = go.Scatter3d(x=getattr(p, mode)[:, 0],
+                            y=getattr(p, mode)[:, 1],
+                            z=getattr(p, mode)[:, 2],
                             mode='markers',
                             marker=dict(
                                 size=size,

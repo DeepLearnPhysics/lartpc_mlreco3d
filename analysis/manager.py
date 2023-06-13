@@ -326,12 +326,14 @@ class AnaToolsManager:
         """
         if 'ParticleBuilder' in self.builders:
             if 'particles' not in result:
+                print("Building particles instead of loading...")
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
 
         if 'InteractionBuilder' in self.builders:
             if 'interactions' not in result:
+                print("Building interactions instead of loading...")
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
                 result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
@@ -641,6 +643,7 @@ class AnaToolsManager:
 
 
     def run(self):
+        print(self.max_iteration)
         for iteration in range(self.max_iteration):
             self.step(iteration)
             if self.profile:

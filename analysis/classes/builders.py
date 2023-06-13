@@ -26,6 +26,18 @@ from analysis.classes import (Particle,
 from analysis.classes.matching import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
 
+# These attributes are computed based on the particles being loaded to
+# each interaction, and they are computed at initialization.
+
+SKIP_KEYS = [
+    'is_principal_match', 'match', 'match_counts', 
+    'num_particles', 'num_primaries', 'particle_counts', 'particle_ids',
+    'primary_counts', 'size', 'topology', 
+    # TruthInteraction Attributes
+    'truth_particle_counts', 'truth_primary_counts', 'truth_topology'
+]
+
+
 class DataBuilder(ABC):
     """Abstract base class for building all data structures
 
@@ -219,13 +231,15 @@ class ParticleBuilder(DataBuilder):
     
     def _load_truth(self, entry, data, result):
         out = []
-        true_nonghost = data['cluster_label'][0]
+        true_nonghost  = data['cluster_label'][0]
         particles_asis = data['particles_asis'][0]
-        pred_nonghost = result['cluster_label_adapted'][0]
-        blueprints = result['truth_particles'][0]
+        pred_nonghost  = result['cluster_label_adapted'][0]
+        blueprints     = result['truth_particles'][0]
+        true_sed       = data['sed'][0]
         for i, bp in enumerate(blueprints):
-            mask = bp['index']
+            mask      = bp['index']
             true_mask = bp['truth_index']
+            sed_mask  = bp.get('sed_index', None)
             pasis_selected = None
             # Find particles_asis
             for pasis in particles_asis:
@@ -250,13 +264,15 @@ class ParticleBuilder(DataBuilder):
             prepared_bp['group_id'] = group_id
             prepared_bp.pop('depositions_sum', None)
             prepared_bp.update({
-                
                 'points': pred_nonghost[mask][:, COORD_COLS],
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
                 'truth_points': true_nonghost[true_mask][:, COORD_COLS],
                 'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
                 'particle_asis': pasis_selected
             })
+            
+            if sed_mask is not None:
+                prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
             
             match = prepared_bp.pop('match', [])
             match_counts = prepared_bp.pop('match_counts', [])
@@ -349,6 +365,7 @@ class ParticleBuilder(DataBuilder):
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
         meta            = data['meta'][0]
+        simE_deposits   = data['sed'][0]
         # point_labels   = data['point_labels'][entry]
         unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.spatial_units == 'cm' else x
 
@@ -358,6 +375,8 @@ class ParticleBuilder(DataBuilder):
             # print(pdg)
             is_primary = lpart.group_id() == lpart.parent_id()
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
+            mask_sed      = simE_deposits[:, 5].astype(int) == id
+            sed_index     = np.where(mask_sed)[0]
             if np.count_nonzero(mask_nonghost) <= 0:
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
@@ -392,6 +411,8 @@ class ParticleBuilder(DataBuilder):
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
+            
+            sed_points          = simE_deposits[mask_sed][:, COORD_COLS]
     
             # 2. Process particle-level labels
             semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
@@ -414,7 +435,9 @@ class ParticleBuilder(DataBuilder):
                                      truth_points=coords_noghost,
                                      truth_depositions=np.empty(0, dtype=np.float32), #TODO
                                      truth_depositions_MeV=depositions_noghost,
-                                     is_primary=is_primary,
+                                     sed_index=sed_index,
+                                     sed_points=sed_points,
+                                     is_primary=bool(is_primary),
                                      pid=pdg,
                                      particle_asis=lpart)
             
@@ -472,18 +495,11 @@ class InteractionBuilder(DataBuilder):
             print(msg)
             
         for i, bp in enumerate(blueprints):
-            info = {
-                'interaction_id': bp['id'],
-                'image_id': bp['image_id'],
-                'is_neutrino': bp['is_neutrino'],
-                'nu_id': bp['nu_id'],
-                'volume_id': bp['volume_id'],
-                'vertex': bp['vertex'],
-                'flash_time': bp['flash_time'],
-                'fmatched': bp['fmatched'],
-                'flash_id': bp['flash_id'],
-                'flash_total_pE': bp['flash_total_pE']
-            }
+            info = copy.deepcopy(bp)
+            info['interaction_id'] = info.pop('id', -1)
+            for key in bp:
+                if key in SKIP_KEYS:
+                    info.pop(key)
             if use_particles:
                 particles = []
                 for p in result['particles'][0]:
@@ -529,14 +545,19 @@ class InteractionBuilder(DataBuilder):
             print(msg)
             
         for i, bp in enumerate(blueprints):
-            info = {
-                'interaction_id': bp['id'],
-                'image_id': bp['image_id'],
-                'is_neutrino': bp['is_neutrino'],
-                'nu_id': bp['nu_id'],
-                'volume_id': bp['volume_id'],
-                'vertex': bp['vertex']
-            }
+            # info = {
+            #     'interaction_id': bp['id'],
+            #     'image_id': bp['image_id'],
+            #     'is_neutrino': bp['is_neutrino'],
+            #     'nu_id': bp['nu_id'],
+            #     'volume_id': bp['volume_id'],
+            #     'vertex': bp['vertex']
+            # }
+            info = copy.deepcopy(bp)
+            info['interaction_id'] = info.pop('id', -1)
+            for key in bp:
+                if key in SKIP_KEYS:
+                    info.pop(key)
             if use_particles:
                 particles = []
                 for p in result['truth_particles'][0]:
