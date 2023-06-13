@@ -8,6 +8,8 @@ from .particles import parse_particles
 from .clean_data import clean_sparse_data
 from .label_data import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 
+from mlreco.utils.globals import UNKWN_SHP
+
 
 def parse_cluster2d(cluster_event):
     """
@@ -180,7 +182,7 @@ def parse_cluster3d(cluster_event,
             features = [value]
             for k, l in labels.items():
                 size = cluster.as_vector().size()
-                value = l[i] if i < len(l) else -1
+                value = l[i] if i < len(l) else (-1 if k != 'shape' else UNKWN_SHP)
                 features.append(np.full(shape=(size), fill_value=value, dtype=np.float32))
 
             # If requested, break cluster into pieces that do not touch each other

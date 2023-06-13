@@ -35,7 +35,7 @@ GHOST_SHP  = larcv.kShapeGhost     # 5
 UNKWN_SHP  = larcv.kShapeUnknown   # 6
 
 # Shape precedence used in the cluster labeling process
-SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP]
+SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP, UNKWN_SHP]
 
 # Shape labels
 SHAPE_LABELS = {
