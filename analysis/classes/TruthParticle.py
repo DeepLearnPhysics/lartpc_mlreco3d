@@ -69,7 +69,8 @@ class TruthParticle(Particle):
         self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
         self.asis = particle_asis
-        assert PDG_TO_PID[int(self.asis.pdg_code())] == self.pid
+        # print(self.pid, PDG_TO_PID[int(self.asis.pdg_code())])
+        assert (PDG_TO_PID[int(self.asis.pdg_code())] == self.pid) or (self.pid == -1)
             
         # Quantities to be set during post-processing
         # tng stands for true nonghost

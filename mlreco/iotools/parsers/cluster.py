@@ -144,7 +144,9 @@ def parse_cluster3d(cluster_event,
         neutrinos     = list(neutrino_event.as_vector()) if neutrino_event is not None else None
 
         particles_p   = parse_particles(particle_event, cluster_event)
-
+        
+        num_clusters = len(particles_p)
+        
         labels['cluster'] = np.array([p.id() for p in particles])
         labels['group']   = np.array([p.group_id() for p in particles])
         labels['inter']   = get_interaction_ids(particles)

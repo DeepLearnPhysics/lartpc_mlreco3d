@@ -107,8 +107,15 @@ class ParticleLogger(AnalysisLogger):
     @staticmethod
     def interaction_id(particle):
         out = {'particle_interaction_id': -1}
-        if hasattr(particle, 'interaction_id'):
+        if hasattr(particle, 'interaction_id')  :
             out['particle_interaction_id'] = particle.interaction_id
+        return out
+    
+    @staticmethod
+    def nu_id(particle):
+        out = {'particle_nu_id': -1}
+        if hasattr(particle, 'nu_id'):
+            out['particle_nu_id'] = particle.nu_id
         return out
 
     @staticmethod
