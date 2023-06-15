@@ -65,6 +65,7 @@ def particle_direction(data_dict,
             
     return update_dict
 
+
 @post_processing(data_capture=[],
                  result_capture=['truth_particles'])
 def count_children(data_dict, result_dict, mode='semantic_type'):

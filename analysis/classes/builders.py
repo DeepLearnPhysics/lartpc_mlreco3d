@@ -306,9 +306,15 @@ class ParticleBuilder(DataBuilder):
 
         # Essential Information
         image_index      = data['index'][entry]
-        volume_labels    = result['input_rescaled'][entry][:, BATCH_COL]
-        point_cloud      = result['input_rescaled'][entry][:, COORD_COLS]
-        depositions      = result['input_rescaled'][entry][:, 4]
+        if 'input_rescaled' in result:
+            input_voxels     = result['input_rescaled'][entry]
+        else:
+            input_voxels     = data['input_data'][entry]
+            
+        volume_labels    = input_voxels[:, BATCH_COL]
+        point_cloud      = input_voxels[:, COORD_COLS]
+        depositions      = input_voxels[:, 4]
+            
         particles        = result['particle_clusts'][entry]
         particle_seg     = result['particle_seg'][entry]
 
@@ -362,21 +368,31 @@ class ParticleBuilder(DataBuilder):
         out = []
         image_index     = data['index'][entry]
         labels          = result['cluster_label_adapted'][entry]
+        particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         labels_nonghost = data['cluster_label'][entry]
         larcv_particles = data['particles_asis'][entry]
-        rescaled_charge = result['input_rescaled'][entry][:, 4]
-        particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
-        coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
+        if 'input_rescaled' in result:
+            rescaled_charge = result['input_rescaled'][entry][:, 4]
+            coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
+        else:
+            rescaled_charge = data['input_data'][entry][:, 4]
+            coordinates     = data['input_data'][entry][:, COORD_COLS]
         meta            = data['meta'][0]
-        simE_deposits   = data['sed'][0]
+        if 'sed' in data:
+            simE_deposits   = data['sed'][0]
+        else:
+            simE_deposits   = None
         # point_labels   = data['point_labels'][entry]
         unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
-            mask_sed      = simE_deposits[:, 5].astype(int) == id
-            sed_index     = np.where(mask_sed)[0]
+            if simE_deposits is not None:
+                mask_sed      = simE_deposits[:, 5].astype(int) == id
+                sed_index     = np.where(mask_sed)[0]
+            else:
+                mask_sed, sed_index = np.array([]), np.array([])
             if np.count_nonzero(mask_nonghost) <= 0:
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
@@ -416,7 +432,10 @@ class ParticleBuilder(DataBuilder):
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
             
-            sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+            if simE_deposits is not None:
+                sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+            else:
+                sed_points          = np.array([])
     
             # 2. Process particle-level labels
             truth_labels = get_truth_particle_labels(labels_nonghost, 
