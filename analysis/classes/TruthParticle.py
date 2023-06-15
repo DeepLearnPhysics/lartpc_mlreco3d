@@ -61,8 +61,8 @@ class TruthParticle(Particle):
         self.truth_points           = truth_points
         self.sed_index              = sed_index
         self.sed_points             = sed_points
-        self._truth_size            = truth_points.shape[0]
         self._sed_size              = sed_points.shape[0]
+        self._truth_size            = truth_points.shape[0]
         self._truth_depositions     = np.atleast_1d(truth_depositions)   # Must be ADC
         self._truth_depositions_MeV = np.atleast_1d(truth_depositions_MeV)   # Must be MeV
         

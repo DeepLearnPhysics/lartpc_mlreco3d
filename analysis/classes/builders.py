@@ -34,7 +34,7 @@ SKIP_KEYS = [
     'num_particles', 'num_primaries', 'particle_counts', 'particle_ids',
     'primary_counts', 'size', 'topology', 
     # TruthInteraction Attributes
-    'truth_particle_counts', 'truth_primary_counts', 'truth_topology'
+    'truth_particle_counts', 'truth_primary_counts', 'truth_topology', 'children_counts'
 ]
 
 
@@ -385,9 +385,11 @@ class ParticleBuilder(DataBuilder):
                                                         mask_nonghost, 
                                                         lpart, 
                                                         image_index,
-                                                        unit_convert=unit_convert)
-                particle.sed_points = simE_deposits[:, COORD_COLS][mask_sed]
-                particle.sed_index  = sed_index
+                                                        unit_convert=unit_convert,
+                                                        sed=simE_deposits,
+                                                        mask_sed=mask_sed)
+                # particle.sed_points = simE_deposits[:, COORD_COLS][mask_sed].astype(np.float32)
+                # particle.sed_index  = sed_index.astype(np.int64)
                 out.append(particle)
                 continue
 
@@ -414,7 +416,7 @@ class ParticleBuilder(DataBuilder):
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
             
-            sed_points          = simE_deposits[mask_sed][:, COORD_COLS]
+            sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
     
             # 2. Process particle-level labels
             truth_labels = get_truth_particle_labels(labels_nonghost, 
@@ -444,7 +446,7 @@ class ParticleBuilder(DataBuilder):
                                      truth_points=coords_noghost,
                                      truth_depositions=np.empty(0, dtype=np.float32), #TODO
                                      truth_depositions_MeV=depositions_noghost,
-                                     sed_index=sed_index,
+                                     sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
                                      is_primary=bool(is_primary),
                                     #  pid=pdg,
@@ -585,7 +587,7 @@ class InteractionBuilder(DataBuilder):
                     'points': pred_nonghost[mask][:, COORD_COLS],
                     'depositions': pred_nonghost[mask][:, VALUE_COL],
                     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL],
+                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL]
                 })
                 ia = TruthInteraction(**info)
             out.append(ia)
@@ -858,11 +860,13 @@ class FragmentBuilder(DataBuilder):
 # --------------------------Helper functions---------------------------
 
 def handle_empty_truth_particles(labels_noghost,  
-                                mask_noghost, 
-                                p, 
-                                entry, 
-                                verbose=False,
-                                unit_convert=None):
+                                 mask_noghost, 
+                                 p, 
+                                 entry, 
+                                 verbose=False,
+                                 unit_convert=None,
+                                 sed=None,
+                                 mask_sed=None):
     """
     Function for handling true larcv::Particle instances with valid 
     true nonghost voxels but with no predicted nonghost voxels.
@@ -893,10 +897,13 @@ def handle_empty_truth_particles(labels_noghost,
     else:
         f = unit_convert
 
-    semantic_type, interaction_id, nu_id = -1, -1, -1
+    semantic_type, interaction_id, nu_id, primary_id, pid = -1, -1, -1, -1, -1
     coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
     coords_noghost, depositions_noghost = np.empty((0,3)), np.array([])
+    sed_index, sed_points = np.array([]), np.empty((0,3))
     if np.count_nonzero(mask_noghost) > 0:
+        sed_points = sed[mask_sed][:, COORD_COLS]
+        sed_index = np.where(mask_sed)[0]
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
@@ -931,7 +938,8 @@ def handle_empty_truth_particles(labels_noghost,
                              truth_depositions=np.empty(0, dtype=np.float32), #TODO
                              truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
-                            #  pid=pdg,
+                             sed_index=sed_index.astype(np.int64),
+                             sed_points=sed_points.astype(np.float32),
                              particle_asis=p,
                              start_point=-np.ones(3, dtype=np.float32),
                              end_point=-np.ones(3, dtype=np.float32))
