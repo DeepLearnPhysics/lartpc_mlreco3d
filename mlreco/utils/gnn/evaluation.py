@@ -217,7 +217,7 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
     """
     # If there is no edge, do not bother
     if not len(edge_index):
-        return np.empty((0,2), dtype=np.int64), np.zeros(n, dtype=np.int64), 0.
+        return np.empty((0,2), dtype=np.int64), np.arange(n, dtype=np.int64), 0.
 
     # Build an input adjacency matrix to constrain the edge selection to the input graph
     adj_mat = adjacency_matrix(edge_index, n)
