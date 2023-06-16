@@ -26,6 +26,18 @@ from analysis.classes import (Particle,
 from analysis.classes.matching import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_vertex
 
+# These attributes are computed based on the particles being loaded to
+# each interaction, and they are computed at initialization.
+
+SKIP_KEYS = [
+    'is_principal_match', 'match', 'match_counts', 
+    'num_particles', 'num_primaries', 'particle_counts', 'particle_ids',
+    'primary_counts', 'size', 'topology', 
+    # TruthInteraction Attributes
+    'truth_particle_counts', 'truth_primary_counts', 'truth_topology', 'children_counts'
+]
+
+
 class DataBuilder(ABC):
     """Abstract base class for building all data structures
 
@@ -161,8 +173,8 @@ class ParticleBuilder(DataBuilder):
             - particles_asis
             - input_rescaled
     """
-    def __init__(self, spatial_units='px'):
-        self.spatial_units = spatial_units
+    def __init__(self, convert_to_cm=False):
+        self.convert_to_cm = convert_to_cm
         
     def _load_reco(self, entry, data: dict, result: dict):
         """Construct Particle objects from loading HDF5 blueprints.
@@ -219,13 +231,18 @@ class ParticleBuilder(DataBuilder):
     
     def _load_truth(self, entry, data, result):
         out = []
-        true_nonghost = data['cluster_label'][0]
+        true_nonghost  = data['cluster_label'][0]
         particles_asis = data['particles_asis'][0]
-        pred_nonghost = result['cluster_label_adapted'][0]
-        blueprints = result['truth_particles'][0]
+        pred_nonghost  = result['cluster_label_adapted'][0]
+        blueprints     = result['truth_particles'][0]
+        if 'sed' in data:
+            true_sed = data['sed'][0]
+        else:
+            true_sed = None
         for i, bp in enumerate(blueprints):
-            mask = bp['index']
+            mask      = bp['index']
             true_mask = bp['truth_index']
+            sed_mask  = bp.get('sed_index', None)
             pasis_selected = None
             # Find particles_asis
             for pasis in particles_asis:
@@ -250,13 +267,15 @@ class ParticleBuilder(DataBuilder):
             prepared_bp['group_id'] = group_id
             prepared_bp.pop('depositions_sum', None)
             prepared_bp.update({
-                
                 'points': pred_nonghost[mask][:, COORD_COLS],
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
                 'truth_points': true_nonghost[true_mask][:, COORD_COLS],
                 'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
                 'particle_asis': pasis_selected
             })
+            
+            if (sed_mask is not None) and ('sed' in data):
+                prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
             
             match = prepared_bp.pop('match', [])
             match_counts = prepared_bp.pop('match_counts', [])
@@ -287,9 +306,15 @@ class ParticleBuilder(DataBuilder):
 
         # Essential Information
         image_index      = data['index'][entry]
-        volume_labels    = result['input_rescaled'][entry][:, BATCH_COL]
-        point_cloud      = result['input_rescaled'][entry][:, COORD_COLS]
-        depositions      = result['input_rescaled'][entry][:, 4]
+        if 'input_rescaled' in result:
+            input_voxels     = result['input_rescaled'][entry]
+        else:
+            input_voxels     = data['input_data'][entry]
+            
+        volume_labels    = input_voxels[:, BATCH_COL]
+        point_cloud      = input_voxels[:, COORD_COLS]
+        depositions      = input_voxels[:, 4]
+            
         particles        = result['particle_clusts'][entry]
         particle_seg     = result['particle_seg'][entry]
 
@@ -343,21 +368,31 @@ class ParticleBuilder(DataBuilder):
         out = []
         image_index     = data['index'][entry]
         labels          = result['cluster_label_adapted'][entry]
+        particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         labels_nonghost = data['cluster_label'][entry]
         larcv_particles = data['particles_asis'][entry]
-        rescaled_charge = result['input_rescaled'][entry][:, 4]
-        particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
-        coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
+        if 'input_rescaled' in result:
+            rescaled_charge = result['input_rescaled'][entry][:, 4]
+            coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
+        else:
+            rescaled_charge = data['input_data'][entry][:, 4]
+            coordinates     = data['input_data'][entry][:, COORD_COLS]
         meta            = data['meta'][0]
+        if 'sed' in data:
+            simE_deposits   = data['sed'][0]
+        else:
+            simE_deposits   = None
         # point_labels   = data['point_labels'][entry]
-        unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.spatial_units == 'cm' else x
+        unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
 
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
-            pdg = PDG_TO_PID.get(lpart.pdg_code(), -1)
-            # print(pdg)
-            is_primary = lpart.group_id() == lpart.parent_id()
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
+            if simE_deposits is not None:
+                mask_sed      = simE_deposits[:, 5].astype(int) == id
+                sed_index     = np.where(mask_sed)[0]
+            else:
+                mask_sed, sed_index = np.array([]), np.array([])
             if np.count_nonzero(mask_nonghost) <= 0:
                 continue  # Skip larcv particles with no true depositions
             # 1. Check if current pid is one of the existing group ids
@@ -366,7 +401,11 @@ class ParticleBuilder(DataBuilder):
                                                         mask_nonghost, 
                                                         lpart, 
                                                         image_index,
-                                                        unit_convert=unit_convert)
+                                                        unit_convert=unit_convert,
+                                                        sed=simE_deposits,
+                                                        mask_sed=mask_sed)
+                # particle.sed_points = simE_deposits[:, COORD_COLS][mask_sed].astype(np.float32)
+                # particle.sed_index  = sed_index.astype(np.int64)
                 out.append(particle)
                 continue
 
@@ -392,17 +431,29 @@ class ParticleBuilder(DataBuilder):
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
             volume_id, cts      = np.unique(volume_labels, return_counts=True)
             volume_id           = int(volume_id[cts.argmax()])
+            
+            if simE_deposits is not None:
+                sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+            else:
+                sed_points          = np.array([])
     
             # 2. Process particle-level labels
-            semantic_type, int_id, nu_id = get_truth_particle_labels(labels, 
-                                                                    mask, 
-                                                                    pid=pdg)
+            truth_labels = get_truth_particle_labels(labels_nonghost, 
+                                                     mask_nonghost, 
+                                                     id=id)
+            semantic_type  = int(truth_labels[0])
+            interaction_id = int(truth_labels[1])
+            nu_id          = int(truth_labels[2])
+            pid            = int(truth_labels[3])
+            primary_id     = int(truth_labels[4])
+            is_primary     = int(primary_id) == 1
             
             # 3. Process particle start / end point labels
         
             particle = TruthParticle(group_id=id,
-                                     interaction_id=int_id, 
+                                     interaction_id=interaction_id, 
                                      nu_id=nu_id,
+                                     pid=pid, 
                                      image_id=image_index,
                                      volume_id=volume_id,
                                      semantic_type=semantic_type, 
@@ -414,8 +465,10 @@ class ParticleBuilder(DataBuilder):
                                      truth_points=coords_noghost,
                                      truth_depositions=np.empty(0, dtype=np.float32), #TODO
                                      truth_depositions_MeV=depositions_noghost,
-                                     is_primary=is_primary,
-                                     pid=pdg,
+                                     sed_index=sed_index.astype(np.int64),
+                                     sed_points=sed_points,
+                                     is_primary=bool(is_primary),
+                                    #  pid=pdg,
                                      particle_asis=lpart)
             
             if particle.semantic_type == 1:
@@ -441,8 +494,8 @@ class InteractionBuilder(DataBuilder):
             - cluster_label
             - neutrino_asis (optional)
     """
-    def __init__(self, spatial_units='px'):
-        self.spatial_units = spatial_units
+    def __init__(self, convert_to_cm=False):
+        self.convert_to_cm = convert_to_cm
 
     def _build_reco(self, entry: int, data: dict, result: dict) -> List[Interaction]:
         particles = result['particles'][entry]
@@ -472,18 +525,11 @@ class InteractionBuilder(DataBuilder):
             print(msg)
             
         for i, bp in enumerate(blueprints):
-            info = {
-                'interaction_id': bp['id'],
-                'image_id': bp['image_id'],
-                'is_neutrino': bp['is_neutrino'],
-                'nu_id': bp['nu_id'],
-                'volume_id': bp['volume_id'],
-                'vertex': bp['vertex'],
-                'flash_time': bp['flash_time'],
-                'fmatched': bp['fmatched'],
-                'flash_id': bp['flash_id'],
-                'flash_total_pE': bp['flash_total_pE']
-            }
+            info = copy.deepcopy(bp)
+            info['interaction_id'] = info.pop('id', -1)
+            for key in bp:
+                if key in SKIP_KEYS:
+                    info.pop(key)
             if use_particles:
                 particles = []
                 for p in result['particles'][0]:
@@ -529,14 +575,19 @@ class InteractionBuilder(DataBuilder):
             print(msg)
             
         for i, bp in enumerate(blueprints):
-            info = {
-                'interaction_id': bp['id'],
-                'image_id': bp['image_id'],
-                'is_neutrino': bp['is_neutrino'],
-                'nu_id': bp['nu_id'],
-                'volume_id': bp['volume_id'],
-                'vertex': bp['vertex']
-            }
+            # info = {
+            #     'interaction_id': bp['id'],
+            #     'image_id': bp['image_id'],
+            #     'is_neutrino': bp['is_neutrino'],
+            #     'nu_id': bp['nu_id'],
+            #     'volume_id': bp['volume_id'],
+            #     'vertex': bp['vertex']
+            # }
+            info = copy.deepcopy(bp)
+            info['interaction_id'] = info.pop('id', -1)
+            for key in bp:
+                if key in SKIP_KEYS:
+                    info.pop(key)
             if use_particles:
                 particles = []
                 for p in result['truth_particles'][0]:
@@ -555,7 +606,7 @@ class InteractionBuilder(DataBuilder):
                     'points': pred_nonghost[mask][:, COORD_COLS],
                     'depositions': pred_nonghost[mask][:, VALUE_COL],
                     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL],
+                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL]
                 })
                 ia = TruthInteraction(**info)
             out.append(ia)
@@ -828,11 +879,13 @@ class FragmentBuilder(DataBuilder):
 # --------------------------Helper functions---------------------------
 
 def handle_empty_truth_particles(labels_noghost,  
-                                mask_noghost, 
-                                p, 
-                                entry, 
-                                verbose=False,
-                                unit_convert=None):
+                                 mask_noghost, 
+                                 p, 
+                                 entry, 
+                                 verbose=False,
+                                 unit_convert=None,
+                                 sed=None,
+                                 mask_sed=None):
     """
     Function for handling true larcv::Particle instances with valid 
     true nonghost voxels but with no predicted nonghost voxels.
@@ -853,32 +906,45 @@ def handle_empty_truth_particles(labels_noghost,
     -------
     particle: TruthParticle
     """
-    pid = int(p.id())
-    pdg = PDG_TO_PID.get(p.pdg_code(), -1)
-    is_primary = p.group_id() == p.parent_id()
+    id = int(p.id())
+    # pdg = PDG_TO_PID.get(p.pdg_code(), -1)
+    # is_primary = p.group_id() == p.parent_id()
+    is_primary = -1
     
     if unit_convert is None:
         f = lambda x: x
     else:
         f = unit_convert
 
-    semantic_type, interaction_id, nu_id = -1, -1, -1
+    semantic_type, interaction_id, nu_id, primary_id, pid = -1, -1, -1, -1, -1
     coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
     coords_noghost, depositions_noghost = np.empty((0,3)), np.array([])
+    sed_index, sed_points = np.array([]), np.empty((0,3))
     if np.count_nonzero(mask_noghost) > 0:
+        sed_points = sed[mask_sed][:, COORD_COLS]
+        sed_index = np.where(mask_sed)[0]
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
-        semantic_type, interaction_id, nu_id = get_truth_particle_labels(labels_noghost, 
-                                                                        mask_noghost, 
-                                                                        pid=pid, 
-                                                                        verbose=verbose)
+        truth_labels = get_truth_particle_labels(labels_noghost, 
+                                                 mask_noghost, 
+                                                 id=id, 
+                                                 verbose=verbose)
+        
+        semantic_type  = int(truth_labels[0])
+        interaction_id = int(truth_labels[1])
+        nu_id          = int(truth_labels[2])
+        pid            = int(truth_labels[3])
+        primary_id     = int(truth_labels[4])
+        is_primary     = int(primary_id) == 1
+        
         volume_id, cts = np.unique(labels_noghost[:, BATCH_COL][mask_noghost].astype(int), 
                                     return_counts=True)
         volume_id = int(volume_id[cts.argmax()])
-    particle = TruthParticle(group_id=pid,
+    particle = TruthParticle(group_id=id,
                              interaction_id=interaction_id,
                              nu_id=nu_id,
+                             pid=pid,
                              volume_id=volume_id,
                              image_id=entry,
                              semantic_type=semantic_type, 
@@ -891,7 +957,8 @@ def handle_empty_truth_particles(labels_noghost,
                              truth_depositions=np.empty(0, dtype=np.float32), #TODO
                              truth_depositions_MeV=depositions_noghost,
                              is_primary=is_primary,
-                             pid=pdg,
+                             sed_index=sed_index.astype(np.int64),
+                             sed_points=sed_points.astype(np.float32),
                              particle_asis=p,
                              start_point=-np.ones(3, dtype=np.float32),
                              end_point=-np.ones(3, dtype=np.float32))
@@ -907,7 +974,7 @@ def handle_empty_truth_particles(labels_noghost,
     return particle
 
 
-def get_truth_particle_labels(labels, mask, pid=-1, verbose=False):
+def get_truth_particle_labels(labels_nonghost, mask, id=-1, verbose=False):
     """
     Helper function for fetching true particle labels from 
     voxel label array. 
@@ -918,15 +985,17 @@ def get_truth_particle_labels(labels, mask, pid=-1, verbose=False):
         Predicted nonghost voxel label information
     mask: np.ndarray
         Voxel index mask
-    pid: int, optional
+    id: int, optional
         Unique id of this particle (for debugging)
     """
-    semantic_type, sem_counts = np.unique(labels[mask][:, -1].astype(int), 
+    
+    # Semantic Type
+    semantic_type, sem_counts = np.unique(labels_nonghost[mask][:, -1].astype(int), 
                                             return_counts=True)
     if semantic_type.shape[0] > 1:
         if verbose:
             print("Semantic Type of Particle {} is not "\
-                "unique: {}, {}".format(pid,
+                "unique: {}, {}".format(id,
                                         str(semantic_type),
                                         str(sem_counts)))
         perm = sem_counts.argmax()
@@ -934,29 +1003,55 @@ def get_truth_particle_labels(labels, mask, pid=-1, verbose=False):
     else:
         semantic_type = semantic_type[0]
     
-    interaction_id, int_counts = np.unique(labels[mask][:, 7].astype(int),
+    # Interaction ID
+    interaction_id, int_counts = np.unique(labels_nonghost[mask][:, 7].astype(int),
                                         return_counts=True)
     if interaction_id.shape[0] > 1:
         if verbose:
             print("Interaction ID of Particle {} is not "\
-                "unique: {}".format(pid, str(interaction_id)))
+                "unique: {}".format(id, str(interaction_id)))
         perm = int_counts.argmax()
         interaction_id = interaction_id[perm]
     else:
         interaction_id = interaction_id[0]
 
-    nu_id, nu_counts = np.unique(labels[mask][:, 8].astype(int),
+    # Neutrino ID
+    nu_id, nu_counts = np.unique(labels_nonghost[mask][:, 8].astype(int),
                                 return_counts=True)
     if nu_id.shape[0] > 1:
         if verbose:
             print("Neutrino ID of Particle {} is not "\
-                "unique: {}".format(pid, str(nu_id)))
+                "unique: {}".format(id, str(nu_id)))
         perm = nu_counts.argmax()
         nu_id = nu_id[perm]
     else:
         nu_id = nu_id[0]
-
-    return semantic_type, interaction_id, nu_id
+        
+    # Primary ID
+    primary_id, primary_counts = np.unique(labels_nonghost[mask][:, 11].astype(int),
+                                return_counts=True)
+    if primary_id.shape[0] > 1:
+        if verbose:
+            print("Primary ID of Particle {} is not "\
+                "unique: {}".format(id, str(primary_id)))
+        perm = primary_counts.argmax()
+        primary_id = primary_id[perm]
+    else:
+        primary_id = primary_id[0]
+        
+    # Primary ID
+    pid, pid_counts = np.unique(labels_nonghost[mask][:, 9].astype(int),
+                                return_counts=True)
+    if pid.shape[0] > 1:
+        if verbose:
+            print("Primary ID of Particle {} is not "\
+                "unique: {}".format(id, str(pid)))
+        perm = pid_counts.argmax()
+        pid = pid[perm]
+    else:
+        pid = pid[0]
+        
+    return semantic_type, interaction_id, nu_id, pid, primary_id
 
 
 def match_points_to_particles(ppn_points : np.ndarray,

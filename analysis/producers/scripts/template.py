@@ -2,8 +2,7 @@ from collections import OrderedDict
 
 from analysis.producers.decorator import write_to
 from analysis.classes.evaluator import FullChainEvaluator
-from analysis.classes.TruthInteraction import TruthInteraction
-from analysis.classes.Interaction import Interaction
+from analysis.classes.data import *
 from analysis.producers.logger import ParticleLogger, InteractionLogger
 from pprint import pprint
 
@@ -44,14 +43,14 @@ def run_inference(data_blob, res, **kwargs):
     units                 = kwargs.get('units', 'px')
 
     # FullChainEvaluator config
-    evaluator_cfg         = kwargs.get('evaluator_cfg', {})
+    # evaluator_cfg         = kwargs.get('evaluator_cfg', {})
     # Particle and Interaction processor names
     particle_fieldnames   = kwargs['logger'].get('particles', {})
     int_fieldnames        = kwargs['logger'].get('interactions', {})
 
     # Load data into evaluator
-    predictor = FullChainEvaluator(data_blob, res, 
-                                   evaluator_cfg=evaluator_cfg)
+    # predictor = FullChainEvaluator(data_blob, res, 
+    #                                evaluator_cfg=evaluator_cfg)
     image_idxs = data_blob['index']
     meta       = data_blob['meta'][0]
 
@@ -66,14 +65,14 @@ def run_inference(data_blob, res, **kwargs):
         }
 
         # 1. Match Interactions and log interaction-level information
-        if 'matched_interactions' in res:
-            matches, icounts = res['matched_interactions'][idx], res['interaction_match_counts'][idx]
-        else:
-            print("Running interaction matching...")
-            matches, icounts = predictor.match_interactions(idx,
-                matching_mode=matching_mode,
-                drop_nonprimary_particles=primaries,
-                return_counts=True)
+        # if 'matched_interactions' in res:
+        matches, icounts = res['matched_interactions'][idx], res['interaction_match_counts'][idx]
+        # else:
+        #     print("Running interaction matching...")
+        #     matches, icounts = predictor.match_interactions(idx,
+        #         matching_mode=matching_mode,
+        #         drop_nonprimary_particles=primaries,
+        #         return_counts=True)
 
         # pprint(matches)
         # assert False
@@ -84,14 +83,14 @@ def run_inference(data_blob, res, **kwargs):
 
         # We access the particle matching information, which is already
         # done by called match_interactions.
-        if 'matched_particles' in res:
-            pmatches, pcounts = res['matched_particles'][idx], res['particle_match_counts'][idx]
-        else:
-            print("Running particle matching...")
-            pmatches, pcounts = predictor.match_particles(idx,
-                matching_mode=matching_mode,
-                only_primaries=primaries,
-                return_counts=True)
+        # if 'matched_particles' in res:
+        pmatches, pcounts = res['matched_particles'][idx], res['particle_match_counts'][idx]
+        # else:
+        #     print("Running particle matching...")
+        #     pmatches, pcounts = predictor.match_particles(idx,
+        #         matching_mode=matching_mode,
+        #         only_primaries=primaries,
+        #         return_counts=True)
 
         # 2. Process interaction level information
         interaction_logger = InteractionLogger(int_fieldnames, meta=meta, units=units)
@@ -126,7 +125,15 @@ def run_inference(data_blob, res, **kwargs):
 
         # Loop over matched particle pairs
         for i, mparticles in enumerate(pmatches):
-            true_p, pred_p = mparticles[0], mparticles[1]
+            if matching_mode == 'true_to_pred':
+                true_p, pred_p = mparticles[0], mparticles[1]
+            elif matching_mode == 'pred_to_true':
+                pred_p, true_p = mparticles[0], mparticles[1]
+            else:
+                raise ValueError("Matching mode {} is not supported.".format(matching_mode))
+            
+            assert (type(true_p) is TruthParticle) or (true_p) is None
+            assert (type(pred_p) is Particle) or (pred_p) is None
 
             true_p_dict = particle_logger.produce(true_p, mode='true')
             pred_p_dict = particle_logger.produce(pred_p, mode='reco')

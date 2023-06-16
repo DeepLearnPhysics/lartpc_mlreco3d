@@ -51,7 +51,7 @@ class AnaToolsManager:
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
-        self.spatial_units = self.ana_config['analysis'].get('spatial_units', 'px')
+        self.convert_to_cm = self.ana_config['analysis'].get('convert_to_cm', False)
 
         # Initialize data product builders
         self.data_builders = None
@@ -62,7 +62,7 @@ class AnaToolsManager:
                 if builder_name not in SUPPORTED_BUILDERS:
                     msg = f"{builder_name} is not a valid data product builder!"
                     raise ValueError(msg)
-                builder = eval(builder_name)(spatial_units=self.spatial_units)
+                builder = eval(builder_name)(convert_to_cm=self.convert_to_cm)
                 self.builders[builder_name] = builder
 
         self._data_reader  = None
@@ -328,12 +328,14 @@ class AnaToolsManager:
         """
         if 'ParticleBuilder' in self.builders:
             if 'particles' not in result:
+                print("Building particles instead of loading...")
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
 
         if 'InteractionBuilder' in self.builders:
             if 'interactions' not in result:
+                print("Building interactions instead of loading...")
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
                 result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
@@ -382,10 +384,10 @@ class AnaToolsManager:
 
     def initialize_flash_manager(self):
         
-        if not self.spatial_units == 'cm':
-            msg = "Need to convert px to cm spatial units before running flash "\
-                "matching. Set spatial_units: cm in analysis config. "
-            raise AssertionError(msg)
+        # if not self.convert_to_cm == 'cm':
+        #     msg = "Need to convert px to cm spatial units before running flash "\
+        #         "matching. Set spatial_units: cm in analysis config. "
+        #     raise AssertionError(msg)
         
         # Only run once, to save time
         if not self.flash_manager_initialized:
@@ -408,10 +410,10 @@ class AnaToolsManager:
 
     def initialize_crt_tpc_manager(self):
         
-        if not self.spatial_units == 'cm':
-            msg = "Need to convert px to cm spatial units before running CRT "\
-                "matching. Set spatial_units: cm in analysis config. "
-            raise AssertionError(msg)
+        # if not self.convert_to_cm == 'cm':
+        #     msg = "Need to convert px to cm spatial units before running CRT "\
+        #         "matching. Set spatial_units: cm in analysis config. "
+        #     raise AssertionError(msg)
         
         # Only run once, to save time
         if not self.crt_tpc_manager_initialized:
@@ -580,7 +582,18 @@ class AnaToolsManager:
         self.logger_dict['forward_time'] = dt
         
         # 1-a. Convert units
-        if self.spatial_units == 'cm':
+        
+        # Dumb check for repeated coordinate conversion. TODO: Fix
+        example_coords = res['input_rescaled'][0][:, COORD_COLS]
+        rounding_error = (example_coords - example_coords.astype(int)).sum()
+        
+        if self.convert_to_cm and rounding_error > 1e-6:
+            msg = "It looks like the input data has coordinates already "\
+                "translated to cm from pixels, and you are trying to convert "\
+                "coordinates again. You might want to set convert_to_cm = False."
+            raise AssertionError(msg)
+        
+        if self.convert_to_cm:
             self.convert_pixels_to_cm(data, res)
 
         # 2. Build data representations'
@@ -643,6 +656,7 @@ class AnaToolsManager:
 
 
     def run(self):
+        print(self.max_iteration)
         for iteration in range(self.max_iteration):
             self.step(iteration)
             if self.profile:
