@@ -1,4 +1,4 @@
-import os, re, warnings
+import os, re, glob, warnings
 import torch
 from collections import defaultdict
 
@@ -404,6 +404,8 @@ class trainval(object):
         if model_paths: #self._model_path and self._model_path != '':
             #print(self._net.state_dict().keys())
             for module, model_path, model_name in model_paths:
+                if len(glob.glob(model_path)) > 1:
+                    continue
                 if not os.path.isfile(model_path):
                     raise ValueError('File not found: %s for module %s\n' % (model_path, module))
                 print('Restoring weights for %s from %s...' % (module,model_path))
