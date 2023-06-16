@@ -405,7 +405,7 @@ class trainval(object):
             #print(self._net.state_dict().keys())
             for module, model_path, model_name in model_paths:
                 if not os.path.isfile(model_path):
-                    if len(glob.glob(model_path):
+                    if len(glob.glob(model_path)):
                         continue
                     else:
                         raise ValueError('File not found: %s for module %s\n' % (model_path, module))
