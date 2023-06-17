@@ -416,7 +416,7 @@ class GNN(torch.nn.Module):
         # Add end points and/or local directions to node features, if requested
         if self.add_points or points is not None:
             if points is None:
-                points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
+                points = get_cluster_points_label(cluster_data, particles, clusts)
             x = torch.cat([x, points.float()], dim=1)
             result['start_points'] = [np.hstack([batch_ids[:,None], points[:,:3].detach().cpu().numpy()])]
             result['end_points'] = [np.hstack([batch_ids[:,None], points[:,3:].detach().cpu().numpy()])]
