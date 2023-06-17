@@ -1,20 +1,19 @@
 from copy import deepcopy
-from mlreco.utils.globals import COORD_COLS
 
 RULES = {
     'parse_sparse2d': ['tensor', None],
-    'parse_sparse3d': ['tensor', None, False, COORD_COLS],
-    'parse_sparse3d_ghost': ['tensor', None, False, COORD_COLS],
-    'parse_sparse3d_charge_rescaled': ['tensor', None, False, COORD_COLS],
+    'parse_sparse3d': ['tensor', None, False, True],
+    'parse_sparse3d_ghost': ['tensor', None, False, True],
+    'parse_sparse3d_charge_rescaled': ['tensor', None, False, True],
 
     'parse_cluster2d': ['tensor', None],
-    'parse_cluster3d': ['tensor', None, False, COORD_COLS],
-    'parse_cluster3d_charge_rescaled': ['tensor', None, False, COORD_COLS],
+    'parse_cluster3d': ['tensor', None, False, True],
+    'parse_cluster3d_charge_rescaled': ['tensor', None, False, True],
 
     'parse_particles': ['list'],
     'parse_neutrinos': ['list'],
-    'parse_particle_points': ['tensor', None, False, COORD_COLS],
-    'parse_particle_coords': ['tensor', None, False, COORD_COLS],
+    'parse_particle_points': ['tensor', None, False, True],
+    'parse_particle_coords': ['tensor', None, False, True],
     'parse_particle_graph': ['tensor', None],
     'parse_particle_singlep_pdg': ['tensor', None],
     'parse_particle_singlep_einit': ['tensor', None],

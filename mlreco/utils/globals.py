@@ -1,3 +1,4 @@
+import numpy as np
 from collections import defaultdict
 from larcv import larcv
 
@@ -5,7 +6,7 @@ from larcv import larcv
 BATCH_COL  = 0
 
 # Columns which specify the voxel coordinates in a sparse tensor
-COORD_COLS = (1,2,3)
+COORD_COLS = np.array([1,2,3])
 
 # Colum which specifies the first value of a voxel in a sparse tensor
 VALUE_COL  = 4
@@ -18,7 +19,7 @@ NU_COL     = 8
 PID_COL    = 9
 PSHOW_COL  = 10
 PGRP_COL   = 11
-VTX_COLS   = (12,13,14)
+VTX_COLS   = np.array([12,13,14])
 MOM_COL    = 15
 PART_COL   = 16 # TODO: change order
 

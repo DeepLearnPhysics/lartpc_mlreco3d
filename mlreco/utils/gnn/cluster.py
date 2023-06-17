@@ -428,11 +428,11 @@ def _get_cluster_points_label(data: nb.float64[:,:],
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
-        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c, COORD_COLS[0]:COORD_COLS[-1]+1])
+        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c][:, COORD_COLS])
         argmins  = np.empty(len(dist_mat), dtype=np.int64)
         for j in range(len(dist_mat)):
             argmins[j] = np.argmin(dist_mat[j])
-        points[i] = data[c][argmins, COORD_COLS[0]:COORD_COLS[-1]+1].reshape(-1)
+        points[i] = data[c][argmins][:, COORD_COLS].reshape(-1)
 
     return points
 
