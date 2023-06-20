@@ -528,7 +528,7 @@ def _get_cluster_dedxs(data: nb.float64[:,:],
     return dedxs
 
 
-@nb.njit(cache=True)
+# @nb.njit(cache=True)
 def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]):
     """
     Finds the start point of a cluster by:
@@ -555,6 +555,8 @@ def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]
 
     # Sort the voxel IDs by increasing order of curvature order
     curvs = [umbrella_curv(voxels, ids[0]), umbrella_curv(voxels, ids[1])]
+    curvs = np.array(curvs, dtype=np.int64)
+    ids = np.array(ids, dtype=np.int64)
     ids[np.argsort(curvs)]
 
     # Return extrema
@@ -628,7 +630,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     return mean
 
 
-@nb.njit(cache=True)
+# @nb.njit(cache=True)
 def umbrella_curv(voxels: nb.float64[:,:],
                   voxid: nb.int64) -> nb.float64:
     """

@@ -582,10 +582,18 @@ class AnaToolsManager:
         # 1-a. Convert units
         
         # Dumb check for repeated coordinate conversion. TODO: Fix
-        example_coords = res['input_rescaled'][0][:, COORD_COLS]
-        rounding_error = (example_coords - example_coords.astype(int)).sum()
+        if 'input_rescaled' in res: 
+            example_coords = res['input_rescaled'][0][:, COORD_COLS]
+        elif 'input_data' in data:
+            example_coords = data['input_data'][0][:, COORD_COLS]
+        else:
+            msg = "Must have some coordinate information 'input_rescaled' "\
+                "in res, or 'input_data' in data) to reconstruct quantities!"
+            raise KeyError(msg)
+            
+        rounding_error = (example_coords - example_coords.astype(int)).sum() 
         
-        if self.convert_to_cm and rounding_error > 1e-6:
+        if self.convert_to_cm and abs(rounding_error) > 1e-6:
             msg = "It looks like the input data has coordinates already "\
                 "translated to cm from pixels, and you are trying to convert "\
                 "coordinates again. You might want to set convert_to_cm = False."
