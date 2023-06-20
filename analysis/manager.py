@@ -118,9 +118,11 @@ class AnaToolsManager:
         else:
             # If there is a reader, simply load reconstructed data
             file_keys = self.ana_config['reader']['file_keys']
+            n_entry = self.ana_config['reader'].get('n_entry', -1)
+            n_skip = self.ana_config['reader'].get('n_skip', -1)
             entry_list = self.ana_config['reader'].get('entry_list', [])
             skip_entry_list = self.ana_config['reader'].get('skip_entry_list', [])
-            Reader = HDF5Reader(file_keys, entry_list, skip_entry_list, True)
+            Reader = HDF5Reader(file_keys, n_entry, n_skip, entry_list, skip_entry_list, to_larcv=True)
             self._data_reader = Reader
             self._reader_state = 'hdf5'
             self._set_iteration(Reader)

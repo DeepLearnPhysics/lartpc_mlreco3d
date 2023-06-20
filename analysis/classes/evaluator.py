@@ -32,7 +32,7 @@ class FullChainEvaluator(FullChainPredictor):
         matched_interactions = evaluator.match_interactions(entry)
     '''
     LABEL_TO_COLUMN = {
-        'segment': SEG_COL,
+        'segment': SHAPE_COL,
         'charge': VALUE_COL,
         'fragment': CLUST_COL,
         'group': GROUP_COL,

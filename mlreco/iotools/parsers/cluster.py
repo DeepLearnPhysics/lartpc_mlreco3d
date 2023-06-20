@@ -8,6 +8,8 @@ from .particles import parse_particles
 from .clean_data import clean_sparse_data
 from .label_data import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 
+from mlreco.utils.globals import UNKWN_SHP
+
 
 def parse_cluster2d(cluster_event):
     """
@@ -138,27 +140,31 @@ def parse_cluster3d(cluster_event,
     labels = OrderedDict()
     labels['cluster'] = np.arange(num_clusters)
     if add_particle_info:
-        assert particle_event is not None, "Must provide particle tree if particle information is included"
+        assert particle_event is not None,\
+                'Must provide particle tree if particle information is included'
+        num_particles = particle_event.size()
+        assert num_particles == num_clusters or num_particles == num_clusters-1,\
+                'The number of particles must be aligned with the number of clusters'
+
         particles     = list(particle_event.as_vector())
         particles_mpv = list(particle_mpv_event.as_vector()) if particle_mpv_event is not None else None
         neutrinos     = list(neutrino_event.as_vector()) if neutrino_event is not None else None
 
         particles_p   = parse_particles(particle_event, cluster_event)
-        
-        num_clusters = len(particles_p)
-        
-        labels['cluster'] = np.array([p.id() for p in particles])
-        labels['group']   = np.array([p.group_id() for p in particles])
-        labels['inter']   = get_interaction_ids(particles)
-        labels['nu']      = get_nu_ids(particles, labels['inter'], particles_mpv, neutrinos)
-        labels['type']    = get_particle_ids(particles, labels['nu'], type_include_mpr, type_include_secondary)
-        labels['pshower'] = get_shower_primary_ids(particles)
-        labels['pgroup']  = get_group_primary_ids(particles, labels['nu'], primary_include_mpr)
-        labels['vtx_x']   = np.array([p.ancestor_position().x() for p in particles_p])
-        labels['vtx_y']   = np.array([p.ancestor_position().y() for p in particles_p])
-        labels['vtx_z']   = np.array([p.ancestor_position().z() for p in particles_p])
-        labels['p']       = np.array([p.p()/1e3 for p in particles]) # In GeV
-        labels['shape']   = np.array([p.shape() for p in particles])
+
+        labels['cluster']  = np.array([p.id() for p in particles])
+        labels['group']    = np.array([p.group_id() for p in particles])
+        labels['inter']    = get_interaction_ids(particles)
+        labels['nu']       = get_nu_ids(particles, labels['inter'], particles_mpv, neutrinos)
+        labels['type']     = get_particle_ids(particles, labels['nu'], type_include_mpr, type_include_secondary)
+        labels['pshower']  = get_shower_primary_ids(particles)
+        labels['pgroup']   = get_group_primary_ids(particles, labels['nu'], primary_include_mpr)
+        labels['vtx_x']    = np.array([p.ancestor_position().x() for p in particles_p])
+        labels['vtx_y']    = np.array([p.ancestor_position().y() for p in particles_p])
+        labels['vtx_z']    = np.array([p.ancestor_position().z() for p in particles_p])
+        labels['p']        = np.array([p.p()/1e3 for p in particles]) # In GeV
+        labels['particle'] = np.array([p.id() for p in particles]) # TODO: change order
+        labels['shape']    = np.array([p.shape() for p in particles])
 
     # Loop over clusters, store info
     clusters_voxels, clusters_features = [], []
@@ -180,7 +186,8 @@ def parse_cluster3d(cluster_event,
             features = [value]
             for k, l in labels.items():
                 size = cluster.as_vector().size()
-                features.append(np.full(shape=(size), fill_value=l[i], dtype=np.float32))
+                value = l[i] if i < len(l) else (-1 if k != 'shape' else UNKWN_SHP)
+                features.append(np.full(shape=(size), fill_value=value, dtype=np.float32))
 
             # If requested, break cluster into pieces that do not touch each other
             if break_clusters:

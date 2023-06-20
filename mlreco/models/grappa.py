@@ -334,7 +334,9 @@ class GNN(torch.nn.Module):
         # Update result with a list of clusters for each batch id
         batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
         if not len(clusts):
-            return {**result, 'clusts': [[np.array([]) for _ in batches]]}
+            return {**result,
+                    'clusts':    [[np.array([]) for _ in batches]],
+                    'batch_ids': [np.array([])]}
 
         # If an event is missing from the input data - e.g., deghosting
         # erased everything (extreme case but possible if very few voxels)
@@ -348,8 +350,8 @@ class GNN(torch.nn.Module):
 
         batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
-        result['batch_ids'] = [batch_ids]
         result['clusts'] = [clusts_split]
+        result['batch_ids'] = [batch_ids]
         if self.edge_max_count > -1:
             _, cnts = np.unique(batch_ids, return_counts=True)
             if np.sum([c*(c-1) for c in cnts]) > 2*self.edge_max_count:
@@ -414,7 +416,7 @@ class GNN(torch.nn.Module):
         # Add end points and/or local directions to node features, if requested
         if self.add_points or points is not None:
             if points is None:
-                points = get_cluster_points_label(cluster_data, particles, clusts, coords_index=self.coords_index)
+                points = get_cluster_points_label(cluster_data, particles, clusts)
             x = torch.cat([x, points.float()], dim=1)
             result['start_points'] = [np.hstack([batch_ids[:,None], points[:,:3].detach().cpu().numpy()])]
             result['end_points'] = [np.hstack([batch_ids[:,None], points[:,3:].detach().cpu().numpy()])]

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
-from mlreco.utils.globals import *
+
+from mlreco.utils.globals import GROUP_COL, PSHOW_COL
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.evaluation import node_assignment, node_assignment_score, node_purity_mask
 
@@ -38,6 +39,7 @@ class NodePrimaryLoss(torch.nn.Module):
         # Set the loss
         self.batch_col = batch_col
         self.coords_col = coords_col
+        self.group_col = loss_config.get('group_col', GROUP_COL)
         self.primary_col = loss_config.get('primary_col', PSHOW_COL)
 
         self.loss = loss_config.get('loss', 'CE')
@@ -91,8 +93,7 @@ class NodePrimaryLoss(torch.nn.Module):
                 if not node_pred.shape[0]:
                     continue
                 clusts = out['clusts'][i][j]
-                clust_ids = get_cluster_label(labels, clusts)
-                group_ids = get_cluster_label(labels, clusts, column=6)
+                group_ids = get_cluster_label(labels, clusts, column=self.group_col)
                 primary_ids = get_cluster_label(labels, clusts, column=self.primary_col)
 
                 # If requested, relabel the group ids in the batch according to the group predictions
@@ -109,7 +110,7 @@ class NodePrimaryLoss(torch.nn.Module):
 
                 # If requested, remove groups that do not contain exactly one primary from the loss
                 if self.high_purity:
-                    valid_mask &= node_purity_mask(clust_ids, group_ids, primary_ids)
+                    valid_mask &= node_purity_mask(group_ids, primary_ids)
 
                 # Apply valid mask to nodes and their predictions
                 if not valid_mask.any(): continue
