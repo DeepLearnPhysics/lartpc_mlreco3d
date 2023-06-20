@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 import os
 
-from mlreco.iotools.readers import HDF5Reader
 
 class DataProductLoader(ABC):
     

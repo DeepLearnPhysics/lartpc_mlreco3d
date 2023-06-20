@@ -217,7 +217,7 @@ def edge_assignment_score(edge_index: nb.int64[:,:],
     """
     # If there is no edge, do not bother
     if not len(edge_index):
-        return np.empty((0,2), dtype=np.int64), np.zeros(n, dtype=np.int64), 0.
+        return np.empty((0,2), dtype=np.int64), np.arange(n, dtype=np.int64), 0.
 
     # Build an input adjacency matrix to constrain the edge selection to the input graph
     adj_mat = adjacency_matrix(edge_index, n)
@@ -309,8 +309,7 @@ def cluster_to_voxel_label(clusts: nb.types.List(nb.int64[:]),
 
 
 @nb.njit(cache=True)
-def node_purity_mask(clust_ids: nb.int64[:],
-                     group_ids: nb.int64[:],
+def node_purity_mask(group_ids: nb.int64[:],
                      primary_ids: nb.int64[:]) -> nb.boolean[:]:
     """
     Function which creates a mask that is False only for nodes
@@ -318,16 +317,16 @@ def node_purity_mask(clust_ids: nb.int64[:],
 
     Note: It is possible that the single true primary has been
     broken into several nodes. In that case, the primary is
-    also ambiguous, skip.
+    also ambiguous, skip. TODO: pick the most sensible primary
+    in that case, too restrictive otherwise.
 
     Args:
-        clust_ids (np.ndarray)  : (C) Array of cluster IDs
         group_ids (np.ndarray)  : (C) Array of cluster group IDs
         primary_ids (np.ndarray): (C) Array of cluster primary IDs
     Returns:
         np.ndarray: (E) High purity node mask
     """
-    purity_mask = np.zeros(len(clust_ids), dtype=np.bool_)
+    purity_mask = np.zeros(len(group_ids), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = group_ids == g
         if np.sum(group_mask) > 1 and np.sum(primary_ids[group_mask] == 1) == 1:
@@ -338,7 +337,7 @@ def node_purity_mask(clust_ids: nb.int64[:],
 
 @nb.njit(cache=True)
 def edge_purity_mask(edge_index: nb.int64[:,:],
-                     clust_ids: nb.int64[:],
+                     part_ids: nb.int64[:],
                      group_ids: nb.int64[:],
                      primary_ids: nb.int64[:]) -> nb.boolean[:]:
     """
@@ -351,7 +350,7 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
 
     Args:
         edge_index (np.ndarray) : (E,2) Incidence matrix
-        clust_ids (np.ndarray)  : (C) Array of cluster IDs
+        part_ids (np.ndarray)   : (C) Array of cluster particle IDs
         group_ids (np.ndarray)  : (C) Array of cluster group IDs
         primary_ids (np.ndarray): (C) Array of cluster primary IDs
     Returns:
@@ -360,7 +359,7 @@ def edge_purity_mask(edge_index: nb.int64[:,:],
     purity_mask = np.ones(len(edge_index), dtype=np.bool_)
     for g in np.unique(group_ids):
         group_mask = np.where(group_ids == g)[0]
-        if np.sum(primary_ids[group_mask]) != 1 and len(np.unique(clust_ids[group_mask][primary_ids[group_mask] == 1])) != 1:
+        if np.sum(primary_ids[group_mask]) != 1 and len(np.unique(part_ids[group_mask][primary_ids[group_mask] == 1])) != 1:
             edge_mask = np.empty(len(edge_index), dtype=np.bool_)
             for k, e in enumerate(edge_index):
                 edge_mask[k] = (e[0] == group_mask).any() & (e[1] == group_mask).any()

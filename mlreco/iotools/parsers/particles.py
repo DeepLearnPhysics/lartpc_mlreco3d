@@ -4,7 +4,7 @@ from larcv import larcv
 from mlreco.utils.globals import PDG_TO_PID
 from mlreco.utils.ppn import get_ppn_info
 
-def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
+def parse_particles(particle_event, sparse_event=None, cluster_event=None, voxel_coordinates=True):
     """
     A function to copy construct & return an array of larcv::Particle.
 
@@ -24,6 +24,7 @@ def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     Configuration
     -------------
     particle_event: larcv::EventParticle
+    sparse_event: larcv::EventSparseTensor3D
     cluster_event: larcv::EventClusterVoxel3D
         to translate coordinates
     voxel_coordinates: bool
@@ -35,8 +36,8 @@ def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     """
     particles = [larcv.Particle(p) for p in particle_event.as_vector()]
     if voxel_coordinates:
-        assert cluster_event is not None
-        meta = cluster_event.meta()
+        assert (sparse_event is not None) ^ (cluster_event is not None)
+        meta = sparse_event.meta() if sparse_event is not None else cluster_event.meta()
         funcs = ['first_step', 'last_step', 'position', 'end_position', 'parent_position', 'ancestor_position']
         for p in particles:
             for f in funcs:
@@ -55,7 +56,7 @@ def parse_particles(particle_event, cluster_event=None, voxel_coordinates=True):
     return particles
 
 
-def parse_neutrinos(neutrino_event, cluster_event=None, voxel_coordinates=True):
+def parse_neutrinos(neutrino_event, sparse_event=None, cluster_event=None, voxel_coordinates=True):
     """
     A function to copy construct & return an array of larcv::Neutrino.
 
@@ -75,6 +76,7 @@ def parse_neutrinos(neutrino_event, cluster_event=None, voxel_coordinates=True):
     Configuration
     -------------
     neutrino_pcluster: larcv::EventNeutrino
+    sparse_event: larcv::EventSparseTensor3D
     cluster3d_pcluster: larcv::EventClusterVoxel3D
         to translate coordinates
     voxel_coordinates: bool
@@ -86,8 +88,8 @@ def parse_neutrinos(neutrino_event, cluster_event=None, voxel_coordinates=True):
     """
     neutrinos = [larcv.Neutrino(p) for p in neutrino_event.as_vector()]
     if voxel_coordinates:
-        assert cluster_event is not None
-        meta = cluster_event.meta()
+        assert (sparse_event is not None) ^ (cluster_event is not None)
+        meta = sparse_event.meta() if sparse_event is not None else cluster_event.meta()
         funcs = ['position']
         for p in neutrinos:
             for f in funcs:

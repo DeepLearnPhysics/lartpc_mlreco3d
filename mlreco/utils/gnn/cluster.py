@@ -6,6 +6,7 @@ from typing import List
 
 import mlreco.utils.numba_local as nbl
 from mlreco.utils.decorators import numbafy
+from mlreco.utils.globals import BATCH_COL, COORD_COLS, PART_COL
 
 
 @numbafy(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
@@ -389,8 +390,8 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
     return feats
 
 
-@numbafy(cast_args=['data','particles'], list_args=['clusts','coords_index'], keep_torch=True, ref_arg='data')
-def get_cluster_points_label(data, particles, clusts, random_order=True, batch_col=0, coords_index=[1, 4]):
+@numbafy(cast_args=['data','particles'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_points_label(data, particles, clusts, random_order=True):
     """
     Function that gets label points for each cluster.
     Returns start point of primary shower fragment twice if shower, delta or Michel
@@ -405,37 +406,33 @@ def get_cluster_points_label(data, particles, clusts, random_order=True, batch_c
     Returns:
         np.ndarray: (N,6) cluster-wise start and end points (in RANDOMIZED ORDER by default)
     """
-    return _get_cluster_points_label(data, particles, clusts, random_order,
-                                    batch_col=batch_col,
-                                    coords_index=coords_index)
+    return _get_cluster_points_label(data, particles, clusts, random_order)
 
 @nb.njit(cache=True)
 def _get_cluster_points_label(data: nb.float64[:,:],
                               particles: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:]),
-                              random_order: nb.boolean = True,
-                              batch_col: nb.int64 = 0,
-                              coords_index: nb.types.List(nb.int64[:]) = [1, 4]) -> nb.float64[:,:]:
+                              random_order: nb.boolean = True) -> nb.float64[:,:]:
 
     # Get start and end points (one and the same for all but track class)
     batch_ids = _get_cluster_batch(data, clusts)
     points = np.empty((len(clusts), 6), dtype=data.dtype)
     for b in np.unique(batch_ids):
-        batch_particles = particles[particles[:,batch_col] == b]
+        batch_particles = particles[particles[:, BATCH_COL] == b]
         for i in np.where(batch_ids == b)[0]:
             c = clusts[i]
-            clust_ids = np.unique(data[c, 5]).astype(np.int64)
-            minid = np.argmin(batch_particles[clust_ids,-2])
+            clust_ids = np.unique(data[c, PART_COL]).astype(np.int64)
+            minid = np.argmin(batch_particles[clust_ids, -2])
             order = np.arange(6) if (np.random.choice(2) or not random_order) else np.array([3, 4, 5, 0, 1, 2])
             points[i] = batch_particles[clust_ids[minid]][order+1] # The first column is the batch ID
 
     # Bring the start points to the closest point in the corresponding cluster
     for i, c in enumerate(clusts):
-        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c,coords_index[0]:coords_index[1]])
+        dist_mat = nbl.cdist(points[i].reshape(-1,3), data[c][:, COORD_COLS])
         argmins  = np.empty(len(dist_mat), dtype=np.int64)
         for j in range(len(dist_mat)):
             argmins[j] = np.argmin(dist_mat[j])
-        points[i] = data[c][argmins, coords_index[0]:coords_index[1]].reshape(-1)
+        points[i] = data[c][argmins][:, COORD_COLS].reshape(-1)
 
     return points
 

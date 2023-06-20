@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+
+from mlreco.utils.globals import CLUST_COL, GROUP_COL, PART_COL, PSHOW_COL
 from mlreco.utils.gnn.cluster import get_cluster_label
 from mlreco.utils.gnn.network import get_fragment_edges
 from mlreco.utils.gnn.evaluation import edge_assignment, edge_assignment_from_graph, edge_purity_mask
@@ -18,7 +20,6 @@ class EdgeChannelLoss(torch.nn.Module):
         grappa_loss:
           edge_loss:
             name:           : channel
-            source_col      : <column in the label data that specifies the source node ids of each voxel (default 5)>
             target_col      : <column in the label data that specifies the target group ids of each voxel (default 6)>
             batch_col       : <column in the label data that specifies the batch ids of each voxel (default 3)>
             loss            : <loss function: 'CE' or 'MM' (default 'CE')>
@@ -41,9 +42,9 @@ class EdgeChannelLoss(torch.nn.Module):
         self.batch_col = batch_col
         self.coords_col = coords_col
 
-        self.source_col = loss_config.get('source_col', 5)
-        self.target_col = loss_config.get('target_col', 6)
-        self.primary_col = loss_config.get('primary_col', 10)
+        self.target_col = loss_config.get('target_col', GROUP_COL)
+        self.primary_col = loss_config.get('primary_col', PSHOW_COL)
+        self.particle_col = loss_config.get('particle_col', PART_COL)
 
         # Set the loss
         self.loss = loss_config.get('loss', 'CE')
@@ -102,8 +103,8 @@ class EdgeChannelLoss(torch.nn.Module):
                     continue
                 edge_index = out['edge_index'][i][j]
                 clusts     = out['clusts'][i][j]
-                clust_ids  = get_cluster_label(labels, clusts, self.source_col)
                 group_ids  = get_cluster_label(labels, clusts, self.target_col)
+                part_ids   = get_cluster_label(labels, clusts, self.particle_col)
 
                 # If a cluster target is -1, none of its edges contribute to the loss
                 valid_clust_mask = group_ids > -1
@@ -112,7 +113,7 @@ class EdgeChannelLoss(torch.nn.Module):
                 # If high purity is requested, remove edges in groups without a single primary
                 if self.high_purity:
                     primary_ids  = get_cluster_label(labels, clusts, self.primary_col)
-                    valid_mask  &= edge_purity_mask(edge_index, clust_ids, group_ids, primary_ids)
+                    valid_mask  &= edge_purity_mask(edge_index, part_ids, group_ids, primary_ids)
 
                 # Apply valid mask to edges and their predictions
                 if not valid_mask.any(): continue
@@ -155,9 +156,9 @@ class EdgeChannelLoss(torch.nn.Module):
                     if not len(edge_pred):
                         continue
                 elif 'particle_forest' in self.target:
-                    clust_ids = get_cluster_label(labels, clusts, self.source_col)
+                    part_ids = get_cluster_label(labels, clusts, self.particle_col)
                     subgraph = graph[i][graph[i][:, self.batch_col] == j, self.coords_col[0]:self.coords_col[0]+2]
-                    true_edge_index = get_fragment_edges(subgraph, clust_ids)
+                    true_edge_index = get_fragment_edges(subgraph, part_ids)
                     edge_assn = edge_assignment_from_graph(edge_index, true_edge_index)
                 else:
                     raise ValueError('Prediction target not recognized:', self.target)

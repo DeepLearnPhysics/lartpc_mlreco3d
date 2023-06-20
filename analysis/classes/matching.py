@@ -268,7 +268,7 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
         else:
             matched = particles_y[select_idx]
             px._match_counts[matched.id] = intersections[j]
-            matched._match_counts[px.id] = intersections[j]
+            # matched._match_counts[px.id] = intersections[j]
             key = (px.id, matched.id)
             matches[key] = (px, matched)
             px.matched = True
@@ -287,33 +287,10 @@ def match_interactions_fn(ints_x : List[Interaction],
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
-    assert value_matrix.shape == (len(ints_y), len(ints_x))
-    
-    idx = value_matrix.argmax(axis=0)
-    intersections = np.atleast_1d(value_matrix.max(axis=0))
-
-    matches = OrderedDict()
-    out_counts = []
-    
-    # For each particle in x, choose one in y
-    for j, px in enumerate(ints_x):
-        select_idx = idx[j]
-        out_counts.append(overlap_matrix[select_idx, j])
-        if intersections[j] <= min_overlap:
-            key = (px.id, None)
-            matches[key] = (px, None)
-            px.matched = False
-        else:
-            matched = ints_y[select_idx]
-            px._match_counts[matched.id] = intersections[j]
-            matched._match_counts[px.id] = intersections[j]
-            key = (px.id, matched.id)
-            matches[key] = (px, matched)
-            px.matched = True
-            matched.matched = True
-
-    out_counts = np.array(out_counts)
-    return matches, out_counts
+    return match_particles_fn(ints_x, ints_y, 
+                              value_matrix=value_matrix, 
+                              overlap_matrix=overlap_matrix, 
+                              min_overlap=min_overlap)
 
 
 def group_particles_to_interactions_fn(particles : List[Particle],
@@ -369,3 +346,32 @@ def check_particle_matches(loaded_particles, clear=False):
     match = match[perm]
 
     return match, match_counts
+
+def generate_match_pairs(truth, reco, prefix='matches'):
+    out = {
+        prefix+'_t2r': [],
+        prefix+'_r2t': [],
+        prefix+'_t2r_values': [],
+        prefix+'_r2t_values': []
+    }
+    true_dict = {p.id : p for p in truth}
+    reco_dict = {p.id : p for p in reco}
+    for p in truth:
+        if len(p.match) == 0:
+            pair = (p, None)
+            out[prefix+'_t2r'].append(pair)
+            out[prefix+'_t2r_values'].append(-1)
+        for i, reco_id in enumerate(p.match):
+            pair = (p, reco_dict[reco_id])
+            out[prefix+'_t2r'].append(pair)
+            out[prefix+'_t2r_values'].append(p.match_counts[i])
+    for p in reco:
+        if len(p.match) == 0:
+            pair = (p, None)
+            out[prefix+'_r2t'].append(pair)
+            out[prefix+'_r2t_values'].append(-1)
+        for i, true_id in enumerate(p.match):
+            pair = (p, true_dict[true_id])
+            out[prefix+'_r2t'].append(pair)
+            out[prefix+'_r2t_values'].append(p.match_counts[i])
+    return out

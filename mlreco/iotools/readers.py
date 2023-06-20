@@ -10,7 +10,7 @@ class HDF5Reader:
     More documentation to come.
     '''
 
-    def __init__(self, file_keys, entry_list=[], skip_entry_list=[], to_larcv=False):
+    def __init__(self, file_keys, n_entry=-1, n_skip=-1, entry_list=[], skip_entry_list=[], to_larcv=False):
         '''
         Load up the HDF5 file.
 
@@ -18,6 +18,10 @@ class HDF5Reader:
         ----------
         file_paths : list
             List of paths to the HDF5 files to be read
+        n_entry: int, optional
+            Maximum number of entries to load
+        n_skip: int, optional
+            Number of entries to skip at the beginning
         entry_list: list(int), optional
             Entry IDs to be accessed. If not specified, expose all entries
         skip_entry_list: list(int), optional
@@ -43,6 +47,7 @@ class HDF5Reader:
             with h5py.File(path, 'r') as file:
                 # Check that there are events in the file and the storage mode
                 assert 'events' in file, 'File does not contain an event tree'
+
                 split_groups = 'data' in file and 'result' in file
                 assert self.split_groups is None or self.split_groups == split_groups,\
                         'Cannot load files with different storing schemes'
@@ -52,10 +57,11 @@ class HDF5Reader:
                 self.file_index.append(i*np.ones(len(file['events']), dtype=np.int32))
 
                 print('Registered', path)
+
         self.file_index = np.concatenate(self.file_index)
 
         # Build an entry index to access, modify file index accordingly
-        self.entry_index = self.get_entry_list(entry_list, skip_entry_list)
+        self.entry_index = self.get_entry_list(n_entry, n_skip, entry_list, skip_entry_list)
 
         # Set whether or not to initialize LArCV objects as such
         self.to_larcv = to_larcv
@@ -124,12 +130,16 @@ class HDF5Reader:
         else:
             return dict(data_blob, **result_blob)
 
-    def get_entry_list(self, entry_list, skip_entry_list):
+    def get_entry_list(self, n_entry, n_skip, entry_list, skip_entry_list):
         '''
         Create a list of events that can be accessed by `self.get`
 
         Parameters
         ----------
+        n_entry: int, optional
+            Maximum number of entries to load
+        n_skip: int, optional
+            Number of entries to skip at the beginning
         entry_list : list
             List of integer entry IDs to add to the index
         skip_entry_list : list
@@ -140,24 +150,42 @@ class HDF5Reader:
         list
             List of integer entry IDs in the index
         '''
+        # Make sure the parameters are sensible
+        assert not ((n_entry > 0 or n_skip > 0) and (entry_list or skip_entry_list)),\
+                'Cannot specify both n_entry or n_skip at the same time as entry_list or skip_entry_list'
+        assert min(0, n_entry) + min(0, n_skip) < self.num_entries,\
+                'Mismatch between n_entry, n_skip and the available number of entries'
+        assert not len(entry_list) or not len(skip_entry_list),\
+                'Cannot specify both entry_list and skip_entry_list at the same time'
+
+        # Create a list of entry indices within each file in the file list
         entry_index = np.empty(self.num_entries, dtype=int)
         for i in np.unique(self.file_index):
             file_mask = np.where(self.file_index==i)[0]
             entry_index[file_mask] = np.arange(len(file_mask))
 
-        if skip_entry_list:
-            assert np.all(np.asarray(entry_list) < self.num_entries)
-            entry_list = set(entry_list)
-            for s in skip_entry_list:
-                if s in entry_list:
-                    entry_list.pop(s)
-            entry_list = list(entry_list)
+        # Create a list of entries to be loaded based on the function parameters
+        if n_entry > 0 or n_skip > 0:
+            entry_list = np.arange(self.num_entries)
+            if n_skip > 0: entry_list = entry_list[n_skip:]
+            if n_entry > 0: entry_list = entry_list[:n_entry]
+        elif len(entry_list):
+            assert np.all(np.asarray(entry_list) < self.num_entries),\
+                    'Values in entry_list outside of bounds'
+        elif len(skip_entry_list):
+            assert np.all(np.asarray(skip_entry_list) < self.num_entries),\
+                    'Values in skip_entry_list outside of bounds'
+            entry_mask = np.ones(self.num_entries, dtype=bool)
+            entry_mask[skip_entry_list] = False
+            entry_list = np.where(entry_mask)[0]
 
-        if entry_list:
+        # Apply entry list to the indexes
+        if len(entry_list):
             entry_index = entry_index[entry_list]
             self.file_index = self.file_index[entry_list]
 
         assert len(entry_index), 'Must at least have one entry to load'
+
         return entry_index
 
     def load_key(self, file, event, data_blob, result_blob, key, nested):
