@@ -43,13 +43,13 @@ def run_flash_matching(data_dict, result_dict,
                                       opflashes,
                                       volume=0,
                                       restrict_interactions=[], 
-                                      cache=True)
+                                      cache=False)
     fmatches_W = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=1,
                                       restrict_interactions=[],
-                                      cache=True)
+                                      cache=False)
 
     flash_dict_E = {}
     for ia, flash, match in fmatches_E:
