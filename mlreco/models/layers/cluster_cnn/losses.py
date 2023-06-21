@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from mlreco.utils import local_cdist
+from mlreco.utils.globals import SHAPE_LABELS
 from mlreco.models.layers.cluster_cnn.losses.lovasz import lovasz_hinge_flat
 from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 from collections import defaultdict
@@ -133,8 +134,10 @@ class EmbeddingLoss(nn.Module):
             loss[i] = computed DLoss for semantic class <i>.
             acc_segs (list): list of computed clustering accuracy for each semantic class.
         '''
-        loss = defaultdict(list)
-        accuracy = defaultdict(float)
+        loss = { 'mask_loss_{}'.format(key) : [] for key in SHAPE_LABELS.keys()}
+        loss['loss'], loss['mask_loss'], loss['smoothing_loss'] = [], [], []
+        accuracy = { 'accuracy_{}'.format(key) : -1 for key in SHAPE_LABELS.keys()}
+        # accuracy = defaultdict(float)
         semantic_classes = slabels.unique()
         for sc in semantic_classes:
             if int(sc) == 4:
@@ -181,11 +184,22 @@ class EmbeddingLoss(nn.Module):
                     embedding_batch, margins_batch,
                     slabels_batch, clabels_batch)
                 for key, val in loss_class.items():
-                    loss[key].append(sum(val) / len(val))
+                    if len(val) > 0:
+                        loss[key].append(sum(val) / len(val))
+                    else:
+                        loss[key].append(0.0)
+                acc_averaged = 0.0
+                acc_counts = 0
                 for s, acc in acc_class.items():
-                    accuracy[s].append(acc)
-                acc = sum(acc_class.values()) / len(acc_class.values())
-                accuracy['accuracy'].append(acc)
+                    if acc >= 0:
+                        accuracy[s].append(acc)
+                        acc_averaged += acc
+                        acc_counts += 1
+                if acc_counts > 0:
+                    acc_averaged = acc_averaged / acc_counts
+                else:
+                    acc_averaged = 0.0
+                accuracy['accuracy'].append(acc_averaged)
 
         loss_avg = {}
         acc_avg = defaultdict(float)
@@ -198,5 +212,7 @@ class EmbeddingLoss(nn.Module):
         res = {}
         res.update(loss_avg)
         res.update(acc_avg)
+        
+        print(res)
 
         return res
