@@ -91,24 +91,27 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
     
     G = nx.DiGraph()
     edges = []
+    graph = data_dict['graph']
+    particles = result_dict['truth_particles']
     
     for p in particles:
         G.add_node(p.id, attr=getattr(p, mode))
     
     for p in particles:
-        parent_to_child = graph[graph[:, 0] == p.id]
+        parent_to_child = graph[graph[:, 1] == p.id]
         for e in parent_to_child:
-            if e[1] in G.nodes:
-                edges.append(tuple(e))
+            if e[2] in G.nodes:
+                # print(e)
+                edges.append((int(e[1]), int(e[2])))
     G.add_edges_from(edges)
     
     for p in particles:
         successors = list(G.successors(p.id))
-        for succ in successors:
-            counter = Counter([G.nodes[succ]['attr'] for succ in successors])
+        counter = Counter()
+        counter.update([G.nodes[succ]['attr'] for succ in successors])
         for key, val in counter.items():
             p._children_counts[key] = val
-    return G
+    return {}
 
 
 @post_processing(data_capture=['meta'], 
