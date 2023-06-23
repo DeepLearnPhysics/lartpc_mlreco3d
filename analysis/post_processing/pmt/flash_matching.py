@@ -7,7 +7,8 @@ from mlreco.utils.globals import *
                  result_capture=['interactions'])
 def run_flash_matching(data_dict, result_dict, 
                        fm=None,
-                       opflash_keys=[]):
+                       opflash_keys=[],
+                       cache=True):
     """
     Post processor for running flash matching using OpT0Finder.
     
@@ -43,13 +44,13 @@ def run_flash_matching(data_dict, result_dict,
                                       opflashes,
                                       volume=0,
                                       restrict_interactions=[], 
-                                      cache=False)
+                                      cache=cache)
     fmatches_W = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,
                                       volume=1,
                                       restrict_interactions=[],
-                                      cache=False)
+                                      cache=cache)
 
     flash_dict_E = {}
     for ia, flash, match in fmatches_E:
@@ -58,7 +59,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
+        ia.flash_hypothesis = float(np.array(match.hypothesis, dtype=np.float64).sum())
         
     flash_dict_W = {}
     for ia, flash, match in fmatches_W:
@@ -67,7 +68,7 @@ def run_flash_matching(data_dict, result_dict,
         ia.flash_time = float(flash.time())
         ia.flash_total_pE = float(flash.TotalPE())
         ia.flash_id = int(flash.id())
-        ia.flash_hypothesis = float(np.array(match.hypothesis).sum())
+        ia.flash_hypothesis = float(np.array(match.hypothesis, dtype=np.float64).sum())
 
     print("Done flash matching.")
     return {}

@@ -66,7 +66,7 @@ def particle_direction(data_dict,
     return update_dict
 
 
-@post_processing(data_capture=[],
+@post_processing(data_capture=['graph'],
                  result_capture=['truth_particles'])
 def count_children(data_dict, result_dict, mode='semantic_type'):
     """Post-processor for counting the number of children of a given particle,
@@ -92,21 +92,23 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
     G = nx.DiGraph()
     edges = []
     
-    for p in result_dict['truth_particles']:
+    for p in particles:
         G.add_node(p.id, attr=getattr(p, mode))
-    for p in result_dict['truth_particles']:
-        parent = p.asis.parent_id()
-        if parent in G:
-            edges.append((parent, p.id))
+    
+    for p in particles:
+        parent_to_child = graph[graph[:, 0] == p.id]
+        for e in parent_to_child:
+            if e[1] in G.nodes:
+                edges.append(tuple(e))
     G.add_edges_from(edges)
     
-    for p in result_dict['truth_particles']:
+    for p in particles:
         successors = list(G.successors(p.id))
-        counter = Counter([G.nodes[succ]['attr'] for succ in successors])
+        for succ in successors:
+            counter = Counter([G.nodes[succ]['attr'] for succ in successors])
         for key, val in counter.items():
             p._children_counts[key] = val
-            
-    return {}
+    return G
 
 
 @post_processing(data_capture=['meta'], 
