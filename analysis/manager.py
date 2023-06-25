@@ -162,6 +162,12 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
+
+
+    @staticmethod
+    def pixel_to_cm(arr, meta):
+        arr[:, COORD_COLS] = pixel_to_cm(arr[:, COORD_COLS], meta)
+        return arr
     
 
     def convert_pixels_to_cm(self, data, result):
@@ -197,10 +203,10 @@ class AnaToolsManager:
         
         for key, val in data.items():
             if key in data_has_voxels:
-                data[key] = [pixel_to_cm(arr, meta) for arr in val]
+                data[key] = [self.pixel_to_cm(arr, meta) for arr in val]
         for key, val in result.items():
             if key in result_has_voxels:
-                result[key] = [pixel_to_cm(arr, meta) for arr in val]
+                result[key] = [self.pixel_to_cm(arr, meta) for arr in val]
     
     
     def _build_reco_reps(self, data, result):
