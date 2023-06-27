@@ -2,17 +2,37 @@ import numpy as np
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
+def high_contrast_colors():
+    '''
+    Produces a list of 48 easily distinguishable colors.
+
+    Returns
+    -------
+    List[str]
+        List of easily distinguishable plotly colors
+    '''
+    import plotly.express as px
+    
+    return np.concatenate([px.colors.qualitative.Dark24, px.colors.qualitative.Light24])
 
 def high_contrast_colorscale():
-    import plotly.express as px
+    '''
+    Produces a discrete plotly colorscale based on 48 easily
+    distinguishable colors.
+
+    Returns
+    -------
+    List[[float, str]]
+        List of colorscale boundaries and colors
+    '''
+    colors = high_contrast_colors()
+    step = 1./len(colors)
+
     colorscale = []
-    step = 1./48
-    for i, c in enumerate(px.colors.qualitative.Dark24):
+    for i, c in enumerate(colors):
         colorscale.append([i*step, c])
         colorscale.append([(i+1)*step, c])
-    for i, c in enumerate(px.colors.qualitative.Light24):
-        colorscale.append([(i+24)*step, c])
-        colorscale.append([(i+25)*step, c])
+
     return colorscale
 
 
