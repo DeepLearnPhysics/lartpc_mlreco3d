@@ -13,6 +13,8 @@ def box_trace(lower, upper, draw_faces=False, **kwargs):
         (3) Vector of lower boundaries in x, z and z
     upper : np.ndarray
         (3) Vector of upper boundaries in x, z and z
+    draw_faces : bool, default False
+        Weather or not to draw the box faces, or only the edges
     **kwargs : dict, optional
         List of additional arguments to pass to plotly.graph_objs.Scatter3D or
         plotly.graph_objs.Mesh3D, depending on the `draw_faces` parameter.
@@ -69,18 +71,20 @@ def box_trace(lower, upper, draw_faces=False, **kwargs):
 
 def box_traces(lowers, uppers, draw_faces=False, color=None, hovertext=None, **kwargs):
     '''
-    Function which produces a list of plotly traces ofboxes given a list of
-    lower bounds and upper bounds in x, y and z.
+    Function which produces a list of plotly traces of boxes
+    given a list of lower bounds and upper bounds in x, y and z.
 
     Parameters
     ----------
-    lower : np.ndarray
+    lowers : np.ndarray
         (N, 3) List of vector of lower boundaries in x, z and z
-    upper : np.ndarray
+    uppers : np.ndarray
         (N, 3) List of vector of upper boundaries in x, z and z
-    color : Union[int, str, np.ndarray]
+    draw_faces : bool, default False
+        Weather or not to draw the box faces, or only the edges
+    color : Union[int, str, np.ndarray], optional
         Color of boxes or list of color of boxes
-    hovertext : Union[int, str, np.ndarray]
+    hovertext : Union[int, str, np.ndarray], optional
         Text associated with every box or each box
     **kwargs : dict, optional
         List of additional arguments to pass to plotly.graph_objs.Scatter3D or
@@ -107,36 +111,44 @@ def box_traces(lowers, uppers, draw_faces=False, color=None, hovertext=None, **k
     return traces
 
 
-def scatter_boxes(coords, dimensions=[1.,1.,1.], color='orange', opacity=0.8, hovertext=None, colorscale=None, **kwargs):
+def scatter_boxes(coords, dimensions=[1.,1.,1.], draw_faces=True, color='orange', opacity=0.8, hovertext=None, **kwargs):
     """
-    Produces go.Mesh3d object to be plotted in plotly
-    - coords is a list of boxes coordinates (Nx3 matrix)
+    Function which produces a list of plotly traces of boxes
+    given a list of coordinates and a box dimension.
+
+    This function assumes that the coordinates are in a space
+    where an offset of (1, 1, 1) corresponds to an offset of
+    (b_x, b_y, b_z), with the latter the dimension of the boxes
+    along the three axes. This can be used to represent the PPN
+    regions of interest in a space compressed by a factor
+    (b_x, b_y, b_z) from the original image resolution.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        (N, 3) Coordinates of in multiples of box lengths in each dimension
+    dimensions : np.ndarray
+        (3) Dimensions of the box in each dimension, i.e. (b_x, b_y, b_z)
+    draw_faces : bool, default True
+        Weather or not to draw the box faces, or only the edges
+    color : Union[int, str, np.ndarray], default 'orange'
+        Color of boxes or list of color of boxes
+    hovertext : Union[int, str, np.ndarray], optional
+        Text associated with every box or each box
+    **kwargs : dict, optional
+        List of additional arguments to pass to plotly.graph_objs.Scatter3D or
+        plotly.graph_objs.Mesh3D, depending on the `draw_faces` parameter.
+
+    Returns
+    -------
+    Union[List[plotly.graph_objs.Scatter3D], List[plotly.graph_objs.Mesh3D]]
+        Box traces
     """
-    base_x = np.array([0, 0, 1, 1, 0, 0, 1, 1]) * boxesize[0]
-    base_y = np.array([0, 1, 1, 0, 0, 1, 1, 0]) * boxesize[1]
-    base_z = np.array([0, 0, 0, 0, 1, 1, 1, 1]) * boxesize[2]
-    trace = []
-    cmin, cmax = None, None
-    if not isinstance(color, str):
-        cmin = min(color)
-        cmax = max(color)
-    for i in range(len(coords)):
-        trace.append(
-                go.Mesh3d(
-                    x=(coords[i][0]-0.5) * boxesize[0] + base_x,
-                    y=(coords[i][1]-0.5) * boxesize[1] + base_y,
-                    z=(coords[i][2]-0.5) * boxesize[2] + base_z,
-                    i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-                    j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-                    k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-                    opacity=opacity,
-                    color=color if isinstance(color, str) else color[i],
-                    colorscale=colorscale,
-                    cmin=cmin,
-                    cmax=cmax,
-                    hoverinfo=['x','y','z'] if hovertext is None else ['x', 'y', 'z','text'],
-                    hovertext=hovertext,
-                    **kwargs
-                    )
-                )
-    return trace
+    # Check the input
+    assert len(dimensions) == 3, 'Must specify three dimensions for the box size'
+
+    # Compute the lower and upper boundaries
+    lowers = coords * np.asarray(dimensions)
+    uppers = (coords + 1.) * np.asarray(dimensions)
+
+    return box_traces(lowers, uppers, draw_faces, color, hovertext, **kwargs)
