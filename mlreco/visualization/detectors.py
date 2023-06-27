@@ -5,7 +5,7 @@ from mlreco.utils import cm_to_pixel
 from .boxes import box_traces
 
 
-def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, shared_legend=True, legend_prefix='Detector', color='rgba(0,0,0,0.150)',  **kwargs):
+def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, shared_legend=True, legend_prefix='Detector', color='rgba(0,0,0,0.150)', linewidth=2, **kwargs):
     '''
     Function which takes loads a file with detector boundaries and
     produces a list of traces which represent them in a 3D event display.
@@ -33,9 +33,10 @@ def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, 
         If True, the legend entry in plotly is shared between all the detector volumes
     legend_prefix : Union[str, List[str]], default 'Detector'
         Name(s) of the detector volumes
-     color : Union[int, str, np.ndarray]
+    color : Union[int, str, np.ndarray]
         Color of boxes or list of color of boxes
-
+    linewidth : int, default 2
+        Width of the box edge lines
     **kwargs : dict, optional
         List of additional arguments to pass to mlreco.viusalization.boxes.box_traces
     '''
@@ -49,7 +50,7 @@ def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, 
         boundaries = cm_to_pixel(boundaries, meta)
 
     # Get a trace per detector volume
-    detectors = box_traces(boundaries[...,0], boundaries[...,1], draw_faces=draw_faces, color=color, **kwargs)
+    detectors = box_traces(boundaries[...,0], boundaries[...,1], draw_faces=draw_faces, color=color, linewidth=linewidth, **kwargs)
 
     # Update the trace names
     for i, d in enumerate(detectors):
