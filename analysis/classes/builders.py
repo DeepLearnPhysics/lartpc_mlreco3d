@@ -396,7 +396,7 @@ class ParticleBuilder(DataBuilder):
                 continue
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
             if simE_deposits is not None:
-                mask_sed      = simE_deposits[:, 5].astype(int) == id
+                mask_sed      = simE_deposits[:, 6].astype(int) == id
                 sed_index     = np.where(mask_sed)[0]
             else:
                 mask_sed, sed_index = np.array([]), np.array([])
