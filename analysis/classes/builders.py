@@ -356,7 +356,7 @@ class ParticleBuilder(DataBuilder):
     def _build_truth(self, 
                     entry: int, 
                     data: dict, 
-                    result: dict) -> List[TruthParticle]:
+                    result: dict, verbose=False) -> List[TruthParticle]:
         """
         Returns
         -------
@@ -379,14 +379,21 @@ class ParticleBuilder(DataBuilder):
             coordinates     = data['input_data'][entry][:, COORD_COLS]
         meta            = data['meta'][0]
         if 'sed' in data:
-            simE_deposits   = data['sed'][0]
+            simE_deposits   = data['sed'][entry]
         else:
             simE_deposits   = None
         # point_labels   = data['point_labels'][entry]
         unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
 
+        # For debugging
+        voxel_counts = 0
+        accounted_indices = []
+        orphans = np.ones(labels_nonghost.shape[0]).astype(bool)
+
         for i, lpart in enumerate(larcv_particles):
             id = int(lpart.id())
+            if lpart.id() != lpart.group_id():
+                continue
             mask_nonghost = labels_nonghost[:, 6].astype(int) == id
             if simE_deposits is not None:
                 mask_sed      = simE_deposits[:, 5].astype(int) == id
@@ -426,6 +433,9 @@ class ParticleBuilder(DataBuilder):
             depositions         = rescaled_charge[mask] # Will be in ADC
             coords_noghost      = labels_nonghost[mask_nonghost][:, COORD_COLS]
             true_voxel_indices  = np.where(mask_nonghost)[0]
+            voxel_counts        += true_voxel_indices.shape[0]
+            accounted_indices.append(true_voxel_indices)
+            orphans[true_voxel_indices] = False
             depositions_noghost = labels_nonghost[mask_nonghost][:, VALUE_COL].squeeze()
 
             volume_labels       = labels_nonghost[mask_nonghost][:, BATCH_COL]
@@ -478,6 +488,12 @@ class ParticleBuilder(DataBuilder):
                 particle.start_point = unit_convert(particle.first_step)
 
             out.append(particle)
+
+        accounted_indices = np.hstack(accounted_indices).squeeze()
+        if verbose:
+            print("All Voxels = {}, Accounted Voxels = {}".format(labels_nonghost.shape[0], voxel_counts))
+            print("Orphaned Semantics = ", np.unique(labels_nonghost[orphans][:, -1], return_counts=True))
+            print("Orphaned GroupIDs = ", np.unique(labels_nonghost[orphans][:, 6], return_counts=True))
 
         return out
 
