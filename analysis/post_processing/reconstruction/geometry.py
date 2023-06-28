@@ -65,6 +65,43 @@ def particle_direction(data_dict,
             
     return update_dict
 
+@post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
+                                                              'particle_clusts',
+                                                              'particle_start_points',
+                                                              'particle_end_points',
+                                                              'particles'])
+def reconstruct_directions(data_dict,
+                           result_dict,
+                           neighborhood_radius=5,
+                           optimize=True):
+    if 'input_rescaled' not in result_dict:
+        input_data = data_dict['input_data']
+    else:
+        input_data = result_dict['input_rescaled']
+
+    particles = np.array([p.index for p in result_dict['particles']])
+    start_points = np.vstack([p.start_point for p in result_dict['particles']])
+    end_points = np.vstack([p.end_point for p in result_dict['particles']])
+
+    update_dict = {
+        'particle_start_directions': get_cluster_directions(input_data[:,COORD_COLS],
+                                                            start_points, 
+                                                            particles,
+                                                            neighborhood_radius, 
+                                                            optimize),
+        'particle_end_directions':   get_cluster_directions(input_data[:,COORD_COLS],
+                                                            end_points, 
+                                                            particles,
+                                                            neighborhood_radius, 
+                                                            optimize)
+    }
+    
+    for i, p in enumerate(result_dict['particles']):
+        p.start_dir = update_dict['particle_start_directions'][i]
+        p.end_dir   = update_dict['particle_end_directions'][i]
+            
+    return {}
+
 
 @post_processing(data_capture=[],
                  result_capture=['truth_particles'])
