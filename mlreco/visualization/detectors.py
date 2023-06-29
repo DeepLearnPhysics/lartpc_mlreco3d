@@ -5,7 +5,7 @@ from mlreco.utils import cm_to_pixel
 from .boxes import box_traces
 
 
-def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, shared_legend=True, legend_prefix='Detector', color='rgba(0,0,0,0.150)', linewidth=2, **kwargs):
+def detector_traces(boundary_file, meta=None, detector_coords=True, draw_faces=False, shared_legend=True, legend_prefix='Detector', color='rgba(0,0,0,0.150)', linewidth=2, **kwargs):
     '''
     Function which takes loads a file with detector boundaries and
     produces a list of traces which represent them in a 3D event display.
@@ -25,8 +25,8 @@ def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, 
         Path to the boundary file
     meta : np.ndarray, optional
         (9) Array of metadata information (only needed if pixel_coordinates is True)
-    to_pixel : bool, default False
-        If True, the coordinates are converted to pixel indices
+    detector_coords : bool, default False
+        If False, the coordinates are converted to pixel indices
     draw_faces : bool, default False
         Weather or not to draw the box faces, or only the edges
     shared_legend : bool, default True
@@ -44,7 +44,7 @@ def detector_traces(boundary_file, meta=None, to_pixel=False, draw_faces=False, 
     boundaries = np.load(boundary_file)
 
     # If required, convert to pixel coordinates
-    if to_pixel:
+    if not detector_coords:
         assert meta is not None,\
                 'Must provide meta information to convert to pixel coordinates'
         boundaries = cm_to_pixel(boundaries, meta)
