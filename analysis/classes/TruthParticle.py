@@ -45,6 +45,7 @@ class TruthParticle(Particle):
                  sed_points: np.ndarray = np.empty((0, 3), dtype=np.float32),
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 sed_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  particle_asis: object = None, 
                  length_tng: float = -1.,
                  csda_kinetic_energy_tng: float = -1.,
@@ -61,6 +62,7 @@ class TruthParticle(Particle):
         self.truth_points           = truth_points
         self.sed_index              = sed_index
         self.sed_points             = sed_points
+        self.sed_depositions        = np.atleast_1d(sed_depositions)
         self._sed_size              = sed_points.shape[0]
         self._truth_size            = truth_points.shape[0]
         self._truth_depositions     = np.atleast_1d(truth_depositions)   # Must be ADC

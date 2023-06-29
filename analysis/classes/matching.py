@@ -272,7 +272,6 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
             key = (px.id, matched.id)
             matches[key] = (px, matched)
             px.matched = True
-            matched.matched = True
 
     out_counts = np.array(out_counts)
             
