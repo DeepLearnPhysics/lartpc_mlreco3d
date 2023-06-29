@@ -7,6 +7,7 @@ from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter, HDF5Writer
+from mlreco.utils import pixel_to_cm
 from mlreco.utils.globals import *
 
 from analysis import post_processing
@@ -161,24 +162,14 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
-    
-    
+
+
     @staticmethod
-    def _pix_to_cm(arr, meta):
-        
-        min_x        = meta[0]
-        min_y        = meta[1]
-        min_z        = meta[2]
-        size_voxel_x = meta[6]
-        size_voxel_y = meta[7]
-        size_voxel_z = meta[8]
-        
-        arr[:, COORD_COLS[0]] = arr[:, COORD_COLS[0]] * size_voxel_x + min_x
-        arr[:, COORD_COLS[1]] = arr[:, COORD_COLS[1]] * size_voxel_y + min_y
-        arr[:, COORD_COLS[2]] = arr[:, COORD_COLS[2]] * size_voxel_z + min_z
+    def pixel_to_cm(arr, meta):
+        arr[:, COORD_COLS] = pixel_to_cm(arr[:, COORD_COLS], meta)
         return arr
     
-    
+
     def convert_pixels_to_cm(self, data, result):
         """Convert pixel coordinates to real world coordinates (in cm)
         for all tensors that have spatial coordinate information, using 
@@ -212,10 +203,10 @@ class AnaToolsManager:
         
         for key, val in data.items():
             if key in data_has_voxels:
-                data[key] = [self._pix_to_cm(arr, meta) for arr in val]
+                data[key] = [self.pixel_to_cm(arr, meta) for arr in val]
         for key, val in result.items():
             if key in result_has_voxels:
-                result[key] = [self._pix_to_cm(arr, meta) for arr in val]
+                result[key] = [self.pixel_to_cm(arr, meta) for arr in val]
     
     
     def _build_reco_reps(self, data, result):
@@ -584,10 +575,18 @@ class AnaToolsManager:
         # 1-a. Convert units
         
         # Dumb check for repeated coordinate conversion. TODO: Fix
-        example_coords = res['input_rescaled'][0][:, COORD_COLS]
-        rounding_error = (example_coords - example_coords.astype(int)).sum()
+        if 'input_rescaled' in res: 
+            example_coords = res['input_rescaled'][0][:, COORD_COLS]
+        elif 'input_data' in data:
+            example_coords = data['input_data'][0][:, COORD_COLS]
+        else:
+            msg = "Must have some coordinate information 'input_rescaled' "\
+                "in res, or 'input_data' in data) to reconstruct quantities!"
+            raise KeyError(msg)
+            
+        rounding_error = (example_coords - example_coords.astype(int)).sum() 
         
-        if self.convert_to_cm and rounding_error > 1e-6:
+        if self.convert_to_cm and abs(rounding_error) > 1e-6:
             msg = "It looks like the input data has coordinates already "\
                 "translated to cm from pixels, and you are trying to convert "\
                 "coordinates again. You might want to set convert_to_cm = False."

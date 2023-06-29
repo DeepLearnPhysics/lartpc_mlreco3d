@@ -6,6 +6,8 @@ from .misc import *
 from collections import defaultdict
 from torch_scatter import scatter_mean
 
+from mlreco.utils.globals import SHAPE_LABELS
+
 class WeightedEdgeLoss(nn.Module):
 
     def __init__(self, loss_type='BCE', reduction='mean', invert=False):
@@ -233,6 +235,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
 
         accuracy = defaultdict(float)
         accuracy['accuracy'] = 0.
+        for i in range(5):
+            accuracy[f'accuracy_{i}'] = 0.
 
         semantic_classes = slabels.unique()
         counts = 0
@@ -299,6 +303,8 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             #     print('occ_loss: {}'.format(occ_loss))
         if counts > 0:
             accuracy['accuracy'] /= counts
+            for i in range(5):
+                accuracy[f'accuracy_{i}'] /= counts
         return loss, accuracy
 
     def forward(self, out, segment_label, cluster_label):

@@ -3,8 +3,8 @@
 Please put here any visualization helper functions.
 Currently available:
 
-## `mlreco.visualization.cubes`
-The function `scatter_cubes` can be useful to display the (cubic) regions of interest found by the intermediate stages of PPN, for example.
+## `mlreco.visualization.boxes`
+The function `scatter_boxes` can be useful to display the regions of interest found by the intermediate stages of PPN, for example.
 
 ## `mlreco.visualization.gnn`
 Various helper functions to visualize the output of a GNN:

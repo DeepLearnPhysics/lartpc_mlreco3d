@@ -6,9 +6,9 @@ from sklearn.cluster import DBSCAN
 from .sparse import parse_sparse3d
 from .particles import parse_particles
 from .clean_data import clean_sparse_data
-from .label_data import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 
 from mlreco.utils.globals import UNKWN_SHP
+from mlreco.utils.particles import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 
 
 def parse_cluster2d(cluster_event):
