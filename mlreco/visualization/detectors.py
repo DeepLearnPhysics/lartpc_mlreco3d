@@ -47,7 +47,7 @@ def detector_traces(boundary_file, meta=None, detector_coords=True, draw_faces=F
     if not detector_coords:
         assert meta is not None,\
                 'Must provide meta information to convert to pixel coordinates'
-        boundaries = cm_to_pixel(boundaries, meta)
+        boundaries = cm_to_pixel(boundaries.transpose(0,2,1), meta).transpose(0,2,1)
 
     # Get a trace per detector volume
     detectors = box_traces(boundaries[...,0], boundaries[...,1], draw_faces=draw_faces, color=color, linewidth=linewidth, **kwargs)
