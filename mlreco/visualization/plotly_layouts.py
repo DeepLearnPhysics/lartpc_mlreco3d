@@ -110,7 +110,7 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         if aspectratio is None:
             axes = ['x', 'y', 'z']
             ratios = np.ones(len(ranges)) if ranges[0] is None else (ranges[:,1]-ranges[:,0])/np.max(ranges[:,1]-ranges[:,0])
-            aspectratio = {axes[i]: 4*v for i, v in enumerate(ratios)}
+            aspectratio = {axes[i]: v for i, v in enumerate(ratios)}
 
     # Check on the axis titles
     assert titles is None or len(titles) == 3, 'Must specify one title per axis'
