@@ -114,7 +114,6 @@ class Particle:
         self.primary_scores = primary_scores
         
         # Quantities to be set during post_processing
-
         self._start_point         = start_point
         self._end_point           = end_point
         self._start_dir           = start_dir

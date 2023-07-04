@@ -18,9 +18,16 @@ class TruthInteraction(Interaction):
 
     Attributes
     ----------
-    depositions_MeV : np.ndarray, default np.array([])
-        Similar as `depositions`, i.e. using adapted true labels.
-        Using true MeV energy deposits instead of rescaled ADC units.
+    depositions_MeV : np.ndarray
+        (N) Array of energy deposition values for each voxel in MeV
+    truth_index : np.ndarray, default np.array([])
+        (N) IDs of voxels that correspond to the interaction within the label tensor
+    truth_points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this interaction in the label tensor
+    truth_depositions : np.ndarray
+        (N) Array of charge deposition values for each true voxel
+    truth_depositions_MeV : np.ndarray
+        (N) Array of energy deposition values for each true voxel in MeV
     """
 
     def __init__(self,
