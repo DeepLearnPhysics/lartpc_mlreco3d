@@ -51,7 +51,7 @@ def calorimetric_energy(data_dict,
                  result_capture_optional=['truth_particles'])
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, 
-                             include_pids=[2, 3, 4],
+                             include_pids=[2, 4],
                              data=False,
                              min_points=5,
                              mode='px'):
