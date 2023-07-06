@@ -1,46 +1,38 @@
 import numpy as np
+from copy import deepcopy
+import plotly
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 
-def high_contrast_colors():
-    '''
-    Produces a list of 48 easily distinguishable colors.
-
-    Returns
-    -------
-    List[str]
-        List of easily distinguishable plotly colors
-    '''
-    import plotly.express as px
-
-    return np.concatenate([px.colors.qualitative.Dark24, px.colors.qualitative.Light24])
+PLOTLY_COLORS = plotly.colors.qualitative.Plotly
+PLOTLY_COLORS_WGRAY = ['#808080'] + PLOTLY_COLORS
+HIGH_CONTRAST_COLORS = np.concatenate([plotly.colors.qualitative.Dark24, plotly.colors.qualitative.Light24])
 
 
 def high_contrast_colorscale():
     '''
     Produces a discrete plotly colorscale based on 48 easily
-    distinguishable colors.
+    distinguishable, discrete colors.
 
     Returns
     -------
     List[[float, str]]
         List of colorscale boundaries and colors
     '''
-    colors = high_contrast_colors()
-    step = 1./len(colors)
+    step = 1./len(HIGH_CONTRAST_COLORS)
 
     colorscale = []
-    for i, c in enumerate(colors):
+    for i, c in enumerate(HIGH_CONTRAST_COLORS):
         colorscale.append([i*step, c])
         colorscale.append([(i+1)*step, c])
 
     return colorscale
 
 
-def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, backgroundcolor='white', gridcolor='lightgray', width=900, height=900, showlegend=True, camera=None, aspectmode='manual', aspectratio=None, **kwargs):
+def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, backgroundcolor='white', gridcolor='lightgray', width=900, height=900, showlegend=True, camera=None, aspectmode='manual', aspectratio=None, dark=False, margin=dict(r=0, l=0, b=0, t=0), **kwargs):
     """
-    Produces go.Layout object for a certain format.
+    Produces plotly.graph_objs.Layout object for a certain format.
 
     Parameters
     ----------
@@ -48,7 +40,7 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         (9) Metadata information used to infer the full image range
     ranges : np.ndarray, optional
         (3, 2) or (N, 3) Array used to specify the plot region in (x,y,z) directions.
-        The default (None) will determine the range to include all points.
+        If not specified (None), the range will be set to include all points.
         Alternatively can be an array of shape (3,2) specifying (x,y,z) axis (min,max) range for a display,
         or simply a list of points with shape (N,3+) where [:,0],[:,1],[:,2] correspond to (x,y,z) values and
         the plotting region is decided by measuring the min,max range in each coordinates. This last option
@@ -67,19 +59,21 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         Height of the layout in pixels
     showlegend : bool, default True
         Whether or not to show the image legend
-    camera : dict, optional
-        Plotly dictionary which specifies the orientation of the camera in 3D
     aspectmode : str, default manual
         Plotly aspect mode. If manual, will define it based on the ranges
     aspectratio : dict, optional
         Plotly dictionary which specifies the aspect ratio for x, y an d z
+    dark : bool, default False
+        Dark layout
+    margin : dict, default dict(r=0, l=0, b=0, t=0)
+        Specifies the margin in each subplot
     **kwargs : dict, optional
         List of additional arguments to pass to plotly.graph_objs.Layout
 
     Results
     -------
     plotly.graph_objs.Layout
-        Object that can be given to go.Figure for visualization (together with traces)
+        Object that can be given to plotly.graph_objs.Figure for visualization (together with traces)
     """
     # Figure out the drawing range
     if ranges is None:
@@ -102,9 +96,6 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         else:
             ranges = np.vstack([[0, 0, 0], np.round((uppers-lowers)/sizes)]).T
 
-    # Get the default units
-    unit = 'cm' if detector_coords else 'pixel'
-
     # Infer the image width/height and aspect ratios, unless they are specified
     if aspectmode == 'manual':
         if aspectratio is None:
@@ -112,39 +103,39 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
             ratios = np.ones(len(ranges)) if ranges[0] is None else (ranges[:,1]-ranges[:,0])/np.max(ranges[:,1]-ranges[:,0])
             aspectratio = {axes[i]: v for i, v in enumerate(ratios)}
 
-    # Check on the axis titles
+    # Check on the axis titles, define default
     assert titles is None or len(titles) == 3, 'Must specify one title per axis'
+    if titles is None:
+        unit = 'cm' if detector_coords else 'pixel'
+        titles = [f'x [{unit}]', f'y [{unit}]', f'z [{unit}]']
 
-    # Initialize some default camera angle if it is not specified
-    if camera is None:
-        camera = dict(up = dict(x = 0, y = 0, z = 1),
-                      center = dict(x = 0, y = 0, z = 0),
-                      eye = dict(x = 1.2, y = 1.2, z = 0.075))
+    # Initialize some default legend behavior
+    if 'legend' not in kwargs:
+        kwargs['legend'] = dict(title = 'Legend', tracegroupgap = 1, itemsizing = 'constant')
 
-    # Initialize layout
-    layout = go.Layout(
-        showlegend = showlegend,
-        width = width,
-        height = height,
-        margin = dict(l = 0, r = 0, b = 0, t = 0),
-        legend = dict(title = 'Legend', tracegroupgap = 1),
-        scene = dict(
+    # If a dark layout is requested, set the theme and the background color accordingly
+    if dark:
+        kwargs['template'] = 'plotly_dark'
+        backgroundcolor = 'black'
+
+    # Initialize the general scene layout
+    scene = dict(
             xaxis = dict(nticks = 10, range = ranges[0], showticklabels = True,
-                         title = dict(text=f'x [{unit}]' if titles is None else titles[0], font=dict(size=20)),
+                         title = dict(text=titles[0], font=dict(size=20)),
                          tickfont = dict(size=14),
                          backgroundcolor = backgroundcolor,
                          gridcolor = gridcolor,
                          showbackground = True
                         ),
             yaxis = dict(nticks = 10, range = ranges[1], showticklabels = True,
-                         title = dict(text=f'y [{unit}]' if titles is None else titles[1], font=dict(size=20)),
+                         title = dict(text=titles[1], font=dict(size=20)),
                          tickfont = dict(size=14),
                          backgroundcolor = backgroundcolor,
                          gridcolor = gridcolor,
                          showbackground = True
                         ),
             zaxis = dict(nticks = 10, range = ranges[2], showticklabels = True,
-                         title = dict(text=f'z [{unit}]' if titles is None else titles[2], font=dict(size=20)),
+                         title = dict(text=titles[2], font=dict(size=20)),
                          tickfont = dict(size=14),
                          backgroundcolor = backgroundcolor,
                          gridcolor = gridcolor,
@@ -153,74 +144,83 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
             aspectmode = aspectmode,
             aspectratio = aspectratio,
             camera = camera
-        ),
+            )
+
+    # Initialize layout
+    layout = go.Layout(
+        showlegend = showlegend,
+        width = width,
+        height = height,
+        margin = margin,
+        scene1 = scene,
+        scene2 = deepcopy(scene),
+        scene3 = deepcopy(scene),
         **kwargs
     )
 
     return layout
 
 
-def white_layout():
-    bg_color = 'rgba(0,0,0,0)'
-    grid_color = 'rgba(220,220,220,100)'
-    layout = dict(showlegend=False,
-        autosize=True,
-        height=1000,
-        width=1000,
-        margin=dict(r=20, l=20, b=20, t=20),
-        plot_bgcolor='rgba(255,255,255,0)',
-        paper_bgcolor='rgba(255,255,255,0)',
-        scene1=dict(xaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    aspectmode='cube'),
-        scene2=dict(xaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    aspectmode='cube'),
-        scene3=dict(xaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    yaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    zaxis=dict(dict(backgroundcolor=bg_color,
-                                    gridcolor=grid_color)),
-                    aspectmode='cube'))
-    return layout
+def dualplot(traces_left, traces_right, layout=None, titles=[None, None], width=1000, height=500, synchronize=False, margin=dict(r=20, l=20, b=20, t=20), **kwargs):
+    '''
+    Function which returns a plotly.graph_objs.Figure with two set of traces
+    side-by-side in separate subplots.
 
+    Parameters
+    ----------
+    traces_left : List[object]
+        List of plotly traces to draw in the left subplot
+    traces_right : List[object]
+        List of plotly traces to draw in the right subplot
+    layout : plotly.Layout, optional
+        Plotly layout
+    titles : List[str], optional
+        Titles of the two subplots
+    width : int, default 1000
+        Width of the layout in pixels
+    height : int, default 500
+        Height of the layout in pixels
+    synchronize : bool, default False
+        If True, matches the camera position/angle of one plot to the other
+    margin : dict, default dict(r=20, l=20, b=20, t=20)
+        Specifies the margin in each subplot
+    **kwargs : dict, optional
+        List of additional arguments to pass to plotly.graph_objs.Layout
 
-def dualplot(traces_left, traces_right, spatial_size=768, layout=None,
-             titles=['Left', 'Right']):
-
-    if layout is None:
-        layout = white_layout()
-
+    Returns
+    -------
+    plotly.graph_objs.Figure
+        Plotly figure with the two subplots
+    '''
+    # Make subplot and add traces
     fig = make_subplots(rows=1, cols=2,
-                        specs=[[{'type': 'scatter3d'}, {'type': 'scatter3d'}]],
                         subplot_titles=(titles[0], titles[1]),
+                        specs=[[{'type': 'scatter3d'}, {'type': 'scatter3d'}]],
                         horizontal_spacing=0.05, vertical_spacing=0.04)
     fig.add_traces(traces_left, rows=[1]*len(traces_left), cols=[1]*len(traces_left))
     fig.add_traces(traces_right, rows=[1]*len(traces_right), cols=[2]*len(traces_right))
 
-    fig.layout = layout
-    fig.update_layout(showlegend=True,
-                      legend=dict(xanchor="left"),
-                      autosize=True,
-                      height=500,
-                      width=1000)
-    fig.update_layout(
-        scene1 = dict(
-            xaxis = dict(range=[0,spatial_size],),
-                         yaxis = dict(range=[0,spatial_size],),
-                         zaxis = dict(range=[0,spatial_size],),),
-        scene2 = dict(
-            xaxis = dict(range=[0,spatial_size],),
-                         yaxis = dict(range=[0,spatial_size],),
-                         zaxis = dict(range=[0,spatial_size],),),
-        margin=dict(r=20, l=10, b=10, t=10))
+    # Inialize and set layout
+    if layout is None:
+        layout = plotly_layout3d(width=width, height=height, margin=margin, **kwargs)
+    fig.layout.update(layout)
+
+    # If requested, synchronize the two cameras
+    if synchronize:
+        fig = go.FigureWidget(fig)
+
+        def cam_change_left(layout, camera):
+            fig.layout.scene2.camera = camera
+        def cam_change_right(layout, camera):
+            fig.layout.scene1.camera = camera
+
+        fig.layout.scene1.on_change(cam_change_left,  'camera')
+        fig.layout.scene2.on_change(cam_change_right, 'camera')
+
     return fig
+
+
+def white_layout(**kwargs):
+    from warnings import warn
+    warn('white_layout is deprecated, use plotly_layout3d instead', DeprecationWarning, stacklevel=2)
+    return plotly_layout3d(**kwargs)
