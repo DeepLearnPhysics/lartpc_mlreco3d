@@ -47,8 +47,8 @@ class LArCVDataset(Dataset):
             fs = sorted(glob.glob(key))
             for f in fs:
                 self._files.append(f)
-                if limit_num_files and len(self._files) >= limit_num_files: break
-            if limit_num_files and len(self._files) >= limit_num_files: break
+                if limit_num_files > 0 and len(self._files) >= limit_num_files: break
+            if limit_num_files > 0 and len(self._files) >= limit_num_files: break
 
         if len(self._files)<1:
             raise FileNotFoundError
