@@ -425,7 +425,7 @@ class AnaToolsManager:
             self.crt_tpc_manager_initialized = True
         
         
-    def run_post_processing(self, data, result):
+    def run_post_processing(self, data, result, verbose=False):
         """Run all registered post-processing scripts.
 
         Parameters
@@ -465,7 +465,8 @@ class AnaToolsManager:
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
-                                                           profile=profile)
+                                                           profile=profile,
+                                                           verbose=verbose)
 
             post_processor_interface.process_and_modify()
             self.logger_dict.update(post_processor_interface._profile)

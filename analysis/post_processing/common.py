@@ -33,7 +33,8 @@ class PostProcessor:
 
     def register_function(self, f, priority, 
                           processor_cfg={}, 
-                          profile=False):
+                          profile=False,
+                          verbose=False):
         data_capture, result_capture = f._data_capture, f._result_capture
         result_capture_optional      = f._result_capture_optional
         pf                           = partial(f, **processor_cfg)
@@ -44,7 +45,8 @@ class PostProcessor:
         if profile:
             pf = self.profile(pf)
         self._funcs[priority].append(pf)
-        print(f"Registered post-processor {f.__name__}")
+        if verbose:
+            print(f"Registered post-processor {f.__name__}")
 
     def process_event(self, image_id, f_list):
 
