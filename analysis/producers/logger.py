@@ -406,8 +406,12 @@ class InteractionLogger(AnalysisLogger):
             out = {mapping[pid] : -1 for pid in ptypes}
 
         if ia is not None:
-            for pid in ptypes:
-                out[mapping[pid]] = ia.primary_counts[pid]
+            if type(ia) is Interaction:
+                for pid in ptypes:
+                    out[mapping[pid]] = ia.primary_counts[pid]
+            if type(ia) is TruthInteraction:
+                for pid in ptypes:
+                    out[mapping[pid]] = ia.truth_primary_counts[pid]
             
         return out
     
@@ -429,8 +433,12 @@ class InteractionLogger(AnalysisLogger):
             out = {mapping[pid] : -1 for pid in ptypes}
 
         if ia is not None:
-            for pid in ptypes:
-                out[mapping[pid]] = ia.primary_counts[pid]
+            if type(ia) is Interaction:
+                for pid in ptypes:
+                    out[mapping[pid]] = ia.primary_counts[pid]
+            if type(ia) is TruthInteraction:
+                for pid in ptypes:
+                    out[mapping[pid]] = ia.truth_primary_counts[pid]
             
         return out
     
