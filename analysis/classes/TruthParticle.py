@@ -17,13 +17,13 @@ class TruthParticle(Particle):
     ----------
     depositions_MeV : np.ndarray
         (N) Array of energy deposition values for each voxel in MeV
-    true_index : np.ndarray, default np.array([])
+    truth_index : np.ndarray, default np.array([])
         (N) IDs of voxels that correspond to the particle within the label tensor
-    true_points : np.dnarray, default np.array([], shape=(0,3))
+    truth_points : np.dnarray, default np.array([], shape=(0,3))
         (N,3) Set of voxel coordinates that make up this particle in the label tensor
-    true_depositions : np.ndarray
+    truth_depositions : np.ndarray
         (N) Array of charge deposition values for each true voxel
-    true_depositions_MeV : np.ndarray
+    truth_depositions_MeV : np.ndarray
         (N) Array of energy deposition values for each true voxel in MeV
     start_position : np.ndarray
         True start position of the particle

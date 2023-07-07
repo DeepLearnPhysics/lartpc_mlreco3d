@@ -1,7 +1,7 @@
 import numpy as np
 
 from .points import scatter_points
-from .plotly_layouts import high_contrast_colors
+from .plotly_layouts import HIGH_CONTRAST_COLORS
 
 from mlreco.utils.particles import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
 from mlreco.utils.globals import COORD_COLS, CLUST_COL
@@ -40,7 +40,7 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
 
     # Initialize one graph per particle
     traces = []
-    colors = high_contrast_colors()
+    colors = HIGH_CONTRAST_COLORS
     for i in range(len(particles)):
         # Get a mask that corresponds to the particle entry, skip empty particles
         mask = cluster_label[:, clust_col] == i
@@ -49,6 +49,7 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
         # Initialize the information string
         p = particles[i]
         start = p.first_step().x(), p.first_step().y(), p.first_step().z()
+        position = p.x(), p.y(), p.z()
         anc_start = p.ancestor_x(), p.ancestor_y(), p.ancestor_z()
         
         label = f'Particle {p.id()}'
@@ -65,9 +66,11 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
                           'Parent PDG code': p.parent_pdg_code(),
                           'Anc. PDG code': p.ancestor_pdg_code(),
                           'Process': p.creation_process(),
+                          'Parent process': p.parent_creation_process(),
                           'Anc. process': p.ancestor_creation_process(),
                           'Initial E': f'{p.energy_init():0.1f} MeV',
                           'Deposited E': f'{p.energy_deposit():0.1f} MeV',
+                          'Position': f'({position[0]:0.3e}, {position[1]:0.3e}, {position[2]:0.3e})',
                           'Start point': f'({start[0]:0.3e}, {start[1]:0.3e}, {start[2]:0.3e})',
                           'Anc. start point': f'({anc_start[0]:0.3e}, {anc_start[1]:0.3e}, {anc_start[2]:0.3e})'}
 
