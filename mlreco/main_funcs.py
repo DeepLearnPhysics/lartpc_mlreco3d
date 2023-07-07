@@ -321,8 +321,10 @@ def train_loop(handlers):
             data_blob, result_blob = handlers.trainer.train_step(handlers.data_io_iter)
 
         # Save snapshot
+        handlers.watch.start('save')
         if checkpt_step:
             handlers.trainer.save_state(handlers.iteration)
+        handlers.watch.stop('save')
 
         handlers.watch.stop('iteration')
         tsum += handlers.watch.time('iteration')
