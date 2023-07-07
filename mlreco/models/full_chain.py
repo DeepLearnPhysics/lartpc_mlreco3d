@@ -235,13 +235,13 @@ class FullChain(FullChainGNN):
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
             charges_coll = compute_rescaled_charge(input[0], deghost, last_index=last_index, collection_only=True)
-            #input[0][deghost, 4] = charges
-            input[0][deghost, 4] = charges_coll
+            #input[0][deghost, VALUE_COL] = charges
+            input[0][deghost, VALUE_COL] = charges_coll
 
             input_rescaled = input[0][deghost,:5].clone()
-            input_rescaled[:,4] = charges
+            input_rescaled[:, VALUE_COL] = charges
             input_rescaled_coll = input[0][deghost,:5].clone()
-            input_rescaled_coll[:,4] = charges_coll
+            input_rescaled_coll[:, VALUE_COL] = charges_coll
 
             result.update({'input_rescaled':[input_rescaled]})
             result.update({'input_rescaled_coll':[input_rescaled_coll]})
@@ -403,6 +403,8 @@ class FullChain(FullChainGNN):
         if self.enable_cnn_clust or self.enable_dbscan:
             cnn_result.update({'segment_label_tmp': [semantic_labels] })
             if label_clustering is not None:
+                if 'input_rescaled' in cnn_result:
+                    label_clustering[0][:, VALUE_COL] = input[0][:, VALUE_COL]
                 cnn_result.update({'cluster_label_adapted': label_clustering })
 
         # if self.use_true_fragments and coords is not None:
