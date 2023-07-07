@@ -10,26 +10,6 @@ PLOTLY_COLORS_WGRAY = ['#808080'] + PLOTLY_COLORS
 HIGH_CONTRAST_COLORS = np.concatenate([plotly.colors.qualitative.Dark24, plotly.colors.qualitative.Light24])
 
 
-def high_contrast_colorscale():
-    '''
-    Produces a discrete plotly colorscale based on 48 easily
-    distinguishable, discrete colors.
-
-    Returns
-    -------
-    List[[float, str]]
-        List of colorscale boundaries and colors
-    '''
-    step = 1./len(HIGH_CONTRAST_COLORS)
-
-    colorscale = []
-    for i, c in enumerate(HIGH_CONTRAST_COLORS):
-        colorscale.append([i*step, c])
-        colorscale.append([(i+1)*step, c])
-
-    return colorscale
-
-
 def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, backgroundcolor='white', gridcolor='lightgray', width=900, height=900, showlegend=True, camera=None, aspectmode='manual', aspectratio=None, dark=False, margin=dict(r=0, l=0, b=0, t=0), **kwargs):
     """
     Produces plotly.graph_objs.Layout object for a certain format.
