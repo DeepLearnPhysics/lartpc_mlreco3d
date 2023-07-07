@@ -377,6 +377,12 @@ class ParticleBuilder(DataBuilder):
         else:
             rescaled_charge = data['input_data'][entry][:, 4]
             coordinates     = data['input_data'][entry][:, COORD_COLS]
+
+        if 'energy_label' in data:
+            energy_label = data['energy_label'][entry][:, 4]
+        else:
+            energy_label = None
+
         meta            = data['meta'][0]
         if 'sed' in data:
             simE_deposits   = data['sed'][entry]
@@ -459,6 +465,10 @@ class ParticleBuilder(DataBuilder):
             is_primary     = int(primary_id) == 1
             
             # 3. Process particle start / end point labels
+
+            truth_depositions_MeV = np.empty(0, dtype=np.float32)
+            if energy_label is not None:
+                truth_depositions_MeV = energy_label[mask_nonghost].squeeze()
         
             particle = TruthParticle(group_id=id,
                                      interaction_id=interaction_id, 
@@ -473,8 +483,8 @@ class ParticleBuilder(DataBuilder):
                                      depositions_MeV=depositions_MeV,
                                      truth_index=true_voxel_indices,
                                      truth_points=coords_noghost,
-                                     truth_depositions=np.empty(0, dtype=np.float32), #TODO
-                                     truth_depositions_MeV=depositions_noghost,
+                                     truth_depositions=depositions_noghost, #TODO
+                                     truth_depositions_MeV=truth_depositions_MeV,
                                      sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
                                      is_primary=bool(is_primary),
