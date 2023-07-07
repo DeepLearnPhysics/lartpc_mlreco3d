@@ -8,9 +8,10 @@ from analysis.classes.data import *
 
 def scatter_points(points, color=None, colorscale=None, cmin=None, cmax=None, opacity=None, markersize=None, hovertext=None, dim=3, **kwargs):
     '''
-    Produces go.Scatter3d or go.Scatter object to be plotted in plotly
-    - voxels is a list of voxel coordinates (Nx2 or Nx3 matrix)
-    - labels is a list of voxel labels (N vector)
+    Produces plotly.graph_objs.Scatter3d or plotly.graph_objs.Scatter
+    trace object to be drawn in plotly. The object is nested to be fed
+    directly to a plotly.graph_objs.Figure or plotly.offline.iplot. All
+    of the regular plotly attribute are available.
 
     Parameters
     ----------
