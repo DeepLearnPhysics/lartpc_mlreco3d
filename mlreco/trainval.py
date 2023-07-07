@@ -96,7 +96,6 @@ class trainval(object):
             self._net.module.update_buffers()
 
     def save_state(self, iteration):
-        self._watch.start('save')
         if len(self._weight_prefix) > 0:
             filename = '%s-%d.ckpt' % (self._weight_prefix, iteration)
             torch.save({
@@ -104,7 +103,6 @@ class trainval(object):
                 'state_dict': self._net.state_dict(),
                 'optimizer': self._optimizer.state_dict()
             }, filename)
-        self._watch.stop('save')
 
 
     def get_data_minibatched(self,data_iter):
