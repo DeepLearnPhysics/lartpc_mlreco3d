@@ -235,8 +235,7 @@ class FullChain(FullChainGNN):
             # Rescale the charge column, store it
             charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
             charges_coll = compute_rescaled_charge(input[0], deghost, last_index=last_index, collection_only=True)
-            #input[0][deghost, VALUE_COL] = charges
-            input[0][deghost, VALUE_COL] = charges_coll
+            input[0][deghost, VALUE_COL] = charges if not self.collection_charge_only else charges_coll
 
             input_rescaled = input[0][deghost,:5].clone()
             input_rescaled[:, VALUE_COL] = charges

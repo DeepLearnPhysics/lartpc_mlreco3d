@@ -916,6 +916,7 @@ def setup_chain_cfg(self, cfg, print_info=True):
     self._gspice_use_true_labels      = cfg.get('graph_spice', {}).get('use_true_labels', False)
 
     self.enable_charge_rescaling = chain_cfg.get('enable_charge_rescaling', False)
+    self.collection_charge_only = chain_cfg.get('collection_charge_only', False)
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
     self.cheat_ghost           = chain_cfg.get('cheat_ghost', False)
     self.verbose               = chain_cfg.get('verbose', False)
