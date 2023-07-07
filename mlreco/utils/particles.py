@@ -1,7 +1,7 @@
 import numpy as np
-import torch
 
-from mlreco.utils.globals import *
+from .globals import SHOWR_SHP, MICHL_SHP, DELTA_SHP, INVAL_ID, INVAL_TID, PDG_TO_PID
+
 
 def get_valid_mask(particles):
     '''

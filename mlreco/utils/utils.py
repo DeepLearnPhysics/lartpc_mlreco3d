@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+from .globals import COORD_COLS
+
 
 def to_numpy(array):
     '''
@@ -54,3 +56,53 @@ def local_cdist(v1, v2):
     v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
     v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
     return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
+
+
+def pixel_to_cm(coords, meta, translate=True):
+    '''
+    Converts the pixel indices in a tensor to detector coordinates
+    using the metadata information.
+
+    The metadata is assumed to have the following structure:
+    [lower_x, lower_y(, lower_z), upper_x, upper_y, (upper_z), size_x, size_y(, size_z)],
+    i.e. lower and upper bounds of the volume and pixel/voxel size.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        (N, 2/3) Input pixel indices
+    meta : np.ndarray
+        (6/9) Array of metadata information
+    translate : bool, default True
+        If set to `False`, this function returns the input unchanged
+    '''
+    if not translate:
+        return coordinates
+
+    lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
+    return lower + (coords + .5) * size
+
+
+def cm_to_pixel(coords, meta, translate=True):
+    '''
+    Converts the detector coordinates in a tensor to pixel indices
+    using the metadata information.
+
+    The metadata is assumed to have the following structure:
+    [lower_x, lower_y(, lower_z), upper_x, upper_y, (upper_z), size_x, size_y(, size_z)],
+    i.e. lower and upper bounds of the volume and pixel/voxel size.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        (N, 2/3) Input detector coordinates
+    meta : np.ndarray
+        (6/9) Array of metadata information
+    translate : bool, default True
+        If set to `False`, this function returns the input unchanged
+    '''
+    if not translate:
+        return coordinates
+
+    lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
+    return (coords - lower) / size - .5

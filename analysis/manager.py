@@ -7,6 +7,7 @@ from mlreco.trainval import trainval
 from mlreco.main_funcs import cycle, process_config
 from mlreco.iotools.readers import HDF5Reader
 from mlreco.iotools.writers import CSVWriter, HDF5Writer
+from mlreco.utils import pixel_to_cm
 from mlreco.utils.globals import *
 
 from analysis import post_processing
@@ -161,24 +162,14 @@ class AnaToolsManager:
         else:
             raise ValueError(f"Data reader {self._reader_state} is not supported!")
         return data, res
-    
-    
+
+
     @staticmethod
-    def _pix_to_cm(arr, meta):
-        
-        min_x        = meta[0]
-        min_y        = meta[1]
-        min_z        = meta[2]
-        size_voxel_x = meta[6]
-        size_voxel_y = meta[7]
-        size_voxel_z = meta[8]
-        
-        arr[:, COORD_COLS[0]] = arr[:, COORD_COLS[0]] * size_voxel_x + min_x
-        arr[:, COORD_COLS[1]] = arr[:, COORD_COLS[1]] * size_voxel_y + min_y
-        arr[:, COORD_COLS[2]] = arr[:, COORD_COLS[2]] * size_voxel_z + min_z
+    def pixel_to_cm(arr, meta):
+        arr[:, COORD_COLS] = pixel_to_cm(arr[:, COORD_COLS], meta)
         return arr
     
-    
+
     def convert_pixels_to_cm(self, data, result):
         """Convert pixel coordinates to real world coordinates (in cm)
         for all tensors that have spatial coordinate information, using 
@@ -214,10 +205,10 @@ class AnaToolsManager:
         
         for key, val in data.items():
             if key in data_has_voxels:
-                data[key] = [self._pix_to_cm(arr, meta) for arr in val]
+                data[key] = [self.pixel_to_cm(arr, meta) for arr in val]
         for key, val in result.items():
             if key in result_has_voxels:
-                result[key] = [self._pix_to_cm(arr, meta) for arr in val]
+                result[key] = [self.pixel_to_cm(arr, meta) for arr in val]
     
     
     def _build_reco_reps(self, data, result):
@@ -436,7 +427,7 @@ class AnaToolsManager:
             self.crt_tpc_manager_initialized = True
         
         
-    def run_post_processing(self, data, result):
+    def run_post_processing(self, data, result, verbose=False):
         """Run all registered post-processing scripts.
 
         Parameters
@@ -476,7 +467,8 @@ class AnaToolsManager:
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
-                                                           profile=profile)
+                                                           profile=profile,
+                                                           verbose=verbose)
 
             post_processor_interface.process_and_modify()
             self.logger_dict.update(post_processor_interface._profile)

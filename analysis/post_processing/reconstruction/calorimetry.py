@@ -51,7 +51,7 @@ def calorimetric_energy(data_dict,
                  result_capture_optional=['truth_particles'])
 def range_based_track_energy(data_dict, result_dict,
                              bin_size=17, 
-                             include_pids=[2, 3, 4],
+                             include_pids=[2, 4],
                              data=False,
                              min_points=5,
                              mode='px'):
@@ -69,8 +69,6 @@ def range_based_track_energy(data_dict, result_dict,
     include_pids : list, optional
         Particle PDG codes (converted to 0-5 labels) to include in 
         computing the energies, by default [2, 3, 4]
-    table_path : str, optional
-        Path to muon/proton/pion CSDARange vs. energy table, by default ''
 
     Returns
     -------
@@ -291,6 +289,9 @@ def compute_curve(points, s=None, bin_size=20):
 
     return u.squeeze(), sppoints, splines, length
 
+def compute_track_length_splines(points, bin_size=17):
+    _, _, _, length = compute_curve(points, bin_size=bin_size)
+    return length
 
 def compute_track_length(points, bin_size=17):
     """Compute track length by dividing it into segments and computing 

@@ -208,15 +208,16 @@ class Particle:
         return msg
 
     def __str__(self):
-        fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<15}"\
-                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} )"
+        fmt = "Particle( Image ID={:<3} | Particle ID={:<3} | Semantic_type: {:<11}"\
+                " | PID: {:<8} | Primary: {:<2} | Interaction ID: {:<2} | Size: {:<5} | Volume: {:<2} | Match: {:<3})"
         msg = fmt.format(self.image_id, self.id,
                          SHAPE_LABELS[self.semantic_type] if self.semantic_type in SHAPE_LABELS else "None",
                          PID_LABELS[self.pid] if self.pid in PID_LABELS else "None",
                          int(self.is_primary),
                          self.interaction_id,
                          self.size,
-                         self.volume_id)
+                         self.volume_id,
+                         str(self.match))
         return msg
 
     @property
