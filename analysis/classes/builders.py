@@ -235,6 +235,9 @@ class ParticleBuilder(DataBuilder):
         particles_asis = data['particles_asis'][0]
         pred_nonghost  = result['cluster_label_adapted'][0]
         blueprints     = result['truth_particles'][0]
+        
+        energy_label   = data['energy_label'][0]
+        
         if 'sed' in data:
             true_sed = data['sed'][0]
         else:
@@ -271,6 +274,7 @@ class ParticleBuilder(DataBuilder):
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
                 'truth_points': true_nonghost[true_mask][:, COORD_COLS],
                 'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
+                'truth_depositions_MeV': energy_label[true_mask][:, VALUE_COL],
                 'particle_asis': pasis_selected
             })
             
@@ -417,25 +421,16 @@ class ParticleBuilder(DataBuilder):
                                                         unit_convert=unit_convert,
                                                         sed=simE_deposits,
                                                         mask_sed=mask_sed)
-                # particle.sed_points = simE_deposits[:, COORD_COLS][mask_sed].astype(np.float32)
-                # particle.sed_index  = sed_index.astype(np.int64)
                 out.append(particle)
                 continue
 
             # 1. Process voxels
             mask = labels[:, 6].astype(int) == id
-            # If particle is Michel electron, we have the option to
-            # only consider the primary ionization.
-            # Semantic labels only label the primary ionization as Michel.
-            # Cluster labels will have the entire Michel together.
-            # if self.michel_primary_ionization_only and 2 in labels[mask][:, -1].astype(int):
-            #     mask = mask & (labels[:, -1].astype(int) == 2)
-            #     mask_noghost = mask_noghost & (labels_nonghost[:, -1].astype(int) == 2)
-
+            
             coords              = coordinates[mask]
             voxel_indices       = np.where(mask)[0]
-            # fragments           = np.unique(labels[mask][:, 5].astype(int))
-            depositions_MeV     = labels[mask][:, VALUE_COL]
+            # depositions_MeV     = labels[mask][:, VALUE_COL]
+            depositions_MeV     = None # TODO: Fix to get MeVs from adapted energy labels?
             depositions         = rescaled_charge[mask] # Will be in ADC
             coords_noghost      = labels_nonghost[mask_nonghost][:, COORD_COLS]
             true_voxel_indices  = np.where(mask_nonghost)[0]
@@ -480,10 +475,10 @@ class ParticleBuilder(DataBuilder):
                                      index=voxel_indices,
                                      points=coords,
                                      depositions=depositions,
-                                     depositions_MeV=depositions_MeV,
+                                     depositions_MeV=np.empty(0, dtype=np.float32),
                                      truth_index=true_voxel_indices,
                                      truth_points=coords_noghost,
-                                     truth_depositions=depositions_noghost, #TODO
+                                     truth_depositions=depositions_noghost, # TODO
                                      truth_depositions_MeV=truth_depositions_MeV,
                                      sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
@@ -591,6 +586,11 @@ class InteractionBuilder(DataBuilder):
         true_nonghost = data['cluster_label'][0]
         pred_nonghost = result['cluster_label_adapted'][0]
         
+        if 'energy_label' in data:
+            energy_label = data['energy_label'][0]
+        else:
+            energy_label = None
+        
         out = []
         blueprints = result['truth_interactions'][0]
         use_particles = 'truth_particles' in result
@@ -626,13 +626,18 @@ class InteractionBuilder(DataBuilder):
             else:
                 mask = bp['index']
                 true_mask = bp['truth_index']
+                if energy_label is not None:
+                    truth_depositions_MeV = energy_label[true_mask][:, VALUE_COL]
+                else:
+                    truth_depositions_MeV = np.empty(0, dtype=np.float32)
                 info.update({
                     'index': mask,
                     'truth_index': true_mask,
                     'points': pred_nonghost[mask][:, COORD_COLS],
                     'depositions': pred_nonghost[mask][:, VALUE_COL],
                     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-                    'truth_depositions_MeV': true_nonghost[true_mask][:, VALUE_COL]
+                    'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
+                    'truth_depositions_MeV': truth_depositions_MeV
                 })
                 ia = TruthInteraction(**info)
             out.append(ia)
@@ -949,6 +954,7 @@ def handle_empty_truth_particles(labels_noghost,
     if np.count_nonzero(mask_noghost) > 0:
         sed_points = sed[mask_sed][:, COORD_COLS]
         sed_index = np.where(mask_sed)[0]
+        sed_depositions = sed[mask_sed][:, VALUE_COL]
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
@@ -985,6 +991,7 @@ def handle_empty_truth_particles(labels_noghost,
                              is_primary=is_primary,
                              sed_index=sed_index.astype(np.int64),
                              sed_points=sed_points.astype(np.float32),
+                             sed_depositions=sed_depositions.astype(np.float32),
                              particle_asis=p,
                              start_point=-np.ones(3, dtype=np.float32),
                              end_point=-np.ones(3, dtype=np.float32))

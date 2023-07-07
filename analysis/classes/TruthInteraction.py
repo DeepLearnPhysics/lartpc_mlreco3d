@@ -153,7 +153,8 @@ class TruthInteraction(Interaction):
         reserved_attributes = [
             'interaction_id', 'nu_id', 'volume_id', 
             'image_id', 'points', 'index', 'depositions', 'depositions_MeV',
-            'truth_depositions_MeV', 'truth_depositions', 'truth_index'
+            'truth_depositions_MeV', 'truth_depositions', 'truth_index', 
+            'sed_index', 'sed_points', 'sed_depositions'
         ]
         
         processed_args = {'particles': []}
@@ -169,9 +170,16 @@ class TruthInteraction(Interaction):
         _process_interaction_attributes(init_args, processed_args, **kwargs)
         
         # Handle depositions_MeV for TruthParticles
+        processed_args['truth_index']             = np.concatenate(init_args['truth_index'])
+        processed_args['truth_points']            = np.vstack(init_args['truth_points'])
+        
         processed_args['depositions_MeV']       = np.concatenate(init_args['depositions_MeV'])
         processed_args['truth_depositions']     = np.concatenate(init_args['truth_depositions'])
         processed_args['truth_depositions_MeV'] = np.concatenate(init_args['truth_depositions_MeV'])
+        
+        processed_args['sed_index']             = np.concatenate(init_args['sed_index'])
+        processed_args['sed_points']            = np.vstack(init_args['sed_points'])
+        processed_args['sed_depositions']       = np.concatenate(init_args['depositions_MeV'])
         
         truth_interaction = cls(**processed_args)
         
