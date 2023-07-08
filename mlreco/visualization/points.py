@@ -64,6 +64,11 @@ def scatter_points(points, color=None, colorscale=None, cmin=None, cmax=None, op
     if hovertext is not None:
         kwargs['hoverinfo'] += ['text']
 
+    # If only cmin or cmax is defined, must figure out the other
+    if (cmin is None) ^ (cmax is None) and color is not None and not np.isscalar(color):
+        if not cmin: cmin = min(np.min(color), cmax*(1-1e-6))
+        if not cmax: cmax = max(np.max(color), cmin*(1+1e-6))
+
     # Initialize and return
     trace_dict = dict(
             x = points[:,coord_cols[0]],
