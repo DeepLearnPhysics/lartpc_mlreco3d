@@ -81,7 +81,8 @@ from mlreco.iotools.parsers.sparse import (
 from mlreco.iotools.parsers.cluster import (
     parse_cluster2d,
     parse_cluster3d,
-    parse_cluster3d_charge_rescaled # TEMPORARY
+    parse_cluster3d_charge_rescaled, # TEMPORARY
+    parse_cluster3d_2cryos # TEMPORARY
 )
 
 from mlreco.iotools.parsers.particles import (

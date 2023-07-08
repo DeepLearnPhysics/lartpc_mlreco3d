@@ -9,6 +9,7 @@ RULES = {
     'parse_cluster2d': ['tensor', None],
     'parse_cluster3d': ['tensor', None, False, True],
     'parse_cluster3d_charge_rescaled': ['tensor', None, False, True],
+    'parse_cluster3d_2cryos': ['tensor', None, False, True],
 
     'parse_particles': ['list'],
     'parse_neutrinos': ['list'],
