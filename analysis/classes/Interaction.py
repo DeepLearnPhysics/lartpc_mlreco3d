@@ -295,20 +295,33 @@ def _process_interaction_attributes(init_args, processed_args, **kwargs):
                 "id: {}".format(int_id[0], str(int_id))
             raise AssertionError(msg)
         processed_args['interaction_id'] = int_id[0]
+    else:
+        processed_args['interaction_id'] = kwargs['interaction_id']
     
     if 'nu_id' not in kwargs:
         nu_id, counts = np.unique(init_args['nu_id'], return_counts=True)
         processed_args['nu_id'] = nu_id[np.argmax(counts)]
+    else:
+        processed_args['nu_id'] = kwargs['nu_id']
     
     if 'volume_id' not in kwargs:
         volume_id, counts = np.unique(init_args['volume_id'], 
                                         return_counts=True)
         processed_args['volume_id'] = volume_id[np.argmax(counts)]
+    else:
+        processed_args['volume_id'] = kwargs['volume_id']
     
     if 'image_id' not in kwargs:
         image_id, counts = np.unique(init_args['image_id'], return_counts=True)
         processed_args['image_id'] = image_id[np.argmax(counts)]
+    else:
+        processed_args['image_id'] = kwargs['image_id']
     
-    processed_args['points'] = np.vstack(init_args['points'])
-    processed_args['index'] = np.concatenate(init_args['index'])
-    processed_args['depositions'] = np.concatenate(init_args['depositions'])
+    if len(init_args['index']) > 0:
+        processed_args['points'] = np.vstack(init_args['points'])
+        processed_args['index'] = np.concatenate(init_args['index'])
+        processed_args['depositions'] = np.concatenate(init_args['depositions'])
+    else:
+        processed_args['points'] = np.empty(0, dtype=np.float32)
+        processed_args['index'] = np.empty(0, dtype=np.int64)
+        processed_args['depositions'] = np.empty(0, dtype=np.float32)

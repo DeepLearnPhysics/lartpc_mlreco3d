@@ -392,6 +392,7 @@ class ParticleBuilder(DataBuilder):
             simE_deposits   = data['sed'][entry]
         else:
             simE_deposits   = None
+
         # point_labels   = data['point_labels'][entry]
         unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
 
@@ -444,9 +445,11 @@ class ParticleBuilder(DataBuilder):
             volume_id           = int(volume_id[cts.argmax()])
             
             if simE_deposits is not None:
-                sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+                sed_points      = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+                sed_depositions = simE_deposits[mask_sed][:, VALUE_COL].astype(np.float32)
             else:
-                sed_points          = np.array([])
+                sed_points      = np.empty((0,3), dtype=np.float32)
+                sed_depositions = np.empty(0, dtype=np.float32)
     
             # 2. Process particle-level labels
             truth_labels = get_truth_particle_labels(labels_nonghost, 
@@ -482,6 +485,7 @@ class ParticleBuilder(DataBuilder):
                                      truth_depositions_MeV=truth_depositions_MeV,
                                      sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
+                                     sed_depositions=sed_depositions,
                                      is_primary=bool(is_primary),
                                     #  pid=pdg,
                                      particle_asis=lpart)
@@ -620,6 +624,7 @@ class InteractionBuilder(DataBuilder):
                     if p.interaction_id == bp['id']:
                         particles.append(p)
                         continue
+                from pprint import pprint
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False, 
                                                      **info)
