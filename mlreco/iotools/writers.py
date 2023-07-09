@@ -56,8 +56,8 @@ class HDF5Writer:
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
         analysis.TruthParticle:         ANA_SKIP_ATTRS,
-        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index'],
-        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index']
+        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index'],
+        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
 
     # List of recognized objects

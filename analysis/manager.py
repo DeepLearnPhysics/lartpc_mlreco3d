@@ -201,6 +201,8 @@ class AnaToolsManager:
         meta = data['meta'][0]
         assert len(meta) == 9
         
+        print("Converting units from px to cm...")
+        
         for key, val in data.items():
             if key in data_has_voxels:
                 data[key] = [self.pixel_to_cm(arr, meta) for arr in val]
