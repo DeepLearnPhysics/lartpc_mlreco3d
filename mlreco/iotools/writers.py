@@ -46,9 +46,9 @@ class HDF5Writer:
 
     # Analysis particle object attributes that do not need to be stored to HDF5
     ANA_SKIP_ATTRS = [
-        'points', 'truth_points', 'particles', 'fragments', 'asis',
-        'depositions', 'depositions_MeV', 'truth_depositions', 'truth_depositions_MeV',
-        'particles_summary', 'sed_points'
+        'points', 'truth_points', 'sed_points', 'particles', 'fragments',
+        'asis', 'depositions', 'depositions_MeV', 'truth_depositions',
+        'truth_depositions_MeV', 'sed_depositions', 'particles_summary'
     ]
 
     ANA_SKIP = {
@@ -56,8 +56,8 @@ class HDF5Writer:
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
         analysis.TruthParticle:         ANA_SKIP_ATTRS,
-        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index'],
-        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index']
+        analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index'],
+        analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
 
     # List of recognized objects
@@ -191,6 +191,10 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
+                assert len(blob[key][0]),\
+                        'Cannot infer the dtype of an empty list and hence cannot initialize the output HDF5 file'
+                # TODO: In this case, fall back on a default dtype specified elsewhere
+
                 if isinstance(blob[key][0][0], self.DATAOBJS):
                     # List containing a single list of dataclass objects per batch ID
                     object_type = type(blob[key][0][0])
@@ -218,8 +222,10 @@ class HDF5Writer:
                     self.key_dict[key]['dtype'] = blob[key][0][0].dtype
                     self.key_dict[key]['width'] = widths
                     self.key_dict[key]['merge'] = same_width
+
                 else:
-                    raise TypeError('Do not know how to store output of type in key: {}'.format(key), type(blob[key][0]))
+                    dtype = type(blob[key][0])
+                    raise TypeError(f'Do not know how to store output of type {dtype} in key {key}')
 
     def get_object_dtype(self, obj):
         '''

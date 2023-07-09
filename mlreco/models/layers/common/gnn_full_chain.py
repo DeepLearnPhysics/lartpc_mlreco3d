@@ -697,8 +697,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 # the cluster label to -1 and the GraphSPICEEmbeddingLoss
                 # will remove voxels with true cluster label -1.
                 gs_cluster_label = cluster_label[0]
-                if not self._gspice_use_true_labels:
-                    gs_cluster_label[(gs_cluster_label[:, -1] != torch.argmax(segmentation_pred, dim=1)), 5] = -1
+                #if not self._gspice_use_true_labels:
+                #    gs_cluster_label[(gs_cluster_label[:, -1] != torch.argmax(segmentation_pred, dim=1)), 5] = -1
                 #res['gs_cluster_label'] = [gs_cluster_label]
                 res_graph_spice = self.spatial_embeddings_loss(graph_spice_out, [gs_seg_label], [gs_cluster_label])
                 #print(res_graph_spice.keys())
@@ -916,6 +916,7 @@ def setup_chain_cfg(self, cfg, print_info=True):
     self._gspice_use_true_labels      = cfg.get('graph_spice', {}).get('use_true_labels', False)
 
     self.enable_charge_rescaling = chain_cfg.get('enable_charge_rescaling', False)
+    self.collection_charge_only = chain_cfg.get('collection_charge_only', False)
     self.enable_ghost          = chain_cfg.get('enable_ghost', False)
     self.cheat_ghost           = chain_cfg.get('cheat_ghost', False)
     self.verbose               = chain_cfg.get('verbose', False)

@@ -18,9 +18,16 @@ class TruthInteraction(Interaction):
 
     Attributes
     ----------
-    depositions_MeV : np.ndarray, default np.array([])
-        Similar as `depositions`, i.e. using adapted true labels.
-        Using true MeV energy deposits instead of rescaled ADC units.
+    depositions_MeV : np.ndarray
+        (N) Array of energy deposition values for each voxel in MeV
+    truth_index : np.ndarray, default np.array([])
+        (N) IDs of voxels that correspond to the interaction within the label tensor
+    truth_points : np.dnarray, default np.array([], shape=(0,3))
+        (N,3) Set of voxel coordinates that make up this interaction in the label tensor
+    truth_depositions : np.ndarray
+        (N) Array of charge deposition values for each true voxel
+    truth_depositions_MeV : np.ndarray
+        (N) Array of energy deposition values for each true voxel in MeV
     """
 
     def __init__(self,
@@ -150,16 +157,21 @@ class TruthInteraction(Interaction):
         
         assert len(particles) > 0
         init_args = defaultdict(list)
-        reserved_attributes = [
-            'interaction_id', 'nu_id', 'volume_id', 
-            'image_id', 'points', 'index', 'depositions', 'depositions_MeV',
-            'truth_depositions_MeV', 'truth_depositions', 'truth_index'
-        ]
+        # Particle-level attributes that needs to be processed
+        reserved_attributes = ['interaction_id', 
+                               'nu_id', 
+                               'volume_id', 
+                               'image_id',
+                               'index', 'points', 'depositions',
+                               'truth_index', 'truth_points', 
+                               'truth_depositions','truth_depositions_MeV',
+                               'sed_index', 'sed_points', 'sed_depositions']
         
         processed_args = {'particles': []}
         for key, val in kwargs.items():
             processed_args[key] = val
         for p in particles:
+            # print(p.sed_depositions)
             assert type(p) is TruthParticle
             for key in reserved_attributes:
                 if key not in kwargs:
@@ -168,10 +180,18 @@ class TruthInteraction(Interaction):
         
         _process_interaction_attributes(init_args, processed_args, **kwargs)
         
+        # print(init_args)
+        
         # Handle depositions_MeV for TruthParticles
-        processed_args['depositions_MeV']       = np.concatenate(init_args['depositions_MeV'])
-        processed_args['truth_depositions']     = np.concatenate(init_args['truth_depositions'])
-        processed_args['truth_depositions_MeV'] = np.concatenate(init_args['truth_depositions_MeV'])
+        processed_args['truth_index']             = np.concatenate(init_args['truth_index'])
+        processed_args['truth_points']            = np.vstack(init_args['truth_points'])
+        
+        processed_args['truth_depositions']       = np.concatenate(init_args['truth_depositions'])
+        processed_args['truth_depositions_MeV']   = np.concatenate(init_args['truth_depositions_MeV'])
+        
+        processed_args['sed_index']               = np.concatenate(init_args['sed_index'])
+        processed_args['sed_points']              = np.vstack(init_args['sed_points'])
+        processed_args['sed_depositions']         = np.concatenate(init_args['sed_depositions'])
         
         truth_interaction = cls(**processed_args)
         

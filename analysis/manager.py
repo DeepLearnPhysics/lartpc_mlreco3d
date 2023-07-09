@@ -201,6 +201,8 @@ class AnaToolsManager:
         meta = data['meta'][0]
         assert len(meta) == 9
         
+        print("Converting units from px to cm...")
+        
         for key, val in data.items():
             if key in data_has_voxels:
                 data[key] = [self.pixel_to_cm(arr, meta) for arr in val]
@@ -425,7 +427,7 @@ class AnaToolsManager:
             self.crt_tpc_manager_initialized = True
         
         
-    def run_post_processing(self, data, result):
+    def run_post_processing(self, data, result, verbose=False):
         """Run all registered post-processing scripts.
 
         Parameters
@@ -465,7 +467,8 @@ class AnaToolsManager:
                 post_processor_interface.register_function(processor, 
                                                            priority,
                                                            processor_cfg=local_pcfg,
-                                                           profile=profile)
+                                                           profile=profile,
+                                                           verbose=verbose)
 
             post_processor_interface.process_and_modify()
             self.logger_dict.update(post_processor_interface._profile)

@@ -158,25 +158,37 @@ def adapt_labels_knn(result, label_seg, label_clustering,
             # Segmentation is always pre-deghosted
             semantic_pred = full_semantic_pred[batch_mask]
 
-            # Include true nonghost voxels by default when they have the right semantic prediction
+            # Check if the semantic labels and predictions are compatible.
+            # Intra EM activity cross-contamination is tolerate.
             true_pred = label_seg[i][batch_mask, -1]
+            incompatible_semantic = (semantic_pred == TRACK_SHP) ^ (true_pred == TRACK_SHP)
+
+            # Include true nonghost voxels by default when they have the right semantic prediction
             new_label_clustering[(true_pred < num_classes)] = make_float(batch_clustering)
-            new_label_clustering[(true_pred < num_classes) & (semantic_pred != true_pred), c3:] = -1.
+            new_label_clustering[(true_pred < num_classes) & incompatible_semantic, c3:] = -1.
             for semantic in unique(semantic_pred):
                 semantic_mask = semantic_pred == semantic
 
                 if true_mask is not None:
                     continue
-                # Select voxels predicted as nonghost, but true ghosts (or true nonghost, but wrong semantic prediction)
+                # Select voxels predicted as nonghost, but true ghosts (or true nonghost, but incompatible semantic prediction)
                 # mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
-                mask = nonghost_mask & (true_pred != semantic) & semantic_mask
+                if semantic == TRACK_SHP:
+                    incompatible_semantic = true_pred != semantic
+                else:
+                    incompatible_semantic = (true_pred == GHOST_SHP) | (true_pred == TRACK_SHP)
+                mask = nonghost_mask & incompatible_semantic & semantic_mask
                 mask = where(mask)[0]
                 #print(semantic, np.intersect1d(mask.cpu().numpy(), indices))
                 # Now we need a special treatment for these, if there are any.
                 if batch_coords[mask].shape[0] == 0:
                     continue
                 tagged_voxels_count = 1 # to get the loop started
-                X_true = batch_clustering[batch_clustering[:, -1] == semantic]
+                if semantic == TRACK_SHP:
+                    compatible_semantic = batch_clustering[:, -1] == semantic
+                else:
+                    compatible_semantic = (batch_clustering[:, -1] != GHOST_SHP) & (batch_clustering[:, -1] != TRACK_SHP)
+                X_true = batch_clustering[compatible_semantic]
                 if X_true.shape[0] == 0:
                     continue
                 X_pred = batch_coords[mask]

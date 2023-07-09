@@ -92,7 +92,7 @@ def box_traces(lowers, uppers, draw_faces=False, color=None, hovertext=None, lin
         (N, 3) List of vector of upper boundaries in x, z and z
     draw_faces : bool, default False
         Weather or not to draw the box faces, or only the edges
-    color : Union[int, str, np.ndarray], optional
+    color : Union[str, np.ndarray], optional
         Color of boxes or list of color of boxes
     hovertext : Union[int, str, np.ndarray], optional
         Text associated with every box or each box
@@ -123,7 +123,7 @@ def box_traces(lowers, uppers, draw_faces=False, color=None, hovertext=None, lin
     return traces
 
 
-def scatter_boxes(coords, dimensions=[1.,1.,1.], draw_faces=True, color='orange', opacity=0.8, hovertext=None, linewidth=2, **kwargs):
+def scatter_boxes(coords, dimensions=[1.,1.,1.], draw_faces=True, color='orange', hovertext=None, linewidth=2, **kwargs):
     """
     Function which produces a list of plotly traces of boxes
     given a list of coordinates and a box dimension.
@@ -143,7 +143,7 @@ def scatter_boxes(coords, dimensions=[1.,1.,1.], draw_faces=True, color='orange'
         (3) Dimensions of the box in each dimension, i.e. (b_x, b_y, b_z)
     draw_faces : bool, default True
         Weather or not to draw the box faces, or only the edges
-    color : Union[int, str, np.ndarray], default 'orange'
+    color : Union[str, np.ndarray], default 'orange'
         Color of boxes or list of color of boxes
     hovertext : Union[int, str, np.ndarray], optional
         Text associated with every box or each box

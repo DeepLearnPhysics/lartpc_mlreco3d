@@ -77,7 +77,7 @@ def pixel_to_cm(coords, meta, translate=True):
         If set to `False`, this function returns the input unchanged
     '''
     if not translate:
-        return coordinates
+        return coords
 
     lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
     return lower + (coords + .5) * size
@@ -102,7 +102,7 @@ def cm_to_pixel(coords, meta, translate=True):
         If set to `False`, this function returns the input unchanged
     '''
     if not translate:
-        return coordinates
+        return coords
 
     lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
     return (coords - lower) / size - .5
