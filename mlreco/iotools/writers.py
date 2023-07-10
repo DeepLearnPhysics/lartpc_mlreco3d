@@ -191,8 +191,9 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
-                assert len(blob[key][0]),\
-                        'Cannot infer the dtype of an empty list and hence cannot initialize the output HDF5 file'
+                if len(blob[key][0]) == 0:
+                    msg = 'Cannot infer the dtype of an empty list <{}> and hence cannot initialize the output HDF5 file'.format(key)
+                    raise AssertionError(msg)
                 # TODO: In this case, fall back on a default dtype specified elsewhere
 
                 if isinstance(blob[key][0][0], self.DATAOBJS):
