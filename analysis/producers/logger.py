@@ -340,6 +340,14 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    @tag('true')
+    def truth_depositions_sum(particle):
+        out = {'particle_truth_depositions_sum': -1}
+        if particle is not None and type(particle) is TruthParticle:
+            out['particle_truth_depositions_sum'] = particle.truth_depositions_sum
+        return out
+    
+    @staticmethod
     def matched(particle):
         out = {'matched': False}
         if particle is not None:
