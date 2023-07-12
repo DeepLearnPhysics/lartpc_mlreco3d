@@ -3,7 +3,9 @@ import numpy as np
 from typing import Counter, List, Union
 from . import Particle
 from mlreco.utils.globals import PDG_TO_PID, SHAPE_LABELS
+from mlreco.utils.utils import pixel_to_cm
 from functools import cached_property
+import sys
 
 class TruthParticle(Particle):
     '''
@@ -79,12 +81,30 @@ class TruthParticle(Particle):
         self.length_tng = length_tng
         self.csda_kinetic_energy_tng = csda_kinetic_energy_tng
         
-        # Set start_point and end_point to first and last step in case
-        # it wasn't set during initialization
-        # if self._start_point is None:
-        #     self._start_point = self.first_step
-        # if self._end_point is None and self.semantic_type == 1:
-        #     self._end_point   = self.last_step
+        if self.asis is not None:
+            self._start_position = np.array([getattr(self.asis.position(), a)() \
+                for a in ['x', 'y', 'z']], dtype=np.float32)
+        else:
+            self._start_position = -np.ones(3) * sys.maxsize
+            
+        if self.asis is not None:
+            self._end_position = np.array([getattr(self.asis.end_position(), a)() \
+                for a in ['x', 'y', 'z']], dtype=np.float32)
+        else:
+            self._end_position = -np.ones(3) * sys.maxsize
+            
+        if self.asis is not None:
+            self._first_step = np.array([getattr(self.asis.first_step(), a)() \
+                for a in ['x', 'y', 'z']], dtype=np.float32)
+        else:
+            self._first_step = -np.ones(3) * sys.maxsize
+            
+        if self.semantic_type == 1:
+            self._last_step = np.array([getattr(self.asis.last_step(), a)() \
+                for a in ['x', 'y', 'z']], dtype=np.float32)
+        else:
+            self._last_step = -np.ones(3) * sys.maxsize
+        
 
 
     @property
@@ -145,40 +165,20 @@ class TruthParticle(Particle):
             self._truth_start_dir = self.momentum/np.linalg.norm(self.momentum)
         return self._truth_start_dir
     
-    @cached_property
+    @property
     def start_position(self):
-        if self.asis is not None:
-            self._start_position = np.array([getattr(self.asis.position(), a)() \
-                for a in ['x', 'y', 'z']], dtype=np.float32)
-        else:
-            self._start_position = -np.ones(3)
         return self._start_position
     
-    @cached_property
+    @property
     def end_position(self):
-        if self.asis is not None:
-            self._end_position = np.array([getattr(self.asis.end_position(), a)() \
-                for a in ['x', 'y', 'z']], dtype=np.float32)
-        else:
-            self._end_position = -np.ones(3)
         return self._end_position
     
-    @cached_property
+    @property
     def first_step(self):
-        if self.asis is not None:
-            self._first_step = np.array([getattr(self.asis.first_step(), a)() \
-                for a in ['x', 'y', 'z']], dtype=np.float32)
-        else:
-            self._first_step = -np.ones(3)
         return self._first_step
     
-    @cached_property
+    @property
     def last_step(self):
-        if self.semantic_type == 1:
-            self._last_step = np.array([getattr(self.asis.last_step(), a)() \
-                for a in ['x', 'y', 'z']], dtype=np.float32)
-        else:
-            self._last_step = -np.ones(3)
         return self._last_step
     
     @cached_property
@@ -188,3 +188,24 @@ class TruthParticle(Particle):
     @cached_property
     def energy_deposit(self):
         return float(self.asis.energy_deposit())
+    
+    def convert_to_cm(self, meta):
+        
+        assert self._units == 'px'
+        
+        if len(self.points) > 0:
+            self.points = pixel_to_cm(self.points, meta)
+        self.start_point = pixel_to_cm(self.start_point, meta)
+        self.end_point = pixel_to_cm(self.end_point, meta)
+        
+        self.truth_points = pixel_to_cm(self.truth_points, meta)
+        if len(self.sed_points) > 0:
+            self.sed_points = pixel_to_cm(self.sed_points, meta)
+        if self.asis is not None:
+            self._first_step = pixel_to_cm(self._first_step, meta)
+            self._start_position = pixel_to_cm(self._start_position, meta)
+            self._end_position = pixel_to_cm(self._end_position, meta)
+            if self.semantic_type == 1:
+                self._last_step = pixel_to_cm(self._last_step, meta)
+
+        self._units = 'cm'

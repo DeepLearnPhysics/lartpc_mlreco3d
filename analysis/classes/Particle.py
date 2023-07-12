@@ -4,7 +4,7 @@ from typing import Counter, List, Union
 from collections import OrderedDict
 
 from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
-
+from mlreco.utils.utils import pixel_to_cm
 
 class Particle:
     '''
@@ -59,7 +59,7 @@ class Particle:
         (3) Particle direction estimate w.r.t. the end point
     energy_sum : float, default -1
         Energy reconstructed from the particle deposition sum
-    momentum_range : float, default -1
+    csda_kinetic_energy : float, default -1
         Momentum reconstructed from the particle range
     momentum_mcs : float, default -1
         Momentum reconstructed using the MCS method
@@ -97,6 +97,7 @@ class Particle:
         self._pid             = -1
         self._size            = -1
         self._is_primary      = False
+        self._units           = 'px'
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -330,3 +331,12 @@ class Particle:
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
         self._is_primary = bool(np.argmax(primary_scores))
+        
+    def convert_to_cm(self, meta):
+        
+        assert self._units == 'px'
+        self.points = pixel_to_cm(self.points, meta)
+        self.start_point = pixel_to_cm(self.start_point, meta)
+        self.end_point = pixel_to_cm(self.end_point, meta)
+
+        self._units = 'cm'

@@ -90,7 +90,7 @@ def scatter_points(points, color=None, colorscale=None, cmin=None, cmax=None, op
         trace_dict['z'] = points[:,coord_cols[2]]
         return [go.Scatter3d(**trace_dict)]
     else:
-        return [go.Scatter(**trac_dict)]
+        return [go.Scatter(**trace_dict)]
 
 
 class Scatter3D:

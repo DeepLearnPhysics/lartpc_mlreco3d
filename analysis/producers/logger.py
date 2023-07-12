@@ -150,7 +150,7 @@ class ParticleLogger(AnalysisLogger):
     def is_primary(particle):
         out = {'particle_is_primary': False}
         if hasattr(particle, 'is_primary'):
-            out['particle_is_primary'] = particle.is_primary
+            out['particle_is_primary'] = bool(particle.is_primary)
         return out
     
     @staticmethod
@@ -478,6 +478,22 @@ class InteractionLogger(AnalysisLogger):
             out['vertex_x'] = ia.vertex[0]
             out['vertex_y'] = ia.vertex[1]
             out['vertex_z'] = ia.vertex[2]
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def truth_vertex(ia):
+        out = {
+            # 'has_vertex': False,
+            'truth_vertex_x': -sys.maxsize,
+            'truth_vertex_y': -sys.maxsize,
+            'truth_vertex_z': -sys.maxsize,
+            # 'vertex_info': None
+        }
+        if ia is not None and hasattr(ia, 'truth_vertex'):
+            out['truth_vertex_x'] = ia.vertex[0]
+            out['truth_vertex_y'] = ia.vertex[1]
+            out['truth_vertex_z'] = ia.vertex[2]
         return out
     
     @staticmethod
