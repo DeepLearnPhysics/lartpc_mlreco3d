@@ -79,23 +79,77 @@ PID_LABELS = {
     #5:  'Kaon'
 }
 
-# Neutrino interaction type labels
-NU_INTERACTION_TYPE = {
+# Neutrino current type
+NU_CURR_TYPE = {
+    0: 'CC',
+    1: 'NC'
+}
+
+# Neutrino interaction mode and type labels
+# Source: https://internal.dunescience.org/doxygen/MCNeutrino_8h_source.html
+NU_INT_TYPE = {
+    -1:   'UnknownInteraction',
+    1:    'QE',
+    2:    'DIS',
+    3:    'Coh',
+    4:    'CohElastic',
+    5:    'ElectronScattering',
+    6:    'IMDAnnihilation',
+    7:    'InverseBetaDecay',
+    8:    'GlashowResonance',
+    9:    'AMNuGamma',
+    10:   'MEC',
+    11:   'Diffractive',
+    12:   'EM',
+    13:   'WeakMix',
+    1000: 'NuanceOffset',
     1001: 'CCQE',
-    1000: 'Undefined',
+    1002: 'NCQE',
     1003: 'ResCCNuProtonPiPlus',
-    1091: 'CCDIS',
     1004: 'ResCCNuNeutronPi0',
     1005: 'ResCCNuNeutronPiPlus',
-    1002: 'NCQE',
-    1092: 'NCDIS',
     1006: 'ResNCNuProtonPi0',
+    1007: 'ResNCNuProtonPiPlus',
     1008: 'ResNCNuNeutronPi0',
     1009: 'ResNCNuNeutronPiMinus',
-    1007: 'ResNCNuNeutronPiPlus',
+    1010: 'ResCCNuBarNeutronPiMinus',
+    1011: 'ResCCNuBarProtonPi0',
+    1012: 'ResCCNuBarProtonPiMinus',
+    1013: 'ResNCNuBarProtonPi0',
+    1014: 'ResNCNuBarProtonPiPlus',
+    1015: 'ResNCNuBarNeutronPi0',
+    1016: 'ResNCNuBarNeutronPiMinus',
+    1017: 'ResCCNuDeltaPlusPiPlus',
+    1021: 'ResCCNuDelta2PlusPiMinus',
+    1028: 'ResCCNuBarDelta0PiMinus',
+    1032: 'ResCCNuBarDeltaMinusPiPlus',
+    1039: 'ResCCNuProtonRhoPlus',
+    1041: 'ResCCNuNeutronRhoPlus',
+    1046: 'ResCCNuBarNeutronRhoMinus',
+    1048: 'ResCCNuBarNeutronRho0',
+    1053: 'ResCCNuSigmaPlusKaonPlus',
+    1055: 'ResCCNuSigmaPlusKaon0',
+    1060: 'ResCCNuBarSigmaMinusKaon0',
+    1062: 'ResCCNuBarSigma0Kaon0',
+    1067: 'ResCCNuProtonEta',
+    1070: 'ResCCNuBarNeutronEta',
+    1073: 'ResCCNuKaonPlusLambda0',
+    1076: 'ResCCNuBarKaon0Lambda0',
+    1079: 'ResCCNuProtonPiPlusPiMinus',
+    1080: 'ResCCNuProtonPi0Pi0',
+    1085: 'ResCCNuBarNeutronPiPlusPiMinus',
+    1086: 'ResCCNuBarNeutronPi0Pi0',
+    1090: 'ResCCNuBarProtonPi0Pi0',
+    1091: 'CCDIS',
+    1092: 'NCDIS',
+    1093: 'UnUsed1',
+    1094: 'UnUsed2',
+    1095: 'CCQEHyperon',
+    1096: 'NCCOH',
     1097: 'CCCOH',
     1098: 'NuElectronElastic',
-    -1: 'N/A'
+    1099: 'InverseMuDecay',
+    1100: 'MEC2p2h'
 }
 
 # Particle masses
