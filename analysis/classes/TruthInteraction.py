@@ -46,7 +46,7 @@ class TruthInteraction(Interaction):
                  nu_interaction_mode: int = -1,
                  nu_current_type: int = -1,
                  nu_energy_init: float = -1.,
-                 truth_vertex: np.ndarray = np.full(3, -sys.maxsize),
+                #  truth_vertex: np.ndarray = np.full(3, -sys.maxsize),
                  **kwargs):
         
         # Initialize private attributes to be set by setter only
@@ -78,7 +78,7 @@ class TruthInteraction(Interaction):
         self.nu_current_type     = nu_current_type
         self.nu_energy_init      = nu_energy_init
         
-        self.truth_vertex = truth_vertex
+        # self.truth_vertex = truth_vertex
         
     @property
     def particles(self):
@@ -261,7 +261,7 @@ class TruthInteraction(Interaction):
             self.sed_points = pixel_to_cm(self.sed_points, meta)
         if (self.vertex > 0).all():
             self.vertex = pixel_to_cm(self.vertex, meta)
-        if (self.truth_vertex > 0).all():
-            self.truth_vertex = pixel_to_cm(self.truth_vertex, meta)
+        # if (self.truth_vertex > 0).all():
+            # self.truth_vertex = pixel_to_cm(self.truth_vertex, meta)
             
         self._units = 'cm'
