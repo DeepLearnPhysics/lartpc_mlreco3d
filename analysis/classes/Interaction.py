@@ -59,7 +59,8 @@ class Interaction:
                  flash_id: int = -1,
                  flash_hypothesis: float = -1,
                  matched: bool = False,
-                 is_contained: bool = False):
+                 is_contained: bool = False,
+                 units: str = 'px'):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -68,7 +69,7 @@ class Interaction:
         self.image_id     = int(image_id)
         self.vertex       = vertex
         self.is_neutrino  = is_neutrino
-        self._units       = 'px'
+        self._units       = units
         
         # Initialize private attributes to be set by setter only
         self._particles  = None
@@ -281,9 +282,15 @@ class Interaction:
             self._particles_summary += pmsg
         return self._particles_summary
     
+    # UNIT CONVERSION 
+    
+    @property
+    def units(self):
+        return self._units
+    
     def convert_to_cm(self, meta):
         
-        assert self._units == 'px'
+        assert self.units == 'px'
 
         self.points = pixel_to_cm(self.points, meta)
         if (self.vertex > 0).all():

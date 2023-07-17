@@ -39,6 +39,14 @@ def run_flash_matching(data_dict, result_dict,
     interactions = result_dict['interactions']
     entry        = data_dict['index']
     
+    # Check if coordinates are in cm
+    rounding_error = np.abs(np.sum(
+        interactions[0].points - interactions[0].points.astype(int)))
+    if rounding_error < 1e-6:
+        msg = f"Rounding error = {rounding_error:.6f}; " \
+            + "It seems you are trying to run flash matching on points with pixel units. Aborting."
+        raise AssertionError(msg)
+    
     fmatches_E = fm.get_flash_matches(int(entry), 
                                       interactions,
                                       opflashes,

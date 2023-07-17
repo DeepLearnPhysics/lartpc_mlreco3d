@@ -87,7 +87,8 @@ class Particle:
                  csda_kinetic_energy: float = -1.,
                  momentum_mcs: float = -1., 
                  matched: bool = False,
-                 is_contained: bool = False, **kwargs):
+                 is_contained: bool = False, 
+                 units: str = 'px', **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -97,7 +98,7 @@ class Particle:
         self._pid             = -1
         self._size            = -1
         self._is_primary      = False
-        self._units           = 'px'
+        self._units           = units
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -340,3 +341,7 @@ class Particle:
         self.end_point = pixel_to_cm(self.end_point, meta)
 
         self._units = 'cm'
+        
+    @property
+    def units(self):
+        return self._units

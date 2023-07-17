@@ -69,7 +69,7 @@ class TruthParticle(Particle):
         self._truth_size            = truth_points.shape[0]
         self._truth_depositions     = np.atleast_1d(truth_depositions)   # Must be ADC
         self._truth_depositions_MeV = np.atleast_1d(truth_depositions_MeV)   # Must be MeV
-        self._truth_depositions_sum = -1
+        self._truth_depositions_sum = self._truth_depositions.sum()
         
         self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
