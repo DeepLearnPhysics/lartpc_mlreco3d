@@ -8,7 +8,8 @@ from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.globals import *
-from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
+# from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor_new import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.deghosting import compute_rescaled_charge
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
@@ -116,8 +117,8 @@ class FullChain(FullChainGNN):
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = GraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
-                                                                    batch_col=self.batch_col,
-                                                                    training=False) # for downstream, need to run prediction in inference mode
+                                                                    # batch_col=self.batch_col,
+                                                                     training=False) # for downstream, need to run prediction in inference mode
             # edge cut threshold is usually 0. (unspecified) during training, but 0.1 at inference
             self.gs_manager.ths = cfg.get('graph_spice', {}).get('constructor_cfg', {}).get('edge_cut_threshold', 0.1)
 
@@ -358,20 +359,25 @@ class FullChain(FullChainGNN):
 
 
                 if self.process_fragments:
-                    #self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
-                    #                              spatial_embeddings_output['graph_info'][0])
-                    self.gs_manager.replace_state(spatial_embeddings_output)
 
-                    self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
-                    cluster_predictions = self.gs_manager._node_pred.x
+                    # self.gs_manager.replace_state(spatial_embeddings_output)
+                    
+                    self.gs_manager.load_state(spatial_embeddings_output)
+
+                    # self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
+                    # cluster_predictions = self.gs_manager._node_pred.x
+                    
+                    node_pred = self.gs_manager.fit_predict()
+                    cluster_predictions = node_pred
+                    
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],
                                                 cluster_predictions.to(device)[:, None]], dim=1)
                     # For the record - (self.gs_manager._node_pred.pos == input[0][filtered_semantic][:, 1:4]).all()
-                    # ie ordering of voxels is the same in node predictions and (filtered) input data
-                    # with np.printoptions(precision=3, suppress=True):
-                    #     print('filtered input', filtered_input.shape, filtered_input[:, 0].sum(), filtered_input[:, 1].sum(), filtered_input[:, 2].sum(), filtered_input[:, 3].sum(), filtered_input[:, 4].sum(), filtered_input[:, 5].sum())
-                    #     print(torch.unique( filtered_input[:, 5], return_counts=True))
+                    # ie ordering of voxels is NOT the same in node predictions and (filtered) input data
+                    # It is likely that input data is lexsorted while node predictions 
+                    # (and anything that are concatenated through Batch.from_data_list) are not. 
+
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragment_clusts'].extend(fragment_data[0])
                     cluster_result['fragment_batch_ids'].extend(fragment_data[1])

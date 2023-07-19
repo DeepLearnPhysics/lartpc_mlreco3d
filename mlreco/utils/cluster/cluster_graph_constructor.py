@@ -1,15 +1,16 @@
 from typing import Union, Callable, Tuple, List
-from abc import ABC, abstractmethod
 
+# Silencing this warning about unclassified (-1) voxels
+# /usr/local/lib/python3.8/dist-packages/sklearn/neighbors/_classification.py:601: 
+# UserWarning: Outlier label -1 is not in training classes. 
+# All class probabilities of outliers will be assigned with 0.
+# warnings.warn('Outlier label {} is not in training '
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-
-from pprint import pprint
 
 import networkx as nx
 from torch_cluster import knn_graph, radius_graph
@@ -17,134 +18,8 @@ from torch_cluster import knn_graph, radius_graph
 from mlreco.utils.metrics import *
 from mlreco.utils.cluster.graph_batch import GraphBatch
 from torch_geometric.data import Data as GraphData
-# from torch_geometric.data import Batch as GraphBatch
-
-from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsClassifier, kneighbors_graph
 from scipy.special import expit
-
-
-# Silencing this warning about unclassified (-1) voxels
-# /usr/local/lib/python3.8/dist-packages/sklearn/neighbors/_classification.py:601: UserWarning: Outlier label -1 is not in training classes. All class probabilities of outliers will be assigned with 0.
-#   warnings.warn('Outlier label {} is not in training '
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
-
-def knn_sklearn(coords, k=5):
-    if isinstance(coords, torch.Tensor):
-        device = coords.device
-        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=k).tocoo()
-        out = np.vstack([G.row, G.col])
-        return torch.Tensor(out).long().to(device=device)
-    elif isinstance(coords, np.ndarray):
-        G = kneighbors_graph(coords, n_neighbors=k).tocoo()
-        out = np.vstack([G.row, G.col])
-        return out
-
-
-def get_edge_weight(sp_emb: torch.Tensor,
-                    ft_emb: torch.Tensor,
-                    cov: torch.Tensor,
-                    edge_indices: torch.Tensor,
-                    occ=None,
-                    eps=0.001):
-    '''
-    INPUTS:
-        - sp_emb (N x D)
-        - ft_emb (N x F)
-        - cov (N x 2)
-        - occ (N x 0)
-        - edge_indices (2 x E)
-
-    RETURNS:
-        - pvec (N x 0)
-    '''
-    # print(edge_indices.shape)
-    device = sp_emb.device
-    ui, vi = edge_indices[0, :], edge_indices[1, :]
-
-    sp_cov_i = cov[:, 0][ui]
-    sp_cov_j = cov[:, 0][vi]
-    sp_i = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov_i**2 + eps)
-    sp_j = ((sp_emb[ui] - sp_emb[vi])**2).sum(dim=1) / (sp_cov_j**2 + eps)
-
-    ft_cov_i = cov[:, 1][ui]
-    ft_cov_j = cov[:, 1][vi]
-    ft_i = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov_i**2 + eps)
-    ft_j = ((ft_emb[ui] - ft_emb[vi])**2).sum(dim=1) / (ft_cov_j**2 + eps)
-
-    p_ij = torch.exp(-sp_i-ft_i)
-    p_ji = torch.exp(-sp_j-ft_j)
-
-    pvec = torch.clamp(p_ij + p_ji - p_ij * p_ji, min=0, max=1).squeeze()
-
-    if occ is not None:
-        r1 = occ[edge_indices[0, :]]
-        r2 = occ[edge_indices[1, :]]
-        # print(r1.shape, r2.shape)
-        r = torch.max((r2 + eps) / (r1 + eps), (r1 + eps) / (r2 + eps))
-        pvec = pvec / r
-        # print(pvec.shape)
-    pvec = torch.clamp(pvec, min=1e-5, max=1-1e-5)
-    return pvec
-
-
-class StrayAssigner(ABC):
-    '''
-    Abstract Class for orphan assigning functors.
-    '''
-    def __init__(self, X, Y, metric_fn : Callable = None, **kwargs):
-        self.clustered = X
-        self.d = metric_fn
-        self.partial_labels = Y
-        super().__init__()
-
-    @abstractmethod
-    def assign_orphans(self):
-        pass
-
-class NearestNeighborsAssigner(StrayAssigner):
-    '''
-    Assigns orphans to the k-nearest cluster using simple kNN Classifier.
-    '''
-    def __init__(self, X, Y, **kwargs):
-        '''
-            X: Points to run Nearest-Neighbor Classifier (N x F)
-            Y: Labels of Points (N, )
-        '''
-        super(NearestNeighborsAssigner, self).__init__(X, Y, **kwargs)
-        self._neigh = KNeighborsClassifier(**kwargs)
-        self._neigh.fit(X, Y)
-
-    def assign_orphans(self, orphans, get_proba=False):
-        pred = self._neigh.predict(orphans)
-        self._pred = pred
-        if get_proba:
-            self._proba = self._neigh.predict_proba(orphans)
-            self._max_proba = np.max(self._proba, axis=1)
-        return pred
-
-
-class RadiusNeighborsAssigner(StrayAssigner):
-    '''
-    Assigns orphans to the k-nearest cluster using simple kNN Classifier.
-    '''
-    def __init__(self, X, Y, **kwargs):
-        '''
-            X: Points to run Nearest-Neighbor Classifier (N x F)
-            Y: Labels of Points (N, )
-        '''
-        super(RadiusNeighborsAssigner, self).__init__(X, Y, **kwargs)
-        self._neigh = RadiusNeighborsClassifier(**kwargs)
-        self._neigh.fit(X, Y)
-
-    def assign_orphans(self, orphans, get_proba=False):
-        pred = self._neigh.predict(orphans)
-        self._pred = pred
-        if get_proba:
-            self._proba = self._neigh.predict_proba(orphans)
-            self._max_proba = np.max(self._proba, axis=1)
-        return pred
+from .helpers import *
 
 
 class ClusterGraphConstructor:
@@ -329,12 +204,14 @@ class ClusterGraphConstructor:
                 if self.use_cluster_labels:
                     frag_labels = labels_batch[class_mask][:, self.cluster_col]
                     truth = self.get_edge_truth(edge_indices, frag_labels)
+                    data.node_truth = frag_labels
                     data.edge_truth = truth
                 data_list.append(data)
             index += 1
 
         self._info = pd.DataFrame(self._info)
         self.data_list = data_list
+        self._graph_batch = GraphBatch()
         self._graph_batch = self._graph_batch.from_data_list(data_list)
         self._num_total_nodes = self._graph_batch.x.shape[0]
         self._node_dim = self._graph_batch.x.shape[1]
@@ -537,110 +414,6 @@ class ClusterGraphConstructor:
         self._node_pred = GraphBatch.from_data_list(pred_data_list)
         # self._graph_batch.add_node_features(node_pred, 'node_pred',
         #                                     dtype=torch.long)
-
-
-    def evaluate_nodes(self, cluster_label : np.ndarray,
-                             metrics : List[ Callable ],
-                             skip=[],
-                             column_names=None,
-                             ignore_index=[-1]):
-        '''
-        Evaluate accuracy metrics for node predictions using a list of
-        scoring functions.
-
-        INPUTS:
-            - cluster_label : N x 6 Tensor, with pos, batch id,
-            fragment_label, and segmentation label.
-            - metrics : List of accuracy metric evaluation functions.
-            - skip: list of graph ids to skip evaluation.
-            - ignore_index: list of true cluster ids to ignore
-        Constructs a GraphBatch object containing true labels and stores it
-        as an attribute to self.
-        '''
-        assert hasattr(self, '_node_pred')
-        skip = set(skip)
-        num_graphs = self._graph_batch.num_graphs
-        entry_list = [i for i in range(num_graphs) if i not in skip]
-
-        # Due to different voxel ordering convention, we need to create
-        # a separate GraphBatch object for labels
-        label_list = []
-        if isinstance(cluster_label, torch.Tensor):
-            batch_index = cluster_label[:, self.batch_col].int().cpu().numpy()
-            segment_label = cluster_label[:, self.seg_col].int().cpu().numpy()
-            fragment_label = cluster_label[:, self.cluster_col].int().cpu().numpy()
-            label_pos = cluster_label[:, 1:4].int().cpu().numpy()
-        else:
-            batch_index = cluster_label[:, self.batch_col].astype(int)
-            segment_label = cluster_label[:, self.seg_col].astype(int)
-            fragment_label = cluster_label[:, self.cluster_col].astype(int)
-            label_pos = cluster_label[:, 1:4]
-
-        for bidx in np.unique(batch_index):
-            batch_mask = batch_index == bidx
-            labels_batch = cluster_label[batch_mask]
-            slabels = segment_label[batch_mask]
-            clabels = fragment_label[batch_mask]
-            batch_pos = label_pos[batch_mask]
-            for c in np.unique(slabels):
-                gt = clabels[slabels == c]
-                x = torch.Tensor(gt).to(dtype=torch.long)
-                pos = batch_pos[slabels == c]
-                d = GraphData(x=x, pos=pos)
-                label_list.append(d)
-        node_truth = GraphBatch.from_data_list(label_list)
-        self._node_truth = node_truth
-
-        add_columns = { f.__name__ : [] for f in metrics}
-        if column_names is None:
-            column_name_map = { f.__name__ : f.__name__ for f in metrics}
-        else:
-            column_name_map = { f.__name__ : name for f,name \
-                                in zip(metrics, column_names)}
-
-        for entry in entry_list:
-            batch_id, semantic_id = self.get_batch_and_class(entry)
-            subgraph = self.get_graph(batch_id, semantic_id)
-
-            # Sort rows
-            if isinstance(subgraph.pos, torch.Tensor):
-                entry_pos = subgraph.pos.cpu().numpy()
-            else:
-                entry_pos = subgraph.pos
-            # entry_perm = np.lexsort(entry_pos.T)
-            # print(entry_pos[entry_perm])
-
-
-            batch_index = (self._graph_batch.batch.cpu().numpy() == entry)
-            labels = self._node_truth.get_example(entry).x
-            temp = self._node_truth.get_example(entry).pos
-
-            if isinstance(temp, torch.Tensor):
-                label_pos = temp.cpu().numpy()
-            else:
-                label_pos = temp
-            label_perm = np.lexsort(label_pos.T)
-            # print(label_pos)
-            # print(label_pos[label_perm])
-
-            # assert False
-            # print(self.node_pred.get_example(entry).pos)
-            pred = self._node_pred.get_example(entry).x
-            mask = ~np.isin(labels, ignore_index)
-            if np.count_nonzero(mask) == 0:
-                print('No node to cluster in CGC')
-                for f in metrics:
-                    add_columns[f.__name__].append(np.nan)
-                continue
-
-            for f in metrics:
-                score = f(pred[mask], labels[mask])
-                # print(score)
-                add_columns[f.__name__].append(score)
-
-        self._info = self._info.assign(**add_columns)
-        self._info.rename(columns=column_name_map, inplace=True)
-        return self.info
 
 
     @property

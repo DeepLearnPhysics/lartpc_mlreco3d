@@ -23,8 +23,10 @@ def to_numpy(array):
 
     if isinstance(array, np.ndarray):
         return array
-    if isinstance(array, torch.Tensor):
+    elif isinstance(array, torch.Tensor):
         return array.cpu().detach().numpy()
+    elif isinstance(array, tuple):
+        return np.array(array)
     elif isinstance(array, ME.SparseTensor):
         return torch.cat([array.C.float(), array.F], dim=1).detach().cpu().numpy()
     else:

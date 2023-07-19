@@ -8,7 +8,7 @@ from mlreco.models.layers.cluster_cnn import gs_kernel_construct, spice_loss_con
 from mlreco.models.layers.cluster_cnn.graph_spice_embedder import GraphSPICEEmbedder
 
 from pprint import pprint
-from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor_new import ClusterGraphConstructor
 
 
 class GraphSPICE(nn.Module):
@@ -146,6 +146,7 @@ class GraphSPICE(nn.Module):
 
         self.kernel_cfg = self.model_config.get('kernel_cfg', {})
         self.kernel_fn = gs_kernel_construct(self.kernel_cfg)
+        self.invert = self.model_config.get('invert', True)
 
         constructor_cfg = self.model_config.get('constructor_cfg', {})
 
@@ -154,8 +155,7 @@ class GraphSPICE(nn.Module):
         # Cluster Graph Manager
         # `training` needs to be set at forward time.
         # Before that, self.training is always True.
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                  batch_col=0)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
 
         self.RETURNS.update(self.embedder.RETURNS)
 
@@ -195,13 +195,18 @@ class GraphSPICE(nn.Module):
         # Build the graph
         graph = self.gs_manager(res,
                                 self.kernel_fn,
-                                labels)
+                                labels,
+                                invert=self.invert)
+        self.gs_manager.fit_predict(skip=self.skip_classes)
+        
+        graph_state = self.gs_manager.save_state()
+        res.update(graph_state)
 
-        res['edge_index'] = [graph.edge_index.T]
-        res['edge_score'] = [graph.edge_attr]
-        if hasattr(graph, 'edge_truth'):
-            res['edge_truth'] = [graph.edge_truth]
-        res['graph_info'] = [self.gs_manager.info.to_numpy()]
+        # res['edge_index'] = [graph.edge_index.T]
+        # res['edge_score'] = [graph.edge_attr]
+        # if hasattr(graph, 'edge_truth'):
+        #     res['edge_truth'] = [graph.edge_truth]
+        # res['graph_info'] = [self.gs_manager.info.to_numpy()]
 
         return res
 
@@ -262,8 +267,7 @@ class GraphSPICELoss(nn.Module):
         self.RETURNS.update(self.loss_fn.RETURNS)
 
         constructor_cfg = self.model_config.get('constructor_cfg', {})
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                  batch_col=0)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
 
         self.invert = self.loss_config.get('invert', True)
         # print("LOSS FN = ", self.loss_fn)
@@ -282,7 +286,8 @@ class GraphSPICELoss(nn.Module):
         '''
 
         '''
-        self.gs_manager.replace_state(result)
+        # self.gs_manager.replace_state(result)
+        self.gs_manager.load_state(result['graph_state'])
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0
