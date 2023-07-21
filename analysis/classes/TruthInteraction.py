@@ -7,14 +7,13 @@ from functools import cached_property
 from . import Interaction, TruthParticle
 from .Interaction import _process_interaction_attributes
 
+from mlreco.utils.decorators import inherit_docstring
 
+@inherit_docstring(Interaction)
 class TruthInteraction(Interaction):
     """
     Data structure mirroring <Interaction>, reserved for true interactions
     derived from true labels / true MC information.
-
-    See <Interaction> documentation for shared attributes.
-    Below are attributes exclusive to TruthInteraction
 
     Attributes
     ----------
@@ -40,7 +39,7 @@ class TruthInteraction(Interaction):
                  sed_points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
-                 sed_depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 sed_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  nu_interaction_type: int = -1,
                  nu_interaction_mode: int = -1,
                  nu_current_type: int = -1,
@@ -64,7 +63,7 @@ class TruthInteraction(Interaction):
 
             self.sed_index              = sed_index
             self.sed_points             = sed_points
-            self.sed_depositions        = np.atleast_1d(sed_depositions)
+            self.sed_depositions_MeV    = np.atleast_1d(sed_depositions_MeV)
             self._sed_size              = sed_points.shape[0]
             
         # Invoke particles setter
@@ -101,7 +100,7 @@ class TruthInteraction(Interaction):
             depositions_MeV_list = []
 
             sed_index_list, sed_points_list = [], []
-            sed_depositions_list = []
+            sed_depositions_MeV_list = []
             for p in value:
                 self.check_particle_input(p)
                 id_list.append(p.id)
@@ -121,7 +120,7 @@ class TruthInteraction(Interaction):
                 # SED
                 sed_index_list.append(p.sed_index)
                 sed_points_list.append(p.sed_points)
-                sed_depositions_list.append(p.sed_depositions)
+                sed_depositions_MeV_list.append(p.sed_depositions_MeV)
 
                 if p.pid >= 0:
                     self._truth_particle_counts[p.pid] += 1
@@ -150,7 +149,7 @@ class TruthInteraction(Interaction):
             self._truth_depositions_MeV = np.atleast_1d(np.concatenate(true_depositions_MeV_list))
             self.sed_index              = np.atleast_1d(np.concatenate(sed_index_list))
             self.sed_points             = np.atleast_1d(np.concatenate(sed_points_list))
-            self.sed_depositions        = np.atleast_1d(np.concatenate(sed_depositions_list))
+            self.sed_depositions_MeV    = np.atleast_1d(np.concatenate(sed_depositions_MeV_list))
         
     @classmethod
     def from_particles(cls, particles, verbose=False, **kwargs):
@@ -165,13 +164,13 @@ class TruthInteraction(Interaction):
                                'index', 'points', 'depositions',
                                'truth_index', 'truth_points', 
                                'truth_depositions','truth_depositions_MeV',
-                               'sed_index', 'sed_points', 'sed_depositions']
+                               'sed_index', 'sed_points', 'sed_depositions_MeV']
         
         processed_args = {'particles': []}
         for key, val in kwargs.items():
             processed_args[key] = val
         for p in particles:
-            # print(p.sed_depositions)
+            # print(p.sed_depositions_MeV)
             assert type(p) is TruthParticle
             for key in reserved_attributes:
                 if key not in kwargs:
@@ -191,7 +190,7 @@ class TruthInteraction(Interaction):
         
         processed_args['sed_index']               = np.concatenate(init_args['sed_index'])
         processed_args['sed_points']              = np.vstack(init_args['sed_points'])
-        processed_args['sed_depositions']         = np.concatenate(init_args['sed_depositions'])
+        processed_args['sed_depositions_MeV']     = np.concatenate(init_args['sed_depositions_MeV'])
         
         truth_interaction = cls(**processed_args)
         

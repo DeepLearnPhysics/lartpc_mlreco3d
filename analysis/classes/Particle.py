@@ -59,8 +59,8 @@ class Particle:
         (3) Particle direction estimate w.r.t. the end point
     energy_sum : float, default -1
         Energy reconstructed from the particle deposition sum
-    momentum_range : float, default -1
-        Momentum reconstructed from the particle range
+    csda_kinetic_energy : float, default -1
+        Kinetic energy reconstructed from the particle range
     momentum_mcs : float, default -1
         Momentum reconstructed using the MCS method
     match : List[int]

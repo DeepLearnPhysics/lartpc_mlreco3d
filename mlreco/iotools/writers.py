@@ -47,8 +47,8 @@ class HDF5Writer:
     # Analysis particle object attributes that do not need to be stored to HDF5
     ANA_SKIP_ATTRS = [
         'points', 'truth_points', 'sed_points', 'particles', 'fragments',
-        'asis', 'depositions', 'depositions_MeV', 'truth_depositions',
-        'truth_depositions_MeV', 'sed_depositions', 'particles_summary'
+        'depositions', 'depositions_MeV', 'truth_depositions',
+        'truth_depositions_MeV', 'sed_depositions_MeV', 'particles_summary'
     ]
 
     ANA_SKIP = {

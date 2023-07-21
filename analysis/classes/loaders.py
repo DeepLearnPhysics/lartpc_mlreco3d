@@ -135,18 +135,11 @@ class ParticleLoader(DataProductLoader):
     def _load_true(self, entry, data, result):
         out = []
         true_nonghost = data['cluster_label'][0]
-        particles_asis = data['particles_asis'][0]
         pred_nonghost = result['cluster_label_adapted'][0]
         blueprints = result['truth_particles'][0]
         for i, bp in enumerate(blueprints):
             mask = bp['index']
             true_mask = bp['truth_index']
-            pasis_selected = None
-            # Find particles_asis
-            for pasis in particles_asis:
-                if pasis.id() == bp['id']:
-                    pasis_selected = pasis
-            assert pasis_selected is not None
             
             prepared_bp = copy.deepcopy(bp)
             
@@ -154,12 +147,10 @@ class ParticleLoader(DataProductLoader):
             prepared_bp['group_id'] = group_id
             prepared_bp.pop('depositions_sum', None)
             prepared_bp.update({
-                
                 'points': pred_nonghost[mask][:, COORD_COLS],
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
                 'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-                'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
-                'particle_asis': pasis_selected
+                'truth_depositions': true_nonghost[true_mask][:, VALUE_COL]
             })
             
             match = prepared_bp.pop('match', [])

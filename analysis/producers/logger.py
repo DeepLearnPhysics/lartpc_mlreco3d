@@ -201,7 +201,7 @@ class ParticleLogger(AnalysisLogger):
     def creation_process(particle):
         out = {'particle_creation_process': 'N/A'}
         if type(particle) is TruthParticle:
-            out['particle_creation_process'] = particle.asis.creation_process()
+            out['particle_creation_process'] = particle.creation_process
         return out
     
     @staticmethod
@@ -263,7 +263,7 @@ class ParticleLogger(AnalysisLogger):
             'num_children': -1,
         }
         if type(particle) is TruthParticle:
-            out['num_children'] = len(particle.asis.children_id())
+            out['num_children'] = len(particle.children_id)
         return out
     
     @staticmethod
@@ -275,11 +275,11 @@ class ParticleLogger(AnalysisLogger):
                'children_counts_3': -1,
                'children_counts_4': -1}
         if type(particle) is TruthParticle:
-            out['children_counts_0'] = particle._children_counts[0]
-            out['children_counts_1'] = particle._children_counts[1]
-            out['children_counts_2'] = particle._children_counts[2]
-            out['children_counts_3'] = particle._children_counts[3]
-            out['children_counts_4'] = particle._children_counts[4]
+            out['children_counts_0'] = particle.children_counts[0]
+            out['children_counts_1'] = particle.children_counts[1]
+            out['children_counts_2'] = particle.children_counts[2]
+            out['children_counts_3'] = particle.children_counts[3]
+            out['children_counts_4'] = particle.children_counts[4]
         return out
     
     @staticmethod

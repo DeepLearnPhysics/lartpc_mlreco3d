@@ -10,14 +10,13 @@ def _tag_neutral_pions_true(particles):
     tagged = defaultdict(list)
     for part in particles:
         num_voxels_noghost = part.coords_noghost.shape[0]
-        p = part.asis
-        ancestor = p.ancestor_track_id()
-        if p.pdg_code() == 22 \
-            and p.creation_process() == "Decay" \
-            and p.parent_creation_process() == "primary" \
-            and p.ancestor_pdg_code() == 111 \
+        ancestor = part.ancestor_track_id
+        if part.pdg_code == 22 \
+            and part.creation_process == "Decay" \
+            and part.parent_creation_process == "primary" \
+            and part.ancestor_pdg_code = 111 \
             and num_voxels_noghost > 0:
-            tagged[ancestor].append(p.id())
+            tagged[ancestor].append(part.id)
     for photon_list in tagged.values():
         out.append(tuple(photon_list))
     return out
