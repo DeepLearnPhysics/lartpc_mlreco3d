@@ -407,15 +407,17 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
 
         res = self.loss_fn(result, segment_label, group_label)
         # print(result)
-        edge_score = result['edge_score'][0].squeeze()
-        x = edge_score.squeeze()
+        # edge_score = result['edge_score'][0].squeeze()
+        edge_score = result['edge_attr'][0].squeeze()
+        x = edge_score
         pred = x >= 0
 
         iou, edge_loss = 0, 0
 
         if self.use_cluster_labels:
-            edge_truth = result['edge_truth'][0]
-            edge_loss = self.edge_loss(edge_score.squeeze(), edge_truth.float())
+            edge_truth = result['edge_label'][0].squeeze()
+            # print(edge_score.squeeze(), edge_truth, edge_score.shape, edge_truth.shape)
+            edge_loss = self.edge_loss(edge_score, edge_truth.float())
             edge_loss = edge_loss.mean()
 
             if self.invert:

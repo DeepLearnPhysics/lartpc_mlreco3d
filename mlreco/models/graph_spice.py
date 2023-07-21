@@ -8,7 +8,7 @@ from mlreco.models.layers.cluster_cnn import gs_kernel_construct, spice_loss_con
 from mlreco.models.layers.cluster_cnn.graph_spice_embedder import GraphSPICEEmbedder
 
 from pprint import pprint
-from mlreco.utils.cluster.cluster_graph_constructor_new import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 
 
 class GraphSPICE(nn.Module):
@@ -197,9 +197,9 @@ class GraphSPICE(nn.Module):
                                 self.kernel_fn,
                                 labels,
                                 invert=self.invert)
-        self.gs_manager.fit_predict(skip=self.skip_classes)
+        # self.gs_manager.fit_predict(skip=self.skip_classes)
         
-        graph_state = self.gs_manager.save_state()
+        graph_state = self.gs_manager.save_state(unwrapped=False)
         res.update(graph_state)
 
         # res['edge_index'] = [graph.edge_index.T]
@@ -287,7 +287,7 @@ class GraphSPICELoss(nn.Module):
 
         '''
         # self.gs_manager.replace_state(result)
-        self.gs_manager.load_state(result['graph_state'])
+        self.gs_manager.load_state(result, unwrapped=False)
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0

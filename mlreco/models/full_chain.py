@@ -9,7 +9,7 @@ from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.globals import *
 # from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-from mlreco.utils.cluster.cluster_graph_constructor_new import ClusterGraphConstructor
+from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.deghosting import compute_rescaled_charge
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
@@ -357,18 +357,11 @@ class FullChain(FullChainGNN):
                                                               graph_spice_label))
                 cnn_result.update({f'graph_spice_{k}':v for k, v in spatial_embeddings_output.items()})
 
-
                 if self.process_fragments:
 
-                    # self.gs_manager.replace_state(spatial_embeddings_output)
+                    self.gs_manager.load_state(spatial_embeddings_output)   
                     
-                    self.gs_manager.load_state(spatial_embeddings_output)
-
-                    # self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
-                    # cluster_predictions = self.gs_manager._node_pred.x
-                    
-                    node_pred = self.gs_manager.fit_predict()
-                    cluster_predictions = node_pred
+                    cluster_predictions = self.gs_manager.fit_predict(min_points=self._gspice_min_points)
                     
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
                                                 semantic_labels[filtered_semantic][:, None],

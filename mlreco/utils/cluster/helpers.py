@@ -16,6 +16,7 @@ import scipy.sparse as sp
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import to_scipy_sparse_matrix
 from torch_geometric.data import Data, Batch
+import copy
 # -------------------------- Helper Functions--------------------------------
 
 def knn_sklearn(coords, k=5):
@@ -135,33 +136,106 @@ class RadiusNeighborsAssigner(StrayAssigner):
         return pred
     
     
+class RadiusNeighborsIterativeAssigner(StrayAssigner):
+    
+    def __init__(self, X, component, 
+                 min_points=0, 
+                 orphans_radius=1.9,
+                 orphans_iterate=True,
+                 orphans_cluster_all=True,
+                 **kwargs):
+        '''
+            X: Points to run Nearest-Neighbor Classifier (N x F)
+            Y: Labels of Points (N, )
+        '''
+        super(RadiusNeighborsIterativeAssigner, self).__init__(X, component, **kwargs)
+        self._neigh = RadiusNeighborsClassifier(**kwargs)
+        self._min_points = min_points
+        labels, counts = np.unique(component, return_counts=True)
+        self._pred = component
+        self._labeled_mask = np.isin(component, labels[counts >= self._min_points])
+        
+        self._pred[~self._labeled_mask] = -1
+        
+        self.X = X
+        self.Y = component
+        
+        self._orphans_iterate = kwargs.get('orphans_iterate', True)
+        self._orphans_radius = kwargs.get('orphans_radius', 1.9)
+        
+    def assign_orphans(self):
+        
+        labeled_mask = copy.deepcopy(self._labeled_mask)
+        num_orphans = 0
+        if labeled_mask.all(): return self._pred
+        while not np.all(labeled_mask) and num_orphans != np.sum(~labeled_mask):
+            
+            num_orphans = np.sum(~labeled_mask)
+            
+            X_valid, Y_valid = self.X[labeled_mask], self.Y[labeled_mask]
+            self._neigh.fit(X_valid, Y_valid)
+            
+            orphan_labels = self._neigh.predict(self.X[~labeled_mask])
+            valid_mask = orphan_labels > -1
+            
+            orphan_indices = np.where(~labeled_mask)[0][valid_mask]
+            
+            labeled_mask[orphan_indices] = True
+            self._pred[orphan_indices] = orphan_labels[valid_mask]
+            
+            if not self._orphans_iterate: break
+            
+        return self._pred
+            
+            
+    
+    
 class ConnectedComponents(BaseTransform):
     def __init__(self, connection: str = 'weak'):
         assert connection in ['strong', 'weak'], 'Unknown connection type'
         self.connection = connection
 
-    def fit_predict_one(self, data: Data, edge_mode='edge_index') -> Data:
+    def fit_predict_one(self, data: Data, edge_mode='edge_pred', **kwargs) -> Data:
         
         device = data.x.device
-        edge_index = getattr(data, edge_mode)
+        if edge_mode == 'edge_pred':
+            edge_index = getattr(data, 'edge_index')
+            connected_mask = (data.edge_pred == 1).squeeze()
+            connected_edges = edge_index[:, connected_mask]
+            edge_index = connected_edges
+        elif edge_mode == 'edge_truth':
+            edge_index = getattr(data, 'edge_index')
+            connected_mask = (data.edge_label == 1).squeeze()
+            connected_edges = edge_index[:, connected_mask]
+            edge_index = connected_edges
+        else:
+            edge_index = getattr(data, edge_mode)
+            
+        assert edge_index.shape[0] == 2, 'Edge Index must be of shape (2, E)'
+            
         if edge_mode == 'edge_index':
             adj = to_scipy_sparse_matrix(edge_index, num_nodes=data.num_nodes)
         else:
-            assert edge_index.shape[1] == 2
-            adj = to_scipy_sparse_matrix(edge_index.T, num_nodes=data.num_nodes)
+            adj = to_scipy_sparse_matrix(edge_index, num_nodes=data.num_nodes)
 
         num_components, component = sp.csgraph.connected_components(
             adj, connection=self.connection)
-
-        data.node_pred = torch.tensor(component).long().to(device)
+        
+        component = component.astype(np.int64)
+        
+        assigner = RadiusNeighborsIterativeAssigner(data.pos.cpu().numpy(), component, **kwargs)
+        node_pred = assigner.assign_orphans()
+        data.node_pred = torch.tensor(node_pred).long().to(device).view(-1, 1)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}({self.connection})'
     
-    def forward(self, batch: Batch, edge_mode='edge_pred') -> Batch:
+    def forward(self, batch: Batch, edge_mode='edge_pred', **kwargs) -> Batch:
         
         data_list = batch.to_data_list()
         for graph_id, subgraph in enumerate(data_list):
-            self.fit_predict_one(subgraph)
+            self.fit_predict_one(subgraph, 
+                                 edge_mode=edge_mode,
+                                 **kwargs)
         out = Batch.from_data_list(data_list)
         return out

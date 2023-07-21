@@ -5,82 +5,248 @@ from typing import Union, Callable, Tuple, List
 # UserWarning: Outlier label -1 is not in training classes. 
 # All class probabilities of outliers will be assigned with 0.
 # warnings.warn('Outlier label {} is not in training '
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+# import warnings
+# warnings.filterwarnings("ignore", category=UserWarning)
 
 import numpy as np
-import pandas as pd
 import torch
 
-import networkx as nx
 from torch_cluster import knn_graph, radius_graph
 
 from mlreco.utils.metrics import *
-from mlreco.utils.cluster.graph_batch import GraphBatch
-from torch_geometric.data import Data as GraphData
-from scipy.special import expit
-from .helpers import *
+from mlreco.utils.globals import *
+from torch_geometric.data import Data, Batch
 
+from .helpers import ConnectedComponents
 
 class ClusterGraphConstructor:
-    '''
-    Parametric Graph-SPICE clustering
+    """Manager class for handling per-batch, per-semantic type predictions
+    in GraphSPICE clustering.
+    """
+    ATTR_NAMES = [
+        'edge_index',
+        'edge_attr',
+        'edge_label',
+        'edge_pred',
+        'x',
+        'pos',
+        'node_pred',
+        'node_truth',
+        'image_id',
+        'voxel_id'
+    ]
+    
+    def __init__(self, 
+                 constructor_cfg : dict,
+                 training=False):
+        """Initialize the ClusterGraphConstructor.
 
-    Parametric GDC includes a bilinear layer to predict edge weights,
-    given pairs of node features.
-    '''
-    def __init__(self, constructor_cfg : dict,
-                       graph_batch : GraphBatch = None,
-                       graph_info : pd.DataFrame = None,
-                       batch_col : int = 0,
-                       training : bool = False):
+        Parameters
+        ----------
+        graph_type : str, optional
+            Type of graph to construct, by default 'knn'
+        edge_cut_threshold : float, optional
+            Thresholding value for edge prediction, by default 0.1
+        training : bool, optional
+            Whether we are in training mode or not, by default False
 
-        # Input Data/Label conventions
-        self.seg_col = constructor_cfg.get('seg_col', -1)
-        self.cluster_col = constructor_cfg.get('cluster_col', 5)
-        self.batch_col = batch_col
-        self.training = training # Default mode is evaluation, this is set otherwise when we initialize
-
-        self.constructor_cfg = constructor_cfg
-
-        # Initial Neighbor Graph Construction Mode
-        mode = constructor_cfg.get('mode', 'knn')
-        if mode == 'knn':
+        Raises
+        ------
+        ValueError
+            If the graph type is not supported.
+        """
+        self.constructor_cfg     = constructor_cfg
+        self._graph_type         = constructor_cfg.get('mode', 'knn')
+        self._edge_cut_threshold = constructor_cfg.get('edge_cut_threshold', 0.0) 
+        self._graph_params       = constructor_cfg.get('cluster_kwargs', dict(k=5))
+        self._skip_classes       = constructor_cfg.get('skip_classes', [])
+        self._min_points         = constructor_cfg.get('min_points', 0)
+        self.training = training
+        
+        # Graph Constructors
+        if self._graph_type == 'knn':
             self._init_graph = knn_graph
-        elif mode == 'radius':
+        elif self._graph_type == 'radius':
             self._init_graph = radius_graph
-        elif mode == 'knn_sklearn':
-            self._init_graph = knn_sklearn
         else:
-            raise ValueError('''Mode {} is not supported for initial
-                graph construction!'''.format(mode))
-
+            msg = f"Graph type {self._graph_type} is not supported for "\
+                "GraphSPICE initialzation!"
+            raise ValueError(msg)
+        
         # Clustering Algorithm Parameters
-        self.ths = constructor_cfg.get('edge_cut_threshold', 0.0) # Prob values 0-1
+        self.ths = self._edge_cut_threshold # Prob values 0-1
         if self.training:
             self.ths = 0.0
-        # print("Edge Threshold Probability Score = ", self.ths)
-        self.kwargs = constructor_cfg.get('cluster_kwargs', dict(k=5))
+
         # Radius within which orphans get assigned to neighbor cluster
-        self._orphans_radius = constructor_cfg.get('orphans_radius', 1.9)
-        self._orphans_iterate = constructor_cfg.get('orphans_iterate', True)
+        self._orphans_radius      = constructor_cfg.get('orphans_radius', 1.9)
+        self._orphans_iterate     = constructor_cfg.get('orphans_iterate', True)
         self._orphans_cluster_all = constructor_cfg.get('orphans_cluster_all', True)
-        self.use_cluster_labels = constructor_cfg.get('use_cluster_labels', True)
+        self.use_cluster_labels   = constructor_cfg.get('use_cluster_labels', True)
+        
+        self._data = None
+        self._key_to_graph = {}
+        self._graph_to_key = {}
+        self._cc_predictor = ConnectedComponents()
+        
+    
+    def clear_data(self):
+        """Clear the data stored in the constructor.
+        """
+        self._data = None
+        self._key_to_graph = {}
+        self._graph_to_key = {}
+        
+        
+    def initialize_graph(self, res : dict,
+                               labels: Union[torch.Tensor, list],
+                               kernel_fn: Callable,
+                               unwrapped=False,
+                               invert=False):
+        """Initialize the graph for a given batch.
 
-        # GraphBatch containing graphs per semantic class.
-        if graph_batch is None:
-            self._graph_batch = GraphBatch()
+        Parameters
+        ----------
+        res : dict
+            Results dictionary from the network.
+        labels : Union[torch.Tensor, list]
+            Labels for the batch.
+        kernel_fn : Callable
+            Kernel function for computing edge weights.
+        unwrapped : bool, optional
+            Indicates whether the results are unwrapped or not, by default False
+        invert : bool, optional
+            Indicates whether the model is trained to predict disconnected edges.
+
+        Returns
+        -------
+        None
+            Operates in place.
+        """
+        self.clear_data()
+        
+        if unwrapped:
+            return self._initialize_graph_unwrapped(res, labels, kernel_fn,
+                                                    invert=invert)
+
+        features = res['hypergraph_features'][0]
+        batch_indices = res['coordinates'][0][:, BATCH_COL].int()
+        coordinates = res['coordinates'][0][:, COORD_COLS]
+        voxel_indices = torch.arange(coordinates.shape[0]).long().to(coordinates.device)
+        
+        data_list = []
+        graph_id  = 0
+
+        for i, bidx in enumerate(torch.unique(batch_indices)):
+            mask = batch_indices == bidx
+            coords_batch = coordinates[mask]
+            features_batch = features[mask]
+            labels_batch = labels[mask].int()
+            voxel_indices_batch = voxel_indices[mask]
+
+            for c in torch.unique(labels_batch[:, SHAPE_COL]):
+                data = self._construct_graph_data(int(bidx),
+                                    int(c),
+                                    graph_id,
+                                    coords_batch,
+                                    features_batch,
+                                    labels_batch,
+                                    voxel_indices_batch,
+                                    kernel_fn=kernel_fn,
+                                    invert=invert)
+                data_list.append(data)
+                graph_id += 1
+        self._data = Batch.from_data_list(data_list)
+
+        
+    def initialize_graph_unwrapped(self, res, labels, kernel_fn,
+                                   invert=False):
+        """Same as initialize_graph, but for unwrapped results.
+        """
+        self.clear_data()
+        
+        features    = res['hypergraph_features']
+        batch_size  = len(res['coordinates'])
+        coordinates = res['coordinates']
+        
+        assert batch_size == len(features)
+        assert batch_size == len(coordinates)
+        
+        data_list = []
+        graph_id  = 0
+        
+        for bidx in range(batch_size):
+            coords_batch   = coordinates[bidx][:, COORD_COLS]
+            features_batch = features[bidx]
+            labels_batch   = labels[bidx]
+            voxel_indices_batch =  torch.arange(
+                coords_batch.shape[0]).int().to(coords_batch.device)
+            
+            for c in torch.unique(labels_batch[:, SHAPE_COL]):
+                data = self._construct_graph_data(int(bidx),
+                                                  int(c),
+                                                  graph_id,
+                                                  coords_batch,
+                                                  features_batch,
+                                                  labels_batch,
+                                                  voxel_indices_batch,
+                                                  kernel_fn=kernel_fn,
+                                                  invert=invert)
+                data_list.append(data)
+                graph_id += 1
+        self._data = Batch.from_data_list(data_list)
+        
+
+    def _construct_graph_data(self, 
+                              batch_id,
+                              semantic_type,
+                              graph_id,
+                              coords_batch, 
+                              features_batch, 
+                              labels_batch,
+                              voxel_indices_batch,
+                              kernel_fn,
+                              invert=False,
+                              build_graph=True,
+                              edge_index=None) -> Data:
+        """Construct a single graph for a given batch, semantic type pair.
+        """
+        
+        class_mask = labels_batch[:, SHAPE_COL] == semantic_type
+        coords_class = coords_batch[class_mask]
+        features_class = features_batch[class_mask]
+        voxels_class = voxel_indices_batch[class_mask]
+
+        if build_graph:
+            edge_index = self._init_graph(coords_class, **self._graph_params)
         else:
-            assert graph_info is not None
-            self._info = graph_info
-            self._graph_batch = graph_batch
-            self._num_total_nodes = self._graph_batch.x.shape[0]
-            self._node_dim = self._graph_batch.x.shape[1]
-            self._num_total_edges = self._graph_batch.edge_index.shape[1]
+            assert edge_index.shape[0] == 2
+        edge_attr  = kernel_fn(
+            features_class[edge_index[0, :]],
+            features_class[edge_index[1, :]])
+        
+        data = Data(x=features_class,
+                    pos=coords_class,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr)
+        data.image_id = int(batch_id) * torch.ones(features_class.shape[0],
+                                            dtype=torch.long, 
+                                            device=features_class.device)
+        data.voxel_id = voxels_class
+        
+        # Mappings from GraphID to (BatchID, SemanticID)
+        data.graph_id = int(graph_id)
+        data.graph_key = (int(batch_id), int(semantic_type))
+        self._key_to_graph[(int(batch_id), int(semantic_type))] = graph_id
+        self._graph_to_key[graph_id] = (int(batch_id), int(semantic_type))
+        self._predict_edges(data, invert=invert)
 
-        self._edge_pred = None
-        self._node_pred = None
-
+        if self.use_cluster_labels:
+            frag_labels = labels_batch[class_mask][:, CLUST_COL]
+            truth = self.get_edge_truth(edge_index, frag_labels)
+            data.node_truth = frag_labels.view(-1, 1).long()
+            data.edge_label = truth.view(-1, 1)
+        return data
 
     @staticmethod
     def get_edge_truth(edge_indices : torch.Tensor,
@@ -100,361 +266,223 @@ class ClusterGraphConstructor:
         u = fragment_labels[edge_indices[0, :]]
         v = fragment_labels[edge_indices[1, :]]
         return (u == v).long()
+        
+    def get_graph_at(self, batch_id, semantic_id):
+        """Retrieve the graph at a given batch, semantic type pair.
 
+        Parameters
+        ----------
+        batch_id : int
+            Batch ID.
+        semantic_id : int
+            Semantic type ID.
 
-    def _initialize_graph_unwrapped(self, res: dict,
-                                          labels: list):
-        '''
-        CGC initializer for unwrapped tensors.
-        (see initialize_graph for functionality)
-        '''
-        features = res['hypergraph_features']
-        batch_indices = res['coordinates'][:,0].int()
-        coordinates = res['coordinates'][:,1:4]
-        assert len(features) != len(labels)
-        assert len(features) != torch.unique(batch_indices).shpae[0]
-        data_list = []
-        graph_id = 0
-        index = 0
-
-        for i, bidx in enumerate(torch.unique(batch_indices)):
-            coords_batch = coordinates[i]
-            features_batch = features[i]
-            labels_batch = labels[i]
-
-            for c in torch.unique(labels_batch[:, self.seg_col]):
-                class_mask = labels_batch[:, self.seg_col] == c
-                coords_class = coords_batch[class_mask]
-                features_class = features_batch[class_mask]
-
-                edge_indices = self._init_graph(coords_class, **self.kwargs)
-                data = GraphData(x=features_class,
-                                 pos=coords_class,
-                                 edge_index=edge_indices)
-                graph_id_key = dict(Index=index,
-                                    BatchID=int(bidx),
-                                    SemanticID=int(c),
-                                    GraphID=graph_id)
-                graph_id += 1
-                self._info.append(graph_id_key)
-
-                frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                truth = self.get_edge_truth(edge_indices, frag_labels)
-                data.edge_truth = truth
-                data_list.append(data)
-            index += 1
-
-        self._info = pd.DataFrame(self._info)
-        self.data_list = data_list
-        self._graph_batch = self._graph_batch.from_data_list(data_list)
-        self._num_total_nodes = self._graph_batch.x.shape[0]
-        self._node_dim = self._graph_batch.x.shape[1]
-        self._num_total_edges = self._graph_batch.edge_index.shape[1]
-
-
-    def initialize_graph(self, res : dict,
-                               labels: Union[torch.Tensor, list],
-                               unwrapped=False):
-        '''
-        From GraphSPICE Embedder Output, initialize GraphBatch object
-        with edge truth labels.
-
-        Inputs:
-            - res (dict): result dictionary output of GraphSPICE Embedder
-            - labels ( N x F Tensor) :
-
-        Transforms point cloud embeddings to collection of graphs
-        (one per unique image id and segmentation class), and stores graph
-        collection as attribute.
-        '''
-        if unwrapped:
-            return self._initialize_graph_unwrapped(res, labels)
-
-        features = res['hypergraph_features'][0]
-        batch_indices = res['coordinates'][0][:,0].int()
-        coordinates = res['coordinates'][0][:,1:4]
-        data_list = []
-
-        graph_id = 0
-        index = 0
-
-        self._info = []
-
-        for i, bidx in enumerate(torch.unique(batch_indices)):
-            mask = batch_indices == bidx
-            coords_batch = coordinates[mask]
-            features_batch = features[mask]
-            labels_batch = labels[mask].int()
-
-            for c in torch.unique(labels_batch[:, self.seg_col]):
-                class_mask = labels_batch[:, self.seg_col] == c
-                coords_class = coords_batch[class_mask]
-                features_class = features_batch[class_mask]
-
-                edge_indices = self._init_graph(coords_class, **self.kwargs)
-                data = GraphData(x=features_class,
-                                 pos=coords_class,
-                                 edge_index=edge_indices)
-                graph_id_key = dict(BatchID=int(bidx),
-                                    Index=index,
-                                    SemanticID=int(c),
-                                    GraphID=graph_id)
-                graph_id += 1
-                self._info.append(graph_id_key)
-                if self.use_cluster_labels:
-                    frag_labels = labels_batch[class_mask][:, self.cluster_col]
-                    truth = self.get_edge_truth(edge_indices, frag_labels)
-                    data.node_truth = frag_labels
-                    data.edge_truth = truth
-                data_list.append(data)
-            index += 1
-
-        self._info = pd.DataFrame(self._info)
-        self.data_list = data_list
-        self._graph_batch = GraphBatch()
-        self._graph_batch = self._graph_batch.from_data_list(data_list)
-        self._num_total_nodes = self._graph_batch.x.shape[0]
-        self._node_dim = self._graph_batch.x.shape[1]
-        self._num_total_edges = self._graph_batch.edge_index.shape[1]
-
-
-    def replace_state(self, result, prefix='', unwrapped=False):
-        concat = torch.cat if isinstance(result[prefix+'features'][0], torch.Tensor) else np.concatenate
-        if unwrapped:
-            batch_size = len(result[prefix+'features'])
-            data_list = []
-            for i in range(batch_size):
-                data = GraphData(x = torch.Tensor(result[prefix+'features'][i]).float(),
-                                #  batch = result[prefix+'coordinates'][:,0],
-                                 pos = torch.Tensor(result[prefix+'coordinates'][i][:,1:4]).float(),
-                                 edge_index = torch.Tensor(result[prefix+'edge_index'][i].T).long(),
-                                 edge_attr = torch.Tensor(result[prefix+'edge_score'][i]).float(),
-                                 edge_truth = torch.Tensor(result[prefix+'edge_truth'][i]).long())
-                data_list.append(data)
-            graph = GraphBatch.from_data_list(data_list)
-            if not isinstance(result[prefix+'features'][0], torch.Tensor):
-                graph.x = graph.x.numpy()
-                graph.pos = graph.pos.numpy()
-                graph.edge_index = graph.edge_index.numpy()
-                graph.edge_attr = graph.edge_attr.numpy()
-                if hasattr(graph, 'edge_truth'):
-                    graph.edge_truth = graph.edge_truth.numpy()
-        else:
-            graph = GraphBatch(x = concat(result[prefix+'features']),
-                               batch = concat(result[prefix+'coordinates'])[:,0],
-                               pos = concat(result[prefix+'coordinates'])[:,1:4],
-                               edge_index = concat(result[prefix+'edge_index']).T,
-                               edge_attr = concat(result[prefix+'edge_score']))
-            if prefix+'edge_truth' in result:
-                 graph.edge_truth = concat(result[prefix+'edge_truth'])
-        self._graph_batch = graph
-        self._num_total_nodes = self._graph_batch.x.shape[0]
-        self._node_dim = self._graph_batch.x.shape[1]
-        self._num_total_edges = self._graph_batch.edge_index.shape[1]
-        self._info = result[prefix+'graph_info']
-
-
-    def _set_edge_attributes(self, kernel_fn : Callable):
-        '''
-        Constructs edge attributes from node feature tensors, and saves
-        edge attributes to current GraphBatch.
-        '''
-        if self._graph_batch is None:
-            raise ValueError('The graph data has not been initialized yet!')
-        elif isinstance(self._graph_batch.edge_attr, torch.Tensor):
-            raise ValueError('Edge attributes are already set: {}'\
-                .format(self._graph_batch.edge_attr))
-        else:
-            if self._graph_batch.edge_index.shape[1] > 0:
-                edge_attr = kernel_fn(
-                    self._graph_batch.x[self._graph_batch.edge_index[0, :]],
-                    self._graph_batch.x[self._graph_batch.edge_index[1, :]])
-                w = edge_attr.squeeze()
-            else:
-                w = torch.empty((0,), device=self._graph_batch.edge_index.device)
-            self._graph_batch.edge_attr = w
-            self._graph_batch.add_edge_features(w, 'edge_attr')
-
-
-    def get_batch_and_class(self, entry):
-        df = self._info.query('GraphID == {}'.format(entry))
-        assert df.shape[0] == 1
-        batch_id = df['BatchID'].item()
-        semantic_id = df['SemanticID'].item()
-        return batch_id, semantic_id
-
-
-    def get_entry(self, batch_id, semantic_id):
-        df = self._info.query(
-            'BatchID == {} and SemanticID == {}'.format(batch_id, semantic_id))
-        assert df.shape[0] < 2
-        if df.shape[0] == 0:
-            raise ValueError('''Event ID: {} and Class Label: {} does not
-                exist in current batch'''.format(batch_id, semantic_id))
-            return None
-        else:
-            entry_num = df['GraphID'].item()
-            return entry_num
-
-
-    def get_graph(self, batch_id, semantic_id):
-        '''
-        Retrieve single graph from GraphBatch object by batch and semantic id.
-
-        INPUTS:
-            - event_id: Event ID (Index)
-            - semantic_id: Semantic Class (0-4)
-
-        RETURNS:
-            - Subgraph corresponding to class [semantic_id] and event [event_id]
-        '''
-        entry_num = self.get_entry(batch_id, semantic_id)
-        return self._graph_batch.get_example(entry_num)
-
-
-    def fit_predict_one(self, entry,
-                        min_points=0,
-                        invert=False) -> Tuple[np.ndarray, nx.Graph]:
-        '''
-        Generate predicted fragment cluster labels for single subgraph.
-
-        INPUTS:
-            - entry number
-            - min_points: minimum voxel count required to assign
-            unique cluster label during first pass.
-            - remainder_alg: algorithm used to handle orphans
-
-        Returns:
-            - pred: predicted cluster labels.
-
-        '''
-        # min_points is not meant to be used at train time
-        # (it defines orphans to be assigned)
-        if self.training:
-            # raise Exception("Please set min_points: 0 in GraphSpice config at training time.")
-            min_points = 0
-
-        subgraph = self._graph_batch.get_example(entry)
-        num_nodes = subgraph.num_nodes
-        G = nx.Graph()
-        G.add_nodes_from(np.arange(num_nodes))
-
-        # Drop edges with low predicted probability score
-        edges = subgraph.edge_index.T
-        edge_logits = subgraph.edge_attr
-        if isinstance(edges, torch.Tensor):
-            edges = edges.detach().cpu().numpy()
-            edge_logits = edge_logits.detach().cpu().numpy()
-        edge_probs = expit(edge_logits)
+        Returns
+        -------
+        subgraph: torch_geometric.data.Data
+            One subgraph corresponding to a unique (batch, semantic type) pair.
+        """
+        graph_id = self._key_to_graph((batch_id, semantic_id))
+        return self._data.get_example(graph_id)
+    
+    def get_example(self, graph_id, verbose=False):
+        if verbose:
+            key = self._graph_to_key[graph_id]
+            print(f"Graph at BatchID={key[0]} and SemanticID={key[1]}")
+        return self._data.get_example(graph_id)
+    
+    def __getitem__(self, graph_id):
+        return self.get_example(graph_id)
+    
+    def _predict_edges(self, data, invert=False):
+        
+        device = data.edge_attr.device
+        edge_index  = data.edge_index.T
+        edge_logits = data.edge_attr
+        edge_probs  = torch.sigmoid(edge_logits).to(device)
+        edge_pred   = torch.zeros_like(edge_probs).long().to(device)
+        
         if invert:
-            pos_edges = edges[edge_probs < self.ths]
-            pos_probs = edge_probs[edge_probs < self.ths]
+            # If invert=True, model is trained to predict disconnected edges
+            # as positives. Hence connected edges are those with scores less
+            # than the thresholding value. (Higher the value, the more likely
+            # it is to be disconnected). 
+            mask = (edge_probs < self.ths).squeeze()
+            edge_pred[mask] = 1
         else:
-            pos_edges = edges[edge_probs >= self.ths]
-            pos_probs = edge_probs[edge_probs >= self.ths]
-        pos_edges = [(e[0], e[1], w) for e, w in zip(pos_edges, pos_probs)]
-        G.add_weighted_edges_from(pos_edges)
-        pred = -np.ones(num_nodes, dtype=np.int32)
-        orphan_mask = np.zeros(num_nodes, dtype=bool)
-        for i, comp in enumerate(nx.connected_components(G)):
-            x = np.asarray(list(comp))
-            pred[x] = i
-            if len(comp) < min_points:
-                orphan_mask[x] = True
+            # When trained to predict connected edges. 
+            mask = (edge_probs >= self.ths).squeeze()
+            edge_pred[mask] = 1
+            
+        data.edge_pred = edge_pred
+        data.edge_prob = edge_probs
+    
+    
+    def save_state(self, unwrapped=False):
+        
+        state_dict = defaultdict(list)
+        batch = self._data.batch
+        image_id = self._data.image_id
+        data_list = self._data.to_data_list()
+        for graph_id, subgraph in enumerate(data_list):
+            for attr_name in self.ATTR_NAMES:
+                if hasattr(subgraph, attr_name):
+                    state_dict[attr_name].append(getattr(subgraph, attr_name))
+            state_dict['graph_id'].append(int(subgraph.graph_id))
+            state_dict['graph_key'].append(subgraph.graph_key)
+            
+        if unwrapped:
+            return state_dict
+        else:
+            state_dict_wrapped = {}
+            state_dict_wrapped['batch'] = [batch]
+            # assert (image_id == torch.cat(state_dict['image_id'], dim=0)).all()
+            state_dict_wrapped['edge_batch'] = [batch[self._data.edge_index[0, :]]]
+            state_dict_wrapped['edge_image_id'] = [image_id[self._data.edge_index[0, :]]]
+            for key, val in state_dict.items():
+                if isinstance(val[0], torch.Tensor):
+                    if key != 'edge_index':
+                        state_dict_wrapped[key] = [torch.cat(val, dim=0)]
+                    else:
+                        state_dict_wrapped[key] = [torch.cat(val, dim=1)]
+                else:
+                    state_dict_wrapped[key] = [np.array(val).astype(int)]
+            
+            return state_dict_wrapped
+    
+    # def _save_state_wrapped(self, validate=True):
+        
+    #     state_dict = {}
+        
+    #     for attr_name in self.ATTR_NAMES:
+    #         if hasattr(self._data, attr_name):
+    #             state_dict[attr_name] = [getattr(self._data, attr_name)]
+    #             state_dict['batch'] = [self._data.batch]
+    #             if validate:
+    #                 batch_1 = self._data.batch[self._data.edge_index[0, :]]
+    #                 batch_2 = self._data.batch[self._data.edge_index[1, :]]
+    #                 assert (batch_1 == batch_2).all()
+    #             edge_batch = self._data.batch[self._data.edge_index[0, :]]
+    #             state_dict['edge_batch'] = [edge_batch]
+    #     state_dict['graph_id'] = [np.array(self._data.graph_id).astype(int)]
+    #     state_dict['graph_key'] = [np.array(self._data.graph_key).astype(int)]
+        
+    #     return state_dict
+    
+    def _load_state_wrapped(self, state_dict):
+        self.clear_data()
+        data_list = []
+        optionals = ['node_pred', 'node_truth', 
+                     'edge_label', 'edge_pred']
+        
+        num_graphs = len(np.unique(state_dict['graph_id'][0]))
+        for graph_id in range(num_graphs):
+            node_mask = state_dict['batch'][0] == graph_id
+            edge_mask = state_dict['edge_batch'][0] == graph_id
+            subgraph = Data(x=state_dict['x'][0][node_mask],
+                            pos=state_dict['pos'][0][node_mask],
+                            edge_index=state_dict['edge_index'][0][:, edge_mask],
+                            edge_attr=state_dict['edge_attr'][0][edge_mask],
+                            edge_pred=state_dict['edge_pred'][0][edge_mask],
+                            image_id=state_dict['image_id'][0][node_mask],
+                            voxel_id=state_dict['voxel_id'][0][node_mask])
+            for name in optionals:
+                if name in state_dict and name.startswith('node'):
+                    setattr(subgraph, name, state_dict[name][0][node_mask])
+                if name in state_dict and name.startswith('edge'):
+                    setattr(subgraph, name, state_dict[name][0][edge_mask])
+            subgraph.graph_id = graph_id
+            subgraph.graph_key = tuple(state_dict['graph_key'][0][graph_id])
+            data_list.append(subgraph)
+            
+        self._data = Batch.from_data_list(data_list)
 
-        # Assign orphans
-        G.pos = subgraph.pos
-        if isinstance(G.pos, torch.Tensor):
-            G.pos = G.pos.detach().cpu().numpy()
-        if not orphan_mask.all():
-            n_orphans = 0
-            while orphan_mask.any() and (n_orphans != np.sum(orphan_mask)):
-                orphans = G.pos[orphan_mask]
-                n_orphans = len(orphans)
-                assigner = RadiusNeighborsAssigner(G.pos[~orphan_mask],
-                                                   pred[~orphan_mask].astype(int),
-                                                   radius=self._orphans_radius,
-                                                   outlier_label=-1)
-                orphan_labels = assigner.assign_orphans(orphans)
-                valid_mask  = orphan_labels > -1
-                new_labels = pred[orphan_mask]
-                new_labels[valid_mask] = orphan_labels[valid_mask]
-                pred[orphan_mask] = new_labels
-                orphan_mask[orphan_mask] = ~valid_mask
-                if not self._orphans_iterate: break
-        if not self._orphans_cluster_all:
-            pred[orphan_mask] = -1
+    
+    def load_state(self, state_dict, unwrapped=False):
+        
+        if not unwrapped:
+            self._load_state_wrapped(state_dict)
+        else:
+            self.clear_data()
+            data_list = []
+            optionals  = ['node_pred', 'node_truth', 
+                        'edge_label', 'edge_pred']
+            num_graphs = len(state_dict['x'])
+            for i in range(num_graphs):
+                subgraph = Data(x=state_dict['x'][i],
+                                pos=state_dict['pos'][i],
+                                edge_index=state_dict['edge_index'][i],
+                                edge_attr=state_dict['edge_attr'][i],
+                                edge_pred=state_dict['edge_pred'][i],
+                                image_id=state_dict['image_id'][i],
+                                voxel_id=state_dict['voxel_id'][i])
+                for name in optionals:
+                    if name in state_dict:
+                        setattr(subgraph, name, state_dict[name][i])
+                        
+                subgraph.graph_id = int(state_dict['graph_id'][i])
+                subgraph.graph_key = tuple(state_dict['graph_key'][i])
+                self._key_to_graph[state_dict['graph_key'][i]] = state_dict['graph_id'][i]
+                self._graph_to_key[state_dict['graph_id'][i]] = state_dict['graph_key'][i]
+                data_list.append(subgraph)
+            
+            self._data = Batch.from_data_list(data_list)
+            
 
-        new_labels, _ = unique_label(pred[pred >= 0])
-        pred[pred >= 0] = new_labels
+    def fit_predict(self, 
+                    skip=[-1, 4], 
+                    edge_mode='edge_pred', 
+                    min_points=None):
+        """Run GraphSPICE clustering on all graphs in the batch.
 
-        return pred, G, subgraph
+        Parameters
+        ----------
+        skip : list, optional
+            Semantic types to skip, by default [-1, 4]
+        edge_mode : str, optional
+            Edge mode to use for clustering, by default 'edge_pred'
 
-
-    def fit_predict(self, skip=[], **kwargs):
-        '''
-        Iterate over all subgraphs and assign predicted labels.
-        '''
+        Returns
+        -------
+        node_pred : torch.Tensor
+            Predicted cluster labels for each voxel.
+        """
         skip = set(skip)
-        num_graphs = self._graph_batch.num_graphs
-        entry_list = [i for i in range(num_graphs) if i not in skip]
-        node_pred = -np.ones(self._num_total_nodes, dtype=np.int32)
-
-        pred_data_list = []
-
-        for entry in entry_list:
-            pred, G, subgraph = self.fit_predict_one(entry, **kwargs)
-            batch = self._graph_batch.batch
-            if isinstance(batch, torch.Tensor):
-                batch = batch.cpu().numpy()
-            batch_index = batch == entry
-            pred_data_list.append(GraphData(x=torch.Tensor(pred).long(),
-                                            pos=torch.Tensor(G.pos)))
-            # node_pred[batch_index] = pred
-        self._node_pred = GraphBatch.from_data_list(pred_data_list)
-        # self._graph_batch.add_node_features(node_pred, 'node_pred',
-        #                                     dtype=torch.long)
-
-
-    @property
-    def node_pred(self):
-        return self._node_pred
-
-    @property
-    def graph_batch(self):
-        if self._graph_batch is None:
-            raise('The GraphBatch data has not been initialized yet!')
-        return self._graph_batch
-
-    @property
-    def info(self):
-        '''
-        Entry mapping (pd.DataFrame):
-
-            - columns: ['Index', 'BatchID', 'SemanticID', 'GraphID']
-
-        By querying on BatchID and SemanticID, for example, one obtains
-        the graph id value (entry) used to access a single subgraph in
-        self._graph_batch.
-        '''
-        return self._info
-
-
-    def __call__(self, res : dict,
-                       kernel_fn : Callable,
-                       labels: torch.Tensor):
-        '''
-        Train time labels include cluster column (default: 5)
-        and segmentation column (default: -1)
-        Test time labels only include segment column (default: -1)
-        '''
-        self.initialize_graph(res, labels)
-        self._set_edge_attributes(kernel_fn)
-        return self._graph_batch
-
-
+        if min_points is None:
+            min_points = self._min_points
+        graphs = self._cc_predictor.forward(self._data, edge_mode=edge_mode,
+                                            min_points=min_points,
+                                            orphans_radius=self._orphans_radius,
+                                            orphans_iterate=self._orphans_iterate,
+                                            orphans_cluster_all=self._orphans_cluster_all,
+                                            outlier_label=int(-1))
+        self._data = graphs
+        
+        perm = torch.argsort(self._data.voxel_id)
+        return graphs.node_pred[perm].squeeze()
+        
+    
+    def __call__(self, res: dict,
+                 kernel_fn: Callable,
+                 labels: Union[torch.Tensor, list],
+                 unwrapped=False,
+                 state_dict=None,
+                 invert=False):
+        if state_dict is None:
+            self.initialize_graph(res, labels, kernel_fn, unwrapped=unwrapped, invert=invert)
+            # node_pred = self.fit_predict(self._skip_classes)
+        else:
+            self.load_state(state_dict)
+            # if 'node_pred' not in state_dict:
+            #     node_pred = self.fit_predict(self._skip_classes)
+        return self._data
+    
     def __repr__(self):
-        out = '''
-        ClusterGraphConstructor
-        '''
-        return out
+        msg = f"""
+        ClusterGraphConstructor(
+            constructor_cfg={self.constructor_cfg},
+            training={self.training},
+            cc_predictor={self._cc_predictor.__repr__()},
+            data={self._data.__repr__()})
+        """
+        return msg
