@@ -221,6 +221,8 @@ class HDF5Reader:
                 blob[key] = group[key][region_ref]
                 if 'scalar' in group[key].attrs and group[key].attrs['scalar']:
                     blob[key] = blob[key][0]
+                if len(group[key].shape) > 1:
+                    blob[key] = blob[key].reshape(-1, group[key].shape[1])
             else:
                 # If the dataset has multiple attributes, it contains an object
                 array = group[key][region_ref]
@@ -237,8 +239,14 @@ class HDF5Reader:
             if len(group[key]['index'].shape) == 1:
                 ret = np.empty(len(el_refs), dtype=np.object)
                 ret[:] = [group[key]['elements'][r] for r in el_refs]
+                if len(group[key]['elements'].shape) > 1:
+                    for i in range(len(el_refs)):
+                        ret[i] = ret[i].reshape(-1, group[key]['elements'].shape[1])
             else:
                 ret = [group[key][f'element_{i}'][r] for i, r in enumerate(el_refs)]
+                for i in range(len(el_refs)):
+                    if len(group[key][f'element_{i}'].shape) > 1:
+                        ret[i] = ret[i].reshape(-1, group[key][f'element_{i}'].shape[1])
             blob[key] = ret
 
         if nested:
