@@ -149,7 +149,6 @@ def prepare(cfg, event_list=None):
     # IO writer
     handlers.writer = writer_factory(cfg)
 
-
     if 'trainval' in cfg:
         # Set random seed for reproducibility
         np.random.seed(cfg['trainval']['seed'])
@@ -168,16 +167,15 @@ def prepare(cfg, event_list=None):
         # Clear cache
         handlers.empty_cuda_cache = cfg['trainval'].get('empty_cuda_cache', False)
 
-        # Restore weights if necessary
-        loaded_iteration = handlers.trainer.initialize()
-        if cfg['trainval']['train']:
-            handlers.iteration = loaded_iteration
-
         # If the number of iterations is negative, run over the whole dataset once
         if cfg['trainval']['iterations'] < 0:
             cfg['trainval']['iterations'] = len(handlers.data_io)
 
-        make_directories(cfg, loaded_iteration, handlers=handlers)
+        # Restore weights if necessary
+        if cfg['trainval']['train']:
+            loaded_iteration = handlers.trainer.initialize()
+            handlers.iteration = loaded_iteration
+            make_directories(cfg, loaded_iteration, handlers=handlers)
 
     return handlers
 
