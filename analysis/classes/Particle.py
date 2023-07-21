@@ -127,9 +127,9 @@ class Particle:
         self.matched             = matched
         self._is_principal_match = False
         self._match              = list(kwargs.get('match', []))
-        self._match_counts       = kwargs.get('match_counts', OrderedDict())
-        if not isinstance(self._match_counts, dict):
-            raise ValueError(f"{type(self._match_counts)}")
+        self._match_overlap       = kwargs.get('match_overlap', OrderedDict())
+        if not isinstance(self._match_overlap, dict):
+            raise ValueError(f"{type(self._match_overlap)}")
         
     @property
     def is_principal_match(self):
@@ -185,21 +185,21 @@ class Particle:
 
     @property
     def match(self):
-        self._match = list(self._match_counts.keys())
+        self._match = list(self._match_overlap.keys())
         return np.array(self._match, dtype=np.int64)
     
     @property
-    def match_counts(self):
-        return np.array(list(self._match_counts.values()), dtype=np.float32)
+    def match_overlap(self):
+        return np.array(list(self._match_overlap.values()), dtype=np.float32)
     
-    @match_counts.setter
-    def match_counts(self, value):
+    @match_overlap.setter
+    def match_overlap(self, value):
         assert type(value) is OrderedDict
-        self._match_counts = value
+        self._match_overlap = value
         
     def clear_match_info(self):
         self._match = []
-        self._match_counts = OrderedDict()
+        self._match_overlap = OrderedDict()
         self.matched = False
 
     def __repr__(self):

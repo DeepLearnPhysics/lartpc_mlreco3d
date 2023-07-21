@@ -88,7 +88,7 @@ class Interaction:
 
         # Quantities to be set by the particle matcher
         self._match         = []
-        self._match_counts  = OrderedDict()
+        self._match_overlap = OrderedDict()
         self.matched        = matched
         self._is_principal_match = False
         
@@ -114,11 +114,11 @@ class Interaction:
         
     @property
     def match(self):
-        return np.array(list(self._match_counts.keys()), dtype=np.int64)
+        return np.array(list(self._match_overlap.keys()), dtype=np.int64)
     
     @property
-    def match_counts(self):
-        return np.array(list(self._match_counts.values()), dtype=np.float32)
+    def match_overlap(self):
+        return np.array(list(self._match_overlap.values()), dtype=np.float32)
     
     @property
     def is_principal_match(self):

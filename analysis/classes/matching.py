@@ -270,8 +270,8 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
             px.matched = False
         else:
             matched = particles_y[select_idx]
-            px._match_counts[matched.id] = intersections[j]
-            # matched._match_counts[px.id] = intersections[j]
+            px._match_overlap[matched.id] = intersections[j]
+            # matched._match_overlap[px.id] = intersections[j]
             key = (px.id, matched.id)
             matches[key] = (px, matched)
             px.matched = True
@@ -336,18 +336,18 @@ def check_particle_matches(loaded_particles, clear=False):
     match_dict = OrderedDict({})
     for p in loaded_particles:
         for i, m in enumerate(p.match):
-            match_dict[int(m)] = p.match_counts[i]
+            match_dict[int(m)] = p.match_overlap[i]
         if clear:
             p._match = []
-            p._match_counts = OrderedDict()
+            p._match_overlap = OrderedDict()
 
-    match_counts = np.array(list(match_dict.values()))
+    match_overlap = np.array(list(match_dict.values()))
     match = np.array(list(match_dict.keys())).astype(int)
-    perm = np.argsort(match_counts)[::-1]
-    match_counts = match_counts[perm]
+    perm = np.argsort(match_overlap)[::-1]
+    match_overlap = match_overlap[perm]
     match = match[perm]
 
-    return match, match_counts
+    return match, match_overlap
 
 def generate_match_pairs(truth, reco, prefix='matches'):
     out = {
@@ -366,7 +366,7 @@ def generate_match_pairs(truth, reco, prefix='matches'):
         for i, reco_id in enumerate(p.match):
             pair = (p, reco_dict[reco_id])
             out[prefix+'_t2r'].append(pair)
-            out[prefix+'_t2r_values'].append(p.match_counts[i])
+            out[prefix+'_t2r_values'].append(p.match_overlap[i])
     for p in reco:
         if len(p.match) == 0:
             pair = (p, None)
@@ -375,5 +375,5 @@ def generate_match_pairs(truth, reco, prefix='matches'):
         for i, true_id in enumerate(p.match):
             pair = (p, true_dict[true_id])
             out[prefix+'_r2t'].append(pair)
-            out[prefix+'_r2t_values'].append(p.match_counts[i])
+            out[prefix+'_r2t_values'].append(p.match_overlap[i])
     return out

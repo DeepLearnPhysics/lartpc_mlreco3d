@@ -47,8 +47,8 @@ def run_inference(data_blob, res, **kwargs):
         }
 
         # 1. Match Interactions and log interaction-level information
-        imatches, icounts = res['matched_interactions'][idx], res['interaction_match_counts'][idx]
-        pmatches, pcounts = res['matched_particles'][idx], res['particle_match_counts'][idx]
+        imatches, icounts = res['matched_interactions'][idx], res['interaction_match_overlap'][idx]
+        pmatches, pcounts = res['matched_particles'][idx], res['particle_match_overlap'][idx]
         # 1 a) Check outputs from interaction matching 
         if len(imatches) > 0:
             # 2. Process interaction level information
@@ -59,7 +59,7 @@ def run_inference(data_blob, res, **kwargs):
 
                 int_dict = OrderedDict()
                 int_dict.update(index_dict)
-                int_dict['interaction_match_counts'] = icounts[i]
+                int_dict['interaction_match_overlap'] = icounts[i]
                 
                 if matching_mode == 'true_to_pred':
                     true_int, pred_int = interaction_pair[0], interaction_pair[1]
@@ -100,7 +100,7 @@ def run_inference(data_blob, res, **kwargs):
 
                 part_dict = OrderedDict()
                 part_dict.update(index_dict)
-                part_dict['particle_match_counts'] = pcounts[i]
+                part_dict['particle_match_overlap'] = pcounts[i]
                 part_dict.update(true_p_dict)
                 part_dict.update(pred_p_dict)
                 particles.append(part_dict)

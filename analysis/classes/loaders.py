@@ -112,8 +112,8 @@ class ParticleLoader(DataProductLoader):
             prepared_bp = copy.deepcopy(bp)
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
-            assert len(match) == len(match_counts)
+            match_overlap = prepared_bp.pop('match_overlap', [])
+            assert len(match) == len(match_overlap)
             
             prepared_bp.pop('depositions_sum', None)
             group_id = prepared_bp.pop('id', -1)
@@ -124,8 +124,8 @@ class ParticleLoader(DataProductLoader):
             })
             particle = Particle(**prepared_bp)
             if len(match) > 0:
-                particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert particle.image_id == entry
             out.append(particle)
         
@@ -154,12 +154,12 @@ class ParticleLoader(DataProductLoader):
             })
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
+            match_overlap = prepared_bp.pop('match_overlap', [])
             
             truth_particle = TruthParticle(**prepared_bp)
             if len(match) > 0:
-                truth_particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                truth_particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert truth_particle.image_id == entry
             assert truth_particle.truth_size > 0
             out.append(truth_particle)
@@ -180,7 +180,7 @@ class ParticleLoader(DataProductLoader):
         
         for p in truth_particles:
             match_ids = p.match
-            mvals = p.match_counts
+            mvals = p.match_overlap
             for i, mid in enumerate(match_ids):
                 p_other = part_dict[mid]
                 key = (p.id, p_other.id)
@@ -194,7 +194,7 @@ class ParticleLoader(DataProductLoader):
                     
         for p in particles:
             match_ids = p.match
-            mvals = p.match_counts
+            mvals = p.match_overlap
             for i, mid in enumerate(match_ids):
                 p_other = truth_dict[mid]
                 key = (p_other.id, p.id)

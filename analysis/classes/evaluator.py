@@ -239,7 +239,7 @@ class FullChainEvaluator(FullChainPredictor):
         particles within a matched interaction pair can be considered
         for matching. 
         '''
-        matched_particles, match_counts = [], []
+        matched_particles, match_overlap = [], []
 
         for m in int_matches:
             ia1, ia2 = m[0], m[1]
@@ -257,17 +257,17 @@ class FullChainEvaluator(FullChainPredictor):
                 if len(p.match) == 0:
                     if type(p) is Particle:
                         matched_particles.append((None, p))
-                        match_counts.append(-1)
+                        match_overlap.append(-1)
                     else:
                         matched_particles.append((p, None))
-                        match_counts.append(-1)
+                        match_overlap.append(-1)
                 for match_id in p.match:
                     if type(p) is Particle:
                         matched_particles.append((ia1[match_id], p))
                     else:
                         matched_particles.append((p, ia1[match_id]))
-                    match_counts.append(p._match_counts[match_id])
-        return matched_particles, np.array(match_counts)
+                    match_overlap.append(p._match_overlap[match_id])
+        return matched_particles, np.array(match_overlap)
 
 
     def match_particles(self, entry,

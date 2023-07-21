@@ -30,7 +30,7 @@ from mlreco.utils.vertex import get_vertex
 # each interaction, and they are computed at initialization.
 
 SKIP_KEYS = [
-    'is_principal_match', 'match', 'match_counts', 
+    'is_principal_match', 'match', 'match_overlap', 
     'num_particles', 'num_primaries', 'particle_counts', 'particle_ids',
     'primary_counts', 'size', 'topology', 
     # TruthInteraction Attributes
@@ -209,8 +209,8 @@ class ParticleBuilder(DataBuilder):
             prepared_bp = copy.deepcopy(bp)
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
-            assert len(match) == len(match_counts)
+            match_overlap = prepared_bp.pop('match_overlap', [])
+            assert len(match) == len(match_overlap)
             
             prepared_bp.pop('depositions_sum', None)
             group_id = prepared_bp.pop('id', -1)
@@ -221,8 +221,8 @@ class ParticleBuilder(DataBuilder):
             })
             particle = Particle(**prepared_bp)
             if len(match) > 0:
-                particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert particle.image_id == entry
             out.append(particle)
         
@@ -282,12 +282,12 @@ class ParticleBuilder(DataBuilder):
                 prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
+            match_overlap = prepared_bp.pop('match_overlap', [])
             
             truth_particle = TruthParticle(**prepared_bp)
             if len(match) > 0:
-                truth_particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                truth_particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert truth_particle.image_id == entry
             assert truth_particle.truth_size > 0
             out.append(truth_particle)
@@ -581,8 +581,8 @@ class InteractionBuilder(DataBuilder):
                 ia = Interaction(**info)
                 
             # Handle matches
-            match_counts = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_counts'])})
-            ia._match_counts = match_counts
+            match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
+            ia._match_overlap = match_overlap
             out.append(ia)
         return out
     
