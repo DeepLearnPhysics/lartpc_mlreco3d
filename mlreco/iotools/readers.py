@@ -44,17 +44,17 @@ class HDF5Reader:
         self.file_index   = []
         self.split_groups = None
         for i, path in enumerate(self.file_paths):
-            with h5py.File(path, 'r') as file:
+            with h5py.File(path, 'r') as in_file:
                 # Check that there are events in the file and the storage mode
-                assert 'events' in file, 'File does not contain an event tree'
+                assert 'events' in in_file, 'File does not contain an event tree'
 
-                split_groups = 'data' in file and 'result' in file
+                split_groups = 'data' in in_file and 'result' in in_file
                 assert self.split_groups is None or self.split_groups == split_groups,\
                         'Cannot load files with different storing schemes'
                 self.split_groups = split_groups
 
-                self.num_entries += len(file['events'])
-                self.file_index.append(i*np.ones(len(file['events']), dtype=np.int32))
+                self.num_entries += len(in_file['events'])
+                self.file_index.append(i*np.ones(len(in_file['events']), dtype=np.int32))
 
                 print('Registered', path)
 
@@ -120,10 +120,10 @@ class HDF5Reader:
 
         # Use the events tree to find out what needs to be loaded
         data_blob, result_blob = {}, {}
-        with h5py.File(self.file_paths[file_idx], 'r') as file:
-            event = file['events'][entry_idx]
+        with h5py.File(self.file_paths[file_idx], 'r') as in_file:
+            event = in_file['events'][entry_idx]
             for key in event.dtype.names:
-                self.load_key(file, event, data_blob, result_blob, key, nested)
+                self.load_key(in_file, event, data_blob, result_blob, key, nested)
 
         if self.split_groups:
             return data_blob, result_blob
@@ -188,13 +188,13 @@ class HDF5Reader:
 
         return entry_index
 
-    def load_key(self, file, event, data_blob, result_blob, key, nested):
+    def load_key(self, in_file, event, data_blob, result_blob, key, nested):
         '''
         Fetch a specific key for a specific event.
 
         Parameters
         ----------
-        file : h5py.File
+        in_file : h5py.File
             HDF5 file instance
         event : dict
             Dictionary of objects that make up one event
@@ -209,12 +209,12 @@ class HDF5Reader:
         '''
         # The event-level information is a region reference: fetch it
         region_ref = event[key]
-        group = file
+        group = in_file
         blob  = result_blob
         if self.split_groups:
-            cat   = 'data' if key in file['data'] else 'result'
+            cat   = 'data' if key in in_file['data'] else 'result'
             blob  = data_blob if cat == 'data' else result_blob
-            group = file[cat]
+            group = in_file[cat]
         if isinstance(group[key], h5py.Dataset):
             if not group[key].dtype.names:
                 # If the reference points at a simple dataset, return

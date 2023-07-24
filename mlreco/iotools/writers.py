@@ -145,14 +145,14 @@ class HDF5Writer:
             self.register_key(result_blob, key, 'result')
 
         # Initialize the output HDF5 file
-        with h5py.File(self.file_name, 'w') as file:
+        with h5py.File(self.file_name, 'w') as out_file:
             # Initialize the info dataset that stores top-level description of what is stored
             if cfg is not None:
-                file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
-                file['info'].attrs['cfg'] = yaml.dump(cfg)
+                out_file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
+                out_file['info'].attrs['cfg'] = yaml.dump(cfg)
 
             # Initialize the event dataset and the corresponding reference array datasets
-            self.initialize_datasets(file)
+            self.initialize_datasets(out_file)
 
             # Mark file as ready for use
             self.ready = True
@@ -282,7 +282,10 @@ class HDF5Writer:
                     dtype, shape = type(val[0]), len(val)
                 else:
                     # Empty list (typing unknown, cannot store)
-                    raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
+                    if key == 'children_id':
+                        dtype, shape = np.int64, 0
+                    else:
+                        raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
 
                 if key in self.ANA_FIXED_LENGTH:
                     object_dtype.append((key, dtype, shape))
@@ -293,22 +296,22 @@ class HDF5Writer:
 
         return object_dtype
 
-    def initialize_datasets(self, file):
+    def initialize_datasets(self, out_file):
         '''
         Create place hodlers for all the datasets to be filled.
 
         Parameters
         ----------
-        file : h5py.File
+        out_file : h5py.File
             HDF5 file instance
         '''
         self.event_dtype = []
         ref_dtype = h5py.special_dtype(ref=h5py.RegionReference)
         for key, val in self.key_dict.items():
-            group = file
+            group = out_file
             if not self.merge_groups:
                 cat   = val['category']
-                group = file[cat] if cat in file else file.create_group(cat)
+                group = out_file[cat] if cat in out_file else out_file.create_group(cat)
             self.event_dtype.append((key, ref_dtype))
 
             if not val['merge'] and not isinstance(val['width'], list):
@@ -340,7 +343,7 @@ class HDF5Writer:
                 subgroup.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
                 subgroup.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
 
-        file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
+        out_file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
     def append(self, data_blob=None, result_blob=None, cfg=None):
         '''
@@ -361,7 +364,7 @@ class HDF5Writer:
             self.ready = True
 
         # Append file
-        with h5py.File(self.file_name, 'a') as file:
+        with h5py.File(self.file_name, 'a') as out_file:
             # Loop over batch IDs
             for batch_id in range(self.batch_size):
                 # Initialize a new event
@@ -371,23 +374,23 @@ class HDF5Writer:
                 # dataset and store the relevant array input and result keys
                 ref_dict = {}
                 for key in self.input_keys:
-                    self.append_key(file, event, data_blob, key, batch_id)
+                    self.append_key(out_file, event, data_blob, key, batch_id)
                 for key in self.result_keys:
-                    self.append_key(file, event, result_blob, key, batch_id)
+                    self.append_key(out_file, event, result_blob, key, batch_id)
 
                 # Append event
-                event_id  = len(file['events'])
-                events_ds = file['events']
+                event_id  = len(out_file['events'])
+                events_ds = out_file['events']
                 events_ds.resize(event_id + 1, axis=0)
                 events_ds[event_id] = event
 
-    def append_key(self, file, event, blob, key, batch_id):
+    def append_key(self, out_file, event, blob, key, batch_id):
         '''
         Stores array in a specific dataset of an HDF5 file
 
         Parameters
         ----------
-        file : h5py.File
+        out_file : h5py.File
             HDF5 file instance
         event : dict
             Dictionary of objects that make up one event
@@ -399,10 +402,10 @@ class HDF5Writer:
             Batch ID to be stored
         '''
         val   = self.key_dict[key]
-        group = file
+        group = out_file
         if not self.merge_groups:
             cat   = val['category']
-            group = file[cat]
+            group = out_file[cat]
 
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single object
@@ -610,8 +613,8 @@ class CSVWriter:
                 'in CSVWriter, the file must exist at the prescribed path '\
                 'before data is written to it.'.format(file_name)
                 raise FileNotFoundError(msg)
-            with open(self.file_name, 'r') as file:
-                self.result_keys = file.readline().split(',')
+            with open(self.file_name, 'r') as out_file:
+                self.result_keys = out_file.readline().split(',')
 
     def create(self, result_blob: dict):
         '''
@@ -627,9 +630,9 @@ class CSVWriter:
         self.result_keys = list(result_blob.keys())
 
         # Create a header and write it to file
-        with open(self.file_name, 'w') as file:
+        with open(self.file_name, 'w') as out_file:
             header_str = ','.join(self.result_keys)+'\n'
-            file.write(header_str)
+            out_file.write(header_str)
 
     def append(self, result_blob: dict):
         '''
@@ -648,6 +651,6 @@ class CSVWriter:
                     'Must provide a dictionary with the expected set of keys'
 
         # Append file
-        with open(self.file_name, 'a') as file:
+        with open(self.file_name, 'a') as out_file:
             result_str = ','.join([str(result_blob[k]) for k in self.result_keys])+'\n'
-            file.write(result_str)
+            out_file.write(result_str)
