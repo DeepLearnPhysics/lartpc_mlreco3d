@@ -172,10 +172,9 @@ def prepare(cfg, event_list=None):
             cfg['trainval']['iterations'] = len(handlers.data_io)
 
         # Restore weights if necessary
-        if cfg['trainval']['train']:
-            loaded_iteration = handlers.trainer.initialize()
-            handlers.iteration = loaded_iteration
-            make_directories(cfg, loaded_iteration, handlers=handlers)
+        loaded_iteration = handlers.trainer.initialize()
+        handlers.iteration = loaded_iteration
+        make_directories(cfg, loaded_iteration, handlers=handlers)
 
     return handlers
 
@@ -361,8 +360,9 @@ def inference_loop(handlers):
         if weight is not None and len(weights) > 1:
             print('Setting weights', weight)
             handlers.cfg['trainval']['model_path'] = weight
-        loaded_iteration = handlers.trainer.initialize()
-        make_directories(handlers.cfg,loaded_iteration,handlers)
+            loaded_iteration = handlers.trainer.initialize()
+            make_directories(handlers.cfg,loaded_iteration,handlers)
+
         handlers.iteration = 0
         handlers.data_io_iter = iter(cycle(handlers.data_io))
         while handlers.iteration < handlers.cfg['trainval']['iterations']:
