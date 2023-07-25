@@ -38,6 +38,12 @@ class TruthParticle(Particle):
     direction : np.ndarray
         (3) Unit vector corresponding to the true particle direction (normalized momentum)
     '''
+
+    # Attributes that specify coordinates
+    _COORD_ATTRS = Particle._COORD_ATTRS +\
+	['truth_points', 'sed_points', 'position', 'end_position',\
+	'parent_position', 'ancestor_position', 'first_step', 'last_step']
+
     def __init__(self,
                  *args,
                  depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
@@ -70,7 +76,7 @@ class TruthParticle(Particle):
         self.sed_index              = sed_index
         self._sed_points            = sed_points
         self._sed_depositions_MeV   = np.atleast_1d(sed_depositions_MeV)
-        
+
         self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
         # Load truth information from the true particle object
@@ -209,24 +215,3 @@ class TruthParticle(Particle):
     def sed_depositions_MeV(self, value):
         assert len(value) == self.sed_size
         self._sed_depositions_MeV = value
-    
-    def convert_to_cm(self, meta):
-        
-        assert self._units == 'px'
-        
-        if len(self.points) > 0:
-            self.points = pixel_to_cm(self.points, meta)
-        self.start_point = pixel_to_cm(self.start_point, meta)
-        self.end_point = pixel_to_cm(self.end_point, meta)
-        
-        self.truth_points = pixel_to_cm(self.truth_points, meta)
-        if len(self.sed_points) > 0:
-            self.sed_points = pixel_to_cm(self.sed_points, meta)
-        if self.asis is not None:
-            self._first_step = pixel_to_cm(self._first_step, meta)
-            self._start_position = pixel_to_cm(self._start_position, meta)
-            self._end_position = pixel_to_cm(self._end_position, meta)
-            if self.semantic_type == 1:
-                self._last_step = pixel_to_cm(self._last_step, meta)
-
-        self._units = 'cm'
