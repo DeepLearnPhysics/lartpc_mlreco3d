@@ -128,11 +128,23 @@ class GraphSPICE(nn.Module):
     MODULES = ['constructor_cfg', 'embedder_cfg', 'kernel_cfg', 'gspice_fragment_manager']
 
     RETURNS = {
-        'coordinates': ['tensor'],
-        'edge_index': ['edge_tensor', ['edge_index', 'coordinates']],
-        'edge_score': ['edge_tensor', ['edge_index', 'coordinates']],
-        'edge_truth': ['edge_tensor', ['edge_index', 'coordinates']],
-        'graph_info': ['tensor']
+        'image_id'     : ['tensor'],
+        'coordinates'  : ['tensor'],
+        'batch'        : ['tensor', 'image_id'],
+        'x'            : ['tensor', 'image_id'],
+        'pos'          : ['tensor', 'image_id'],
+        'node_truth'   : ['tensor', 'image_id'],
+        'voxel_id'     : ['tensor', 'image_id'],
+        'graph_key'    : ['tensor'],
+        'graph_id'     : ['tensor', 'graph_key'],
+        'full_edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_batch'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_image_id': ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_label'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_attr'    : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_pred'    : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_prob'    : ['edge_tensor', ['full_edge_index', 'image_id']]
     }
 
     def __init__(self, cfg, name='graph_spice'):
@@ -197,16 +209,9 @@ class GraphSPICE(nn.Module):
                                 self.kernel_fn,
                                 labels,
                                 invert=self.invert)
-        # self.gs_manager.fit_predict(skip=self.skip_classes)
         
         graph_state = self.gs_manager.save_state(unwrapped=False)
         res.update(graph_state)
-
-        # res['edge_index'] = [graph.edge_index.T]
-        # res['edge_score'] = [graph.edge_attr]
-        # if hasattr(graph, 'edge_truth'):
-        #     res['edge_truth'] = [graph.edge_truth]
-        # res['graph_info'] = [self.gs_manager.info.to_numpy()]
 
         return res
 

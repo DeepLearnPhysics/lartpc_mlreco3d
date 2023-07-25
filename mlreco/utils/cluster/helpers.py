@@ -195,7 +195,9 @@ class ConnectedComponents(BaseTransform):
         assert connection in ['strong', 'weak'], 'Unknown connection type'
         self.connection = connection
 
-    def fit_predict_one(self, data: Data, edge_mode='edge_pred', **kwargs) -> Data:
+    def fit_predict_one(self, data: Data, 
+                        edge_mode='edge_pred', 
+                        offset=0, **kwargs) -> Data:
         
         device = data.x.device
         if edge_mode == 'edge_pred':
@@ -225,17 +227,32 @@ class ConnectedComponents(BaseTransform):
         
         assigner = RadiusNeighborsIterativeAssigner(data.pos.cpu().numpy(), component, **kwargs)
         node_pred = assigner.assign_orphans()
-        data.node_pred = torch.tensor(node_pred).long().to(device).view(-1, 1)
+        # data.node_pred = torch.tensor(node_pred).long().to(device) + offset
+        data.node_pred = torch.tensor(node_pred).long().to(device)
+        data.node_pred[data.node_pred != -1] += offset
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}({self.connection})'
     
     def forward(self, batch: Batch, edge_mode='edge_pred', **kwargs) -> Batch:
         
+        x = 0
+        
         data_list = batch.to_data_list()
+        offset = 0
+        current_batch = 0
         for graph_id, subgraph in enumerate(data_list):
+            if current_batch < int(subgraph.graph_key[0]):
+                # Next batch, set offset = 0
+                offset = 0
+                current_batch = int(subgraph.graph_key[0])
+            
             self.fit_predict_one(subgraph, 
                                  edge_mode=edge_mode,
+                                 offset=offset,
                                  **kwargs)
+
+            offset = int(subgraph.node_pred.max()) + 1
+            
         out = Batch.from_data_list(data_list)
         return out

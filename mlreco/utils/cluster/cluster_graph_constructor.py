@@ -27,13 +27,17 @@ class ClusterGraphConstructor:
         'edge_index',
         'edge_attr',
         'edge_label',
+        'edge_prob',
         'edge_pred',
+        'edge_batch',
+        'edge_image_id',
         'x',
         'pos',
         'node_pred',
         'node_truth',
         'image_id',
-        'voxel_id'
+        'voxel_id',
+        'semantic_id'
     ]
     
     def __init__(self, 
@@ -225,14 +229,21 @@ class ClusterGraphConstructor:
             features_class[edge_index[0, :]],
             features_class[edge_index[1, :]])
         
+        image_id = int(batch_id) * torch.ones(features_class.shape[0],
+                                            dtype=torch.long, 
+                                            device=features_class.device)
+        voxel_id = voxels_class
+        semantic_id = int(semantic_type) * torch.ones(features_class.shape[0],
+                                                           dtype=torch.long,
+                                                           device=features_class.device)
+        
         data = Data(x=features_class,
                     pos=coords_class,
                     edge_index=edge_index,
-                    edge_attr=edge_attr)
-        data.image_id = int(batch_id) * torch.ones(features_class.shape[0],
-                                            dtype=torch.long, 
-                                            device=features_class.device)
-        data.voxel_id = voxels_class
+                    edge_attr=edge_attr,
+                    image_id=image_id,
+                    voxel_id=voxel_id,
+                    semantic_id=semantic_id)
         
         # Mappings from GraphID to (BatchID, SemanticID)
         data.graph_id = int(graph_id)
@@ -297,7 +308,6 @@ class ClusterGraphConstructor:
     def _predict_edges(self, data, invert=False):
         
         device = data.edge_attr.device
-        edge_index  = data.edge_index.T
         edge_logits = data.edge_attr
         edge_probs  = torch.sigmoid(edge_logits).to(device)
         edge_pred   = torch.zeros_like(edge_probs).long().to(device)
@@ -321,13 +331,18 @@ class ClusterGraphConstructor:
     def save_state(self, unwrapped=False):
         
         state_dict = defaultdict(list)
+        perm = torch.argsort(self._data.voxel_id)
         batch = self._data.batch
+        edge_index = self._data.edge_index
         image_id = self._data.image_id
         data_list = self._data.to_data_list()
         for graph_id, subgraph in enumerate(data_list):
             for attr_name in self.ATTR_NAMES:
                 if hasattr(subgraph, attr_name):
-                    state_dict[attr_name].append(getattr(subgraph, attr_name))
+                    if attr_name == 'edge_index':
+                        state_dict[attr_name].append(subgraph.edge_index.T)
+                    else:
+                        state_dict[attr_name].append(getattr(subgraph, attr_name))
             state_dict['graph_id'].append(int(subgraph.graph_id))
             state_dict['graph_key'].append(subgraph.graph_key)
             
@@ -337,37 +352,18 @@ class ClusterGraphConstructor:
             state_dict_wrapped = {}
             state_dict_wrapped['batch'] = [batch]
             # assert (image_id == torch.cat(state_dict['image_id'], dim=0)).all()
-            state_dict_wrapped['edge_batch'] = [batch[self._data.edge_index[0, :]]]
-            state_dict_wrapped['edge_image_id'] = [image_id[self._data.edge_index[0, :]]]
+            state_dict_wrapped['edge_batch'] = [batch[edge_index[0, :]]]
+            # assert image_id[self._data.edge_index[0, :]] == image_id[self._data.edge_index[1, :]]
+            state_dict_wrapped['edge_image_id'] = [image_id[edge_index[0, :]]]
+            state_dict_wrapped['full_edge_index'] = [edge_index.T]
             for key, val in state_dict.items():
                 if isinstance(val[0], torch.Tensor):
-                    if key != 'edge_index':
-                        state_dict_wrapped[key] = [torch.cat(val, dim=0)]
-                    else:
-                        state_dict_wrapped[key] = [torch.cat(val, dim=1)]
+                    state_dict_wrapped[key] = [torch.cat(val, dim=0)]
                 else:
                     state_dict_wrapped[key] = [np.array(val).astype(int)]
             
             return state_dict_wrapped
-    
-    # def _save_state_wrapped(self, validate=True):
-        
-    #     state_dict = {}
-        
-    #     for attr_name in self.ATTR_NAMES:
-    #         if hasattr(self._data, attr_name):
-    #             state_dict[attr_name] = [getattr(self._data, attr_name)]
-    #             state_dict['batch'] = [self._data.batch]
-    #             if validate:
-    #                 batch_1 = self._data.batch[self._data.edge_index[0, :]]
-    #                 batch_2 = self._data.batch[self._data.edge_index[1, :]]
-    #                 assert (batch_1 == batch_2).all()
-    #             edge_batch = self._data.batch[self._data.edge_index[0, :]]
-    #             state_dict['edge_batch'] = [edge_batch]
-    #     state_dict['graph_id'] = [np.array(self._data.graph_id).astype(int)]
-    #     state_dict['graph_key'] = [np.array(self._data.graph_key).astype(int)]
-        
-    #     return state_dict
+
     
     def _load_state_wrapped(self, state_dict):
         self.clear_data()
@@ -381,11 +377,13 @@ class ClusterGraphConstructor:
             edge_mask = state_dict['edge_batch'][0] == graph_id
             subgraph = Data(x=state_dict['x'][0][node_mask],
                             pos=state_dict['pos'][0][node_mask],
-                            edge_index=state_dict['edge_index'][0][:, edge_mask],
+                            edge_index=state_dict['edge_index'][0].T[:, edge_mask],
                             edge_attr=state_dict['edge_attr'][0][edge_mask],
                             edge_pred=state_dict['edge_pred'][0][edge_mask],
+                            edge_prob=state_dict['edge_prob'][0][edge_mask],
                             image_id=state_dict['image_id'][0][node_mask],
-                            voxel_id=state_dict['voxel_id'][0][node_mask])
+                            voxel_id=state_dict['voxel_id'][0][node_mask],
+                            semantic_id=state_dict['semantic_id'][0][node_mask])
             for name in optionals:
                 if name in state_dict and name.startswith('node'):
                     setattr(subgraph, name, state_dict[name][0][node_mask])
@@ -411,11 +409,13 @@ class ClusterGraphConstructor:
             for i in range(num_graphs):
                 subgraph = Data(x=state_dict['x'][i],
                                 pos=state_dict['pos'][i],
-                                edge_index=state_dict['edge_index'][i],
+                                edge_index=state_dict['edge_index'][i].T,
                                 edge_attr=state_dict['edge_attr'][i],
                                 edge_pred=state_dict['edge_pred'][i],
+                                edge_prob=state_dict['edge_prob'][i],
                                 image_id=state_dict['image_id'][i],
-                                voxel_id=state_dict['voxel_id'][i])
+                                voxel_id=state_dict['voxel_id'][i],
+                                semantic_id=state_dict['semantic_id'][i])
                 for name in optionals:
                     if name in state_dict:
                         setattr(subgraph, name, state_dict[name][i])
@@ -430,7 +430,6 @@ class ClusterGraphConstructor:
             
 
     def fit_predict(self, 
-                    skip=[-1, 4], 
                     edge_mode='edge_pred', 
                     min_points=None):
         """Run GraphSPICE clustering on all graphs in the batch.
@@ -447,7 +446,6 @@ class ClusterGraphConstructor:
         node_pred : torch.Tensor
             Predicted cluster labels for each voxel.
         """
-        skip = set(skip)
         if min_points is None:
             min_points = self._min_points
         graphs = self._cc_predictor.forward(self._data, edge_mode=edge_mode,
@@ -457,9 +455,8 @@ class ClusterGraphConstructor:
                                             orphans_cluster_all=self._orphans_cluster_all,
                                             outlier_label=int(-1))
         self._data = graphs
-        
-        perm = torch.argsort(self._data.voxel_id)
-        return graphs.node_pred[perm].squeeze()
+
+        return graphs
         
     
     def __call__(self, res: dict,

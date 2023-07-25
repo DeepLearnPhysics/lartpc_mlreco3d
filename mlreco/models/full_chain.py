@@ -361,11 +361,15 @@ class FullChain(FullChainGNN):
 
                     self.gs_manager.load_state(spatial_embeddings_output)   
                     
-                    cluster_predictions = self.gs_manager.fit_predict(min_points=self._gspice_min_points)
+                    graphs = self.gs_manager.fit_predict(min_points=self._gspice_min_points)
                     
+                    perm = torch.argsort(graphs.voxel_id)
+                    cluster_predictions = graphs.node_pred[perm]
+
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
-                                                semantic_labels[filtered_semantic][:, None],
-                                                cluster_predictions.to(device)[:, None]], dim=1)
+                                                semantic_labels[filtered_semantic].view(-1, 1),
+                                                cluster_predictions.view(-1, 1)], dim=1)
+                    
                     # For the record - (self.gs_manager._node_pred.pos == input[0][filtered_semantic][:, 1:4]).all()
                     # ie ordering of voxels is NOT the same in node predictions and (filtered) input data
                     # It is likely that input data is lexsorted while node predictions 
