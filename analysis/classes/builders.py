@@ -402,7 +402,7 @@ class ParticleBuilder(DataBuilder):
             simE_deposits   = None
 
         # point_labels   = data['point_labels'][entry]
-        unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
+        # unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
 
         # For debugging
         voxel_counts = 0
@@ -427,7 +427,6 @@ class ParticleBuilder(DataBuilder):
                                                         mask_nonghost, 
                                                         lpart, 
                                                         image_index,
-                                                        unit_convert=unit_convert,
                                                         sed=simE_deposits,
                                                         mask_sed=mask_sed)
                 out.append(particle)
@@ -499,10 +498,10 @@ class ParticleBuilder(DataBuilder):
                                      particle_asis=lpart)
             
             if particle.semantic_type == 1:
-                particle.start_point = unit_convert(particle.first_step)
-                particle.end_point   = unit_convert(particle.last_step)
+                particle.start_point = particle.first_step
+                particle.end_point   = particle.last_step
             elif particle.semantic_type == 0:
-                particle.start_point = unit_convert(particle.first_step)
+                particle.start_point = particle.first_step
 
             out.append(particle)
 
@@ -673,6 +672,7 @@ class InteractionBuilder(DataBuilder):
             print("Neutrino truth information not found in label data!")
         for ia in interactions:
             if ia.id in vertices:
+                # ia.truth_vertex = vertices[ia.id]
                 ia.vertex = vertices[ia.id]
 
             if 'neutrinos' in data and ia.nu_id == 1:
@@ -925,7 +925,6 @@ def handle_empty_truth_particles(labels_noghost,
                                  p, 
                                  entry, 
                                  verbose=False,
-                                 unit_convert=None,
                                  sed=None,
                                  mask_sed=None):
     """
@@ -951,12 +950,7 @@ def handle_empty_truth_particles(labels_noghost,
     id = int(p.id())
     # pdg = PDG_TO_PID.get(p.pdg_code(), -1)
     # is_primary = p.group_id() == p.parent_id()
-    is_primary = -1
-    
-    if unit_convert is None:
-        f = lambda x: x
-    else:
-        f = unit_convert
+    is_primary = False
 
     semantic_type, interaction_id, nu_id, primary_id, pid = -1, -1, -1, -1, -1
     coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
@@ -979,7 +973,7 @@ def handle_empty_truth_particles(labels_noghost,
         nu_id          = int(truth_labels[2])
         pid            = int(truth_labels[3])
         primary_id     = int(truth_labels[4])
-        is_primary     = int(primary_id) == 1
+        is_primary     = bool(int(primary_id) == 1)
         
         volume_id, cts = np.unique(labels_noghost[:, BATCH_COL][mask_noghost].astype(int), 
                                     return_counts=True)
@@ -1006,15 +1000,6 @@ def handle_empty_truth_particles(labels_noghost,
                              particle_asis=p,
                              start_point=-np.ones(3, dtype=np.float32),
                              end_point=-np.ones(3, dtype=np.float32))
-
-    particle.start_point = f(np.array([p.first_step().x(),
-                                       p.first_step().y(),
-                                       p.first_step().z()]))
-
-    if semantic_type == 1:
-        particle.end_point = f(np.array([p.last_step().x(),
-                                         p.last_step().y(),
-                                         p.last_step().z()]))
     return particle
 
 

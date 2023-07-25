@@ -18,6 +18,7 @@ from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
 from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
+
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
 
 class AnaToolsManager:
@@ -198,6 +199,10 @@ class AnaToolsManager:
             'particle_end_points',
         ])
         
+        data_products = set([
+            'particles', 'truth_particles', 'interactions', 'truth_interactions'
+        ])
+        
         meta = data['meta'][0]
         assert len(meta) == 9
         
@@ -209,6 +214,10 @@ class AnaToolsManager:
         for key, val in result.items():
             if key in result_has_voxels:
                 result[key] = [self.pixel_to_cm(arr, meta) for arr in val]
+            if key in data_products:
+                for plist in val:
+                    for p in plist:
+                        p.convert_to_cm(meta)
     
     
     def _build_reco_reps(self, data, result):
@@ -594,9 +603,6 @@ class AnaToolsManager:
                 "translated to cm from pixels, and you are trying to convert "\
                 "coordinates again. You might want to set convert_to_cm = False."
             raise AssertionError(msg)
-        
-        if self.convert_to_cm:
-            self.convert_pixels_to_cm(data, res)
 
         # 2. Build data representations'
         if self.data_builders is not None:
@@ -609,6 +615,9 @@ class AnaToolsManager:
             dt = end - start
             self.logger_dict['build_reps_time'] = dt
         print(f"Building representations took {dt:.3f} seconds.")
+        
+        if self.convert_to_cm:
+            self.convert_pixels_to_cm(data, res)
         
         # 3. Run post-processing, if requested
         start = time.time()

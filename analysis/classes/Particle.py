@@ -4,7 +4,7 @@ from typing import Counter, List, Union
 from collections import OrderedDict
 
 from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
-
+from mlreco.utils.utils import pixel_to_cm
 
 class Particle:
     '''
@@ -79,15 +79,16 @@ class Particle:
                  depositions: np.ndarray = np.empty(0, dtype=np.float32), 
                  pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32),
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
-                 start_point: np.ndarray = -np.ones(3, dtype=np.float32),
-                 end_point: np.ndarray = -np.ones(3, dtype=np.float32),
+                 start_point: np.ndarray = np.full(3, float('-inf')),
+                 end_point: np.ndarray = np.full(3, float('-inf')), 
                  start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  length: float = -1.,
                  csda_kinetic_energy: float = -1.,
                  momentum_mcs: float = -1., 
                  matched: bool = False,
-                 is_contained: bool = False, **kwargs):
+                 is_contained: bool = False, 
+                 units: str = 'px', **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -97,6 +98,7 @@ class Particle:
         self._pid             = -1
         self._size            = -1
         self._is_primary      = False
+        self._units           = units
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -330,3 +332,16 @@ class Particle:
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
         self._is_primary = bool(np.argmax(primary_scores))
+        
+    def convert_to_cm(self, meta):
+        
+        assert self._units == 'px'
+        self.points = pixel_to_cm(self.points, meta)
+        self.start_point = pixel_to_cm(self.start_point, meta)
+        self.end_point = pixel_to_cm(self.end_point, meta)
+
+        self._units = 'cm'
+        
+    @property
+    def units(self):
+        return self._units

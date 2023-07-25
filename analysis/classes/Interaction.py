@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 
 from typing import Counter, List, Union, Dict
@@ -7,6 +6,7 @@ from functools import cached_property
 
 from . import Particle
 from mlreco.utils.globals import PID_LABELS
+from mlreco.utils.utils import pixel_to_cm
 
 
 class Interaction:
@@ -44,7 +44,7 @@ class Interaction:
                  nu_id: int = -1,
                  volume_id: int = -1,
                  image_id: int = -1,
-                 vertex: np.ndarray = -np.ones(3, dtype=np.float32),
+                 vertex: np.ndarray = np.full(3, float('-inf')),
                  is_neutrino: bool = False,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
@@ -52,13 +52,14 @@ class Interaction:
                  crthit_matched: bool = False,
                  crthit_matched_particle_id: int = -1,
                  crthit_id: int = -1,
-                 flash_time: float = -float(sys.maxsize),
+                 flash_time: float = float('-inf'),
                  fmatched: bool = False,
                  flash_total_pE: float = -1,
                  flash_id: int = -1,
                  flash_hypothesis: float = -1,
                  matched: bool = False,
-                 is_contained: bool = False):
+                 is_contained: bool = False,
+                 units: str = 'px'):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -67,6 +68,7 @@ class Interaction:
         self.image_id     = int(image_id)
         self.vertex       = vertex
         self.is_neutrino  = is_neutrino
+        self._units       = units
         
         # Initialize private attributes to be set by setter only
         self._particles  = None
@@ -160,7 +162,7 @@ class Interaction:
 
     @property
     def particles(self):
-        return self._particles.values()
+        return list(self._particles.values())
 
     @particles.setter
     def particles(self, value):
@@ -278,6 +280,22 @@ class Interaction:
                 primary_str[p.is_primary], p.id, p.pid, p.size, str(p.match))
             self._particles_summary += pmsg
         return self._particles_summary
+    
+    # UNIT CONVERSION 
+    
+    @property
+    def units(self):
+        return self._units
+    
+    def convert_to_cm(self, meta):
+        
+        assert self.units == 'px'
+
+        self.points = pixel_to_cm(self.points, meta)
+        if (self.vertex > 0).all():
+            self.vertex = pixel_to_cm(self.vertex, meta)
+            
+        self._units = 'cm'
 
 
 # ------------------------------Helper Functions---------------------------

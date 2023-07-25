@@ -11,7 +11,8 @@ from mlreco.utils.globals import COORD_COLS
 
 
 @post_processing(data_capture=[],
-                 result_capture=['interactions'])
+                 result_capture=['interactions'],
+                 result_capture_optional=['truth_interactions'])
 def reconstruct_vertex(data_dict, result_dict,
                        include_semantics=[0,1],
                        use_primaries=True,
@@ -20,8 +21,6 @@ def reconstruct_vertex(data_dict, result_dict,
     
     for ia in result_dict['interactions']:
         
-        candidates = []
-        
         if use_primaries:
             particles = [p for p in ia.particles \
                 if p.is_primary and (p.semantic_type in include_semantics)]
@@ -29,23 +28,34 @@ def reconstruct_vertex(data_dict, result_dict,
             particles = [p for p in ia.particles \
                 if p.semantic_type in include_semantics]
             
-        cand_1 = get_adjacent_startpoint_candidate(particles, r1)
-        cand_2 = get_track_shower_candidate(particles, r2=r2)
-        cand_3 = get_pseudovertex_candidate(particles, dim=3)
-        
-        if len(cand_1) > 0:
-            candidates.append(cand_1)
-        if len(cand_2) > 0:
-            candidates.append(cand_2)
-        if len(cand_3) > 0:
-            candidates.append(cand_3)
-            
-        if len(candidates) > 0:
-            candidates = np.vstack(candidates)
-            vertex = np.mean(candidates, axis=0)
+        vertex = reconstruct_vertex_fn(particles, r1=r1, r2=r2)
+            # print(ia.vertex, vertex)
+        if vertex is not None:
             ia.vertex = vertex
             
     return {}
+
+def reconstruct_vertex_fn(particles, r1=5.0, r2=10.0):
+    
+    vertex = None
+    
+    candidates = []
+    cand_1 = get_adjacent_startpoint_candidate(particles, r1)
+    cand_2 = get_track_shower_candidate(particles, r2=r2)
+    
+    if len(cand_1) > 0:
+        candidates.append(cand_1)
+    if len(cand_2) > 0:
+        candidates.append(cand_2)
+    if len(candidates) == 0:
+        cand_3 = get_pseudovertex_candidate(particles, dim=3)
+        if len(cand_3) > 0: candidates.append(cand_3)
+        
+    if len(candidates) > 0:
+        candidates = np.vstack(candidates)
+        vertex = np.mean(candidates, axis=0)
+        
+    return vertex
 
 @nb.njit(cache=True)
 def point_to_line_distance_(p1, p2, v2):

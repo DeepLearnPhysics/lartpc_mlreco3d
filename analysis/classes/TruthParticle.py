@@ -4,6 +4,7 @@ from typing import Counter, List, Union
 
 from . import Particle
 
+from mlreco.utils import pixel_to_cm
 from mlreco.utils.globals import PDG_TO_PID, SHAPE_LABELS
 from mlreco.utils.decorators import inherit_docstring
 
@@ -69,6 +70,8 @@ class TruthParticle(Particle):
         self.sed_index              = sed_index
         self._sed_points            = sed_points
         self._sed_depositions_MeV   = np.atleast_1d(sed_depositions_MeV)
+        
+        self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
         # Load truth information from the true particle object
         self.register_larcv_particle(particle_asis)
@@ -83,7 +86,6 @@ class TruthParticle(Particle):
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng = -1.
         self.csda_kinetic_energy_tng = -1.
-
 
     def register_larcv_particle(self, particle):
         '''
@@ -207,3 +209,24 @@ class TruthParticle(Particle):
     def sed_depositions_MeV(self, value):
         assert len(value) == self.sed_size
         self._sed_depositions_MeV = value
+    
+    def convert_to_cm(self, meta):
+        
+        assert self._units == 'px'
+        
+        if len(self.points) > 0:
+            self.points = pixel_to_cm(self.points, meta)
+        self.start_point = pixel_to_cm(self.start_point, meta)
+        self.end_point = pixel_to_cm(self.end_point, meta)
+        
+        self.truth_points = pixel_to_cm(self.truth_points, meta)
+        if len(self.sed_points) > 0:
+            self.sed_points = pixel_to_cm(self.sed_points, meta)
+        if self.asis is not None:
+            self._first_step = pixel_to_cm(self._first_step, meta)
+            self._start_position = pixel_to_cm(self._start_position, meta)
+            self._end_position = pixel_to_cm(self._end_position, meta)
+            if self.semantic_type == 1:
+                self._last_step = pixel_to_cm(self._last_step, meta)
+
+        self._units = 'cm'
