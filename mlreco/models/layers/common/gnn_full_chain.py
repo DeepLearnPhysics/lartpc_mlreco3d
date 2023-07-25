@@ -679,7 +679,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
 
         if self.enable_cnn_clust:
             # If there is no track voxel, maybe GraphSpice didn't run
-            if self._enable_graph_spice and 'graph_spice_graph_info' in out:
+            if self._enable_graph_spice:
+            # if self._enable_graph_spice and 'graph_spice_graph_info' in out:
                 graph_spice_out = {k.split('graph_spice_')[-1]:v for k, v in out.items() if 'graph_spice_' in k}
 
                 segmentation_pred = out['segmentation'][0]
@@ -852,7 +853,8 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 print('Segmentation Accuracy: {:.4f}'.format(res_seg['accuracy']))
             if self.enable_ppn and 'ppn_output_coords' in out:
                 print('PPN Accuracy: {:.4f}'.format(res_ppn['accuracy']))
-            if self.enable_cnn_clust and ('graph_spice_graph_info' in out or 'embeddings' in out):
+            # if self.enable_cnn_clust and ('graph_spice_graph_info' in out or 'embeddings' in out):
+            if self.enable_cnn_clust:
                 if not self._enable_graph_spice:
                     print('Clustering Embedding Accuracy: {:.4f}'.format(res_cnn_clust['accuracy']))
                 else:

@@ -191,6 +191,7 @@ class GraphBatch(Batch):
 
 
     def add_edge_features(self, edge_feats, name : AnyStr, dtype=None):
+
         device = self.edge_attr.device
         feats = edge_feats
         if not isinstance(edge_feats, Tensor):

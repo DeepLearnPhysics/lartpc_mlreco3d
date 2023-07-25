@@ -335,11 +335,13 @@ class Unwrapper:
         if isinstance(data[0], (int, float)):
             if len(data) == 1:
                 return [data[g] for g in range(self.num_gpus) for i in range(self.batch_size)]
-            elif len(data) == self.batch_count:
-                return data
             else:
-                raise ValueError('Only accept scalar arrays of size 1 or batch_size: '+\
-                                 f'{len(data)} != {self.batch_size}')
+                return data
+            # elif len(data) == self.batch_count:
+            #     return data
+            # else:
+            #     raise ValueError('Only accept scalar arrays of size 1 or batch_size: '+\
+            #                      f'{len(data)} != {self.batch_size}')
         if isinstance(data[0], list):
             concat_data = []
             for d in data:

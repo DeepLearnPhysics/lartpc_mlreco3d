@@ -206,7 +206,7 @@ class SPICEFragmentManager(FragmentManager):
             frag_seg[i] = vals[torch.argmax(cnts)].item()
 
         return fragments, frag_batch_ids, frag_seg
-
+            
 
 class GraphSPICEFragmentManager(FragmentManager):
     '''
@@ -217,23 +217,24 @@ class GraphSPICEFragmentManager(FragmentManager):
 
 
     def process(self, filtered_input, n, filtered_semantic, offset=0):
+        
         fragments = form_clusters(filtered_input, column=-1, batch_index=self._batch_column)
         fragments = [f.int().detach().cpu().numpy() for f in fragments]
 
         if len(fragments) > 0:
             frag_batch_ids = get_cluster_batch(filtered_input.detach().cpu().numpy(), \
                                             fragments, batch_index=self._batch_column)
-            fragments_seg = get_cluster_label(filtered_input, fragments, column=4)
+            fragments_seg = get_cluster_label(filtered_input, fragments, column=-2)
+            fragments_id = get_cluster_label(filtered_input, fragments, column=-1)
         else:
             frag_batch_ids = np.empty((0,))
             fragments_seg = np.empty((0,))
-        # fragments = [np.arange(filtered_input.shape[0])[clust] \
-        #              for clust in fragments]
-        # We want the indices to refer to the unfiltered, original input
-        #filtered_semantic = filtered_semantic.detach().cpu().numpy()
+            fragments_id = np.empty((0,))
+        
         fragments = [np.arange(n)[filtered_semantic.detach().cpu().numpy()][clust]+offset \
                      for clust in fragments]
-        return fragments, frag_batch_ids, fragments_seg
+
+        return fragments, frag_batch_ids, fragments_seg, fragments_id
 
     def forward(self, filtered_input, original_input, filtered_semantic):
         '''
@@ -255,9 +256,11 @@ class GraphSPICEFragmentManager(FragmentManager):
 
         '''
         all_fragments, all_frag_batch_ids, all_fragments_seg = [], [], []
+        all_fragments_id = []
         for b in filtered_input[:, self._batch_column].unique():
             mask = filtered_input[:, self._batch_column] == b
             original_mask = original_input[:, self._batch_column] == b
+        
             # How many voxels belong to that batch
             n = torch.count_nonzero(original_mask)
             # The index start of the batch in original data
@@ -265,8 +268,14 @@ class GraphSPICEFragmentManager(FragmentManager):
             # of n, as this will fail if a batch is missing
             # from the original data (eg no track in that batch).
             offset = torch.nonzero(original_mask).min().item()
-            fragments, frag_batch_ids, fragments_seg = self.process(filtered_input[mask], n.item(), filtered_semantic[original_mask].cpu(), offset=offset)
+            
+            fragments, frag_batch_ids, fragments_seg, fragments_id = self.process(filtered_input[mask], 
+                                                                    n.item(), 
+                                                                    filtered_semantic[original_mask].cpu(),
+                                                                    offset=offset)
+            
             all_fragments.extend(fragments)
             all_frag_batch_ids.extend(frag_batch_ids)
             all_fragments_seg.extend(fragments_seg)
-        return all_fragments, all_frag_batch_ids, all_fragments_seg
+            all_fragments_id.extend(fragments_id)
+        return all_fragments, all_frag_batch_ids, all_fragments_seg, all_fragments_id
