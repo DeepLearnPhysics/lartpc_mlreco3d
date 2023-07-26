@@ -20,13 +20,17 @@ import copy
 # -------------------------- Helper Functions--------------------------------
 
 def knn_sklearn(coords, k=5):
+    if coords.shape[0] < k:
+        n_neighbors = coords.shape[0] - 1
+    else:
+        n_neighbors = k
     if isinstance(coords, torch.Tensor):
         device = coords.device
-        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=k).tocoo()
+        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=n_neighbors).tocoo()
         out = np.vstack([G.row, G.col])
         return torch.Tensor(out).long().to(device=device)
     elif isinstance(coords, np.ndarray):
-        G = kneighbors_graph(coords, n_neighbors=k).tocoo()
+        G = kneighbors_graph(coords, n_neighbors=n_neighbors).tocoo()
         out = np.vstack([G.row, G.col])
         return out
 
