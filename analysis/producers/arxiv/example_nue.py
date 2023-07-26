@@ -114,7 +114,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 true_int_dict['true_nu_current_type'] = nu.current_type()
                 true_int_dict['true_nu_energy'] = nu.energy_init()
 
-            pred_int_dict['interaction_match_counts'] = counts[i]
+            pred_int_dict['interaction_match_overlap'] = counts[i]
 
             if enable_flash_matching:
                 volume = true_int.volume if true_int is not None else pred_int.volume
@@ -165,7 +165,7 @@ def debug_pid(data_blob, res, data_idx, analysis_cfg, cfg):
                 if pred_p is not None and true_p is not None:
                     pred_particle_dict['true_particle_is_matched'] = True
 
-                pred_particle_dict['particle_match_counts'] = ious[i]
+                pred_particle_dict['particle_match_overlap'] = ious[i]
 
                 true_particle_dict['true_interaction_id'] = true_int.id
                 pred_particle_dict['pred_interaction_id'] = pred_int.id

@@ -4,9 +4,9 @@ from .points import scatter_points
 from .plotly_layouts import HIGH_CONTRAST_COLORS
 
 from mlreco.utils.particles import get_interaction_ids, get_nu_ids, get_particle_ids, get_shower_primary_ids, get_group_primary_ids
-from mlreco.utils.globals import COORD_COLS, CLUST_COL
+from mlreco.utils.globals import COORD_COLS, PART_COL
 
-def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=None, clust_col=CLUST_COL, markersize=1, **kwargs):
+def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=None, part_col=PART_COL, markersize=1, **kwargs):
     '''
     Function which returns a graph object per true particle in the 
     particle list, provided that the particle deposited energy in the
@@ -22,6 +22,8 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
         (M) List of true MPV particle instances
     neutrinos : List[larcv.Neutrino], optional
         (N) List of true neutrino instances
+    part_col : int
+        Index of the column in the label tensor that contains the particle ID
     **kwargs : dict, optional
         List of additional arguments to pass to plotly.graph_objs.Scatter3D that
         make up the output list
@@ -43,7 +45,7 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
     colors = HIGH_CONTRAST_COLORS
     for i in range(len(particles)):
         # Get a mask that corresponds to the particle entry, skip empty particles
-        mask = cluster_label[:, clust_col] == i
+        mask = cluster_label[:, part_col] == i
         if not np.sum(mask): continue
             
         # Initialize the information string

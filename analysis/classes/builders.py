@@ -30,7 +30,7 @@ from mlreco.utils.vertex import get_vertex
 # each interaction, and they are computed at initialization.
 
 SKIP_KEYS = [
-    'is_principal_match', 'match', 'match_counts', 
+    'is_principal_match', 'match', 'match_overlap', 
     'num_particles', 'num_primaries', 'particle_counts', 'particle_ids',
     'primary_counts', 'size', 'topology', 
     # TruthInteraction Attributes
@@ -209,8 +209,8 @@ class ParticleBuilder(DataBuilder):
             prepared_bp = copy.deepcopy(bp)
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
-            assert len(match) == len(match_counts)
+            match_overlap = prepared_bp.pop('match_overlap', [])
+            assert len(match) == len(match_overlap)
             
             prepared_bp.pop('depositions_sum', None)
             group_id = prepared_bp.pop('id', -1)
@@ -221,8 +221,8 @@ class ParticleBuilder(DataBuilder):
             })
             particle = Particle(**prepared_bp)
             if len(match) > 0:
-                particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert particle.image_id == entry
             out.append(particle)
         
@@ -282,12 +282,12 @@ class ParticleBuilder(DataBuilder):
                 prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
             
             match = prepared_bp.pop('match', [])
-            match_counts = prepared_bp.pop('match_counts', [])
+            match_overlap = prepared_bp.pop('match_overlap', [])
             
             truth_particle = TruthParticle(**prepared_bp)
             if len(match) > 0:
-                truth_particle.match_counts = OrderedDict({
-                    key : val for key, val in zip(match, match_counts)})
+                truth_particle.match_overlap = OrderedDict({
+                    key : val for key, val in zip(match, match_overlap)})
             # assert truth_particle.image_id == entry
             assert truth_particle.truth_size > 0
             out.append(truth_particle)
@@ -371,7 +371,15 @@ class ParticleBuilder(DataBuilder):
 
         out = []
         image_index     = data['index'][entry]
-        labels          = result['cluster_label_adapted'][entry]
+        if 'cluster_label_adapted' in result:
+            labels = result['cluster_label_adapted'][0]
+        elif 'cluster_label' in data:
+            labels = data['cluster_label'][0]
+        else:
+            msg = "To build TruthParticle objects from HDF5 data, need either "\
+                "cluster_label inside data dictionary or cluster_label_adapted inside"\
+                " result dictionary."
+            raise KeyError(msg)
         particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
         labels_nonghost = data['cluster_label'][entry]
         larcv_particles = data['particles_asis'][entry]
@@ -444,11 +452,11 @@ class ParticleBuilder(DataBuilder):
             volume_id           = int(volume_id[cts.argmax()])
             
             if simE_deposits is not None:
-                sed_points      = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
-                sed_depositions = simE_deposits[mask_sed][:, VALUE_COL].astype(np.float32)
+                sed_points          = simE_deposits[mask_sed][:, COORD_COLS].astype(np.float32)
+                sed_depositions_MeV = simE_deposits[mask_sed][:, VALUE_COL].astype(np.float32)
             else:
-                sed_points      = np.empty((0,3), dtype=np.float32)
-                sed_depositions = np.empty(0, dtype=np.float32)
+                sed_points          = np.empty((0,3), dtype=np.float32)
+                sed_depositions_MeV = np.empty(0, dtype=np.float32)
     
             # 2. Process particle-level labels
             truth_labels = get_truth_particle_labels(labels_nonghost, 
@@ -484,7 +492,7 @@ class ParticleBuilder(DataBuilder):
                                      truth_depositions_MeV=truth_depositions_MeV,
                                      sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
-                                     sed_depositions=sed_depositions,
+                                     sed_depositions_MeV=sed_depositions_MeV,
                                      is_primary=bool(is_primary),
                                     #  pid=pdg,
                                      particle_asis=lpart)
@@ -497,7 +505,7 @@ class ParticleBuilder(DataBuilder):
 
             out.append(particle)
 
-        accounted_indices = np.hstack(accounted_indices).squeeze()
+        accounted_indices = np.hstack(accounted_indices).squeeze() if len(accounted_indices) else np.empty(0, dtype=np.int64)
         if verbose:
             print("All Voxels = {}, Accounted Voxels = {}".format(labels_nonghost.shape[0], voxel_counts))
             print("Orphaned Semantics = ", np.unique(labels_nonghost[orphans][:, -1], return_counts=True))
@@ -572,8 +580,8 @@ class InteractionBuilder(DataBuilder):
                 ia = Interaction(**info)
                 
             # Handle matches
-            match_counts = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_counts'])})
-            ia._match_counts = match_counts
+            match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
+            ia._match_overlap = match_overlap
             out.append(ia)
         return out
     
@@ -676,9 +684,7 @@ class InteractionBuilder(DataBuilder):
                 #                    nu.position().y(),
                 #                    nu.position().z()], dtype=np.float32)
                 # for p in ia.particles:
-                #     pos = np.array([p.asis.ancestor_position().x(),
-                #                     p.asis.ancestor_position().y(),
-                #                     p.asis.ancestor_position().z()], dtype=np.float32)
+                #     pos = p.ancestor_position
                 #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
                     # if check_pos:
                 ia.nu_interaction_type     = nu.interaction_type()
@@ -953,7 +959,7 @@ def handle_empty_truth_particles(labels_noghost,
     if np.count_nonzero(mask_noghost) > 0:
         sed_points = sed[mask_sed][:, COORD_COLS]
         sed_index = np.where(mask_sed)[0]
-        sed_depositions = sed[mask_sed][:, VALUE_COL]
+        sed_depositions_MeV = sed[mask_sed][:, VALUE_COL]
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()
@@ -990,7 +996,7 @@ def handle_empty_truth_particles(labels_noghost,
                              is_primary=is_primary,
                              sed_index=sed_index.astype(np.int64),
                              sed_points=sed_points.astype(np.float32),
-                             sed_depositions=sed_depositions.astype(np.float32),
+                             sed_depositions_MeV=sed_depositions_MeV.astype(np.float32),
                              particle_asis=p,
                              start_point=-np.ones(3, dtype=np.float32),
                              end_point=-np.ones(3, dtype=np.float32))

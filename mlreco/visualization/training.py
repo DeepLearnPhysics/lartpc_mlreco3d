@@ -107,6 +107,9 @@ def get_training_df(log_dir, keys, prefix='train'):
             df[key_name] = df[key]
         log_dfs.append(df)
 
+    if not len(log_dfs):
+        raise FileNotFoundError(f'Found no train log with prefix \'{prefix}\' under {log_dir}')
+
     return pd.concat(log_dfs, sort=True) 
 
 

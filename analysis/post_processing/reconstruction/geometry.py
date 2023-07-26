@@ -134,7 +134,7 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
     for p in particles:
         G.add_node(p.id, attr=getattr(p, mode))
     for p in result_dict['truth_particles']:
-        parent = p.asis.parent_id()
+        parent = p.parent_id
         if parent in G and int(parent) != int(p.id):
             edges.append((parent, p.id))
     G.add_edges_from(edges)
@@ -144,7 +144,7 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
         counter = Counter()
         counter.update([G.nodes[succ]['attr'] for succ in successors])
         for key, val in counter.items():
-            p._children_counts[key] = val
+            p.children_counts[key] = val
     return {}
 
 
