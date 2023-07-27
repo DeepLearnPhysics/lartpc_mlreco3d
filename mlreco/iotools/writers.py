@@ -7,7 +7,7 @@ from collections import defaultdict
 from larcv import larcv
 from analysis import classes as analysis
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, NU_CURR_TYPE, NU_INT_TYPE
 
 
 class HDF5Writer:
@@ -21,8 +21,11 @@ class HDF5Writer:
     '''
     # Analysis object attributes to be stored as enumerated types and their associated rules
     ANA_ENUM = {
-        'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
-        'pid': {v:k for k, v in PID_LABELS.items()}
+        'semantic_type': {v : k for k, v in SHAPE_LABELS.items()},
+        'pid': {v : k for k, v in PID_LABELS.items()},
+        'nu_current_type': {v : k for k, v in NU_CURR_TYPE.items()},
+        'nu_interaction_type': {v : k for k, v in NU_INT_TYPE.items()},
+        'nu_interaction_mode': {v : k for k, v in NU_INT_TYPE.items()}
     }
 
     # Analysis object array attributes which have a fixed length
