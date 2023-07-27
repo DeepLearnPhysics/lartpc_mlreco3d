@@ -35,7 +35,25 @@ def reconstruct_vertex(data_dict, result_dict,
             
     return {}
 
+
 def reconstruct_vertex_fn(particles, r1=5.0, r2=10.0):
+    
+    vertex = np.full((3, ), -sys.maxsize)
+    candidates = get_adjacent_startpoint_candidate(particles, r1)
+    if len(candidates) > 0:
+        vertex = candidates.mean(axis=0)
+        return vertex
+    candidates = get_track_shower_candidate(particles, r2=r2)
+    if len(candidates) > 0:
+        vertex = candidates.mean(axis=0)
+        return vertex
+    pvtx = get_pseudovertex_candidate(particles, dim=3)
+    if len(candidates) > 0:
+        return pvtx
+    return vertex
+
+
+def reconstruct_vertex_deprecated(particles, r1=5.0, r2=10.0):
     
     vertex = None
     

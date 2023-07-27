@@ -318,8 +318,11 @@ class Particle:
 
     @pid.setter
     def pid(self, value):
-        assert value in PID_LABELS
-        self._pid = value
+        if value not in PID_LABELS:
+            print("WARNING: PID {} not in PID_LABELS".format(value))
+            self._pid = -1
+        else:
+            self._pid = value
 
     @property
     def primary_scores(self):
