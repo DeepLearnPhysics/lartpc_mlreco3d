@@ -138,6 +138,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.normalize_vtx_label = loss_config.get('normalize_vtx_label', True)
         self.use_anchor_points = loss_config.get('use_anchor_points', False)
         self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
+        self.type_num_classes = loss_config.get('type_num_classes', 5)
         self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
         self.type_high_purity = loss_config.get('type_high_purity', True)
         self.momentum_high_purity = loss_config.get('momentum_high_purity', True)
@@ -192,8 +193,8 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_pred_type = out['node_pred_type'][i][j]
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
 
-                    # Do not apply loss to nodes labeled -1 (unknown class)
-                    valid_mask_type = node_assn_type > -1
+                    # Do not apply loss to nodes labeled -1 (unknown class) or above the number of output classes
+                    valid_mask_type = (node_assn_type > -1) & (node_assn_type < self.type_num_classes)
 
                     # Do not apply loss if the logit corresponding to the true class is -inf (forbidden prediction)
                     # Not a problem is node_assn_type is -1, as these rows will already be excluded by previous mask
@@ -210,7 +211,6 @@ class NodeKinematicsLoss(torch.nn.Module):
                     if len(valid_mask_type):
                         node_pred_type = node_pred_type[valid_mask_type]
                         node_assn_type = torch.tensor(node_assn_type[valid_mask_type], dtype=torch.long, device=node_pred_type.device, requires_grad=False)
-
                         if self.balance_classes:
                             vals, counts = torch.unique(node_assn_type, return_counts=True)
                             weights = len(node_assn_type)/len(counts)/counts
