@@ -107,11 +107,14 @@ class TruthParticle(Particle):
         shared_keys  = ['track_id', 'creation_process', 'pdg_code', 't']
         scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
-                'id', 'parent_id', 'group_id', 'interaction_id',\
+                'parent_id', 'group_id', 'interaction_id',\
                 'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape']
         for k in scalar_keys:
             val = getattr(particle, k)()
             setattr(self, k, val)
+            
+        # Exception for particle_id
+        self.truth_id = getattr(particle, 'id')()
 
         # Load up the children list
         self.children_id = np.array(particle.children_id())
@@ -215,3 +218,15 @@ class TruthParticle(Particle):
     def sed_depositions_MeV(self, value):
         assert len(value) == self.sed_size
         self._sed_depositions_MeV = value
+
+    @property
+    def truth_depositions_sum(self):
+        return self.truth_depositions.sum()
+    
+    @property
+    def truth_depositions_MeV_sum(self):
+        return self.truth_depositions_MeV.sum()
+    
+    @property
+    def sed_depositions_MeV_sum(self):
+        return self.sed_depositions_MeV.sum()
