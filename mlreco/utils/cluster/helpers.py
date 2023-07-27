@@ -16,6 +16,7 @@ import scipy.sparse as sp
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import to_scipy_sparse_matrix
 from torch_geometric.data import Data, Batch
+from sklearn.cluster import DBSCAN
 import copy
 # -------------------------- Helper Functions--------------------------------
 
@@ -172,6 +173,9 @@ class RadiusNeighborsIterativeAssigner(StrayAssigner):
         labeled_mask = copy.deepcopy(self._labeled_mask)
         num_orphans = 0
         if labeled_mask.all(): return self._pred
+        if (~labeled_mask).all():
+            self._pred = DBSCAN(eps=self._orphans_radius, min_samples=1).fit_predict(self.X)
+            return self._pred
         while not np.all(labeled_mask) and num_orphans != np.sum(~labeled_mask):
             
             num_orphans = np.sum(~labeled_mask)
