@@ -69,6 +69,8 @@ PDG_TO_PID.update({
     #-321: 5   # K-
 })
 
+PID_TO_PDG = {v : abs(k) for k, v in PDG_TO_PID.items()}
+
 # Particle type labels
 PID_LABELS = {
     0:  'Photon',
@@ -81,8 +83,9 @@ PID_LABELS = {
 
 # Neutrino current type
 NU_CURR_TYPE = {
-    0: 'CC',
-    1: 'NC'
+    -1: 'UnknownCurrent',
+    0:  'CC',
+    1:  'NC'
 }
 
 # Neutrino interaction mode and type labels
