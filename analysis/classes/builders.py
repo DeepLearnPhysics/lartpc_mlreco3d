@@ -210,6 +210,7 @@ class ParticleBuilder(DataBuilder):
             
             match = prepared_bp.pop('match', [])
             match_overlap = prepared_bp.pop('match_overlap', [])
+
             assert len(match) == len(match_overlap)
             
             prepared_bp.pop('depositions_sum', None)

@@ -60,7 +60,9 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        
+        t2r_matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
+        out['matched_particles_t2r'] = t2r_matches['matched_particles_t2r']
+        out['particle_match_overlap_t2r'] = t2r_matches['matched_particles_t2r_values']
         overlap_matrix, value_matrix = weighted_matrix_iou(pred_particles, true_particles, weight=weight)
         matched_particles, counts = match_particles_fn(
             pred_particles, 
@@ -68,9 +70,11 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        out = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
+        r2t_matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
+        out['matched_particles_r2t'] = r2t_matches['matched_particles_r2t']
+        out['particle_match_overlap_r2t'] = r2t_matches['matched_particles_r2t_values']
     else:
-        raise ValueError("matching_mode must be one of 'true_to_pred' or 'pred_to_true'.")
+        raise ValueError("matching_mode must be one of 'true_to_pred' or 'pred_to_true' or 'both'.")
 
     return out
     
@@ -128,6 +132,10 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
+        out['matched_interactions_t2r'] = matches['matched_interactions_t2r']
+        out['interaction_match_overlap_t2r'] = matches['matched_interactions_t2r_values']
+        
         overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions, weight=weight)
         matched_interactions, counts = match_interactions_fn(
             pred_interactions, 
@@ -135,7 +143,9 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        out = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
+        matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
+        out['matched_interactions_r2t'] = matches['matched_interactions_r2t']
+        out['interaction_match_overlap_r2t'] = matches['matched_interactions_r2t_values']
     else:
         raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
     

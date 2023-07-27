@@ -16,17 +16,22 @@ import scipy.sparse as sp
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import to_scipy_sparse_matrix
 from torch_geometric.data import Data, Batch
+from sklearn.cluster import DBSCAN
 import copy
 # -------------------------- Helper Functions--------------------------------
 
 def knn_sklearn(coords, k=5):
+    if coords.shape[0] < k:
+        n_neighbors = coords.shape[0] - 1
+    else:
+        n_neighbors = k
     if isinstance(coords, torch.Tensor):
         device = coords.device
-        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=k).tocoo()
+        G = kneighbors_graph(coords.cpu().numpy(), n_neighbors=n_neighbors).tocoo()
         out = np.vstack([G.row, G.col])
         return torch.Tensor(out).long().to(device=device)
     elif isinstance(coords, np.ndarray):
-        G = kneighbors_graph(coords, n_neighbors=k).tocoo()
+        G = kneighbors_graph(coords, n_neighbors=n_neighbors).tocoo()
         out = np.vstack([G.row, G.col])
         return out
 
@@ -168,6 +173,9 @@ class RadiusNeighborsIterativeAssigner(StrayAssigner):
         labeled_mask = copy.deepcopy(self._labeled_mask)
         num_orphans = 0
         if labeled_mask.all(): return self._pred
+        if (~labeled_mask).all():
+            self._pred = DBSCAN(eps=self._orphans_radius, min_samples=1).fit_predict(self.X)
+            return self._pred
         while not np.all(labeled_mask) and num_orphans != np.sum(~labeled_mask):
             
             num_orphans = np.sum(~labeled_mask)

@@ -17,7 +17,7 @@ from mlreco.utils.metrics import *
 from mlreco.utils.globals import *
 from torch_geometric.data import Data, Batch
 
-from .helpers import ConnectedComponents
+from .helpers import ConnectedComponents, knn_sklearn
 
 class ClusterGraphConstructor:
     """Manager class for handling per-batch, per-semantic type predictions
@@ -72,6 +72,8 @@ class ClusterGraphConstructor:
             self._init_graph = knn_graph
         elif self._graph_type == 'radius':
             self._init_graph = radius_graph
+        elif self._graph_type == 'knn_sklearn':
+            self._init_graph = knn_sklearn
         else:
             msg = f"Graph type {self._graph_type} is not supported for "\
                 "GraphSPICE initialzation!"
