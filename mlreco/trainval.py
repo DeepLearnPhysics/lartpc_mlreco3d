@@ -490,6 +490,8 @@ class trainval(object):
 
         self._model = model(module_config)
 
+        self._model.batch_size = self._minibatch_size
+
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
         if self._train:
