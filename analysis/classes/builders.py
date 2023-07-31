@@ -430,6 +430,7 @@ class ParticleBuilder(DataBuilder):
                                                         image_index,
                                                         sed=simE_deposits,
                                                         mask_sed=mask_sed)
+                particle.id = len(out)
                 out.append(particle)
                 continue
 
@@ -476,7 +477,8 @@ class ParticleBuilder(DataBuilder):
             if energy_label is not None:
                 truth_depositions_MeV = energy_label[mask_nonghost].squeeze()
         
-            particle = TruthParticle(group_id=id,
+            particle = TruthParticle(#group_id=id,
+                                     group_id=len(out),
                                      interaction_id=interaction_id, 
                                      nu_id=nu_id,
                                      pid=pid, 
@@ -567,6 +569,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['particles'][0]:
                     if p.interaction_id == bp['id']:
+                        p.interaction_id = len(out)
                         particles.append(p)
                         continue
                 ia = Interaction.from_particles(particles, 
@@ -579,6 +582,7 @@ class InteractionBuilder(DataBuilder):
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
                 ia = Interaction(**info)
+                ia.id = len(out)
                 
             # Handle matches
             match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
@@ -630,9 +634,10 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['truth_particles'][0]:
                     if p.interaction_id == bp['id']:
+                        p.interaction_id = len(out)
                         particles.append(p)
                         continue
-                from pprint import pprint
+
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False, 
                                                      **info)
@@ -653,6 +658,8 @@ class InteractionBuilder(DataBuilder):
                     'truth_depositions_MeV': truth_depositions_MeV
                 })
                 ia = TruthInteraction(**info)
+                ia.id = len(out)
+
             out.append(ia)
         return out
     
@@ -979,6 +986,7 @@ def handle_empty_truth_particles(labels_noghost,
         volume_id, cts = np.unique(labels_noghost[:, BATCH_COL][mask_noghost].astype(int), 
                                     return_counts=True)
         volume_id = int(volume_id[cts.argmax()])
+
     particle = TruthParticle(group_id=id,
                              interaction_id=interaction_id,
                              nu_id=nu_id,

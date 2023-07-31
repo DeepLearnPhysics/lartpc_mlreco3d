@@ -162,6 +162,7 @@ class ParticleLoader(DataProductLoader):
                     key : val for key, val in zip(match, match_overlap)})
             # assert truth_particle.image_id == entry
             assert truth_particle.truth_size > 0
+            truth_particle.id = len(out)
             out.append(truth_particle)
             
         return out

@@ -19,6 +19,8 @@ class TruthParticle(Particle):
 
     Attributes
     ----------
+    truth_id : int
+        Index of the particle in the input list of larcv.Particle
     depositions_MeV : np.ndarray
         (N) Array of energy deposition values for each reconstructed voxel in MeV
     truth_index : np.ndarray, default np.array([])
@@ -114,7 +116,7 @@ class TruthParticle(Particle):
             setattr(self, k, val)
             
         # Exception for particle_id
-        self.truth_id = getattr(particle, 'id')()
+        self.truth_id = particle.id()
 
         # Load up the children list
         self.children_id = np.array(particle.children_id())

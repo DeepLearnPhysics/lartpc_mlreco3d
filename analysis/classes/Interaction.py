@@ -35,7 +35,7 @@ class Interaction:
     points : np.dnarray, default np.array([], shape=(0,3))
         (N,3) Set of voxel coordinates that make up this interaction in the input tensor
     vertex : np.ndarray, optional
-        3D coordinates of the predicted interaction vertex
+        (3) 3D coordinates of the predicted interaction vertex
         in reconstruction (used for debugging)
     units : str, default 'px'
         Units in which coordinates are expressed
