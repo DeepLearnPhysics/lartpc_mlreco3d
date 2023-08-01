@@ -7,7 +7,7 @@ from collections import defaultdict
 from larcv import larcv
 from analysis import classes as analysis
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, NU_CURR_TYPE, NU_INT_TYPE
 
 
 class HDF5Writer:
@@ -21,8 +21,11 @@ class HDF5Writer:
     '''
     # Analysis object attributes to be stored as enumerated types and their associated rules
     ANA_ENUM = {
-        'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
-        'pid': {v:k for k, v in PID_LABELS.items()}
+        'semantic_type': {v : k for k, v in SHAPE_LABELS.items()},
+        'pid': {v : k for k, v in PID_LABELS.items()},
+        'nu_current_type': {v : k for k, v in NU_CURR_TYPE.items()},
+        'nu_interaction_type': {v : k for k, v in NU_INT_TYPE.items()},
+        'nu_interaction_mode': {v : k for k, v in NU_INT_TYPE.items()}
     }
 
     # Analysis object array attributes which have a fixed length
@@ -31,27 +34,23 @@ class HDF5Writer:
         'vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
     ]
 
-    # LArCV object attributes that do not need to be stored to HDF5
+    # Object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
         'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
         *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
-    LARCV_SKIP = {
-        larcv.Particle: LARCV_SKIP_ATTRS,
-        larcv.Neutrino: LARCV_SKIP_ATTRS,
-        larcv.Flash:    ['wireCenters', 'wireWidths'],
-        larcv.CRTHit:   ['feb_id', 'pesmap']
-    }
-
-    # Analysis particle object attributes that do not need to be stored to HDF5
     ANA_SKIP_ATTRS = [
         'points', 'truth_points', 'sed_points', 'particles', 'fragments',
         'depositions', 'depositions_MeV', 'truth_depositions',
         'truth_depositions_MeV', 'sed_depositions_MeV', 'particles_summary'
     ]
 
-    ANA_SKIP = {
+    SKIP_ATTRS = {
+        larcv.Particle: LARCV_SKIP_ATTRS,
+        larcv.Neutrino: LARCV_SKIP_ATTRS,
+        larcv.Flash:    ['wireCenters', 'wireWidths'],
+        larcv.CRTHit:   ['feb_id', 'pesmap'],
         analysis.ParticleFragment:      ANA_SKIP_ATTRS,
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
@@ -61,7 +60,8 @@ class HDF5Writer:
     }
 
     # List of recognized objects
-    DATAOBJS = tuple(list(LARCV_SKIP.keys()) + list(ANA_SKIP.keys()))
+    DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
+    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -100,7 +100,7 @@ class HDF5Writer:
         self.append_file      = append_file
         self.merge_groups     = merge_groups
         self.ready            = False
-        self.object_dtypes    = {}
+        self.object_dtypes    = []
 
     def create(self, data_blob, result_blob=None, cfg=None):
         '''
@@ -192,21 +192,28 @@ class HDF5Writer:
             else:
                 # List containing a list/array of objects per batch ID
                 if len(blob[key][0]) == 0:
-                    msg = 'Cannot infer the dtype of an empty list <{}> and hence cannot initialize the output HDF5 file'.format(key)
-                    raise AssertionError(msg)
-                # TODO: In this case, fall back on a default dtype specified elsewhere
+                    msg = f'Cannot infer the dtype of an empty list ({key}) and hence cannot initialize the output HDF5 file'
+                    raise AssertionError(msg) # TODO: In this case, fall back on a default dtype specified elsewhere
 
-                if isinstance(blob[key][0][0], self.DATAOBJS):
+                if isinstance(blob[key][0][0], dict):
+                    # List containing a single list of dictionary objects per batch ID
+                    dict_dtype = self.get_dict_dtype(blob[key][0][0])
+                    self.object_dtypes.append(dict_dtype)
+
+                    self.key_dict[key]['dtype'] = dict_dtype
+
+                elif isinstance(blob[key][0][0], self.DATA_OBJS):
                     # List containing a single list of dataclass objects per batch ID
-                    object_type = type(blob[key][0][0])
-                    if not object_type in self.object_dtypes:
-                        self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
-                    self.key_dict[key]['larcv'] = object_type in self.LARCV_SKIP
+                    object_dtype = self.get_object_dtype(blob[key][0][0])
+                    self.object_dtypes.append(object_dtype)
+
+                    self.key_dict[key]['dtype'] = object_dtype
+                    self.key_dict[key]['larcv'] = type(blob[key][0][0]) in self.LARCV_OBJS
 
                 elif not hasattr(blob[key][0][0], '__len__'):
                     # List containing a single list of scalars per batch ID
                     self.key_dict[key]['dtype'] = type(blob[key][0][0])
+
 
                 elif not isinstance(blob[key][0], list) and not blob[key][0].dtype == np.object:
                     # List containing a single ndarray of scalars per batch ID
@@ -228,16 +235,20 @@ class HDF5Writer:
                     dtype = type(blob[key][0])
                     raise TypeError(f'Do not know how to store output of type {dtype} in key {key}')
 
-    def get_object_dtype(self, obj):
+    def get_dict_dtype(self, obj_dict, obj=dict, is_larcv=False):
         '''
-        Loop over the members of a class to figure out what to store. This
-        function assumes that the the class only posses getters that return
-        either a scalar, a string, a larcv.Vertex, a list, np.ndarrary or a set.
+        Loop over the keys in a dictonary to figure out what to store. This
+        function assumes that the dictionary only maps tovalues that are
+        either a scalar, string, larcv.Vertex, list, np.ndarrary or set.
 
         Parameters
         ----------
-        object : class instance
+        obj_dict : dict
             Instance of an object used to identify attribute types
+        obj : type, default dict
+            Type of object this dictionary was built from
+        is_larcv : bool, default False
+            Whether or not this dictionary was built from a LArCV class
 
         Returns
         -------
@@ -245,19 +256,7 @@ class HDF5Writer:
             List of (key, dtype) pairs
         '''
         object_dtype = []
-        members = inspect.getmembers(obj)
-        is_larcv = type(obj) in self.LARCV_SKIP
-        skip_keys = self.LARCV_SKIP[type(obj)] if is_larcv else self.ANA_SKIP[type(obj)]
-        attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
-        for key in attr_names:
-            # Fetch the attribute value
-            if is_larcv:
-                val = getattr(obj, key)()
-            else:
-                val = getattr(obj, key)
-                if callable(val):
-                    continue
-
+        for key, val in obj_dict.items():
             # Append the relevant data type
             if isinstance(val, str):
                 # String
@@ -296,6 +295,39 @@ class HDF5Writer:
                 raise ValueError(f'Attribute {key} of {obj} has unrecognized type {type(val)}')
 
         return object_dtype
+
+    def get_object_dtype(self, obj):
+        '''
+        Loop over the members of a class to figure out what to store. This
+        function assumes that the class only posseses getters that return
+        either a scalar, string, larcv.Vertex, list, np.ndarrary or set.
+
+        Parameters
+        ----------
+        object : class
+            Instance of an object used to identify attribute types
+
+        Returns
+        -------
+        list
+            List of (key, dtype) pairs
+        '''
+        obj_dict = {}
+        members = inspect.getmembers(obj)
+        is_larcv = type(obj) in self.LARCV_OBJS
+        skip_keys = self.SKIP_ATTRS[type(obj)]
+        attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
+        for key in attr_names:
+            # Fetch the attribute value
+            if is_larcv:
+                val = getattr(obj, key)()
+                obj_dict[key] = val
+            else:
+                val = getattr(obj, key)
+                if not callable(val):
+                    obj_dict[key] = val
+
+        return self.get_dict_dtype(obj_dict, obj, is_larcv)
 
     def initialize_datasets(self, out_file):
         '''
@@ -417,7 +449,7 @@ class HDF5Writer:
             if not hasattr(obj, '__len__'):
                 obj = [obj]
 
-            if val['dtype'] in self.object_dtypes.values():
+            if val['dtype'] in self.object_dtypes:
                 self.store_objects(group, event, key, obj, val['dtype'])
             else:
                 self.store(group, event, key, obj)
@@ -549,7 +581,7 @@ class HDF5Writer:
         key: str
             Name of the dataset in the file
         array : np.ndarray
-            Array to be stored
+            Array of objects or dictionaries to be stored
         obj_dtype : list
             List of (key, dtype) pairs which specify what's to store
         '''
@@ -558,7 +590,11 @@ class HDF5Writer:
         for i, o in enumerate(array):
             for row in obj_dtype:
                 k, dtype, _ = row if len(row) == 3 else [*row, None]
-                attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
+                if type(o) is dict:
+                    attr = o[k]
+                else:
+                    attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
+
                 if np.isscalar(attr):
                     objects[i][k] = attr
                 elif isinstance(attr, larcv.Vertex):

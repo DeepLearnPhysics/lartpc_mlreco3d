@@ -215,16 +215,17 @@ class GNN(torch.nn.Module):
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
                 type_net_mode = type_config.get('mode', 'standard')
+                type_net_num_classes = type_config.get('num_classes', 5)
                 if type_net_mode == 'linear':
-                    self.type_net = torch.nn.Linear(node_output_feats, 5)
+                    self.type_net = torch.nn.Linear(node_output_feats, type_net_num_classes)
                 elif type_net_mode == 'standard':
                     self.type_net = MomentumNet(node_output_feats,
-                                                num_output=5,
+                                                num_output=type_net_num_classes,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 positive_outputs=type_config.get('positive_outputs', False))
                 elif type_net_mode == 'edl':
                     self.type_net = MomentumNet(node_output_feats,
-                                                num_output=5,
+                                                num_output=type_net_num_classes,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 positive_outputs=type_config.get('positive_outputs', True))
                 else:

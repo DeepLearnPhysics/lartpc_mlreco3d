@@ -3,7 +3,7 @@ import numpy as np
 from typing import Counter, List, Union
 from collections import OrderedDict
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, PID_TO_PDG
 from mlreco.utils.utils import pixel_to_cm
 
 class Particle:
@@ -45,6 +45,8 @@ class Particle:
         Charged Pion (3), Proton (4)) of this particle
     pid_scores : np.ndarray
         (P) Array of softmax scores associated with each of particle class
+    pdg_code : int
+        PDG code corresponding to the PID number
     is_primary : bool
         Indicator whether this particle is a primary from an interaction
     primary_scores : np.ndarray
@@ -119,6 +121,7 @@ class Particle:
         self.points         = points
         self.depositions    = depositions
 
+        self.pdg_code       = -1
         self.pid_scores     = pid_scores
         self.primary_scores = primary_scores
 
@@ -308,9 +311,11 @@ class Particle:
         # If no PID scores are providen, the PID is unknown
         if pid_scores[0] < 0.:
             self._pid = -1
+            self._pdg_code = -1
         else:
         # Store the PID scores
             self._pid = int(np.argmax(pid_scores))
+            self.pdg_code = int(PID_TO_PDG[self._pid])
 
     @property
     def pid(self):

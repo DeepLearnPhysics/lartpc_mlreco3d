@@ -21,13 +21,21 @@ class TruthInteraction(Interaction):
     depositions_MeV : np.ndarray
         (N) Array of energy deposition values for each voxel in MeV
     truth_index : np.ndarray, default np.array([])
-        (N) IDs of voxels that correspond to the interaction within the label tensor
+        (N_t) IDs of voxels that correspond to the interaction within the label tensor
     truth_points : np.dnarray, default np.array([], shape=(0,3))
-        (N,3) Set of voxel coordinates that make up this interaction in the label tensor
+        (N_t,3) Set of voxel coordinates that make up this interaction in the label tensor
     truth_depositions : np.ndarray
-        (N) Array of charge deposition values for each true voxel
+        (N_t) Array of energy deposition values for each true voxel in MeV
     truth_depositions_MeV : np.ndarray
-        (N) Array of energy deposition values for each true voxel in MeV
+        (N_t) Array of energy deposition values for each true voxel in MeV
+    sed_index : np.ndarray, default np.array([])
+        (N_s) IDs of voxels that correspond to the particle with the SED tensor
+    sed_points : np.dnarray, default np.array([], shape=(0,3))
+        (N_s, 3) Set of voxel coordinates that make up this particle in the SED tensor
+    sed_depositions_MeV : np.ndarray, default np.array([])
+        (N_s) Array of energy deposition values for each SED voxel in MeV
+    truth_vertex : np.ndarray, optional
+        (3) 3D coordinates of the true interaction vertex
     """
 
     # Attributes that specify coordinates

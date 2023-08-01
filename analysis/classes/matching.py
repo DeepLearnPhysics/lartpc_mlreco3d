@@ -320,7 +320,10 @@ def group_particles_to_interactions_fn(particles : List[Particle],
     for p in particles:
         interactions[p.interaction_id].append(p)
 
-    for int_id, particles in interactions.items():
+    for i, (int_id, particles) in enumerate(interactions.items()):
+        # Reset the particle interaction ID to follow the arbitray interaction ordering
+        for p in particles:
+            p.interaction_id = i
         if mode == 'pred':
             interactions[int_id] = Interaction.from_particles(particles)
         elif mode == 'truth':

@@ -217,10 +217,11 @@ class FullChain(FullChainGNN):
             input = [input]
             label_clustering = [label_clustering]
 
-        # Store batch size for GNN formatting
-        batches = torch.unique(input[0][:, self.batch_col])
-        assert len(batches) == batches.max().int().item() + 1
-        self.batch_size = len(batches)
+        # If not availabel, store batch size for GNN formatting
+        if not hasattr(self, 'batch_size'):
+            batches = torch.unique(input[0][:, self.batch_col])
+            assert len(batches) == batches.max().int().item() + 1
+            self.batch_size = len(batches)
 
         result = {}
 
