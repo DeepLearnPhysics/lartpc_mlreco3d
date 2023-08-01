@@ -57,8 +57,6 @@ class VertexPPNChain(nn.Module):
                                segment_labels=segment_labels)
             out['segmentation'].append(segmentation.F)
             out.update(res_vertex)
-            
-
         return out
 
 
