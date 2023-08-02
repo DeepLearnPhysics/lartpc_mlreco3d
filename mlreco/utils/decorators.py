@@ -57,7 +57,7 @@ def inherit_docstring(parent):
 
         # Get the parent attribute docstring block
         docstr = parent.__doc__
-        substr = docstr.split(header)[-1]
+        substr = docstr.split(header)[-1].rstrip() + '\n'
         if len(substr.split(underline)) > 1:
             substr = ''.join(substr.split(underline)[0].split('\n')[:-1]).rstrip()
 
