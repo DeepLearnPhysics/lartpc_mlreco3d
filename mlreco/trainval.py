@@ -490,7 +490,8 @@ class trainval(object):
 
         self._model = model(module_config)
 
-        self._model.batch_size = self._minibatch_size
+        num_volumes = 1 if not self._boundaries else np.prod([len(b)+1 for b in self._boundaries if b != 'None'])
+        self._model.batch_size = self._minibatch_size * num_volumes
 
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
