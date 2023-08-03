@@ -43,6 +43,9 @@ def particle_direction(data_dict,
     else:
         input_data = result_dict['input_rescaled']
     particles      = result_dict['particle_clusts']
+    if not len(particles):
+        return data_dict
+
     start_points   = result_dict['particle_start_points']
     end_points     = result_dict['particle_end_points']
 
