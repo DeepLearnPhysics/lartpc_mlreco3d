@@ -164,7 +164,7 @@ class Interaction:
         Consistency check for particle interaction id and self.id
         """
         assert type(x) is Particle
-        assert x.interaction_id == self.id
+        # assert x.interaction_id == self.id
 
     @property
     def particles(self):

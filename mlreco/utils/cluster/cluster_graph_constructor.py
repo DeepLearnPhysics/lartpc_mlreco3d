@@ -347,7 +347,7 @@ class ClusterGraphConstructor:
                         state_dict[attr_name].append(getattr(subgraph, attr_name))
             state_dict['graph_id'].append(int(subgraph.graph_id))
             state_dict['graph_key'].append(subgraph.graph_key)
-            
+    
         if unwrapped:
             return state_dict
         else:

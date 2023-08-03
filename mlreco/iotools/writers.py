@@ -684,8 +684,12 @@ class CSVWriter:
         if self.result_keys is None:
             self.create(result_blob)
         else:
-            assert list(result_blob.keys()) == self.result_keys,\
-                    'Must provide a dictionary with the expected set of keys'
+            if not (list(result_blob.keys()) == self.result_keys):
+                diff1 = set(list(result_blob.keys())).difference(set(self.result_keys))
+                diff2 = set(self.result_keys).difference(set(list(result_blob.keys())))
+                msg = "Must provide a dictionary with the expected set of keys: "\
+                    "difference = {}, {}".format(str(diff1), str(diff2))
+                raise AssertionError(msg)
 
         # Append file
         with open(self.file_name, 'a') as out_file:
