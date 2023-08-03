@@ -40,5 +40,5 @@ if __name__ == '__main__':
                         action='store_true')
     args = parser.parse_args()
     if args.detect_anomaly:
-        torch.autograd.set_detect_anomaly(True)
+        torch.autograd.set_detect_anomaly(True, check_nan=True)
     main(args.config)

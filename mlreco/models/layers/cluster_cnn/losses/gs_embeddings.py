@@ -47,6 +47,7 @@ class WeightedEdgeLoss(nn.Module):
         #     w = 1.0 / (1.0 - float(num_pos) / num_edges)
         #     weight[~y.bool()] = w
         # print(logits.shape, logits.max())
+        
         loss = self.loss_fn(logits, y.float(), weight=weight)
         return loss
 
@@ -232,6 +233,13 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         '''
         loss = defaultdict(list)
         loss['loss'] = []
+        loss['ft_intra_loss'] = []
+        loss['ft_inter_loss'] = []
+        loss['ft_reg_loss'] = []
+        loss['sp_intra_loss'] = []
+        loss['sp_inter_loss'] = []
+        loss['cov_loss'] = []
+        loss['occ_loss'] = []
 
         accuracy = defaultdict(float)
         accuracy['accuracy'] = 0.
@@ -305,6 +313,7 @@ class GraphSPICEEmbeddingLoss(nn.Module):
             accuracy['accuracy'] /= counts
             for i in range(5):
                 accuracy[f'accuracy_{i}'] /= counts
+                
         return loss, accuracy
 
     def forward(self, out, segment_label, cluster_label):
@@ -365,11 +374,17 @@ class GraphSPICEEmbeddingLoss(nn.Module):
         acc_avg = defaultdict(float)
 
         for key, val in loss.items():
-            loss_avg[key] = sum(val) / len(val)
+            if sum(val) > 0:
+                loss_avg[key] = sum(val) / len(val)
+            else:
+                loss_avg[key] = 0.0
         if segmentationLayer:
             loss_avg['loss'] += loss_avg['gs_loss_seg']
         for key, val in accuracy.items():
-            acc_avg[key] = sum(val) / len(val)
+            if sum(val) > 0:
+                acc_avg[key] = sum(val) / len(val)
+            else:
+                acc_avg[key] = 1.0
 
         res = {}
         res.update(loss_avg)
@@ -432,4 +447,5 @@ class NodeEdgeHybridLoss(torch.nn.modules.loss._Loss):
         else:
             res['loss'] = edge_loss
         res['edge_loss'] = float(edge_loss)
+        
         return res
