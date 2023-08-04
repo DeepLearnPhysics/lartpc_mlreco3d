@@ -5,7 +5,7 @@ from typing import Counter, List, Union
 from . import Particle
 
 from mlreco.utils import pixel_to_cm
-from mlreco.utils.globals import PDG_TO_PID, SHAPE_LABELS
+from mlreco.utils.globals import PDG_TO_PID, SHAPE_LABELS, PID_LABELS
 from mlreco.utils.decorators import inherit_docstring
 
 @inherit_docstring(Particle)
@@ -61,7 +61,6 @@ class TruthParticle(Particle):
 
         # Set the attributes of the parent Particle class
         super(TruthParticle, self).__init__(*args, **kwargs)
-
         # Initialize private attributes to be assigned through setters only
         self._depositions_MeV       = None
         self._truth_index           = None
@@ -232,3 +231,29 @@ class TruthParticle(Particle):
     @property
     def sed_depositions_MeV_sum(self):
         return self.sed_depositions_MeV.sum()
+    
+    @property
+    def primary_scores(self):
+        '''
+        Primary ID scores getter/setter. The setter converts the
+        scores to a primary prediction through argmax.
+        '''
+        raise AttributeError("primary_scores cannot be referenced or assigned for TruthParticles")
+
+    @primary_scores.setter
+    def primary_scores(self, primary_scores):
+        # If no primary scores are given, the primary status is unknown
+        raise AttributeError("primary_scores cannot be referenced or assigned for TruthParticles")
+    
+    @property
+    def pid_scores(self):
+        '''
+        Primary ID scores getter/setter. The setter converts the
+        scores to a primary prediction through argmax.
+        '''
+        raise AttributeError("pid_scores cannot be referenced or assigned for TruthParticles")
+
+    @pid_scores.setter
+    def pid_scores(self, pid_scores):
+        # If no primary scores are given, the primary status is unknown
+        raise AttributeError("pid_scores cannot be referenced or assigned for TruthParticles")
