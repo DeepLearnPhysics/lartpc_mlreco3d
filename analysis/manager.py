@@ -581,7 +581,7 @@ class AnaToolsManager:
         data, res = self.forward(iteration=iteration)
         end = time.time()
         dt = end - start
-        print(f"Foward took {dt:.3f} seconds.")
+        print(f"\nForward took {dt:.3f} seconds.")
         self.logger_dict['forward_time'] = dt
         
         # 1-a. Convert units

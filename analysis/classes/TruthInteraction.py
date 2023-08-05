@@ -53,11 +53,12 @@ class TruthInteraction(Interaction):
                  truth_depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  truth_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
                  sed_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 nu_pdg_code: int = -1,
                  nu_interaction_type: int = -1,
                  nu_interaction_mode: int = -1,
                  nu_current_type: int = -1,
                  nu_energy_init: float = -1.,
-                 truth_vertex: np.ndarray = np.full(3, float('-inf')),
+                 truth_vertex: np.ndarray = np.full(3, -np.inf),
                  **kwargs):
 
         # Initialize private attributes to be set by setter only
@@ -84,6 +85,7 @@ class TruthInteraction(Interaction):
         super(TruthInteraction, self).__init__(interaction_id, particles, **kwargs)
 
         # Neutrino-specific information to be filled elsewhere
+        self.nu_pdg_code         = nu_pdg_code
         self.nu_interaction_type = nu_interaction_type
         self.nu_interaction_mode = nu_interaction_mode
         self.nu_current_type     = nu_current_type

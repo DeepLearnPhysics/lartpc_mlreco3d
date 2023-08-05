@@ -695,6 +695,7 @@ class InteractionBuilder(DataBuilder):
                 #     pos = p.ancestor_position
                 #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
                     # if check_pos:
+                ia.nu_pdg_code             = nu.pdg_code()
                 ia.nu_interaction_type     = nu.interaction_type()
                 ia.nu_interaction_mode     = nu.interaction_mode()
                 ia.nu_current_type         = nu.current_type()

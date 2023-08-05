@@ -96,6 +96,35 @@ def mean(x: nb.float32[:,:],
 
 
 @nb.njit(cache=True)
+def norm(x: nb.float32[:,:],
+         axis: nb.int32) -> nb.float32[:]:
+    """
+    Numba implementation of `np.linalg.norm(x, axis)`.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        (N,M) array of values
+    axis : int
+        Array axis ID
+
+    Returns
+    -------
+    np.ndarray
+        (N) or (M) array of `norm` values
+    """
+    assert axis == 0 or axis == 1
+    xnorm = np.empty(x.shape[1-axis], dtype=np.int32)
+    if axis == 0:
+        for i in range(len(xnorm)):
+            xnorm[i] = np.linalg.norm(x[:,i])
+    else:
+        for i in range(len(xnorm)):
+            xnorm[i] = np.linalg.norm(x[i])
+    return xnorm
+
+
+@nb.njit(cache=True)
 def argmin(x: nb.float32[:,:],
            axis: nb.int32) -> nb.int32[:]:
     """
