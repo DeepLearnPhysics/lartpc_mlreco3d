@@ -16,7 +16,8 @@ from mlreco.utils.globals import (BATCH_COL,
                                   INTER_COL,
                                   GROUP_COL,
                                   PSHOW_COL,
-                                  CLUST_COL)
+                                  CLUST_COL,
+                                  TRACK_SHP)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
@@ -431,6 +432,10 @@ class ParticleBuilder(DataBuilder):
                                                         sed=simE_deposits,
                                                         mask_sed=mask_sed)
                 particle.id = len(out)
+                particle.start_point = particle.first_step
+                if particle.semantic_type == TRACK_SHP:
+                    particle.end_point = particle.last_step
+
                 out.append(particle)
                 continue
 
@@ -500,11 +505,9 @@ class ParticleBuilder(DataBuilder):
                                     #  pid=pdg,
                                      particle_asis=lpart)
 
-            if particle.semantic_type == 1:
-                particle.start_point = particle.first_step
-                particle.end_point   = particle.last_step
-            elif particle.semantic_type == 0:
-                particle.start_point = particle.first_step
+            particle.start_point = particle.first_step
+            if particle.semantic_type == TRACK_SHP:
+                particle.end_point = particle.last_step
 
             out.append(particle)
 

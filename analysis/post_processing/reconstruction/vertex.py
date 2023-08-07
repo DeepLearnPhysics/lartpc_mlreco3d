@@ -106,10 +106,7 @@ def reconstruct_vertex_single(interaction,
         particles = [p for p in interaction.particles \
             if p.semantic_type in include_semantics]
     if not len(particles):
-        particles = interaction.particles
-
-    assert len(particles),\
-            'Cannot reconstruct the vertex of an interaction with no particle'
+        return
 
     # Reconstruct the vertex for this interaction
     interaction.vertex = reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold)
