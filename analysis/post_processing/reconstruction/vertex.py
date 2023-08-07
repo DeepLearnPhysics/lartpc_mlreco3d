@@ -44,8 +44,8 @@ def reconstruct_vertex(data_dict, result_dict,
         Maximum angle between the vertex-to-start-point vector and a
         shower direction to consider that a shower originated from the vertex
     run_mode : str
-        One of `reco`, `truth`, `both` to tell which interactions to apply
-        this algorithm to.
+        One of `reco`, `truth`, `both` to tell which interaction types to
+        apply this algorithm to.
     '''
     # Loop over interactions
     if run_mode not in ['reco', 'truth', 'both']:
@@ -141,7 +141,7 @@ def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
     '''
     # Collapse particle objects to a set of start, end points and directions
     start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)
-    end_points   = np.vstack([p.start_point for p in particles]).astype(np.float32)
+    end_points   = np.vstack([p.end_point for p in particles]).astype(np.float32)
     directions   = np.vstack([p.start_dir for p in particles]).astype(np.float32)
     semantics    = np.array([p.semantic_type for p in particles], dtype=np.int32)
 
@@ -163,15 +163,15 @@ def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
     if anchor_vertex and len(track_ids) > 1:
         # Step 1: if there is a unique point where >=1 track meet, pick it
         # as the vertex (no need for direction predictions here)
-        groups = get_track_confluence(start_points[track_mask], end_points[track_mask], touching_threshold)
-        if len(groups) == 1:
-            return np.mean(start_points[groups[0]], axis=0)
+        vertices = get_track_confluence(start_points[track_mask], end_points[track_mask], touching_threshold)
+        if len(vertices) == 1:
+            return vertices[0]
 
         # Step 2: if there is a unique *start* point where >=1 track start,
         # pick it as the vertex.
-        groups = get_track_confluence(start_points[track_mask], touching_threshold=touching_threshold)
-        if len(groups) == 1:
-            return np.mean(start_points[groups[0]], axis=0)
+        vertices = get_track_confluence(start_points[track_mask], touching_threshold=touching_threshold)
+        if len(vertices) == 1:
+            return vertices[0]
 
         # Step 3: if all else fails on track groups, simply pick the longest
         # track, take its starting point and hope for the best...
@@ -232,7 +232,7 @@ def angular_loss(candidates: nb.float32[:,:],
 @nb.njit(cache=True)
 def get_track_confluence(start_points: nb.float32[:,:],
                          end_points: nb.float32[:,:] = np.empty((0,3), dtype=np.float32),
-                         touching_threshold: nb.float32 = 5.0) -> nb.types.List(nb.int32[:]):
+                         touching_threshold: nb.float32 = 5.0) -> nb.types.List(nb.float32[:]):
     '''
     Find the points where multiple tracks touch.
 
@@ -248,11 +248,12 @@ def get_track_confluence(start_points: nb.float32[:,:],
     Returns
     -------
     List[np.ndarray]
-        List of confluence track groups which all touch at one point.
+        List of vertices that correspond to the confluence points
     '''
     # Create a track-to-track distance matrix
     n_tracks = len(start_points)
     dist_mat = np.zeros((n_tracks, n_tracks), dtype=np.float32)
+    end_mat  = np.zeros((n_tracks, n_tracks), dtype=np.int32)
     if not len(end_points):
         for i, si in enumerate(start_points):
             for j, sj in enumerate(start_points):
@@ -266,32 +267,47 @@ def get_track_confluence(start_points: nb.float32[:,:],
             for j, (sj, ej) in enumerate(zip(start_points, end_points)):
                 if j > i:
                     pointsj = np.vstack((sj, ej))
-                    dist_mat[i,j] = np.min(nbl.cdist(pointsi, pointsj))
+                    submat = nbl.cdist(pointsi, pointsj)
+                    mini, minj = np.argmin(submat)//2, np.argmin(submat)%2
+                    dist_mat[i,j] = submat[mini, minj]
+                    end_mat[i,j], end_mat[j,i] = mini, minj
                 if j < i:
                     dist_mat[i,j] = dist_mat[j,i]
 
     # Convert distance matrix to an adjacency matrix, compute
-    # the square graphic to find the number of walks 
+    # the square graphic to find the number of walks
     adj_mat  = (dist_mat < touching_threshold).astype(np.float32) # @ does not like integers
     walk_mat = adj_mat @ adj_mat
     for i in range(n_tracks):
         walk_mat[i,i] = np.max(walk_mat[i][np.arange(n_tracks) != i])
 
-    # Find cycles to build track groups
+    # Find cycles to build track groups and confluence points (vertices)
     leftover  = np.ones(n_tracks, dtype=np.bool_)
     max_walks = nbl.max(walk_mat, axis=1)
-    groups    = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
+    vertices  = nb.typed.List.empty_list(np.empty(0, dtype=np.float32))
     while np.any(leftover):
+        # Find the longest available cycle (must be at least 2 tracks)
         left_ids = np.where(leftover)[0]
         max_id   = left_ids[np.argmax(max_walks[leftover])]
         max_walk = max_walks[max_id]
         if max_walk < 2:
             break
 
+        # Form the track group that make up the cycle
         leftover[walk_mat[max_id] == max_walk] = False
-        groups.append(np.where(walk_mat[max_id] == max_walk)[0])
+        group  = np.where(walk_mat[max_id] == max_walk)[0]
 
-    return groups
+        # Take the barycenter of the touching track ends as the vertex
+        if not len(end_points):
+            vertices.append(nbl.mean(start_points[group], axis=0))
+        else:
+            vertex = np.zeros(3, dtype=np.float32)
+            for i, t in enumerate(group):
+                end_id = np.argmax(np.bincount(end_mat[t][group][np.arange(len(group)) != i]))
+                vertex += start_points[t]/len(group) if not end_id else end_points[t]/len(group)
+            vertices.append(vertex)
+
+    return vertices
 
 
 @nb.njit(cache=True)
