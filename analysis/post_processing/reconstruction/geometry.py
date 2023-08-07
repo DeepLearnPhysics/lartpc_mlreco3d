@@ -82,6 +82,9 @@ def reconstruct_directions(data_dict,
     else:
         input_data = result_dict['input_rescaled']
 
+    if not len(result_dict['particles']):
+        return {}
+
     particles = np.array([p.index for p in result_dict['particles']])
     start_points = np.vstack([p.start_point for p in result_dict['particles']])
     end_points = np.vstack([p.end_point for p in result_dict['particles']])
