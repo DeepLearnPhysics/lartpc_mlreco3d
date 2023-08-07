@@ -96,6 +96,7 @@ class Particle:
                  momentum_mcs: float = -1.,
                  matched: bool = False,
                  is_contained: bool = False,
+                 is_primary: bool = False,
                  units: str = 'px', **kwargs):
 
         # Initialize private attributes to be assigned through setters only
@@ -105,7 +106,7 @@ class Particle:
         self._depositions_sum = -1
         self._pid             = -1
         self._size            = -1
-        self._is_primary      = False
+        self._is_primary      = is_primary
         self._units           = units
 
         # Initialize attributes
@@ -122,8 +123,8 @@ class Particle:
         self.depositions    = depositions
 
         self.pdg_code       = -1
-        self.pid_scores     = pid_scores
-        self.primary_scores = primary_scores
+        self._pid_scores     = pid_scores
+        self._primary_scores = primary_scores
 
         # Quantities to be set during post_processing
         self._start_point         = start_point
