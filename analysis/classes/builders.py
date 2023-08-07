@@ -679,8 +679,8 @@ class InteractionBuilder(DataBuilder):
         if 'neutrinos' not in data:
             print("Neutrino truth information not found in label data!")
         for ia in interactions:
-            if ia.id in vertices:
-                ia.truth_vertex = vertices[ia.id]
+            if ia.truth_id in vertices:
+                ia.truth_vertex = vertices[ia.truth_id]
 
             if 'neutrinos' in data and ia.nu_id == 1:
                 neutrinos = data['neutrinos'][entry]

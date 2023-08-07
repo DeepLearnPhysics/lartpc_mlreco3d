@@ -18,6 +18,8 @@ class TruthInteraction(Interaction):
 
     Attributes
     ----------
+    truth_id : int
+        Index of the interaction as stored in the larcv.Particle information
     depositions_MeV : np.ndarray
         (N) Array of energy deposition values for each voxel in MeV
     truth_index : np.ndarray, default np.array([])
@@ -44,6 +46,7 @@ class TruthInteraction(Interaction):
 
     def __init__(self,
                  interaction_id: int = -1,
+                 truth_id: int = -1,
                  particles: List[TruthParticle] = None,
                  depositions_MeV : np.ndarray = np.empty(0, dtype=np.float32),
                  truth_index: np.ndarray = np.empty(0, dtype=np.int64),
@@ -61,13 +64,15 @@ class TruthInteraction(Interaction):
                  truth_vertex: np.ndarray = np.full(3, -np.inf),
                  **kwargs):
 
+        # Store the truth ID of the interaction
+        self.truth_id = truth_id
+
         # Initialize private attributes to be set by setter only
         self._particles  = None
         self._particle_counts = np.zeros(6, dtype=np.int64)
         self._primary_counts  = np.zeros(6, dtype=np.int64)
         self._truth_particle_counts = np.zeros(6, dtype=np.int64)
         self._truth_primary_counts  = np.zeros(6, dtype=np.int64)
-        # self.particles   = particles
 
         if self._particles is None:
             self._depositions_MeV        = depositions_MeV
@@ -189,30 +194,15 @@ class TruthInteraction(Interaction):
         for key, val in kwargs.items():
             processed_args[key] = val
         for p in particles:
-            # print(p.sed_depositions_MeV)
             assert type(p) is TruthParticle
             for key in reserved_attributes:
                 if key not in kwargs:
                     init_args[key].append(getattr(p, key))
             processed_args['particles'].append(p)
 
-        _process_interaction_attributes(init_args, processed_args, **kwargs)
-
-        # print(init_args)
-
-        # Handle depositions_MeV for TruthParticles
-        processed_args['truth_index']             = np.concatenate(init_args['truth_index'])
-        processed_args['truth_points']            = np.vstack(init_args['truth_points'])
-
-        processed_args['truth_depositions']       = np.concatenate(init_args['truth_depositions'])
-        processed_args['truth_depositions_MeV']   = np.concatenate(init_args['truth_depositions_MeV'])
-
-        processed_args['sed_index']               = np.concatenate(init_args['sed_index'])
-        processed_args['sed_points']              = np.vstack(init_args['sed_points'])
-        processed_args['sed_depositions_MeV']     = np.concatenate(init_args['sed_depositions_MeV'])
+        _process_truth_interaction_attributes(init_args, processed_args, **kwargs)
 
         truth_interaction = cls(**processed_args)
-
         return truth_interaction
 
     @property
@@ -263,3 +253,22 @@ class TruthInteraction(Interaction):
     def __str__(self):
         msg = super(TruthInteraction, self).__str__()
         return 'Truth'+msg
+
+
+# ------------------------------Helper Functions---------------------------
+
+def _process_truth_interaction_attributes(init_args, processed_args, **kwargs):
+    # Call the general function (sets attributes shared with Interaction
+    _process_interaction_attributes(init_args, processed_args, **kwargs)
+
+    # Treat the TruthInteraction-specific attributes
+    if len(init_args['truth_index']) > 0:
+        processed_args['truth_index']           = np.concatenate(init_args['truth_index'])
+        processed_args['truth_points']          = np.vstack(init_args['truth_points'])
+        processed_args['truth_depositions']     = np.concatenate(init_args['truth_depositions'])
+        processed_args['truth_depositions_MeV'] = np.concatenate(init_args['truth_depositions_MeV'])
+
+    if len(init_args['sed_index']):
+        processed_args['sed_index']             = np.concatenate(init_args['sed_index'])
+        processed_args['sed_points']            = np.vstack(init_args['sed_points'])
+        processed_args['sed_depositions_MeV']   = np.concatenate(init_args['sed_depositions_MeV'])

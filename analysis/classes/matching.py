@@ -9,8 +9,6 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
-from pprint import pprint
-
 
 class VoxelMatcher:
 
@@ -322,12 +320,19 @@ def group_particles_to_interactions_fn(particles : List[Particle],
 
     for i, (int_id, particles) in enumerate(interactions.items()):
         # Reset the particle interaction ID to follow the arbitray interaction ordering
+        truth_int_ids = []
         for p in particles:
+            truth_int_ids.append(p.interaction_id)
             p.interaction_id = i
+        truth_int_ids = np.unique(truth_int_ids)
+        assert len(truth_int_ids) == 1,\
+                'Particles in this interaction do not share an interaction ID'
+
         if mode == 'pred':
             interactions[int_id] = Interaction.from_particles(particles)
         elif mode == 'truth':
             interactions[int_id] = TruthInteraction.from_particles(particles)
+            interactions[int_id].truth_id = truth_int_ids[0]
         else:
             raise ValueError(f"Unknown aggregation mode {mode}.")
 
