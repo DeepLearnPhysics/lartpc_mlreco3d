@@ -243,7 +243,7 @@ class TruthParticle(Particle):
     @primary_scores.setter
     def primary_scores(self, primary_scores):
         # If no primary scores are given, the primary status is unknown
-        raise AttributeError("primary_scores cannot be referenced or assigned for TruthParticles")
+        self._primary_scores = primary_scores
     
     @property
     def pid_scores(self):
@@ -256,4 +256,4 @@ class TruthParticle(Particle):
     @pid_scores.setter
     def pid_scores(self, pid_scores):
         # If no primary scores are given, the primary status is unknown
-        raise AttributeError("pid_scores cannot be referenced or assigned for TruthParticles")
+        self._pid_scores = pid_scores

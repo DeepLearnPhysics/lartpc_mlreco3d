@@ -123,9 +123,10 @@ class Particle:
         self.depositions    = depositions
 
         self.pdg_code       = -1
-        self._pid_scores     = pid_scores
-        self._primary_scores = primary_scores
-
+        
+        self.pid_scores     = pid_scores
+        self.primary_scores = primary_scores
+        
         # Quantities to be set during post_processing
         self._start_point         = start_point
         self._end_point           = end_point
