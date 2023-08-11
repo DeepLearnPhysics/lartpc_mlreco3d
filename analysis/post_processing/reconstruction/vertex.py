@@ -109,7 +109,9 @@ def reconstruct_vertex_single(interaction,
         return
 
     # Reconstruct the vertex for this interaction
-    interaction.vertex = reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold)
+    vtx, vtx_mode = reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold, return_mode=True)
+    interaction.vertex = vtx
+    interaction.vertex_mode = vtx_mode
 
     # If requested, update primaries on the basis of the predicted vertex
     if update_primaries:
@@ -122,7 +124,8 @@ def reconstruct_vertex_single(interaction,
                 p.is_primary = True
 
 
-def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
+def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold,
+                                return_mode=False):
     '''
     Reconstruct the vertex of an individual interaction.
 
@@ -144,6 +147,8 @@ def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
 
     # If there is only one particle: choose the start point
     if len(particles) == 1:
+        if return_mode:
+            return start_points[0], 'single_start'
         return start_points[0]
 
     # If there is only one track and N showers: pick the track end-point
@@ -154,6 +159,8 @@ def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
     if anchor_vertex and len(track_ids) == 1:
         candidates = np.vstack([start_points[track_mask], end_points[track_mask]])
         losses     = angular_loss(candidates, start_points[~track_mask], directions[~track_mask])
+        if return_mode:
+            return candidates[np.argmin(losses)], '1trackNshower'
         return candidates[np.argmin(losses)]
 
     # If there are >=2 tracks, try multiple things
@@ -162,23 +169,31 @@ def reconstruct_vertex_dispatch(particles, anchor_vertex, touching_threshold):
         # as the vertex (no need for direction predictions here)
         vertices = get_track_confluence(start_points[track_mask], end_points[track_mask], touching_threshold)
         if len(vertices) == 1:
+            if return_mode:
+                return vertices[0], 'multiTrack1'
             return vertices[0]
 
         # Step 2: if there is a unique *start* point where >=1 track start,
         # pick it as the vertex.
         vertices = get_track_confluence(start_points[track_mask], touching_threshold=touching_threshold)
         if len(vertices) == 1:
+            if return_mode:
+                return vertices[0], 'multiTrack2'
             return vertices[0]
 
         # Step 3: if all else fails on track groups, simply pick the longest
         # track, take its starting point and hope for the best...
         track_lengths = np.linalg.norm(end_points[track_mask]-start_points[track_mask], axis=-1)
+        if return_mode:
+            return start_points[track_mask][np.argmax(track_lengths)], 'multiTrack3'
         return start_points[track_mask][np.argmax(track_lengths)]
 
     # If there is only showers (or the vertex is not anchored): find the point which
     # minimizes the sum of distances from the vertex w.r.t. to all direction lines.
     # TODO: Find the point which minimizes the angular difference between the
     # vertex-to-point vector and the shower direction estimates (much better).
+    if return_mode:
+        return get_pseudovertex(start_points, directions), 'pseudovtx'
     return get_pseudovertex(start_points, directions)
 
 

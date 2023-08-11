@@ -51,6 +51,7 @@ class Interaction:
                  volume_id: int = -1,
                  image_id: int = -1,
                  vertex: np.ndarray = np.full(3, -np.inf),
+                 vertex_mode: str = 'N/A',
                  is_neutrino: bool = False,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
@@ -73,6 +74,7 @@ class Interaction:
         self.volume_id    = int(volume_id)
         self.image_id     = int(image_id)
         self.vertex       = vertex
+        self.vertex_mode  = vertex_mode
         self.is_neutrino  = is_neutrino
         self._units       = units
 
@@ -119,14 +121,28 @@ class Interaction:
         if self._size is None:
             self._size = len(self.index)
         return self._size
-
+    
     @property
     def match(self):
-        return np.array(list(self._match_overlap.keys()), dtype=np.int64)
+        self._match = list(self._match_overlap.keys())
+        return np.array(self._match, dtype=np.int64)
 
     @property
     def match_overlap(self):
         return np.array(list(self._match_overlap.values()), dtype=np.float32)
+
+    @match_overlap.setter
+    def match_overlap(self, value):
+        assert type(value) is OrderedDict
+        self._match_overlap = value
+
+    # @property
+    # def match(self):
+    #     return np.array(list(self._match_overlap.keys()), dtype=np.int64)
+
+    # @property
+    # def match_overlap(self):
+    #     return np.array(list(self._match_overlap.values()), dtype=np.float32)
 
     @property
     def is_principal_match(self):

@@ -257,6 +257,11 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
 
     matches = OrderedDict()
     out_counts = []
+    
+    for px in particles_x:
+        px.match_overlap = OrderedDict()
+    for py in particles_y:
+        py.match_overlap = OrderedDict()
 
     # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
@@ -366,6 +371,7 @@ def generate_match_pairs(truth, reco, prefix='matches'):
     }
     true_dict = {p.id : p for p in truth}
     reco_dict = {p.id : p for p in reco}
+
     for p in truth:
         if len(p.match) == 0:
             pair = (p, None)

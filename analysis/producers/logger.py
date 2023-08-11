@@ -480,12 +480,14 @@ class InteractionLogger(AnalysisLogger):
             'vertex_x': -sys.maxsize,
             'vertex_y': -sys.maxsize,
             'vertex_z': -sys.maxsize,
+            'vertex_mode': 'N/A'
             # 'vertex_info': None
         }
         if ia is not None and hasattr(ia, 'vertex'):
             out['vertex_x'] = ia.vertex[0]
             out['vertex_y'] = ia.vertex[1]
             out['vertex_z'] = ia.vertex[2]
+            out['vertex_mode'] = ia.vertex_mode
         return out
     
     @staticmethod
@@ -499,9 +501,9 @@ class InteractionLogger(AnalysisLogger):
             # 'vertex_info': None
         }
         if ia is not None and hasattr(ia, 'truth_vertex'):
-            out['truth_vertex_x'] = ia.vertex[0]
-            out['truth_vertex_y'] = ia.vertex[1]
-            out['truth_vertex_z'] = ia.vertex[2]
+            out['truth_vertex_x'] = ia.truth_vertex[0]
+            out['truth_vertex_y'] = ia.truth_vertex[1]
+            out['truth_vertex_z'] = ia.truth_vertex[2]
         return out
     
     @staticmethod
