@@ -207,7 +207,6 @@ class ConnectedComponents(BaseTransform):
                         edge_mode='edge_pred', 
                         offset=0, **kwargs) -> Data:
         
-        device = data.x.device
         if edge_mode == 'edge_pred':
             edge_index = getattr(data, 'edge_index')
             connected_mask = (data.edge_pred == 1).squeeze()
@@ -223,20 +222,30 @@ class ConnectedComponents(BaseTransform):
             
         assert edge_index.shape[0] == 2, 'Edge Index must be of shape (2, E)'
             
-        if edge_mode == 'edge_index':
+        if isinstance(edge_index, torch.Tensor):
             adj = to_scipy_sparse_matrix(edge_index, num_nodes=data.num_nodes)
         else:
-            adj = to_scipy_sparse_matrix(edge_index, num_nodes=data.num_nodes)
+            edge_attr, N = np.ones(len(edge_index[0])), data.num_nodes
+            adj = sp.coo_matrix((edge_attr, (edge_index[0], edge_index[1])), (N, N))
 
         num_components, component = sp.csgraph.connected_components(
             adj, connection=self.connection)
         
         component = component.astype(np.int64)
         
-        assigner = RadiusNeighborsIterativeAssigner(data.pos.cpu().numpy(), component, **kwargs)
+        if isinstance(data.pos, torch.Tensor):
+            assigner = RadiusNeighborsIterativeAssigner(data.pos.cpu().numpy(), component, **kwargs)
+        else:
+            assigner = RadiusNeighborsIterativeAssigner(data.pos, component, **kwargs)
         node_pred = assigner.assign_orphans()
-        # data.node_pred = torch.tensor(node_pred).long().to(device) + offset
-        data.node_pred = torch.tensor(node_pred).long().to(device)
+
+        if isinstance(data.x, torch.Tensor):
+            device = data.x.device
+            # data.node_pred = torch.tensor(node_pred).long().to(device) + offset
+            data.node_pred = torch.tensor(node_pred).long().to(device)
+        else:
+            data.node_pred = node_pred
+
         data.node_pred[data.node_pred != -1] += offset
 
     def __repr__(self) -> str:

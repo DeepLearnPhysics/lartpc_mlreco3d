@@ -137,6 +137,7 @@ class GraphSPICE(nn.Module):
         'voxel_id'     : ['tensor', 'image_id'],
         'graph_key'    : ['tensor'],
         'graph_id'     : ['tensor', 'graph_key'],
+        'semantic_id'  : ['tensor', 'image_id'],
         'full_edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
         'edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
         'edge_batch'   : ['edge_tensor', ['full_edge_index', 'image_id']],
