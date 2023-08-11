@@ -113,7 +113,7 @@ def run_inference(data_blob, res, **kwargs):
         return [interactions, particles]
 
 
-@write_to(['interactions_t2r', 'particles_t2r', 'interacrtions_r2t', 'particles_r2t'])
+@write_to(['interactions_t2r', 'particles_t2r', 'interactions_r2t', 'particles_r2t'])
 def run_bidirectional_inference(data_blob, res, **kwargs):
     """
     Template for a logging script for particle and interaction objects.

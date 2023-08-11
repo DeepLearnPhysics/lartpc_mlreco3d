@@ -211,6 +211,10 @@ class ParticleBuilder(DataBuilder):
 
             match = prepared_bp.pop('match', [])
             match_overlap = prepared_bp.pop('match_overlap', [])
+            
+            # ONLY TEMPORARY
+            if 'match_counts' in prepared_bp:
+                match_overlap = prepared_bp.pop('match_counts')
 
             assert len(match) == len(match_overlap)
 
@@ -563,8 +567,15 @@ class InteractionBuilder(DataBuilder):
             print(msg)
 
         for i, bp in enumerate(blueprints):
+            
+            # ONLY TEMPORARY
+            if 'match_counts' in bp:
+                match_overlap = bp.pop('match_counts')
+                bp['match_overlap'] = match_overlap
+            
             info = copy.deepcopy(bp)
             info['interaction_id'] = info.pop('id', -1)
+            
             for key in bp:
                 if key in SKIP_KEYS:
                     info.pop(key)
@@ -620,14 +631,12 @@ class InteractionBuilder(DataBuilder):
             print(msg)
 
         for i, bp in enumerate(blueprints):
-            # info = {
-            #     'interaction_id': bp['id'],
-            #     'image_id': bp['image_id'],
-            #     'is_neutrino': bp['is_neutrino'],
-            #     'nu_id': bp['nu_id'],
-            #     'volume_id': bp['volume_id'],
-            #     'vertex': bp['vertex']
-            # }
+            
+            # ONLY TEMPORARY
+            if 'match_counts' in bp:
+                match_overlap = bp.pop('match_counts')
+                bp['match_overlap'] = match_overlap
+                
             info = copy.deepcopy(bp)
             info['interaction_id'] = info.pop('id', -1)
             for key in bp:

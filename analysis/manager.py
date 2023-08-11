@@ -54,6 +54,7 @@ class AnaToolsManager:
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
         self.convert_to_cm = self.ana_config['analysis'].get('convert_to_cm', False)
+        self.force_build   = self.ana_config['analysis'].get('force_build', False)
 
         # Initialize data product builders
         self.data_builders = None
@@ -329,14 +330,14 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            if 'particles' not in result:
+            if ('particles' not in result) or self.force_build:
                 print("Building particles instead of loading...")
                 result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
             else:
                 result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
 
         if 'InteractionBuilder' in self.builders:
-            if 'interactions' not in result:
+            if ('interactions' not in result) or self.force_build:
                 print("Building interactions instead of loading...")
                 result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             else:
