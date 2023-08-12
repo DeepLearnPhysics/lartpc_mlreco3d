@@ -11,7 +11,7 @@ sys.path.insert(0, current_directory)
 from mlreco.main_funcs import process_config, train, inference
 
 
-def main(config):
+def main(config, data_keys):
     cfg_file = config
     if not os.path.isfile(cfg_file):
         cfg_file = os.path.join(current_directory, 'config', config)
@@ -23,6 +23,8 @@ def main(config):
 
     if environ.get('CUDA_VISIBLE_DEVICES') is not None and cfg['trainval']['gpus'] == '-1':
         cfg['trainval']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
+    if data_keys is not None:
+        cfg['iotool']['dataset']['data_keys'] = data_keys
 
     process_config(cfg)
 
@@ -35,10 +37,13 @@ if __name__ == '__main__':
     import torch
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
-    parser.add_argument("--detect_anomaly",
-                        help="Turns on autograd.detect_anomaly for debugging",
+    parser.add_argument('--detect_anomaly',
+                        help='Turns on autograd.detect_anomaly for debugging',
                         action='store_true')
+    parser.add_argument('--data_keys',
+                        help='Specify path(s) to data files',
+                        nargs='+')
     args = parser.parse_args()
     if args.detect_anomaly:
         torch.autograd.set_detect_anomaly(True, check_nan=True)
-    main(args.config)
+    main(args.config, args.data_keys)
