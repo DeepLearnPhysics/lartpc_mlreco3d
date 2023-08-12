@@ -540,7 +540,7 @@ def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]
         int: ID of the start voxel
     """
     # Get the axis of maximum spread
-    axis = principal_axis(voxels)
+    axis = nbl.principal_components(voxels)[0]
 
     # Compute coord values along that axis
     coords = np.empty(len(voxels))
@@ -648,29 +648,6 @@ def umbrella_curv(voxels: nb.float64[:,:],
 
     # Find the umbrella curvature (mean angle from the mean direction)
     return abs(np.mean([np.dot((voxels[i]-refvox)/np.linalg.norm(voxels[i]-refvox), axis) for i in range(len(voxels)) if i != voxid]))
-
-
-@nb.njit(cache=True)
-def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
-    """
-    Computes the direction of the principal axis of a cloud of points
-    by computing its eigenvectors.
-
-    Args:
-        voxels (np.ndarray): (N,3) Voxel coordinates [x, y, z]
-    Returns:
-        int: (3) Coordinates of the principal axis
-    """
-    # Center data
-    center = nbl.mean(voxels, 0)
-    x = voxels - center
-
-    # Get orientation matrix
-    A = np.dot(x.T, x)
-
-    # Get eigenvectors, select the one which corresponds to the maximal spread
-    _, v = np.linalg.eigh(A)
-    return v[:,2]
 
 
 @nb.njit(cache=True)

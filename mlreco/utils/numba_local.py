@@ -303,7 +303,7 @@ def log_loss(label: nb.boolean[:],
              pred: nb.float32[:]) -> nb.float32:
     """
     Numba implementation of cross-entropy loss.
-    
+
     Parameters
     ----------
     label : np.ndarray
@@ -367,6 +367,45 @@ def cdist(x1: nb.float32[:,:],
         for i2 in range(x2.shape[0]):
             res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2+(x1[i1][1]-x2[i2][1])**2+(x1[i1][2]-x2[i2][2])**2)
     return res
+
+
+@nb.njit(cache=True)
+def principal_components(voxels:nb.float32[:,:],
+                         n_components:nb.int32 = -1) -> nb.float32[:,:]:
+    '''
+    Computes the principal components of a point cloud by computing the
+    eigenvectors of the centered covariance matrix.
+
+    Parameters
+    ----------
+    voxels : np.ndarray
+        (N, d) Voxel coordinates in d dimensions
+    n_components : int, default d
+        Number of principal components to return
+
+    Returns
+    -------
+    np.ndarray
+        (n_components, d) List of principal components
+    '''
+    # Deal with the number of components
+    if n_components < 0:
+        n_components = voxels.shape[1]
+    if n_components > min(voxels.shape):
+        raise ValueError('n_components is larger than the number of points/dimensions')
+
+    # Center data
+    center = nbl.mean(voxels, 0)
+    x = voxels - center
+
+    # Get covariance matrix
+    A = np.dot(x.T, x)
+
+    # Get eigenvectors
+    _, v = np.linalg.eigh(A)
+    v = np.fliplr(v).T
+
+    return v[:n_components]
 
 
 @nb.njit(cache=True)

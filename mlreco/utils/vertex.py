@@ -1,8 +1,8 @@
 import numpy as np
 import numba as nb
 
-from mlreco.utils import numba_local as nbl
-from mlreco.utils.globals import TRACK_SHP, INTER_COL, PGRP_COL, VTX_COLS
+from . import numba_local as nbl
+from .globals import TRACK_SHP, INTER_COL, PGRP_COL, VTX_COLS
 
 
 def get_vertex(start_points,
