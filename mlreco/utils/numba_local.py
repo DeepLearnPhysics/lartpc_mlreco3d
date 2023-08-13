@@ -370,33 +370,23 @@ def cdist(x1: nb.float32[:,:],
 
 
 @nb.njit(cache=True)
-def principal_components(voxels:nb.float32[:,:],
-                         n_components:nb.int32 = -1) -> nb.float32[:,:]:
+def principal_components(x: nb.float32[:,:]) -> nb.float32[:,:]:
     '''
     Computes the principal components of a point cloud by computing the
     eigenvectors of the centered covariance matrix.
 
     Parameters
     ----------
-    voxels : np.ndarray
-        (N, d) Voxel coordinates in d dimensions
-    n_components : int, default d
-        Number of principal components to return
+    x : np.ndarray
+        (N, d) Coordinates in d dimensions
 
     Returns
     -------
     np.ndarray
-        (n_components, d) List of principal components
+        (d, d) List of principal components (row-ordered)
     '''
-    # Deal with the number of components
-    if n_components < 0:
-        n_components = voxels.shape[1]
-    if n_components > min(voxels.shape):
-        raise ValueError('n_components is larger than the number of points/dimensions')
-
     # Center data
-    center = nbl.mean(voxels, 0)
-    x = voxels - center
+    x = x - mean(x, 0)
 
     # Get covariance matrix
     A = np.dot(x.T, x)
@@ -405,7 +395,7 @@ def principal_components(voxels:nb.float32[:,:],
     _, v = np.linalg.eigh(A)
     v = np.fliplr(v).T
 
-    return v[:n_components]
+    return v
 
 
 @nb.njit(cache=True)
