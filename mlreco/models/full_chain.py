@@ -8,7 +8,6 @@ from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.globals import *
-# from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.deghosting import compute_rescaled_charge

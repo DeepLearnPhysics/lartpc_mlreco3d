@@ -25,7 +25,7 @@ from analysis.classes import (Particle,
                               ParticleFragment,
                               TruthParticleFragment)
 from analysis.classes.matching import group_particles_to_interactions_fn
-from mlreco.utils.vertex import get_vertex
+from mlreco.utils.vertex import get_truth_vertex
 
 # These attributes are computed based on the particles being loaded to
 # each interaction, and they are computed at initialization.
@@ -723,11 +723,9 @@ class InteractionBuilder(DataBuilder):
         for inter_idx in inter_idxs:
             if inter_idx < 0:
                 continue
-            vtx = get_vertex(data['cluster_label'],
-                             data['cluster_label'],
-                             data_idx=entry,
-                             inter_idx=inter_idx,
-                             vtx_col=VTX_COLS[0])
+            vtx = get_truth_vertex(data['cluster_label'],
+                                   data_idx=entry,
+                                   inter_idx=inter_idx)
             mask    = data['cluster_label'][entry][:, INTER_COL].astype(int) == inter_idx
             points  = data['cluster_label'][entry][:, COORD_COLS]
             new_vtx = points[mask][np.linalg.norm(points[mask] - vtx, axis=1).argmin()]

@@ -303,7 +303,7 @@ def log_loss(label: nb.boolean[:],
              pred: nb.float32[:]) -> nb.float32:
     """
     Numba implementation of cross-entropy loss.
-    
+
     Parameters
     ----------
     label : np.ndarray
@@ -367,6 +367,35 @@ def cdist(x1: nb.float32[:,:],
         for i2 in range(x2.shape[0]):
             res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2+(x1[i1][1]-x2[i2][1])**2+(x1[i1][2]-x2[i2][2])**2)
     return res
+
+
+@nb.njit(cache=True)
+def principal_components(x: nb.float32[:,:]) -> nb.float32[:,:]:
+    '''
+    Computes the principal components of a point cloud by computing the
+    eigenvectors of the centered covariance matrix.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        (N, d) Coordinates in d dimensions
+
+    Returns
+    -------
+    np.ndarray
+        (d, d) List of principal components (row-ordered)
+    '''
+    # Center data
+    x = x - mean(x, 0)
+
+    # Get covariance matrix
+    A = np.dot(x.T, x)
+
+    # Get eigenvectors
+    _, v = np.linalg.eigh(A)
+    v = np.fliplr(v).T
+
+    return v
 
 
 @nb.njit(cache=True)
