@@ -6,4 +6,5 @@ from .geometry import particle_direction, fiducial_cut, count_children, reconstr
 from .calorimetry import calorimetric_energy, range_based_track_energy, range_based_track_energy_spline
 from .ppn import assign_ppn_candidates
 from .label import adjust_pid_and_primary_labels
+from .tracking import reconstruct_track_length
 # from .neutrino import nu_calorimetric_energy
