@@ -104,25 +104,27 @@ def reconstruct_vertex_single(interaction,
     if not use_primaries or not len(particles):
         particles = [p for p in interaction.particles \
             if p.semantic_type in include_semantics]
+        
+    if len(particles) > 0:
 
-    # Collapse particle objects to a set of start, end points and directions
-    start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)
-    end_points   = np.vstack([p.end_point for p in particles]).astype(np.float32)
-    directions   = np.vstack([p.start_dir for p in particles]).astype(np.float32)
-    semantics    = np.array([p.semantic_type for p in particles], dtype=np.int32)
+        # Collapse particle objects to a set of start, end points and directions
+        start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)
+        end_points   = np.vstack([p.end_point for p in particles]).astype(np.float32)
+        directions   = np.vstack([p.start_dir for p in particles]).astype(np.float32)
+        semantics    = np.array([p.semantic_type for p in particles], dtype=np.int32)
 
-    # Reconstruct the vertex for this interaction
-    vtx, vtx_mode = get_vertex(start_points, end_points, directions, semantics,
-            anchor_vertex, touching_threshold, return_mode=True)
-    interaction.vertex = vtx
-    interaction.vertex_mode = vtx_mode
+        # Reconstruct the vertex for this interaction
+        vtx, vtx_mode = get_vertex(start_points, end_points, directions, semantics,
+                anchor_vertex, touching_threshold, return_mode=True)
+        interaction.vertex = vtx
+        interaction.vertex_mode = vtx_mode
 
-    # If requested, update primaries on the basis of the predicted vertex
-    if update_primaries:
-        for p in interaction.particles:
-            if p.semantic_type not in [SHOWR_SHP, TRACK_SHP]:
-                p.is_primary = False
-            elif np.linalg.norm(p.start_point - interaction.vertex) < touching_threshold:
-                p.is_primary = True
-            elif p.semantic_type == SHOWR_SHP and np.dot(p.start_point, interaction.vertex) < angle_threshold:
-                p.is_primary = True
+        # If requested, update primaries on the basis of the predicted vertex
+        if update_primaries:
+            for p in interaction.particles:
+                if p.semantic_type not in [SHOWR_SHP, TRACK_SHP]:
+                    p.is_primary = False
+                elif np.linalg.norm(p.start_point - interaction.vertex) < touching_threshold:
+                    p.is_primary = True
+                elif p.semantic_type == SHOWR_SHP and np.dot(p.start_point, interaction.vertex) < angle_threshold:
+                    p.is_primary = True

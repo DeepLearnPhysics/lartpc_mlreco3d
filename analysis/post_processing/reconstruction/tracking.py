@@ -10,7 +10,7 @@ from mlreco.utils.tracking import get_track_segments, get_track_segment_dedxs, g
 @post_processing(data_capture=['meta'], 
                  result_capture=['particles'],
                  result_capture_optional=['truth_particles'])
-def reconstruct_track_length(data_dict, result_dict,
+def reconstruct_track_energy(data_dict, result_dict,
                              data=False,
                              include_pids=[2,4],
                              tracking_mode='default',
@@ -46,8 +46,13 @@ def reconstruct_track_length(data_dict, result_dict,
         if tracking_mode == 'default':
             length = compute_track_length(coordinates, bin_size=bin_size)
         elif tracking_mode == 'spline':
-            length = compute_track_length_splines(coordinates, bin_size=bin_size)
+            if coordinates.shape[0] > bin_size:
+                length = compute_track_length_splines(coordinates, bin_size=bin_size)
+            else:
+                length = compute_track_length(coordinates, bin_size=bin_size)
         elif tracking_mode == 'numba':
+            coordinates = np.ascontiguousarray(coordinates, dtype=np.float32)
+            startpoint = np.ascontiguousarray(startpoint, dtype=np.float32)
             length = get_track_length(coordinates, segment_length=bin_size,
                                       point=startpoint, 
                                       method=kwargs.get('method', 'step'),
@@ -61,26 +66,31 @@ def reconstruct_track_length(data_dict, result_dict,
         for p in truth_particles:
             if not ((p.semantic_type == 1) and (p.pid in include_pids)):
                 continue
-        if convert_to_cm:
-            coordinates = getattr(p, truth_point_mode)
-            coordinates = _pix_to_cm(coordinates, meta)
-            startpoint  = _pix_to_cm(p.start_point, meta)
-            bin_size    = bin_size * px_to_cm
-        else:
-            coordinates = getattr(p, truth_point_mode)
-            startpoint  = p.start_point
-            if tracking_mode == 'default':
-                length = compute_track_length(coordinates, bin_size=bin_size)
-            elif tracking_mode == 'spline':
-                length = compute_track_length_splines(coordinates, bin_size=bin_size)
-            elif tracking_mode == 'numba':
-                length = get_track_length(coordinates, segment_length=bin_size,
-                                        point=startpoint, 
-                                        method=kwargs.get('method', 'step'),
-                                        anchor_point=kwargs.get('anchor_point', True))
+            if convert_to_cm:
+                coordinates = getattr(p, truth_point_mode)
+                coordinates = _pix_to_cm(coordinates, meta)
+                startpoint  = _pix_to_cm(p.start_point, meta)
+                bin_size    = bin_size * px_to_cm
             else:
-                raise ValueError(f"Track length reconstruction module {tracking_mode} is not supported!")
-            p.length = length
-            p.csda_kinetic_energy = splines[p.pid](length)
+                coordinates = getattr(p, truth_point_mode)
+                startpoint  = p.start_point
+                if tracking_mode == 'default':
+                    length = compute_track_length(coordinates, bin_size=bin_size)
+                elif tracking_mode == 'spline':
+                    if coordinates.shape[0] > bin_size:
+                        length = compute_track_length_splines(coordinates, bin_size=bin_size)
+                    else:
+                        length = compute_track_length(coordinates, bin_size=bin_size)
+                elif tracking_mode == 'numba':
+                    coordinates = np.ascontiguousarray(coordinates, dtype=np.float32)
+                    startpoint = np.ascontiguousarray(startpoint, dtype=np.float32)
+                    length = get_track_length(coordinates, segment_length=bin_size,
+                                            point=startpoint, 
+                                            method=kwargs.get('method', 'step'),
+                                            anchor_point=kwargs.get('anchor_point', True))
+                else:
+                    raise ValueError(f"Track length reconstruction module {tracking_mode} is not supported!")
+                p.length = length
+                p.csda_kinetic_energy = splines[p.pid](length)
             
     return {}
