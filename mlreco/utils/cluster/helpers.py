@@ -205,7 +205,8 @@ class ConnectedComponents(BaseTransform):
 
     def fit_predict_one(self, data: Data, 
                         edge_mode='edge_pred', 
-                        offset=0, **kwargs) -> Data:
+                        offset=0, edge_threshold=0.1,
+                        invert=True, **kwargs) -> Data:
         
         if edge_mode == 'edge_pred':
             edge_index = getattr(data, 'edge_index')
@@ -215,6 +216,14 @@ class ConnectedComponents(BaseTransform):
         elif edge_mode == 'edge_truth':
             edge_index = getattr(data, 'edge_index')
             connected_mask = (data.edge_label == 1).squeeze()
+            connected_edges = edge_index[:, connected_mask]
+            edge_index = connected_edges
+        elif edge_mode == 'edge_prob':
+            edge_index = getattr(data, 'edge_index')
+            if invert:
+                connected_mask = (data.edge_prob < edge_threshold).squeeze()
+            else:
+                connected_mask = (data.edge_prob >= edge_threshold).squeeze()
             connected_edges = edge_index[:, connected_mask]
             edge_index = connected_edges
         else:

@@ -433,7 +433,9 @@ class ClusterGraphConstructor:
 
     def fit_predict(self, 
                     edge_mode='edge_pred', 
-                    min_points=None):
+                    min_points=None,
+                    edge_threshold=0.1,
+                    invert=True):
         """Run GraphSPICE clustering on all graphs in the batch.
 
         Parameters
@@ -455,7 +457,9 @@ class ClusterGraphConstructor:
                                             orphans_radius=self._orphans_radius,
                                             orphans_iterate=self._orphans_iterate,
                                             orphans_cluster_all=self._orphans_cluster_all,
-                                            outlier_label=int(-1))
+                                            outlier_label=int(-1),
+                                            edge_threshold=edge_threshold,
+                                            invert=invert)
         self._data = graphs
 
         return graphs
