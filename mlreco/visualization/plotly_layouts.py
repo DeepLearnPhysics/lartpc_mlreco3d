@@ -68,8 +68,10 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         assert np.all(ranges[:,1] >= ranges[:,0])
 
     if meta is not None:
-        assert ranges is None or None in ranges, 'Should not specify both `ranges` and `meta` parameters'
-        assert len(np.asarray(meta).reshape(-1)) == 9, 'Metadata should be an array of 9 values'
+        assert ranges is None or None in ranges,\
+                'Should not specify both `ranges` and `meta` parameters'
+        assert len(np.asarray(meta).reshape(-1)) == 9,\
+                'Metadata should be an array of 9 values'
         lowers, uppers, sizes = np.split(np.asarray(meta).reshape(-1), 3)
         if detector_coords:
             ranges = np.vstack([lowers, uppers]).T

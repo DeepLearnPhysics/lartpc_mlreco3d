@@ -69,7 +69,7 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
         Method used to segment the track (one of 'step' or 'one_shot')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
-    min_count : int, default 1
+    min_count : int, default 0
         Minimum number of points in a segment for it to be valid
 
     Returns
@@ -89,9 +89,9 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
     for i, segment in enumerate(segment_clusts):
         # Compute the rate of energy/charge deposition
         # If the segment has insufficient content, return dummy values
-        if len(segment) >= min_count:
+        dx = segment_lengths[i]
+        if len(segment) >= min_count and dx > 0.:
             de = np.sum(values[segment])
-            dx = segment_lengths[i]
             segment_dedxs[i] = de/dx 
         else:
             segment_dedxs[i] = -1.
