@@ -273,8 +273,8 @@ class GNN(torch.nn.Module):
                 raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 
         # Initialize encoders
-        self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
-        self.edge_encoder = edge_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
+        self.node_encoder = node_encoder_construct(cfg[name])
+        self.edge_encoder = edge_encoder_construct(cfg[name])
 
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
@@ -328,7 +328,7 @@ class GNN(torch.nn.Module):
 
         # If requested, merge images together within the batch
         if self.merge_batch:
-            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc, self.batch_index)
+            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc)
             batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
@@ -349,7 +349,7 @@ class GNN(torch.nn.Module):
             bcounts = new_bcounts
             batches = np.arange(batch_size)
 
-        batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
+        batch_ids = get_cluster_batch(cluster_data, clusts)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
         result['clusts'] = [clusts_split]
         result['batch_ids'] = [batch_ids]

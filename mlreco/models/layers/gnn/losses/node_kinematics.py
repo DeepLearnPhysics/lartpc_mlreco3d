@@ -93,7 +93,6 @@ class NodeKinematicsLoss(torch.nn.Module):
 
         self.group_col = loss_config.get('cluster_col', GROUP_COL)
         self.type_col = loss_config.get('type_col', PID_COL)
-        self.momentum_col = loss_config.get('momentum_col', MOM_COL)
         self.vtx_col = loss_config.get('vtx_col', VTX_COLS[0])
         self.vtx_positives_col = loss_config.get('vtx_positives_col', PGRP_COL)
 
@@ -231,7 +230,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 if compute_momentum and out['node_pred_p'][i][j].shape[0]:
                     # Get the momentum predictions and true momenta from the specified columns
                     node_pred_p = out['node_pred_p'][i][j]
-                    node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+                    node_assn_p = get_momenta_label(labels, clusts)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
                     valid_mask_p = node_assn_p.detach().cpu().numpy() > -1
@@ -446,7 +445,7 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
 
     def compute_momentum(self, node_pred_p, labels, clusts, iteration=None):
 
-        node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+        node_assn_p = get_momenta_label(labels, clusts)
         with torch.no_grad():
             p_acc = torch.pow(node_pred_p[:, 0]-node_assn_p, 2).sum()
         n_clusts_momentum = len(clusts)
