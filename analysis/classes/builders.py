@@ -613,16 +613,16 @@ class InteractionBuilder(DataBuilder):
         return out
 
     def _load_truth(self, entry, data, result):
-        true_nonghost = data['cluster_label'][0]
-        pred_nonghost = result['cluster_label_adapted'][0]
+        true_nonghost = data['cluster_label'][entry]
+        pred_nonghost = result['cluster_label_adapted'][entry]
 
         if 'energy_label' in data:
-            energy_label = data['energy_label'][0]
+            energy_label = data['energy_label'][entry]
         else:
             energy_label = None
 
         out = []
-        blueprints = result['truth_interactions'][0]
+        blueprints = result['truth_interactions'][entry]
         use_particles = 'truth_particles' in result
 
         if not use_particles:
@@ -644,12 +644,11 @@ class InteractionBuilder(DataBuilder):
                     info.pop(key)
             if use_particles:
                 particles = []
-                for p in result['truth_particles'][0]:
+                for p in result['truth_particles'][entry]:
                     if p.interaction_id == bp['id']:
                         p.interaction_id = len(out)
                         particles.append(p)
-                        continue
-
+                        # continue
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False,
                                                      **info)
