@@ -261,9 +261,12 @@ def get_track_segments(coordinates: nb.float32[:,:],
                 continue
 
             # Compute the principal component of the segment, use it as direction
-            direction = nbl.principal_components(coordinates[segment])[0]
-            if np.dot(direction, track_dir) < 0.:
-                direction = -direction
+            if len(segment) > min_count:
+                direction = nbl.principal_components(coordinates[segment])[0]
+                if np.dot(direction, track_dir) < 0.:
+                    direction = -direction
+            else:
+                direction = track_dir
             segment_dirs[i] = direction
 
             # Evaluate the length of the segment as constrained by the track
