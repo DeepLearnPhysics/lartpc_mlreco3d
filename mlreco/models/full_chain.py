@@ -230,7 +230,7 @@ class FullChain(FullChainGNN):
             last_index = 4 + self.deghost_input_features
             result.update(self.uresnet_deghost([input[0][:,:last_index]]))
             result['ghost'] = result['segmentation']
-            deghost = result['ghost'][0].argmax(dim=1) == 0
+            deghost = result['ghost'][0][:, 0] > result['ghost'][0][:,1]
             del result['segmentation']
 
             # Rescale the charge column, store it

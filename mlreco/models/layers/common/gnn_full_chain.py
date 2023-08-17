@@ -157,17 +157,14 @@ class FullChainGNN(torch.nn.Module):
         if self.use_true_fragments:
             label_clustering = result['cluster_label_adapted'][0]
             fragments = form_clusters(label_clustering[0].int().cpu().numpy(),
-                                      column=5,
-                                      batch_index=self.batch_col)
+                                      column=5)
 
             fragments = np.array(fragments, dtype=object)
             frag_seg = get_cluster_label(label_clustering[0].int(),
                                          fragments,
                                          column=-1)
             semantic_labels = label_clustering[0].int()[:, -1]
-            frag_batch_ids = get_cluster_batch(input[0][:, :5],
-                                               fragments,
-                                               batch_index=self.batch_col)
+            frag_batch_ids = get_cluster_batch(input[0][:, :5], fragments)
         else:
             fragments = result['frag_dict']['frags'][0]
             frag_seg = result['frag_dict']['frag_seg'][0]
@@ -323,9 +320,7 @@ class FullChainGNN(torch.nn.Module):
         particles = np.array(particles,
                              dtype=object if not same_length else np.int64)
 
-        part_batch_ids = get_cluster_batch(input[0],
-                                           particles,
-                                           batch_index=self.batch_col)
+        part_batch_ids = get_cluster_batch(input[0], particles)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
         part_seg = np.empty(len(particles), dtype=np.int32)
 
@@ -385,7 +380,7 @@ class FullChainGNN(torch.nn.Module):
                 particles = form_clusters(label_clustering[0].int().cpu().numpy(), min_size=-1, column=self.inter_source_col, cluster_classes=self._inter_ids)
                 particles = np.array(particles, dtype=object)
                 part_seg = get_cluster_label(label_clustering[0].int(), particles, column=-1)
-                part_batch_ids = get_cluster_batch(label_clustering[0], particles, batch_index=0)
+                part_batch_ids = get_cluster_batch(label_clustering[0], particles)
                 _, counts = torch.unique(label_clustering[0][:, 0], return_counts=True)
 
             # For showers, select primary for extra feature extraction
@@ -472,7 +467,7 @@ class FullChainGNN(torch.nn.Module):
             if self._cosmic_use_true_interactions:
                 if label_clustering is None:
                     raise Exception("The option to use true interactions requires label segmentation and clustering in the network input.")
-                interactions = form_clusters(label_clustering[0], column=7, batch_index=self.batch_col)
+                interactions = form_clusters(label_clustering[0], column=7)
                 interactions = [inter.cpu().numpy() for inter in interactions]
             else:
                 for b in range(len(counts)):
@@ -485,7 +480,7 @@ class FullChainGNN(torch.nn.Module):
             interactions = np.array(interactions,
                                  dtype=object if not same_length else np.int64)
 
-            inter_batch_ids = get_cluster_batch(input[0], interactions, batch_index=self.batch_col)
+            inter_batch_ids = get_cluster_batch(input[0], interactions)
             inter_cosmic_pred = torch.empty((len(interactions), 2), dtype=torch.float)
 
             # Replace batch id column with a global "interaction id"

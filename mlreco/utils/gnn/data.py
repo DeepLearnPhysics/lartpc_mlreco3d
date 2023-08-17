@@ -1,4 +1,3 @@
-# Defines inputs to the GNN networks
 import numpy as np
 import numba as nb
 import torch
@@ -8,13 +7,14 @@ import mlreco.utils.numba_local as nbl
 from mlreco.utils import local_cdist
 from mlreco.utils.decorators import numbafy
 from mlreco.utils.ppn import get_track_endpoints_geo
+from mlreco.utils.globals import BATCH_COL, COORD_COLS
 
 from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
 
 
-def cluster_features(data, clusts, extra=False, **kwargs):
+def cluster_features(data, clusts, extra=False):
     """
     Function that returns an array of 16/19 geometric features for
     each of the clusters in the provided list.
@@ -27,12 +27,12 @@ def cluster_features(data, clusts, extra=False, **kwargs):
         np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
     """
     if extra:
-        return torch.cat([get_cluster_features(data.float(), clusts, **kwargs),
-                          get_cluster_features_extended(data.float(), clusts, **kwargs)], dim=1)
-    return get_cluster_features(data.float(), clusts, **kwargs)
+        return torch.cat([get_cluster_features(data.float(), clusts),
+                          get_cluster_features_extended(data.float(), clusts)], dim=1)
+    return get_cluster_features(data.float(), clusts)
 
 
-def cluster_edge_features(data, clusts, edge_index, **kwargs):
+def cluster_edge_features(data, clusts, edge_index, closest_index=None):
     """
     Function that returns a tensor of 19 geometric edge features for each of the
     edges connecting clusters in the graph.
@@ -41,10 +41,11 @@ def cluster_edge_features(data, clusts, edge_index, **kwargs):
         data (torch.Tensor)    : (N,8) [x, y, z, batchid, value, id, groupid, shape]
         clusts ([np.ndarray])  : (C) List of arrays of voxel IDs in each cluster
         edge_index (np.ndarray): (E,2) Incidence matrix
+        closest_index (np.ndarray): (E) Index of closest pair of voxels for each edge
     Returns:
         np.ndarray: (E,19) Tensor of edge features (point1, point2, displacement, distance, orientation)
     """
-    return get_cluster_edge_features(data.float(), clusts, edge_index, **kwargs)
+    return get_cluster_edge_features(data.float(), clusts, edge_index, closest_index)
 
 
 def voxel_features(data, max_dist=5.0):
@@ -98,7 +99,7 @@ def form_merging_batches(batch_ids, mean_merge_size):
     return np.concatenate([np.full(n,i) for i,n in enumerate(event_cnts)])
 
 
-def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_col=0):
+def merge_batch(data, particles, merge_size=2, whether_fluctuate=False):
     """
     Merge events in same batch. For example, if batch size = 16 and merge_size = 2,
     output data has a batch size of 8 with each adjacent 2 batches in input data merged.
@@ -114,7 +115,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_co
         np.ndarray: (B) Relabeled tensor
     """
     # Get the batch IDs
-    batch_ids = data[:,batch_col].unique()
+    batch_ids = data[:, BATCH_COL].unique()
 
     # Get the list that dictates how to merge events
     batch_size = len(batch_ids)
@@ -132,12 +133,12 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_co
     for i in np.unique(merging_batch_id_list):
         # Find the list of voxels that belong to the new batch
         merging_batch_ids = np.where(merging_batch_id_list == i)[0]
-        data_selections = [data[:,batch_col] == j for j in merging_batch_ids]
-        part_selections = [particles[:,batch_col] == j for j in merging_batch_ids]
+        data_selections = [data[:, BATCH_COL] == j for j in merging_batch_ids]
+        part_selections = [particles[:, BATCH_COL] == j for j in merging_batch_ids]
 
         # Relabel the batch column to the new batch id
         batch_selection = torch.sum(torch.stack(data_selections), dim=0).type(torch.bool)
-        data[batch_selection,batch_col] = int(i)
+        data[batch_selection, BATCH_COL] = int(i)
 
         # Relabel the cluster and group IDs by offseting by the number of particles
         clust_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0
@@ -154,7 +155,7 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False, batch_co
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
-        particles[batch_selection,batch_col] = int(i)
+        particles[batch_selection, BATCH_COL] = int(i)
 
     return data, particles, merging_batch_id_list
 
@@ -168,8 +169,7 @@ def _get_extra_gnn_features(fragments,
                            use_proxy=True,
                            use_supp=False,
                            enhance=False,
-                           allow_outside=False,
-                           coords_col=(1, 4)):
+                           allow_outside=False):
     """
     Extracting extra features to feed into the GNN particle aggregators
 
@@ -219,7 +219,7 @@ def _get_extra_gnn_features(fragments,
                                         dtype=torch.float)
         points_tensor = result['ppn_points'][0].detach()
         for i, f in enumerate(fragments[mask]):
-            fragment_voxels = input[0][f][:,coords_col[0]:coords_col[1]]
+            fragment_voxels = input[0][f][:, COORD_COLS]
             if frag_seg[mask][i] == 1:
                 end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None, use_proxy=use_proxy)
             else:

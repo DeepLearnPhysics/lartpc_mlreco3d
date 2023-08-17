@@ -1,9 +1,9 @@
-# Geometric feature extractor for Cluster GNN
 import torch
 import numpy as np
 from torch_scatter import scatter_min
 
 from mlreco.utils import local_cdist
+from mlreco.utils.globals import COORD_COLS
 from mlreco.utils.gnn.data import cluster_features, cluster_edge_features
 
 class ClustGeoNodeEncoder(torch.nn.Module):
@@ -26,23 +26,21 @@ class ClustGeoNodeEncoder(torch.nn.Module):
     Total of 28 hand-engineered features
 
     """
-    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
+    def __init__(self, model_config):
         super(ClustGeoNodeEncoder, self).__init__()
 
         # Initialize the encoder parameters
         self.use_numpy = model_config.get('use_numpy', True)
         self.more_feats = model_config.get('more_feats', False)
-        self.batch_col = batch_col
-        self.coords_col = coords_col
 
     def forward(self, data, clusts):
 
         # If numpy is to be used, bring data to CPU, pass through Numba function
         if self.use_numpy:
-            return cluster_features(data, clusts, extra=self.more_feats, batch_col=self.batch_col, coords_col=self.coords_col)
+            return cluster_features(data, clusts, extra=self.more_feats)
 
         # Get the voxel set
-        voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()
+        voxels = data[:, COORD_COLS].float()
 
         # Get the value & semantic types
         values    = data[:, 4].float()
@@ -112,13 +110,11 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
     Produces geometric cluster edge features.
 
     """
-    def __init__(self, model_config, batch_col=0, coords_col=(1, 4)):
+    def __init__(self, model_config):
         super(ClustGeoEdgeEncoder, self).__init__()
 
         # Initialize the chain parameters
         self.use_numpy = model_config.get('use_numpy', True)
-        self.batch_col = batch_col
-        self.coords_col = coords_col
 
     def forward(self, data, clusts, edge_index, closest_index=None):
 
@@ -130,10 +126,10 @@ class ClustGeoEdgeEncoder(torch.nn.Module):
         # If numpy is to be used, bring data to cpu, pass through Numba function
         # Otherwise use torch-based implementation of cluster_edge_features
         if self.use_numpy:
-            feats = cluster_edge_features(data, clusts, edge_index.T, closest_index=closest_index, batch_col=self.batch_col, coords_col=self.coords_col)
+            feats = cluster_edge_features(data, clusts, edge_index.T, closest_index=closest_index)
         else:
             # Get the voxel set
-            voxels = data[:, self.coords_col[0]:self.coords_col[1]].float()
+            voxels = data[:, COORD_COLS].float()
 
             # Here is a torch-based implementation of cluster_edge_features
             feats = []

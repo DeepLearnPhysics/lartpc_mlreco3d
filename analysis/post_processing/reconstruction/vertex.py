@@ -106,7 +106,6 @@ def reconstruct_vertex_single(interaction,
             if p.semantic_type in include_semantics]
         
     if len(particles) > 0:
-
         # Collapse particle objects to a set of start, end points and directions
         start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)
         end_points   = np.vstack([p.end_point for p in particles]).astype(np.float32)

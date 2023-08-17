@@ -1,4 +1,3 @@
-# Defines GNN network accuracy metrics
 import numpy as np
 import numba as nb
 
