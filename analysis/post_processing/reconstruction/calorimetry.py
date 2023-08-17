@@ -289,8 +289,8 @@ def compute_curve(points, s=None, bin_size=20):
 
     return u.squeeze(), sppoints, splines, length
 
-def compute_track_length_splines(points, bin_size=17):
-    _, _, _, length = compute_curve(points, bin_size=bin_size)
+def compute_track_length_splines(points, bin_size, s=None):
+    x, y, f, length = compute_curve(points, s=s, bin_size=bin_size)
     return length
 
 def compute_track_length(points, bin_size=17):

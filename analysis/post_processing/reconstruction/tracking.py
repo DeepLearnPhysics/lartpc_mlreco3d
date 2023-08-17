@@ -72,6 +72,7 @@ def reconstruct_track_energy(data_dict, result_dict,
                 startpoint  = _pix_to_cm(p.start_point, meta)
                 bin_size    = bin_size * px_to_cm
             else:
+                assert p.units == 'cm'
                 coordinates = getattr(p, truth_point_mode)
                 startpoint  = p.start_point
                 if tracking_mode == 'default':
