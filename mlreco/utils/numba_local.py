@@ -393,7 +393,7 @@ def principal_components(x: nb.float32[:,:]) -> nb.float32[:,:]:
 
     # Get eigenvectors
     _, v = np.linalg.eigh(A)
-    v = np.fliplr(v).T
+    v = np.ascontiguousarray(np.fliplr(v).T)
 
     return v
 
