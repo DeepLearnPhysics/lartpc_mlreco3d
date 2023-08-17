@@ -159,6 +159,14 @@ def get_track_segments(coordinates: nb.float32[:,:],
             start_id      = nbl.farthest_pair(coordinates)[0]
             segment_start = coordinates[start_id]
 
+        # If PCA is used, find the track principal axis to orient segements
+        if method == 'step_pca':
+            track_dir    = nbl.principal_components(coordinates)[0]
+            pstart       = np.dot(segment_start, track_dir)
+            pcoordinates = np.dot(coordinates, track_dir)
+            if np.abs(np.min(pcoordinates) - pstart) > np.abs(np.max(pcoordinates) - pstart):
+                track_dir = -track_dir
+
         # Step through the track iteratively
         segment_clusts    = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
         segment_dirs_l    = nb.typed.List.empty_list(np.empty(0, dtype=coordinates.dtype))
@@ -183,12 +191,14 @@ def get_track_segments(coordinates: nb.float32[:,:],
             if method != 'step_end' and len(segment_index) > min_count and np.max(dists[pass_index]) > 0.:
                 if method == 'step_pca':
                     direction = nbl.principal_components(coordinates[segment_index])[0]
+                    if np.dot(direction, track_dir) < 0.:
+                        direction = -direction
                 else:
                     direction = nbl.mean(coordinates[segment_index] - segment_start, axis=0)
             elif len(fail_index):
-                direction  = coordinates[left_index[fail_index][np.argmin(dists[fail_index])]] - segment_start
+                direction = coordinates[left_index[fail_index][np.argmin(dists[fail_index])]] - segment_start
             else:
-                direction  = coordinates[segment_index[np.argmax(dists)]] - segment_start
+                direction = coordinates[segment_index[np.argmax(dists)]] - segment_start
             direction /= np.linalg.norm(direction)
             segment_dirs_l.append(direction)
 
