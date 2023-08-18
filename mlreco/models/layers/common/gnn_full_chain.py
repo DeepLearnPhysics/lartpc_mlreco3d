@@ -32,74 +32,41 @@ class FullChainGNN(torch.nn.Module):
         setup_chain_cfg(self, cfg)
 
         # Initialize the particle aggregator modules
-        if self.enable_gnn_shower:
-            self.grappa_shower     = GNN(cfg, name='grappa_shower', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_shower_cfg      = cfg.get('grappa_shower', {})
-            self._shower_ids       = grappa_shower_cfg.get('base', {}).get('node_type', 0)
-            self._shower_use_true_particles = grappa_shower_cfg.get('use_true_particles', False)
-            self._shower_add_value = getattr(self.grappa_shower.node_encoder, 'add_value', False)
-            self._shower_add_shape = getattr(self.grappa_shower.node_encoder, 'add_shape', False)
-            if self.use_supp_in_gnn:
-                warn('`use_supp_in_gnn` is deprecated, '
-                        'specify the extra features in the node encoder config')
-                self._shower_add_value = self._shower_add_shape = True
-            if not isinstance(self._shower_ids, list): self._shower_ids = [self._shower_ids]
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_shower.RETURNS, 'shower_fragment'))
-            self.RETURNS['shower_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+        for stage in ['shower', 'track', 'particle', 'inter', 'kinematics']:
+            if getattr(self, f'enable_gnn_{stage}'):
+                # Initialize the GNN model
+                name = f'grappa_{stage}'
+                setattr(self, name, GNN(cfg, name=name, batch_col=self.batch_col, coords_col=self.coords_col))
 
-        if self.enable_gnn_track:
-            self.grappa_track      = GNN(cfg, name='grappa_track', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_track_cfg       = cfg.get('grappa_track', {})
-            self._track_ids        = grappa_track_cfg.get('base', {}).get('node_type', 1)
-            self._track_use_true_particles = grappa_track_cfg.get('use_true_particles', False)
-            self._track_add_value = getattr(self.grappa_track.node_encoder, 'add_value', False)
-            self._track_add_shape = getattr(self.grappa_track.node_encoder, 'add_shape', False)
-            if self.use_supp_in_gnn:
-                warn('`use_supp_in_gnn` is deprecated, '
-                        'specify the extra features in the node encoder config')
-                self._track_add_value = self._track_add_shape = True
-            if not isinstance(self._track_ids, list): self._track_ids = [self._track_ids]
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_track.RETURNS, 'track_fragment'))
-            self.RETURNS['track_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Get the relevant attributes
+                grappa_cfg = cfg.get(name, {})
+                setattr(self, f'_{stage}_use_true_particles', grappa_cfg.get('use_true_particles', False))
+                setattr(self, f'_{stage}_ids', getattr(self, name).node_type)
+                setattr(self, f'_{stage}_add_value', getattr(getattr(self, name).node_encoder, 'add_value', False))
+                setattr(self, f'_{stage}_add_shape', getattr(getattr(self, name).node_encoder, 'add_shape', False))
+                if hasattr(getattr(self, name).node_encoder, 'add_value'):
+                    setattr(getattr(self, name).node_encoder, 'add_value', False)
+                    setattr(getattr(self, name).node_encoder, 'add_shape', False)
+                if self.use_supp_in_gnn:
+                    warn('`use_supp_in_gnn` is deprecated, '
+                            'specify the extra features in the node encoder config')
+                    setattr(self, f'_{stage}_add_value', True)
+                    setattr(self, f'_{stage}_add_shape', True)
 
-        if self.enable_gnn_particle:
-            self.grappa_particle   = GNN(cfg, name='grappa_particle', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_particle_cfg    = cfg.get('grappa_particle', {})
-            self._particle_ids     = grappa_particle_cfg.get('base', {}).get('node_type', [0,1,2,3])
-            self._particle_use_true_particles = grappa_particle_cfg.get('use_true_particles', False)
-            self._particle_add_value = getattr(self.grappa_particle.node_encoder, 'add_value', False)
-            self._particle_add_shape = getattr(self.grappa_particle.node_encoder, 'add_shape', False)
-            if self.use_supp_in_gnn:
-                warn('`use_supp_in_gnn` is deprecated, '
-                        'specify the extra features in the node encoder config')
-                self._particle_add_value = self._particle_add_shape = True
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_particle.RETURNS, 'particle_fragment'))
-            self.RETURNS['particle_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Interaction specific attributes
+                if stage == 'inter':
+                    self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
+                    self._inter_use_shower_primary      = grappa_cfg.get('use_shower_primary', True)
+                    self._inter_enforce_semantics       = grappa_cfg.get('enforce_semantics', True)
+                    self._inter_enforce_semantics_shape = grappa_cfg.get('enforce_semantics_shape', (4,5))
+                    self._inter_enforce_semantics_map   = grappa_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
-        if self.enable_gnn_inter:
-            self.grappa_inter      = GNN(cfg, name='grappa_inter', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_inter_cfg = cfg.get('grappa_inter', {})
-            self._inter_ids        = grappa_inter_cfg.get('base', {}).get('node_type', [0,1,2,3])
-            self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
-            self._inter_add_value = getattr(self.grappa_inter.node_encoder, 'add_value', False)
-            self._inter_add_shape = getattr(self.grappa_inter.node_encoder, 'add_shape', False)
-            if self.use_supp_in_gnn:
-                warn('`use_supp_in_gnn` is deprecated, '
-                        'specify the extra features in the node encoder config')
-                self._inter_add_value = self._inter_add_shape = True
-            self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
-            self._inter_use_shower_primary = grappa_inter_cfg.get('use_shower_primary', True)
-            self._inter_enforce_semantics       = grappa_inter_cfg.get('enforce_semantics', True)
-            self._inter_enforce_semantics_shape = grappa_inter_cfg.get('enforce_semantics_shape', (4,5))
-            self._inter_enforce_semantics_map   = grappa_inter_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_inter.RETURNS, 'particle'))
-            self.RETURNS['particle_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
 
-        if self.enable_gnn_kinematics:
-            self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._kinematics_use_true_particles = cfg.get('grappa_kinematics', {}).get('use_true_particles', False)
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_kinematics.RETURNS, 'kinematics'))
-            self.RETURNS['kinematics_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Add unwrapping rules
+                suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
+                self.RETURNS.update(prefix_unwrapper_rules(getattr(self, name).RETURNS, f'{stage}{suffix}'))
+                self.RETURNS[f'{stage}{suffix}_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+
 
     def run_gnn(self, grappa, input, result, clusts, prefix, kwargs={}):
         """
