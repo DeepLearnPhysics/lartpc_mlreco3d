@@ -983,8 +983,8 @@ def setup_chain_cfg(self, cfg, print_info=True):
         self.enable_cosmic         = False
 
     # Whether to use PPN information (GNN shower clustering step only)
-    self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
-    self.use_supp_in_gnn    = chain_cfg.get('use_supp_in_gnn', True)
+    self.use_ppn_in_gnn  = chain_cfg.get('use_ppn_in_gnn', False)
+    self.use_supp_in_gnn = chain_cfg.get('use_supp_in_gnn', False)
 
     # Make sure the deghosting config is consistent
     if self.enable_ghost and not self.enable_charge_rescaling:
