@@ -121,16 +121,16 @@ class DBSCANFragmenter(torch.nn.Module):
         if len(self.break_classes):
             assert output is not None or points is not None
             if points is None:
-                from mlreco.utils.ppn import uresnet_ppn_type_point_selector
+                from mlreco.utils.ppn import get_ppn_predictions
                 numpy_output = {'segmentation': [output['segmentation'][0].detach().cpu().numpy()],
                                 'ppn_points'  : [output['ppn_points'][0].detach().cpu().numpy()],
                                 'ppn_masks'   : [x.detach().cpu().numpy() for x in output['ppn_masks'][0]],
                                 'ppn_coords'  : [x.detach().cpu().numpy() for x in output['ppn_coords'][0]]}
 
-                points =  uresnet_ppn_type_point_selector(data, numpy_output,
-                                            score_threshold      = self.ppn_score_threshold,
-                                            type_threshold       = self.ppn_type_threshold,
-                                            type_score_threshold = self.ppn_type_score_threshold)
+                points =  get_ppn_predictions(data, numpy_output,
+                                              score_threshold      = self.ppn_score_threshold,
+                                              type_threshold       = self.ppn_type_threshold,
+                                              type_score_threshold = self.ppn_type_score_threshold)
                 point_labels = points[:, 12]
             else:
                 point_labels = points[:, -1]

@@ -4,20 +4,21 @@ import numpy as np
 
 from mlreco.models.layers.common.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
+from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
+from mlreco.utils.ppn import get_particle_points
 from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.deghosting import compute_rescaled_charge
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
-from mlreco.utils.ppn import get_track_endpoints_geo
-from mlreco.utils.gnn.data import _get_extra_gnn_features
+from mlreco.utils.gnn.cluster import get_cluster_features_extended
 from mlreco.utils.unwrap import prefix_unwrapper_rules
-from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
+
 
 
 class FullChain(FullChainGNN):
@@ -146,46 +147,73 @@ class FullChain(FullChainGNN):
         #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     @staticmethod
-    def get_extra_gnn_features(fragments,
-                               fragments_seg,
-                               classes,
-                               input,
-                               result,
-                               use_ppn=False,
-                               use_supp=False):
-        """
+    def get_extra_gnn_features(data, result, clusts, clusts_seg, classes,
+            add_points=True, add_value=True, add_shape=True):
+        '''
         Extracting extra features to feed into the GNN particle aggregators
-
-        - PPN: Most likely PPN point for showers,
-               end points for tracks (+ direction estimate)
-        - Supplemental: Mean/RMS energy in the fragment + semantic class
 
         Parameters
         ==========
-        fragments: np.ndarray
-        fragments_seg: np.ndarray
-        classes: list
-        input: list
-        result: dictionary
-        use_ppn: bool
-        use_supp: bool
+        data : torch.Tensor
+            Tensor of input voxels to the particle aggregator
+        result : dict
+            Dictionary of output of the CNN stages
+        clusts : List[numpy.ndarray]
+            List of clusters representing the fragment or particle objects
+        clusts_seg : numpy.ndarray
+            Array of cluster semantic types
+        classes : List, optional
+            List of semantic classes to include in the output set of particles
+        add_points : bool, default True
+            If `True`, add particle points as node features
+        add_value : bool, default True
+            If `True`, add mean and std voxel values as node features
+        add_shape : bool, default True
+            If `True`, add cluster semantic shape as a node feature
 
         Returns
         =======
-        mask: np.ndarray
-            Boolean mask to select fragments belonging to one
-            of the requested classes.
-        kwargs: dictionary
-            Keys can include `points` (if `use_ppn` is `True`)
-            and `extra_feats` (if `use_supp` is True).
-        """
-        return _get_extra_gnn_features(fragments,
-                                       fragments_seg,
-                                       classes,
-                                       input,
-                                       result,
-                                       use_ppn=use_ppn,
-                                       use_supp=use_supp)
+        index : np.ndarray
+            Index to select fragments belonging to one of the requested classes
+        kwargs : dict
+            Keys can include `points` (if `add_points` is `True`)
+            and `extra_feats` (if `add_value` or `add_shape` is True).
+        '''
+        # If needed, build a particle mask based on semantic classes
+        if classes is not None:
+            mask = np.zeros(len(clusts_seg), dtype=bool)
+            for c in classes:
+                mask |= (clusts_seg == c)
+            index = np.where(mask)[0]
+        else:
+            index = np.arange(len(clusts))
+
+        # Get the particle end points, if requested
+        kwargs = {}
+        if add_points:
+            coords     = data[0][:, COORD_COLS].detach().cpu().numpy()
+            ppn_points = result['ppn_points'][0].detach().cpu().numpy()
+            points     = get_particle_points(coords, clusts[index],
+                    clusts_seg[index], ppn_points)
+
+            kwargs['points'] = torch.tensor(points,
+                    dtype=torch.float, device=data[0].device)
+
+        # Get the supplemental information, if requested
+        if add_value or add_shape:
+            extra_feats = torch.empty((len(index), 2*add_value + add_shape),
+                    dtype=torch.float, device=data[0].device)
+            if add_value:
+                extra_feats[:,:2] = get_cluster_features_extended(data[0],
+                        clusts[index], add_value=True, add_shape=False)
+            if add_shape:
+                extra_feats[:,-1] = torch.tensor(clusts_seg[index],
+                        dtype=torch.float, device=data[0].device)
+
+            kwargs['extra_feats'] = torch.tensor(extra_feats,
+                    dtype=torch.float, device=data[0].device)
+
+        return index, kwargs
 
 
     def full_chain_cnn(self, input):
@@ -417,13 +445,13 @@ class FullChain(FullChainGNN):
 
 
 class FullChainLoss(FullChainLoss):
-    """
+    '''
     Loss function for the full chain.
 
     See Also
     --------
     FullChain, mlreco.models.layers.common.gnn_full_chain.FullChainLoss
-    """
+    '''
 
     def __init__(self, cfg):
         super(FullChainLoss, self).__init__(cfg)

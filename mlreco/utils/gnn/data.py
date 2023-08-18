@@ -4,17 +4,16 @@ import torch
 from typing import Tuple
 
 import mlreco.utils.numba_local as nbl
-from mlreco.utils import local_cdist
 from mlreco.utils.decorators import numbafy
-from mlreco.utils.ppn import get_track_endpoints_geo
-from mlreco.utils.globals import BATCH_COL, COORD_COLS
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, CLUST_COL, PART_COL,
+        GROUP_COL, INTER_COL, NU_COL)
 
 from .cluster import get_cluster_features, get_cluster_features_extended
 from .network import get_cluster_edge_features, get_voxel_edge_features
 from .voxels  import get_voxel_features
 
 
-def cluster_features(data, clusts, extra=False):
+def cluster_features(data, clusts, add_value=False, add_shape=False):
     """
     Function that returns an array of 16/19 geometric features for
     each of the clusters in the provided list.
@@ -22,13 +21,14 @@ def cluster_features(data, clusts, extra=False):
     Args:
         data (torch.Tensor)  : (N,3) Voxel coordinates [x, y, z]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        extra (bool)         : Whether or not to include extended features
+        add_value (bool)     : Whether or not to add the pixel value mean/std to the features
+        add_shape (bool)     : Whether or not to add the dominant semantic type to the features
     Returns:
-        np.ndarray: (C,16/19) tensor of cluster features (center, orientation, direction, size)
+        np.ndarray: (C,16/17/18/19) tensor of cluster features
     """
-    if extra:
+    if add_value or add_shape:
         return torch.cat([get_cluster_features(data.float(), clusts),
-                          get_cluster_features_extended(data.float(), clusts)], dim=1)
+                          get_cluster_features_extended(data.float(), clusts, add_value, add_shape)], dim=1)
     return get_cluster_features(data.float(), clusts)
 
 
@@ -141,125 +141,25 @@ def merge_batch(data, particles, merge_size=2, whether_fluctuate=False):
         data[batch_selection, BATCH_COL] = int(i)
 
         # Relabel the cluster and group IDs by offseting by the number of particles
-        clust_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0
+        clust_offset, part_offset, group_offset, int_offset, nu_offset = 0, 0, 0, 0, 0
         for j, sel in enumerate(data_selections):
             if j:
-                data[sel & (data[:,5] > -1),5] += clust_offset
-                data[sel & (data[:,6] > -1),6] += group_offset
-                data[sel & (data[:,7] > -1),7] += int_offset
-                data[sel & (data[:,8] >  0),8] += nu_offset
+                data[sel & (data[:, CLUST_COL] > -1), CLUST_COL] += clust_offset
+                data[sel & (data[:, PART_COL ] > -1), CLUST_COL] += part_offset
+                data[sel & (data[:, GROUP_COL] > -1), GROUP_COL] += group_offset
+                data[sel & (data[:, INTER_COL] > -1), INTER_COL] += int_offset
+                data[sel & (data[:, NU_COL] >  0), NU_COL] += nu_offset
             clust_offset += torch.sum(part_selections[j])
-            group_offset += torch.max(data[sel,6])+1
-            int_offset = torch.max(data[sel,7])+1
-            nu_offset = torch.max(data[sel,8])+1
+            part_offset += torch.max(data[sel, PART_COL]) + 1
+            group_offset += torch.max(data[sel, GROUP_COL]) + 1
+            int_offset = torch.max(data[sel, INTER_COL]) + 1
+            nu_offset = torch.max(data[sel, NU_COL]) + 1
 
         # Relabel the particle batch column
         batch_selection = torch.sum(torch.stack(part_selections), dim=0).type(torch.bool)
         particles[batch_selection, BATCH_COL] = int(i)
 
     return data, particles, merging_batch_id_list
-
-
-def _get_extra_gnn_features(fragments,
-                           frag_seg,
-                           classes,
-                           input,
-                           result,
-                           use_ppn=False,
-                           use_proxy=True,
-                           use_supp=False,
-                           enhance=False,
-                           allow_outside=False):
-    """
-    Extracting extra features to feed into the GNN particle aggregators
-
-    - PPN: Most likely PPN point for showers,
-            end points for tracks (+ direction estimate)
-    - Supplemental: Mean/RMS energy in the fragment + semantic class
-
-    If the `enhance` parameter is `True`, tracks leverage PPN predictions
-    to provide a more accurate estimate of the end points. This needs to be 
-    avoided for track fragments, as PPN is not trained to find end points for them.
-    If set to `False`, the two voxels furthest away from each other are picked.
-
-    If the `allow_outside` parameter is `True`, the end point estimates
-    are *not* brought back to the closest fragment voxel.
-
-    Parameters
-    ==========
-    fragments: np.ndarray
-    frag_seg: np.ndarray
-    classes: list
-    input: list
-    result: dictionary
-    use_ppn: bool
-    use_supp: bool
-    enhance: bool
-    allow_outside: bool
-
-    Returns
-    =======
-    mask: np.ndarray
-        Boolean mask to select fragments belonging to one
-        of the requested classes.
-    kwargs: dictionary
-        Keys can include `points` (if `use_ppn` is `True`)
-        and `extra_feats` (if `use_supp` is True).
-    """
-    # Build a mask for the requested classes
-    mask = np.zeros(len(frag_seg), dtype=bool)
-    for c in classes:
-        mask |= (frag_seg == c)
-    mask = np.where(mask)[0]
-
-    # If requested, extract PPN-related features
-    kwargs = {}
-    if use_ppn:
-        ppn_points = torch.empty((0,6), device=input[0].device,
-                                        dtype=torch.float)
-        points_tensor = result['ppn_points'][0].detach()
-        for i, f in enumerate(fragments[mask]):
-            fragment_voxels = input[0][f][:, COORD_COLS]
-            if frag_seg[mask][i] == 1:
-                end_points = get_track_endpoints_geo(input[0], f, points_tensor if enhance else None, use_proxy=use_proxy)
-            else:
-                scores = torch.softmax(points_tensor[f, -2:], dim=1)[:,-1]
-                # scores = torch.sigmoid(points_tensor[f, -1])
-                dmask  = torch.nonzero((scores > 0.5) & (torch.max(
-                    torch.abs(points_tensor[f,:3]), dim=1).values < 1.),
-                    as_tuple=True)[0]
-                argmax = dmask[torch.argmax(scores[dmask])] \
-                            if len(dmask) else torch.argmax(scores)
-                start  = fragment_voxels[argmax] + points_tensor[f][argmax,:3] + 0.5
-                end_points = torch.cat([start, start])
-
-            if not allow_outside and (frag_seg[mask][i] != 1 or (frag_seg[mask][i] == 1 and enhance)):
-                dist_mat   = local_cdist(end_points.reshape(-1,3), fragment_voxels)
-                argmins    = torch.argmin(dist_mat, dim=1)
-                end_points = torch.cat([fragment_voxels[argmins[0]], fragment_voxels[argmins[1]]])
-
-            ppn_points = torch.cat((ppn_points, end_points.reshape(1,-1)), dim=0)
-
-        kwargs['points'] = ppn_points
-
-    # If requested, add energy and semantic related features
-    if use_supp:
-        supp_feats = torch.empty((0,3), device=input[0].device,
-                                        dtype=torch.float)
-        for i, f in enumerate(fragments[mask]):
-            values = torch.cat((input[0][f,4].mean().reshape(1),
-                                input[0][f,4].std().reshape(1))).float()
-            if torch.isnan(values[1]): # Handle size-1 particles
-                values[1] = input[0][f,4] - input[0][f,4]
-            sem_type = torch.tensor([frag_seg[mask][i]],
-                                    dtype=torch.float,
-                                    device=input[0].device)
-            supp_feats = torch.cat((supp_feats,
-                torch.cat([values, sem_type.reshape(1)]).reshape(1,-1)), dim=0)
-
-        kwargs['extra_feats'] = supp_feats
-
-    return mask, kwargs
 
 
 @numbafy(list_args=['clusts'])

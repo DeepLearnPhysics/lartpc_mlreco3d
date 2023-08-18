@@ -23,8 +23,8 @@ def get_track_length(coordinates: nb.float32[:,:],
     segment_length : float, optional
         Segment length in the units that specify the coordinates
     method : str, default 'step'
-        Method used to segment the track (one of 'step', 'step_pca',
-        'step_end' or 'bin_pca')
+        Method used to compute the track length (one of 'displacement', 'step',
+        'step_pca', 'step_end' or 'bin_pca')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 1

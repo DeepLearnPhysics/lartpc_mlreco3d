@@ -356,6 +356,7 @@ class GNN(torch.nn.Module):
         if self.edge_max_count > -1:
             _, cnts = np.unique(batch_ids, return_counts=True)
             if np.sum([c*(c-1) for c in cnts]) > 2*self.edge_max_count:
+                print('The complete graph is too large, must skip batch') # TODO: use logging
                 return result
 
         # If necessary, compute the cluster distance matrix

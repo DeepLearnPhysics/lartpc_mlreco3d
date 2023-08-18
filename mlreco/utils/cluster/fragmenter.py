@@ -217,7 +217,7 @@ class GraphSPICEFragmentManager(FragmentManager):
 
     def process(self, filtered_input, n, filtered_semantic, offset=0):
         
-        fragments = form_clusters(filtered_input, column=-1, batch_index=self._batch_column)
+        fragments = form_clusters(filtered_input, column=-1)
         fragments = [f.int().detach().cpu().numpy() for f in fragments]
 
         if len(fragments) > 0:
