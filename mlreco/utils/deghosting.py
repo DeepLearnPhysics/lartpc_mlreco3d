@@ -137,7 +137,7 @@ def adapt_labels_knn(result, label_seg, label_clustering,
     for i in range(len(label_seg)):
         coords = label_seg[i][:, :c3]
         label_c = []
-        full_nonghost_mask = argmax(result['ghost'][i]) == 0 if true_mask is None else true_mask
+        full_nonghost_mask = result['ghost'][i][:,0] > result['ghost'][i][:,1] if true_mask is None else true_mask
         full_semantic_pred = to_device(make_long(result['segmentation'][i].shape[1]*ones(len(coords))), coords)
         full_semantic_pred[full_nonghost_mask] = argmax(result['segmentation'][i])
         for batch_id in unique(coords[:, batch_column]):
