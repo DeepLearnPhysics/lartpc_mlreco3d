@@ -304,7 +304,7 @@ def deghost_labels_and_predictions(data_blob, result):
     '''
 
     result['ghost_mask'] = [
-        result['ghost'][i].argmax(axis=1) == 0 \
+            result['ghost'][i][:,0] > result['ghost'][i][:,1] \
             for i in range(len(result['ghost']))]
 
     if 'segment_label' in data_blob:

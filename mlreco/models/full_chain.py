@@ -314,7 +314,7 @@ class FullChain(FullChainGNN):
             #               self.uresnet_lonely.num_classes
             #     print(deghost, deghost.shape)
             # else:
-            deghost = result['ghost'][0].argmax(dim=1) == 0
+            deghost = result['ghost'][0][:,0] > result['ghost'][0][:,1]
 
             input = [input[0][deghost]]
 
