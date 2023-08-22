@@ -61,11 +61,11 @@ class FullChainGNN(torch.nn.Module):
                     self._inter_enforce_semantics_shape = grappa_cfg.get('enforce_semantics_shape', (4,5))
                     self._inter_enforce_semantics_map   = grappa_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
-
                 # Add unwrapping rules
                 suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
-                self.RETURNS.update(prefix_unwrapper_rules(getattr(self, name).RETURNS, f'{stage}{suffix}'))
-                self.RETURNS[f'{stage}{suffix}_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                tag    = f'{stage}{suffix}' if stage != 'inter' else 'particle'
+                self.RETURNS.update(prefix_unwrapper_rules(getattr(self, name).RETURNS, tag))
+                self.RETURNS[f'{tag}_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
 
 
     def run_gnn(self, grappa, input, result, clusts, prefix, kwargs={}):
