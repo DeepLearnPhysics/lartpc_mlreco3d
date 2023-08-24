@@ -467,4 +467,3 @@ class FullChainLoss(FullChainLoss):
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg.get('graph_spice', {}).get('skip_classes', [])
