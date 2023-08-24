@@ -11,8 +11,7 @@ from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import get_particle_points
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
-from mlreco.utils.deghosting import compute_rescaled_charge
+from mlreco.utils.deghosting import compute_rescaled_charge, adapt_labels
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
@@ -320,11 +319,10 @@ class FullChain(FullChainGNN):
 
             if label_seg is not None and label_clustering is not None:
                 # ME uses 0 for batch column, so need to compensate
-                label_clustering = adapt_labels(result,
-                                                label_seg,
-                                                label_clustering,
-                                                batch_column=0,
-                                                coords_column_range=(1,4))
+                label_clustering = [adapt_labels(label_clustering[0],
+                                                 label_seg[0],
+                                                 deghost,
+                                                 result['segmentation'][0])]
 
             deghost_result = {}
             deghost_result.update(result)

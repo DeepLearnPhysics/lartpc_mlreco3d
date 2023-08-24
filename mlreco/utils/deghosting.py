@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+
 from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 from torch_cluster import knn
@@ -7,281 +8,250 @@ from torch_cluster import knn
 from .globals import *
 
 
-def compute_rescaled_charge(input_data, deghost_mask, last_index = 6, collection_only=False):
+def compute_rescaled_charge(input_data,
+        deghost_mask, last_index=6, collection_only=False):
     """
-    Computes rescaled charge after deghosting
+    Computes rescaled charge after deghosting.
 
-    Note
-    ----
+    Notes
+    -----
     This function should work on Numpy arrays or Torch tensors.
 
     Parameters
     ----------
-    input_data: np.ndarray or torch.Tensor
-        Shape (N, 4+num_features) where 4 corresponds to batch_id,x,y,z
-    deghost_mask: np.ndarray or torch.Tensor
-        Shape (N,), N_deghost is the predicted deghosted voxel count
+    input_data: Union[np.ndarray, torch.Tensor]
+        (N, 4+N_f+6) Input tensor
+    deghost_mask: Union[np.ndarray, torch.Tensor]
+        (N) Ghost mask
     last_index: int, default 6
-        Indexes where hit-related features start @ 4 + deghost_input_features
+        Indexes where hit-related features start (4+N_f)
     collection_only : bool, default False
         Only use the collection plane to estimate the rescaled charge
 
     Returns
     -------
-    np.ndarray or torch.Tensor
-        Shape (N_deghost,) contains rescaled charge array for input data.
-        Includes deghosted mask already.
+    Union[np.ndarray, torch.Tensor]
+        (N_deghost) Rescaled charge array for input data
     """
+    # Define operations on the basis of the input type
     if torch.is_tensor(input_data):
         unique = torch.unique
-        empty = lambda n: torch.empty(n, dtype=torch.long, device=hit_charges.device)
+        empty = lambda shape: torch.empty(shape, dtype=torch.long,
+                device=input_data.device)
         sum = lambda x: torch.sum(x, dim=1)
     else:
         unique = np.unique
         empty = np.empty
         sum = lambda x: np.sum(x, axis=1)
 
-    batches = unique(input_data[:, BATCH_COL])
-    hit_charges  = input_data[deghost_mask, last_index  :last_index+3]
+    # Count how many times each wire hit is used to form a space point
     hit_ids      = input_data[deghost_mask, last_index+3:last_index+6]
-    multiplicity = empty(hit_charges.shape, )
-    for b in batches:
+    multiplicity = empty(hit_ids.shape)
+    for b in unique(input_data[:, BATCH_COL]):
         batch_mask = input_data[deghost_mask, BATCH_COL] == b
-        _, inverse, counts = unique(hit_ids[batch_mask], return_inverse=True, return_counts=True)
+        _, inverse, counts = unique(hit_ids[batch_mask],
+                return_inverse=True, return_counts=True)
         multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
+
+    # Rescale the charge on the basis of hit multiplicity
+    hit_charges = input_data[deghost_mask, last_index  :last_index+3]
     if not collection_only:
+        # Take the average of the charge estimates from each active plane
         pmask   = hit_ids > -1
-        charges = sum((hit_charges*pmask)/multiplicity)/sum(pmask) # Take average estimate
+        charges = sum((hit_charges*pmask)/multiplicity)/sum(pmask)
     else:
-        charges = hit_charges[:,-1]/multiplicity[:,-1] # Only use the collection plate measurement
+        # Only use the collection plane measurement
+        charges = hit_charges[:,-1]/multiplicity[:,-1]
 
     return charges
 
 
-def adapt_labels_knn(result, label_seg, label_clustering,
-                      num_classes=5,
-                      batch_column=0,
-                      coords_column_range=(1, 4),
-                      true_mask=None,
-                      use_numpy=False):
+def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
+        break_classes=[SHOWR_SHP,TRACK_SHP,MICHL_SHP,DELTA_SHP]):
     """
-    Returns new cluster labels that have the same size as the input w/ ghost points.
-    Points predicted as nonghost but that are true ghosts get the cluster label of
-    the closest cluster.
-    Points that are true ghosts and predicted as ghosts get "empty" (-1) values.
+    Adapts the cluster labels to account for the predicted ghost mask.
 
-    Note
-    ----
+    Points predicted as nonghost but that are true ghosts get the cluster
+    label of the closest touching cluster, if there is one. Points that are
+    predicted as ghosts get "empty" (-1) cluster labels everywhere.
+
+    Instances that have been broken up by the deghosting process get
+    assigned distinct cluster labels for each effective fragment.
+
+    Notes
+    -----
+    This function should work on Numpy arrays or Torch tensors.
+
     Uses GPU version from `torch_cluster.knn` to speed up
     the label adaptation computation.
 
     Parameters
     ----------
-    result: dict
-    label_seg: list of torch.Tensor
-    label_clustering: list of torch.Tensor
-    num_classes: int, default 5
-        Semantic classes count.
-    batch_column: int, default 0
-    coords_column_range: tuple, default (1, 4)
-    true_mask: torch.Tensor, default None
-        True nonghost mask. If None, will use the intersection
-        of predicted nonghost and true nonghost. This option is
-        useful to do "cheat ghost predictions" (i.e. mimic deghosting
-        predictions using true ghost mask, to run later stages
-        of the chain independently of the deghosting stage).
+    cluster_label : Union[np.ndarray, torch.Tensor]
+        (N, N_l) Cluster label tensor
+    segment_label : List[Union[np.ndarray, torch.Tensor]]
+        (M, 5) Segmentation label tensor
+    deghost_mask : Union[np.ndarray, torch.Tensor]
+        (M) Predicted deghost mask
+    segmentation : Union[np.ndarray, torch.Tensor]
+        (N_deghost, N_c) Segmentation score prediction tensor
+    break_classes : List[int], default [SHOWR_SHP, TRACK_SHP, MICHL_SHP, DELTA_SHP]
+        Classes to run DBSCAN on to break up
 
     Returns
     -------
-    np.ndarray
-        shape: (input w/ ghost points, label_clusters_features)
-
-    See Also
-    --------
-    adapt_labels, adapt_labels_numpy
+    Union[np.ndarray, torch.Tensor]
+        (N_deghost, N_l) Adapted cluster label tensor
     """
-    complete_label_clustering = []
-    c1, c2 = coords_column_range
-
-    if use_numpy:
-        unique            = np.unique
-        ones              = np.ones
-        argmax            = lambda x: np.argmax(x, axis=1)
-        where             = np.where
-        concatenate0      = lambda x: np.concatenate(x, axis=1)
-        concatenate1      = lambda x: np.concatenate(x, axis=0)
-        compute_neighbor  = lambda X_true, X_pred: cdist(X_pred[:, c1:c2], X_true[:, c1:c2]).argmin(axis=1)
-        compute_distances = lambda X_true, X_pred: np.amax(np.abs(X_true[:, c1:c2] - X_pred[:, c1:c2]), axis=1)
-        make_float        = lambda x : x
-        make_long         = lambda x: x.astype(np.int64)
-        to_device         = lambda x, y: x
-        get_shape         = lambda x, y: (x.shape[0], y.shape[1])
-    else:
-        unique            = lambda x: x.int().unique()
-        ones              = torch.ones
-        argmax            = lambda x: torch.argmax(x, dim=1)
+    # Define operations on the basis of the input type
+    if torch.is_tensor(segment_label):
         where             = torch.where
-        concatenate0      = lambda x: torch.cat(x, dim=1).float()
-        concatenate1      = lambda x: torch.cat(x, dim=0)
-        compute_neighbor  = lambda X_true, X_pred: knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)[1]
-        compute_distances = lambda X_true, X_pred: torch.amax(torch.abs(X_true[:, c1:c2] - X_pred[:, c1:c2]), dim=1)
-        make_float        = lambda x: x.float()
-        make_long         = lambda x: x.long()
-        to_device         = lambda x, y: x.to(y.device)
-        get_shape         = lambda x, y: (x.size(0), y.size(1))
+        ones              = lambda shape: torch.ones(shape, dtype=segment_label.dtype, device=segment_label.device)
+        unique            = lambda x: x.int().unique()
+        argmax            = lambda x, dim: torch.argmax(x, dim=dim)
+        concatenate       = lambda x, dim: torch.cat(x, dim=dim)
+        compute_neighbor  = lambda X_true, X_pred: knn(X_true[:, COORD_COLS].float(), X_pred[:, COORD_COLS].float(), 1)[1]
+        compute_distances = lambda X_true, X_pred: torch.amax(torch.abs(X_true[:, COORD_COLS] - X_pred[:, COORD_COLS]), dim=1)
+        to_long           = lambda x: x.long()
+        to_bool           = lambda x: x.bool()
+    else:
+        where             = np.where
+        ones              = np.ones
+        unique            = np.unique
+        argmax            = lambda x, axis: np.argmax(x, axis=axis)
+        concatenate       = lambda x, axis: np.concatenate(x, axis=axis)
+        compute_neighbor  = lambda X_true, X_pred: cdist(X_pred[:, COORD_COLS], X_true[:, COORD_COLS]).argmin(axis=1)
+        compute_distances = lambda X_true, X_pred: np.amax(np.abs(X_true[:, COORD_COLS] - X_pred[:, COORD_COLS]), axis=1)
+        to_long           = lambda x: x.astype(np.int64)
+        to_bool           = lambda x: x.astype(bool)
 
-    if true_mask is not None:
-        assert true_mask.shape[0] == label_seg[0].shape[0]
-    c3 = max(c2, batch_column+1)
+    # Build a tensor of predicted segmentation that includes ghost points
+    coords = segment_label[:, :VALUE_COL]
+    if len(deghost_mask) != len(segmentation):
+        segment_pred = to_long(GHOST_SHP*ones(len(coords)))
+        segment_pred[deghost_mask] = argmax(segmentation, 1)
+    else:
+        segment_pred = argmax(segmentation, 1)
 
-    for i in range(len(label_seg)):
-        coords = label_seg[i][:, :c3]
-        label_c = []
-        full_nonghost_mask = result['ghost'][i][:,0] > result['ghost'][i][:,1] if true_mask is None else true_mask
-        full_semantic_pred = to_device(make_long(result['segmentation'][i].shape[1]*ones(len(coords))), coords)
-        full_semantic_pred[full_nonghost_mask] = argmax(result['segmentation'][i])
-        for batch_id in unique(coords[:, batch_column]):
-            batch_mask = coords[:, batch_column] == batch_id
-            batch_coords = coords[batch_mask]
-            batch_clustering = label_clustering[i][label_clustering[i][:, batch_column] == batch_id]
-            if len(batch_clustering) == 0:
+    # Initialize the DBSCAN algorithm (finds connected groups)
+    dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
+
+    # Loop over individual images in the batch
+    new_cluster_label = []
+    for batch_id in unique(coords[:, BATCH_COL]):
+        # Restrict tensors to a specific batch_id
+        batch_mask      = where(coords[:, BATCH_COL] == batch_id)[0]
+        deghost_mask_b  = deghost_mask[batch_mask]
+        if not deghost_mask_b.sum():
+            new_cluster_label.append(-1. * ones((0, cluster_label.shape[1])))
+            continue
+
+        coords_b        = coords[batch_mask]
+        cluster_label_b = cluster_label[cluster_label[:, BATCH_COL] == batch_id]
+        segment_label_b = segment_label[batch_mask, VALUE_COL]
+        segment_pred_b  = segment_pred[batch_mask]
+
+        # Prepare new labels
+        new_label = -1. * ones((coords_b.shape[0], cluster_label_b.shape[1]))
+        new_label[:, :VALUE_COL] = coords_b
+
+        # Check if the segment labels and predictions are compatible.
+        # If they are compatible, store the cluster labels as is
+        true_deghost = segment_label_b < GHOST_SHP
+        incompatible_segment = (segment_pred_b == TRACK_SHP) \
+                ^ (segment_label_b == TRACK_SHP)
+        new_label[true_deghost] = cluster_label_b
+        new_label[true_deghost & incompatible_segment, VALUE_COL:] = -1.
+
+        # Loop over semantic classes separately
+        for s in unique(segment_pred_b):
+            # Skip predicted ghosts
+            if s == GHOST_SHP:
                 continue
 
-            nonghost_mask = full_nonghost_mask[batch_mask]
-
-            # Prepare new labels
-            new_label_clustering = -1. * ones(get_shape(batch_coords, batch_clustering))
-            if (not use_numpy) and torch.cuda.is_available():
-                new_label_clustering = new_label_clustering.cuda()
-            new_label_clustering[:, :c3] = batch_coords
-
-            # Segmentation is always pre-deghosted
-            semantic_pred = full_semantic_pred[batch_mask]
-
-            # Check if the semantic labels and predictions are compatible.
-            # Intra EM activity cross-contamination is tolerate.
-            true_pred = label_seg[i][batch_mask, -1]
-            incompatible_semantic = (semantic_pred == TRACK_SHP) ^ (true_pred == TRACK_SHP)
-
-            # Include true nonghost voxels by default when they have the right semantic prediction
-            new_label_clustering[(true_pred < num_classes)] = make_float(batch_clustering)
-            new_label_clustering[(true_pred < num_classes) & incompatible_semantic, c3:] = -1.
-            for semantic in unique(semantic_pred):
-                semantic_mask = semantic_pred == semantic
-
-                if true_mask is not None:
-                    continue
-                # Select voxels predicted as nonghost, but true ghosts (or true nonghost, but incompatible semantic prediction)
-                # mask = nonghost_mask & (label_seg[i][:, -1][batch_mask] == num_classes) & semantic_mask
-                if semantic == TRACK_SHP:
-                    incompatible_semantic = true_pred != semantic
-                else:
-                    incompatible_semantic = (true_pred == GHOST_SHP) | (true_pred == TRACK_SHP)
-                mask = nonghost_mask & incompatible_semantic & semantic_mask
-                mask = where(mask)[0]
-                #print(semantic, np.intersect1d(mask.cpu().numpy(), indices))
-                # Now we need a special treatment for these, if there are any.
-                if batch_coords[mask].shape[0] == 0:
-                    continue
-                tagged_voxels_count = 1 # to get the loop started
-                if semantic == TRACK_SHP:
-                    compatible_semantic = batch_clustering[:, -1] == semantic
-                else:
-                    compatible_semantic = (batch_clustering[:, -1] != GHOST_SHP) & (batch_clustering[:, -1] != TRACK_SHP)
-                X_true = batch_clustering[compatible_semantic]
-                if X_true.shape[0] == 0:
-                    continue
-                X_pred = batch_coords[mask]
-                while tagged_voxels_count > 0 and X_pred.shape[0] > 0:
-                    # print(batch_id, "while", X_true.shape, X_pred.shape, tagged_voxels_count)
-                    #neighbors = knn(X_true[:, c1:c2].float(), X_pred[:, c1:c2].float(), 1)
-                    #_, d = neighbors[0], neighbors[1]
-                    d = compute_neighbor(X_true, X_pred)
-
-                    # compute Chebyshev distance between predicted and true
-                    # distances = torch.amax(torch.abs(X_true[neighbors[1], c1:c2] - X_pred[neighbors[0], c1:c2]), dim=1)
-                    distances = compute_distances(X_true[d], X_pred)
-
-                    select_mask = distances <= 1
-
-                    tagged_voxels_count = select_mask.sum()
-                    if tagged_voxels_count > 0:
-                        # We assign label of closest true nonghost voxel to those within Chebyshev distance 1
-                        additional_label_clustering = concatenate0([X_pred[select_mask],
-                                                                X_true[d[select_mask], c3:]])
-
-                        new_label_clustering[mask[select_mask]] = additional_label_clustering
-                        mask = mask[~select_mask]
-                        # Update for next iteration
-                        X_true = additional_label_clustering
-                        X_pred = X_pred[~select_mask]
-
-
-            # Now we save - need only to keep predicted nonghost voxels.
-            label_c.append(new_label_clustering[nonghost_mask])
-            #print(new_label_clustering[nonghost_mask][indices])
-            #print(new_label_clustering[indices])
-        label_c = concatenate1(label_c)
-        #print("ignored 0 ", (label_c[:, -1] == -1).sum())
-        # Also run DBSCAN on track true clusters
-        # We want to avoid true track clusters broken in two having the same cluster id label
-        # Note: we assume we are adapting either cluster or kinematics labels,
-        # for which cluster id and group id columns are 5 and 6 respectively.
-        cluster_id_col = 5
-        track_label = 1
-        dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
-        track_mask = label_c[:, -1] == track_label
-        for batch_id in unique(coords[:, batch_column]):
-            batch_mask = label_c[:, batch_column] == batch_id
-            # We want to select cluster ids for track-like particles
-            batch_clustering = label_clustering[i][(label_clustering[i][:, batch_column] == batch_id) & (label_clustering[i][:, -1] == track_label)]
-            if len(batch_clustering) == 0:
+            # Restrict to points in this class that have incompatible segment
+            # labels. If there are none, skip to the next class
+            bad_index = where((segment_pred_b == s) \
+                    & (~true_deghost | incompatible_segment))[0]
+            if coords_b[bad_index].shape[0] == 0:
                 continue
-            # Reset counter for each batch entry
-            # we need to avoid labeling a cluster with an already existing cluster id (maybe not track)
-            cluster_count =  unique(label_clustering[i][(label_clustering[i][:, batch_column] == batch_id)][:, cluster_id_col]).max()+1
-            for c in unique(batch_clustering[:, cluster_id_col]):
+
+            # Find points in cluster_label that have compatible segment labels
+            cluster_seg = cluster_label_b[:, SHAPE_COL]
+            compatible_segment = cluster_seg == TRACK_SHP if s == TRACK_SHP \
+                    else cluster_seg != TRACK_SHP
+            X_true = cluster_label_b[compatible_segment]
+            if X_true.shape[0] == 0:
+                continue
+
+            # Loop over the set of unlabeled predicted points
+            X_pred = coords_b[bad_index]
+            tagged_voxels_count = 1
+            while tagged_voxels_count > 0 and X_pred.shape[0] > 0:
+                # Find the nearest neighbor to each predicted point
+                d = compute_neighbor(X_true, X_pred)
+
+                # Compute Chebyshev distance between predicted and closest true.
+                distances = compute_distances(X_true[d], X_pred)
+
+                # Label unlabeled voxels that touch a compatible true voxel
+                select_mask = distances <= 1
+                tagged_voxels_count = select_mask.sum()
+                if tagged_voxels_count > 0:
+                    # Use the label of the touching true voxel
+                    additional_cluster_label = \
+                            concatenate([X_pred[select_mask],
+                                X_true[d[select_mask], VALUE_COL:]], 1)
+                    new_label[bad_index[select_mask]] = additional_cluster_label
+
+                    # Update the mask to not include the new assigned points
+                    bad_index = bad_index[~select_mask]
+
+                    # The new true available points are the ones we just added.
+                    # The new pred points are those not yet labeled
+                    X_true = additional_cluster_label
+                    X_pred = X_pred[~select_mask]
+
+        # At this point, get rid of predicted ghosts.
+        new_label = new_label[deghost_mask_b]
+        new_label[:, SHAPE_COL] = segment_pred_b[deghost_mask_b]
+
+        # Find the current largest cluster ID to avoid duplicates
+        cluster_count = int(cluster_label_b[:, CLUST_COL].max()) + 1
+
+        for break_class in break_classes:
+            # Restrict to the set of labels associated with this class
+            break_index = where(new_label[:, SHAPE_COL] == break_class)[0]
+            restricted_label = new_label[break_index]
+
+            # Loop over true cluster instances in the new label tensor, break
+            for c in unique(restricted_label[:, CLUST_COL]):
+                # Skip invalid cluster ID
                 if c < 0:
                     continue
-                cluster_mask = label_c[batch_mask, cluster_id_col] == c
-                if cluster_mask.sum() == 0:
-                    continue
-                coordinates = label_c[batch_mask][cluster_mask, c1:c2]
-                if not isinstance(label_c, np.ndarray):
+
+                # Restrict tensor to a specific cluster, get voxel coordinates
+                cluster_index = where(restricted_label[:, CLUST_COL] == c)[0]
+                coordinates = restricted_label[cluster_index][:, COORD_COLS]
+                if torch.is_tensor(coordinates):
                     coordinates = coordinates.detach().cpu().numpy()
-                l = dbscan.fit(coordinates).labels_
-                # Unclustered voxels can keep the label -1
-                if not isinstance(label_c, np.ndarray):
-                    l = torch.tensor(l, device = label_c.device).float()
-                l[l > -1] = l[l > -1] + cluster_count
-                label_c[where(batch_mask)[0][cluster_mask], cluster_id_col] = l
-                cluster_count = int(l.max() + 1)
 
-        complete_label_clustering.append(label_c)
+                # Run DBSCAN on the cluster, update labels
+                break_labels = dbscan.fit(coordinates).labels_
+                break_labels += cluster_count
+                if torch.is_tensor(new_label):
+                    break_labels = torch.tensor(break_labels,
+                            dtype=new_label.dtype, device=new_label.device)
+                new_label[break_index[cluster_index], CLUST_COL] = break_labels
+                cluster_count = int(break_labels.max()) + 1
 
-    return complete_label_clustering
+        # Append the new set of labels associated with this image
+        new_cluster_label.append(new_label)
 
+    # Stack the tensors obtained from each batch_id
+    new_cluster_label = concatenate(new_cluster_label, 0)
 
-def adapt_labels(*args, **kwargs):
-    """
-    Kept for backward compatibility, to deprecate soon.
-
-    See Also
-    --------
-    adapt_labels_knn, adapt_labels_numpy
-    """
-    return adapt_labels_knn(*args, **kargs)
-
-
-def adapt_labels_numpy(*args, **kwargs):
-    """
-    Numpy version of `adapt_labels`.
-
-    See Also
-    --------
-    adapt_labels, adapt_labels_knn
-    """
-    return adapt_labels_knn(*args, **kwargs, use_numpy=True)
+    return new_cluster_label
 
 
 def deghost_labels_and_predictions(data_blob, result):

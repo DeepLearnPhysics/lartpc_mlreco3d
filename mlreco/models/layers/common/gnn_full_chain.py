@@ -4,7 +4,6 @@ from warnings import warn
 
 from mlreco.models.grappa import GNN, GNNLoss
 from mlreco.utils.unwrap import prefix_unwrapper_rules
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import (form_clusters,
