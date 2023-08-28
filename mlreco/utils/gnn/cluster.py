@@ -286,6 +286,8 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
+    if not len(clusts):
+        return np.empty((0, 16), dtype=data.dtype) # Cannot type empty list
     return _get_cluster_features(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
@@ -355,6 +357,9 @@ def get_cluster_features_extended(data, clusts, add_value=True, add_shape=True):
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
+    assert add_value or add_shape
+    if not len(clusts):
+        return np.empty((0, add_value*2+add_shape), dtype=data.dtype)
     return _get_cluster_features_extended(data, clusts, add_value, add_shape)
 
 @nb.njit(parallel=True, cache=True)
@@ -362,7 +367,6 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    add_value: bool = True,
                                    add_shape: bool = True) -> nb.float64[:,:]:
-    assert add_value or add_shape
     feats = np.empty((len(clusts), add_value*2+add_shape), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
