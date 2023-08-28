@@ -11,7 +11,7 @@ from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import get_particle_points
-from mlreco.utils.deghosting import compute_rescaled_charge, adapt_labels
+from mlreco.utils.ghost import compute_rescaled_charge, adapt_labels
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
