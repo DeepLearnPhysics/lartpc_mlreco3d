@@ -59,6 +59,9 @@ class HDF5Writer:
         analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
 
+    # Outputs that have a fixed number of tensors. #TODO: Inherit from unwrap rules
+    TENSOR_LISTS = ['encoderTensors', 'decoderTensors', 'ppn_masks', 'ppn_layers', 'ppn_coords']
+
     # List of recognized objects
     DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
     LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
@@ -232,7 +235,7 @@ class HDF5Writer:
 
                     self.key_dict[key]['dtype'] = blob[key][ref_id][0].dtype
                     self.key_dict[key]['width'] = widths
-                    self.key_dict[key]['merge'] = same_width
+                    self.key_dict[key]['merge'] = same_width and key not in self.TENSOR_LISTS
 
                 else:
                     dtype = type(blob[key][ref_id])
@@ -443,31 +446,33 @@ class HDF5Writer:
             cat   = val['category']
             group = out_file[cat]
 
-        if key not in blob:
-            # If the key is not in the dictionary, add empty reference
-            self.store_empty(group, event, key)
-
-        elif not val['merge'] and not isinstance(val['width'], list):
-            # Store single object
-            if np.isscalar(blob[key]):
-                obj = blob[key]
+        if not val['merge'] and not isinstance(val['width'], list):
+            # Store single arrays
+            if key not in blob:
+                array = []
+            elif np.isscalar(blob[key]):
+                array = blob[key]
             else:
-                obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
-            if not hasattr(obj, '__len__'):
-                obj = [obj]
+                array = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
+
+            if not hasattr(array, '__len__'):
+                array = [array]
 
             if val['dtype'] in self.object_dtypes:
-                self.store_objects(group, event, key, obj, val['dtype'])
+                self.store_objects(group, event, key, array, val['dtype'])
             else:
-                self.store(group, event, key, obj)
+                self.store(group, event, key, array)
 
         elif not val['merge']:
             # Store the array and its reference for each element in the list
-            self.store_jagged(group, event, key, blob[key][batch_id])
+            array_list = blob[key][batch_id] if key in blob else \
+                    [[] for _ in range(len(val['width']))]
+            self.store_jagged(group, event, key, array_list)
 
         else:
             # Store one array of for all in the list and a index to break them
-            self.store_flat(group, event, key, blob[key][batch_id])
+            array_list = blob[key][batch_id] if key in blob else []
+            self.store_flat(group, event, key, array_list)
 
     @staticmethod
     def store(group, event, key, array):
@@ -623,26 +628,6 @@ class HDF5Writer:
 
         # Define region reference, store it at the event level
         region_ref = dataset.regionref[current_id:current_id + len(array)]
-        event[key] = region_ref
-
-    @staticmethod
-    def store_empty(group, event, key):
-        '''
-        Adds empty reference to an existing dataset
-
-        Parameters
-        ----------
-        group : h5py.Group
-            Dataset group under which to store this array
-        event : dict
-            Dictionary of objects that make up one event
-        key: str
-            Name of the dataset in the file
-        '''
-        # Define empty region reference, store it at the event level
-        dataset = group[key]
-        current_id = len(dataset)
-        region_ref = dataset.regionref[current_id:current_id]
         event[key] = region_ref
 
 
