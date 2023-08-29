@@ -231,6 +231,9 @@ class FullChain(FullChainGNN):
             dictionary of all network outputs from cnns.
         '''
         device = input[0].device
+        if not len(input[0]):
+            # TODO: move empty case handling elsewhere
+            return {}, input
 
         label_seg, label_clustering, coords = None, None, None
         if len(input) == 3:
