@@ -339,8 +339,6 @@ class ParticleBuilder(DataBuilder):
         primary_scores = softmax(primary_logits, axis=1)
 
         for i, p in enumerate(particles):
-            print('i,p : ',i,p)
-            print(volume_labels)
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
             seg_label = particle_seg[i]

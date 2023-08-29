@@ -361,6 +361,13 @@ class ParticleLogger(AnalysisLogger):
             out['is_principal_match'] = particle.is_principal_match
         return out
     
+    @staticmethod
+    def gap_length(particle):
+        out = {'gap_length': -1}
+        if particle is not None:
+            out['gap_length'] = particle.gap_length
+        return out
+    
 
 class InteractionLogger(AnalysisLogger):
 
