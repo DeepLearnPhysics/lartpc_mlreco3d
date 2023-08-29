@@ -191,48 +191,51 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
-                if len(blob[key][0]) == 0:
-                    msg = f'Cannot infer the dtype of an empty list ({key}) and hence cannot initialize the output HDF5 file'
+                lengths = np.array([len(blob[key][i]) for i in range(len(blob[key]))])
+                index   = np.where(lengths)[0]
+                if not len(index):
+                    msg = f'Cannot infer the dtype of a list of empty lists ({key}) and hence cannot initialize the output HDF5 file'
                     raise AssertionError(msg) # TODO: In this case, fall back on a default dtype specified elsewhere
 
-                if isinstance(blob[key][0][0], dict):
+                ref_id = index[0]
+                if isinstance(blob[key][ref_id][0], dict):
                     # List containing a single list of dictionary objects per batch ID
-                    dict_dtype = self.get_dict_dtype(blob[key][0][0])
+                    dict_dtype = self.get_dict_dtype(blob[key][ref_id][0])
                     self.object_dtypes.append(dict_dtype)
 
                     self.key_dict[key]['dtype'] = dict_dtype
 
-                elif isinstance(blob[key][0][0], self.DATA_OBJS):
+                elif isinstance(blob[key][ref_id][0], self.DATA_OBJS):
                     # List containing a single list of dataclass objects per batch ID
-                    object_dtype = self.get_object_dtype(blob[key][0][0])
+                    object_dtype = self.get_object_dtype(blob[key][ref_id][0])
                     self.object_dtypes.append(object_dtype)
 
                     self.key_dict[key]['dtype'] = object_dtype
-                    self.key_dict[key]['larcv'] = type(blob[key][0][0]) in self.LARCV_OBJS
+                    self.key_dict[key]['larcv'] = type(blob[key][ref_id][0]) in self.LARCV_OBJS
 
-                elif not hasattr(blob[key][0][0], '__len__'):
+                elif not hasattr(blob[key][ref_id][0], '__len__'):
                     # List containing a single list of scalars per batch ID
-                    self.key_dict[key]['dtype'] = type(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = type(blob[key][ref_id][0])
 
 
-                elif not isinstance(blob[key][0], list) and not blob[key][0].dtype == np.object:
+                elif not isinstance(blob[key][ref_id], list) and not blob[key][ref_id].dtype == np.object:
                     # List containing a single ndarray of scalars per batch ID
-                    self.key_dict[key]['dtype'] = blob[key][0].dtype
-                    self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
+                    self.key_dict[key]['dtype'] = blob[key][ref_id].dtype
+                    self.key_dict[key]['width'] = blob[key][ref_id].shape[1] if len(blob[key][ref_id].shape) == 2 else 0
 
-                elif isinstance(blob[key][0][0], np.ndarray):
+                elif isinstance(blob[key][ref_id][0], np.ndarray):
                     # List containing a list (or ndarray) of ndarrays per batch ID
                     widths = []
-                    for i in range(len(blob[key][0])):
-                        widths.append(blob[key][0][i].shape[1] if len(blob[key][0][i].shape) == 2 else 0)
+                    for i in range(len(blob[key][ref_id])):
+                        widths.append(blob[key][ref_id][i].shape[1] if len(blob[key][ref_id][i].shape) == 2 else 0)
                     same_width = np.all([widths[i] == widths[0] for i in range(len(widths))])
 
-                    self.key_dict[key]['dtype'] = blob[key][0][0].dtype
+                    self.key_dict[key]['dtype'] = blob[key][ref_id][0].dtype
                     self.key_dict[key]['width'] = widths
                     self.key_dict[key]['merge'] = same_width
 
                 else:
-                    dtype = type(blob[key][0])
+                    dtype = type(blob[key][ref_id])
                     raise TypeError(f'Do not know how to store output of type {dtype} in key {key}')
 
     def get_dict_dtype(self, obj_dict, obj=dict, is_larcv=False):
@@ -440,7 +443,11 @@ class HDF5Writer:
             cat   = val['category']
             group = out_file[cat]
 
-        if not val['merge'] and not isinstance(val['width'], list):
+        if key not in blob:
+            # If the key is not in the dictionary, add empty reference
+            self.store_empty(group, event, key)
+
+        elif not val['merge'] and not isinstance(val['width'], list):
             # Store single object
             if np.isscalar(blob[key]):
                 obj = blob[key]
@@ -618,6 +625,26 @@ class HDF5Writer:
         region_ref = dataset.regionref[current_id:current_id + len(array)]
         event[key] = region_ref
 
+    @staticmethod
+    def store_empty(group, event, key):
+        '''
+        Adds empty reference to an existing dataset
+
+        Parameters
+        ----------
+        group : h5py.Group
+            Dataset group under which to store this array
+        event : dict
+            Dictionary of objects that make up one event
+        key: str
+            Name of the dataset in the file
+        '''
+        # Define empty region reference, store it at the event level
+        dataset = group[key]
+        current_id = len(dataset)
+        region_ref = dataset.regionref[current_id:current_id]
+        event[key] = region_ref
+
 
 class CSVWriter:
     '''
@@ -630,7 +657,8 @@ class CSVWriter:
 
     def __init__(self,
                  file_name: str = 'output.csv',
-                 append_file: bool = False):
+                 append_file: bool = False,
+                 accept_missing: bool = True):
         '''
         Initialize the basics of the output file
 
@@ -640,10 +668,13 @@ class CSVWriter:
             Name of the output CSV file
         append_file : bool, default False
             Add more rows to an existing CSV file
+        accept_missing : bool, default True
+            Tolerate missing keys
         '''
-        self.file_name   = file_name
-        self.append_file = append_file
-        self.result_keys = None
+        self.file_name      = file_name
+        self.append_file    = append_file
+        self.accept_missing = accept_missing
+        self.result_keys    = None
         if self.append_file:
             if not os.path.isfile(file_name):
                 msg = 'File not found at path: {}. When using append=True '\
@@ -685,11 +716,19 @@ class CSVWriter:
             self.create(result_blob)
         else:
             if not (list(result_blob.keys()) == self.result_keys):
-                diff1 = set(list(result_blob.keys())).difference(set(self.result_keys))
-                diff2 = set(self.result_keys).difference(set(list(result_blob.keys())))
-                msg = "Must provide a dictionary with the expected set of keys: "\
-                    "difference = {}, {}".format(str(diff1), str(diff2))
-                raise AssertionError(msg)
+                if self.accept_missing:
+                    new_result_blob = {k:-1 for k in self.result_keys}
+                    for k, v in result_blob.items():
+                        if k not in new_result_blob:
+                            raise KeyError(f'Key {k} has not been seen in previous iterations')
+                        new_result_blob[k] = v
+                    result_blob = new_result_blob
+                else:
+                    diff1 = set(list(result_blob.keys())).difference(set(self.result_keys))
+                    diff2 = set(self.result_keys).difference(set(list(result_blob.keys())))
+                    msg = "Must provide a dictionary with the expected set of keys: "\
+                        "difference = {}, {}".format(str(diff1), str(diff2))
+                    raise AssertionError(msg)
 
         # Append file
         with open(self.file_name, 'a') as out_file:
