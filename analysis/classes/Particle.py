@@ -69,6 +69,9 @@ class Particle:
         List of TruthParticle IDs for which this particle is matched to
     units : str, default 'px'
         Units in which coordinates are expressed
+    gap_length : float, default -1 
+        inter cluster gap length usually divided by track length
+
     '''
 
     # Attributes that specify coordinates

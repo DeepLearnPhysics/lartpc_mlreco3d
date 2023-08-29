@@ -145,7 +145,6 @@ class HDF5Writer:
             self.register_key(result_blob, key, 'result')
 
         # Initialize the output HDF5 file
-        print('****** hey Im writing here *******',self.file_name)
         with h5py.File(self.file_name, 'w') as out_file:
             # Initialize the info dataset that stores top-level description of what is stored
             if cfg is not None:
@@ -234,7 +233,6 @@ class HDF5Writer:
 
                 else:
                     dtype = type(blob[key][0])
-                    print(blob[key][0][0],key)
                     raise TypeError(f'Do not know how to store output of type {dtype} in key {key}')
 
     def get_dict_dtype(self, obj_dict, obj=dict, is_larcv=False):
