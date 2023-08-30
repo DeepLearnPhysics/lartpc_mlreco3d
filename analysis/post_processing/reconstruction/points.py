@@ -47,10 +47,6 @@ def order_end_points(data_dict,
             
     return update_dict
 
-from sklearn.cluster import DBSCAN
-from sklearn.decomposition import PCA
-from scipy.spatial.distance import cdist
-#Functions
 def order_clusters(points, eps=1.1, min_samples=1):
     """
     Order clusters along the principal axis of the track.

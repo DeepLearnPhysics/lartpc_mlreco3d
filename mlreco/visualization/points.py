@@ -169,7 +169,7 @@ class Scatter3D:
             for entry in objects:
                 attribute = getattr(entry, color)
                 assert np.isscalar(attribute)
-                self._colors[int(entry.id)] = int(attribute) \
+                self._colors[int(entry.id)] = attribute \
                     * np.ones(getattr(entry, mode).shape[0], dtype=np.int64)
 
                 if int(attribute) < cmin:
