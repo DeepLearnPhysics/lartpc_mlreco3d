@@ -405,6 +405,7 @@ class HDF5Writer:
         # Append file
         with h5py.File(self.file_name, 'a') as out_file:
             # Loop over batch IDs
+            self.batch_size = len(data_blob['index'])
             for batch_id in range(self.batch_size):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
