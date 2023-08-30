@@ -106,10 +106,10 @@ class DBSCANFragmenter(torch.nn.Module):
                     if (i > -1 and np.sum(labels == i) >= self.min_size[k])]
                 clusts.extend(cls_idx)
 
-        same_length = np.all([len(c) == len(clusts[0]) for c in clusts])
-        clusts = np.array(clusts, dtype=object if not same_length else np.int64)
+        clusts_nb    = np.empty(len(clusts), dtype=object)
+        clusts_nb[:] = clusts
 
-        return clusts
+        return clusts_nb
 
 
     def forward(self, data, output=None, points=None):
