@@ -240,7 +240,7 @@ def get_pseudovertex(start_points: nb.float32[:,:],
             'Cannot reconstruct pseudovertex without points'
 
     if len(start_points) == 1:
-        return points[0]
+        return start_points[0]
 
     pseudovtx = np.zeros((dim, ), dtype=start_points.dtype)
     S = np.zeros((dim, dim), dtype=start_points.dtype)

@@ -97,7 +97,7 @@ class AnaToolsManager:
         assert self.max_iteration <= len(dataset)
         
 
-    def initialize(self, event_list=None):
+    def initialize(self, event_list=None, data_keys=None, outfile=None):
         """Initializer for setting up inference mode full chain forwarding
         or reading data from HDF5. 
         """
@@ -110,6 +110,9 @@ class AnaToolsManager:
                     assert event_list[0] < event_list[1]
                     event_list = list(range(event_list[0], event_list[1]))
 
+            if data_keys is not None:
+                self.config['iotool']['dataset']['data_keys'] = data_keys
+
             loader = loader_factory(self.config, event_list=event_list)
             self._dataset = iter(cycle(loader))
             Trainer = trainval(self.config)
@@ -120,6 +123,8 @@ class AnaToolsManager:
             self._num_images = len(loader.dataset._event_list)
         else:
             # If there is a reader, simply load reconstructed data
+            if data_keys is not None:
+                self.ana_config['reader']['file_keys'] = data_keys
             file_keys = self.ana_config['reader']['file_keys']
             n_entry = self.ana_config['reader'].get('n_entry', -1)
             n_skip = self.ana_config['reader'].get('n_skip', -1)
@@ -132,6 +137,8 @@ class AnaToolsManager:
             
 
         if 'writer' in self.ana_config:
+            if outfile is not None:
+                self.ana_config['writer']['file_name'] = outfile
             writer_cfg = copy.deepcopy(self.ana_config['writer'])
             assert 'name' in writer_cfg
             writer_cfg.pop('name')
