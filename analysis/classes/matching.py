@@ -260,8 +260,8 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
     
     for px in particles_x:
         px.match_overlap = OrderedDict()
-    for py in particles_y:
-        py.match_overlap = OrderedDict()
+    #for py in particles_y:
+    #    py.match_overlap = OrderedDict()
 
     # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
