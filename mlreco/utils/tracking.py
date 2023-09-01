@@ -299,7 +299,7 @@ def get_track_segments(coordinates: nb.float32[:,:],
         segment_start     = np.copy(start_point)
         segment_clusts    = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
         segment_dirs_l    = nb.typed.List.empty_list(np.empty(0, dtype=coordinates.dtype))
-        segment_lengths_l = nb.typed.List.empty_list(np.float32)
+        segment_lengths_l = nb.typed.List.empty_list(np.empty((), dtype=coordinates.dtype).item())
         left_index = np.arange(len(coordinates))
         while len(left_index):
             # Compute distances from the segment start point to the leftover points
