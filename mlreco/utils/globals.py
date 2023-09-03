@@ -157,7 +157,9 @@ NU_INT_TYPE = {
 
 # Particle masses
 ELECTRON_MASS = 0.511998  # [MeV/c^2]
-MUON_MASS     = 105.7     # [MeV/c^2]
+MUON_MASS     = 105.658   # [MeV/c^2]
+PION_MASS     = 139.570   # [MeV/c^2]
+KAON_MASS     = 493.677   # [MeV/c^2]
 PROTON_MASS   = 938.272   # [MeV/c^2]
 
 # Physical constants

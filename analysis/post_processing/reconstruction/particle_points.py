@@ -1,11 +1,14 @@
 import numpy as np
 import numba as nb
+
 from scipy.spatial.distance import cdist
 from sklearn.decomposition import PCA
+
 from mlreco.utils.globals import COORD_COLS
+from mlreco.utils.tracking import get_track_segment_dedxs
 
 from analysis.post_processing import post_processing
-from analysis.post_processing.reconstruction.calorimetry import compute_track_dedx
+
 
 @post_processing(data_capture=[], 
                  result_capture=['particles'])
@@ -183,11 +186,10 @@ def correct_track_endpoints_linfit(points,
                                    depositions,
                                    bin_size=17):
     if len(points) >= 2:
-        dedx = compute_track_dedx(points, 
-                                  startpoint,
-                                  endpoint, 
-                                  depositions, 
-                                  bin_size=bin_size)
+        dedx = get_track_segment_dedxs(points, 
+                                       depositions, 
+                                       endpoint, 
+                                       segment_length=bin_size)
         new_startpoint, new_endpoint = np.copy(startpoint), np.copy(endpoint)
         if len(dedx) > 1:
             x = np.arange(len(dedx))

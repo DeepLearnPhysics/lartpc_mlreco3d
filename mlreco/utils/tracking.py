@@ -1,15 +1,18 @@
 import numpy as np
 import numba as nb
 
+from scipy.interpolate import UnivariateSpline
+
 from . import numba_local as nbl
 
 
 def get_track_length(coordinates: nb.float32[:,:],
                      segment_length: nb.float32 = None,
                      point: nb.float32[:] = None,
-                     method: str = 'step',
+                     method: str = 'bin_pca',
                      anchor_point: bool = True,
-                     min_count: int = 10) -> nb.float32:
+                     min_count: int = 10,
+                     spline_smooth: float = None) -> nb.float32:
     '''
     Given a set of point coordinates associated with a track and one of its end
     points, compute its length.
@@ -18,23 +21,32 @@ def get_track_length(coordinates: nb.float32[:,:],
     ----------
     coordinates : np.ndarray
         (N, 3) Coordinates of the points that make up the track
-    point : np.ndarray, optional
-        (3) An end point of the track
     segment_length : float, optional
         Segment length in the units that specify the coordinates
+    point : np.ndarray, optional
+        (3) An end point of the track
     method : str, default 'step'
         Method used to compute the track length (one of 'displacement', 'step',
-        'step_next' or 'bin_pca')
+        'step_next', 'bin_pca' or 'spline')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 10
         Minimum number of points in a segment to use it in the stepping function
+    spline_smooth : float, optional
+        The smoothing factor to be used in spline regression, when used
 
     Returns
     -------
     float
        Total length of the track
     '''
+    if method == 'displacement':
+        # Project points along the principal component, compute displacement
+        track_dir = nbl.principal_components(coordinates)[0]
+        pcoordinates = np.dot(coordinates, track_dir)
+
+        return np.max(pcoordinates) - np.min(pcoordinates)
+
     if method in ['step', 'step_next', 'bin_pca']:
         # Segment the track and sum the segment lengths
         segment_lengths = get_track_segments(coordinates, segment_length,
@@ -44,7 +56,7 @@ def get_track_length(coordinates: nb.float32[:,:],
 
     elif method == 'splines':
         # Fit point along the track with a spline, compute spline length
-        raise NotImplementedError
+        return get_track_spline(coordinates, segment_length, spline_smooth)[-1]
 
     else:
         raise ValueError(f'Track length estimation method ({method}) not recognized')
@@ -107,7 +119,6 @@ def check_track_orientation(coordinates: nb.float32[:,:],
         start_dedx  = np.sum(values[dist_mat[0] < local_radius])/local_radius
         end_dedx    = np.sum(values[dist_mat[1] < local_radius])/local_radius
 
-        print(start_dedx, end_dedx)
         return start_dedx < end_dedx
 
     elif method == 'gradient':
@@ -122,20 +133,20 @@ def check_track_orientation(coordinates: nb.float32[:,:],
         # Compute the deposition gradient as an average of the two
         gradient = (grad_start - grad_end) / 2.
 
-        return bool(gradient)
+        return bool(gradient >= 0.)
 
     else:
         raise ValueError('Track orientation method not recognized')
 
 
-#@nb.njit(cache=True)
+@nb.njit(cache=True)
 def get_track_deposition_gradient(coordinates: nb.float32[:,:],
                                   values: nb.float32[:],
                                   start_point: nb.float32[:],
                                   segment_length: nb.float32 = 5.,
                                   method: str = 'step',
                                   anchor_point: bool = True,
-                                  min_count: int = 10) -> (nb.float32[:], nb.float32[:]):
+                                  min_count: int = 10) -> (nb.float32, nb.float32[:], nb.float32[:], nb.float32[:]):
     '''
     Given a set of point coordinates and their values associated with a track
     and a start point, compute the deposition gradient with respect to the
@@ -161,10 +172,14 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
 
     Returns
     -------
-    np.ndarray
+    gradient : float
+       Deposition gradient along the track from the start point
+    segment_dedxs : np.ndarray
        (S) Array of energy/charge deposition rate values
-    np.ndarray
+    segment_rrs : np.ndarray
        (S) Array of residual ranges (center of the segment w.r.t. end point)
+    segment_lengths : np.ndarray
+       (S) Array of segment lengths
     '''
     # Compute the track segment dedxs
     dedxs, dists, lengths = get_track_segment_dedxs(coordinates, values, start_point,
@@ -191,7 +206,7 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
                             segment_length: nb.float32 = 5.,
                             method: str = 'step',
                             anchor_point: bool = True,
-                            min_count: int = 10) -> (nb.float32[:], nb.float32[:]):
+                            min_count: int = 10) -> (nb.float32[:], nb.float32[:], nb.float32[:]):
     '''
     Given a set of point coordinates and their values associated with a track
     and one of its end points, compute the energy/charge deposition rate as
@@ -217,10 +232,12 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
 
     Returns
     -------
-    np.ndarray
+    segment_dedxs : np.ndarray
        (S) Array of energy/charge deposition rate values
-    np.ndarray
+    segment_rrs : np.ndarray
        (S) Array of residual ranges (center of the segment w.r.t. end point)
+    segment_lengths : np.ndarray
+       (S) Array of segment lengths
     '''
     # Get the segment indexes and their lengths
     segment_clusts, _, segment_lengths = get_track_segments(coordinates,
@@ -414,3 +431,62 @@ def get_track_segments(coordinates: nb.float32[:,:],
 
     else:
         raise ValueError('Track segmentation method not recognized')
+
+
+def get_track_spline(coordinates, segment_length, s=None):
+    '''
+    Estimate the best approximating curve defined by a point cloud
+    using univariate 3D splines.
+
+    The length is computed by measuring the length of the piecewise linear
+    interpolation of the spline at points defined by the bin size.
+
+    Parameters
+    ----------
+    coordinatea : np.ndarray
+        (N, 3) point cloud
+    segment_length : float
+        The subdivision length at which to sample points from the spline.
+        If the track length is less than the segment_length, then the returned
+        length will be computed from the farthest two projected points along
+        the track's principal direction.
+    s : float, optional
+        The smoothing factor to be used in spline regression, by default None
+
+    Returns
+    -------
+    u : np.ndarray
+        (N) The principal axis parametrization of the curve
+        C(u) = (spx(u), spy(u), spz(u))
+    sppoints : np.ndarray
+        (N, 3) The graph of the spline at points u
+    splines : scipy.interpolate.UnivariateSpline
+        Approximating splines for the point cloud defined by points
+    length : float
+        The estimate of the total length of the curve
+    '''
+    # Compute the principal component along which to segment the track
+    track_dir = nbl.principal_components(coordinates)[0]
+    pcoords   = np.dot(coordinates, track_dir)
+    perm      = np.argsort(pcoords.squeeze())
+    u         = pcoords[perm]
+
+    # Compute the univariate splines along each axis
+    spx = UnivariateSpline(u, coordinates[perm][:, 0], s=s)
+    spy = UnivariateSpline(u, coordinates[perm][:, 1], s=s)
+    spz = UnivariateSpline(u, coordinates[perm][:, 2], s=s)
+    sppoints = np.hstack([spx(u), spy(u), spz(u)])
+    splines  = [spx, spy, spz]
+
+    # If track length is less than segment_length, just return length.
+    # Otherwise estimate length by piecewise linear interpolation
+    start, end = u.min(), u.max()
+    length = end - start
+    if length > segment_length:
+        bins = np.arange(u.min(), u.max(), segment_length)
+        bins = np.hstack([bins, np.array([u.max()])])
+        pt_approx = np.hstack([sp(bins).reshape(-1, 1) for sp in splines])
+        segments = np.linalg.norm(pt_approx[1:] - pt_approx[:-1], axis=1)
+        length = segments.sum()
+
+    return u.squeeze(), sppoints, splines, length
