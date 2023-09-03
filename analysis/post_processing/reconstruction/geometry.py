@@ -1,11 +1,14 @@
 import numpy as np
-
-from mlreco.utils.gnn.cluster import get_cluster_directions, cluster_direction
-from analysis.post_processing import post_processing
-from mlreco.utils.globals import *
-
 import networkx as nx
+
 from collections import Counter
+
+from mlreco.utils.globals import *
+from mlreco.utils.gnn.cluster import get_cluster_directions, cluster_direction
+from mlreco.utils.geometry import Geometry
+
+from analysis.post_processing import post_processing
+
 
 
 @post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
@@ -157,64 +160,45 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
 @post_processing(data_capture=['meta'], 
                  result_capture=['particles', 'interactions'],
                  result_capture_optional=['truth_particles', 'truth_interactions'])
-def fiducial_cut(data_dict, result_dict, margin=0, spatial_units='cm'):
-    """_summary_
+def check_containement(data_dict, result_dict,
+                       margin=5,
+                       detector='icarus',
+                       boundary_file=None,
+                       mode='module'):
+    """
+    Check whether a particle comes within some distance of the boundaries
+    of the detector and assign the `is_contained` attribute accordingly.
 
     Parameters
     ----------
-    data_dict : _type_
-        _description_
-    result_dict : _type_
-        _description_
-    margin : int, optional
-        _description_, by default 5
-    spatial_units : str, optional
-        _description_, by default 'cm'
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    margin : float, default 5 cm
+        Minimum distance from a detector wall to be considered contained
+    detector : str, default 'icarus'
+        Detector to get the geometry from
+    boundary_file : str, optional
+        Path to a detector boundary file. Supersedes `detector` if set
+    mode : str, default 'module'
+        Containement criterion (one of 'global', 'module', 'tpc'):
+        - If 'global', makes sure is is contained within the outermost walls
+        - If 'module', makes sure it is contained within a single module
+        - If 'tpc', makes sure it is contained within a single tpc
     """
-    particles = result_dict['particles']
-    interactions = result_dict['interactions']
-    
-    for p in particles:
-        p.is_contained = check_containment_cm(p, margin=margin)
-        
-    for ia in interactions:
-        ia.is_contained = check_containment_cm(ia, margin=margin)
-        
-    if 'truth_particles' in result_dict:
-        for p in result_dict['truth_particles']:
-            p.is_contained = check_containment_cm(p, margin=margin)
-            
-    if 'truth_interactions' in result_dict:
-        for ia in result_dict['truth_interactions']:
-            ia.is_contained = check_containment_cm(ia, margin=margin)
-            
+    # Initialize the geometry
+    geo = Geometry(detector, boundary_file)
+
+    # Check containment
+    for k in ['particles', 'interactions', 'truth_particles', 'truth_interactions']:
+        if k in result_dict:
+            for p in result_dict[k]:
+                # Make sure the particle coordinates are expressed in centimeters
+                if p.units != 'cm':
+                    raise ValueError('Particle coordinates must be expressed in cm '
+                            'to use the range-based kinetice energy reconstruction')
+
+                p.is_contained = geo.check_containment(p.points, margin, mode)
+
     return {}
-            
-            
-# ------------------------Helper Functions----------------------------
-
-FIDUCIAL_VOLUME = {
-    'x1_min': -358.49,
-    'x2_min': 61.94,
-    'x1_max': -61.94,
-    'x2_max': 358.49,
-    'y_min': -181.86,
-    'y_max': 134.96,
-    'z_min': -894.95,
-    'z_max': 894.95
-}
-
-def check_containment_cm(obj, margin=0):
-    x1 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x1_min'] + margin) \
-       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x1_max'] - margin)
-    x2 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x2_min'] + margin) \
-       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x2_max'] - margin)
-    y  = (obj.points[:, 1] > FIDUCIAL_VOLUME['y_min'] + margin) \
-       & (obj.points[:, 1] < FIDUCIAL_VOLUME['y_max'] - margin)
-    z  = (obj.points[:, 2] > FIDUCIAL_VOLUME['z_min'] + margin) \
-       & (obj.points[:, 2] < FIDUCIAL_VOLUME['z_max'] - margin)
-    x  = x1 | x2
-    x = x.all()
-    y = y.all()
-    z = z.all()
-    return (x and y and z)
