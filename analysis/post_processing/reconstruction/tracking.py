@@ -72,7 +72,7 @@ def reconstruct_track_energy(data_dict, result_dict,
                     method=tracking_mode, **kwargs)
 
             # Store the length and the CSDA kinetic energy
-            p.length = length
-            p.csda_kinetic_energy = splines[p.pid](length)
+            p.length  = length
+            p.csda_ke = splines[p.pid](length)
 
     return {}

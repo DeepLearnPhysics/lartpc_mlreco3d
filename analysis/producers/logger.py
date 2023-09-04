@@ -315,13 +315,21 @@ class ParticleLogger(AnalysisLogger):
         if particle is not None:
             out['particle_length'] = particle.length
         return out
+
+    @staticmethod
+    # @tag('reco')
+    def calo_ke(particle):
+        out = {'calo_ke': -1}
+        if particle is not None:
+            out['calo_ke'] = particle.calo_ke
+        return out
     
     @staticmethod
     # @tag('reco')
-    def csda_kinetic_energy(particle):
-        out = {'csda_kinetic_energy': -1}
+    def csda_ke(particle):
+        out = {'csda_ke': -1}
         if particle is not None:
-            out['csda_kinetic_energy'] = particle.csda_kinetic_energy
+            out['csda_ke'] = particle.csda_ke
         return out
     
     @staticmethod

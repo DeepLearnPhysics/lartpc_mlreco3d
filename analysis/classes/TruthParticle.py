@@ -91,8 +91,10 @@ class TruthParticle(Particle):
         self.truth_end_dir   = np.zeros(3)
 
         # Quantities to be set with track range reconstruction post-processor
-        self.length_tng = -1.
-        self.csda_kinetic_energy_tng = -1.
+        self.length_tng  = -1.
+        self.csda_ke_tng = -1.
+        self.calo_ke_tng = -1.
+        self.mcs_ke_tng  = -1.
 
     def register_larcv_particle(self, particle):
         '''

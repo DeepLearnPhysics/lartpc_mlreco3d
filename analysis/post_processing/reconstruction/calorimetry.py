@@ -1,15 +1,15 @@
 import numpy as np
 
+from mlreco.utils.globals import PID_LABELS
+
 from analysis.post_processing import post_processing
-from mlreco.utils.globals import VALUE_COL
 
 
 @post_processing(data_capture=['input_data'], 
-                 result_capture=['input_rescaled',
-                                 'particle_clusts'])
-def calorimetric_energy(data_dict,
-                        result_dict,
-                        conversion_factor=1.):
+                 result_capture=['particles'])
+def reconstruct_calo_energy(data_dict,
+                            result_dict,
+                            conversion_factor=1.):
     '''
     Compute calorimetric energy by summing the charge depositions and
     scaling by the ADC to MeV conversion factor.
@@ -20,21 +20,20 @@ def calorimetric_energy(data_dict,
         Data dictionary (contains one image-worth of data)
     result_dict : dict
         Result dictionary (contains one image-worth of data)
-    conversion_factor : float, optional
-        ADC to MeV conversion factor (MeV / ADC), by default 1.
-
-    Returns
-    -------
-    update_dict: dict
-        Dictionary to be included into result dictionary, containing the
-        computed energy under the key 'particle_calo_energy'.
+    conversion_factor : Union[float, dict], default 1.
+        Voxel value to MeV conversion factor. If a single number, the same
+        scaling is used for every particle type. If a dictionary is provided,
     '''
+    # Loop over reconstructed particles
+    for p in result_dict['particles']:
+        factor = conversion_factor
+        if isinstance(factor, dict):
+            if p.pid != -1 and p.pid not in PID_LABELS.keys():
+                raise ValueError(f'Particle species not recognized:{p.pid}')
+            if p.pid not in conversion_factor.keys():
+                raise ValueError(f'Must specify a conversion factor for particle {p.pid}')
+            factor = conversion_factor[p.pid]
 
-    input_data     = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
-    particles      = result_dict['particle_clusts']
-
-    update_dict = {
-        'particle_calo_energy': conversion_factor*np.array([np.sum(input_data[p, VALUE_COL]) for p in particles])
-    }
+        p.calo_ke = factor * p.depositions_sum
             
-    return update_dict
+    return {}

@@ -51,20 +51,22 @@ class Particle:
         Indicator whether this particle is a primary from an interaction
     primary_scores : np.ndarray
         (2) Array of softmax scores associated with secondary and primary
-    start_point : np.ndarray, default np.array([-1, -1, -1])
+    start_point : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle start point
-    end_point : np.ndarray, default np.array([-1, -1, -1])
+    end_point : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle end point
-    start_dir : np.ndarray, default np.array([-1, -1, -1])
+    start_dir : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle direction estimate w.r.t. the start point
-    end_dir : np.ndarray, default np.array([-1, -1, -1])
+    end_dir : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle direction estimate w.r.t. the end point
-    energy_sum : float, default -1
-        Energy reconstructed from the particle deposition sum
-    csda_kinetic_energy : float, default -1
+    momentum : np.ndarray, default np.array([-inf, -inf, -inf])
+        (3) Particle 3-momentum estimate
+    calo_ke : float, default -1
+        Kinetic energy reconstructed from the energy depositions alone
+    csda_ke : float, default -1
         Kinetic energy reconstructed from the particle range
-    momentum_mcs : float, default -1
-        Momentum reconstructed using the MCS method
+    mcs_ke  : float, default -1
+        Kinetic energy reconstructed using the MCS method
     match : List[int]
         List of TruthParticle IDs for which this particle is matched to
     units : str, default 'px'
@@ -89,11 +91,13 @@ class Particle:
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
                  start_point: np.ndarray = np.full(3, -np.inf),
                  end_point: np.ndarray = np.full(3, -np.inf),
-                 start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
-                 end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
+                 start_dir: np.ndarray = np.full(3, -np.inf),
+                 end_dir: np.ndarray = np.full(3, -np.inf),
+                 momentum: np.ndarray = np.full(3, -np.inf),
                  length: float = -1.,
-                 csda_kinetic_energy: float = -1.,
-                 momentum_mcs: float = -1.,
+                 calo_ke: float = -1.,
+                 csda_ke: float = -1.,
+                 mcs_ke: float = -1.,
                  matched: bool = False,
                  is_contained: bool = False,
                  is_primary: bool = False,
@@ -128,14 +132,16 @@ class Particle:
         self.primary_scores = primary_scores
         
         # Quantities to be set during post_processing
-        self._start_point         = start_point
-        self._end_point           = end_point
-        self._start_dir           = start_dir
-        self._end_dir             = end_dir
-        self.length               = length
-        self.csda_kinetic_energy  = csda_kinetic_energy
-        self.momentum_mcs         = momentum_mcs
-        self.is_contained         = is_contained
+        self._start_point = start_point
+        self._end_point   = end_point
+        self._start_dir   = start_dir
+        self._end_dir     = end_dir
+        self.momentum     = momentum
+        self.length       = length
+        self.calo_ke      = calo_ke
+        self.csda_ke      = csda_ke
+        self.mcs_ke       = mcs_ke
+        self.is_contained = is_contained
 
         # Quantities to be set by the particle matcher
         self.matched             = matched
