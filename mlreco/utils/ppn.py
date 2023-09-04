@@ -5,7 +5,8 @@ import torch
 from mlreco.utils import numba_local as nbl
 from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_types, dbscan_points
-from mlreco.utils.globals import TRACK_SHP, LOWES_SHP, UNKWN_SHP
+from mlreco.utils.globals import (COORD_COLS, PPN_RPOS_COLS, PPN_END_COLS,
+        TRACK_SHP, LOWES_SHP, UNKWN_SHP)
 
 
 def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5, min_energy_deposit=0, include_point_tagging=True):
@@ -270,9 +271,9 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
 
             # If requested, enhance using the PPN predictions. Only consider
             # points in the cluster that have a positive score
-            # TODO: PPN coords and score location should not be hardcoded
             if enhance_track_points:
-                pos_mask    = ppn_points[c][idxs, -1] >= ppn_points[c][idxs, -2]
+                pos_mask = ppn_points[c][idxs, PPN_RPOS_COLS[1]] \
+                        >= ppn_points[c][idxs, PPN_RPOS_COLS[0]]
                 end_points += pos_mask * (points_tensor[idxs, :3] + 0.5)
 
             # If needed, anchor the track endpoints to the track cluster
@@ -287,8 +288,7 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
         else:
             # Only use positive voxels and give precedence to predictions
             # that are contained within the voxel making the prediction.
-            # TODO: PPN coords and score location should not be hardcoded
-            ppn_scores = nbl.softmax(ppn_points[c][:, -2:], axis=1)[:,-1]
+            ppn_scores = nbl.softmax(ppn_points[c][:, PPN_RPOS_COLS], axis=1)[:,-1]
             val_index  = np.where(np.all(np.abs(ppn_points[c, :3] < 1.)))[0]
             best_id    = val_index[np.argmax(ppn_scores[val_index])] \
                     if len(val_index) else np.argmax(ppn_scores)
@@ -305,6 +305,54 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
 
     # Return points
     return points
+
+
+def check_track_orientation_ppn(start_point, end_point, ppn_candidates):
+    '''
+    Use the PPN point assignments as a basis to orient a track. Match
+    the end points of a track to the closest PPN candidate and pick the
+    candidate with the highest start score as the start point
+
+    Parameters
+    ----------
+    start_point : np.ndarray
+        (3) Start point of the track
+    end_point : np.ndarray
+        (3) End point of the track
+    ppn_candidates : np.ndarray
+        (N, 10)  PPN point candidates and their associated scores
+
+    Returns
+    -------
+    bool
+       Returns `True` if the start point provided is correct, `False`
+       if the end point is more likely to be the start point.
+    '''
+    # If there's no PPN candidates, nothing to do here
+    if not len(ppn_candidates):
+        return True
+
+    # Get the candidate coordinates and end point classification predictions
+    ppn_points = ppn_candidates[:, COORD_COLS]
+    end_scores = ppn_candidates[:, PPN_END_COLS]
+
+    # Compute the distance between the track end points and the PPN candidates
+    end_points = np.vstack([start_point, end_point])
+    dist_mat = nbl.cdist(end_points, ppn_points)
+
+    # If both track end points are closest to the same PPN point, the start
+    # point must be closest to it if the score is high, farthest otherwise
+    argmins = np.argmin(dist_mat, axis=1)
+    if argmins[0] == argmins[1]:
+        label = np.argmax(end_scores[argmins[0]])
+        dists = dist_mat[[0,1], argmins]
+        return (label == 0 and dists[0] < dists[1]) or \
+                (label == 1 and dists[1] < dists[0])
+
+    # In all other cases, check that the start point is associated with the PPN
+    # point with the lowest end score
+    end_scores = end_scores[argmins, -1]
+    return end_scores[0] < end_scores[1]
 
 
 def image_contains(meta, point, dim=3):
@@ -367,5 +415,5 @@ def image_coordinates(meta, point, dim=3):
 def uresnet_ppn_type_point_selector(*args, **kwargs):
         from warnings import warn
         warn('uresnet_ppn_type_point_selector is deprecated,'
-             'use get_ppn_prections instead')
+             'use get_ppn_predictions instead')
         return get_ppn_predictions(*args, **kwargs)

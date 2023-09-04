@@ -3,7 +3,7 @@ import networkx as nx
 
 from collections import Counter
 
-from mlreco.utils.globals import *
+from mlreco.utils.globals import TRACK_SHP
 
 from analysis.post_processing import post_processing
 
@@ -35,7 +35,7 @@ def adjust_pid_and_primary_labels(data_dict, result_dict,
     for p in result_dict['particles']:
         # Adjust the particle ID
         pid_thresholds = track_thresholds \
-                if p.semantic_type == 1 else em_thresholds
+                if p.semantic_type == TRACK_SHP else em_thresholds
         assigned = False or not len(pid_thresholds)
         for k, v in pid_thresholds.items():
             if not assigned and p.pid_scores[k] >= v:

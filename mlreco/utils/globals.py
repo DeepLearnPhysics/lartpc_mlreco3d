@@ -3,37 +3,48 @@ from collections import defaultdict
 from larcv import larcv
 
 # Column which specifies the batch ID in a sparse tensor
-BATCH_COL  = 0
+BATCH_COL = 0
 
 # Columns which specify the voxel coordinates in a sparse tensor
-COORD_COLS = np.array([1,2,3])
+COORD_COLS = np.array([1, 2, 3])
 
 # Colum which specifies the first value of a voxel in a sparse tensor
-VALUE_COL  = 4
+VALUE_COL = 4
 
 # Columns that specify each attribute in a cluster label tensor
-CLUST_COL  = 5
-GROUP_COL  = 6
-INTER_COL  = 7
-NU_COL     = 8
-PID_COL    = 9
-PSHOW_COL  = 10
-PGRP_COL   = 11
-VTX_COLS   = np.array([12,13,14])
-MOM_COL    = 15
-PART_COL   = 16 # TODO: change order
+CLUST_COL = 5
+GROUP_COL = 6
+INTER_COL = 7
+NU_COL    = 8
+PID_COL   = 9
+PSHOW_COL = 10
+PGRP_COL  = 11
+VTX_COLS  = np.array([12, 13, 14])
+MOM_COL   = 15
+PART_COL  = 16 # TODO: change order
 
-# Colum which specifies the shape ID of a voxel in a sparse or cluster label tensor
-SHAPE_COL  = -1
+# Colum which specifies the shape ID of a voxel in a label tensor
+SHAPE_COL = -1
+
+# Columns that specify each output in a PPN output tensor
+PPN_ROFF_COLS  = np.array([0, 1, 2])         # Raw offset
+PPN_RCLS_COLS  = np.array([3, 4, 5, 6, 7])   # Raw class scores
+PPN_RPOS_COLS  = np.array([8, 9])            # Raw positive score
+
+PPN_SCORE_COLS = np.array([4, 5])            # Softmax positive scores
+PPN_OCC_COL    = 6                           # Occupancy score
+PPN_CLASS_COLS = np.array([7, 8, 9, 10, 11]) # Softmax class scores
+PPN_SHAPE_COL  = 12                          # Predicted shape
+PPN_END_COLS   = np.array([13, 14])          # Softmax end point scores
 
 # Shape ID of each type of voxel category
-SHOWR_SHP  = larcv.kShapeShower    # 0
-TRACK_SHP  = larcv.kShapeTrack     # 1
-MICHL_SHP  = larcv.kShapeMichel    # 2
-DELTA_SHP  = larcv.kShapeDelta     # 3
-LOWES_SHP  = larcv.kShapeLEScatter # 4
-GHOST_SHP  = larcv.kShapeGhost     # 5
-UNKWN_SHP  = larcv.kShapeUnknown   # 6
+SHOWR_SHP = larcv.kShapeShower    # 0
+TRACK_SHP = larcv.kShapeTrack     # 1
+MICHL_SHP = larcv.kShapeMichel    # 2
+DELTA_SHP = larcv.kShapeDelta     # 3
+LOWES_SHP = larcv.kShapeLEScatter # 4
+GHOST_SHP = larcv.kShapeGhost     # 5
+UNKWN_SHP = larcv.kShapeUnknown   # 6
 
 # Shape precedence used in the cluster labeling process
 SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP, UNKWN_SHP]
