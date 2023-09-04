@@ -28,7 +28,7 @@ SHAPE_COL = -1
 
 # Columns that specify each output in a PPN output tensor
 PPN_ROFF_COLS  = np.array([0, 1, 2])         # Raw offset
-PPN_RCLS_COLS  = np.array([3, 4, 5, 6, 7])   # Raw class scores
+PPN_RTYPE_COLS = np.array([3, 4, 5, 6, 7])   # Raw class type scores
 PPN_RPOS_COLS  = np.array([8, 9])            # Raw positive score
 
 PPN_SCORE_COLS = np.array([4, 5])            # Softmax positive scores

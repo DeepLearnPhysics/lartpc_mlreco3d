@@ -5,13 +5,14 @@ import torch
 from mlreco.utils import numba_local as nbl
 from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_types, dbscan_points
-from mlreco.utils.globals import (COORD_COLS, PPN_RPOS_COLS, PPN_END_COLS,
-        TRACK_SHP, LOWES_SHP, UNKWN_SHP)
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, PPN_RTYPE_COLS,
+        PPN_RPOS_COLS, PPN_END_COLS, TRACK_SHP, LOWES_SHP, UNKWN_SHP)
 
 
-def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5, min_energy_deposit=0, include_point_tagging=True):
+def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5,
+        min_energy_deposit=0, include_point_tagging=True):
     '''
-    Gets particle points coordinates and informations for running PPN.
+    Gets particle point coordinates and informations for running PPN.
 
     We skip some particles under specific conditions (e.g. low energy deposit,
     low voxel count, nucleus track, etc.)
@@ -88,7 +89,6 @@ def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5, min_energy_deposi
 
 def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5,
                         type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                        batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
                         selection=None, num_classes=5, apply_deghosting=True, **kwargs):
     '''
     Converts the raw output of PPN to a set of proposed points.
@@ -134,7 +134,7 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
 
-    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
+    scores = scipy.special.softmax(points[:, PPN_RPOS_COLS], axis=1)
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean
@@ -146,7 +146,7 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
     all_batch  = []
     all_softmax = []
     all_endpoints = []
-    batch_ids  = event_data[:, batch_col]
+    batch_ids  = event_data[:, BATCH_COL]
     for b in np.unique(batch_ids):
         final_points = []
         final_scores = []
@@ -169,8 +169,8 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
             new_mask[indices] = mask[indices]
             mask = new_mask
 
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
-        ppn_type_softmax = scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index2][mask][:, PPN_RTYPE_COLS], axis=1), axis=1)
+        ppn_type_softmax = scipy.special.softmax(points[batch_index2][mask][:, PPN_RTYPE_COLS], axis=1)
         if enable_classify_endpoints:
             ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index2][mask], axis=1)
         if enforce_type:
@@ -178,16 +178,16 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
-                    d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
+                    d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, COORD_COLS] + 0.5, event_data[batch_index][mask][uresnet_points][:, COORD_COLS])
                     ppn_mask2 = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask2][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask2][:, coords_col[0]:coords_col[1]])
+                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask2][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask2][:, COORD_COLS])
                     final_scores.append(scores[batch_index2][mask][ppn_points][ppn_mask2])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask2])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask2])
                     if enable_classify_endpoints:
                         final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask2])
         else:
-            final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
+            final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, COORD_COLS]]
             final_scores = [scores[batch_index2][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]
