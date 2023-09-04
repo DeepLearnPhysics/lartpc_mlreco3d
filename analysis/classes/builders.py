@@ -10,7 +10,6 @@ import copy
 
 from mlreco.utils.globals import (BATCH_COL,
                                   COORD_COLS,
-                                  PDG_TO_PID,
                                   VALUE_COL,
                                   VTX_COLS,
                                   INTER_COL,
@@ -965,8 +964,6 @@ def handle_empty_truth_particles(labels_noghost,
     particle: TruthParticle
     """
     id = int(p.id())
-    # pdg = PDG_TO_PID.get(p.pdg_code(), -1)
-    # is_primary = p.group_id() == p.parent_id()
     is_primary = False
 
     semantic_type, interaction_id, nu_id, primary_id, pid = -1, -1, -1, -1, -1

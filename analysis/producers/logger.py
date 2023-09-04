@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 import sys
 
-from mlreco.utils.globals import PID_LABELS
 from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):

@@ -65,8 +65,8 @@ PDG_TO_PID.update({
     211:  3,  # pi+
     -211: 3,  # pi-
     2212: 4,  # protons
-    #321:  5,  # K+
-    #-321: 5   # K-
+    321:  5,  # K+
+    -321: 5   # K-
 })
 
 PID_TO_PDG = {v : abs(k) for k, v in PDG_TO_PID.items()}
@@ -78,7 +78,7 @@ PID_LABELS = {
     2:  'Muon',
     3:  'Pion',
     4:  'Proton',
-    #5:  'Kaon'
+    5:  'Kaon'
 }
 
 # Neutrino current type

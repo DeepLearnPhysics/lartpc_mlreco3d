@@ -30,7 +30,7 @@ def csda_table_spline(particle_type, table_dir='csda_tables'):
     suffix = 'E_liquid_argon'
     name_mapping = {PDG_TO_PID[13]: 'mu',
                     PDG_TO_PID[211]: 'pi',
-                    #PDG_TO_PID[321]: 'ka',
+                    PDG_TO_PID[321]: 'ka',
                     PDG_TO_PID[2212]: 'p'}
 
     if particle_type in name_mapping.keys():
