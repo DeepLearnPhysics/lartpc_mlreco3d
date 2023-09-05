@@ -213,7 +213,7 @@ class ParticleLogger(AnalysisLogger):
             'particle_py': min_int,
             'particle_pz': min_int,
         }
-        if type(particle) is TruthParticle:
+        if particle is not None:
             out['particle_px'] = particle.momentum[0]
             out['particle_py'] = particle.momentum[1]
             out['particle_pz'] = particle.momentum[2]
