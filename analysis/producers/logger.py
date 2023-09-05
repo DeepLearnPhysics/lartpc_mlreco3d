@@ -204,7 +204,7 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    @tag('true')
+    #@tag('true')
     def momentum(particle):
         min_int = -sys.maxsize - 1
         out = {

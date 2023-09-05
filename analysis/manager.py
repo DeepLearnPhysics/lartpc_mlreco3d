@@ -584,12 +584,13 @@ class AnaToolsManager:
             Iteration number for current step. 
         """
         # 1. Run forward
+        print(f"\nProcessing entry {iteration}")
         glob_start = time.time()
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
         dt = end - start
-        print(f"\nForward took {dt:.3f} seconds.")
+        print(f"Forward took {dt:.3f} seconds.")
         self.logger_dict['forward_time'] = dt
         
         # 1-a. Convert units

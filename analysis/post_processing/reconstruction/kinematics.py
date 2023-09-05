@@ -46,9 +46,9 @@ def reconstruct_momentum(data_dict,
         else:
             # If a particle is a track, pick csda for contained tracks and
             # pick mcs for uncontained tracks, unless specified otherwise
-            if (method == 'csda' or p.is_contained) and p.csda_ke > -1.:
+            if (method == 'csda' or p.is_contained) and p.csda_ke > 0.:
                 ke = p.csda_ke
-            elif (method == 'mcs' or not p.is_contained) and p.mcs_ke > -1.:
+            elif (method == 'mcs' or not p.is_contained) and p.mcs_ke > 0.:
                 ke = p.mcs_ke
             else:
                 ke = p.calo_ke

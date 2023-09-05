@@ -346,7 +346,11 @@ def get_track_segments(coordinates: nb.float32[:,:],
             else:
                 # If this is the last segment, find the farthest point from its start
                 direction = coordinates[segment_index[np.argmax(dists[pass_index])]] - segment_start
-            direction /= np.linalg.norm(direction)
+
+            if np.linalg.norm(direction):
+                direction /= np.linalg.norm(direction)
+            else:
+                direction = np.array([1.,0.,0.], dtype=coordinates.dtype)
 
             # Compute the segment length. If it's the last segment,
             # track the distance to the fathest point in the segment
@@ -470,6 +474,12 @@ def get_track_spline(coordinates, segment_length, s=None):
     pcoords   = np.dot(coordinates, track_dir)
     perm      = np.argsort(pcoords.squeeze())
     u         = pcoords[perm]
+
+    # If there is less than four points, cannot fit a 3D spline
+    if len(coordinates) < 4:
+        # Fall back on displacement to estimate length
+        length = np.max(pcoords) - np.min(pcoords)
+        return u.squeeze, None, None, length
 
     # Compute the univariate splines along each axis
     spx = UnivariateSpline(u, coordinates[perm][:, 0], s=s)
