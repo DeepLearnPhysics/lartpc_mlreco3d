@@ -73,6 +73,6 @@ def reconstruct_csda_energy(data_dict, result_dict,
 
             # Store the length and the CSDA kinetic energy
             p.length  = length
-            p.csda_ke = splines[p.pid](length) if length > 0. else 0.
+            p.csda_ke = splines[p.pid](length).item() if length > 0. else 0.
 
     return {}
