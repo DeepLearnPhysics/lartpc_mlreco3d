@@ -84,12 +84,22 @@ PID_TO_PDG = {v : abs(k) for k, v in PDG_TO_PID.items()}
 
 # Particle type labels
 PID_LABELS = {
-    0:  'Photon',
-    1:  'Electron',
-    2:  'Muon',
-    3:  'Pion',
-    4:  'Proton',
-    5:  'Kaon'
+    0: 'Photon',
+    1: 'Electron',
+    2: 'Muon',
+    3: 'Pion',
+    4: 'Proton',
+    5: 'Kaon'
+}
+
+# Particle masses
+PID_MASSES = {
+    0: 0.,
+    1: 0.511998, # [MeV/c^2]
+    2: 105.658,  # [MeV/c^2]
+    3: 139.570,
+    4: 493.677,
+    5: 938.272
 }
 
 # Neutrino current type
@@ -165,13 +175,6 @@ NU_INT_TYPE = {
     1099: 'InverseMuDecay',
     1100: 'MEC2p2h'
 }
-
-# Particle masses
-ELECTRON_MASS = 0.511998  # [MeV/c^2]
-MUON_MASS     = 105.658   # [MeV/c^2]
-PION_MASS     = 139.570   # [MeV/c^2]
-KAON_MASS     = 493.677   # [MeV/c^2]
-PROTON_MASS   = 938.272   # [MeV/c^2]
 
 # Physical constants
 ARGON_DENSITY = 1.396     # [g/cm^3]

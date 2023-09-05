@@ -11,12 +11,12 @@ from analysis.post_processing import post_processing
 @post_processing(data_capture=['meta'],
                  result_capture=['particles'],
                  result_capture_optional=['truth_particles'])
-def reconstruct_track_energy(data_dict, result_dict,
-                             tracking_mode='bin_pca',
-                             include_pids=[2,3,4,5],
-                             truth_point_mode='points',
-                             run_mode = 'both',
-                             **kwargs):
+def reconstruct_csda_energy(data_dict, result_dict,
+                            tracking_mode='bin_pca',
+                            include_pids=[2,3,4,5],
+                            truth_point_mode='points',
+                            run_mode = 'both',
+                            **kwargs):
     '''
     Reconstruct the kinetic energy of tracks based on their range in liquid
     argon using the continuous slowing down approximation (CSDA).
