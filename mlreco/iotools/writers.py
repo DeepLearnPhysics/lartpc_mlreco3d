@@ -416,8 +416,7 @@ class HDF5Writer:
         # Append file
         with h5py.File(self.file_name, 'a') as out_file:
             # Loop over batch IDs
-            self.batch_size = len(data_blob['index'])
-            for batch_id in range(self.batch_size):
+            for batch_id in range(len(data_blob['index'])):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
 
@@ -461,10 +460,14 @@ class HDF5Writer:
         if not val['merge'] and not isinstance(val['width'], list):
             # Store single arrays
             if key not in blob:
+                # If an output does not exists, give an empty array
                 array = []
             elif np.isscalar(blob[key]):
+                # If an output is a scalar, nest it
                 array = blob[key]
             else:
+                # If an output is a nest scalar, get it for every batch ID
+                # TODO: Must get rid of this option
                 array = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
 
             if not hasattr(array, '__len__'):
