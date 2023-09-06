@@ -1,119 +1,24 @@
 import numpy as np
 
-from mlreco.utils.gnn.cluster import get_cluster_directions, cluster_direction
-from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
+from mlreco.utils.gnn.cluster import cluster_direction
+from mlreco.utils.geometry import Geometry
 
-import networkx as nx
-from collections import Counter
+from analysis.classes import TruthParticle
+from analysis.post_processing import post_processing
 
 
-@post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
-                                                              'particle_clusts',
-                                                              'particle_start_points',
-                                                              'particle_end_points',
-                                                              'particles'])
-def particle_direction(data_dict,
-                       result_dict,
-                       neighborhood_radius=5,
-                       optimize=True):
-    """Estimate the direction of a particle using the startpoint.
-    This modifies the <start_dir> attribute of each Particle object in-place.
-
-    Parameters
-    ----------
-    data_dict : dict
-        Input data dictionary
-    result_dict : dict
-        Chain output dictionary
-    neighborhood_radius : int, optional
-        The radius of the neighborhood around the startpoint, 
-        used to compute the direction vector , by default 5
-    optimize : bool, optional
-        Option to use the optimizing algorithm, by default True
-
-    Returns
-    -------
-    update_dict: dict
-        Dictionary containing start and end directions for all particles in the image. 
-    """
-
-    if 'input_rescaled' not in result_dict:
-        input_data = data_dict['input_data']
-    else:
-        input_data = result_dict['input_rescaled']
-    particles      = result_dict['particle_clusts']
-    if not len(particles):
-        return data_dict
-
-    start_points   = result_dict['particle_start_points']
-    end_points     = result_dict['particle_end_points']
-
-    update_dict = {
-        'particle_start_directions': get_cluster_directions(input_data[:,COORD_COLS],
-                                                            start_points[:,COORD_COLS], 
-                                                            particles,
-                                                            neighborhood_radius, 
-                                                            optimize),
-        'particle_end_directions':   get_cluster_directions(input_data[:,COORD_COLS],
-                                                            end_points[:,COORD_COLS], 
-                                                            particles,
-                                                            neighborhood_radius, 
-                                                            optimize)
-    }
-    
-    for i, p in enumerate(result_dict['particles']):
-        p.start_dir = update_dict['particle_start_directions'][i]
-        p.end_dir   = update_dict['particle_end_directions'][i]
-            
-    return update_dict
-
-@post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
-                                                              'particle_clusts',
-                                                              'particle_start_points',
-                                                              'particle_end_points',
-                                                              'particles'])
+@post_processing(data_capture=[],
+                 result_capture=['particles'],
+                 result_capture_optional=['truth_particles'])
 def reconstruct_directions(data_dict,
                            result_dict,
                            neighborhood_radius=5,
-                           optimize=True):
-    if 'input_rescaled' not in result_dict:
-        input_data = data_dict['input_data']
-    else:
-        input_data = result_dict['input_rescaled']
-
-    if not len(result_dict['particles']):
-        return {}
-
-    particles = np.array([p.index for p in result_dict['particles']])
-    start_points = np.vstack([p.start_point for p in result_dict['particles']])
-    end_points = np.vstack([p.end_point for p in result_dict['particles']])
-
-    update_dict = {
-        'particle_start_directions': get_cluster_directions(input_data[:,COORD_COLS],
-                                                            start_points, 
-                                                            particles,
-                                                            neighborhood_radius, 
-                                                            optimize),
-        'particle_end_directions':   get_cluster_directions(input_data[:,COORD_COLS],
-                                                            end_points, 
-                                                            particles,
-                                                            neighborhood_radius, 
-                                                            optimize)
-    }
-    
-    for i, p in enumerate(result_dict['particles']):
-        p.start_dir = update_dict['particle_start_directions'][i]
-        p.end_dir   = update_dict['particle_end_directions'][i]
-            
-    return {}
-
-
-@post_processing(data_capture=['graph'],
-                 result_capture=['truth_particles'])
-def count_children(data_dict, result_dict, mode='semantic_type'):
-    """Post-processor for counting the number of children of a given particle,
-    using the particle hierarchy information from parse_particle_graph.
+                           optimize=True,
+                           truth_point_mode='points',
+                           run_mode='both'):
+    '''
+    Reconstruct the direction of particles w.r.t. to their end points.
 
     Parameters
     ----------
@@ -121,100 +26,110 @@ def count_children(data_dict, result_dict, mode='semantic_type'):
         Input data dictionary
     result_dict : dict
         Chain output dictionary
-    mode : str, optional
-        Attribute name to categorize children, by default 'semantic_type'.
-        This will count each child particle for different semantic types
-        separately. 
+    neighborhood_radius : float, default 5
+        Max distance between start voxel and other voxels
+    optimize : bool, default True
+        Optimizes the number of points involved in the estimate
+    truth_point_mode : str, default 'points'
+        Point attribute to use to compute the direction of true particles
+    run_mode : str, default 'both'
+        Which output to run on (one of 'both', 'reco' or 'truth')
+    '''
+    # List objects for which to reconstruct direcions
+    key_list = []
+    if run_mode in ['reco', 'both']:
+        key_list += ['particles']
+    if run_mode in ['truth', 'both']:
+        key_list += ['truth_particles']
 
-    Returns
-    -------
-    None
-        (Operation is in-place)
-    """
-    
-    G = nx.DiGraph()
-    edges = []
-    graph = data_dict['graph']
-    particles = result_dict['truth_particles']
-    
-    for p in particles:
-        G.add_node(p.id, attr=getattr(p, mode))
-    for p in result_dict['truth_particles']:
-        parent = p.parent_id
-        if parent in G and int(parent) != int(p.id):
-            edges.append((parent, p.id))
-    G.add_edges_from(edges)
-    
-    for p in particles:
-        successors = list(G.successors(p.id))
-        counter = Counter()
-        counter.update([G.nodes[succ]['attr'] for succ in successors])
-        for key, val in counter.items():
-            p.children_counts[key] = val
+    # Loop over particle objects
+    for k in key_list:
+        for p in result_dict[k]:
+            # Make sure the particle coordinates are expressed in cm
+            if p.units != 'cm':
+                raise ValueError('Particle coordinates must be expressed in cm '
+                        'to use the range-based kinetice energy reconstruction')
+
+            # Get point coordinates
+            if not isinstance(p, TruthParticle):
+                coordinates = p.points
+            else:
+                coordinates = getattr(p, truth_point_mode)
+            if not len(coordinates):
+                continue
+
+            # Reconstruct directions from either end of the particle
+            p.start_dir = cluster_direction(coordinates, p.start_point,
+                    neighborhood_radius, optimize)
+            p.end_dir   = cluster_direction(coordinates, p.end_point,
+                    neighborhood_radius, optimize)
+
     return {}
 
 
-@post_processing(data_capture=['meta'], 
+@post_processing(data_capture=[],
                  result_capture=['particles', 'interactions'],
                  result_capture_optional=['truth_particles', 'truth_interactions'])
-def fiducial_cut(data_dict, result_dict, margin=0, spatial_units='cm'):
-    """_summary_
+def check_containement(data_dict, result_dict,
+                       margin=5,
+                       detector='icarus',
+                       boundary_file=None,
+                       mode='module',
+                       truth_point_mode='points',
+                       run_mode='both'):
+    '''
+    Check whether a particle comes within some distance of the boundaries
+    of the detector and assign the `is_contained` attribute accordingly.
 
     Parameters
     ----------
-    data_dict : _type_
-        _description_
-    result_dict : _type_
-        _description_
-    margin : int, optional
-        _description_, by default 5
-    spatial_units : str, optional
-        _description_, by default 'cm'
-    """
-    particles = result_dict['particles']
-    interactions = result_dict['interactions']
-    
-    for p in particles:
-        p.is_contained = check_containment_cm(p, margin=margin)
-        
-    for ia in interactions:
-        ia.is_contained = check_containment_cm(ia, margin=margin)
-        
-    if 'truth_particles' in result_dict:
-        for p in result_dict['truth_particles']:
-            p.is_contained = check_containment_cm(p, margin=margin)
-            
-    if 'truth_interactions' in result_dict:
-        for ia in result_dict['truth_interactions']:
-            ia.is_contained = check_containment_cm(ia, margin=margin)
-            
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    margin : float, default 5 cm
+        Minimum distance from a detector wall to be considered contained
+    detector : str, default 'icarus'
+        Detector to get the geometry from
+    boundary_file : str, optional
+        Path to a detector boundary file. Supersedes `detector` if set
+    mode : str, default 'module'
+        Containement criterion (one of 'global', 'module', 'tpc'):
+        - If 'global', makes sure is is contained within the outermost walls
+        - If 'module', makes sure it is contained within a single module
+        - If 'tpc', makes sure it is contained within a single tpc
+    truth_point_mode : str, default 'points'
+        Point attribute to use to check containment of true particles
+    run_mode : str, default 'both'
+        Which output to run on (one of 'both', 'reco' or 'truth')
+    '''
+    # Initialize the geometry
+    geo = Geometry(detector, boundary_file)
+
+    # List objects for which to check containement
+    key_list = []
+    if run_mode in ['reco', 'both']:
+        key_list += ['particles', 'interactions']
+    if run_mode in ['truth', 'both']:
+        key_list += ['truth_particles', 'truth_interactions']
+
+    # Loop over particle objects
+    for k in key_list:
+        for p in result_dict[k]:
+            # Make sure the particle coordinates are expressed in cm
+            if p.units != 'cm':
+                raise ValueError('Particle coordinates must be expressed in cm '
+                        'to use the range-based kinetice energy reconstruction')
+
+            # Get point coordinates
+            if not isinstance(p, TruthParticle):
+                coordinates = p.points
+            else:
+                coordinates = getattr(p, truth_point_mode)
+            if not len(coordinates):
+                continue
+
+            # Check containment
+            p.is_contained = geo.check_containment(p.points, margin, mode)
+
     return {}
-            
-            
-# ------------------------Helper Functions----------------------------
-
-FIDUCIAL_VOLUME = {
-    'x1_min': -358.49,
-    'x2_min': 61.94,
-    'x1_max': -61.94,
-    'x2_max': 358.49,
-    'y_min': -181.86,
-    'y_max': 134.96,
-    'z_min': -894.95,
-    'z_max': 894.95
-}
-
-def check_containment_cm(obj, margin=0):
-    x1 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x1_min'] + margin) \
-       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x1_max'] - margin)
-    x2 = (obj.points[:, 0] > FIDUCIAL_VOLUME['x2_min'] + margin) \
-       & (obj.points[:, 0] < FIDUCIAL_VOLUME['x2_max'] - margin)
-    y  = (obj.points[:, 1] > FIDUCIAL_VOLUME['y_min'] + margin) \
-       & (obj.points[:, 1] < FIDUCIAL_VOLUME['y_max'] - margin)
-    z  = (obj.points[:, 2] > FIDUCIAL_VOLUME['z_min'] + margin) \
-       & (obj.points[:, 2] < FIDUCIAL_VOLUME['z_max'] - margin)
-    x  = x1 | x2
-    x = x.all()
-    y = y.all()
-    z = z.all()
-    return (x and y and z)

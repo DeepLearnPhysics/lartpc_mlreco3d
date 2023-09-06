@@ -3,7 +3,7 @@ import numpy as np
 from torch_scatter import scatter_min
 
 from mlreco.utils import local_cdist
-from mlreco.utils.globals import COORD_COLS
+from mlreco.utils.globals import COORD_COLS, VALUE_COL, SHAPE_COL
 from mlreco.utils.gnn.data import cluster_features, cluster_edge_features
 
 class ClustGeoNodeEncoder(torch.nn.Module):
@@ -31,20 +31,28 @@ class ClustGeoNodeEncoder(torch.nn.Module):
 
         # Initialize the encoder parameters
         self.use_numpy = model_config.get('use_numpy', True)
-        self.more_feats = model_config.get('more_feats', False)
+        self.add_value = model_config.get('add_value', False)
+        self.add_shape = model_config.get('add_shape', False)
+
+        # Deprecated
+        if 'more_feats' in model_config:
+            from warnings import warn
+            warn('`more_feats` is deprecated, use `add_value` and/or `add_shape` instead', DeprecationWarning, 2)
+            if model_config['more_feats']:
+                self.add_value = self.add_shape = True
 
     def forward(self, data, clusts):
 
         # If numpy is to be used, bring data to CPU, pass through Numba function
         if self.use_numpy:
-            return cluster_features(data, clusts, extra=self.more_feats)
+            return cluster_features(data, clusts, self.add_value, self.add_shape)
 
         # Get the voxel set
         voxels = data[:, COORD_COLS].float()
 
         # Get the value & semantic types
-        values    = data[:, 4].float()
-        sem_types = data[:, -1].float()
+        values    = data[:, VALUE_COL].float()
+        sem_types = data[:, SHAPE_COL].float()
 
         # Below is a torch-based implementation of cluster_features
         feats = []
@@ -56,11 +64,13 @@ class ClustGeoNodeEncoder(torch.nn.Module):
 
             # Do not waste time with computations with size 1 clusters, default to zeros
             if len(c) < 2:
-                if not self.more_feats:
-                    feats.append(torch.cat((x.flatten(), torch.zeros(12, dtype=voxels.dtype, device=voxels.device), size)))
-                else:
-                    extra_feats = torch.tensor([values[c[0]], 0., sem_types[c[0]]], dtype=voxels.dtype, device=voxels.device)
-                    feats.append(torch.cat((x.flatten(), torch.zeros(12, dtype=voxels.dtype, device=voxels.device), size, extra_feats)))
+                feats_v = torch.cat((x.flatten(), torch.zeros(12, dtype=voxels.dtype, device=voxels.device), size))
+                if add_value:
+                    feats_v = torch.cat((feats_v, torch.tensor([values[c[0]], 0.], dtype=voxels.dtype, device=voxels.device)))
+                if add_shape:
+                    feats_v = torch.cat((feats_v, torch.tensor([sem_types[c[0]]], dtype=voxels.dtype, device=voxels.device)))
+
+                feats.append(feats_v)
                 continue
 
             # Center data
@@ -96,11 +106,13 @@ class ClustGeoNodeEncoder(torch.nn.Module):
             v0 = dirwt * v0
 
             # Append (center, B.flatten(), v0, size)
-            if not self.more_feats:
-                feats.append(torch.cat((center, B.flatten(), v0, size)))
-            else:
-                extra_feats = torch.tensor([values[c].mean(), values[c].std(), sem_types[c].mode()[0]], dtype=voxels.dtype, device=voxels.device)
-                feats.append(torch.cat((center, B.flatten(), v0, size, extra_feats)))
+            feats_v = torch.cat((center, B.flatten(), v0, size))
+            if add_value:
+                feats_v = torch.cat((feats_v, torch.tensor([values[c].mean(), values[c].std()], dtype=voxels.dtype, device=voxels.device)))
+            if add_shape:
+                feats_v = torch.cat((feats_v, torch.tensor([sem_types[c].mode()], dtype=voxels.dtype, device=voxels.device)))
+
+            feats.append(feats_v)
 
         return torch.stack(feats, dim=0)
 

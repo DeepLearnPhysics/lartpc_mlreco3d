@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 import sys
 
-from mlreco.utils.globals import PID_LABELS
 from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):
@@ -205,7 +204,7 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
-    @tag('true')
+    #@tag('true')
     def momentum(particle):
         min_int = -sys.maxsize - 1
         out = {
@@ -214,7 +213,7 @@ class ParticleLogger(AnalysisLogger):
             'particle_py': min_int,
             'particle_pz': min_int,
         }
-        if type(particle) is TruthParticle:
+        if particle is not None:
             out['particle_px'] = particle.momentum[0]
             out['particle_py'] = particle.momentum[1]
             out['particle_pz'] = particle.momentum[2]
@@ -316,13 +315,21 @@ class ParticleLogger(AnalysisLogger):
         if particle is not None:
             out['particle_length'] = particle.length
         return out
+
+    @staticmethod
+    # @tag('reco')
+    def calo_ke(particle):
+        out = {'calo_ke': -1}
+        if particle is not None:
+            out['calo_ke'] = particle.calo_ke
+        return out
     
     @staticmethod
     # @tag('reco')
-    def csda_kinetic_energy(particle):
-        out = {'csda_kinetic_energy': -1}
+    def csda_ke(particle):
+        out = {'csda_ke': -1}
         if particle is not None:
-            out['csda_kinetic_energy'] = particle.csda_kinetic_energy
+            out['csda_ke'] = particle.csda_ke
         return out
     
     @staticmethod

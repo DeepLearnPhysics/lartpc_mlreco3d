@@ -286,6 +286,8 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
+    if not len(clusts):
+        return np.empty((0, 16), dtype=data.dtype) # Cannot type empty list
     return _get_cluster_features(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
@@ -342,7 +344,7 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_features_extended(data, clusts):
+def get_cluster_features_extended(data, clusts, add_value=True, add_shape=True):
     """
     Function that returns the an array of 3 additional features for
     each of the clusters in the provided list.
@@ -350,27 +352,38 @@ def get_cluster_features_extended(data, clusts):
     Args:
         data (np.ndarray)    : (N,X) Data tensor [x,y,z,batch_id,value,...,sem_type]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        add_value (bool)     : Whether or not to add the pixel value mean/std to the features
+        add_shape (bool)     : Whether or not to add the dominant semantic type to the features
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
-    return _get_cluster_features_extended(data, clusts)
+    assert add_value or add_shape
+    if not len(clusts):
+        return np.empty((0, add_value*2+add_shape), dtype=data.dtype)
+    return _get_cluster_features_extended(data, clusts, add_value, add_shape)
 
 @nb.njit(parallel=True, cache=True)
 def _get_cluster_features_extended(data: nb.float64[:,:],
-                                   clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
-    feats = np.empty((len(clusts), 3), dtype=data.dtype)
+                                   clusts: nb.types.List(nb.int64[:]),
+                                   add_value: bool = True,
+                                   add_shape: bool = True) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), add_value*2+add_shape), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
-        # Get mean and RMS energy in the cluster
+        # Get cluster
         clust = clusts[ids[k]]
-        mean_value = np.mean(data[clust, VALUE_COL])
-        std_value = np.std(data[clust, VALUE_COL])
 
-        # Get the cluster semantic class
-        types, cnts = nbl.unique(data[clust, SHAPE_COL])
-        major_sem_type = types[np.argmax(cnts)]
+        # Get mean and RMS energy in the cluster, if requested
+        if add_value:
+            mean_value = np.mean(data[clust, VALUE_COL])
+            std_value = np.std(data[clust, VALUE_COL])
+            feats[k, :2] = np.array([mean_value, std_value], dtype=data.dtype)
 
-        feats[k] = [mean_value, std_value, major_sem_type]
+        # Get the cluster semantic class, if requested
+        if add_shape:
+            types, cnts = nbl.unique(data[clust, SHAPE_COL])
+            major_sem_type = types[np.argmax(cnts)]
+            feats[k, -1] = major_sem_type
 
     return feats
 

@@ -1,9 +1,9 @@
 import torch
 import numpy as np
+from warnings import warn
 
 from mlreco.models.grappa import GNN, GNNLoss
 from mlreco.utils.unwrap import prefix_unwrapper_rules
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import (form_clusters,
@@ -31,50 +31,41 @@ class FullChainGNN(torch.nn.Module):
         setup_chain_cfg(self, cfg)
 
         # Initialize the particle aggregator modules
-        if self.enable_gnn_shower:
-            self.grappa_shower     = GNN(cfg, name='grappa_shower', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_shower_cfg      = cfg.get('grappa_shower', {})
-            self._shower_ids       = grappa_shower_cfg.get('base', {}).get('node_type', 0)
-            self._shower_use_true_particles = grappa_shower_cfg.get('use_true_particles', False)
-            if not isinstance(self._shower_ids, list): self._shower_ids = [self._shower_ids]
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_shower.RETURNS, 'shower_fragment'))
-            self.RETURNS['shower_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+        for stage in ['shower', 'track', 'particle', 'inter', 'kinematics']:
+            if getattr(self, f'enable_gnn_{stage}'):
+                # Initialize the GNN model
+                name = f'grappa_{stage}'
+                setattr(self, name, GNN(cfg, name=name, batch_col=self.batch_col, coords_col=self.coords_col))
 
-        if self.enable_gnn_track:
-            self.grappa_track      = GNN(cfg, name='grappa_track', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_track_cfg       = cfg.get('grappa_track', {})
-            self._track_ids        = grappa_track_cfg.get('base', {}).get('node_type', 1)
-            self._track_use_true_particles = grappa_track_cfg.get('use_true_particles', False)
-            if not isinstance(self._track_ids, list): self._track_ids = [self._track_ids]
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_track.RETURNS, 'track_fragment'))
-            self.RETURNS['track_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Get the relevant attributes
+                grappa_cfg = cfg.get(name, {})
+                setattr(self, f'_{stage}_use_true_particles', grappa_cfg.get('use_true_particles', False))
+                setattr(self, f'_{stage}_ids', getattr(self, name).node_type)
+                setattr(self, f'_{stage}_add_value', getattr(getattr(self, name).node_encoder, 'add_value', False))
+                setattr(self, f'_{stage}_add_shape', getattr(getattr(self, name).node_encoder, 'add_shape', False))
+                if hasattr(getattr(self, name).node_encoder, 'add_value'):
+                    setattr(getattr(self, name).node_encoder, 'add_value', False)
+                    setattr(getattr(self, name).node_encoder, 'add_shape', False)
+                if self.use_supp_in_gnn:
+                    warn('`use_supp_in_gnn` is deprecated, '
+                            'specify the extra features in the node encoder config')
+                    setattr(self, f'_{stage}_add_value', True)
+                    setattr(self, f'_{stage}_add_shape', True)
 
-        if self.enable_gnn_particle:
-            self.grappa_particle   = GNN(cfg, name='grappa_particle', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_particle_cfg    = cfg.get('grappa_particle', {})
-            self._particle_ids     = grappa_particle_cfg.get('base', {}).get('node_type', [0,1,2,3])
-            self._particle_use_true_particles = grappa_particle_cfg.get('use_true_particles', False)
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_particle.RETURNS, 'particle_fragment'))
-            self.RETURNS['particle_fragment_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Interaction specific attributes
+                if stage == 'inter':
+                    self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
+                    self._inter_use_shower_primary      = grappa_cfg.get('use_shower_primary', True)
+                    self._inter_enforce_semantics       = grappa_cfg.get('enforce_semantics', True)
+                    self._inter_enforce_semantics_shape = grappa_cfg.get('enforce_semantics_shape', (4,5))
+                    self._inter_enforce_semantics_map   = grappa_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
-        if self.enable_gnn_inter:
-            self.grappa_inter      = GNN(cfg, name='grappa_inter', batch_col=self.batch_col, coords_col=self.coords_col)
-            grappa_inter_cfg = cfg.get('grappa_inter', {})
-            self._inter_ids        = grappa_inter_cfg.get('base', {}).get('node_type', [0,1,2,3])
-            self._inter_use_true_particles = grappa_inter_cfg.get('use_true_particles', False)
-            self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
-            self._inter_use_shower_primary = grappa_inter_cfg.get('use_shower_primary', True)
-            self._inter_enforce_semantics       = grappa_inter_cfg.get('enforce_semantics', True)
-            self._inter_enforce_semantics_shape = grappa_inter_cfg.get('enforce_semantics_shape', (4,5))
-            self._inter_enforce_semantics_map   = grappa_inter_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_inter.RETURNS, 'particle'))
-            self.RETURNS['particle_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
+                # Add unwrapping rules
+                suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
+                tag    = f'{stage}{suffix}' if stage != 'inter' else 'particle'
+                self.RETURNS.update(prefix_unwrapper_rules(getattr(self, name).RETURNS, tag))
+                self.RETURNS[f'{tag}_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
 
-        if self.enable_gnn_kinematics:
-            self.grappa_kinematics = GNN(cfg, name='grappa_kinematics', batch_col=self.batch_col, coords_col=self.coords_col)
-            self._kinematics_use_true_particles = cfg.get('grappa_kinematics', {}).get('use_true_particles', False)
-            self.RETURNS.update(prefix_unwrapper_rules(self.grappa_kinematics.RETURNS, 'kinematics'))
-            self.RETURNS['kinematics_clusts'][1][0] = 'input_data' if not self.enable_ghost else 'input_rescaled'
 
     def run_gnn(self, grappa, input, result, clusts, prefix, kwargs={}):
         """
@@ -137,15 +128,15 @@ class FullChainGNN(torch.nn.Module):
                 result[node_pred][0][b].detach().cpu().numpy(),
                 result[group_pred][0][b])
 
-        for g in np.unique(result[group_pred][0][b]):
-            group_mask = np.where(result[group_pred][0][b] == g)[0]
-            particles.append(
-                voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
-            if node_pred in result:
-                primary_id = group_mask[primary_labels[group_mask]][0]
-                part_primary_ids.append(primary_id)
-            else:
-                part_primary_ids.append(g)
+            for g in np.unique(result[group_pred][0][b]):
+                group_mask = np.where(result[group_pred][0][b] == g)[0]
+                particles.append(
+                    voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
+                if node_pred in result:
+                    primary_id = group_mask[primary_labels[group_mask]][0]
+                    part_primary_ids.append(primary_id)
+                else:
+                    part_primary_ids.append(g)
 
 
     def get_all_fragments(self, result, input):
@@ -202,14 +193,11 @@ class FullChainGNN(torch.nn.Module):
         if self.enable_gnn_shower:
 
             # Run shower GrapPA: merges shower fragments into shower instances
-            em_mask, kwargs = self.get_extra_gnn_features(fragments,
-                                                          frag_seg,
-                                                          self._shower_ids,
-                                                          input,
-                                                          result,
-                                                          use_ppn=self.use_ppn_in_gnn,
-                                                          use_supp=self.use_supp_in_gnn)
-
+            em_mask, kwargs = self.get_extra_gnn_features(input, result,
+                    fragments, frag_seg, self._shower_ids,
+                    add_points=self.use_ppn_in_gnn,
+                    add_value=self._shower_add_value,
+                    add_shape=self._shower_add_shape)
 
             self.run_gnn(self.grappa_shower,
                          input,
@@ -221,13 +209,11 @@ class FullChainGNN(torch.nn.Module):
         if self.enable_gnn_track:
 
             # Run track GrapPA: merges tracks fragments into track instances
-            track_mask, kwargs = self.get_extra_gnn_features(fragments,
-                                                             frag_seg,
-                                                             self._track_ids,
-                                                             input,
-                                                             result,
-                                                             use_ppn=self.use_ppn_in_gnn,
-                                                             use_supp=self.use_supp_in_gnn)
+            track_mask, kwargs = self.get_extra_gnn_features(input, result,
+                    fragments, frag_seg, self._track_ids,
+                    add_points=self.use_ppn_in_gnn,
+                    add_value=self._track_add_value,
+                    add_shape=self._track_add_shape)
 
             self.run_gnn(self.grappa_track,
                          input,
@@ -239,13 +225,11 @@ class FullChainGNN(torch.nn.Module):
         if self.enable_gnn_particle:
             # Run particle GrapPA: merges particle fragments or
             # labels in _partile_ids together into particle instances
-            mask, kwargs = self.get_extra_gnn_features(fragments,
-                                                       frag_seg,
-                                                       self._particle_ids,
-                                                       input,
-                                                       result,
-                                                       use_ppn=self.use_ppn_in_gnn,
-                                                       use_supp=self.use_supp_in_gnn)
+            mask, kwargs = self.get_extra_gnn_features(input, result,
+                    fragments, frag_seg, self._particle_ids,
+                    add_points=self.use_ppn_in_gnn,
+                    add_value=self._particle_add_value,
+                    add_shape=self._particle_add_shape)
 
             kwargs['groups'] = frag_seg[mask]
 
@@ -316,28 +300,23 @@ class FullChainGNN(torch.nn.Module):
             particles.extend(fragments[mask])
             part_primary_ids.extend(-np.ones(np.sum(mask)).astype(int))
 
-        same_length = np.all([len(p) == len(particles[0]) for p in particles])
-        particles = np.array(particles,
-                             dtype=object if not same_length else np.int64)
+        particles_np    = np.empty(len(particles), dtype=object)
+        particles_np[:] = particles
 
-        part_batch_ids = get_cluster_batch(input[0], particles)
+        part_batch_ids = get_cluster_batch(input[0], particles_np)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
-        part_seg = np.empty(len(particles), dtype=np.int32)
+        part_seg = np.empty(len(particles_np), dtype=np.int32)
 
-        for i, p in enumerate(particles):
+        for i, p in enumerate(particles_np):
             vals, cnts = semantic_labels[p].unique(return_counts=True)
             #assert len(vals) == 1
             part_seg[i] = vals[torch.argmax(cnts)].item()
 
         # Store in result the intermediate fragments
         bcids = [np.where(part_batch_ids == b)[0] for b in range(len(counts))]
-        same_length = [np.all([len(c) == len(particles[b][0]) \
-                    for c in particles[b]] ) for b in bcids]
-
-        parts = [np.array([vids[c].astype(np.int64) for c in particles[b]],
-                        dtype=object \
-                        if not same_length[idx] \
-                        else np.int64) for idx, b in enumerate(bcids)]
+        parts = [np.empty(len(b), dtype=object) for b in bcids]
+        for idx, b in enumerate(bcids):
+            parts[idx][:] = [vids[c] for c in particles_np[b]]
 
         parts_seg = [part_seg[b] for idx, b in enumerate(bcids)]
 
@@ -348,7 +327,7 @@ class FullChainGNN(torch.nn.Module):
         })
 
         part_result = {
-            'particles': particles,
+            'particles': particles_np,
             'part_seg': part_seg,
             'part_batch_ids': part_batch_ids,
             'part_primary_ids': part_primary_ids,
@@ -404,21 +383,15 @@ class FullChainGNN(torch.nn.Module):
                 extra_feats_particles.append(p)
 
             # result['extra_feats_particles'] = [extra_feats_particles]
-            same_length = np.all([len(p) == len(extra_feats_particles[0]) \
-                                 for p in extra_feats_particles])
-
-            extra_feats_particles = np.array(extra_feats_particles,
-                                             dtype=object \
-                                             if not same_length else np.int64)
+            extra_feats_particles_np    = np.empty(len(extra_feats_particles), dtype=object)
+            extra_feats_particles_np[:] = extra_feats_particles
 
             # Run interaction GrapPA: merges particle instances into interactions
-            inter_mask, kwargs = self.get_extra_gnn_features(extra_feats_particles,
-                                                    part_seg,
-                                                    self._inter_ids,
-                                                    input,
-                                                    result,
-                                                    use_ppn=self.use_ppn_in_gnn,
-                                                    use_supp=True)
+            inter_mask, kwargs = self.get_extra_gnn_features(input, result,
+                    extra_feats_particles_np, part_seg, self._inter_ids,
+                    add_points=self.use_ppn_in_gnn,
+                    add_value=self._inter_add_value,
+                    add_shape=self._inter_add_shape)
 
             self.run_gnn(self.grappa_inter,
                          input,
@@ -475,13 +448,11 @@ class FullChainGNN(torch.nn.Module):
                     self.select_particle_in_group(result, counts, b, interactions, inter_primary_ids,
                                                   None, 'particle_group_pred', 'particle_clusts')
 
-            same_length = np.all([len(inter) == len(interactions[0]) for inter in interactions])
-            interactions = [inter.astype(np.int64) for inter in interactions]
-            interactions = np.array(interactions,
-                                 dtype=object if not same_length else np.int64)
+            interactions_np    = np.empty(len(interations), dtype=object)
+            interactions_np[:] = interactions
 
-            inter_batch_ids = get_cluster_batch(input[0], interactions)
-            inter_cosmic_pred = torch.empty((len(interactions), 2), dtype=torch.float)
+            inter_batch_ids = get_cluster_batch(input[0], interactions_np)
+            inter_cosmic_pred = torch.empty((len(interactions_np), 2), dtype=torch.float)
 
             # Replace batch id column with a global "interaction id"
             # because ResidualEncoder uses the batch id column to shape its output
@@ -496,14 +467,12 @@ class FullChainGNN(torch.nn.Module):
                                                 else torch.cat([input[0][:, :4].float(), feature_map], dim=1)
 
             inter_data = torch.empty((0, inter_input_data.size(1)), dtype=torch.float, device=device)
-            for i, interaction in enumerate(interactions):
+            for i, interaction in enumerate(interactions_np):
                 inter_data = torch.cat([inter_data, inter_input_data[interaction]], dim=0)
                 inter_data[-len(interaction):, self.batch_col] = i * torch.ones(len(interaction)).to(device)
             inter_cosmic_pred = self.cosmic_discriminator(inter_data)
 
             # Reorganize into batches before storing in result dictionary
-            same_length = np.all([len(f) == len(interactions[0]) for f in interactions] )
-            interactions = np.array(interactions, dtype=object if not same_length else np.int64)
             inter_batch_ids = np.array(inter_batch_ids)
 
             batches, counts = torch.unique(input[0][:, self.batch_col], return_counts=True)
@@ -515,16 +484,15 @@ class FullChainGNN(torch.nn.Module):
 
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
-            same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
 
-            interactions_np = [np.array([vids[c].astype(np.int64) for c in interactions[b]],
-                               dtype=object if not same_length[idx] else np.int64) \
-                                   for idx, b in enumerate(bcids)]
+            inters = [np.empty(len(b), dtype=object) for b in enumerate(bcids)]
+            for idx, b in enumeate(bcids):
+                inters[idx][:] = [vids[c].astype(np.int64) for c in interactions_nb[b]]
 
             inter_cosmic_pred_np = [inter_cosmic_pred[b] for idx, b in enumerate(bcids)]
 
             result.update({
-                'interactions': [interactions_np],
+                'interactions': [inters],
                 'inter_cosmic_pred': [inter_cosmic_pred_np]
                 })
 
@@ -967,8 +935,8 @@ def setup_chain_cfg(self, cfg, print_info=True):
         self.enable_cosmic         = False
 
     # Whether to use PPN information (GNN shower clustering step only)
-    self.use_ppn_in_gnn    = chain_cfg.get('use_ppn_in_gnn', False)
-    self.use_supp_in_gnn    = chain_cfg.get('use_supp_in_gnn', True)
+    self.use_ppn_in_gnn  = chain_cfg.get('use_ppn_in_gnn', False)
+    self.use_supp_in_gnn = chain_cfg.get('use_supp_in_gnn', False)
 
     # Make sure the deghosting config is consistent
     if self.enable_ghost and not self.enable_charge_rescaling:

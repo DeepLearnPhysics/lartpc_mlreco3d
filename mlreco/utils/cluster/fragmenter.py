@@ -18,11 +18,10 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
         - frag_seg
         - batch_column
     """
-    same_length = np.all([len(f) == len(fragments[0]) for f in fragments])
-    fragments_np = np.array(fragments,
-                            dtype=object if not same_length else np.int64)
+    fragments_np      = np.empty(len(fragments), dtype=object)
+    fragments_np[:]   = fragments
     frag_batch_ids_np = np.array(frag_batch_ids)
-    frag_seg_np = np.array(frag_seg)
+    frag_seg_np       = np.array(frag_seg)
 
     batches, counts = torch.unique(batch_column, return_counts=True)
     # In case one of the events is "missing" and len(counts) < batch_size
@@ -34,12 +33,9 @@ def format_fragments(fragments, frag_batch_ids, frag_seg, batch_column, batch_si
 
     vids = np.concatenate([np.arange(n.item()) for n in counts])
     bcids = [np.where(frag_batch_ids_np == b)[0] for b in range(len(counts))]
-    same_length = [np.all([len(c) == len(fragments_np[b][0]) \
-                    for c in fragments_np[b]] ) for b in bcids]
-
-    frags = [np.array([vids[c].astype(np.int64) for c in fragments_np[b]],
-                        dtype=object if not same_length[idx] else np.int64) \
-                        for idx, b in enumerate(bcids)]
+    frags = [np.empty(len(b), dtype=object) for b in bcids]
+    for idx, b in enumerate(bcids):
+        frags[idx][:] = [vids[c].astype(np.int64) for c in fragments_np[b]]
 
     frags_seg = [frag_seg_np[b].astype(np.int32) for idx, b in enumerate(bcids)]
 
@@ -194,9 +190,8 @@ class SPICEFragmentManager(FragmentManager):
                     fragments.append(mask[pred_labels == c])
                     frag_batch_ids.append(int(batch_id))
 
-        same_length = np.all([len(f) == len(fragments[0]) for f in fragments])
-        fragments = np.array([f.detach().cpu().numpy() for f in fragments if len(f)],
-                             dtype=object if not same_length else np.int64)
+        fragments_np    = np.empty(len(fragments), dtype=object)
+        fragments_np[:] = fragments
         frag_batch_ids = np.array(frag_batch_ids)
         frag_seg = np.empty(len(fragments), dtype=np.int32)
         for i, f in enumerate(fragments):
@@ -204,7 +199,7 @@ class SPICEFragmentManager(FragmentManager):
             assert len(vals) == 1
             frag_seg[i] = vals[torch.argmax(cnts)].item()
 
-        return fragments, frag_batch_ids, frag_seg
+        return fragemnts_np, frag_batch_ids, frag_seg
             
 
 class GraphSPICEFragmentManager(FragmentManager):
@@ -217,7 +212,7 @@ class GraphSPICEFragmentManager(FragmentManager):
 
     def process(self, filtered_input, n, filtered_semantic, offset=0):
         
-        fragments = form_clusters(filtered_input, column=-1, batch_index=self._batch_column)
+        fragments = form_clusters(filtered_input, column=-1)
         fragments = [f.int().detach().cpu().numpy() for f in fragments]
 
         if len(fragments) > 0:

@@ -2,7 +2,7 @@ import numpy as np
 from larcv import larcv
 
 from mlreco.utils.globals import PDG_TO_PID
-from mlreco.utils.ppn import get_ppn_info
+from mlreco.utils.ppn import get_ppn_labels
 
 def parse_particles(particle_event, sparse_event=None, cluster_event=None, voxel_coordinates=True):
     """
@@ -45,12 +45,6 @@ def parse_particles(particle_event, sparse_event=None, cluster_event=None, voxel
                 x = (pos.x() - meta.min_x()) / meta.size_voxel_x()
                 y = (pos.y() - meta.min_y()) / meta.size_voxel_y()
                 z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
-                # x = (pos.x() - meta.origin().x) / meta.size_voxel_x()
-                # y = (pos.y() - meta.origin().y) / meta.size_voxel_y()
-                # z = (pos.z() - meta.origin().z) / meta.size_voxel_z()
-                # x = pos.x() * meta.size_voxel_x() + meta.origin().x
-                # y = pos.y() * meta.size_voxel_y() + meta.origin().y
-                # z = pos.z() * meta.size_voxel_z() + meta.origin().z
                 getattr(p,f)(x,y,z,pos.t())
 
     return particles
@@ -97,12 +91,6 @@ def parse_neutrinos(neutrino_event, sparse_event=None, cluster_event=None, voxel
                 x = (pos.x() - meta.min_x()) / meta.size_voxel_x()
                 y = (pos.y() - meta.min_y()) / meta.size_voxel_y()
                 z = (pos.z() - meta.min_z()) / meta.size_voxel_z()
-                # x = (pos.x() - meta.origin().x) / meta.size_voxel_x()
-                # y = (pos.y() - meta.origin().y) / meta.size_voxel_y()
-                # z = (pos.z() - meta.origin().z) / meta.size_voxel_z()
-                # x = pos.x() * meta.size_voxel_x() + meta.origin().x
-                # y = pos.y() * meta.size_voxel_y() + meta.origin().y
-                # z = pos.z() * meta.size_voxel_z() + meta.origin().z
                 getattr(p,f)(x,y,z,pos.t())
 
     return neutrinos
@@ -140,20 +128,10 @@ def parse_particle_points(sparse_event, particle_event, include_point_tagging=Tr
         and the particle data index in this order. (optionally: end/start tagging)
     """
     particles_v = particle_event.as_vector()
-    part_info = get_ppn_info(particles_v, sparse_event.meta())
-    # For open data - to reproduce
-    # part_info = get_ppn_info(particles_v, sparse_event.meta(), min_voxel_count=7, min_energy_deposit=10, use_particle_shape=False)
-    # part_info = get_ppn_info(particles_v, sparse_event.meta(), min_voxel_count=5, min_energy_deposit=10, use_particle_shape=False)
-    np_values = np.column_stack([part_info[:, 3], part_info[:, 8]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 2), dtype=np.float32)
-    if include_point_tagging:
-        np_values = np.column_stack([part_info[:, 3], part_info[:, 8], part_info[:, 9]]) if part_info.shape[0] > 0 else np.empty(shape=(0, 3), dtype=np.float32)
+    part_labels = get_ppn_labels(particles_v, sparse_event.meta(),
+            include_point_tagging=include_point_tagging)
 
-    if part_info.shape[0] > 0:
-        #return part_info[:, :3], part_info[:, 3][:, None]
-        return part_info[:, :3], np_values
-    else:
-        #return np.empty(shape=(0, 3), dtype=np.int32), np.empty(shape=(0, 1), dtype=np.float32)
-        return np.empty(shape=(0, 3), dtype=np.int32), np_values
+    return part_labels[:,:3], part_labels[:,3:]
 
 
 def parse_particle_coords(particle_event, cluster_event):
