@@ -583,7 +583,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['particles'][0]:
                     if p.interaction_id == bp['id']:
-                        p.interaction_id = len(out)
+                        # p.interaction_id = len(out)
                         particles.append(p)
                         continue
                 ia = Interaction.from_particles(particles,
@@ -646,7 +646,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['truth_particles'][entry]:
                     if p.interaction_id == bp['id']:
-                        p.interaction_id = len(out)
+                        # p.interaction_id = len(out)
                         particles.append(p)
                         # continue
                 ia = TruthInteraction.from_particles(particles,
