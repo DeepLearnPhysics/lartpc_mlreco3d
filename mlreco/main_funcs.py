@@ -350,14 +350,15 @@ def inference_loop(handlers):
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}
+    preloaded = os.path.isfile(handlers.cfg['trainval']['model_path'])
     weights = sorted(glob.glob(handlers.cfg['trainval']['model_path']))
-    if not len(weights):
-        weights = [None]
-    if len(weights) > 1:
+    if not preloaded and len(weights):
         print("Looping over weights: ", len(weights))
         for w in weights: print('  -',w)
+    if not len(weights):
+        weights = [None]
     for weight in weights:
-        if weight is not None and len(weights) > 1:
+        if weight is not None and not preloaded:
             print('Setting weights', weight)
             handlers.cfg['trainval']['model_path'] = weight
             loaded_iteration = handlers.trainer.initialize()
