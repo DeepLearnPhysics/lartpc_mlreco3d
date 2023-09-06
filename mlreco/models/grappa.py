@@ -332,22 +332,22 @@ class GNN(torch.nn.Module):
             batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
 
-        # Update result with a list of clusters for each batch id
-        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
-        if not len(clusts):
-            return {**result,
-                    'clusts':    [[np.array([]) for _ in batches]],
-                    'batch_ids': [np.array([])]}
-
         # If an event is missing from the input data - e.g., deghosting
         # erased everything (extreme case but possible if very few voxels)
         # then we might be miscounting batches. Ensure that batches is the
         # same length as batch_size if specified.
+        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
         if batch_size is not None:
             new_bcounts = np.zeros(batch_size, dtype=np.int64)
             new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
             batches = np.arange(batch_size)
+
+        # Update result with a list of clusters for each batch id
+        if not len(clusts):
+            return {**result,
+                    'clusts':    [[np.array([]) for _ in batches]],
+                    'batch_ids': [np.array([])]}
 
         batch_ids = get_cluster_batch(cluster_data, clusts)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)

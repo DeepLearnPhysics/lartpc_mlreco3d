@@ -128,15 +128,15 @@ class FullChainGNN(torch.nn.Module):
                 result[node_pred][0][b].detach().cpu().numpy(),
                 result[group_pred][0][b])
 
-        for g in np.unique(result[group_pred][0][b]):
-            group_mask = np.where(result[group_pred][0][b] == g)[0]
-            particles.append(
-                voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
-            if node_pred in result:
-                primary_id = group_mask[primary_labels[group_mask]][0]
-                part_primary_ids.append(primary_id)
-            else:
-                part_primary_ids.append(g)
+            for g in np.unique(result[group_pred][0][b]):
+                group_mask = np.where(result[group_pred][0][b] == g)[0]
+                particles.append(
+                    voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
+                if node_pred in result:
+                    primary_id = group_mask[primary_labels[group_mask]][0]
+                    part_primary_ids.append(primary_id)
+                else:
+                    part_primary_ids.append(g)
 
 
     def get_all_fragments(self, result, input):
