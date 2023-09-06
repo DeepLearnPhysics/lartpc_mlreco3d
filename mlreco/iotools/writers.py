@@ -59,6 +59,14 @@ class HDF5Writer:
         analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
 
+    # Output with default types. TODO: move this, make it not name-dependant
+    DEFAULT_OBJS = {
+        'particles':          analysis.Particle(),
+        'truth_particles':    analysis.TruthParticle(),
+        'interactions':       analysis.Interaction(),
+        'truth_interactions': analysis.TruthInteraction(),
+    }
+
     # Outputs that have a fixed number of tensors. #TODO: Inherit from unwrap rules
     TENSOR_LISTS = ['encoderTensors', 'decoderTensors', 'ppn_masks', 'ppn_layers', 'ppn_coords']
 
@@ -196,43 +204,47 @@ class HDF5Writer:
                 # List containing a list/array of objects per batch ID
                 lengths = np.array([len(blob[key][i]) for i in range(len(blob[key]))])
                 index   = np.where(lengths)[0]
-                if not len(index):
+                if len(index):
+                    ref_id  = index[0]
+                    ref_obj = blob[key][ref_id][0]
+                elif key in self.DEFAULT_OBJS.keys():
+                    ref_obj = self.DEFAULT_OBJS[key]
+                else:
                     msg = f'Cannot infer the dtype of a list of empty lists ({key}) and hence cannot initialize the output HDF5 file'
                     raise AssertionError(msg) # TODO: In this case, fall back on a default dtype specified elsewhere
 
-                ref_id = index[0]
-                if isinstance(blob[key][ref_id][0], dict):
+                if isinstance(ref_obj, dict):
                     # List containing a single list of dictionary objects per batch ID
-                    dict_dtype = self.get_dict_dtype(blob[key][ref_id][0])
+                    dict_dtype = self.get_dict_dtype(ref_obj)
                     self.object_dtypes.append(dict_dtype)
 
                     self.key_dict[key]['dtype'] = dict_dtype
 
-                elif isinstance(blob[key][ref_id][0], self.DATA_OBJS):
+                elif isinstance(ref_obj, self.DATA_OBJS):
                     # List containing a single list of dataclass objects per batch ID
-                    object_dtype = self.get_object_dtype(blob[key][ref_id][0])
+                    object_dtype = self.get_object_dtype(ref_obj)
                     self.object_dtypes.append(object_dtype)
 
                     self.key_dict[key]['dtype'] = object_dtype
-                    self.key_dict[key]['larcv'] = type(blob[key][ref_id][0]) in self.LARCV_OBJS
+                    self.key_dict[key]['larcv'] = type(ref_obj) in self.LARCV_OBJS
 
-                elif not hasattr(blob[key][ref_id][0], '__len__'):
+                elif not hasattr(ref_obj, '__len__'):
                     # List containing a single list of scalars per batch ID
-                    self.key_dict[key]['dtype'] = type(blob[key][ref_id][0])
+                    self.key_dict[key]['dtype'] = type(ref_obj)
 
                 elif not isinstance(blob[key][ref_id], list) and not blob[key][ref_id].dtype == np.object:
                     # List containing a single ndarray of scalars per batch ID
                     self.key_dict[key]['dtype'] = blob[key][ref_id].dtype
                     self.key_dict[key]['width'] = blob[key][ref_id].shape[1] if len(blob[key][ref_id].shape) == 2 else 0
 
-                elif isinstance(blob[key][ref_id][0], np.ndarray):
+                elif isinstance(ref_obj, np.ndarray):
                     # List containing a list (or ndarray) of ndarrays per batch ID
                     widths = []
                     for i in range(len(blob[key][ref_id])):
                         widths.append(blob[key][ref_id][i].shape[1] if len(blob[key][ref_id][i].shape) == 2 else 0)
                     same_width = np.all([widths[i] == widths[0] for i in range(len(widths))])
 
-                    self.key_dict[key]['dtype'] = blob[key][ref_id][0].dtype
+                    self.key_dict[key]['dtype'] = ref_obj.dtype
                     self.key_dict[key]['width'] = widths
                     self.key_dict[key]['merge'] = same_width and key not in self.TENSOR_LISTS
 
