@@ -104,6 +104,8 @@ def reconstruct_vertex_single(interaction,
     if not use_primaries or not len(particles):
         particles = [p for p in interaction.particles \
             if p.semantic_type in include_semantics]
+    if not len(particles):
+        particles = interaction.particles
         
     if len(particles) > 0:
         # Collapse particle objects to a set of start, end points and directions
