@@ -8,15 +8,8 @@ from scipy.special import softmax
 from scipy.spatial.distance import cdist
 import copy
 
-from mlreco.utils.globals import (BATCH_COL,
-                                  COORD_COLS,
-                                  VALUE_COL,
-                                  VTX_COLS,
-                                  INTER_COL,
-                                  GROUP_COL,
-                                  PSHOW_COL,
-                                  CLUST_COL,
-                                  TRACK_SHP)
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL, INTER_COL,
+        CLUST_COL, GROUP_COL, PSHOW_COL, TRACK_SHP)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,

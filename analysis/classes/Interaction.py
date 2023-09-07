@@ -84,7 +84,8 @@ class Interaction:
         # Invoke particles setter
         self._particle_counts = np.zeros(6, dtype=np.int64)
         self._primary_counts  = np.zeros(6, dtype=np.int64)
-        self.particles   = particles
+        if particles is not None:
+            self.particles   = particles
 
         # Aggregate individual particle information
         if self._particles is None:
