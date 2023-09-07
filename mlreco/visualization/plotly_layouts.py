@@ -98,6 +98,7 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
     # If a dark layout is requested, set the theme and the background color accordingly
     if dark:
         kwargs['template'] = 'plotly_dark'
+        kwargs['paper_bgcolor'] = 'black'
         backgroundcolor = 'black'
 
     # Initialize the general scene layout
