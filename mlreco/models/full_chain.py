@@ -254,6 +254,7 @@ class FullChain(FullChainGNN):
 
         result = {}
 
+        deghost = None
         if self.enable_charge_rescaling:
             # Pass through the deghosting
             assert self.enable_ghost
@@ -307,6 +308,12 @@ class FullChain(FullChainGNN):
 
         cnn_result = {}
 
+        if label_seg is not None and label_clustering is not None:
+            label_clustering = [adapt_labels(label_clustering[0],
+                                             label_seg[0],
+                                             result['segmentation'][0],
+                                             deghost)]
+
         if self.enable_ghost:
 
             # Update input based on deghosting results
@@ -319,13 +326,6 @@ class FullChain(FullChainGNN):
             deghost = result['ghost'][0][:,0] > result['ghost'][0][:,1]
 
             input = [input[0][deghost]]
-
-            if label_seg is not None and label_clustering is not None:
-                # ME uses 0 for batch column, so need to compensate
-                label_clustering = [adapt_labels(label_clustering[0],
-                                                 label_seg[0],
-                                                 deghost,
-                                                 result['segmentation'][0])]
 
             deghost_result = {}
             deghost_result.update(result)

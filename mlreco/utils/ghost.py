@@ -66,12 +66,12 @@ def compute_rescaled_charge(input_data,
     return charges
 
 
-def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
+def adapt_labels(cluster_label, segment_label, segmentation, deghost_mask=None,
         break_classes=[SHOWR_SHP,TRACK_SHP,MICHL_SHP,DELTA_SHP]):
     """
-    Adapts the cluster labels to account for the predicted ghost mask.
+    Adapts the cluster labels to account for the predicted semantics.
 
-    Points predicted as nonghost but that are true ghosts get the cluster
+    Points predicted as wrongly predicted get the cluster
     label of the closest touching cluster, if there is one. Points that are
     predicted as ghosts get "empty" (-1) cluster labels everywhere.
 
@@ -91,10 +91,10 @@ def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
         (N, N_l) Cluster label tensor
     segment_label : List[Union[np.ndarray, torch.Tensor]]
         (M, 5) Segmentation label tensor
-    deghost_mask : Union[np.ndarray, torch.Tensor]
-        (M) Predicted deghost mask
     segmentation : Union[np.ndarray, torch.Tensor]
         (N_deghost, N_c) Segmentation score prediction tensor
+    deghost_mask : Union[np.ndarray, torch.Tensor], optional
+        (M) Predicted deghost mask
     break_classes : List[int], default [SHOWR_SHP, TRACK_SHP, MICHL_SHP, DELTA_SHP]
         Classes to run DBSCAN on to break up
 
@@ -127,7 +127,7 @@ def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
 
     # Build a tensor of predicted segmentation that includes ghost points
     coords = segment_label[:, :VALUE_COL]
-    if len(deghost_mask) != len(segmentation):
+    if deghost_mask is not None and len(deghost_mask) != len(segmentation):
         segment_pred = to_long(GHOST_SHP*ones(len(coords)))
         segment_pred[deghost_mask] = argmax(segmentation, 1)
     else:
@@ -141,10 +141,13 @@ def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
     for batch_id in unique(coords[:, BATCH_COL]):
         # Restrict tensors to a specific batch_id
         batch_mask      = where(coords[:, BATCH_COL] == batch_id)[0]
-        deghost_mask_b  = deghost_mask[batch_mask]
-        if not deghost_mask_b.sum():
-            new_cluster_label.append(-1. * ones((0, cluster_label.shape[1])))
-            continue
+        if not len(batch_mask):
+            new_cluster_label.append(-1 * ones((0, clusts_label.shape[1])))
+        if deghost_mask is not None:
+            deghost_mask_b = deghost_mask[batch_mask]
+            if not deghost_mask_b.sum():
+                new_cluster_label.append(-1. * ones((0, cluster_label.shape[1])))
+                continue
 
         coords_b        = coords[batch_mask]
         cluster_label_b = cluster_label[cluster_label[:, BATCH_COL] == batch_id]
@@ -213,8 +216,11 @@ def adapt_labels(cluster_label, segment_label, deghost_mask, segmentation,
                     X_pred = X_pred[~select_mask]
 
         # At this point, get rid of predicted ghosts.
-        new_label = new_label[deghost_mask_b]
-        new_label[:, SHAPE_COL] = segment_pred_b[deghost_mask_b]
+        if deghost_mask is not None:
+            new_label = new_label[deghost_mask_b]
+            new_label[:, SHAPE_COL] = segment_pred_b[deghost_mask_b]
+        else:
+            new_label[:, SHAPE_COL] = segment_pred_b
 
         # Find the current largest cluster ID to avoid duplicates
         cluster_count = int(cluster_label_b[:, CLUST_COL].max()) + 1
