@@ -620,8 +620,9 @@ def cluster_direction(voxels: nb.float64[:,:],
     for i in range(len(voxels)):
         rel_voxels[i] = voxels[i]-start
     mean = nbl.mean(rel_voxels, 0)
-    if np.linalg.norm(mean):
-        return mean/np.linalg.norm(mean)
+    norm = np.sqrt(np.dot(mean, mean))
+    if norm:
+        return mean/norm
     return mean
 
 
