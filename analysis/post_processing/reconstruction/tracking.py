@@ -41,6 +41,9 @@ def reconstruct_csda_energy(data_dict, result_dict,
     splines = {ptype: csda_table_spline(ptype) for ptype in include_pids}
 
     # List objects for which to reconstruct track KE
+    if run_mode not in ['reco', 'truth', 'both']:
+        raise ValueError('`run_mode` must be either `reco`, `truth` or `both`')
+
     key_list = []
     if run_mode in ['reco', 'both']:
         key_list += ['particles']
