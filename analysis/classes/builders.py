@@ -436,7 +436,7 @@ class ParticleBuilder(DataBuilder):
                 continue
 
             # 1. Process voxels
-            mask = labels[:, GROUPC_OL].astype(int) == id
+            mask = labels[:, GROUP_COL].astype(int) == id
 
             coords              = coordinates[mask]
             voxel_indices       = np.where(mask)[0]
