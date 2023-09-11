@@ -5,7 +5,7 @@ from typing import Counter, List, Union
 from . import Particle
 
 from mlreco.utils import pixel_to_cm
-from mlreco.utils.globals import PDG_TO_PID, SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import PDG_TO_PID, TRACK_SHP, SHAPE_LABELS, PID_LABELS
 from mlreco.utils.decorators import inherit_docstring
 
 @inherit_docstring(Particle)
@@ -141,6 +141,12 @@ class TruthParticle(Particle):
         self.pid           = PDG_TO_PID[int(self.pdg_code)]
         self.start_point   = self.first_step
         self.end_point     = self.last_step
+
+        # Patch to deal with bad LArCV input, TODO: fix it upstream
+        if self.start_point[0] == -np.inf and self.end_point[0] == -np.inf:
+            self.start_point = self.end_point = np.zeros(3, dtype=self.start_point.dtype)
+        if self.end_point[0] == -np.inf:
+            self.end_point = self.start_point
 
     def __repr__(self):
         msg = super(TruthParticle, self).__repr__()

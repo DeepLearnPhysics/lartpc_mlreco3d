@@ -100,13 +100,13 @@ def reconstruct_vertex_single(interaction,
     # Selected the set of particles to use as a basis for vertex prediction
     if use_primaries:
         particles = [p for p in interaction.particles \
-            if p.is_primary and (p.semantic_type in include_semantics)]
+            if p.is_primary and (p.semantic_type in include_semantics) and p.size > 0]
     if not use_primaries or not len(particles):
         particles = [p for p in interaction.particles \
-            if p.semantic_type in include_semantics]
+            if p.semantic_type in include_semantics and p.size > 0]
     if not len(particles):
-        particles = interaction.particles
-        
+        particles = [p for p in interaction.particles if p.size > 0]
+
     if len(particles) > 0:
         # Collapse particle objects to a set of start, end points and directions
         start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)

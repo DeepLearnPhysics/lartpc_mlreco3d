@@ -615,6 +615,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['accuracy']
             loss += self.ppn_weight*res_ppn['loss']
 
+        # Fetch adapted labels
+        if cluster_label is not None:
+            cluster_label = out['cluster_label_adapted']
+
         if self.enable_ghost and 'ghost' in out \
                              and (self.enable_cnn_clust or \
                                   self.enable_gnn_track or \
@@ -629,10 +633,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 true_mask = deghost
             else:
                 true_mask = None
-
-            # Adapt to ghost points
-            if cluster_label is not None:
-                cluster_label = out['cluster_label_adapted']
 
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]

@@ -252,8 +252,8 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
     if not len(value_matrix.flatten()):
         return OrderedDict(), []
 
-    idx = value_matrix.argmax(axis=0)
-    intersections = np.atleast_1d(value_matrix.max(axis=0))
+    #idx = value_matrix.argmax(axis=0)
+    #intersections = np.atleast_1d(value_matrix.max(axis=0))
 
     matches = OrderedDict()
     out_counts = []
@@ -265,19 +265,21 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
 
     # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
-        select_idx = idx[j]
-        out_counts.append(overlap_matrix[select_idx, j])
-        if intersections[j] <= min_overlap:
+        #select_idx = idx[j]
+        match_idxs = np.where(overlap_matrix[:,j] > min_overlap)[0]
+        out_counts.append(match_idxs)
+        if not len(match_idxs):
             key = (px.id, None)
             matches[key] = (px, None)
             px.matched = False
         else:
-            matched = particles_y[select_idx]
-            px._match_overlap[matched.id] = intersections[j]
-            # matched._match_overlap[px.id] = intersections[j]
-            key = (px.id, matched.id)
-            matches[key] = (px, matched)
             px.matched = True
+            for idx in match_idxs:
+                matched = particles_y[idx]
+                px._match_overlap[matched.id] = overlap_matrix[idx,j]
+                # matched._match_overlap[px.id] = intersections[j]
+                key = (px.id, matched.id)
+                matches[key] = (px, matched)
 
     out_counts = np.array(out_counts)
 

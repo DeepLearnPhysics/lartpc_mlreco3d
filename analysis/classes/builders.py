@@ -8,15 +8,8 @@ from scipy.special import softmax
 from scipy.spatial.distance import cdist
 import copy
 
-from mlreco.utils.globals import (BATCH_COL,
-                                  COORD_COLS,
-                                  VALUE_COL,
-                                  VTX_COLS,
-                                  INTER_COL,
-                                  GROUP_COL,
-                                  PSHOW_COL,
-                                  CLUST_COL,
-                                  TRACK_SHP)
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL, INTER_COL,
+        CLUST_COL, GROUP_COL, PSHOW_COL, TRACK_SHP)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
@@ -969,11 +962,12 @@ def handle_empty_truth_particles(labels_noghost,
     semantic_type, interaction_id, nu_id, primary_id, pid = -1, -1, -1, -1, -1
     coords, depositions, voxel_indices = np.empty((0,3)), np.array([]), np.array([])
     coords_noghost, depositions_noghost = np.empty((0,3)), np.array([])
-    sed_index, sed_points = np.array([]), np.empty((0,3))
+    sed_index, sed_points, sed_depositions_MeV = np.array([]), np.empty((0,3)), np.array([])
     if np.count_nonzero(mask_noghost) > 0:
-        sed_points = sed[mask_sed][:, COORD_COLS]
-        sed_index = np.where(mask_sed)[0]
-        sed_depositions_MeV = sed[mask_sed][:, VALUE_COL]
+        if sed is not None:
+            sed_points = sed[mask_sed][:, COORD_COLS]
+            sed_index = np.where(mask_sed)[0]
+            sed_depositions_MeV = sed[mask_sed][:, VALUE_COL]
         coords_noghost = labels_noghost[mask_noghost][:, COORD_COLS]
         true_voxel_indices = np.where(mask_noghost)[0]
         depositions_noghost = labels_noghost[mask_noghost][:, VALUE_COL].squeeze()

@@ -87,7 +87,8 @@ class Particle:
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty(0, dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
-                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32),
+                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32), # TODO get it from somewhere
+                 #pid_scores: np.ndarray = -np.ones(5, dtype=np.float32), # TODO get it from somewhere
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
                  start_point: np.ndarray = np.full(3, -np.inf),
                  end_point: np.ndarray = np.full(3, -np.inf),
@@ -332,7 +333,8 @@ class Particle:
     @pid.setter
     def pid(self, value):
         if value not in PID_LABELS:
-            print("WARNING: PID {} not in PID_LABELS".format(value))
+            if value != -1:
+                print("WARNING: PID {} not in PID_LABELS".format(value))
             self._pid = -1
         else:
             self._pid = value
