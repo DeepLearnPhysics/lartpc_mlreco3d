@@ -95,7 +95,7 @@ def check_containement(data_dict, result_dict,
         Path to a detector boundary file. Supersedes `detector` if set
     mode : str, default 'module'
         Containement criterion (one of 'global', 'module', 'tpc'):
-        - If 'global', makes sure is is contained within the outermost walls
+        - If 'detector', makes sure is is contained within the outermost walls
         - If 'module', makes sure it is contained within a single module
         - If 'tpc', makes sure it is contained within a single tpc
     truth_point_mode : str, default 'points'
