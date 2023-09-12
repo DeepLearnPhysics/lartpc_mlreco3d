@@ -9,8 +9,8 @@ from analysis.post_processing import post_processing
                  result_capture=['particles', 'interactions'])
 def adjust_particle_properties(data_dict, result_dict,
                                em_pid_thresholds={},
-                               track_pid_thresholds={4:0.85, 2:0.1, 3:0.0},
-                               primary_threshold=0.1):
+                               track_pid_thresholds={},
+                               primary_threshold=None):
     '''
     Adjust the particle PID and primary properties according to
     customizable thresholds and priority orderings.
@@ -28,6 +28,13 @@ def adjust_particle_properties(data_dict, result_dict,
     primary_treshold : float, optional
         Primary score above which a paricle is considered a primary
     '''
+    # Check that there is something to do, throw otherwise
+    if not len(em_pid_thresholds) and not len(track_pid_thresholds) and \
+            primary_threshold is None:
+        msg = ('Specify one of `em_pid_thresholds`, `track_pid_thresholds`'
+               'or `primary_threshold` for this function to do anything.')
+        raise ValueError(msg)
+
     # Loop over the particle objects
     for p in result_dict['particles']:
         # Adjust the particle ID
