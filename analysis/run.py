@@ -1,6 +1,6 @@
 import yaml
 import argparse
-import os, sys
+import os, sys, pathlib
 import numpy as np
 import copy
 
@@ -23,6 +23,7 @@ from analysis.manager import AnaToolsManager
 def main(analysis_cfg_path, model_cfg_path=None, data_keys=None, outfile=None):
 
     analysis_config = yaml.safe_load(open(analysis_cfg_path, 'r'))
+    parent_path = pathlib.Path(analysis_cfg_path).parent
     if 'chain_config' in analysis_config['analysis']:
         if model_cfg_path is None:
             model_cfg_path = analysis_config['analysis']['chain_config']
@@ -35,7 +36,7 @@ def main(analysis_cfg_path, model_cfg_path=None, data_keys=None, outfile=None):
     if 'analysis' not in analysis_config:
         raise Exception('Analysis configuration needs to live under `analysis` section.')
     
-    manager = AnaToolsManager(analysis_config, cfg=config)
+    manager = AnaToolsManager(analysis_config, cfg=config, parent_path=parent_path)
     manager.initialize(data_keys=data_keys, outfile=outfile)
     manager.run()
 

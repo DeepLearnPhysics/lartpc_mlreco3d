@@ -47,9 +47,10 @@ class AnaToolsManager:
         Whether to print out execution times.
     
     """
-    def __init__(self, ana_cfg, verbose=True, cfg=None):
+    def __init__(self, ana_cfg, verbose=True, cfg=None, parent_path=None):
         self.config        = cfg
         self.ana_config    = ana_cfg
+        self.parent_path   = parent_path
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
@@ -409,6 +410,10 @@ class AnaToolsManager:
             if isinstance(ADC_to_MeV, str):
                 ADC_to_MeV = eval(ADC_to_MeV)
             self.fm_config    = pp_flash_matching['fmatch_config']
+            if not os.path.isfile(self.fm_config):
+                self.fm_config = os.path.join(self.parent_path, self.fm_config)
+                if not os.path.isfile(self.fm_config):
+                    raise FileNotFoundError('Cannot find flash-matcher config')
 
             self.fm = FlashMatcherInterface(self.config, 
                                             self.fm_config, 
