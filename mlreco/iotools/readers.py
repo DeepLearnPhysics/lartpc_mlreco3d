@@ -61,7 +61,7 @@ class HDF5Reader:
                     print('Registered', path)
                 elif i == self.max_print:
                     print('...')
-        print(f'Registered {len(self.file_paths)} files')
+        print(f'Registered {len(self.file_paths)} file(s)')
 
         self.file_index = np.concatenate(self.file_index)
 

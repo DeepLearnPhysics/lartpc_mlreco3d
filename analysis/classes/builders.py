@@ -8,8 +8,8 @@ from scipy.special import softmax
 from scipy.spatial.distance import cdist
 import copy
 
-from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL, INTER_COL,
-        CLUST_COL, GROUP_COL, PSHOW_COL, TRACK_SHP)
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL,
+        CLUST_COL, GROUP_COL, INTER_COL, PSHOW_COL, TRACK_SHP)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
@@ -315,7 +315,7 @@ class ParticleBuilder(DataBuilder):
 
         volume_labels    = input_voxels[:, BATCH_COL]
         point_cloud      = input_voxels[:, COORD_COLS]
-        depositions      = input_voxels[:, 4]
+        depositions      = input_voxels[:, VALUE_COL]
 
         particles        = result['particle_clusts'][entry]
         particle_seg     = result['particle_seg'][entry]
@@ -378,18 +378,18 @@ class ParticleBuilder(DataBuilder):
                 "cluster_label inside data dictionary or cluster_label_adapted inside"\
                 " result dictionary."
             raise KeyError(msg)
-        particle_ids    = set(list(np.unique(labels[:, 6]).astype(int)))
+        particle_ids    = set(list(np.unique(labels[:, GROUP_COL]).astype(int)))
         labels_nonghost = data['cluster_label'][entry]
         larcv_particles = data['particles_asis'][entry]
         if 'input_rescaled' in result:
-            rescaled_charge = result['input_rescaled'][entry][:, 4]
+            rescaled_charge = result['input_rescaled'][entry][:, VALUE_COL]
             coordinates     = result['input_rescaled'][entry][:, COORD_COLS]
         else:
-            rescaled_charge = data['input_data'][entry][:, 4]
+            rescaled_charge = data['input_data'][entry][:, VALUE_COL]
             coordinates     = data['input_data'][entry][:, COORD_COLS]
 
         if 'energy_label' in data:
-            energy_label = data['energy_label'][entry][:, 4]
+            energy_label = data['energy_label'][entry][:, VALUE_COL]
         else:
             energy_label = None
 
@@ -411,9 +411,9 @@ class ParticleBuilder(DataBuilder):
             id = int(lpart.id())
             if lpart.id() != lpart.group_id():
                 continue
-            mask_nonghost = labels_nonghost[:, 6].astype(int) == id
+            mask_nonghost = labels_nonghost[:, GROUP_COL].astype(int) == id
             if simE_deposits is not None:
-                mask_sed      = simE_deposits[:, 6].astype(int) == id
+                mask_sed      = simE_deposits[:, GROUP_COL].astype(int) == id
                 sed_index     = np.where(mask_sed)[0]
             else:
                 mask_sed, sed_index = np.array([]), np.array([])
@@ -436,7 +436,7 @@ class ParticleBuilder(DataBuilder):
                 continue
 
             # 1. Process voxels
-            mask = labels[:, 6].astype(int) == id
+            mask = labels[:, GROUP_COL].astype(int) == id
 
             coords              = coordinates[mask]
             voxel_indices       = np.where(mask)[0]
@@ -510,8 +510,8 @@ class ParticleBuilder(DataBuilder):
         accounted_indices = np.hstack(accounted_indices).squeeze() if len(accounted_indices) else np.empty(0, dtype=np.int64)
         if verbose:
             print("All Voxels = {}, Accounted Voxels = {}".format(labels_nonghost.shape[0], voxel_counts))
-            print("Orphaned Semantics = ", np.unique(labels_nonghost[orphans][:, -1], return_counts=True))
-            print("Orphaned GroupIDs = ", np.unique(labels_nonghost[orphans][:, 6], return_counts=True))
+            print("Orphaned Semantics = ", np.unique(labels_nonghost[orphans][:, SHAPE_COL], return_counts=True))
+            print("Orphaned GroupIDs = ", np.unique(labels_nonghost[orphans][:, GROUP_COL], return_counts=True))
 
         return out
 
