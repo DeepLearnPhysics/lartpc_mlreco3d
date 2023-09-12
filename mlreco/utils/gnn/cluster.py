@@ -597,8 +597,8 @@ def cluster_direction(voxels: nb.float64[:,:],
 
         # Find the PCA relative secondary spread for each point
         labels = np.zeros(len(voxels), dtype=voxels.dtype)
-        meank = nbl.mean(voxels, 0)
-        covk = (np.transpose(voxels-meank) @ (voxels-meank))/3
+        meank = nbl.mean(voxels[:3], 0)
+        covk = (np.transpose(voxels[:3]-meank) @ (voxels[:3]-meank))/3
         for i in range(2, len(voxels)):
             # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
             w, _ = np.linalg.eigh(covk)
