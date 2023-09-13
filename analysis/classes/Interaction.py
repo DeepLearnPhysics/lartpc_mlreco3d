@@ -77,6 +77,8 @@ class Interaction:
         self.vertex_mode  = vertex_mode
         self.is_neutrino  = is_neutrino
         self._units       = units
+        if type(units) is bytes:
+            self._units = units.decode()
 
         # Initialize private attributes to be set by setter only
         self._particles  = None

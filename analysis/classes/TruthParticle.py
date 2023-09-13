@@ -139,8 +139,8 @@ class TruthParticle(Particle):
         # Set parent attributes based on the above
         self.semantic_type = self.shape
         self.pid           = PDG_TO_PID[int(self.pdg_code)]
-        self.start_point   = self.first_step
-        self.end_point     = self.last_step
+        self.start_point   = self.first_step.astype(np.float32)
+        self.end_point     = self.last_step.astype(np.float32)
 
         # Patch to deal with bad LArCV input, TODO: fix it upstream
         if self.start_point[0] == -np.inf and self.end_point[0] == -np.inf:
