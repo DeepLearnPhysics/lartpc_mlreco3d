@@ -3,6 +3,7 @@ import numpy as np
 from warnings import warn
 
 from mlreco.models.grappa import GNN, GNNLoss
+from mlreco.utils.globals import SHAPE_COL, TRACK_SHP
 from mlreco.utils.unwrap import prefix_unwrapper_rules
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
@@ -305,12 +306,17 @@ class FullChainGNN(torch.nn.Module):
 
         part_batch_ids = get_cluster_batch(input[0], particles_np)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
-        part_seg = np.empty(len(particles_np), dtype=np.int32)
 
-        for i, p in enumerate(particles_np):
-            vals, cnts = semantic_labels[p].unique(return_counts=True)
-            #assert len(vals) == 1
-            part_seg[i] = vals[torch.argmax(cnts)].item()
+        # Get the particle shape. If it's a shower, pick the shape of the primary
+        part_seg = get_cluster_label(semantic_labels[:,None], particles, column=SHAPE_COL)
+        for i, p in enumerate(particles):
+            if part_seg[i] != TRACK_SHP and self._inter_use_shower_primary:
+                voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
+                             np.arange(counts[part_batch_ids[i]].item())
+                if len(voxel_inds) and len(result['shower_fragment_clusts'][0][part_batch_ids[i]]) > 0:
+                    p = voxel_inds[result['shower_fragment_clusts'][0]\
+                                  [part_batch_ids[i]][part_primary_ids[i]]]
+                    part_seg[i] = get_cluster_label(semantic_labels[:,None], [p], column=SHAPE_COL)[0]
 
         # Store in result the intermediate fragments
         bcids = [np.where(part_batch_ids == b)[0] for b in range(len(counts))]
@@ -365,7 +371,7 @@ class FullChainGNN(torch.nn.Module):
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
-                if part_seg[i] == 0 and not self._inter_use_true_particles and self._inter_use_shower_primary:
+                if part_seg[i] != TRACK_SHP and not self._inter_use_true_particles and self._inter_use_shower_primary:
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
                     if len(voxel_inds) and len(result['shower_fragment_clusts'][0][part_batch_ids[i]]) > 0:
