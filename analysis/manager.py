@@ -602,9 +602,10 @@ class AnaToolsManager:
         
         if self.convert_to_cm and abs(rounding_error) > 1e-6:
             msg = "It looks like the input data has coordinates already "\
-                "translated to cm from pixels, and you are trying to convert "\
-                "coordinates again. You might want to set convert_to_cm = False."
-            raise AssertionError(msg)
+                  "translated to cm from pixels, and you are trying to convert "\
+                  "coordinates again. Will not convert again."
+            self.convert_to_cm = False
+            print(msg)
 
         # 2. Build data representations'
         if self.data_builders is not None:
