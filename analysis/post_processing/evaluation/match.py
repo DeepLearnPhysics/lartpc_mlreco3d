@@ -17,7 +17,8 @@ def match_particles(data_dict,
                     matching_mode='true_to_pred',
                     min_overlap=0,
                     overlap_mode='iou',
-                    weight=False):
+                    weight=False,
+                    keep_principal_matches=True):
     pred_particles = result_dict['particles']
     
     out = {}
@@ -37,7 +38,8 @@ def match_particles(data_dict,
             true_particles, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
         out['matched_particles'] = matches['matched_particles_r2t']
         out['particle_match_overlap'] = matches['matched_particles_r2t_values']
@@ -48,7 +50,8 @@ def match_particles(data_dict,
             pred_particles, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
         out['matched_particles'] = matches['matched_particles_t2r']
         out['particle_match_overlap'] = matches['matched_particles_t2r_values']
@@ -59,7 +62,8 @@ def match_particles(data_dict,
             pred_particles, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         t2r_matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
         out['matched_particles_t2r'] = t2r_matches['matched_particles_t2r']
         out['particle_match_overlap_t2r'] = t2r_matches['matched_particles_t2r_values']
@@ -69,7 +73,8 @@ def match_particles(data_dict,
             true_particles, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         r2t_matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
         out['matched_particles_r2t'] = r2t_matches['matched_particles_r2t']
         out['particle_match_overlap_r2t'] = r2t_matches['matched_particles_r2t_values']
@@ -109,7 +114,8 @@ def match_interactions(data_dict,
             true_interactions, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
         out['matched_interactions'] = matches['matched_interactions_r2t']
         out['interaction_match_overlap'] = matches['matched_interactions_r2t_values']
@@ -120,7 +126,8 @@ def match_interactions(data_dict,
             pred_interactions, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
         out['matched_interactions'] = matches['matched_interactions_t2r']
         out['interaction_match_overlap'] = matches['matched_interactions_t2r_values']
@@ -131,7 +138,8 @@ def match_interactions(data_dict,
             pred_interactions, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
         out['matched_interactions_t2r'] = matches['matched_interactions_t2r']
         out['interaction_match_overlap_t2r'] = matches['matched_interactions_t2r_values']
@@ -142,7 +150,8 @@ def match_interactions(data_dict,
             true_interactions, 
             value_matrix,
             overlap_matrix,
-            min_overlap=min_overlap)
+            min_overlap=min_overlap,
+            keep_principal_matches=keep_principal_matches)
         matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
         out['matched_interactions_r2t'] = matches['matched_interactions_r2t']
         out['interaction_match_overlap_r2t'] = matches['matched_interactions_r2t_values']

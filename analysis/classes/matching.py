@@ -354,14 +354,16 @@ def match_interactions_fn(ints_x : List[Interaction],
                           ints_y : List[Interaction],
                           value_matrix: np.ndarray,
                           overlap_matrix: np.ndarray,
-                          min_overlap=0):
+                          min_overlap=0,
+                          keep_principal_matches=True):
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
     return match_particles_fn(ints_x, ints_y,
                               value_matrix=value_matrix,
                               overlap_matrix=overlap_matrix,
-                              min_overlap=min_overlap)
+                              min_overlap=min_overlap,
+                              keep_principal_matches=keep_principal_matches)
 
 
 def group_particles_to_interactions_fn(particles : List[Particle],
