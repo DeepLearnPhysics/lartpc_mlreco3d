@@ -7,10 +7,19 @@ import numpy as np
 from scipy.special import softmax
 from scipy.spatial.distance import cdist
 import copy
-from mlreco.utils.globals import *
 
-from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL,
-        CLUST_COL, GROUP_COL, INTER_COL, PSHOW_COL, TRACK_SHP)
+from mlreco.utils.globals import (BATCH_COL,
+                                  COORD_COLS,
+                                  VALUE_COL,
+                                  INTER_COL,
+                                  GROUP_COL,
+                                  PSHOW_COL,
+                                  CLUST_COL,
+                                  NU_COL,
+                                  TRACK_SHP,
+                                  SHAPE_COL,
+                                  PGRP_COL,
+                                  PID_COL)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
@@ -362,7 +371,6 @@ class ParticleBuilder(DataBuilder):
             list of true TruthParticle instances of length equal to the
             batch size.
         """
-        print('Build truth is called.')
 
         out = []
         image_index     = data['index'][entry]
@@ -424,6 +432,7 @@ class ParticleBuilder(DataBuilder):
                                                         image_index,
                                                         sed=simE_deposits,
                                                         mask_sed=mask_sed)
+                particle.id = len(out)
                 particle.start_point = particle.first_step
                 if particle.semantic_type == TRACK_SHP:
                     particle.end_point = particle.last_step
@@ -460,8 +469,7 @@ class ParticleBuilder(DataBuilder):
             # 2. Process particle-level labels
             truth_labels = get_truth_particle_labels(labels_nonghost,
                                                      mask_nonghost,
-                                                     id=id,
-                                                     verbose=False)
+                                                     id=id)
             semantic_type  = int(truth_labels[0])
             interaction_id = int(truth_labels[1])
             nu_id          = int(truth_labels[2])
@@ -474,9 +482,9 @@ class ParticleBuilder(DataBuilder):
             truth_depositions_MeV = np.empty(0, dtype=np.float32)
             if energy_label is not None:
                 truth_depositions_MeV = energy_label[mask_nonghost].squeeze()
-            
-            particle = TruthParticle(group_id=id,
-                                    #  group_id=len(out),
+
+            particle = TruthParticle(#group_id=id,
+                                     group_id=len(out),
                                      interaction_id=interaction_id,
                                      nu_id=nu_id,
                                      pid=pid,
@@ -567,7 +575,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['particles'][0]:
                     if p.interaction_id == bp['id']:
-                        # p.interaction_id = len(out)
+                        p.interaction_id = len(out)
                         particles.append(p)
                         continue
                 ia = Interaction.from_particles(particles,
@@ -580,7 +588,7 @@ class InteractionBuilder(DataBuilder):
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
                 ia = Interaction(**info)
-                # ia.id = len(out)
+                ia.id = len(out)
 
             # Handle matches
             match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
@@ -625,7 +633,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['truth_particles'][entry]:
                     if p.interaction_id == bp['id']:
-                        # p.interaction_id = len(out)
+                        p.interaction_id = len(out)
                         particles.append(p)
                         # continue
                 ia = TruthInteraction.from_particles(particles,
@@ -648,7 +656,7 @@ class InteractionBuilder(DataBuilder):
                     'truth_depositions_MeV': truth_depositions_MeV
                 })
                 ia = TruthInteraction(**info)
-                # ia.id = len(out)
+                ia.id = len(out)
 
             out.append(ia)
         return out
