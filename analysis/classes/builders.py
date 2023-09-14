@@ -204,10 +204,6 @@ class ParticleBuilder(DataBuilder):
 
             match = prepared_bp.pop('match', [])
             match_overlap = prepared_bp.pop('match_overlap', [])
-            
-            # # ONLY TEMPORARY
-            # if 'match_counts' in prepared_bp:
-            #     match_overlap = prepared_bp.pop('match_counts')
 
             assert len(match) == len(match_overlap)
 
@@ -371,9 +367,9 @@ class ParticleBuilder(DataBuilder):
         out = []
         image_index     = data['index'][entry]
         if 'cluster_label_adapted' in result:
-            labels = result['cluster_label_adapted'][0]
+            labels = result['cluster_label_adapted'][entry]
         elif 'cluster_label' in data:
-            labels = data['cluster_label'][0]
+            labels = data['cluster_label'][entry]
         else:
             msg = "To build TruthParticle objects from HDF5 data, need either "\
                 "cluster_label inside data dictionary or cluster_label_adapted inside"\
