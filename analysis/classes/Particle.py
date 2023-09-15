@@ -90,11 +90,11 @@ class Particle:
                  pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32), # TODO get it from somewhere
                  #pid_scores: np.ndarray = -np.ones(5, dtype=np.float32), # TODO get it from somewhere
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
-                 start_point: np.ndarray = np.full(3, -np.inf),
-                 end_point: np.ndarray = np.full(3, -np.inf),
-                 start_dir: np.ndarray = np.full(3, -np.inf),
-                 end_dir: np.ndarray = np.full(3, -np.inf),
-                 momentum: np.ndarray = np.full(3, -np.inf),
+                 start_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 end_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 start_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 end_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 momentum: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  length: float = -1.,
                  calo_ke: float = -1.,
                  csda_ke: float = -1.,
@@ -113,6 +113,8 @@ class Particle:
         self._size            = -1
         self._is_primary      = is_primary
         self._units           = units
+        if type(units) is bytes:
+            self._units = units.decode()
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -165,7 +167,7 @@ class Particle:
         assert value.shape == (3,)
         if (np.abs(value) < 1e10).all():
             # Only set start_point if not bogus value
-            self._start_point = value
+            self._start_point = value.astype(np.float32)
 
     @property
     def end_point(self):
@@ -224,7 +226,8 @@ class Particle:
         self.matched = False
 
     def __repr__(self):
-        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)
+        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(
+            self.image_id, self.id, self._pid, self.size)
         return msg
 
     def __str__(self):
@@ -365,7 +368,6 @@ class Particle:
         assert self._units == 'px'
         for attr in self._COORD_ATTRS:
             setattr(self, attr, pixel_to_cm(getattr(self, attr), meta))
-
         self._units = 'cm'
 
     @property

@@ -60,12 +60,13 @@ def reconstruct_csda_energy(data_dict, result_dict,
             # Make sure the particle coordinates are expressed in cm
             if p.units != 'cm':
                 raise ValueError('Particle coordinates must be expressed in cm '
-                        'to use the range-based kinetice energy reconstruction')
+                        'to use the range-based kinetic energy reconstruction')
 
             # Get point coordinates
             if not isinstance(p, TruthParticle):
                 coordinates = p.points
             else:
+                # assert p.units == 'cm'
                 coordinates = getattr(p, truth_point_mode)
             if not len(coordinates):
                 continue

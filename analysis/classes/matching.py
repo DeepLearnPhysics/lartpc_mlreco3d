@@ -186,12 +186,31 @@ def _weighted_matrix_dice(index_x : List[nb.int64[:]],
             overlap_matrix[i, j] = (2.0 * float(cap.shape[0]) / float(cup)) * w
     return overlap_matrix
 
-
 def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
                        particles_y : Union[List[Particle], List[TruthParticle]],
                        value_matrix: np.ndarray,
                        overlap_matrix: np.ndarray,
-                       min_overlap=0.0):
+                       min_overlap=0.0,
+                       keep_principal_matches=True):
+    if keep_principal_matches:
+        return match_particles_principal(particles_x, 
+                                         particles_y,
+                                         value_matrix, 
+                                         overlap_matrix, 
+                                         min_overlap=min_overlap)
+    else:
+        return match_particles_all(particles_x, 
+                                   particles_y,
+                                   value_matrix, 
+                                   overlap_matrix, 
+                                   min_overlap=min_overlap)
+
+
+def match_particles_all(particles_x : Union[List[Particle], List[TruthParticle]],
+                        particles_y : Union[List[Particle], List[TruthParticle]],
+                        value_matrix: np.ndarray,
+                        overlap_matrix: np.ndarray,
+                        min_overlap=0.0):
     '''
     Match each Particle in <pred_particles> to <truth_particles>
     The number of matches will be equal to the length of <pred_particles>.
@@ -286,18 +305,65 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
     return matches, out_counts
 
 
+def match_particles_principal(particles_x : Union[List[Particle], List[TruthParticle]],
+                       particles_y : Union[List[Particle], List[TruthParticle]],
+                       value_matrix: np.ndarray,
+                       overlap_matrix: np.ndarray,
+                       min_overlap=0.0):
+    '''
+    Same as <match_particles_fn>, but only keeps principal matches.
+    '''
+    assert value_matrix.shape == (len(particles_y), len(particles_x))
+
+    if not len(value_matrix.flatten()):
+        return OrderedDict(), []
+
+    idx = value_matrix.argmax(axis=0)
+    intersections = np.atleast_1d(value_matrix.max(axis=0))
+
+    matches = OrderedDict()
+    out_counts = []
+    
+    for px in particles_x:
+        px.match_overlap = OrderedDict()
+    for py in particles_y:
+        py.match_overlap = OrderedDict()
+
+    # For each particle in x, choose one in y
+    for j, px in enumerate(particles_x):
+        select_idx = idx[j]
+        out_counts.append(overlap_matrix[select_idx, j])
+        if intersections[j] <= min_overlap:
+            key = (px.id, None)
+            matches[key] = (px, None)
+            px.matched = False
+        else:
+            matched = particles_y[select_idx]
+            px._match_overlap[matched.id] = intersections[j]
+            # matched._match_overlap[px.id] = intersections[j]
+            key = (px.id, matched.id)
+            matches[key] = (px, matched)
+            px.matched = True
+
+    out_counts = np.array(out_counts)
+
+    return matches, out_counts
+
+
 def match_interactions_fn(ints_x : List[Interaction],
                           ints_y : List[Interaction],
                           value_matrix: np.ndarray,
                           overlap_matrix: np.ndarray,
-                          min_overlap=0):
+                          min_overlap=0,
+                          keep_principal_matches=True):
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
     return match_particles_fn(ints_x, ints_y,
                               value_matrix=value_matrix,
                               overlap_matrix=overlap_matrix,
-                              min_overlap=min_overlap)
+                              min_overlap=min_overlap,
+                              keep_principal_matches=keep_principal_matches)
 
 
 def group_particles_to_interactions_fn(particles : List[Particle],
@@ -322,23 +388,24 @@ def group_particles_to_interactions_fn(particles : List[Particle],
         interactions constructed from using labels with Interactions.
     """
     interactions = defaultdict(list)
+
     for p in particles:
         interactions[p.interaction_id].append(p)
 
-    for i, (int_id, particles) in enumerate(interactions.items()):
+    for i, (int_id, parts) in enumerate(interactions.items()):
         # Reset the particle interaction ID to follow the arbitray interaction ordering
         truth_int_ids = []
-        for p in particles:
+        for p in parts:
             truth_int_ids.append(p.interaction_id)
-            p.interaction_id = i
+            # p.interaction_id = i
         truth_int_ids = np.unique(truth_int_ids)
         assert len(truth_int_ids) == 1,\
                 'Particles in this interaction do not share an interaction ID'
 
         if mode == 'pred':
-            interactions[int_id] = Interaction.from_particles(particles)
+            interactions[int_id] = Interaction.from_particles(parts)
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction.from_particles(particles)
+            interactions[int_id] = TruthInteraction.from_particles(parts)
             interactions[int_id].truth_id = truth_int_ids[0]
         else:
             raise ValueError(f"Unknown aggregation mode {mode}.")

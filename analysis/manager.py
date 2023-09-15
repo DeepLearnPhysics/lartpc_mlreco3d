@@ -18,6 +18,8 @@ from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
 from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
 
+from pprint import pprint
+
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
 
@@ -195,7 +197,7 @@ class AnaToolsManager:
         
         data_has_voxels = set([
             'input_data', 'segment_label', 
-            'particles_label', 'cluster_label', 'kinematics_label', 
+            'particles_label', 'cluster_label', 'kinematics_label', 'sed'
         ])
         result_has_voxels = set([
             'input_rescaled', 
@@ -310,7 +312,7 @@ class AnaToolsManager:
             lcheck_reco = self._build_reco_reps(data, result)
         elif mode == 'truth':
             lcheck_truth = self._build_truth_reps(data, result)
-        elif mode is None or mode == 'all':
+        elif mode == 'all':
             lcheck_reco = self._build_reco_reps(data, result)
             lcheck_truth = self._build_truth_reps(data, result)
         else:
@@ -338,18 +340,10 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            if ('particles' not in result) or self.force_build:
-                print("Building particles instead of loading...")
-                result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
-            else:
-                result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+            result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
 
         if 'InteractionBuilder' in self.builders:
-            if ('interactions' not in result) or self.force_build:
-                print("Building interactions instead of loading...")
-                result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
-            else:
-                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
+            result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
             
             
     def _load_truth_reps(self, data, result):
@@ -369,15 +363,9 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            if 'truth_particles' not in result:
-                result['truth_particles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
-            else:
-                result['truth_particles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
+            result['truth_particles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
         if 'InteractionBuilder' in self.builders:
-            if 'truth_interactions' not in result:
-                result['truth_interactions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
-            else:
-                result['truth_interactions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
+            result['truth_interactions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
             
     def load_representations(self, data, result, mode='all'):
         if self.ana_mode is not None:
@@ -623,7 +611,7 @@ class AnaToolsManager:
         # 2. Build data representations'
         if self.data_builders is not None:
             start = time.time()
-            if self._reader_state == 'hdf5':
+            if 'particles' in res:
                 self.load_representations(data, res)
             else:
                 self.build_representations(data, res)

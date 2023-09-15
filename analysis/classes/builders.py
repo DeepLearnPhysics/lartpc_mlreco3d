@@ -8,8 +8,18 @@ from scipy.special import softmax
 from scipy.spatial.distance import cdist
 import copy
 
-from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL,
-        CLUST_COL, GROUP_COL, INTER_COL, PSHOW_COL, TRACK_SHP)
+from mlreco.utils.globals import (BATCH_COL,
+                                  COORD_COLS,
+                                  VALUE_COL,
+                                  INTER_COL,
+                                  GROUP_COL,
+                                  PSHOW_COL,
+                                  CLUST_COL,
+                                  NU_COL,
+                                  TRACK_SHP,
+                                  SHAPE_COL,
+                                  PGRP_COL,
+                                  PID_COL)
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
@@ -203,10 +213,6 @@ class ParticleBuilder(DataBuilder):
 
             match = prepared_bp.pop('match', [])
             match_overlap = prepared_bp.pop('match_overlap', [])
-            
-            # ONLY TEMPORARY
-            if 'match_counts' in prepared_bp:
-                match_overlap = prepared_bp.pop('match_counts')
 
             assert len(match) == len(match_overlap)
 
@@ -230,7 +236,6 @@ class ParticleBuilder(DataBuilder):
     def _load_truth(self, entry, data, result):
         out = []
         true_nonghost  = data['cluster_label'][0]
-        particles_asis = data['particles_asis'][0]
         pred_nonghost  = result['cluster_label_adapted'][0]
         blueprints     = result['truth_particles'][0]
 
@@ -245,22 +250,6 @@ class ParticleBuilder(DataBuilder):
             true_mask = bp['truth_index']
             sed_mask  = bp.get('sed_index', None)
             pasis_selected = None
-            # Find particles_asis
-            for pasis in particles_asis:
-                if pasis.id() == bp['id']:
-                    pasis_selected = pasis
-            assert pasis_selected is not None
-
-            # recipe = {
-            #     'index': mask,
-            #     'truth_index': true_mask,
-            #     'points': pred_nonghost[mask][:, COORD_COLS],
-            #     'depositions': pred_nonghost[mask][:, VALUE_COL],
-            #     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-            #     'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
-            #     'particle_asis': pasis_selected,
-            #     'group_id': group_id
-            # }
 
             prepared_bp = copy.deepcopy(bp)
 
@@ -283,6 +272,7 @@ class ParticleBuilder(DataBuilder):
             match_overlap = prepared_bp.pop('match_overlap', [])
 
             truth_particle = TruthParticle(**prepared_bp)
+            truth_particle.load_larcv_attributes(prepared_bp)
             if len(match) > 0:
                 truth_particle.match_overlap = OrderedDict({
                     key : val for key, val in zip(match, match_overlap)})
@@ -348,9 +338,8 @@ class ParticleBuilder(DataBuilder):
                             volume_id=volume_id,
                             pid_scores=pid_scores[i],
                             primary_scores=primary_scores[i],
-                            start_point = np.ascontiguousarray(particle_start_points[i]),
-                            end_point = np.ascontiguousarray(particle_end_points[i]))
-
+                            start_point = np.ascontiguousarray(particle_start_points[i], dtype=np.float32),
+                            end_point = np.ascontiguousarray(particle_end_points[i], dtype=np.float32))
             out.append(part)
 
         return out
@@ -370,9 +359,9 @@ class ParticleBuilder(DataBuilder):
         out = []
         image_index     = data['index'][entry]
         if 'cluster_label_adapted' in result:
-            labels = result['cluster_label_adapted'][0]
+            labels = result['cluster_label_adapted'][entry]
         elif 'cluster_label' in data:
-            labels = data['cluster_label'][0]
+            labels = data['cluster_label'][entry]
         else:
             msg = "To build TruthParticle objects from HDF5 data, need either "\
                 "cluster_label inside data dictionary or cluster_label_adapted inside"\
@@ -560,11 +549,6 @@ class InteractionBuilder(DataBuilder):
 
         for i, bp in enumerate(blueprints):
             
-            # ONLY TEMPORARY
-            if 'match_counts' in bp:
-                match_overlap = bp.pop('match_counts')
-                bp['match_overlap'] = match_overlap
-            
             info = copy.deepcopy(bp)
             info['interaction_id'] = info.pop('id', -1)
             
@@ -623,12 +607,7 @@ class InteractionBuilder(DataBuilder):
             print(msg)
 
         for i, bp in enumerate(blueprints):
-            
-            # ONLY TEMPORARY
-            if 'match_counts' in bp:
-                match_overlap = bp.pop('match_counts')
-                bp['match_overlap'] = match_overlap
-                
+
             info = copy.deepcopy(bp)
             info['interaction_id'] = info.pop('id', -1)
             for key in bp:
@@ -1028,11 +1007,11 @@ def get_truth_particle_labels(labels_nonghost, mask, id=-1, verbose=False):
     """
 
     # Semantic Type
-    semantic_type, sem_counts = np.unique(labels_nonghost[mask][:, -1].astype(int),
+    semantic_type, sem_counts = np.unique(labels_nonghost[mask][:, SHAPE_COL].astype(int),
                                             return_counts=True)
     if semantic_type.shape[0] > 1:
         if verbose:
-            print("Semantic Type of Particle {} is not "\
+            print("Semantic Type of TruthParticle {} is not "\
                 "unique: {}, {}".format(id,
                                         str(semantic_type),
                                         str(sem_counts)))
@@ -1042,11 +1021,11 @@ def get_truth_particle_labels(labels_nonghost, mask, id=-1, verbose=False):
         semantic_type = semantic_type[0]
 
     # Interaction ID
-    interaction_id, int_counts = np.unique(labels_nonghost[mask][:, 7].astype(int),
+    interaction_id, int_counts = np.unique(labels_nonghost[mask][:, INTER_COL].astype(int),
                                         return_counts=True)
     if interaction_id.shape[0] > 1:
         if verbose:
-            print("Interaction ID of Particle {} is not "\
+            print("Interaction ID of TruthParticle {} is not "\
                 "unique: {}".format(id, str(interaction_id)))
         perm = int_counts.argmax()
         interaction_id = interaction_id[perm]
@@ -1054,11 +1033,11 @@ def get_truth_particle_labels(labels_nonghost, mask, id=-1, verbose=False):
         interaction_id = interaction_id[0]
 
     # Neutrino ID
-    nu_id, nu_counts = np.unique(labels_nonghost[mask][:, 8].astype(int),
+    nu_id, nu_counts = np.unique(labels_nonghost[mask][:, NU_COL].astype(int),
                                 return_counts=True)
     if nu_id.shape[0] > 1:
         if verbose:
-            print("Neutrino ID of Particle {} is not "\
+            print("Neutrino ID of TruthParticle {} is not "\
                 "unique: {}".format(id, str(nu_id)))
         perm = nu_counts.argmax()
         nu_id = nu_id[perm]
@@ -1066,23 +1045,23 @@ def get_truth_particle_labels(labels_nonghost, mask, id=-1, verbose=False):
         nu_id = nu_id[0]
 
     # Primary ID
-    primary_id, primary_counts = np.unique(labels_nonghost[mask][:, 11].astype(int),
+    primary_id, primary_counts = np.unique(labels_nonghost[mask][:, PGRP_COL].astype(int),
                                 return_counts=True)
     if primary_id.shape[0] > 1:
         if verbose:
-            print("Primary ID of Particle {} is not "\
+            print("Primary ID of TruthParticle {} is not "\
                 "unique: {}".format(id, str(primary_id)))
         perm = primary_counts.argmax()
         primary_id = primary_id[perm]
     else:
         primary_id = primary_id[0]
 
-    # Primary ID
-    pid, pid_counts = np.unique(labels_nonghost[mask][:, 9].astype(int),
+    # PID
+    pid, pid_counts = np.unique(labels_nonghost[mask][:, PID_COL].astype(int),
                                 return_counts=True)
     if pid.shape[0] > 1:
         if verbose:
-            print("Primary ID of Particle {} is not "\
+            print("Primary ID of TruthParticle {} is not "\
                 "unique: {}".format(id, str(pid)))
         perm = pid_counts.argmax()
         pid = pid[perm]

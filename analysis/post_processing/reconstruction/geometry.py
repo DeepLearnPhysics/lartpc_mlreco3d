@@ -48,7 +48,7 @@ def reconstruct_directions(data_dict,
             # Make sure the particle coordinates are expressed in cm
             if p.units != 'cm':
                 raise ValueError('Particle coordinates must be expressed in cm '
-                        'to use the range-based kinetice energy reconstruction')
+                        'to use the range-based kinetic energy reconstruction, currently in {}'.format(p.units))
 
             # Get point coordinates
             if not isinstance(p, TruthParticle):

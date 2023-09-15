@@ -82,7 +82,8 @@ def pixel_to_cm(coords, meta, translate=True):
         return coords
 
     lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
-    return lower + (coords + .5) * size
+    out = lower + (coords + .5) * size
+    return out.astype(np.float32)
 
 
 def cm_to_pixel(coords, meta, translate=True):
