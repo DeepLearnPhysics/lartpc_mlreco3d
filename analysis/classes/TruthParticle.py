@@ -148,6 +148,36 @@ class TruthParticle(Particle):
             self.start_point = self.end_point = np.zeros(3, dtype=self.start_point.dtype)
         if self.end_point[0] == -np.inf:
             self.end_point = self.start_point
+            
+            
+    def load_larcv_attributes(self, particle_dict):
+        '''
+        Extracts all the relevant attributes from the a
+        `larcv.Particle` and makes it its own.
+
+        Parameters
+        ----------
+        particle : larcv.Particle
+            True MC particle object
+        '''
+        # Load up all of the scalar information
+        shared_keys  = ['track_id', 'creation_process', 'pdg_code', 't']
+        scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
+        scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
+                'parent_id', 'group_id', 'interaction_id',\
+                'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape']
+
+        # Load up all the 3-vector information
+        vec_keys = ['position', 'end_position', 'parent_position',\
+                'ancestor_position', 'first_step', 'last_step']
+        
+        attribute_keys = scalar_keys + vec_keys
+        for attr_name in attribute_keys:
+            attr = particle_dict[attr_name]
+            if type(attr) is bytes:
+                attr = attr.decode()
+            setattr(self, attr_name, attr)
+            
 
     def __repr__(self):
         msg = super(TruthParticle, self).__repr__()

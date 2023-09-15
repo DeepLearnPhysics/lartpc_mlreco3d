@@ -236,7 +236,6 @@ class ParticleBuilder(DataBuilder):
     def _load_truth(self, entry, data, result):
         out = []
         true_nonghost  = data['cluster_label'][0]
-        particles_asis = data['particles_asis'][0]
         pred_nonghost  = result['cluster_label_adapted'][0]
         blueprints     = result['truth_particles'][0]
 
@@ -251,11 +250,6 @@ class ParticleBuilder(DataBuilder):
             true_mask = bp['truth_index']
             sed_mask  = bp.get('sed_index', None)
             pasis_selected = None
-            # Find particles_asis
-            for pasis in particles_asis:
-                if pasis.id() == bp['id']:
-                    pasis_selected = pasis
-            assert pasis_selected is not None
 
             prepared_bp = copy.deepcopy(bp)
 
@@ -278,6 +272,7 @@ class ParticleBuilder(DataBuilder):
             match_overlap = prepared_bp.pop('match_overlap', [])
 
             truth_particle = TruthParticle(**prepared_bp)
+            truth_particle.load_larcv_attributes(prepared_bp)
             if len(match) > 0:
                 truth_particle.match_overlap = OrderedDict({
                     key : val for key, val in zip(match, match_overlap)})
