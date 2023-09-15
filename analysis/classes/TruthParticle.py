@@ -81,7 +81,8 @@ class TruthParticle(Particle):
         self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
         # Load truth information from the true particle object
-        self.register_larcv_particle(particle_asis)
+        if particle_asis is not None:
+            self.register_larcv_particle(particle_asis)
 
         # Quantity to be set with the children counting post-processor
         self.children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
