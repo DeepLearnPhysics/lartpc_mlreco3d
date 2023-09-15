@@ -93,7 +93,8 @@ def match_interactions(data_dict,
                        matching_mode='true_to_pred',
                        min_overlap=0,
                        overlap_mode='iou',
-                       weight=False):
+                       weight=False,
+                       keep_principal_matches=True):
 
     pred_interactions = result_dict['interactions']
     
