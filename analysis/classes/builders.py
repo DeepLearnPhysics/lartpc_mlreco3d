@@ -236,7 +236,7 @@ class ParticleBuilder(DataBuilder):
     def _load_truth(self, entry, data, result):
         out = []
         true_nonghost  = data['cluster_label'][0]
-        particles_asis = data['particles_asis'][0]
+        # particles_asis = data['particles_asis'][0]
         pred_nonghost  = result['cluster_label_adapted'][0]
         blueprints     = result['truth_particles'][0]
 
@@ -251,22 +251,6 @@ class ParticleBuilder(DataBuilder):
             true_mask = bp['truth_index']
             sed_mask  = bp.get('sed_index', None)
             pasis_selected = None
-            # Find particles_asis
-            for pasis in particles_asis:
-                if pasis.id() == bp['id']:
-                    pasis_selected = pasis
-            assert pasis_selected is not None
-
-            # recipe = {
-            #     'index': mask,
-            #     'truth_index': true_mask,
-            #     'points': pred_nonghost[mask][:, COORD_COLS],
-            #     'depositions': pred_nonghost[mask][:, VALUE_COL],
-            #     'truth_points': true_nonghost[true_mask][:, COORD_COLS],
-            #     'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
-            #     'particle_asis': pasis_selected,
-            #     'group_id': group_id
-            # }
 
             prepared_bp = copy.deepcopy(bp)
 
