@@ -496,7 +496,7 @@ class AnaToolsManager:
             self.logger_dict.update(post_processor_interface._profile)
             
 
-    def run_ana_scripts(self, data, result):
+    def run_ana_scripts(self, data, result, iteration):
         """Run all registered analysis scripts (under producers/scripts)
 
         Parameters
@@ -517,6 +517,7 @@ class AnaToolsManager:
             script_processor = ScriptProcessor(data, result)
             for processor_name, pcfg in self.ana_config['scripts'].items():
                 priority = pcfg.pop('priority', -1)
+                pcfg['iteration'] = iteration
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(scripts,str(processor_name))
                 script_processor.register_function(processor,
@@ -652,7 +653,7 @@ class AnaToolsManager:
 
         # 5. Run scripts, if requested
         start = time.time()
-        ana_output = self.run_ana_scripts(data, res)
+        ana_output = self.run_ana_scripts(data, res, iteration)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
