@@ -104,7 +104,10 @@ def check_containement(data_dict, result_dict,
         Which output to run on (one of 'both', 'reco' or 'truth')
     '''
     # Initialize the geometry
-    geo = Geometry(detector, boundary_file)
+    if boundary_file is not None:
+        geo = Geometry(boundary_file)
+    else:
+        geo = Geometry(detector)
 
     # List objects for which to check containement
     key_list = []
