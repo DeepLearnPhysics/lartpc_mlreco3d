@@ -1,8 +1,63 @@
 import numpy as np
 
-from mlreco.utils.globals import TRACK_SHP, PID_MASSES
+from mlreco.utils.globals import TRACK_SHP, PID_MASSES, SHP_TO_PID, SHP_TO_PRIMARY
 
 from analysis.post_processing import post_processing
+
+
+@post_processing(data_capture=[],
+                 result_capture=['particles', 'interactions'])
+def enforce_particle_semantics(data_dict, result_dict,
+                               enforce_pid=True,
+                               enforce_primary=True):
+    '''
+    Enforce logical connections between semantic predictions and
+    particle-level predictions (PID and primary):
+    - If a particle has shower shape, it can only have a shower PID
+    - If a particle has track shape, it can only have a track PID
+    - If a particle has delta/michel shape, it can only be a secondary electron
+
+    Parameters
+    ----------
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    enforce_pid : bool, default True
+        Enforce the PID prediction based on the semantic type
+    enforce_primary : bool, default True
+        Enforce the primary predictionbased on the semantic type
+    '''
+    # Loop over the particle objects
+    for p in result_dict['particles']:
+        # Get the particle semantic type
+        shape = p.semantic_type
+
+        # Reset the PID scores
+        if enforce_pid:
+            pid_range = SHP_TO_PID[shape]
+            pid_range = pid_range[pid_range < len(p.pid_scores)]
+
+            pid_scores = np.zeros(len(p.pid_scores), dtype=p.pid_scores.dtype)
+            pid_scores[pid_range] = p.pid_scores[pid_range]
+            pid_scores /= np.sum(pid_scores)
+            p.pid_scores = pid_scores
+
+        # Reset the primary scores
+        if enforce_primary:
+            primary_range = SHP_TO_PRIMARY[shape]
+
+            primary_scores = np.zeros(len(p.primary_scores),
+                    dtype=p.primary_scores.dtype)
+            primary_scores[primary_range] = p.primary_scores[primary_range]
+            primary_scores /= np.sum(primary_scores)
+            p.primary_scores = primary_scores
+
+    # Update the interaction information accordingly
+    for ia in result_dict['interactions']:
+        ia._update_particle_info()
+
+    return {}
 
 
 @post_processing(data_capture=[],

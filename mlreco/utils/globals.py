@@ -92,6 +92,21 @@ PID_LABELS = {
     5: 'Kaon'
 }
 
+# Map between shape and allowed PID/primary labels
+SHP_TO_PID = {
+    SHOWR_SHP: np.array([0,1]),
+    TRACK_SHP: np.array([2,3,4,5]),
+    DELTA_SHP: np.array([1]),
+    MICHL_SHP: np.array([1])
+}
+
+SHP_TO_PRIMARY = {
+    SHOWR_SHP: np.array([0,1]),
+    TRACK_SHP: np.array([0,1]),
+    DELTA_SHP: np.array([0]),
+    MICHL_SHP: np.array([0])
+}
+
 # Particle masses
 PID_MASSES = {
     0: 0.,
