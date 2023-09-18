@@ -16,7 +16,7 @@ def reconstruct_vertex(data_dict, result_dict,
                        anchor_vertex = True,
                        touching_threshold = 2.0,
                        angle_threshold = 0.3,
-                       run_mode = 'reco'):
+                       run_mode = 'both'):
     '''
     Post-processor which reconstructs one vertex for each
     interaction in the provided list. It modifies the input list
@@ -42,7 +42,7 @@ def reconstruct_vertex(data_dict, result_dict,
     angle_threshold : float, default 0.3 radians
         Maximum angle between the vertex-to-start-point vector and a
         shower direction to consider that a shower originated from the vertex
-    run_mode : str
+    run_mode : str, default 'both'
         One of `reco`, `truth`, `both` to tell which interaction types to
         apply this algorithm to.
     '''
