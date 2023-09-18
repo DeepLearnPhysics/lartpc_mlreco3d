@@ -81,6 +81,7 @@ class Particle:
                  fragment_ids: np.ndarray = np.empty(0, dtype=np.int64),
                  interaction_id: int = -1,
                  nu_id: int = -1,
+                 pid: int = -1,
                  volume_id: int = -1,
                  image_id: int = -1,
                  semantic_type: int = -1,
@@ -109,7 +110,7 @@ class Particle:
         self._index           = None
         self._depositions     = None
         self._depositions_sum = -1
-        self._pid             = -1
+        self._pid             = pid
         self._size            = -1
         self._is_primary      = is_primary
         self._units           = units

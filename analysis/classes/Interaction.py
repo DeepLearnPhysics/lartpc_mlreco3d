@@ -109,7 +109,7 @@ class Interaction:
 
         # Flash matching quantities
         self.flash_time     = flash_time
-        self.fmatched       = fmatched
+        self.fmatched       = bool(fmatched)
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
         self.flash_hypothesis = flash_hypothesis
