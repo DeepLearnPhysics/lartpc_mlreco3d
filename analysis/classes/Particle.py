@@ -315,6 +315,9 @@ class Particle:
         '''
         Particle ID scores getter/setter. The setter converts the
         scores to an particle ID prediction through argmax.
+        
+        Warning: If <pid_scores> are provided by either the constructor or
+        the pid_scores.setter, it will override the current pid. 
         '''
         return self._pid_scores
 
