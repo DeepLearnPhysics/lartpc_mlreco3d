@@ -3,10 +3,6 @@ import os
 
 from conftest import *
     
-def test_mpvmpr_forward(mpvmpr_forward):
-    print(mpvmpr_forward)
-    assert os.path.exists(mpvmpr_forward)
-    
 def test_bnb_nue_forward(bnb_nue_forward):
     print(bnb_nue_forward)
     assert os.path.exists(bnb_nue_forward)

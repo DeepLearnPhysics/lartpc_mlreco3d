@@ -1,7 +1,9 @@
 import pytest
 import os, yaml
+import pathlib
 
 from mlreco.main_funcs import process_config, inference
+from analysis.manager import AnaToolsManager
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -48,6 +50,24 @@ def mpvmpr_forward(prod, tmp_data_dir, tmp_log_dir):
     inference(cfg)
     
     return outfile
+
+
+@pytest.fixture(scope='session')
+def mpvmpr_anatools_manager(prod, tmp_data_dir, tmp_log_dir):
+
+    config_path = os.path.join(prod, "config/icarus/analysis/latest.cfg")
+    parent_path = pathlib.Path(config_path).parent
+    data_path = os.path.join(str(tmp_data_dir), 'mpvmpr_test.h5')
+    cfg = yaml.safe_load(open(config_path, 'r'))
+    
+    cfg['analysis']['log_dir'] = os.path.join(str(tmp_log_dir), 'log_trash')
+
+    outfile = os.path.join(str(tmp_data_dir), 'mpvmpr_test_processed.h5')
+
+    manager = AnaToolsManager(cfg, parent_path=parent_path)
+    manager.initialize(data_keys=[data_path], outfile=outfile)
+    
+    return manager
 
 
 @pytest.fixture(scope='session')
