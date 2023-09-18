@@ -239,7 +239,10 @@ class ParticleBuilder(DataBuilder):
         pred_nonghost  = result['cluster_label_adapted'][0]
         blueprints     = result['truth_particles'][0]
 
-        energy_label   = data['energy_label'][0]
+        if 'energy_label' in data:
+            energy_label = data['energy_label'][entry]
+        else:
+            energy_label = None
 
         if 'sed' in data:
             true_sed = data['sed'][0]
@@ -256,12 +259,16 @@ class ParticleBuilder(DataBuilder):
             group_id = prepared_bp.pop('id', -1)
             prepared_bp['group_id'] = group_id
             prepared_bp.pop('depositions_sum', None)
+            if energy_label is not None:
+                truth_depositions_MeV = energy_label[true_mask][:, VALUE_COL]
+            else:
+                truth_depositions_MeV = np.empty(0, dtype=np.float32)
             prepared_bp.update({
                 'points': pred_nonghost[mask][:, COORD_COLS],
                 'depositions': pred_nonghost[mask][:, VALUE_COL],
                 'truth_points': true_nonghost[true_mask][:, COORD_COLS],
                 'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
-                'truth_depositions_MeV': energy_label[true_mask][:, VALUE_COL],
+                'truth_depositions_MeV': truth_depositions_MeV,
                 'particle_asis': pasis_selected
             })
 

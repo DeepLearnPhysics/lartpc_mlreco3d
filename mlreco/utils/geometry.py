@@ -9,30 +9,25 @@ class Geometry:
     which contains a list of TPC boundaries.
     '''
 
-    def __init__(self, detector=None, boundary_file=None):
+    def __init__(self, boundaries):
         '''
         Convert a detector boundary file to useful detector attributes
 
         Parameters
         ----------
-        detector : str, default 'icarus'
-            Detector to get the geometry from
-        boundary_file : str, optional
-            Path to a detector boundary file. Supersedes `detector` if set
+        boundaries : str
+            Name of a recognized detector to get the geometry from or path
+            to a `.npy` boundary file to load the boundaries from.
         '''
-        # Should either provide the detector name or a boundary file
-        if detector is None and boundary_file is None:
-            raise ValueError('Provide either the name of the detector or a boundary file')
-
-        # If a detector name is provided, fetch a default boundary file
-        if detector is not None and boundary_file is None:
+        # If the boundaries are not a file, fetch a default boundary file
+        if not os.path.isfile(boundaries):
             path = pathlib.Path(__file__).parent
-            boundary_file = os.path.join(path, 'geo', f'{detector.lower()}_boundaries.npy')
+            boundaries = os.path.join(path, 'geo', f'{boundaries.lower()}_boundaries.npy')
 
         # Check that the boundary file exists, load it
-        if not os.path.isfile(boundary_file):
-            raise OSError(f'Could not find boundary file: {boundary_file}')
-        self.tpcs = np.load(boundary_file)
+        if not os.path.isfile(boundaries):
+            raise OSError(f'Could not find boundary file: {boundaries}')
+        self.tpcs = np.load(boundaries)
 
         # Build modules from the TPC list (merge touching TPCs)
         self.build_modules()
