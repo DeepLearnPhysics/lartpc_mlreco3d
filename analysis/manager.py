@@ -17,6 +17,7 @@ from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
 from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
+from analysis.classes.matching import generate_match_pairs
 
 from pprint import pprint
 
@@ -321,6 +322,7 @@ class AnaToolsManager:
             assert lreco == num_batches
         for ltruth in lcheck_truth:
             assert ltruth == num_batches
+
             
             
     def _load_reco_reps(self, data, result):
@@ -377,6 +379,18 @@ class AnaToolsManager:
         elif mode is None or mode == 'all':
             self._load_reco_reps(data, result)
             self._load_truth_reps(data, result)
+            if 'ParticleBuilder' in self.builders:
+                matches = generate_match_pairs(result['truth_particles'][0],
+                        result['particles'][0], 'matched_particles')
+                result.update({k:[v] for k, v in matches.items()})
+                result['particle_match_overlap_t2r'] = result.pop('matched_particles_t2r_values')
+                result['particle_match_overlap_r2t'] = result.pop('matched_particles_r2t_values')
+            if 'InteractionBuilder' in self.builders:
+                matches = generate_match_pairs(result['truth_interactions'][0],
+                        result['interactions'][0], 'matched_interactions')
+                result.update({k:[v] for k, v in matches.items()})
+                result['interaction_match_overlap_t2r'] = result.pop('matched_interactions_t2r_values')
+                result['interaction_match_overlap_r2t'] = result.pop('matched_interactions_r2t_values')
         else:
             raise ValueError(f"DataBuilder mode {mode} is not supported!")
             
