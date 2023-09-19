@@ -165,11 +165,13 @@ class TruthParticle(Particle):
         scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
                 'parent_id', 'group_id', 'interaction_id',\
-                'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape']
+                'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape',\
+                'pid', 'semantic_type']
 
         # Load up all the 3-vector information
         vec_keys = ['position', 'end_position', 'parent_position',\
-                'ancestor_position', 'first_step', 'last_step']
+                'ancestor_position', 'first_step', 'last_step',\
+                'start_point', 'end_point']
         
         attribute_keys = scalar_keys + vec_keys
         for attr_name in attribute_keys:
