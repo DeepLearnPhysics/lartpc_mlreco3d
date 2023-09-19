@@ -225,6 +225,7 @@ class ParticleBuilder(DataBuilder):
             })
             particle = Particle(**prepared_bp)
             particle.pid = bp['pid']
+            particle.is_primary = bp['is_primary']
             if len(match) > 0:
                 particle.match_overlap = OrderedDict({
                     key : val for key, val in zip(match, match_overlap)})
