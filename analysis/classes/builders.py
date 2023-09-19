@@ -224,6 +224,7 @@ class ParticleBuilder(DataBuilder):
                 'depositions': point_cloud[mask][:, VALUE_COL],
             })
             particle = Particle(**prepared_bp)
+            particle.pid = bp['pid']
             if len(match) > 0:
                 particle.match_overlap = OrderedDict({
                     key : val for key, val in zip(match, match_overlap)})
