@@ -652,7 +652,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
-        # return data, res
+        return data, res
         
         
     def log(self, iteration):
@@ -672,6 +672,6 @@ class AnaToolsManager:
     def run(self):
         print(self.max_iteration)
         for iteration in range(self.max_iteration):
-            self.step(iteration)
+            data, res = self.step(iteration)
             if self.profile:
                 self.log(iteration)
