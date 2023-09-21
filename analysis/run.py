@@ -5,7 +5,7 @@ import numpy as np
 import copy
 
 # Setup OpT0Finder for flash matching as needed
-if os.getenv('FMATCH_BASEDIR') is not None:
+if os.getenv('FMATCH_BUILDDIR') is not None:
     print('Setting up OpT0Finder...')
     sys.path.append(os.path.join(os.getenv('FMATCH_BASEDIR'), 'python'))
     import flashmatch
