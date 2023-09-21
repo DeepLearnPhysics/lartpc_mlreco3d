@@ -11,7 +11,13 @@ class Geometry:
 
     def __init__(self, boundaries, sources=None):
         '''
-        Convert a detector boundary file to useful detector attributes
+        Convert a detector boundary file to useful detector attributes.
+
+        The boundary file is a (N_m, N_t, D, 2) np.ndarray where:
+        - N_m is the number of modules (or cryostat) in the detector
+        - N_t is the number of TPCs per module (or cryostat)
+        - D is the number of dimension (always 3)
+        - 2 corresponds to the lower/upper boundaries along that axis
 
         Parameters
         ----------
@@ -35,7 +41,7 @@ class Geometry:
         # Check that the boundary file exists, load it
         if not os.path.isfile(boundaries):
             raise FileNotFoundError(f'Could not find boundary file: {boundaries}')
-        self.tpcs = np.load(boundaries)
+        self.boundaries = np.load(boundaries)
 
         # Check that the sources file exists, load it
         self.sources = None
@@ -43,54 +49,39 @@ class Geometry:
             if not os.path.isfile(sources):
                 raise FileNotFoundError(f'Could not find sources file: {sources}')
             self.sources = np.load(sources)
-            assert self.sources.shape[0] == self.tpcs.shape[0], \
+            assert self.sources.shape[:2] == self.boundaries.shape[:2], \
                     'There should be one list of sources per TPC'
+            self.sources = np.vstack(self.sources)
 
-        # Build modules from the TPC list (merge touching TPCs)
-        self.build_modules()
-
-        # Build an outer volume from the TPC list (find outermost boundaries)
-        self.build_detector()
-
-    def build_modules(self, tolerance=1):
-        '''
-        Merges touching TPCs into modules
-
-        Parameters
-        ----------
-        tolerance : float, default 1 cm
-            Distance within which two TPCs are considered touching
-        '''
-        # Build an adjacency matrix
-        adj_mat = np.ones((len(self.tpcs), len(self.tpcs)))
-        for i in range(len(self.tpcs)):
-            for j in range(len(self.tpcs)):
-                if i < j:
-                    adj_mat[i, j] = \
-                            (np.abs(self.tpcs[j][:,0] - self.tpcs[i][:,1]) \
-                                    < tolerance).any() | \
-                            (np.abs(self.tpcs[j][:,1] - self.tpcs[i][:,0]) \
-                                    < tolerance).any()
-                elif j < i:
-                    adj_mat[i, j] = adj_mat[j, i]
+        # Build TPCs
+        self.build_tpcs()
 
         # Build modules
-        leftover = np.ones(len(self.tpcs), dtype=bool)
-        groups = []
-        for i in range(len(self.tpcs)):
-            if leftover[i]:
-                mask = adj_mat[i].astype(bool)
-                groups.append(np.where(mask)[0])
-                leftover &= ~mask
+        self.build_modules()
 
-        self.modules = np.empty((len(groups), 3, 2))
-        for i, g in enumerate(groups):
-            self.modules[i,:,0] = np.min(self.tpcs[g], axis=0)[:,0]
-            self.modules[i,:,1] = np.max(self.tpcs[g], axis=0)[:,1]
+        # Build detector
+        self.build_detector()
+
+    def build_tpcs(self):
+        '''
+        Flatten out the geometry array to a simple list of TPCs.
+        '''
+        self.tpcs = self.boundaries.reshape(-1, 3, 2)
+
+    def build_modules(self):
+        '''
+        Convert the list of boundaries of TPCs that make up the modules into
+        a list of boundaries that encompass each module.
+        '''
+        self.modules = np.empty((len(self.boundaries), 3, 2))
+        for i, m in enumerate(self.boundaries):
+            self.modules[i][:,0] = np.min(m, axis=0)[:,0]
+            self.modules[i][:,1] = np.max(m, axis=0)[:,1]
 
     def build_detector(self):
         '''
-        Find outermost boundaries
+        Convert the list of boundaries of TPCs that make up the detector
+        into a single set of overall detector boundaries.
         '''
         self.detector = np.empty((3, 2))
         self.detector[:,0] = np.min(self.tpcs, axis=0)[:,0]
@@ -100,9 +91,6 @@ class Geometry:
         """
         Check whether a point cloud comes within some distance of the boundaries
         of a certain subset of detector volumes, depending on the mode.
-
-        The `margin` attribute can take one of three forms:
-        - Sin
 
         If a list of sources is provided, the `mode` is ignored and the
         containement is checked against the list of TPCs that contributed

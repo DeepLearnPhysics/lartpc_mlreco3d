@@ -22,7 +22,6 @@ def detector_traces(boundaries, meta=None, detector_coords=True, draw_faces=Fals
 
     Parameters
     ----------
-        Path to the boundary file
     boundaries : str
         Name of a recognized detector to get the geometry from or path
         to a `.npy` boundary file to load the boundaries from.
