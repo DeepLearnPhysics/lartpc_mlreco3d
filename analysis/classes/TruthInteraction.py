@@ -117,7 +117,7 @@ class TruthInteraction(Interaction):
 
         if value is not None:
             self._particles = {p.id : p for p in value}
-            id_list, index_list, points_list, depositions_list = [], [], [], []
+            id_list, index_list, points_list, sources_list, depositions_list = [], [], [], [], []
 
             true_index_list, true_points_list = [], []
             true_depositions_list, true_depositions_MeV_list = [], []
@@ -132,6 +132,7 @@ class TruthInteraction(Interaction):
                 # Predicted Nonghost
                 index_list.append(p.index)
                 points_list.append(p.points)
+                sources_list.append(p.sources)
                 depositions_list.append(p.depositions)
                 depositions_MeV_list.append(p.depositions_MeV)
 
@@ -165,6 +166,7 @@ class TruthInteraction(Interaction):
             self._num_primaries         = len([1 for p in value if p.is_primary])
             self.index                  = np.atleast_1d(np.concatenate(index_list))
             self.points                 = np.atleast_1d(np.vstack(points_list))
+            self.sources                = np.atleast_1d(np.vstack(sources_list))
             self.depositions            = np.atleast_1d(np.concatenate(depositions_list))
             self.truth_points           = np.atleast_1d(np.concatenate(true_points_list))
             self.truth_index            = np.atleast_1d(np.concatenate(true_index_list))
@@ -185,7 +187,7 @@ class TruthInteraction(Interaction):
                                'nu_id',
                                'volume_id',
                                'image_id',
-                               'index', 'points', 'depositions',
+                               'index', 'points', 'sources', 'depositions',
                                'truth_index', 'truth_points',
                                'truth_depositions','truth_depositions_MeV',
                                'sed_index', 'sed_points', 'sed_depositions_MeV']

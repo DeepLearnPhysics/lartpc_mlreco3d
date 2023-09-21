@@ -57,9 +57,6 @@ class FullChainGNN(torch.nn.Module):
                 if stage == 'inter':
                     self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
                     self._inter_use_shower_primary      = grappa_cfg.get('use_shower_primary', True)
-                    self._inter_enforce_semantics       = grappa_cfg.get('enforce_semantics', True)
-                    self._inter_enforce_semantics_shape = grappa_cfg.get('enforce_semantics_shape', (4,5))
-                    self._inter_enforce_semantics_map   = grappa_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
                 # Add unwrapping rules
                 suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
@@ -405,17 +402,6 @@ class FullChainGNN(torch.nn.Module):
                          particles[inter_mask],
                          'particle',
                          kwargs)
-
-            # If requested, enforce that particle PID predictions are compatible with semantics,
-            # i.e. set logits to -inf if they belong to incompatible PIDs
-            if self._inter_enforce_semantics and 'particle_node_pred_type' in result:
-                sem_pid_logic = -float('inf')*torch.ones(self._inter_enforce_semantics_shape, dtype=input[0].dtype, device=input[0].device)
-                sem_pid_logic[self._inter_enforce_semantics_map] = 0.
-                pid_logits = result['particle_node_pred_type']
-                for i in range(len(pid_logits)):
-                    for b in range(len(pid_logits[i])):
-                        pid_logits[i][b] += sem_pid_logic[part_seg[part_batch_ids==b]]
-                result['particle_node_pred_type'] = pid_logits
 
         # ---
         # 4. GNN for particle flow & kinematics

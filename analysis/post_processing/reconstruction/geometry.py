@@ -4,7 +4,7 @@ from mlreco.utils.globals import *
 from mlreco.utils.gnn.cluster import cluster_direction
 from mlreco.utils.geometry import Geometry
 
-from analysis.classes import TruthParticle
+from analysis.classes import TruthParticle, TruthInteraction
 from analysis.post_processing import post_processing
 
 
@@ -48,20 +48,20 @@ def reconstruct_directions(data_dict,
             # Make sure the particle coordinates are expressed in cm
             if p.units != 'cm':
                 raise ValueError('Particle coordinates must be expressed in cm '
-                        'to use the range-based kinetic energy reconstruction, currently in {}'.format(p.units))
+                        'to reconstruct directions, currently in {}'.format(p.units))
 
             # Get point coordinates
             if not isinstance(p, TruthParticle):
-                coordinates = p.points
+                coords = p.points
             else:
-                coordinates = getattr(p, truth_point_mode)
-            if not len(coordinates):
+                coords = getattr(p, truth_point_mode)
+            if not len(coords):
                 continue
 
             # Reconstruct directions from either end of the particle
-            p.start_dir = cluster_direction(coordinates, p.start_point,
+            p.start_dir = cluster_direction(coords, p.start_point,
                     neighborhood_radius, optimize)
-            p.end_dir   = cluster_direction(coordinates, p.end_point,
+            p.end_dir   = cluster_direction(coords, p.end_point,
                     neighborhood_radius, optimize)
 
     return {}
@@ -71,15 +71,22 @@ def reconstruct_directions(data_dict,
                  result_capture=['particles', 'interactions'],
                  result_capture_optional=['truth_particles', 'truth_interactions'])
 def check_containement(data_dict, result_dict,
-                       margin=5,
-                       detector='icarus',
+                       margin,
+                       use_source=False,
+                       detector=None,
                        boundary_file=None,
+                       source_file=None,
                        mode='module',
                        truth_point_mode='points',
                        run_mode='both'):
     '''
-    Check whether a particle comes within some distance of the boundaries
-    of the detector and assign the `is_contained` attribute accordingly.
+    Check whether a particle or interaction comes within some distance
+    of the boundaries of the detector and assign the `is_contained`
+    attribute accordingly.
+
+    If `use_source` is True, the cut will be based on the source of the point
+    cloud, i.e. if a point cloud was produced by TPCs i and j, it must be
+    contained within the volume bound by the set of TPCs i and j.
 
     Parameters
     ----------
@@ -87,12 +94,21 @@ def check_containement(data_dict, result_dict,
         Input data dictionary
     result_dict : dict
         Chain output dictionary
-    margin : float, default 5 cm
-        Minimum distance from a detector wall to be considered contained
-    detector : str, default 'icarus'
+    margin : Union[float, List[float], np.array]
+        Minimum distance from a detector wall to be considered contained:
+        - If float: distance buffer is shared between all 6 walls
+        - If [x,y,z]: distance is shared between pairs of falls facing
+          each other and perpendicular to a shared axis
+        - If [[x_low,x_up], [y_low,y_up], [z_low,z_up]]: distance is specified
+          individually of each wall.
+    use_source : bool, default False
+        If True, use the point sources to define a containment volume
+    detector : str, optional
         Detector to get the geometry from
     boundary_file : str, optional
         Path to a detector boundary file. Supersedes `detector` if set
+    source_file : str, optional
+        Path to a detector source file. Supersedes `detector` if set
     mode : str, default 'module'
         Containement criterion (one of 'global', 'module', 'tpc'):
         - If 'detector', makes sure is is contained within the outermost walls
@@ -103,8 +119,18 @@ def check_containement(data_dict, result_dict,
     run_mode : str, default 'both'
         Which output to run on (one of 'both', 'reco' or 'truth')
     '''
+    # Define boundary and source files
+    boundaries = boundary_file if boundary_file is not None else detector
+    assert boundaries is not None, \
+            'Must provide detector name or boundary file to check containment'
+
+    if not use_source:
+        sources = None
+    else:
+        sources = source_file if source_file is not None else detector
+
     # Initialize the geometry
-    geo = Geometry(detector, boundary_file)
+    geo = Geometry(boundaries, sources)
 
     # List objects for which to check containement
     key_list = []
@@ -113,23 +139,102 @@ def check_containement(data_dict, result_dict,
     if run_mode in ['truth', 'both']:
         key_list += ['truth_particles', 'truth_interactions']
 
-    # Loop over particle objects
+    # Loop over partcile/interaction objects
     for k in key_list:
         for p in result_dict[k]:
-            # Make sure the particle coordinates are expressed in cm
+            # Make sure the particle/interaction coordinates are expressed in cm
             if p.units != 'cm':
                 raise ValueError('Particle coordinates must be expressed in cm '
-                        'to use the range-based kinetice energy reconstruction')
+                        'to check containement, currently in {}'.format(p.units))
 
             # Get point coordinates
-            if not isinstance(p, TruthParticle):
-                coordinates = p.points
+            if not isinstance(p, TruthParticle) \
+                    and not isinstance(p, TruthInteraction):
+                coords = p.points
             else:
-                coordinates = getattr(p, truth_point_mode)
-            if not len(coordinates):
+                coords = getattr(p, truth_point_mode)
+            if not len(coords):
                 continue
 
             # Check containment
-            p.is_contained = geo.check_containment(p.points, margin, mode)
+            sources = p.sources if use_source and len(p.sources) else None
+            p.is_contained = geo.check_containment(coords, margin, sources, mode)
+
+    return {}
+
+
+@post_processing(data_capture=[],
+                 result_capture=['interactions'],
+                 result_capture_optional=['truth_interactions'])
+def check_fiducial(data_dict, result_dict,
+                   margin,
+                   detector=None,
+                   boundary_file=None,
+                   mode='module',
+                   truth_vertex_mode='truth_vertex',
+                   run_mode='both'):
+    '''
+    Check whether an interaction vertex is within some fiducial volume defined
+    as margin distances from each of the detector walls.
+
+    Parameters
+    ----------
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    margin : Union[float, List[float], np.array]
+        Minimum distance from a detector wall to be considered contained:
+        - If float: distance buffer is shared between all 6 walls
+        - If [x,y,z]: distance is shared between pairs of falls facing
+          each other and perpendicular to a shared axis
+        - If [[x_low,x_up], [y_low,y_up], [z_low,z_up]]: distance is specified
+          individually of each wall.
+    detector : str, default 'icarus'
+        Detector to get the geometry from
+    boundary_file : str, optional
+        Path to a detector boundary file. Supersedes `detector` if set
+    mode : str, default 'module'
+        Containement criterion (one of 'global', 'module', 'tpc'):
+        - If 'detector', makes sure is is contained within the outermost walls
+        - If 'module', makes sure it is contained within a single module
+        - If 'tpc', makes sure it is contained within a single tpc
+    truth_vertex_mode : str, default 'truth_vertex'
+        Vertex attribute to use to check containment of true interactions
+    run_mode : str, default 'both'
+        Which output to run on (one of 'both', 'reco' or 'truth')
+    '''
+    # Define boundary and source files
+    boundaries = boundary_file if boundary_file is not None else detector
+    assert boundaries is not None, \
+            'Must provide detector name or boundary file to check containment'
+
+    # Initialize the geometry
+    geo = Geometry(boundaries)
+
+    # List objects for which to check containement
+    key_list = []
+    if run_mode in ['reco', 'both']:
+        key_list += ['interactions']
+    if run_mode in ['truth', 'both']:
+        key_list += ['truth_interactions']
+
+    # Loop over interaction objects
+    for k in key_list:
+        for p in result_dict[k]:
+            # Make sure the interaction coordinates are expressed in cm
+            if p.units != 'cm':
+                raise ValueError('Particle coordinates must be expressed in cm '
+                        'to check fiducial, currently in {}'.format(p.units))
+
+            # Get point coordinates
+            if not isinstance(p, TruthInteraction):
+                vertex = p.vertex
+            else:
+                vertex = getattr(p, truth_vertex_mode)
+            vertex = vertex.reshape(-1,3)
+
+            # Check containment
+            p.is_fiducial = geo.check_containment(vertex, margin, mode=mode)
 
     return {}

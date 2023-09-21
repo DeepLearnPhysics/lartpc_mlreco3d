@@ -42,7 +42,7 @@ class HDF5Writer:
 
     ANA_SKIP_ATTRS = [
         'points', 'truth_points', 'sed_points', 'particles', 'fragments',
-        'depositions', 'depositions_MeV', 'truth_depositions',
+        'sources', 'depositions', 'depositions_MeV', 'truth_depositions',
         'truth_depositions_MeV', 'sed_depositions_MeV', 'particles_summary'
     ]
 
