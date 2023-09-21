@@ -456,8 +456,8 @@ def generate_match_pairs(truth, reco, prefix='matches', only_principal=False):
             continue
         if only_principal:
             idxmax = np.argmax(p.match_overlap)
-            reco_id = p.match[idxmax]
-            pair = (p, reco_dict[reco_id])
+            true_id = p.match[idxmax]
+            pair = (p, true_dict[true_id])
             out[prefix+'_t2r'].append(pair)
             out[prefix+'_t2r_values'].append(p.match_overlap[idxmax])
         else:
