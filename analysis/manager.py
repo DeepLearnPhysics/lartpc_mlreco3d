@@ -60,7 +60,7 @@ class AnaToolsManager:
         self.convert_to_cm = self.ana_config['analysis'].get('convert_to_cm', False)
         self.force_build   = self.ana_config['analysis'].get('force_build', False)
         
-        self.load_principal_matches = self.ana_config['analysis'].get('load_principal_matches', True)
+        self.load_principal_matches = self.ana_config['analysis'].get('load_only_principal_matches', True)
 
         # Initialize data product builders
         self.data_builders = None
