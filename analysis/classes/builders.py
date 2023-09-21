@@ -223,7 +223,12 @@ class ParticleBuilder(DataBuilder):
                 'points': point_cloud[mask][:, COORD_COLS],
                 'depositions': point_cloud[mask][:, VALUE_COL],
             })
+            if 'input_rescaled_source' in result:
+                prepared_bp['sources'] = result['input_rescaled_source'][0][mask]
+
             particle = Particle(**prepared_bp)
+            particle.pid = bp['pid']
+            particle.is_primary = bp['is_primary']
             if len(match) > 0:
                 particle.match_overlap = OrderedDict({
                     key : val for key, val in zip(match, match_overlap)})
@@ -274,6 +279,8 @@ class ParticleBuilder(DataBuilder):
 
             if (sed_mask is not None) and ('sed' in data):
                 prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
+            if 'input_rescaled_source' in result:
+                prepared_bp['sources'] = result['input_rescaled_source'][0][mask]
 
             match = prepared_bp.pop('match', [])
             match_overlap = prepared_bp.pop('match_overlap', [])
@@ -310,6 +317,11 @@ class ParticleBuilder(DataBuilder):
         else:
             input_voxels     = data['input_data'][entry]
 
+        if 'input_rescaled_source' in result:
+            input_source     = result['input_rescaled_source'][entry]
+        else:
+            input_source     = np.empty((0,2), dtype=np.float32)
+
         volume_labels    = input_voxels[:, BATCH_COL]
         point_cloud      = input_voxels[:, COORD_COLS]
         depositions      = input_voxels[:, VALUE_COL]
@@ -341,6 +353,7 @@ class ParticleBuilder(DataBuilder):
                             semantic_type=seg_label,
                             index=p,
                             points=np.ascontiguousarray(point_cloud[p]),
+                            sources=input_source[p] if len(input_source) else input_source,
                             depositions=depositions[p],
                             volume_id=volume_id,
                             pid_scores=pid_scores[i],
@@ -383,6 +396,11 @@ class ParticleBuilder(DataBuilder):
         else:
             rescaled_charge = data['input_data'][entry][:, VALUE_COL]
             coordinates     = data['input_data'][entry][:, COORD_COLS]
+
+        if 'input_rescaled_source' in result:
+            input_source     = result['input_rescaled_source'][entry]
+        else:
+            input_source     = np.empty((0,2), dtype=np.float32)
 
         if 'energy_label' in data:
             energy_label = data['energy_label'][entry][:, VALUE_COL]
@@ -484,6 +502,7 @@ class ParticleBuilder(DataBuilder):
                                      semantic_type=semantic_type,
                                      index=voxel_indices,
                                      points=coords,
+                                     sources=input_source[mask] if len(input_source) else input_source,
                                      depositions=depositions,
                                      depositions_MeV=np.empty(0, dtype=np.float32),
                                      truth_index=true_voxel_indices,
@@ -578,6 +597,8 @@ class InteractionBuilder(DataBuilder):
                     'points': point_cloud[mask][:, COORD_COLS],
                     'depositions': point_cloud[mask][:, VALUE_COL]
                 })
+                if 'input_rescaled_source' in result:
+                    info['sources'] = result['input_rescaled_source'][0][mask]
                 ia = Interaction(**info)
                 ia.id = len(out)
 
@@ -646,6 +667,8 @@ class InteractionBuilder(DataBuilder):
                     'truth_depositions': true_nonghost[true_mask][:, VALUE_COL],
                     'truth_depositions_MeV': truth_depositions_MeV
                 })
+                if 'input_rescaled_source' in result:
+                    info['sources'] = result['input_rescaled_source'][0][mask]
                 ia = TruthInteraction(**info)
                 ia.id = len(out)
 

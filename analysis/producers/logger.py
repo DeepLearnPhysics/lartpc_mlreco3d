@@ -7,16 +7,20 @@ import sys
 from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):
-    """Tags a function with a str indicator for truth inputs only,
+    '''
+    Tags a function with a str indicator for truth inputs only,
     reco inputs only, or both.
-    """
+    '''
     def tags_decorator(func):
         func._tag = tag_name
         return func
+
     return tags_decorator
 
 def attach_prefix(update_dict, prefix):
-    """Simple function that adds a prefix to all keys in update_dict"""
+    '''
+    Simple function that adds a prefix to all keys in update_dict
+    '''
     if prefix is None:
         return update_dict
     out = OrderedDict({})
@@ -28,9 +32,9 @@ def attach_prefix(update_dict, prefix):
     return out
 
 class AnalysisLogger:
-    """
+    '''
     Base class for analysis tools logger interface.
-    """
+    '''
 
     def __init__(self, fieldnames: dict):
         self.fieldnames = fieldnames

@@ -9,7 +9,7 @@ from .globals import *
 
 
 def compute_rescaled_charge(input_data,
-        deghost_mask, last_index=6, collection_only=False):
+        deghost_mask, last_index, collection_only=False):
     """
     Computes rescaled charge after deghosting.
 
@@ -23,8 +23,8 @@ def compute_rescaled_charge(input_data,
         (N, 4+N_f+6) Input tensor
     deghost_mask: Union[np.ndarray, torch.Tensor]
         (N) Ghost mask
-    last_index: int, default 6
-        Indexes where hit-related features start (4+N_f)
+    last_index: int
+        Index where hit-related features start (4+N_f)
     collection_only : bool, default False
         Only use the collection plane to estimate the rescaled charge
 
