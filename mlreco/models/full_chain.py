@@ -92,6 +92,7 @@ class FullChain(FullChainGNN):
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
             self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
             self.RETURNS['input_rescaled_coll'] = ['tensor', 'input_rescaled', False, True]
+            self.RETURNS['input_rescaled_source'] = ['tensor', 'input_rescaled']
             self.RETURNS['segmentation'][1] = 'input_rescaled'
             self.RETURNS['segment_label_tmp'][1] = 'input_rescaled'
             self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
@@ -276,6 +277,8 @@ class FullChain(FullChainGNN):
 
             result.update({'input_rescaled':[input_rescaled]})
             result.update({'input_rescaled_coll':[input_rescaled_coll]})
+            if input[0].shape[1] == (last_index + 6 + 2):
+                result.update({'input_rescaled_source':[input[0][deghost,-2:]]})
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -315,7 +318,6 @@ class FullChain(FullChainGNN):
                                              deghost)]
 
         if self.enable_ghost:
-
             # Update input based on deghosting results
             # if self.cheat_ghost:
             #     assert label_seg is not None

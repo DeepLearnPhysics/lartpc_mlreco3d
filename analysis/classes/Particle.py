@@ -33,6 +33,8 @@ class Particle:
         (N) IDs of voxels that correspond to the particle within the input tensor
     points : np.dnarray, default np.array([], shape=(0,3))
         (N,3) Set of voxel coordinates that make up this particle in the input tensor
+    sources : np.ndarray, default np.array([], shape=(0,2))
+        (N, 2) Set of voxel sources as (Module ID, TPC ID) pairs
     depositions : np.ndarray, defaul np.array([])
         (N) Array of charge deposition values for each voxel
     depositions_sum : float
@@ -85,7 +87,8 @@ class Particle:
                  image_id: int = -1,
                  semantic_type: int = -1,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
-                 points: np.ndarray = np.empty(0, dtype=np.float32),
+                 points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 sources: np.ndarray = np.empty((0,2), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32), # TODO get it from somewhere
                  #pid_scores: np.ndarray = -np.ones(5, dtype=np.float32), # TODO get it from somewhere
@@ -127,6 +130,7 @@ class Particle:
 
         self.index          = index
         self.points         = points
+        self.sources        = sources
         self.depositions    = depositions
 
         self.pdg_code       = -1

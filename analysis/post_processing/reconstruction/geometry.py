@@ -74,12 +74,18 @@ def check_containement(data_dict, result_dict,
                        margin=5,
                        detector='icarus',
                        boundary_file=None,
+                       use_source=False,
+                       source_file=None,
                        mode='module',
                        truth_point_mode='points',
                        run_mode='both'):
     '''
     Check whether a particle comes within some distance of the boundaries
     of the detector and assign the `is_contained` attribute accordingly.
+
+    If `use_source` is True, the cut will be based on the source of the point
+    cloud, i.e. if a point cloud was produced by TPCs i and j, it must be
+    contained within the volume bound by the set of TPCs i and j.
 
     Parameters
     ----------
@@ -93,6 +99,10 @@ def check_containement(data_dict, result_dict,
         Detector to get the geometry from
     boundary_file : str, optional
         Path to a detector boundary file. Supersedes `detector` if set
+    use_source : bool, default False
+        If True, use the point sources to define a containment volume
+    source_file : str, optional
+        Path to a detector source file. Supersedes `detector` if set
     mode : str, default 'module'
         Containement criterion (one of 'global', 'module', 'tpc'):
         - If 'detector', makes sure is is contained within the outermost walls
@@ -103,11 +113,15 @@ def check_containement(data_dict, result_dict,
     run_mode : str, default 'both'
         Which output to run on (one of 'both', 'reco' or 'truth')
     '''
-    # Initialize the geometry
-    if boundary_file is not None:
-        geo = Geometry(boundary_file)
+    # Define boundary and source files
+    boundaries = boundary_file if boundary_file is not None else detector
+    if not use_source:
+        sources = None
     else:
-        geo = Geometry(detector)
+        sources = source_file if source_file is not None else detector
+
+    # Initialize the geometry
+    geo = Geometry(boundaries, sources)
 
     # List objects for which to check containement
     key_list = []
@@ -133,6 +147,7 @@ def check_containement(data_dict, result_dict,
                 continue
 
             # Check containment
-            p.is_contained = geo.check_containment(p.points, margin, mode)
+            sources = p.sources if use_source and len(p.sources) else None
+            p.is_contained = geo.check_containment(p.points, margin, sources, mode)
 
     return {}
