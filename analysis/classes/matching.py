@@ -190,20 +190,12 @@ def match_particles_fn(particles_x : Union[List[Particle], List[TruthParticle]],
                        particles_y : Union[List[Particle], List[TruthParticle]],
                        value_matrix: np.ndarray,
                        overlap_matrix: np.ndarray,
-                       min_overlap=0.0,
-                       keep_principal_matches=True):
-    if keep_principal_matches:
-        return match_particles_principal(particles_x, 
-                                         particles_y,
-                                         value_matrix, 
-                                         overlap_matrix, 
-                                         min_overlap=min_overlap)
-    else:
-        return match_particles_all(particles_x, 
-                                   particles_y,
-                                   value_matrix, 
-                                   overlap_matrix, 
-                                   min_overlap=min_overlap)
+                       min_overlap=0.0):
+    return match_particles_all(particles_x, 
+                               particles_y,
+                               value_matrix, 
+                               overlap_matrix, 
+                               min_overlap=min_overlap)
 
 
 def match_particles_all(particles_x : Union[List[Particle], List[TruthParticle]],
@@ -354,16 +346,14 @@ def match_interactions_fn(ints_x : List[Interaction],
                           ints_y : List[Interaction],
                           value_matrix: np.ndarray,
                           overlap_matrix: np.ndarray,
-                          min_overlap=0,
-                          keep_principal_matches=True):
+                          min_overlap=0):
     """
     Same as <match_particles_fn>, but for lists of interactions.
     """
     return match_particles_fn(ints_x, ints_y,
                               value_matrix=value_matrix,
                               overlap_matrix=overlap_matrix,
-                              min_overlap=min_overlap,
-                              keep_principal_matches=keep_principal_matches)
+                              min_overlap=min_overlap)
 
 
 def group_particles_to_interactions_fn(particles : List[Particle],
@@ -431,7 +421,7 @@ def check_particle_matches(loaded_particles, clear=False):
 
     return match, match_overlap
 
-def generate_match_pairs(truth, reco, prefix='matches'):
+def generate_match_pairs(truth, reco, prefix='matches', only_principal=False):
     out = {
         prefix+'_t2r': [],
         prefix+'_r2t': [],
@@ -446,17 +436,33 @@ def generate_match_pairs(truth, reco, prefix='matches'):
             pair = (p, None)
             out[prefix+'_t2r'].append(pair)
             out[prefix+'_t2r_values'].append(-1)
-        for i, reco_id in enumerate(p.match):
+            continue
+        if only_principal:
+            idxmax = np.argmax(p.match_overlap)
+            reco_id = p.match[idxmax]
             pair = (p, reco_dict[reco_id])
             out[prefix+'_t2r'].append(pair)
-            out[prefix+'_t2r_values'].append(p.match_overlap[i])
+            out[prefix+'_t2r_values'].append(p.match_overlap[idxmax])
+        else:
+            for i, reco_id in enumerate(p.match):
+                pair = (p, reco_dict[reco_id])
+                out[prefix+'_t2r'].append(pair)
+                out[prefix+'_t2r_values'].append(p.match_overlap[i])
     for p in reco:
         if len(p.match) == 0:
             pair = (p, None)
             out[prefix+'_r2t'].append(pair)
             out[prefix+'_r2t_values'].append(-1)
-        for i, true_id in enumerate(p.match):
-            pair = (p, true_dict[true_id])
-            out[prefix+'_r2t'].append(pair)
-            out[prefix+'_r2t_values'].append(p.match_overlap[i])
+            continue
+        if only_principal:
+            idxmax = np.argmax(p.match_overlap)
+            reco_id = p.match[idxmax]
+            pair = (p, reco_dict[reco_id])
+            out[prefix+'_t2r'].append(pair)
+            out[prefix+'_t2r_values'].append(p.match_overlap[idxmax])
+        else:
+            for i, true_id in enumerate(p.match):
+                pair = (p, true_dict[true_id])
+                out[prefix+'_r2t'].append(pair)
+                out[prefix+'_r2t_values'].append(p.match_overlap[i])
     return out

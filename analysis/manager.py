@@ -59,6 +59,8 @@ class AnaToolsManager:
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
         self.convert_to_cm = self.ana_config['analysis'].get('convert_to_cm', False)
         self.force_build   = self.ana_config['analysis'].get('force_build', False)
+        
+        self.load_principal_matches = self.ana_config['analysis'].get('load_only_principal_matches', True)
 
         # Initialize data product builders
         self.data_builders = None
@@ -381,13 +383,13 @@ class AnaToolsManager:
             self._load_truth_reps(data, result)
             if 'ParticleBuilder' in self.builders:
                 matches = generate_match_pairs(result['truth_particles'][0],
-                        result['particles'][0], 'matched_particles')
+                        result['particles'][0], 'matched_particles', only_principal=self.load_principal_matches)
                 result.update({k:[v] for k, v in matches.items()})
                 result['particle_match_overlap_t2r'] = result.pop('matched_particles_t2r_values')
                 result['particle_match_overlap_r2t'] = result.pop('matched_particles_r2t_values')
             if 'InteractionBuilder' in self.builders:
                 matches = generate_match_pairs(result['truth_interactions'][0],
-                        result['interactions'][0], 'matched_interactions')
+                        result['interactions'][0], 'matched_interactions', only_principal=self.load_principal_matches)
                 result.update({k:[v] for k, v in matches.items()})
                 result['interaction_match_overlap_t2r'] = result.pop('matched_interactions_t2r_values')
                 result['interaction_match_overlap_r2t'] = result.pop('matched_interactions_r2t_values')
@@ -667,7 +669,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
-        # return data, res
+        return data, res
         
         
     def log(self, iteration):
@@ -687,6 +689,6 @@ class AnaToolsManager:
     def run(self):
         print(self.max_iteration)
         for iteration in range(self.max_iteration):
-            self.step(iteration)
+            data, res = self.step(iteration)
             if self.profile:
                 self.log(iteration)
