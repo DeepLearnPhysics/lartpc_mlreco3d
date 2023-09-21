@@ -1,5 +1,5 @@
 from .points import assign_particle_extrema
-from .geometry import reconstruct_directions, check_containement
+from .geometry import reconstruct_directions, check_containement, check_fiducial
 from .calorimetry import reconstruct_calo_energy
 from .tracking import reconstruct_csda_energy
 # from .mcs import reconstruct_mcs_energy

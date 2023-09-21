@@ -61,8 +61,12 @@ class Particle:
         (3) Particle direction estimate w.r.t. the start point
     end_dir : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle direction estimate w.r.t. the end point
+    length : float, default -1
+        Length of the particle (only assigned to track objects)
     momentum : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle 3-momentum estimate
+    is_contained : bool
+        Indicator whether this particle is contained or not
     calo_ke : float, default -1
         Kinetic energy reconstructed from the energy depositions alone
     csda_ke : float, default -1
@@ -71,6 +75,8 @@ class Particle:
         Kinetic energy reconstructed using the MCS method
     match : List[int]
         List of TruthParticle IDs for which this particle is matched to
+    match_overlap : List[float]
+        List of match overlaps (in terms of IoU) between the particle and its matches
     units : str, default 'px'
         Units in which coordinates are expressed
     '''

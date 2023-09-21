@@ -101,6 +101,9 @@ class Geometry:
         Check whether a point cloud comes within some distance of the boundaries
         of a certain subset of detector volumes, depending on the mode.
 
+        The `margin` attribute can take one of three forms:
+        - Sin
+
         If a list of sources is provided, the `mode` is ignored and the
         containement is checked against the list of TPCs that contributed
         to the point cloud only.
@@ -109,8 +112,13 @@ class Geometry:
         ----------
         points : np.ndarray
             (N, 3) Set of point coordinates
-        margin : float
-            Minimum distance from a detector wall to be considered contained
+        margin : Union[float, List[float], np.array]
+            Minimum distance from a detector wall to be considered contained:
+            - If float: distance buffer is shared between all 6 walls
+            - If [x,y,z]: distance is shared between pairs of falls facing
+              each other and perpendicular to a shared axis
+            - If [[x_low,x_up], [y_low,y_up], [z_low,z_up]]: distance is specified
+              individually of each wall.
         sources : np.ndarray, optional
             (S, 2) : List of [module ID, tpc ID] pairs that created the point cloud
         mode : str, default 'module'
@@ -144,11 +152,23 @@ class Geometry:
         else:
             raise ValueError(f'Containement check mode not recognized: {mode}')
 
+        # Translate the margin parameter to a (3,2) matrix
+        if np.isscalar(margin):
+            margin = np.full((3,2), margin)
+        elif len(np.array(margin).shape) == 1:
+            assert len(margin) == 3, \
+                    'Must provide one value per axis'
+            margin = np.repeat([margin], 2, axis=0).T
+        else:
+            assert np.array(margin).shape == (3,2), \
+                    'Must provide two values per axis'
+            margin = np.array(margin)
+
         # Loop over volumes, make sure the cloud is contained in at least one
         contained = False
         for v in volumes:
-            if (points > (v[:,0] + margin)).all() \
-                    and (points < (v[:,1] - margin)).all():
+            if (points > (v[:,0] + margin[:,0])).all() \
+                    and (points < (v[:,1] - margin[:,1])).all():
                 contained = True
                 break
 

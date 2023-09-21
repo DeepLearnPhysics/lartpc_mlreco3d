@@ -39,6 +39,10 @@ class Interaction:
     vertex : np.ndarray, optional
         (3) 3D coordinates of the predicted interaction vertex
         in reconstruction (used for debugging)
+    is_contained : bool
+        Indicator whether this interaction is contained or not
+    is_fiducial : bool, default False
+        Indicator whether the vertex is inside the fiducial volume or not
     units : str, default 'px'
         Units in which coordinates are expressed
     """
@@ -69,6 +73,7 @@ class Interaction:
                  flash_hypothesis: float = -1,
                  matched: bool = False,
                  is_contained: bool = False,
+                 is_fiducial: bool = False,
                  units: str = 'px'):
 
         # Initialize attributes
@@ -109,7 +114,9 @@ class Interaction:
         self.matched        = matched
         self._is_principal_match = False
 
+        # Quantities to be filled by the geometry post-processor
         self.is_contained   = is_contained
+        self.is_fiducial    = is_fiducial
 
         # Flash matching quantities
         self.flash_time     = flash_time
