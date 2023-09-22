@@ -9,8 +9,8 @@ def get_vertex(start_points,
                end_points,
                directions,
                semantics,
-               anchor_vertex,
-               touching_threshold,
+               anchor_vertex=True,
+               touching_threshold=2.0,
                return_mode=False):
     '''
     Reconstruct the vertex of an individual interaction.
@@ -19,17 +19,17 @@ def get_vertex(start_points,
     ----------
     start_points : np.ndarray
         (P, 3) Particle start points
-    end_points : np.ndarray, optional
+    end_points : np.ndarray
         (P, 3) Particle end points
     directions : np.ndarray
         (P, 3) Particle directions
     semantics : np.ndarray
         (P) : particle semantic type
-    anchor_vertex : bool
+    anchor_vertex : bool, default True
         If true, anchor the candidate vertex to particle objects,
         with the expection of interactions only composed of showers.
-    touching_threshold : float
-        Maximum distance for two track points to be considered touching
+    touching_threshold : float, default 2.0
+        Maximum distance for two particle points to be considered touching
     '''
     # If there is no particle: return default values
     if not len(start_points):
@@ -49,7 +49,7 @@ def get_vertex(start_points,
     if anchor_vertex:
         # If there is a unique point where >=2 particles meet, pick it. Include
         # track start and end points, to not rely on direction predictions
-        vertices   = get_confluence_points(start_points, end_points, touching_threshold)
+        vertices = get_confluence_points(start_points, end_points, touching_threshold)
         if len(vertices) == 1:
             if return_mode:
                 return vertices[0], 'confluence_nodir'
@@ -139,8 +139,8 @@ def angular_loss(candidates: nb.float32[:,:],
 
 @nb.njit(cache=True)
 def get_confluence_points(start_points: nb.float32[:,:],
-                          end_points: nb.float32[:,:] = np.empty((0,3), dtype=np.float32),
-                          touching_threshold: nb.float32 = 5.0) -> nb.types.List(nb.float32[:]):
+                          end_points: nb.float32[:,:] = None,
+                          touching_threshold: nb.float32 = 2.0) -> nb.types.List(nb.float32[:]):
     '''
     Find the points where multiple particles touch.
 
@@ -150,7 +150,7 @@ def get_confluence_points(start_points: nb.float32[:,:],
         (P, 3) Particle start points
     end_points : np.ndarray, optional
         (P, 3) Particle end points
-    touching_threshold : float, default 5 cm
+    touching_threshold : float, default 2.0
         Maximum distance for two particle points to be considered touching
 
     Returns
@@ -160,9 +160,9 @@ def get_confluence_points(start_points: nb.float32[:,:],
     '''
     # Create a particle-to-particle distance matrix
     n_part   = len(start_points)
-    dist_mat = np.zeros((n_part, n_part), dtype=np.float32)
+    dist_mat = np.zeros((n_part, n_part), dtype=start_points.dtype)
     end_mat  = np.zeros((n_part, n_part), dtype=np.int32)
-    if not len(end_points):
+    if end_points is None:
         for i, si in enumerate(start_points):
             for j, sj in enumerate(start_points):
                 if j > i:
@@ -192,7 +192,7 @@ def get_confluence_points(start_points: nb.float32[:,:],
     # Find cycles to build particle groups and confluence points (vertices)
     leftover  = np.ones(n_part, dtype=np.bool_)
     max_walks = nbl.max(walk_mat, axis=1)
-    vertices  = nb.typed.List.empty_list(np.empty(0, dtype=np.float32))
+    vertices  = nb.typed.List.empty_list(np.empty(0, dtype=start_points.dtype))
     while np.any(leftover):
         # Find the longest available cycle (must be at least 2 particles)
         left_ids = np.where(leftover)[0]
@@ -206,10 +206,10 @@ def get_confluence_points(start_points: nb.float32[:,:],
         group  = np.where(walk_mat[max_id] == max_walk)[0]
 
         # Take the barycenter of the touching particle ends as the vertex
-        if not len(end_points):
+        if end_points is None:
             vertices.append(nbl.mean(start_points[group], axis=0))
         else:
-            vertex = np.zeros(3, dtype=np.float32)
+            vertex = np.zeros(3, dtype=start_points.dtype)
             for i, t in enumerate(group):
                 end_id = np.argmax(np.bincount(end_mat[t][group][np.arange(len(group)) != i]))
                 vertex += start_points[t]/len(group) if not end_id else end_points[t]/len(group)
@@ -219,7 +219,7 @@ def get_confluence_points(start_points: nb.float32[:,:],
 
 
 @nb.njit(cache=True)
-def get_pseudovertex(points: nb.float32[:,:],
+def get_pseudovertex(start_points: nb.float32[:,:],
                      directions:  nb.float32[:,:],
                      dim: int = 3) -> nb.float32[:]:
     '''
@@ -229,26 +229,26 @@ def get_pseudovertex(points: nb.float32[:,:],
 
     Parameters
     ----------
-    points : np.ndarray
+    start_points : np.ndarray
         (P, 3) Particle start points
     directions : np.ndarray
         (P, 3) Particle directions
     dim : int
         Number of dimensions
     '''
-    assert len(points),\
+    assert len(start_points),\
             'Cannot reconstruct pseudovertex without points'
 
-    if len(points) == 1:
-        return points[0]
+    if len(start_points) == 1:
+        return start_points[0]
 
-    pseudovtx = np.zeros((dim, ), dtype=np.float32)
-    S = np.zeros((dim, dim), dtype=np.float32)
-    C = np.zeros((dim, ), dtype=np.float32)
+    pseudovtx = np.zeros((dim, ), dtype=start_points.dtype)
+    S = np.zeros((dim, dim), dtype=start_points.dtype)
+    C = np.zeros((dim, ), dtype=start_points.dtype)
 
-    for p, d in zip(points, directions):
-        S += (np.outer(d, d) - np.eye(dim, dtype=np.float32))
-        C += (np.outer(d, d) - np.eye(dim, dtype=np.float32)) @ np.ascontiguousarray(p)
+    for p, d in zip(start_points, directions):
+        S += (np.outer(d, d) - np.eye(dim, dtype=start_points.dtype))
+        C += (np.outer(d, d) - np.eye(dim, dtype=start_points.dtype)) @ np.ascontiguousarray(p)
 
     pseudovtx = np.linalg.pinv(S) @ C
 

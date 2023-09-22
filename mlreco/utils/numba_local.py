@@ -481,29 +481,42 @@ def closest_pair(x1: nb.float32[:,:],
     float
         Distance between the two points
     '''
+    # Find the two points in two sets of points that are closest to each other
     if algorithm == 'brute':
+        # Compute every pair-wise distances between the two sets
         dist_mat = cdist(x1, x2)
+
+        # Select the closest pair of point
         index = np.argmin(dist_mat)
         idxs = [index//dist_mat.shape[1], index%dist_mat.shape[1]]
         dist = dist_mat[idxs[0], idxs[1]]
+
     elif algorithm == 'recursive':
+        # Pick the point to start iterating from
         xarr = [x1, x2]
-        idxs, subidx, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
+        idxs, set_id, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
         if seed:
-            seed_idxs  = np.array(farthest_pair(xarr[~subidx], 'recursive')[:2])
-            seed_dists = cdist(xarr[~subidx][seed_idxs], xarr[subidx])
-            seed_argmins = argmin(seed_dists, axis=1)
-            seed_mins = np.array([seed_dists[0][seed_argmins[0]], seed_dists[1][seed_argmins[1]]])
-            seed_choice = np.argmin(seed_mins)
-            idxs[int(~subidx)] = seed_idxs[seed_choice]
-            idxs[int(subidx) ] = seed_argmins[seed_choice]
-            dist = seed_mins[seed_choice]
+            # Find the end points of the two sets
+            for i, x in enumerate(xarr):
+                seed_idxs    = np.array(farthest_pair(xarr[i], 'recursive')[:2])
+                seed_dists   = cdist(xarr[i][seed_idxs], xarr[~i])
+                seed_argmins = argmin(seed_dists, axis=1)
+                seed_mins    = np.array([seed_dists[0][seed_argmins[0]],
+                                         seed_dists[1][seed_argmins[1]]])
+                if np.min(seed_mins) < dist:
+                    set_id = ~i
+                    seed_choice = np.argmin(seed_mins)
+                    idxs[int(~set_id)] = seed_idxs[seed_choice]
+                    idxs[int(set_id)] = seed_argmins[seed_choice]
+                    dist = seed_mins[seed_choice]
+
+        # Find the closest point in the other set, repeat until convergence
         while dist < tempdist:
             tempdist = dist
-            dists = cdist(np.ascontiguousarray(xarr[subidx][idxs[subidx]]).reshape(1,-1), xarr[~subidx]).flatten()
-            idxs[~subidx] = np.argmin(dists)
-            dist = dists[idxs[~subidx]]
-            subidx = ~subidx
+            dists = cdist(np.ascontiguousarray(xarr[set_id][idxs[set_id]]).reshape(1,-1), xarr[~set_id]).flatten()
+            idxs[~set_id] = np.argmin(dists)
+            dist = dists[idxs[~set_id]]
+            subidx = ~set_id
     else:
         raise ValueError('Algorithm not supported')
 

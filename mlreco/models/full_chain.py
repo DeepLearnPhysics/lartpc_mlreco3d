@@ -11,8 +11,7 @@ from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
 from mlreco.utils.ppn import get_particle_points
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
-from mlreco.utils.deghosting import compute_rescaled_charge
+from mlreco.utils.ghost import compute_rescaled_charge, adapt_labels
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
@@ -93,6 +92,7 @@ class FullChain(FullChainGNN):
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
             self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
             self.RETURNS['input_rescaled_coll'] = ['tensor', 'input_rescaled', False, True]
+            self.RETURNS['input_rescaled_source'] = ['tensor', 'input_rescaled']
             self.RETURNS['segmentation'][1] = 'input_rescaled'
             self.RETURNS['segment_label_tmp'][1] = 'input_rescaled'
             self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
@@ -232,6 +232,9 @@ class FullChain(FullChainGNN):
             dictionary of all network outputs from cnns.
         '''
         device = input[0].device
+        if not len(input[0]):
+            # TODO: move empty case handling elsewhere
+            return {}, input
 
         label_seg, label_clustering, coords = None, None, None
         if len(input) == 3:
@@ -252,6 +255,7 @@ class FullChain(FullChainGNN):
 
         result = {}
 
+        deghost = None
         if self.enable_charge_rescaling:
             # Pass through the deghosting
             assert self.enable_ghost
@@ -273,6 +277,8 @@ class FullChain(FullChainGNN):
 
             result.update({'input_rescaled':[input_rescaled]})
             result.update({'input_rescaled_coll':[input_rescaled_coll]})
+            if input[0].shape[1] == (last_index + 6 + 2):
+                result.update({'input_rescaled_source':[input[0][deghost,-2:]]})
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -305,8 +311,13 @@ class FullChain(FullChainGNN):
 
         cnn_result = {}
 
-        if self.enable_ghost:
+        if label_seg is not None and label_clustering is not None:
+            label_clustering = [adapt_labels(label_clustering[0],
+                                             label_seg[0],
+                                             result['segmentation'][0],
+                                             deghost)]
 
+        if self.enable_ghost:
             # Update input based on deghosting results
             # if self.cheat_ghost:
             #     assert label_seg is not None
@@ -317,14 +328,6 @@ class FullChain(FullChainGNN):
             deghost = result['ghost'][0][:,0] > result['ghost'][0][:,1]
 
             input = [input[0][deghost]]
-
-            if label_seg is not None and label_clustering is not None:
-                # ME uses 0 for batch column, so need to compensate
-                label_clustering = adapt_labels(result,
-                                                label_seg,
-                                                label_clustering,
-                                                batch_column=0,
-                                                coords_column_range=(1,4))
 
             deghost_result = {}
             deghost_result.update(result)
@@ -469,4 +472,3 @@ class FullChainLoss(FullChainLoss):
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg.get('graph_spice', {}).get('skip_classes', [])

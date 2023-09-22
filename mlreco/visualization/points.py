@@ -227,6 +227,9 @@ class Scatter3D:
 
     def __call__(self, objects, color='id', mode='points', colorscale='rainbow', cmin=None, cmax=None, size=1, scatter_start_points=False, scatter_end_points=False, scatter_vertices=False, **kwargs):
 
+        if not len(objects):
+            return []
+
         self.check_attribute_name(objects, color)
         self.clear_state()
 

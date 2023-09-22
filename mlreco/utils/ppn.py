@@ -5,12 +5,14 @@ import torch
 from mlreco.utils import numba_local as nbl
 from mlreco.utils import local_cdist
 from mlreco.utils.dbscan import dbscan_types, dbscan_points
-from mlreco.utils.globals import TRACK_SHP, LOWES_SHP, UNKWN_SHP
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, PPN_RTYPE_COLS,
+        PPN_RPOS_COLS, PPN_END_COLS, TRACK_SHP, LOWES_SHP, UNKWN_SHP)
 
 
-def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5, min_energy_deposit=0, include_point_tagging=True):
+def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5,
+        min_energy_deposit=0, include_point_tagging=True):
     '''
-    Gets particle points coordinates and informations for running PPN.
+    Gets particle point coordinates and informations for running PPN.
 
     We skip some particles under specific conditions (e.g. low energy deposit,
     low voxel count, nucleus track, etc.)
@@ -87,7 +89,6 @@ def get_ppn_labels(particle_v, meta, dim=3, min_voxel_count=5, min_energy_deposi
 
 def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5,
                         type_threshold=1.999, entry=0, score_pool='max', enforce_type=True,
-                        batch_col=0, coords_col=(1, 4), type_col=(3,8), score_col=(8,10),
                         selection=None, num_classes=5, apply_deghosting=True, **kwargs):
     '''
     Converts the raw output of PPN to a set of proposed points.
@@ -133,7 +134,7 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
         uresnet_predictions = uresnet_predictions[mask_ghost]
         #scores = scores[mask_ghost]
 
-    scores = scipy.special.softmax(points[:, score_col[0]:score_col[1]], axis=1)
+    scores = scipy.special.softmax(points[:, PPN_RPOS_COLS], axis=1)
     pool_op = None
     if   score_pool == 'max'  : pool_op=np.amax
     elif score_pool == 'mean' : pool_op = np.amean
@@ -145,7 +146,7 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
     all_batch  = []
     all_softmax = []
     all_endpoints = []
-    batch_ids  = event_data[:, batch_col]
+    batch_ids  = event_data[:, BATCH_COL]
     for b in np.unique(batch_ids):
         final_points = []
         final_scores = []
@@ -168,8 +169,8 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
             new_mask[indices] = mask[indices]
             mask = new_mask
 
-        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1), axis=1)
-        ppn_type_softmax = scipy.special.softmax(points[batch_index2][mask][:, type_col[0]:type_col[1]], axis=1)
+        ppn_type_predictions = np.argmax(scipy.special.softmax(points[batch_index2][mask][:, PPN_RTYPE_COLS], axis=1), axis=1)
+        ppn_type_softmax = scipy.special.softmax(points[batch_index2][mask][:, PPN_RTYPE_COLS], axis=1)
         if enable_classify_endpoints:
             ppn_classify_endpoints = scipy.special.softmax(classify_endpoints[batch_index2][mask], axis=1)
         if enforce_type:
@@ -177,16 +178,16 @@ def get_ppn_predictions(data, out, score_threshold=0.5, type_score_threshold=0.5
                 uresnet_points = uresnet_predictions[batch_index][mask] == c
                 ppn_points = ppn_type_softmax[:, c] > type_score_threshold #ppn_type_predictions == c
                 if np.count_nonzero(ppn_points) > 0 and np.count_nonzero(uresnet_points) > 0:
-                    d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, coords_col[0]:coords_col[1]] + 0.5, event_data[batch_index][mask][uresnet_points][:, coords_col[0]:coords_col[1]])
+                    d = scipy.spatial.distance.cdist(points[batch_index2][mask][ppn_points][:, :3] + event_data[batch_index][mask][ppn_points][:, COORD_COLS] + 0.5, event_data[batch_index][mask][uresnet_points][:, COORD_COLS])
                     ppn_mask2 = (d < type_threshold).any(axis=1)
-                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask2][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask2][:, coords_col[0]:coords_col[1]])
+                    final_points.append(points[batch_index2][mask][ppn_points][ppn_mask2][:, :3] + 0.5 + event_data[batch_index][mask][ppn_points][ppn_mask2][:, COORD_COLS])
                     final_scores.append(scores[batch_index2][mask][ppn_points][ppn_mask2])
                     final_types.append(ppn_type_predictions[ppn_points][ppn_mask2])
                     final_softmax.append(ppn_type_softmax[ppn_points][ppn_mask2])
                     if enable_classify_endpoints:
                         final_endpoints.append(ppn_classify_endpoints[ppn_points][ppn_mask2])
         else:
-            final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, coords_col[0]:coords_col[1]]]
+            final_points = [points[batch_index2][mask][:, :3] + 0.5 + event_data[batch_index][mask][:, COORD_COLS]]
             final_scores = [scores[batch_index2][mask]]
             final_types = [ppn_type_predictions]
             final_softmax =  [ppn_type_softmax]
@@ -270,9 +271,9 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
 
             # If requested, enhance using the PPN predictions. Only consider
             # points in the cluster that have a positive score
-            # TODO: PPN coords and score location should not be hardcoded
             if enhance_track_points:
-                pos_mask    = ppn_points[c][idxs, -1] >= ppn_points[c][idxs, -2]
+                pos_mask = ppn_points[c][idxs, PPN_RPOS_COLS[1]] \
+                        >= ppn_points[c][idxs, PPN_RPOS_COLS[0]]
                 end_points += pos_mask * (points_tensor[idxs, :3] + 0.5)
 
             # If needed, anchor the track endpoints to the track cluster
@@ -287,8 +288,7 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
         else:
             # Only use positive voxels and give precedence to predictions
             # that are contained within the voxel making the prediction.
-            # TODO: PPN coords and score location should not be hardcoded
-            ppn_scores = nbl.softmax(ppn_points[c][:, -2:], axis=1)[:,-1]
+            ppn_scores = nbl.softmax(ppn_points[c][:, PPN_RPOS_COLS], axis=1)[:,-1]
             val_index  = np.where(np.all(np.abs(ppn_points[c, :3] < 1.)))[0]
             best_id    = val_index[np.argmax(ppn_scores[val_index])] \
                     if len(val_index) else np.argmax(ppn_scores)
@@ -305,6 +305,54 @@ def get_particle_points(coords, clusts, clusts_seg, ppn_points, classes=None,
 
     # Return points
     return points
+
+
+def check_track_orientation_ppn(start_point, end_point, ppn_candidates):
+    '''
+    Use the PPN point assignments as a basis to orient a track. Match
+    the end points of a track to the closest PPN candidate and pick the
+    candidate with the highest start score as the start point
+
+    Parameters
+    ----------
+    start_point : np.ndarray
+        (3) Start point of the track
+    end_point : np.ndarray
+        (3) End point of the track
+    ppn_candidates : np.ndarray
+        (N, 10)  PPN point candidates and their associated scores
+
+    Returns
+    -------
+    bool
+       Returns `True` if the start point provided is correct, `False`
+       if the end point is more likely to be the start point.
+    '''
+    # If there's no PPN candidates, nothing to do here
+    if not len(ppn_candidates):
+        return True
+
+    # Get the candidate coordinates and end point classification predictions
+    ppn_points = ppn_candidates[:, COORD_COLS]
+    end_scores = ppn_candidates[:, PPN_END_COLS]
+
+    # Compute the distance between the track end points and the PPN candidates
+    end_points = np.vstack([start_point, end_point])
+    dist_mat = nbl.cdist(end_points, ppn_points)
+
+    # If both track end points are closest to the same PPN point, the start
+    # point must be closest to it if the score is high, farthest otherwise
+    argmins = np.argmin(dist_mat, axis=1)
+    if argmins[0] == argmins[1]:
+        label = np.argmax(end_scores[argmins[0]])
+        dists = dist_mat[[0,1], argmins]
+        return (label == 0 and dists[0] < dists[1]) or \
+                (label == 1 and dists[1] < dists[0])
+
+    # In all other cases, check that the start point is associated with the PPN
+    # point with the lowest end score
+    end_scores = end_scores[argmins, -1]
+    return end_scores[0] < end_scores[1]
 
 
 def image_contains(meta, point, dim=3):
@@ -367,5 +415,5 @@ def image_coordinates(meta, point, dim=3):
 def uresnet_ppn_type_point_selector(*args, **kwargs):
         from warnings import warn
         warn('uresnet_ppn_type_point_selector is deprecated,'
-             'use get_ppn_prections instead')
+             'use get_ppn_predictions instead')
         return get_ppn_predictions(*args, **kwargs)

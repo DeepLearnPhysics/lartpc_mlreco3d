@@ -1,42 +1,75 @@
 import pytest
-import os, sys
-
-from mlreco.iotools.readers import HDF5Reader
-from analysis.classes.builders import ParticleBuilder, InteractionBuilder
-
+import os, yaml
 import pathlib
-from pprint import pprint
-from collections import defaultdict
 
-file_key_load = '../data/nue_corsika_test.h5'
-file_key_build = '../data/nue_corsika_test_raw.h5'
+from mlreco.main_funcs import process_config, inference
+from analysis.manager import AnaToolsManager
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--prod", action="store", required=True, type=str, help="Path to lartpc_mlreco3d_prod"
+    )
+    
+@pytest.fixture(scope='session')
+def prod(request):
+    prod_path = request.config.getoption("--prod")
+    if not os.path.exists(str(prod_path)):
+        raise ValueError(f"Path {str(prod_path)} for lartpc_mlreco3d_prod does not exist!")
+    return prod_path
 
 @pytest.fixture(scope='session')
-def bnb_nue_cosmic_organized():
-    reader = HDF5Reader(file_key_load, to_larcv=True)
-    num_entries = reader.num_entries
-    data_dict, result_dict = defaultdict(list), defaultdict(list)
-    for i in range(num_entries):
-        data, res = reader.get(i, nested=True)
-        for key, val in data.items():
-            data_dict[key].extend(val)
-        for key, val in res.items():
-            result_dict[key].extend(val)
-    return data_dict, result_dict
+def tmp_data_dir(tmp_path_factory):
+    temp_dir = tmp_path_factory.mktemp("tmp_data")
+    yield temp_dir
+    
+@pytest.fixture(scope='session')
+def tmp_log_dir(tmp_path_factory):
+    temp_dir = tmp_path_factory.mktemp("tmp_log")
+    yield temp_dir
+
 
 @pytest.fixture(scope='session')
-def bnb_nue_cosmic_raw():
-    reader = HDF5Reader(file_key_build, to_larcv=True)
-    num_entries = reader.num_entries
-    data_dict, result_dict = defaultdict(list), defaultdict(list)
-    for i in range(num_entries):
-        data, res = reader.get(i, nested=True)
-        for key, val in data.items():
-            data_dict[key].extend(val)
-        for key, val in res.items():
-            result_dict[key].extend(val)
-    return data_dict, result_dict
+def bnb_nue_forward(prod, tmp_data_dir, tmp_log_dir):
 
-def test_load_hdf5(bnb_nue_cosmic_raw,
-                   bnb_nue_cosmic_organized):
-    pass
+    config_path = os.path.join(prod, "config/icarus/mlreco/latest_nocrt.cfg")
+    data_path = '/sdf/data/neutrino/icarus/bnb_nue_corsika/all.root'
+    cfg = yaml.safe_load(open(config_path, 'r'))
+    
+    if os.environ.get('CUDA_VISIBLE_DEVICES') is not None and cfg['trainval']['gpus'] == '-1':
+        cfg['trainval']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
+    
+    
+    cfg['iotool']['dataset']['data_keys'] = [data_path]
+    outfile = os.path.join(str(tmp_data_dir), 'bnb_nue_corsika_test.h5')
+    cfg['iotool']['writer']['file_name'] = outfile
+    cfg['trainval']['log_dir'] = str(tmp_log_dir)
+    cfg['trainval']['iterations'] = 10
+    cfg['trainval']['weight_prefix'] = os.path.join(str(tmp_log_dir), 'weights', 'snapshot')
+
+    process_config(cfg)
+    inference(cfg)
+    
+    return outfile
+
+@pytest.fixture(scope='session')
+def bnb_numu_forward(prod, tmp_data_dir, tmp_log_dir):
+
+    config_path = os.path.join(prod, "config/icarus/mlreco/latest.cfg")
+    data_path = '/sdf/data/neutrino/icarus/bnb_numu_corsika/larcv0000.root'
+    cfg = yaml.safe_load(open(config_path, 'r'))
+    
+    if os.environ.get('CUDA_VISIBLE_DEVICES') is not None and cfg['trainval']['gpus'] == '-1':
+        cfg['trainval']['gpus'] = os.getenv('CUDA_VISIBLE_DEVICES')
+    
+    
+    cfg['iotool']['dataset']['data_keys'] = [data_path]
+    outfile = os.path.join(str(tmp_data_dir), 'bnb_numu_corsika_test.h5')
+    cfg['iotool']['writer']['file_name'] = outfile
+    cfg['trainval']['log_dir'] = str(tmp_log_dir)
+    cfg['trainval']['iterations'] = 10
+    cfg['trainval']['weight_prefix'] = os.path.join(str(tmp_log_dir), 'weights', 'snapshot')
+
+    process_config(cfg)
+    inference(cfg)
+    
+    return outfile

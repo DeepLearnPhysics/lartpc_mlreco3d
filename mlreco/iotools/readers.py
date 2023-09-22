@@ -43,6 +43,7 @@ class HDF5Reader:
         self.num_entries  = 0
         self.file_index   = []
         self.split_groups = None
+        self.max_print    = 10
         for i, path in enumerate(self.file_paths):
             with h5py.File(path, 'r') as in_file:
                 # Check that there are events in the file and the storage mode
@@ -56,7 +57,11 @@ class HDF5Reader:
                 self.num_entries += len(in_file['events'])
                 self.file_index.append(i*np.ones(len(in_file['events']), dtype=np.int32))
 
-                print('Registered', path)
+                if i < self.max_print:
+                    print('Registered', path)
+                elif i == self.max_print:
+                    print('...')
+        print(f'Registered {len(self.file_paths)} file(s)')
 
         self.file_index = np.concatenate(self.file_index)
 
