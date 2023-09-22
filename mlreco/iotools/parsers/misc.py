@@ -1,6 +1,5 @@
 import numpy as np
 from larcv import larcv
-from mlreco.utils.dbscan import dbscan_types
 
 
 def parse_meta2d(sparse_event, projection_id = 0):
@@ -120,9 +119,9 @@ def parse_run_info(sparse_event):
     tuple
          (run, subrun, event)
     """
-    return [sparse_event.run(),
-            sparse_event.subrun(),
-            sparse_event.event()]
+    return [dict(run    = sparse_event.run(),
+                 subrun = sparse_event.subrun(),
+                 event  = sparse_event.event())]
 
 
 def parse_opflash(opflash_event):

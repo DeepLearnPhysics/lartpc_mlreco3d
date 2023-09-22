@@ -1,375 +1,131 @@
-import sys
-from itertools import combinations
-
 import numpy as np
-import numba as nb
-from scipy.spatial.distance import cdist
 
-from mlreco.utils.gnn.cluster import cluster_direction
+from mlreco.utils.globals import SHOWR_SHP, TRACK_SHP
+from mlreco.utils.vertex import get_vertex
+
 from analysis.post_processing import post_processing
-from mlreco.utils.globals import COORD_COLS
 
 
 @post_processing(data_capture=[],
-                 result_capture=['interactions'])
+                 result_capture=['interactions'],
+                 result_capture_optional=['truth_interactions'])
 def reconstruct_vertex(data_dict, result_dict,
-                       include_semantics=[0,1],
-                       use_primaries=True,
-                       r1=5.0,
-                       r2=10.0):
-    
-    for ia in result_dict['interactions']:
-        
-        candidates = []
-        
-        if use_primaries:
-            particles = [p for p in ia.particles \
-                if p.is_primary and (p.semantic_type in include_semantics)]
-        else:
-            particles = [p for p in ia.particles \
-                if p.semantic_type in include_semantics]
-            
-        cand_1 = get_adjacent_startpoint_candidate(particles, r1)
-        cand_2 = get_track_shower_candidate(particles, r2=r2)
-        cand_3 = get_pseudovertex_candidate(particles, dim=3)
-        
-        if len(cand_1) > 0:
-            candidates.append(cand_1)
-        if len(cand_2) > 0:
-            candidates.append(cand_2)
-        if len(cand_3) > 0:
-            candidates.append(cand_3)
-            
-        if len(candidates) > 0:
-            candidates = np.vstack(candidates)
-            vertex = np.mean(candidates, axis=0)
-            ia.vertex = vertex
-            
-    return {}
+                       include_semantics = [SHOWR_SHP, TRACK_SHP],
+                       use_primaries = True,
+                       update_primaries = False,
+                       anchor_vertex = True,
+                       touching_threshold = 2.0,
+                       angle_threshold = 0.3,
+                       run_mode = 'both'):
+    '''
+    Post-processor which reconstructs one vertex for each
+    interaction in the provided list. It modifies the input list
+    of interactions in place.
 
-@nb.njit(cache=True)
-def point_to_line_distance_(p1, p2, v2):
-    dist = np.sqrt(np.sum(np.cross(v2, (p2 - p1))**2)+1e-8)
-    return dist
+    Parameters
+    ----------
+    interactions : List[Interaction]
+        List of reconstructed particle interactions
+    truth_interactions : List[TruthInteractions], optional
+        List of true interactions
+    include_semantics : List[int]
+        List of semantic classes to consider for vertex reconstruction
+    use_primaries : bool, default True
+        If true, only considers primary particles to reconstruct the vertex
+    update_primaries : bool, default False
+        Use the reconstructed vertex to update primaries
+    anchor_vertex : bool, default True
+        If true, anchor the candidate vertex to particle objects,
+        with the expection of interactions only composed of showers
+    touching_threshold : float, default 2 cm
+        Maximum distance for two track points to be considered touching
+    angle_threshold : float, default 0.3 radians
+        Maximum angle between the vertex-to-start-point vector and a
+        shower direction to consider that a shower originated from the vertex
+    run_mode : str, default 'both'
+        One of `reco`, `truth`, `both` to tell which interaction types to
+        apply this algorithm to.
+    '''
+    # Loop over interactions
+    if run_mode not in ['reco', 'truth', 'both']:
+        raise ValueError('`run_mode` must be either `reco`, `truth` or `both`')
 
-@nb.njit(cache=True)
-def point_to_line_distance(P1, P2, V2):
-    dist = np.zeros((P1.shape[0], P2.shape[0]))
-    for i, p1 in enumerate(P1):
-        for j, p2 in enumerate(P2):
-            d = point_to_line_distance_(p1, p2, V2[j])
-            dist[i, j] = d
-    return dist
+    if run_mode in ['reco', 'both']:
+        for ia in result_dict['interactions']:
+            reconstruct_vertex_single(ia, include_semantics, use_primaries, update_primaries,
+                    anchor_vertex, touching_threshold, angle_threshold)
 
-def get_adjacent_startpoint_candidate(particles,
-                                      r1=5.0):
-    candidates = []
-    startpoints = []
-    for p in particles:
-        startpoints.append(p.start_point)
-    if len(startpoints) == 0:
-        return np.array(candidates)
-    startpoints = np.vstack(startpoints)
-    dist = cdist(startpoints, startpoints)
-    dist += -np.eye(dist.shape[0])
-    idx, idy = np.where((dist < r1) & (dist > 0))
-    
-    # Keep track of duplicate pairs
-    duplicates = []
-    # Append barycenter of two touching points within radius r1 to candidates
-    for ix, iy in zip(idx, idy):
-        center = (startpoints[ix] + startpoints[iy]) / 2.0
-        if not((ix, iy) in duplicates or (iy, ix) in duplicates):
-            candidates.append(center)
-            duplicates.append((ix, iy))
-            
-    candidates = np.array(candidates)
-    return candidates
-
-def get_track_shower_candidate(particles,
-                               r2=5.0):
-    candidates, track_starts = [], []
-    shower_starts, shower_dirs = [], []
-    
-    for p in particles:
-        if p.semantic_type == 0 and len(p.points) > 0:
-            shower_starts.append(p.start_point)
-            shower_dirs.append(p.start_dir)
-        if p.semantic_type == 1:
-            track_starts.append(p.start_point)
-            
-    if len(shower_starts) == 0 or len(track_starts) == 0:
-        return np.array(candidates)
-    
-    shower_dirs = np.vstack(shower_dirs)
-    shower_starts = np.vstack(shower_starts)
-    track_starts = np.vstack(track_starts)
-    
-    dist = point_to_line_distance(track_starts, shower_starts, shower_dirs)
-    idx, idy = np.where(dist < r2)
-    for ix, iy in zip(idx, idy):
-        candidates.append(track_starts[ix])
-        
-    candidates = np.array(candidates)
-    return candidates
-
-def get_pseudovertex_candidate(particles, dim=3):
-    
-    if len(particles) < 2:
-        return np.array([])
-    
-    pseudovtx = np.zeros((dim, ))
-    S = np.zeros((dim, dim))
-    C = np.zeros((dim, ))
-
-    assert len(particles) >= 2
-        
-    for p in particles:
-        startpt = p.start_point
-        vec = p.start_dir
-        w = 1.0
-        S += w * (np.outer(vec, vec) - np.eye(dim))
-        C += w * (np.outer(vec, vec) - np.eye(dim)) @ startpt
-
-    pseudovtx = np.linalg.pinv(S) @ C
-    return pseudovtx
-
-
-
-# ---------------------------DEPRECATED--------------------------------
-
-@post_processing(data_capture=[],
-                 result_capture=['particle_clusts',
-                                 'particle_seg',
-                                 'particle_start_points',
-                                 'particle_group_pred',
-                                 'particle_node_pred_vtx',
-                                 'input_rescaled',
-                                 'interactions'],
-                 result_capture_optional=['particle_dirs'])
-def reconstruct_vertex_deprecated(data_dict, result_dict,
-                       mode='all',
-                       include_semantics=[0,1],
-                       use_primaries=True,
-                       r1=5.0,
-                       r2=10.0):
-    """Post processing for reconstructing interaction vertex.
-    
-    """
-
-    particles              = result_dict['particle_clusts']
-    particle_group_pred    = result_dict['particle_group_pred']
-    primary_ids            = np.argmax(result_dict['particle_node_pred_vtx'], axis=1)
-    particle_seg           = result_dict['particle_seg']
-    input_coords           = result_dict['input_rescaled'][:, COORD_COLS]
-    startpoints            = result_dict['particle_start_points'][:, COORD_COLS]
-
-    # Optional
-    particle_dirs          = result_dict.get('particle_dirs', None)
-
-    assert len(primary_ids) == len(particles)
-
-    if particle_dirs is not None:
-        assert len(particle_dirs) == len(particles)
-    
-    vertices = []
-    interaction_ids = []
-    # Loop over interactions:
-    for ia in np.unique(particle_group_pred):
-        interaction_ids.append(ia)
-        # Default bogus value for no vertex
-        candidates = []
-        vertex = np.array([-sys.maxsize, -sys.maxsize, -sys.maxsize])
-
-        int_mask = particle_group_pred == ia
-        particles_int = []
-        startpoints_int = []
-        particle_seg_int = []
-        primaries_int = []
-
-        dirs_int = None
-        if particle_dirs is not None:
-            dirs_int = [p for i, p in enumerate(particle_dirs[int_mask]) \
-                         if particle_seg[int_mask][i] in include_semantics]
-
-        for i, primary_id in enumerate(primary_ids[int_mask]):
-            if particle_seg[int_mask][i] not in include_semantics:
-                continue
-            if not use_primaries or primary_id == 1:
-                particles_int.append(particles[int_mask][i])
-                particle_seg_int.append(particle_seg[int_mask][i])
-                primaries_int.append(primary_id)
-                startpoints_int.append(startpoints[int_mask][i])
-                if particle_dirs is not None:
-                    dirs_int.append(particle_dirs[int_mask][i])
-        
-        if len(startpoints_int) > 0:
-            startpoints_int = np.vstack(startpoints_int)
-            if len(startpoints_int) == 1:
-                vertex = startpoints_int.squeeze()
-            else:
-                # Gather vertex candidates from each algorithm
-                vertices_1 = get_centroid_adj_pairs(startpoints_int, r1=r1)
-                vertices_2 = get_track_shower_poca(startpoints_int,
-                                                particles_int,
-                                                particle_seg_int,
-                                                input_coords,
-                                                r2=r2,
-                                                particle_dirs=dirs_int)
-                if len(particles_int) >= 2:
-                    pseudovertex = compute_pseudovertex(particles_int, 
-                                                        startpoints_int, 
-                                                        input_coords, 
-                                                        dim=3, 
-                                                        particle_dirs=dirs_int)
-                else:
-                    pseudovertex = np.array([])
-
-                if vertices_1.shape[0] > 0:
-                    candidates.append(vertices_1)
-                if vertices_2.shape[0] > 0:
-                    candidates.append(vertices_2)
-                if len(candidates) > 0:
-                    candidates = np.vstack(candidates)
-                    vertex = np.mean(candidates, axis=0)
-        vertices.append(vertex)
-
-    if len(vertices) > 0:
-        vertices = np.vstack(vertices)
-    else:
-        msg = "Vertex reconstructor saw an image with no interactions, "\
-        "maybe there's an image with no voxels?"
-        raise RuntimeWarning(msg)
-        vertices = np.array([])
-
-    interaction_ids = np.array(interaction_ids).reshape(-1, 1)
-
-    vertices = {key: val for key, val in zip(interaction_ids.squeeze(), vertices)}
-
-    for i, ia in enumerate(result_dict['interactions']):
-        ia.vertex = vertices[ia.id]
+    if run_mode in ['truth', 'both']:
+        assert 'truth_interactions' in result_dict,\
+                'Need truth interaction to apply vertex reconstruction to them'
+        for ia in result_dict['truth_interactions']:
+            reconstruct_vertex_single(ia, include_semantics, use_primaries, False,
+                    anchor_vertex, touching_threshold, angle_threshold)
 
     return {}
 
 
-def get_centroid_adj_pairs(particle_start_points, 
-                           r1=5.0):
+def reconstruct_vertex_single(interaction,
+                              include_semantics,
+                              use_primaries,
+                              update_primaries,
+                              anchor_vertex,
+                              touching_threshold,
+                              angle_threshold):
+
     '''
-    From N x 3 array of N particle startpoint coordinates, find
-    two points which touch each other within r1, and return the
-    barycenter of such pairs. 
+    Post-processor which reconstructs one vertex for each
+    interaction in the provided list. It modifies the input list
+    of interactions in place.
+
+    Parameters
+    ----------
+    interaction : List[Interaction, TruthInteraction]
+        Reconstructed/truth interaction object
+    include_semantics : List[int]
+        List of semantic classes to consider for vertex reconstruction
+    use_primaries : bool
+        If true, only considers primary particles to reconstruct the vertex
+    update_primaries : bool
+        Use the reconstructed vertex to update primaries
+    anchor_vertex : bool
+        If true, anchor the candidate vertex to particle objects,
+        with the expection of interactions only composed of showers
+    touching_threshold : float
+        Maximum distance for two track points to be considered touching
+    angle_threshold : float
+        Maximum angle between the vertex-to-start-point vector and a
+        shower direction to consider that a shower originated from the vertex
     '''
-    candidates = []
+    # Selected the set of particles to use as a basis for vertex prediction
+    if use_primaries:
+        particles = [p for p in interaction.particles \
+            if p.is_primary and (p.semantic_type in include_semantics) and p.size > 0]
+    if not use_primaries or not len(particles):
+        particles = [p for p in interaction.particles \
+            if p.semantic_type in include_semantics and p.size > 0]
+    if not len(particles):
+        particles = [p for p in interaction.particles if p.size > 0]
 
-    startpoints = []
-    for i, pts in enumerate(particle_start_points):
-        startpoints.append(pts)
-    if len(startpoints) == 0:
-        return np.array(candidates)
-    startpoints = np.vstack(startpoints)
-    dist = cdist(startpoints, startpoints)
-    dist += -np.eye(dist.shape[0])
-    idx, idy = np.where( (dist < r1) & (dist > 0))
-    # Keep track of duplicate pairs
-    duplicates = []
-    # Append barycenter of two touching points within radius r1 to candidates
-    for ix, iy in zip(idx, idy):
-        center = (startpoints[ix] + startpoints[iy]) / 2.0
-        if not((ix, iy) in duplicates or (iy, ix) in duplicates):
-            candidates.append(center)
-            duplicates.append((ix, iy))
-    candidates = np.array(candidates)
-    return candidates
+    if len(particles) > 0:
+        # Collapse particle objects to a set of start, end points and directions
+        start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)
+        end_points   = np.vstack([p.end_point for p in particles]).astype(np.float32)
+        directions   = np.vstack([p.start_dir for p in particles]).astype(np.float32)
+        semantics    = np.array([p.semantic_type for p in particles], dtype=np.int32)
 
+        # Reconstruct the vertex for this interaction
+        vtx, vtx_mode = get_vertex(start_points, end_points, directions, semantics,
+                anchor_vertex, touching_threshold, return_mode=True)
+        interaction.vertex = vtx
+        interaction.vertex_mode = vtx_mode
 
-def get_track_shower_poca(particle_start_points,
-                          particle_clusts,
-                          particle_seg, 
-                          input_coords,
-                          r2=5.0,
-                          particle_dirs=None):
-    '''
-    From list of particles, find startpoints of track particles that lie
-    within r2 distance away from the closest line defined by a shower
-    direction vector. 
-    '''
-    
-    candidates = []
-    
-    track_starts = []
-    shower_starts, shower_dirs = [], []
-    for i, mask in enumerate(particle_clusts):
-        pts = input_coords[mask]
-        if particle_seg[i] == 0 and len(pts) > 0:
-            if particle_dirs is not None:
-                vec = particle_dirs[i]
-            else:
-                vec = cluster_direction(pts, 
-                        particle_start_points[i], 
-                        optimize=True)
-            shower_dirs.append(vec)
-            shower_starts.append(
-                particle_start_points[i])
-        if particle_seg[i] == 1:
-            track_starts.append(
-                particle_start_points[i])
-
-    shower_dirs   = np.array(shower_dirs)
-    shower_starts = np.array(shower_starts)
-    track_starts  = np.array(track_starts)
-
-    assert len(shower_dirs) == len(shower_starts)
-
-    if len(shower_dirs) == 0 or len(track_starts) == 0:
-        return np.array(candidates)
-
-    dist = point_to_line_distance(track_starts, shower_starts, shower_dirs)
-    idx, idy = np.where(dist < r2)
-    for ix, iy in zip(idx, idy):
-        candidates.append(track_starts[ix])
-        
-    candidates = np.array(candidates)
-    return candidates
-
-
-def compute_pseudovertex(particle_clusts,
-                         particle_start_points,
-                         input_coords, 
-                         dim=3,
-                         particle_dirs=None):
-    """
-    Given a set of particles, compute the vertex by the following method:
-
-    1) Estimate the direction of each particle
-    2) Using infinite lines defined by the direction and the startpoint of
-    each particle, compute the point of closest approach. 
-    3) Solve the least squares optimization problem. 
-
-    The least squares problem in this case has an analytic solution
-    which could be solved by matrix pseudoinversion. 
-    """
-    pseudovtx = np.zeros((dim, ))
-    S = np.zeros((dim, dim))
-    C = np.zeros((dim, ))
-
-    assert len(particle_clusts) >= 2
-        
-    for i, mask in enumerate(particle_clusts):
-        pts = input_coords[mask]
-        startpt = particle_start_points[i]
-        if particle_dirs is not None:
-            vec = particle_dirs[i]
-        else:
-            vec = cluster_direction(pts, startpt, optimize=True)
-        w = 1.0
-        S += w * (np.outer(vec, vec) - np.eye(dim))
-        C += w * (np.outer(vec, vec) - np.eye(dim)) @ startpt
-
-    pseudovtx = np.linalg.pinv(S) @ C
-    return pseudovtx
-
-
-def prune_vertex_candidates(candidates, pseudovtx, r=30):
-    dist = np.linalg.norm(candidates - pseudovtx.reshape(1, -1), axis=1)
-    pruned = candidates[dist < r]
-    return pruned
+        # If requested, update primaries on the basis of the predicted vertex
+        if update_primaries:
+            for p in interaction.particles:
+                if p.semantic_type not in [SHOWR_SHP, TRACK_SHP]:
+                    p.is_primary = False
+                elif np.linalg.norm(p.start_point - interaction.vertex) < touching_threshold:
+                    p.is_primary = True
+                elif p.semantic_type == SHOWR_SHP and np.dot(p.start_point, interaction.vertex) < angle_threshold:
+                    p.is_primary = True

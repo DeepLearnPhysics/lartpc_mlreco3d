@@ -315,9 +315,9 @@ class Unwrapper:
                                 for index in data[g][b*self.num_volumes+v]:
                                     index_list.append(index + offset)
 
-                        same_length = np.all([len(c) == len(index_list[0]) for c in index_list])
-                        index_list = np.array(index_list, dtype=object if not same_length else np.int64)
-                        unwrapped.append(index_list)
+                        index_list_nb    = np.empty(len(index_list), dtype=object)
+                        index_list_nb[:] = index_list
+                        unwrapped.append(index_list_nb)
 
         return unwrapped
 
@@ -335,11 +335,13 @@ class Unwrapper:
         if isinstance(data[0], (int, float)):
             if len(data) == 1:
                 return [data[g] for g in range(self.num_gpus) for i in range(self.batch_size)]
-            elif len(data) == self.batch_count:
-                return data
             else:
-                raise ValueError('Only accept scalar arrays of size 1 or batch_size: '+\
-                                 f'{len(data)} != {self.batch_size}')
+                return data
+            # elif len(data) == self.batch_count:
+            #     return data
+            # else:
+            #     raise ValueError('Only accept scalar arrays of size 1 or batch_size: '+\
+            #                      f'{len(data)} != {self.batch_size}')
         if isinstance(data[0], list):
             concat_data = []
             for d in data:

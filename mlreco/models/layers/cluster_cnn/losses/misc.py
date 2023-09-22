@@ -130,18 +130,24 @@ class BinaryCELogDiceLoss(torch.nn.Module):
 
     def forward(self, logits, targets, weight=None, eps=0.001, reduction='none'):
 
-        bceloss = self.ce(logits, targets, weight=weight, reduction=reduction)
-        bce = bceloss.mean()
-        # if weight is not None:
-        #     bce = (weight * torch.pow(bceloss, self.gamma)).mean()
-        # else:
-        #     bce = torch.pow(bceloss, self.gamma).mean()
+        device = logits.device
 
-        p = torch.sigmoid(logits)
-        num = 2.0 * p[targets > 0.5].sum()
-        denom = (p**2).sum() + (targets**2).sum()
-        dice = torch.clamp((num + eps) / (denom + eps), min=eps, max=1-eps)
-        dice_loss = -torch.log(dice)
+        bce, dice_loss = torch.tensor(0.0).to(device), torch.tensor(0.0).to(device)
+
+        if logits.shape[0] > 0:
+            bceloss = self.ce(logits, targets, weight=weight, reduction=reduction)
+            bce = bceloss.mean()
+            
+            # if weight is not None:
+            #     bce = (weight * torch.pow(bceloss, self.gamma)).mean()
+            # else:
+            #     bce = torch.pow(bceloss, self.gamma).mean()
+
+            p = torch.sigmoid(logits)
+            num = 2.0 * p[targets > 0.5].sum()
+            denom = (p**2).sum() + (targets**2).sum()
+            dice = torch.clamp((num + eps) / (denom + eps), min=eps, max=1-eps)
+            dice_loss = -torch.log(dice)
         # print("CE = {}, Dice = {} ({})".format(bce, dice_loss, dice))
         return self.w_ce * bce + self.w_dice * dice_loss
 

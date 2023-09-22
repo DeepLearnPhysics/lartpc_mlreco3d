@@ -50,7 +50,7 @@ def reconstruct_images_t2r(data, result, **kwargs):
             # 'event': data_blob['run_info'][idx][2]
         })
             
-        matched_interactions, icounts = result['matched_interactions'][i], result['interaction_match_counts'][i]
+        matched_interactions, icounts = result['matched_interactions'][i], result['interaction_match_overlap'][i]
             
         interaction_logger = InteractionLogger(int_fieldnames, meta=meta, units=units)
         interaction_logger.prepare()
@@ -79,7 +79,7 @@ def reconstruct_images_t2r(data, result, **kwargs):
                 update_dict = copy.deepcopy(index_dict)
                 assert type(true_p) is TruthParticle
                 if len(true_p.match) > 0:
-                    match_id, match_value = true_p.match[0], true_p.match_counts[0]
+                    match_id, match_value = true_p.match[0], true_p.match_overlap[0]
                     pred_p = particle_match_dict[true_p.id]
                     assert type(pred_p) is Particle
                 elif len(true_p.match) == 0:
@@ -133,7 +133,7 @@ def reconstruct_images_r2t(data, result, **kwargs):
             # 'event': data_blob['run_info'][idx][2]
         })
             
-        matched_interactions, icounts = result['matched_interactions'][i], result['interaction_match_counts'][i]
+        matched_interactions, icounts = result['matched_interactions'][i], result['interaction_match_overlap'][i]
             
         interaction_logger = InteractionLogger(int_fieldnames, meta=meta, units=units)
         interaction_logger.prepare()
@@ -162,7 +162,7 @@ def reconstruct_images_r2t(data, result, **kwargs):
                 update_dict = copy.deepcopy(index_dict)
                 assert type(pred_p) is Particle
                 if len(pred_p.match) > 0:
-                    match_id, match_value = pred_p.match[0], pred_p.match_counts[0]
+                    match_id, match_value = pred_p.match[0], pred_p.match_overlap[0]
                     true_p = particle_match_dict[pred_p.id]
                     assert type(true_p) is TruthParticle
                 elif len(pred_p.match) == 0:

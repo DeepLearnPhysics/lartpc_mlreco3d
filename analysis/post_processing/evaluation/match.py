@@ -17,7 +17,8 @@ def match_particles(data_dict,
                     matching_mode='true_to_pred',
                     min_overlap=0,
                     overlap_mode='iou',
-                    weight=False):
+                    weight=False,
+                    list_principal_matches=True):
     pred_particles = result_dict['particles']
     
     out = {}
@@ -38,9 +39,11 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
-        out['matched_particles'] = matches['matched_particles_r2t']
-        out['particle_match_counts'] = matches['matched_particles_r2t_values']
+        matches = generate_match_pairs(true_particles, pred_particles, 
+                                       prefix='matched_particles',
+                                       only_principal=list_principal_matches)
+        out['matched_particles_r2t'] = matches['matched_particles_r2t']
+        out['particle_match_overlap_r2t'] = matches['matched_particles_r2t_values']
     elif matching_mode == 'true_to_pred':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_particles, pred_particles, weight=weight)
         matched_particles, counts = match_particles_fn(
@@ -49,9 +52,11 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        matches = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
-        out['matched_particles'] = matches['matched_particles_t2r']
-        out['particle_match_counts'] = matches['matched_particles_t2r_values']
+        matches = generate_match_pairs(true_particles, pred_particles, 
+                                       prefix='matched_particles',
+                                       only_principal=list_principal_matches)
+        out['matched_particles_t2r'] = matches['matched_particles_t2r']
+        out['particle_match_overlap_t2r'] = matches['matched_particles_t2r_values']
     elif matching_mode == 'both':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_particles, pred_particles, weight=weight)
         matched_particles, counts = match_particles_fn(
@@ -60,7 +65,11 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        
+        t2r_matches = generate_match_pairs(true_particles, pred_particles, 
+                                           prefix='matched_particles',
+                                           only_principal=list_principal_matches)
+        out['matched_particles_t2r'] = t2r_matches['matched_particles_t2r']
+        out['particle_match_overlap_t2r'] = t2r_matches['matched_particles_t2r_values']
         overlap_matrix, value_matrix = weighted_matrix_iou(pred_particles, true_particles, weight=weight)
         matched_particles, counts = match_particles_fn(
             pred_particles, 
@@ -68,10 +77,13 @@ def match_particles(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        out = generate_match_pairs(true_particles, pred_particles, prefix='matched_particles')
+        r2t_matches = generate_match_pairs(true_particles, pred_particles, 
+                                           prefix='matched_particles',
+                                           only_principal=list_principal_matches)
+        out['matched_particles_r2t'] = r2t_matches['matched_particles_r2t']
+        out['particle_match_overlap_r2t'] = r2t_matches['matched_particles_r2t_values']
     else:
-        raise ValueError("matching_mode must be one of 'true_to_pred' or 'pred_to_true'.")
-
+        raise ValueError("matching_mode must be one of 'true_to_pred' or 'pred_to_true' or 'both'.")
     return out
     
 
@@ -84,12 +96,12 @@ def match_interactions(data_dict,
                        matching_mode='true_to_pred',
                        min_overlap=0,
                        overlap_mode='iou',
-                       weight=False):
+                       weight=False,
+                       list_principal_matches=True):
 
     pred_interactions = result_dict['interactions']
     
-    out = {'matched_interactions': [],
-           'interaction_match_counts': []}
+    out = {}
     
     if overlap_mode == 'chamfer':
         true_interactions = [ia for ia in result_dict['truth_interactions'] if ia.truth_size > 0]
@@ -106,9 +118,11 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
-        out['matched_interactions'] = matches['matched_interactions_r2t']
-        out['interaction_match_counts'] = matches['matched_interactions_r2t_values']
+        matches = generate_match_pairs(true_interactions, pred_interactions, 
+                                       prefix='matched_interactions',
+                                       only_principal=list_principal_matches)
+        out['matched_interactions_r2t'] = matches['matched_interactions_r2t']
+        out['interaction_match_overlap_r2t'] = matches['matched_interactions_r2t_values']
     elif matching_mode == 'true_to_pred':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions, pred_interactions, weight=weight)
         matched_interactions, counts = match_interactions_fn(
@@ -117,9 +131,11 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        matches = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
-        out['matched_interactions'] = matches['matched_interactions_t2r']
-        out['interaction_match_counts'] = matches['matched_interactions_t2r_values']
+        matches = generate_match_pairs(true_interactions, pred_interactions, 
+                                       prefix='matched_interactions',
+                                       only_principal=list_principal_matches)
+        out['matched_interactions_t2r'] = matches['matched_interactions_t2r']
+        out['interaction_match_overlap_t2r'] = matches['matched_interactions_t2r_values']
     elif matching_mode == 'both':
         overlap_matrix, value_matrix = weighted_matrix_iou(true_interactions, pred_interactions, weight=weight)
         matched_interactions, counts = match_interactions_fn(
@@ -128,6 +144,12 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
+        matches = generate_match_pairs(true_interactions, pred_interactions, 
+                                       prefix='matched_interactions',
+                                       only_principal=list_principal_matches)
+        out['matched_interactions_t2r'] = matches['matched_interactions_t2r']
+        out['interaction_match_overlap_t2r'] = matches['matched_interactions_t2r_values']
+        
         overlap_matrix, value_matrix = weighted_matrix_iou(pred_interactions, true_interactions, weight=weight)
         matched_interactions, counts = match_interactions_fn(
             pred_interactions, 
@@ -135,7 +157,11 @@ def match_interactions(data_dict,
             value_matrix,
             overlap_matrix,
             min_overlap=min_overlap)
-        out = generate_match_pairs(true_interactions, pred_interactions, prefix='matched_interactions')
+        matches = generate_match_pairs(true_interactions, pred_interactions, 
+                                       prefix='matched_interactions',
+                                       only_principal=list_principal_matches)
+        out['matched_interactions_r2t'] = matches['matched_interactions_r2t']
+        out['interaction_match_overlap_r2t'] = matches['matched_interactions_r2t_values']
     else:
         raise ValueError("matching_mode must be one of 'recursive', 'true_to_pred' or 'pred_to_true'.")
     
@@ -155,7 +181,7 @@ def match_parts_within_ints(int_matches):
     for matching. 
     '''
 
-    matched_particles, match_counts = [], []
+    matched_particles, match_overlap = [], []
 
     for m in int_matches:
         ia1, ia2 = m[0], m[1]
@@ -173,32 +199,32 @@ def match_parts_within_ints(int_matches):
             if len(p.match) == 0:
                 if type(p) is Particle:
                     matched_particles.append((None, p))
-                    match_counts.append(-1)
+                    match_overlap.append(-1)
                 else:
                     matched_particles.append((p, None))
-                    match_counts.append(-1)
+                    match_overlap.append(-1)
             for match_id in p.match:
                 if type(p) is Particle:
                     matched_particles.append((ia1[match_id], p))
                 else:
                     matched_particles.append((p, ia1[match_id]))
-                match_counts.append(p._match_counts[match_id])
-    return matched_particles, np.array(match_counts)
+                match_overlap.append(p._match_overlap[match_id])
+    return matched_particles, np.array(match_overlap)
 
 
 def check_particle_matches(loaded_particles, clear=False):
     match_dict = OrderedDict({})
     for p in loaded_particles:
         for i, m in enumerate(p.match):
-            match_dict[int(m)] = p.match_counts[i]
+            match_dict[int(m)] = p.match_overlap[i]
         if clear:
             p._match = []
-            p._match_counts = OrderedDict()
+            p._match_overlap = OrderedDict()
 
-    match_counts = np.array(list(match_dict.values()))
+    match_overlap = np.array(list(match_dict.values()))
     match = np.array(list(match_dict.keys())).astype(int)
-    perm = np.argsort(match_counts)[::-1]
-    match_counts = match_counts[perm]
+    perm = np.argsort(match_overlap)[::-1]
+    match_overlap = match_overlap[perm]
     match = match[perm]
 
-    return match, match_counts
+    return match, match_overlap

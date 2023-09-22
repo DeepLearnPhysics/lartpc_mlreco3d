@@ -107,6 +107,9 @@ def get_training_df(log_dir, keys, prefix='train'):
             df[key_name] = df[key]
         log_dfs.append(df)
 
+    if not len(log_dfs):
+        raise FileNotFoundError(f'Found no train log with prefix \'{prefix}\' under {log_dir}')
+
     return pd.concat(log_dfs, sort=True) 
 
 
@@ -313,6 +316,7 @@ def draw_training_curves(log_dir, models, metrics,
             legend_title = model_names[models[0]] if models[0] in model_names else models[0]
             plt.legend(ncol=leg_ncols, title=legend_title if len(models)==1 else None)
         if len(figure_name):
+            plt.savefig(f'{figure_name}.png', bbox_inches='tight')
             plt.savefig(f'{figure_name}.pdf', bbox_inches='tight')
         plt.show()
     else:

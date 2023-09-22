@@ -1,8 +1,11 @@
 import numpy as np
 from copy import deepcopy
+
 import plotly
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+
+from mlreco.utils.geometry import Geometry
 
 
 PLOTLY_COLORS = plotly.colors.qualitative.Plotly
@@ -10,25 +13,35 @@ PLOTLY_COLORS_WGRAY = ['#808080'] + PLOTLY_COLORS
 HIGH_CONTRAST_COLORS = np.concatenate([plotly.colors.qualitative.Dark24, plotly.colors.qualitative.Light24])
 
 
-def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, backgroundcolor='white', gridcolor='lightgray', width=900, height=900, showlegend=True, camera=None, aspectmode='manual', aspectratio=None, dark=False, margin=dict(r=0, l=0, b=0, t=0), **kwargs):
+def plotly_layout3d(ranges=None, meta=None, detector=None, titles=None,
+        detector_coords=False, backgroundcolor='white', gridcolor='lightgray',
+        width=900, height=900, showlegend=True, camera=None,
+        aspectmode='manual', aspectratio=None, dark=False,
+        margin=dict(r=0, l=0, b=0, t=0), **kwargs):
     """
     Produces plotly.graph_objs.Layout object for a certain format.
 
     Parameters
     ----------
+    ranges : np.ndarray, optional
+        (3, 2) or (N, 3) Array used to specify the plot region in (x,y,z)
+        directions. If not specified (None), the range will be set to include
+        all points. Alternatively can be an array of shape (3,2) specifying
+        (x,y,z) axis (min,max) range for a display, or simply a list of points
+        with shape (N,3+) where [:,0],[:,1],[:,2] correspond to (x,y,z) values
+        and the plotting region is decided by measuring the min,max range in
+        each coordinates. This last option is useful if one wants to define
+        the region based on a set of points that is not same as what's plotted.
     meta : np.ndarray, optional
         (9) Metadata information used to infer the full image range
-    ranges : np.ndarray, optional
-        (3, 2) or (N, 3) Array used to specify the plot region in (x,y,z) directions.
-        If not specified (None), the range will be set to include all points.
-        Alternatively can be an array of shape (3,2) specifying (x,y,z) axis (min,max) range for a display,
-        or simply a list of points with shape (N,3+) where [:,0],[:,1],[:,2] correspond to (x,y,z) values and
-        the plotting region is decided by measuring the min,max range in each coordinates. This last option
-        is useful if one wants to define the region based on a set of points that is not same as what's plotted.
+    detector : str
+        Name of a recognized detector to get the geometry from or path to a
+        `.npy` boundary file to load the boundaries from.
     titles : List[str], optional
         (3) Array of strings for (x,y,z) axis title respectively
     detector_coords : bool, default False
-        Whether or not the coordinates being drawn are in detector_coordinates or pixel IDs
+        Whether or not the coordinates being drawn are in detector_coordinates
+        or pixel IDs
     backgroundcolor : Union[str, int], default 'white'
         Color of the layout background
     gridcolor : Union[str, int], default 'lightgray'
@@ -59,8 +72,9 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
     if ranges is None:
         ranges = [None, None, None]
     else:
+        # If the range is provided, just use it
         if ranges.shape != (3, 2):
-            assert len(ranges.shape) == 2 and ranges.shape[1] == 3,\
+            assert len(ranges.shape) == 2 and ranges.shape[1] == 3, \
                 'If ranges is not of shape (3, 2), it must be of shape (N, 3)'
             ranges = np.vstack([np.min(ranges, axis=0), np.max(ranges, axis=0)]).T
 
@@ -68,13 +82,35 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
         assert np.all(ranges[:,1] >= ranges[:,0])
 
     if meta is not None:
-        assert ranges is None or None in ranges, 'Should not specify both `ranges` and `meta` parameters'
-        assert len(np.asarray(meta).reshape(-1)) == 9, 'Metadata should be an array of 9 values'
+        # If meta information is provided, make the full image the range
+        assert ranges is None or None in ranges, \
+                'Should not specify both `ranges` and `meta` parameters'
+        assert len(np.asarray(meta).reshape(-1)) == 9,\
+                'Metadata should be an array of 9 values'
         lowers, uppers, sizes = np.split(np.asarray(meta).reshape(-1), 3)
         if detector_coords:
             ranges = np.vstack([lowers, uppers]).T
         else:
             ranges = np.vstack([[0, 0, 0], np.round((uppers-lowers)/sizes)]).T
+
+    if detector is not None:
+        # If detector geometry is provided, make the full detector the range
+        assert (ranges is None or None in ranges) and meta is None, \
+                'Should not specify `detector` along with `ranges` or `meta`'
+        geo = Geometry(detector)
+        lengths = geo.detector[:,1] - geo.detector[:,0]
+        ranges = geo.detector
+
+        # Add some padding
+        ranges[:,0] -= lengths*0.1
+        ranges[:,1] += lengths*0.1
+
+        # Define detector-style camera, unless explicitely provided
+        if camera is None:
+            camera = dict(eye    = dict(x = -2, y = 1,    z = -0.01),
+                          up     = dict(x = 0., y = 1.,   z = 0.),
+                          center = dict(x = 0., y = -0.1, z = -0.01))
+
 
     # Infer the image width/height and aspect ratios, unless they are specified
     if aspectmode == 'manual':
@@ -96,6 +132,7 @@ def plotly_layout3d(meta=None, ranges=None, titles=None, detector_coords=False, 
     # If a dark layout is requested, set the theme and the background color accordingly
     if dark:
         kwargs['template'] = 'plotly_dark'
+        kwargs['paper_bgcolor'] = 'black'
         backgroundcolor = 'black'
 
     # Initialize the general scene layout

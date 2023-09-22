@@ -149,7 +149,6 @@ def prepare(cfg, event_list=None):
     # IO writer
     handlers.writer = writer_factory(cfg)
 
-
     if 'trainval' in cfg:
         # Set random seed for reproducibility
         np.random.seed(cfg['trainval']['seed'])
@@ -168,15 +167,13 @@ def prepare(cfg, event_list=None):
         # Clear cache
         handlers.empty_cuda_cache = cfg['trainval'].get('empty_cuda_cache', False)
 
-        # Restore weights if necessary
-        loaded_iteration = handlers.trainer.initialize()
-        if cfg['trainval']['train']:
-            handlers.iteration = loaded_iteration
-
         # If the number of iterations is negative, run over the whole dataset once
         if cfg['trainval']['iterations'] < 0:
             cfg['trainval']['iterations'] = len(handlers.data_io)
 
+        # Restore weights if necessary
+        loaded_iteration = handlers.trainer.initialize()
+        handlers.iteration = loaded_iteration
         make_directories(cfg, loaded_iteration, handlers=handlers)
 
     return handlers
@@ -353,18 +350,20 @@ def inference_loop(handlers):
     tsum = 0.
     # Metrics for each event
     # global_metrics = {}
+    preloaded = os.path.isfile(handlers.cfg['trainval']['model_path'])
     weights = sorted(glob.glob(handlers.cfg['trainval']['model_path']))
-    if not len(weights):
-        weights = [None]
-    if len(weights) > 1:
+    if not preloaded and len(weights):
         print("Looping over weights: ", len(weights))
         for w in weights: print('  -',w)
+    if not len(weights):
+        weights = [None]
     for weight in weights:
-        if weight is not None and len(weights) > 1:
+        if weight is not None and not preloaded:
             print('Setting weights', weight)
             handlers.cfg['trainval']['model_path'] = weight
-        loaded_iteration = handlers.trainer.initialize()
-        make_directories(handlers.cfg,loaded_iteration,handlers)
+            loaded_iteration = handlers.trainer.initialize()
+            make_directories(handlers.cfg,loaded_iteration,handlers)
+
         handlers.iteration = 0
         handlers.data_io_iter = iter(cycle(handlers.data_io))
         while handlers.iteration < handlers.cfg['trainval']['iterations']:

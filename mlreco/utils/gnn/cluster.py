@@ -1,4 +1,3 @@
-# Defines cluster formation and feature extraction
 import numpy as np
 import numba as nb
 import torch
@@ -6,11 +5,12 @@ from typing import List
 
 import mlreco.utils.numba_local as nbl
 from mlreco.utils.decorators import numbafy
-from mlreco.utils.globals import BATCH_COL, COORD_COLS, PART_COL
+from mlreco.utils.globals import (BATCH_COL, COORD_COLS, VALUE_COL, CLUST_COL,
+        PART_COL, GROUP_COL, MOM_COL, SHAPE_COL)
 
 
 @numbafy(cast_args=['data'], list_args=['cluster_classes'], keep_torch=True, ref_arg='data')
-def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-1], shape_index=-1):
+def form_clusters(data, min_size=-1, column=CLUST_COL, cluster_classes=[-1]):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up each of the clusters in the input tensor.
@@ -19,35 +19,31 @@ def form_clusters(data, min_size=-1, column=5, batch_index=0, cluster_classes=[-
         data (np.ndarray)      : (N,6-10) [x, y, z, batchid, value, id(, groupid, intid, nuid, shape)]
         min_size (int)         : Minimal cluster size
         column (int)           : Column in the tensor which contains cluster IDs
-        batch_index (int)      : Column in the tensor which contains batch IDs
         cluster_classes ([int]): List of classes to include in the list of clusters
-        shape_index (int)      : Column in the tensor which contains shape IDs
     Returns:
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
-    return _form_clusters(data, min_size, column, batch_index, cluster_classes, shape_index)
+    return _form_clusters(data, min_size, column, cluster_classes)
 
 @nb.njit(cache=True)
 def _form_clusters(data: nb.float64[:,:],
                    min_size: nb.int64 = -1,
-                   column: nb.int64 = 5,
-                   batch_index: nb.int64 = 0,
-                   cluster_classes: nb.types.List(nb.int64) = nb.typed.List([-1]),
-                   shape_index: nb.int64 = -1) -> nb.types.List(nb.int64[:]):
+                   column: nb.int64 = CLUST_COL,
+                   cluster_classes: nb.types.List(nb.int64) = nb.typed.List([-1])) -> nb.types.List(nb.int64[:]):
 
     # Create a mask which restricts the voxels to those with shape in cluster_classes
     restrict = False
     if cluster_classes[0] != -1:
         mask = np.zeros(len(data), dtype=np.bool_)
         for s in cluster_classes:
-            mask |= (data[:, shape_index] == s)
+            mask |= (data[:, SHAPE_COL] == s)
         mask = np.where(mask)[0]
         restrict = True
     subdata = data[mask] if restrict else data
 
     # Loop over batches and cluster IDs, append cluster voxel lists
     clusts = []
-    batch_ids = subdata[:, batch_index]
+    batch_ids = subdata[:, BATCH_COL]
     for b in np.unique(batch_ids):
         binds = np.where(batch_ids == b)[0]
         clust_ids = subdata[binds, column]
@@ -65,7 +61,7 @@ def _form_clusters(data: nb.float64[:,:],
 
 
 @numbafy(cast_args=['data'], keep_torch=True, ref_arg='data')
-def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
+def reform_clusters(data, clust_ids, batch_ids, column=CLUST_COL):
     """
     Function that returns a list of of arrays of voxel IDs
     that make up the requested clusters.
@@ -78,22 +74,21 @@ def reform_clusters(data, clust_ids, batch_ids, column=5, batch_col=0):
     Returns:
         [np.ndarray]: (C) List of arrays of voxel IDs in each cluster
     """
-    return _reform_clusters(data, clust_ids, batch_ids, column, batch_col)
+    return _reform_clusters(data, clust_ids, batch_ids, column)
 
 @nb.njit(cache=True)
 def _reform_clusters(data: nb.float64[:,:],
                      clust_ids: nb.int64[:],
                      batch_ids: nb.int64[:],
-                     column: nb.int64 = 5,
-                     batch_col: nb.int64 = 0) -> nb.types.List(nb.int64[:]):
+                     column: nb.int64 = CLUST_COL) -> nb.types.List(nb.int64[:]):
     clusts = []
     for i in range(len(batch_ids)):
-        clusts.append(np.where((data[:,batch_col] == batch_ids[i]) & (data[:,column] == clust_ids[i]))[0])
+        clusts.append(np.where((data[:, BATCH_COL] == batch_ids[i]) & (data[:, column] == clust_ids[i]))[0])
     return clusts
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'])
-def get_cluster_batch(data, clusts, batch_index=0):
+def get_cluster_batch(data, clusts):
     """
     Function that returns the batch ID of each cluster.
     This should be unique for each cluster, assert that it is.
@@ -105,24 +100,23 @@ def get_cluster_batch(data, clusts, batch_index=0):
         np.ndarray: (C) List of batch IDs
     """
     if len(clusts) > 0:
-        return _get_cluster_batch(data, clusts, batch_index)
+        return _get_cluster_batch(data, clusts)
     else:
         return np.empty((0,), dtype=np.int32)
 
 @nb.njit(cache=True)
 def _get_cluster_batch(data: nb.float64[:,:],
-                       clusts: nb.types.List(nb.int64[:]),
-                       batch_index: nb.int64 = 0) -> nb.int64[:]:
+                       clusts: nb.types.List(nb.int64[:])) -> nb.int64[:]:
 
     labels = np.empty(len(clusts), dtype=np.int64)
     for i, c in enumerate(clusts):
-        assert len(np.unique(data[c, batch_index])) == 1
-        labels[i] = data[c[0], batch_index]
+        assert len(np.unique(data[c, BATCH_COL])) == 1
+        labels[i] = data[c[0], BATCH_COL]
     return labels
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'])
-def get_cluster_label(data, clusts, column=5):
+def get_cluster_label(data, clusts, column=CLUST_COL):
     """
     Function that returns the majority label of each cluster,
     as specified in the requested data column.
@@ -139,7 +133,7 @@ def get_cluster_label(data, clusts, column=5):
 @nb.njit(cache=True)
 def _get_cluster_label(data: nb.float64[:,:],
                        clusts: nb.types.List(nb.int64[:]),
-                       column: nb.int64 = 5) -> nb.float64[:]:
+                       column: nb.int64 = CLUST_COL) -> nb.float64[:]:
 
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
@@ -149,7 +143,7 @@ def _get_cluster_label(data: nb.float64[:,:],
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'])
-def get_cluster_primary_label(data, clusts, column, cluster_column=5, group_column=6):
+def get_cluster_primary_label(data, clusts, column, cluster_column=CLUST_COL, group_column=GROUP_COL):
     """
     Function that returns the majority label of the primary component
     of a cluster, as specified in the requested data column.
@@ -172,8 +166,8 @@ def get_cluster_primary_label(data, clusts, column, cluster_column=5, group_colu
 def _get_cluster_primary_label(data: nb.float64[:,:],
                                clusts: nb.types.List(nb.int64[:]),
                                column: nb.int64,
-                               cluster_column: nb.int64 = 5,
-                               group_column: nb.int64 = 6) -> nb.float64[:]:
+                               cluster_column: nb.int64 = CLUST_COL,
+                               group_column: nb.int64 = GROUP_COL) -> nb.float64[:]:
     labels = np.empty(len(clusts), dtype=data.dtype)
     group_ids = _get_cluster_label(data, clusts, group_column)
     for i in range(len(clusts)):
@@ -189,31 +183,29 @@ def _get_cluster_primary_label(data: nb.float64[:,:],
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_momenta_label(data, clusts, column=8):
+def get_momenta_label(data, clusts):
     """
-    Function that returns the momentum unit vector of each cluster
+    Function that returns the momentum value of each cluster
 
     Args:
         data (np.ndarray)    : (N,12) [x, y, z, batchid, value, id, groupid, px, py, pz, p, pdg]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
-        column (int)         : Column which specifies the cluster ID
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
-    return _get_momenta_label(data, clusts, column)
+    return _get_momenta_label(data, clusts)
 
 @nb.njit(cache=True)
 def _get_momenta_label(data: nb.float64[:,:],
-                       clusts: nb.types.List(nb.int64[:]),
-                       column: nb.int64 = 8) -> nb.float64[:]:
+                       clusts: nb.types.List(nb.int64[:])) -> nb.float64[:]:
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        labels[i] = np.mean(data[c, column])
+        labels[i] = np.mean(data[c, MOM_COL])
     return labels
 
 
-@numbafy(cast_args=['data'], list_args=['clusts', 'coords_index'], keep_torch=True, ref_arg='data')
-def get_cluster_centers(data, clusts, coords_index=[1, 4]):
+@numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
+def get_cluster_centers(data, clusts):
     """
     Function that returns the coordinate of the centroid
     associated with the listed clusters.
@@ -224,15 +216,14 @@ def get_cluster_centers(data, clusts, coords_index=[1, 4]):
     Returns:
         np.ndarray: (C,3) tensor of cluster centers
     """
-    return _get_cluster_centers(data, clusts, coords_index)
+    return _get_cluster_centers(data, clusts)
 
 @nb.njit(cache=True)
 def _get_cluster_centers(data: nb.float64[:,:],
-                         clusts: nb.types.List(nb.int64[:]),
-                         coords_index: nb.types.List(nb.int64[:]) = [0, 3]) -> nb.float64[:,:]:
-    centers = np.empty((len(clusts),3), dtype=data.dtype)
+                         clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
+    centers = np.empty((len(clusts), 3), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        centers[i] = np.sum(data[c, coords_index[0]:coords_index[1]], axis=0)/len(c)
+        centers[i] = np.sum(data[c][:, COORD_COLS], axis=0)/len(c)
     return centers
 
 
@@ -278,15 +269,13 @@ def _get_cluster_energies(data: nb.float64[:,:],
                           clusts: nb.types.List(nb.int64[:])) -> nb.float64[:]:
     energies = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
-        energies[i] = np.sum(data[c, 4])
+        energies[i] = np.sum(data[c, VALUE_COL])
     return energies
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
 def get_cluster_features(data: nb.float64[:,:],
-                         clusts: nb.types.List(nb.int64[:]),
-                         batch_col: nb.int64 = 0,
-                         coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+                         clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
     """
     Function that returns an array of 16 geometric features for
     each of the clusters in the provided list.
@@ -297,20 +286,20 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
-    return _get_cluster_features(data, clusts, batch_col=batch_col, coords_col=coords_col)
+    if not len(clusts):
+        return np.empty((0, 16), dtype=data.dtype) # Cannot type empty list
+    return _get_cluster_features(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
 def _get_cluster_features(data: nb.float64[:,:],
-                          clusts: nb.types.List(nb.int64[:]),
-                          batch_col: nb.int64 = 0,
-                          coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
+                          clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
     feats = np.empty((len(clusts), 16), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64) # prange creates a uint64 iterator which is cast to int64 to access a list,
                                                   # and throws a warning. To avoid this, use a separate counter to acces clusts.
     for k in nb.prange(len(clusts)):
         # Get list of voxels in the cluster
         clust = clusts[ids[k]]
-        x = data[clust, coords_col[0]:coords_col[1]]
+        x = data[clust][:, COORD_COLS]
 
         # Center data
         center = nbl.mean(x, 0)
@@ -355,7 +344,7 @@ def _get_cluster_features(data: nb.float64[:,:],
 
 
 @numbafy(cast_args=['data'], list_args=['clusts'], keep_torch=True, ref_arg='data')
-def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
+def get_cluster_features_extended(data, clusts, add_value=True, add_shape=True):
     """
     Function that returns the an array of 3 additional features for
     each of the clusters in the provided list.
@@ -363,29 +352,38 @@ def get_cluster_features_extended(data, clusts, batch_col=0, coords_col=(1, 4)):
     Args:
         data (np.ndarray)    : (N,X) Data tensor [x,y,z,batch_id,value,...,sem_type]
         clusts ([np.ndarray]): (C) List of arrays of voxel IDs in each cluster
+        add_value (bool)     : Whether or not to add the pixel value mean/std to the features
+        add_shape (bool)     : Whether or not to add the dominant semantic type to the features
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
-    return _get_cluster_features_extended(data, clusts, batch_col=batch_col, coords_col=coords_col)
+    assert add_value or add_shape
+    if not len(clusts):
+        return np.empty((0, add_value*2+add_shape), dtype=data.dtype)
+    return _get_cluster_features_extended(data, clusts, add_value, add_shape)
 
 @nb.njit(parallel=True, cache=True)
 def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
-                                   batch_col: nb.int64 = 0,
-                                   coords_col: nb.types.List(nb.int64[:]) = (1, 4)) -> nb.float64[:,:]:
-    feats = np.empty((len(clusts), 3), dtype=data.dtype)
+                                   add_value: bool = True,
+                                   add_shape: bool = True) -> nb.float64[:,:]:
+    feats = np.empty((len(clusts), add_value*2+add_shape), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
-        # Get mean and RMS energy in the cluster
+        # Get cluster
         clust = clusts[ids[k]]
-        mean_value = np.mean(data[clust,4])
-        std_value = np.std(data[clust,4])
 
-        # Get the cluster semantic class
-        types, cnts = nbl.unique(data[clust,-1])
-        major_sem_type = types[np.argmax(cnts)]
+        # Get mean and RMS energy in the cluster, if requested
+        if add_value:
+            mean_value = np.mean(data[clust, VALUE_COL])
+            std_value = np.std(data[clust, VALUE_COL])
+            feats[k, :2] = np.array([mean_value, std_value], dtype=data.dtype)
 
-        feats[k] = [mean_value, std_value, major_sem_type]
+        # Get the cluster semantic class, if requested
+        if add_shape:
+            types, cnts = nbl.unique(data[clust, SHAPE_COL])
+            major_sem_type = types[np.argmax(cnts)]
+            feats[k, -1] = major_sem_type
 
     return feats
 
@@ -456,7 +454,7 @@ def _get_cluster_start_points(data: nb.float64[:,:],
                               clusts: nb.types.List(nb.int64[:])) -> nb.float64[:,:]:
     points = np.empty((len(clusts), 3))
     for k in nb.prange(len(clusts)):
-        vid = cluster_end_points(data[clusts[k],:3])[-1]
+        vid = cluster_end_points(data[clusts[k]][:, COORD_COLS])[-1]
 
     return points
 
@@ -488,7 +486,7 @@ def _get_cluster_directions(data: nb.float64[:,:],
     ids  = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
         # Weird bug here: without the cast (astype), throws a strange noncontiguous error on reshape...
-        dirs[k] = cluster_direction(data[clusts[ids[k]],:3], starts[k].astype(np.float64), max_dist, optimize)
+        dirs[k] = cluster_direction(data[clusts[ids[k]]], starts[k].astype(np.float64), max_dist, optimize)
 
     return dirs
 
@@ -520,7 +518,7 @@ def _get_cluster_dedxs(data: nb.float64[:,:],
     ids   = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
         # Weird bug here: without the cast (astype), throws a strange noncontiguous error on reshape...
-        dedxs[k] = cluster_dedx(data[clusts[ids[k]],:3], values[clusts[ids[k]]], starts[k].astype(np.float64), max_dist)
+        dedxs[k] = cluster_dedx(data[clusts[ids[k]]], values[clusts[ids[k]]], starts[k].astype(np.float64), max_dist)
 
     return dedxs
 
@@ -540,7 +538,7 @@ def cluster_end_points(voxels: nb.float64[:,:]) -> (nb.float64[:], nb.float64[:]
         int: ID of the start voxel
     """
     # Get the axis of maximum spread
-    axis = principal_axis(voxels)
+    axis = nbl.principal_components(voxels)[0]
 
     # Compute coord values along that axis
     coords = np.empty(len(voxels))
@@ -622,8 +620,9 @@ def cluster_direction(voxels: nb.float64[:,:],
     for i in range(len(voxels)):
         rel_voxels[i] = voxels[i]-start
     mean = nbl.mean(rel_voxels, 0)
-    if np.linalg.norm(mean):
-        return mean/np.linalg.norm(mean)
+    norm = np.sqrt(np.dot(mean, mean))
+    if norm:
+        return mean/norm
     return mean
 
 
@@ -648,29 +647,6 @@ def umbrella_curv(voxels: nb.float64[:,:],
 
     # Find the umbrella curvature (mean angle from the mean direction)
     return abs(np.mean([np.dot((voxels[i]-refvox)/np.linalg.norm(voxels[i]-refvox), axis) for i in range(len(voxels)) if i != voxid]))
-
-
-@nb.njit(cache=True)
-def principal_axis(voxels:nb.float64[:,:]) -> nb.float64[:]:
-    """
-    Computes the direction of the principal axis of a cloud of points
-    by computing its eigenvectors.
-
-    Args:
-        voxels (np.ndarray): (N,3) Voxel coordinates [x, y, z]
-    Returns:
-        int: (3) Coordinates of the principal axis
-    """
-    # Center data
-    center = nbl.mean(voxels, 0)
-    x = voxels - center
-
-    # Get orientation matrix
-    A = np.dot(x.T, x)
-
-    # Get eigenvectors, select the one which corresponds to the maximal spread
-    _, v = np.linalg.eigh(A)
-    return v[:,2]
 
 
 @nb.njit(cache=True)

@@ -23,8 +23,10 @@ def to_numpy(array):
 
     if isinstance(array, np.ndarray):
         return array
-    if isinstance(array, torch.Tensor):
+    elif isinstance(array, torch.Tensor):
         return array.cpu().detach().numpy()
+    elif isinstance(array, tuple):
+        return np.array(array)
     elif isinstance(array, ME.SparseTensor):
         return torch.cat([array.C.float(), array.F], dim=1).detach().cpu().numpy()
     else:
@@ -76,11 +78,12 @@ def pixel_to_cm(coords, meta, translate=True):
     translate : bool, default True
         If set to `False`, this function returns the input unchanged
     '''
-    if not translate:
+    if not translate or not len(coords):
         return coords
 
     lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
-    return lower + (coords + .5) * size
+    out = lower + (coords + .5) * size
+    return out.astype(np.float32)
 
 
 def cm_to_pixel(coords, meta, translate=True):
@@ -101,7 +104,7 @@ def cm_to_pixel(coords, meta, translate=True):
     translate : bool, default True
         If set to `False`, this function returns the input unchanged
     '''
-    if not translate:
+    if not translate or not len(coords):
         return coords
 
     lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)

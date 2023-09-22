@@ -4,20 +4,20 @@ import numpy as np
 
 from mlreco.models.layers.common.gnn_full_chain import FullChainGNN, FullChainLoss
 from mlreco.models.layers.common.ppnplus import PPN, PPNLonelyLoss
+from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 from mlreco.models.uresnet import UResNet_Chain, SegmentationLoss
 from mlreco.models.graph_spice import GraphSPICE, GraphSPICELoss
 
 from mlreco.utils.globals import *
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
-from mlreco.utils.deghosting import compute_rescaled_charge
+from mlreco.utils.ppn import get_particle_points
+from mlreco.utils.ghost import compute_rescaled_charge, adapt_labels
 from mlreco.utils.cluster.fragmenter import (DBSCANFragmentManager,
                                              GraphSPICEFragmentManager,
                                              format_fragments)
-from mlreco.utils.ppn import get_track_endpoints_geo
-from mlreco.utils.gnn.data import _get_extra_gnn_features
+from mlreco.utils.gnn.cluster import get_cluster_features_extended
 from mlreco.utils.unwrap import prefix_unwrapper_rules
-from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
+
 
 
 class FullChain(FullChainGNN):
@@ -92,6 +92,7 @@ class FullChain(FullChainGNN):
             self.RETURNS.update(self.uresnet_deghost.RETURNS)
             self.RETURNS['input_rescaled'] = ['tensor', 'input_rescaled', False, True]
             self.RETURNS['input_rescaled_coll'] = ['tensor', 'input_rescaled', False, True]
+            self.RETURNS['input_rescaled_source'] = ['tensor', 'input_rescaled']
             self.RETURNS['segmentation'][1] = 'input_rescaled'
             self.RETURNS['segment_label_tmp'][1] = 'input_rescaled'
             self.RETURNS['fragment_clusts'][1][0] = 'input_rescaled'
@@ -116,8 +117,8 @@ class FullChain(FullChainGNN):
             self._enable_graph_spice       = 'graph_spice' in cfg
             self.graph_spice               = GraphSPICE(cfg)
             self.gs_manager                = ClusterGraphConstructor(cfg.get('graph_spice', {}).get('constructor_cfg', {}),
-                                                                    batch_col=self.batch_col,
-                                                                    training=False) # for downstream, need to run prediction in inference mode
+                                                                    # batch_col=self.batch_col,
+                                                                     training=False) # for downstream, need to run prediction in inference mode
             # edge cut threshold is usually 0. (unspecified) during training, but 0.1 at inference
             self.gs_manager.ths = cfg.get('graph_spice', {}).get('constructor_cfg', {}).get('edge_cut_threshold', 0.1)
 
@@ -146,46 +147,73 @@ class FullChain(FullChainGNN):
         #             sum(p.numel() for p in self.parameters() if p.requires_grad)))
 
     @staticmethod
-    def get_extra_gnn_features(fragments,
-                               fragments_seg,
-                               classes,
-                               input,
-                               result,
-                               use_ppn=False,
-                               use_supp=False):
-        """
+    def get_extra_gnn_features(data, result, clusts, clusts_seg, classes,
+            add_points=True, add_value=True, add_shape=True):
+        '''
         Extracting extra features to feed into the GNN particle aggregators
-
-        - PPN: Most likely PPN point for showers,
-               end points for tracks (+ direction estimate)
-        - Supplemental: Mean/RMS energy in the fragment + semantic class
 
         Parameters
         ==========
-        fragments: np.ndarray
-        fragments_seg: np.ndarray
-        classes: list
-        input: list
-        result: dictionary
-        use_ppn: bool
-        use_supp: bool
+        data : torch.Tensor
+            Tensor of input voxels to the particle aggregator
+        result : dict
+            Dictionary of output of the CNN stages
+        clusts : List[numpy.ndarray]
+            List of clusters representing the fragment or particle objects
+        clusts_seg : numpy.ndarray
+            Array of cluster semantic types
+        classes : List, optional
+            List of semantic classes to include in the output set of particles
+        add_points : bool, default True
+            If `True`, add particle points as node features
+        add_value : bool, default True
+            If `True`, add mean and std voxel values as node features
+        add_shape : bool, default True
+            If `True`, add cluster semantic shape as a node feature
 
         Returns
         =======
-        mask: np.ndarray
-            Boolean mask to select fragments belonging to one
-            of the requested classes.
-        kwargs: dictionary
-            Keys can include `points` (if `use_ppn` is `True`)
-            and `extra_feats` (if `use_supp` is True).
-        """
-        return _get_extra_gnn_features(fragments,
-                                       fragments_seg,
-                                       classes,
-                                       input,
-                                       result,
-                                       use_ppn=use_ppn,
-                                       use_supp=use_supp)
+        index : np.ndarray
+            Index to select fragments belonging to one of the requested classes
+        kwargs : dict
+            Keys can include `points` (if `add_points` is `True`)
+            and `extra_feats` (if `add_value` or `add_shape` is True).
+        '''
+        # If needed, build a particle mask based on semantic classes
+        if classes is not None:
+            mask = np.zeros(len(clusts_seg), dtype=bool)
+            for c in classes:
+                mask |= (clusts_seg == c)
+            index = np.where(mask)[0]
+        else:
+            index = np.arange(len(clusts))
+
+        # Get the particle end points, if requested
+        kwargs = {}
+        if add_points:
+            coords     = data[0][:, COORD_COLS].detach().cpu().numpy()
+            ppn_points = result['ppn_points'][0].detach().cpu().numpy()
+            points     = get_particle_points(coords, clusts[index],
+                    clusts_seg[index], ppn_points)
+
+            kwargs['points'] = torch.tensor(points,
+                    dtype=torch.float, device=data[0].device)
+
+        # Get the supplemental information, if requested
+        if add_value or add_shape:
+            extra_feats = torch.empty((len(index), 2*add_value + add_shape),
+                    dtype=torch.float, device=data[0].device)
+            if add_value:
+                extra_feats[:,:2] = get_cluster_features_extended(data[0],
+                        clusts[index], add_value=True, add_shape=False)
+            if add_shape:
+                extra_feats[:,-1] = torch.tensor(clusts_seg[index],
+                        dtype=torch.float, device=data[0].device)
+
+            kwargs['extra_feats'] = torch.tensor(extra_feats,
+                    dtype=torch.float, device=data[0].device)
+
+        return index, kwargs
 
 
     def full_chain_cnn(self, input):
@@ -204,6 +232,9 @@ class FullChain(FullChainGNN):
             dictionary of all network outputs from cnns.
         '''
         device = input[0].device
+        if not len(input[0]):
+            # TODO: move empty case handling elsewhere
+            return {}, input
 
         label_seg, label_clustering, coords = None, None, None
         if len(input) == 3:
@@ -216,20 +247,22 @@ class FullChain(FullChainGNN):
             input = [input]
             label_clustering = [label_clustering]
 
-        # Store batch size for GNN formatting
-        batches = torch.unique(input[0][:, self.batch_col])
-        assert len(batches) == batches.max().int().item() + 1
-        self.batch_size = len(batches)
+        # If not availabel, store batch size for GNN formatting
+        if not hasattr(self, 'batch_size'):
+            batches = torch.unique(input[0][:, self.batch_col])
+            assert len(batches) == batches.max().int().item() + 1
+            self.batch_size = len(batches)
 
         result = {}
 
+        deghost = None
         if self.enable_charge_rescaling:
             # Pass through the deghosting
             assert self.enable_ghost
             last_index = 4 + self.deghost_input_features
             result.update(self.uresnet_deghost([input[0][:,:last_index]]))
             result['ghost'] = result['segmentation']
-            deghost = result['ghost'][0].argmax(dim=1) == 0
+            deghost = result['ghost'][0][:, 0] > result['ghost'][0][:,1]
             del result['segmentation']
 
             # Rescale the charge column, store it
@@ -244,6 +277,8 @@ class FullChain(FullChainGNN):
 
             result.update({'input_rescaled':[input_rescaled]})
             result.update({'input_rescaled_coll':[input_rescaled_coll]})
+            if input[0].shape[1] == (last_index + 6 + 2):
+                result.update({'input_rescaled_source':[input[0][deghost,-2:]]})
 
         if self.enable_uresnet:
             if not self.enable_charge_rescaling:
@@ -276,8 +311,13 @@ class FullChain(FullChainGNN):
 
         cnn_result = {}
 
-        if self.enable_ghost:
+        if label_seg is not None and label_clustering is not None:
+            label_clustering = [adapt_labels(label_clustering[0],
+                                             label_seg[0],
+                                             result['segmentation'][0],
+                                             deghost)]
 
+        if self.enable_ghost:
             # Update input based on deghosting results
             # if self.cheat_ghost:
             #     assert label_seg is not None
@@ -285,17 +325,9 @@ class FullChain(FullChainGNN):
             #               self.uresnet_lonely.num_classes
             #     print(deghost, deghost.shape)
             # else:
-            deghost = result['ghost'][0].argmax(dim=1) == 0
+            deghost = result['ghost'][0][:,0] > result['ghost'][0][:,1]
 
             input = [input[0][deghost]]
-
-            if label_seg is not None and label_clustering is not None:
-                # ME uses 0 for batch column, so need to compensate
-                label_clustering = adapt_labels(result,
-                                                label_seg,
-                                                label_clustering,
-                                                batch_column=0,
-                                                coords_column_range=(1,4))
 
             deghost_result = {}
             deghost_result.update(result)
@@ -356,22 +388,24 @@ class FullChain(FullChainGNN):
                                                               graph_spice_label))
                 cnn_result.update({f'graph_spice_{k}':v for k, v in spatial_embeddings_output.items()})
 
-
                 if self.process_fragments:
-                    #self.gs_manager.replace_state(spatial_embeddings_output['graph'][0],
-                    #                              spatial_embeddings_output['graph_info'][0])
-                    self.gs_manager.replace_state(spatial_embeddings_output)
 
-                    self.gs_manager.fit_predict(invert=self._gspice_invert, min_points=self._gspice_min_points)
-                    cluster_predictions = self.gs_manager._node_pred.x
+                    self.gs_manager.load_state(spatial_embeddings_output)   
+                    
+                    graphs = self.gs_manager.fit_predict(min_points=self._gspice_min_points)
+                    
+                    perm = torch.argsort(graphs.voxel_id)
+                    cluster_predictions = graphs.node_pred[perm]
+
                     filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
-                                                semantic_labels[filtered_semantic][:, None],
-                                                cluster_predictions.to(device)[:, None]], dim=1)
+                                                semantic_labels[filtered_semantic].view(-1, 1),
+                                                cluster_predictions.view(-1, 1)], dim=1)
+                    
                     # For the record - (self.gs_manager._node_pred.pos == input[0][filtered_semantic][:, 1:4]).all()
-                    # ie ordering of voxels is the same in node predictions and (filtered) input data
-                    # with np.printoptions(precision=3, suppress=True):
-                    #     print('filtered input', filtered_input.shape, filtered_input[:, 0].sum(), filtered_input[:, 1].sum(), filtered_input[:, 2].sum(), filtered_input[:, 3].sum(), filtered_input[:, 4].sum(), filtered_input[:, 5].sum())
-                    #     print(torch.unique( filtered_input[:, 5], return_counts=True))
+                    # ie ordering of voxels is NOT the same in node predictions and (filtered) input data
+                    # It is likely that input data is lexsorted while node predictions 
+                    # (and anything that are concatenated through Batch.from_data_list) are not. 
+
                     fragment_data = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
                     cluster_result['fragment_clusts'].extend(fragment_data[0])
                     cluster_result['fragment_batch_ids'].extend(fragment_data[1])
@@ -414,13 +448,13 @@ class FullChain(FullChainGNN):
 
 
 class FullChainLoss(FullChainLoss):
-    """
+    '''
     Loss function for the full chain.
 
     See Also
     --------
     FullChain, mlreco.models.layers.common.gnn_full_chain.FullChainLoss
-    """
+    '''
 
     def __init__(self, cfg):
         super(FullChainLoss, self).__init__(cfg)
@@ -438,4 +472,3 @@ class FullChainLoss(FullChainLoss):
             # assert self._enable_graph_spice
             self._enable_graph_spice = True
             self.spatial_embeddings_loss = GraphSPICELoss(cfg, name='graph_spice_loss')
-            self._gspice_skip_classes = cfg.get('graph_spice', {}).get('skip_classes', [])

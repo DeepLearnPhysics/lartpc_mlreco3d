@@ -1,4 +1,5 @@
 import os, re, glob, warnings
+import numpy as np
 import torch
 from collections import defaultdict
 
@@ -282,8 +283,6 @@ class trainval(object):
                     loss_acc = self._criterion(result, *tuple(loss_blob), iteration=iteration)
                 else:
                     loss_acc = self._criterion(result, *tuple(loss_blob))
-                    #print('hello')
-                    #loss_acc['loss'].backward()
                 if self._train:
                     self._loss.append(loss_acc['loss'])
 
@@ -303,12 +302,17 @@ class trainval(object):
                 if len(result[key]) == 0: continue
                 if isinstance(result[key][0], list):
                     res[key] = [[to_numpy(s) for s in x] for x in result[key]]
-                # elif isinstance(result[key][0], Batch):
-                #     res[key] = result[key]
+                elif isinstance(result[key], list) and np.isscalar(result[key][0]):
+                    res[key] = result[key]
                 else:
-                    res[key] = [to_numpy(s) for s in result[key]]
+                    try:
+                        res[key] = [to_numpy(s) for s in result[key]]
+                    except:
+                        print(type(result[key][0]))
+                        raise Exception(f'Could not convert result {key}: {str(result[key])} of type "{type(result[key][0])}" to numpy array')
 
             return res
+        
 
     def initialize_calibrator(self, model, module_config):
 
@@ -483,6 +487,9 @@ class trainval(object):
         self.tspent_sum['forward'] = self.tspent_sum['train'] = self.tspent_sum['io'] = self.tspent_sum['save'] = 0.
 
         self._model = model(module_config)
+
+        num_volumes = 1 if not self._boundaries else np.prod([len(b)+1 for b in self._boundaries if b != 'None'])
+        self._model.batch_size = self._minibatch_size * num_volumes
 
         self._net = DataParallel(self._model, device_ids=self._gpus)
 

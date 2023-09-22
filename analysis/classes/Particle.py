@@ -3,8 +3,8 @@ import numpy as np
 from typing import Counter, List, Union
 from collections import OrderedDict
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
-
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, PID_TO_PDG
+from mlreco.utils.utils import pixel_to_cm
 
 class Particle:
     '''
@@ -33,6 +33,8 @@ class Particle:
         (N) IDs of voxels that correspond to the particle within the input tensor
     points : np.dnarray, default np.array([], shape=(0,3))
         (N,3) Set of voxel coordinates that make up this particle in the input tensor
+    sources : np.ndarray, default np.array([], shape=(0,2))
+        (N, 2) Set of voxel sources as (Module ID, TPC ID) pairs
     depositions : np.ndarray, defaul np.array([])
         (N) Array of charge deposition values for each voxel
     depositions_sum : float
@@ -45,58 +47,84 @@ class Particle:
         Charged Pion (3), Proton (4)) of this particle
     pid_scores : np.ndarray
         (P) Array of softmax scores associated with each of particle class
+    pdg_code : int
+        PDG code corresponding to the PID number
     is_primary : bool
         Indicator whether this particle is a primary from an interaction
     primary_scores : np.ndarray
         (2) Array of softmax scores associated with secondary and primary
-    start_point : np.ndarray, default np.array([-1, -1, -1])
+    start_point : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle start point
-    end_point : np.ndarray, default np.array([-1, -1, -1])
+    end_point : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle end point
-    start_dir : np.ndarray, default np.array([-1, -1, -1])
+    start_dir : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle direction estimate w.r.t. the start point
-    end_dir : np.ndarray, default np.array([-1, -1, -1])
+    end_dir : np.ndarray, default np.array([-inf, -inf, -inf])
         (3) Particle direction estimate w.r.t. the end point
-    energy_sum : float, default -1
-        Energy reconstructed from the particle deposition sum
-    momentum_range : float, default -1
-        Momentum reconstructed from the particle range
-    momentum_mcs : float, default -1
-        Momentum reconstructed using the MCS method
+    length : float, default -1
+        Length of the particle (only assigned to track objects)
+    momentum : np.ndarray, default np.array([-inf, -inf, -inf])
+        (3) Particle 3-momentum estimate
+    is_contained : bool
+        Indicator whether this particle is contained or not
+    calo_ke : float, default -1
+        Kinetic energy reconstructed from the energy depositions alone
+    csda_ke : float, default -1
+        Kinetic energy reconstructed from the particle range
+    mcs_ke  : float, default -1
+        Kinetic energy reconstructed using the MCS method
     match : List[int]
         List of TruthParticle IDs for which this particle is matched to
+    match_overlap : List[float]
+        List of match overlaps (in terms of IoU) between the particle and its matches
+    units : str, default 'px'
+        Units in which coordinates are expressed
     '''
-    def __init__(self, 
-                 group_id: int = -1, 
+
+    # Attributes that specify coordinates
+    _COORD_ATTRS = ['points', 'start_point', 'end_point']
+
+    def __init__(self,
+                 group_id: int = -1,
                  fragment_ids: np.ndarray = np.empty(0, dtype=np.int64),
-                 interaction_id: int = -1, 
+                 interaction_id: int = -1,
                  nu_id: int = -1,
+                 pid: int = -1,
                  volume_id: int = -1,
-                 image_id: int = -1, 
-                 semantic_type: int = -1, 
-                 index: np.ndarray = np.empty(0, dtype=np.int64), 
-                 points: np.ndarray = np.empty(0, dtype=np.float32),
-                 depositions: np.ndarray = np.empty(0, dtype=np.float32), 
-                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32),
+                 image_id: int = -1,
+                 semantic_type: int = -1,
+                 index: np.ndarray = np.empty(0, dtype=np.int64),
+                 points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 sources: np.ndarray = np.empty((0,2), dtype=np.float32),
+                 depositions: np.ndarray = np.empty(0, dtype=np.float32),
+                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32), # TODO get it from somewhere
+                 #pid_scores: np.ndarray = -np.ones(5, dtype=np.float32), # TODO get it from somewhere
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
-                 start_point: np.ndarray = -np.ones(3, dtype=np.float32),
-                 end_point: np.ndarray = -np.ones(3, dtype=np.float32),
-                 start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
-                 end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
+                 start_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 end_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 start_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 end_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 momentum: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  length: float = -1.,
-                 csda_kinetic_energy: float = -1.,
-                 momentum_mcs: float = -1., 
+                 calo_ke: float = -1.,
+                 csda_ke: float = -1.,
+                 mcs_ke: float = -1.,
                  matched: bool = False,
-                 is_contained: bool = False, **kwargs):
+                 is_contained: bool = False,
+                 is_primary: bool = False,
+                 units: str = 'px', **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
         self._index           = None
         self._depositions     = None
         self._depositions_sum = -1
-        self._pid             = -1
+        self._pid             = pid
         self._size            = -1
-        self._is_primary      = False
+        self._is_primary      = is_primary
+        self._units           = units
+        if type(units) is bytes:
+            self._units = units.decode()
 
         # Initialize attributes
         self.id             = int(group_id)
@@ -106,104 +134,111 @@ class Particle:
         self.image_id       = int(image_id)
         self.volume_id      = int(volume_id)
         self.semantic_type  = int(semantic_type)
-        self.points         = points
 
         self.index          = index
+        self.points         = points
+        self.sources        = sources
         self.depositions    = depositions
+
+        self.pdg_code       = -1
+        
         self.pid_scores     = pid_scores
         self.primary_scores = primary_scores
         
         # Quantities to be set during post_processing
-        self._start_point         = start_point
-        self._end_point           = end_point
-        self._start_dir           = start_dir
-        self._end_dir             = end_dir
-        self.length               = length
-        self.csda_kinetic_energy  = csda_kinetic_energy
-        self.momentum_mcs         = momentum_mcs
-        self.is_contained         = is_contained
+        self._start_point = start_point
+        self._end_point   = end_point
+        self._start_dir   = start_dir
+        self._end_dir     = end_dir
+        self.momentum     = momentum
+        self.length       = length
+        self.calo_ke      = calo_ke
+        self.csda_ke      = csda_ke
+        self.mcs_ke       = mcs_ke
+        self.is_contained = is_contained
 
         # Quantities to be set by the particle matcher
         self.matched             = matched
         self._is_principal_match = False
         self._match              = list(kwargs.get('match', []))
-        self._match_counts       = kwargs.get('match_counts', OrderedDict())
-        if not isinstance(self._match_counts, dict):
-            raise ValueError(f"{type(self._match_counts)}")
-        
+        self._match_overlap       = kwargs.get('match_overlap', OrderedDict())
+        if not isinstance(self._match_overlap, dict):
+            raise ValueError(f"{type(self._match_overlap)}")
+
     @property
     def is_principal_match(self):
         return self._is_principal_match
-        
+
     @property
     def start_point(self):
         return self._start_point
-    
+
     @start_point.setter
     def start_point(self, value):
         assert value.shape == (3,)
         if (np.abs(value) < 1e10).all():
             # Only set start_point if not bogus value
-            self._start_point = value
-        
+            self._start_point = value.astype(np.float32)
+
     @property
     def end_point(self):
         return self._end_point
-    
+
     @end_point.setter
     def end_point(self, value):
         assert value.shape == (3,)
         if (np.abs(value) < 1e10).all():
             # Only set start_point if not bogus value
             self._end_point = value
-        
+
     @property
     def start_dir(self):
         return self._start_dir
-    
+
     @start_dir.setter
     def start_dir(self, value):
         assert value.shape == (3,)
         self._start_dir = value
-        
+
     @property
     def end_dir(self):
         return self._end_dir
-    
+
     @end_dir.setter
     def end_dir(self, value):
         assert value.shape == (3,)
         self._end_dir = value
-        
+
     @property
     def is_primary(self):
         return bool(self._is_primary)
-    
+
     @is_primary.setter
     def is_primary(self, value):
         self._is_primary = value
 
     @property
     def match(self):
-        self._match = list(self._match_counts.keys())
+        self._match = list(self._match_overlap.keys())
         return np.array(self._match, dtype=np.int64)
-    
+
     @property
-    def match_counts(self):
-        return np.array(list(self._match_counts.values()), dtype=np.float32)
-    
-    @match_counts.setter
-    def match_counts(self, value):
+    def match_overlap(self):
+        return np.array(list(self._match_overlap.values()), dtype=np.float32)
+
+    @match_overlap.setter
+    def match_overlap(self, value):
         assert type(value) is OrderedDict
-        self._match_counts = value
-        
+        self._match_overlap = value
+
     def clear_match_info(self):
         self._match = []
-        self._match_counts = OrderedDict()
+        self._match_overlap = OrderedDict()
         self.matched = False
 
     def __repr__(self):
-        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(self.image_id, self.id, self._pid, self.size)
+        msg = "Particle(image_id={}, id={}, pid={}, size={})".format(
+            self.image_id, self.id, self._pid, self.size)
         return msg
 
     def __str__(self):
@@ -290,6 +325,9 @@ class Particle:
         '''
         Particle ID scores getter/setter. The setter converts the
         scores to an particle ID prediction through argmax.
+        
+        Warning: If <pid_scores> are provided by either the constructor or
+        the pid_scores.setter, it will override the current pid. 
         '''
         return self._pid_scores
 
@@ -299,19 +337,25 @@ class Particle:
         # If no PID scores are providen, the PID is unknown
         if pid_scores[0] < 0.:
             self._pid = -1
+            self._pdg_code = -1
         else:
         # Store the PID scores
             self._pid = int(np.argmax(pid_scores))
-        
+            self.pdg_code = int(PID_TO_PDG[self._pid])
+
     @property
     def pid(self):
         return int(self._pid)
-    
+
     @pid.setter
     def pid(self, value):
-        assert value in PID_LABELS
-        self._pid = value
-    
+        if value not in PID_LABELS:
+            if value != -1:
+                print("WARNING: PID {} not in PID_LABELS".format(value))
+            self._pid = -1
+        else:
+            self._pid = value
+
     @property
     def primary_scores(self):
         '''
@@ -326,7 +370,20 @@ class Particle:
         if primary_scores[0] < 0.:
             self._primary_scores = primary_scores
             self._is_primary = False
-        
+
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
         self._is_primary = bool(np.argmax(primary_scores))
+
+    def convert_to_cm(self, meta):
+        '''
+        Converts the units of all coordinate attributes to cm.
+        '''
+        assert self._units == 'px'
+        for attr in self._COORD_ATTRS:
+            setattr(self, attr, pixel_to_cm(getattr(self, attr), meta))
+        self._units = 'cm'
+
+    @property
+    def units(self):
+        return self._units

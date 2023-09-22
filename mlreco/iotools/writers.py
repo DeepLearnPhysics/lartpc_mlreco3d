@@ -7,7 +7,7 @@ from collections import defaultdict
 from larcv import larcv
 from analysis import classes as analysis
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, NU_CURR_TYPE, NU_INT_TYPE
 
 
 class HDF5Writer:
@@ -21,37 +21,36 @@ class HDF5Writer:
     '''
     # Analysis object attributes to be stored as enumerated types and their associated rules
     ANA_ENUM = {
-        'semantic_type': {v:k for k, v in SHAPE_LABELS.items()},
-        'pid': {v:k for k, v in PID_LABELS.items()}
+        'semantic_type': {v : k for k, v in SHAPE_LABELS.items()},
+        'pid': {v : k for k, v in PID_LABELS.items()},
+        'nu_current_type': {v : k for k, v in NU_CURR_TYPE.items()},
+        'nu_interaction_type': {v : k for k, v in NU_INT_TYPE.items()},
+        'nu_interaction_mode': {v : k for k, v in NU_INT_TYPE.items()}
     }
 
     # Analysis object array attributes which have a fixed length
     ANA_FIXED_LENGTH = [
         'start_point', 'end_point', 'start_dir', 'end_dir', 'start_position', 'end_position',
-        'vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
+        'vertex', 'truth_vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
     ]
 
-    # LArCV object attributes that do not need to be stored to HDF5
+    # Object attributes that do not need to be stored to HDF5
     LARCV_SKIP_ATTRS = [
         'add_trajectory_point', 'dump', 'momentum', 'boundingbox_2d', 'boundingbox_3d',
         *[k + a for k in ['', 'parent_', 'ancestor_'] for a in ['x', 'y', 'z', 't']]
     ]
 
-    LARCV_SKIP = {
+    ANA_SKIP_ATTRS = [
+        'points', 'truth_points', 'sed_points', 'particles', 'fragments',
+        'sources', 'depositions', 'depositions_MeV', 'truth_depositions',
+        'truth_depositions_MeV', 'sed_depositions_MeV', 'particles_summary'
+    ]
+
+    SKIP_ATTRS = {
         larcv.Particle: LARCV_SKIP_ATTRS,
         larcv.Neutrino: LARCV_SKIP_ATTRS,
         larcv.Flash:    ['wireCenters', 'wireWidths'],
-        larcv.CRTHit:   ['feb_id', 'pesmap']
-    }
-
-    # Analysis particle object attributes that do not need to be stored to HDF5
-    ANA_SKIP_ATTRS = [
-        'points', 'truth_points', 'sed_points', 'particles', 'fragments',
-        'asis', 'depositions', 'depositions_MeV', 'truth_depositions',
-        'truth_depositions_MeV', 'sed_depositions', 'particles_summary'
-    ]
-
-    ANA_SKIP = {
+        larcv.CRTHit:   ['feb_id', 'pesmap'],
         analysis.ParticleFragment:      ANA_SKIP_ATTRS,
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
@@ -60,8 +59,20 @@ class HDF5Writer:
         analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
 
+    # Output with default types. TODO: move this, make it not name-dependant
+    DEFAULT_OBJS = {
+        'particles':          analysis.Particle(),
+        'truth_particles':    analysis.TruthParticle(),
+        'interactions':       analysis.Interaction(),
+        'truth_interactions': analysis.TruthInteraction(),
+    }
+
+    # Outputs that have a fixed number of tensors. #TODO: Inherit from unwrap rules
+    TENSOR_LISTS = ['encoderTensors', 'decoderTensors', 'ppn_masks', 'ppn_layers', 'ppn_coords']
+
     # List of recognized objects
-    DATAOBJS = tuple(list(LARCV_SKIP.keys()) + list(ANA_SKIP.keys()))
+    DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
+    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
 
     def __init__(self,
                  file_name: str = 'output.h5',
@@ -100,7 +111,7 @@ class HDF5Writer:
         self.append_file      = append_file
         self.merge_groups     = merge_groups
         self.ready            = False
-        self.object_dtypes    = {}
+        self.object_dtypes    = []
 
     def create(self, data_blob, result_blob=None, cfg=None):
         '''
@@ -145,14 +156,14 @@ class HDF5Writer:
             self.register_key(result_blob, key, 'result')
 
         # Initialize the output HDF5 file
-        with h5py.File(self.file_name, 'w') as file:
+        with h5py.File(self.file_name, 'w') as out_file:
             # Initialize the info dataset that stores top-level description of what is stored
             if cfg is not None:
-                file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
-                file['info'].attrs['cfg'] = yaml.dump(cfg)
+                out_file.create_dataset('info', (0,), maxshape=(None,), dtype=None)
+                out_file['info'].attrs['cfg'] = yaml.dump(cfg)
 
             # Initialize the event dataset and the corresponding reference array datasets
-            self.initialize_datasets(file)
+            self.initialize_datasets(out_file)
 
             # Mark file as ready for use
             self.ready = True
@@ -191,52 +202,70 @@ class HDF5Writer:
 
             else:
                 # List containing a list/array of objects per batch ID
-                assert len(blob[key][0]),\
-                        'Cannot infer the dtype of an empty list and hence cannot initialize the output HDF5 file'
-                # TODO: In this case, fall back on a default dtype specified elsewhere
+                lengths = np.array([len(blob[key][i]) for i in range(len(blob[key]))])
+                index   = np.where(lengths)[0]
+                if len(index):
+                    ref_id  = index[0]
+                    ref_obj = blob[key][ref_id][0]
+                elif key in self.DEFAULT_OBJS.keys():
+                    ref_obj = self.DEFAULT_OBJS[key]
+                else:
+                    msg = f'Cannot infer the dtype of a list of empty lists ({key}) and hence cannot initialize the output HDF5 file'
+                    raise AssertionError(msg) # TODO: In this case, fall back on a default dtype specified elsewhere
 
-                if isinstance(blob[key][0][0], self.DATAOBJS):
+                if isinstance(ref_obj, dict):
+                    # List containing a single list of dictionary objects per batch ID
+                    dict_dtype = self.get_dict_dtype(ref_obj)
+                    self.object_dtypes.append(dict_dtype)
+
+                    self.key_dict[key]['dtype'] = dict_dtype
+
+                elif isinstance(ref_obj, self.DATA_OBJS):
                     # List containing a single list of dataclass objects per batch ID
-                    object_type = type(blob[key][0][0])
-                    if not object_type in self.object_dtypes:
-                        self.object_dtypes[object_type] = self.get_object_dtype(blob[key][0][0])
-                    self.key_dict[key]['dtype'] = self.object_dtypes[object_type]
-                    self.key_dict[key]['larcv'] = object_type in self.LARCV_SKIP
+                    object_dtype = self.get_object_dtype(ref_obj)
+                    self.object_dtypes.append(object_dtype)
 
-                elif not hasattr(blob[key][0][0], '__len__'):
+                    self.key_dict[key]['dtype'] = object_dtype
+                    self.key_dict[key]['larcv'] = type(ref_obj) in self.LARCV_OBJS
+
+                elif not hasattr(ref_obj, '__len__'):
                     # List containing a single list of scalars per batch ID
-                    self.key_dict[key]['dtype'] = type(blob[key][0][0])
+                    self.key_dict[key]['dtype'] = type(ref_obj)
 
-                elif not isinstance(blob[key][0], list) and not blob[key][0].dtype == np.object:
+                elif not isinstance(blob[key][ref_id], list) and not blob[key][ref_id].dtype == np.object:
                     # List containing a single ndarray of scalars per batch ID
-                    self.key_dict[key]['dtype'] = blob[key][0].dtype
-                    self.key_dict[key]['width'] = blob[key][0].shape[1] if len(blob[key][0].shape) == 2 else 0
+                    self.key_dict[key]['dtype'] = blob[key][ref_id].dtype
+                    self.key_dict[key]['width'] = blob[key][ref_id].shape[1] if len(blob[key][ref_id].shape) == 2 else 0
 
-                elif isinstance(blob[key][0][0], np.ndarray):
+                elif isinstance(ref_obj, np.ndarray):
                     # List containing a list (or ndarray) of ndarrays per batch ID
                     widths = []
-                    for i in range(len(blob[key][0])):
-                        widths.append(blob[key][0][i].shape[1] if len(blob[key][0][i].shape) == 2 else 0)
+                    for i in range(len(blob[key][ref_id])):
+                        widths.append(blob[key][ref_id][i].shape[1] if len(blob[key][ref_id][i].shape) == 2 else 0)
                     same_width = np.all([widths[i] == widths[0] for i in range(len(widths))])
 
-                    self.key_dict[key]['dtype'] = blob[key][0][0].dtype
+                    self.key_dict[key]['dtype'] = ref_obj.dtype
                     self.key_dict[key]['width'] = widths
-                    self.key_dict[key]['merge'] = same_width
+                    self.key_dict[key]['merge'] = same_width and key not in self.TENSOR_LISTS
 
                 else:
-                    dtype = type(blob[key][0])
+                    dtype = type(blob[key][ref_id])
                     raise TypeError(f'Do not know how to store output of type {dtype} in key {key}')
 
-    def get_object_dtype(self, obj):
+    def get_dict_dtype(self, obj_dict, obj=dict, is_larcv=False):
         '''
-        Loop over the members of a class to figure out what to store. This
-        function assumes that the the class only posses getters that return
-        either a scalar, a string, a larcv.Vertex, a list, np.ndarrary or a set.
+        Loop over the keys in a dictonary to figure out what to store. This
+        function assumes that the dictionary only maps tovalues that are
+        either a scalar, string, larcv.Vertex, list, np.ndarrary or set.
 
         Parameters
         ----------
-        object : class instance
+        obj_dict : dict
             Instance of an object used to identify attribute types
+        obj : type, default dict
+            Type of object this dictionary was built from
+        is_larcv : bool, default False
+            Whether or not this dictionary was built from a LArCV class
 
         Returns
         -------
@@ -244,19 +273,7 @@ class HDF5Writer:
             List of (key, dtype) pairs
         '''
         object_dtype = []
-        members = inspect.getmembers(obj)
-        is_larcv = type(obj) in self.LARCV_SKIP
-        skip_keys = self.LARCV_SKIP[type(obj)] if is_larcv else self.ANA_SKIP[type(obj)]
-        attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
-        for key in attr_names:
-            # Fetch the attribute value
-            if is_larcv:
-                val = getattr(obj, key)()
-            else:
-                val = getattr(obj, key)
-                if callable(val):
-                    continue
-
+        for key, val in obj_dict.items():
             # Append the relevant data type
             if isinstance(val, str):
                 # String
@@ -282,7 +299,10 @@ class HDF5Writer:
                     dtype, shape = type(val[0]), len(val)
                 else:
                     # Empty list (typing unknown, cannot store)
-                    raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
+                    if key == 'children_id':
+                        dtype, shape = np.int64, 0
+                    else:
+                        raise ValueError(f'Attribute {key} of {obj} is an untyped empty list')
 
                 if key in self.ANA_FIXED_LENGTH:
                     object_dtype.append((key, dtype, shape))
@@ -293,22 +313,55 @@ class HDF5Writer:
 
         return object_dtype
 
-    def initialize_datasets(self, file):
+    def get_object_dtype(self, obj):
+        '''
+        Loop over the members of a class to figure out what to store. This
+        function assumes that the class only posseses getters that return
+        either a scalar, string, larcv.Vertex, list, np.ndarrary or set.
+
+        Parameters
+        ----------
+        object : class
+            Instance of an object used to identify attribute types
+
+        Returns
+        -------
+        list
+            List of (key, dtype) pairs
+        '''
+        obj_dict = {}
+        members = inspect.getmembers(obj)
+        is_larcv = type(obj) in self.LARCV_OBJS
+        skip_keys = self.SKIP_ATTRS[type(obj)]
+        attr_names = [k for k, _ in members if k[0] != '_' and k not in skip_keys]
+        for key in attr_names:
+            # Fetch the attribute value
+            if is_larcv:
+                val = getattr(obj, key)()
+                obj_dict[key] = val
+            else:
+                val = getattr(obj, key)
+                if not callable(val):
+                    obj_dict[key] = val
+
+        return self.get_dict_dtype(obj_dict, obj, is_larcv)
+
+    def initialize_datasets(self, out_file):
         '''
         Create place hodlers for all the datasets to be filled.
 
         Parameters
         ----------
-        file : h5py.File
+        out_file : h5py.File
             HDF5 file instance
         '''
         self.event_dtype = []
         ref_dtype = h5py.special_dtype(ref=h5py.RegionReference)
         for key, val in self.key_dict.items():
-            group = file
+            group = out_file
             if not self.merge_groups:
                 cat   = val['category']
-                group = file[cat] if cat in file else file.create_group(cat)
+                group = out_file[cat] if cat in out_file else out_file.create_group(cat)
             self.event_dtype.append((key, ref_dtype))
 
             if not val['merge'] and not isinstance(val['width'], list):
@@ -340,7 +393,7 @@ class HDF5Writer:
                 subgroup.create_dataset('elements', shape, maxshape=maxshape, dtype=val['dtype'])
                 subgroup.create_dataset('index', (0,), maxshape=(None,), dtype=ref_dtype)
 
-        file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
+        out_file.create_dataset('events', (0,), maxshape=(None,), dtype=self.event_dtype)
 
     def append(self, data_blob=None, result_blob=None, cfg=None):
         '''
@@ -361,9 +414,9 @@ class HDF5Writer:
             self.ready = True
 
         # Append file
-        with h5py.File(self.file_name, 'a') as file:
+        with h5py.File(self.file_name, 'a') as out_file:
             # Loop over batch IDs
-            for batch_id in range(self.batch_size):
+            for batch_id in range(len(data_blob['index'])):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
 
@@ -371,23 +424,23 @@ class HDF5Writer:
                 # dataset and store the relevant array input and result keys
                 ref_dict = {}
                 for key in self.input_keys:
-                    self.append_key(file, event, data_blob, key, batch_id)
+                    self.append_key(out_file, event, data_blob, key, batch_id)
                 for key in self.result_keys:
-                    self.append_key(file, event, result_blob, key, batch_id)
+                    self.append_key(out_file, event, result_blob, key, batch_id)
 
                 # Append event
-                event_id  = len(file['events'])
-                events_ds = file['events']
+                event_id  = len(out_file['events'])
+                events_ds = out_file['events']
                 events_ds.resize(event_id + 1, axis=0)
                 events_ds[event_id] = event
 
-    def append_key(self, file, event, blob, key, batch_id):
+    def append_key(self, out_file, event, blob, key, batch_id):
         '''
         Stores array in a specific dataset of an HDF5 file
 
         Parameters
         ----------
-        file : h5py.File
+        out_file : h5py.File
             HDF5 file instance
         event : dict
             Dictionary of objects that make up one event
@@ -399,32 +452,42 @@ class HDF5Writer:
             Batch ID to be stored
         '''
         val   = self.key_dict[key]
-        group = file
+        group = out_file
         if not self.merge_groups:
             cat   = val['category']
-            group = file[cat]
+            group = out_file[cat]
 
         if not val['merge'] and not isinstance(val['width'], list):
-            # Store single object
-            if np.isscalar(blob[key]):
-                obj = blob[key]
+            # Store single arrays
+            if key not in blob:
+                # If an output does not exists, give an empty array
+                array = []
+            elif np.isscalar(blob[key]):
+                # If an output is a scalar, nest it
+                array = blob[key]
             else:
-                obj = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
-            if not hasattr(obj, '__len__'):
-                obj = [obj]
+                # If an output is a nest scalar, get it for every batch ID
+                # TODO: Must get rid of this option
+                array = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
 
-            if val['dtype'] in self.object_dtypes.values():
-                self.store_objects(group, event, key, obj, val['dtype'])
+            if not hasattr(array, '__len__'):
+                array = [array]
+
+            if val['dtype'] in self.object_dtypes:
+                self.store_objects(group, event, key, array, val['dtype'])
             else:
-                self.store(group, event, key, obj)
+                self.store(group, event, key, array)
 
         elif not val['merge']:
             # Store the array and its reference for each element in the list
-            self.store_jagged(group, event, key, blob[key][batch_id])
+            array_list = blob[key][batch_id] if key in blob else \
+                    [[] for _ in range(len(val['width']))]
+            self.store_jagged(group, event, key, array_list)
 
         else:
             # Store one array of for all in the list and a index to break them
-            self.store_flat(group, event, key, blob[key][batch_id])
+            array_list = blob[key][batch_id] if key in blob else []
+            self.store_flat(group, event, key, array_list)
 
     @staticmethod
     def store(group, event, key, array):
@@ -545,7 +608,7 @@ class HDF5Writer:
         key: str
             Name of the dataset in the file
         array : np.ndarray
-            Array to be stored
+            Array of objects or dictionaries to be stored
         obj_dtype : list
             List of (key, dtype) pairs which specify what's to store
         '''
@@ -554,7 +617,11 @@ class HDF5Writer:
         for i, o in enumerate(array):
             for row in obj_dtype:
                 k, dtype, _ = row if len(row) == 3 else [*row, None]
-                attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
+                if type(o) is dict:
+                    attr = o[k]
+                else:
+                    attr = getattr(o, k)() if callable(getattr(o, k)) else getattr(o, k)
+
                 if np.isscalar(attr):
                     objects[i][k] = attr
                 elif isinstance(attr, larcv.Vertex):
@@ -590,7 +657,8 @@ class CSVWriter:
 
     def __init__(self,
                  file_name: str = 'output.csv',
-                 append_file: bool = False):
+                 append_file: bool = False,
+                 accept_missing: bool = True):
         '''
         Initialize the basics of the output file
 
@@ -600,18 +668,21 @@ class CSVWriter:
             Name of the output CSV file
         append_file : bool, default False
             Add more rows to an existing CSV file
+        accept_missing : bool, default True
+            Tolerate missing keys
         '''
-        self.file_name   = file_name
-        self.append_file = append_file
-        self.result_keys = None
+        self.file_name      = file_name
+        self.append_file    = append_file
+        self.accept_missing = accept_missing
+        self.result_keys    = None
         if self.append_file:
             if not os.path.isfile(file_name):
                 msg = 'File not found at path: {}. When using append=True '\
                 'in CSVWriter, the file must exist at the prescribed path '\
                 'before data is written to it.'.format(file_name)
                 raise FileNotFoundError(msg)
-            with open(self.file_name, 'r') as file:
-                self.result_keys = file.readline().split(',')
+            with open(self.file_name, 'r') as out_file:
+                self.result_keys = out_file.readline().split(',')
 
     def create(self, result_blob: dict):
         '''
@@ -627,9 +698,9 @@ class CSVWriter:
         self.result_keys = list(result_blob.keys())
 
         # Create a header and write it to file
-        with open(self.file_name, 'w') as file:
+        with open(self.file_name, 'w') as out_file:
             header_str = ','.join(self.result_keys)+'\n'
-            file.write(header_str)
+            out_file.write(header_str)
 
     def append(self, result_blob: dict):
         '''
@@ -644,10 +715,22 @@ class CSVWriter:
         if self.result_keys is None:
             self.create(result_blob)
         else:
-            assert list(result_blob.keys()) == self.result_keys,\
-                    'Must provide a dictionary with the expected set of keys'
+            if not (list(result_blob.keys()) == self.result_keys):
+                if self.accept_missing:
+                    new_result_blob = {k:-1 for k in self.result_keys}
+                    for k, v in result_blob.items():
+                        if k not in new_result_blob:
+                            raise KeyError(f'Key {k} has not been seen in previous iterations')
+                        new_result_blob[k] = v
+                    result_blob = new_result_blob
+                else:
+                    diff1 = set(list(result_blob.keys())).difference(set(self.result_keys))
+                    diff2 = set(self.result_keys).difference(set(list(result_blob.keys())))
+                    msg = "Must provide a dictionary with the expected set of keys: "\
+                        "difference = {}, {}".format(str(diff1), str(diff2))
+                    raise AssertionError(msg)
 
         # Append file
-        with open(self.file_name, 'a') as file:
+        with open(self.file_name, 'a') as out_file:
             result_str = ','.join([str(result_blob[k]) for k in self.result_keys])+'\n'
-            file.write(result_str)
+            out_file.write(result_str)

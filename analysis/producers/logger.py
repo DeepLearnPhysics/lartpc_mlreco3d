@@ -4,20 +4,23 @@ from functools import partial
 import numpy as np
 import sys
 
-from mlreco.utils.globals import PID_LABELS
 from analysis.classes import TruthInteraction, TruthParticle, Interaction
 
 def tag(tag_name):
-    """Tags a function with a str indicator for truth inputs only,
+    '''
+    Tags a function with a str indicator for truth inputs only,
     reco inputs only, or both.
-    """
+    '''
     def tags_decorator(func):
         func._tag = tag_name
         return func
+
     return tags_decorator
 
 def attach_prefix(update_dict, prefix):
-    """Simple function that adds a prefix to all keys in update_dict"""
+    '''
+    Simple function that adds a prefix to all keys in update_dict
+    '''
     if prefix is None:
         return update_dict
     out = OrderedDict({})
@@ -29,9 +32,9 @@ def attach_prefix(update_dict, prefix):
     return out
 
 class AnalysisLogger:
-    """
+    '''
     Base class for analysis tools logger interface.
-    """
+    '''
 
     def __init__(self, fieldnames: dict):
         self.fieldnames = fieldnames
@@ -150,7 +153,7 @@ class ParticleLogger(AnalysisLogger):
     def is_primary(particle):
         out = {'particle_is_primary': False}
         if hasattr(particle, 'is_primary'):
-            out['particle_is_primary'] = particle.is_primary
+            out['particle_is_primary'] = bool(particle.is_primary)
         return out
     
     @staticmethod
@@ -201,11 +204,11 @@ class ParticleLogger(AnalysisLogger):
     def creation_process(particle):
         out = {'particle_creation_process': 'N/A'}
         if type(particle) is TruthParticle:
-            out['particle_creation_process'] = particle.asis.creation_process()
+            out['particle_creation_process'] = particle.creation_process
         return out
     
     @staticmethod
-    @tag('true')
+    #@tag('true')
     def momentum(particle):
         min_int = -sys.maxsize - 1
         out = {
@@ -214,7 +217,7 @@ class ParticleLogger(AnalysisLogger):
             'particle_py': min_int,
             'particle_pz': min_int,
         }
-        if type(particle) is TruthParticle:
+        if particle is not None:
             out['particle_px'] = particle.momentum[0]
             out['particle_py'] = particle.momentum[1]
             out['particle_pz'] = particle.momentum[2]
@@ -263,7 +266,7 @@ class ParticleLogger(AnalysisLogger):
             'num_children': -1,
         }
         if type(particle) is TruthParticle:
-            out['num_children'] = len(particle.asis.children_id())
+            out['num_children'] = len(particle.children_id)
         return out
     
     @staticmethod
@@ -275,11 +278,11 @@ class ParticleLogger(AnalysisLogger):
                'children_counts_3': -1,
                'children_counts_4': -1}
         if type(particle) is TruthParticle:
-            out['children_counts_0'] = particle._children_counts[0]
-            out['children_counts_1'] = particle._children_counts[1]
-            out['children_counts_2'] = particle._children_counts[2]
-            out['children_counts_3'] = particle._children_counts[3]
-            out['children_counts_4'] = particle._children_counts[4]
+            out['children_counts_0'] = particle.children_counts[0]
+            out['children_counts_1'] = particle.children_counts[1]
+            out['children_counts_2'] = particle.children_counts[2]
+            out['children_counts_3'] = particle.children_counts[3]
+            out['children_counts_4'] = particle.children_counts[4]
         return out
     
     @staticmethod
@@ -316,13 +319,21 @@ class ParticleLogger(AnalysisLogger):
         if particle is not None:
             out['particle_length'] = particle.length
         return out
+
+    @staticmethod
+    # @tag('reco')
+    def calo_ke(particle):
+        out = {'calo_ke': -1}
+        if particle is not None:
+            out['calo_ke'] = particle.calo_ke
+        return out
     
     @staticmethod
     # @tag('reco')
-    def csda_kinetic_energy(particle):
-        out = {'csda_kinetic_energy': -1}
+    def csda_ke(particle):
+        out = {'csda_ke': -1}
         if particle is not None:
-            out['csda_kinetic_energy'] = particle.csda_kinetic_energy
+            out['csda_ke'] = particle.csda_ke
         return out
     
     @staticmethod
@@ -337,6 +348,14 @@ class ParticleLogger(AnalysisLogger):
         out = {'particle_depositions_sum': -1}
         if particle is not None:
             out['particle_depositions_sum'] = particle.depositions_sum
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def truth_depositions_sum(particle):
+        out = {'particle_truth_depositions_sum': -1}
+        if particle is not None and type(particle) is TruthParticle:
+            out['particle_truth_depositions_sum'] = particle.truth_depositions_sum
         return out
     
     @staticmethod
@@ -472,12 +491,30 @@ class InteractionLogger(AnalysisLogger):
             'vertex_x': -sys.maxsize,
             'vertex_y': -sys.maxsize,
             'vertex_z': -sys.maxsize,
+            'vertex_mode': 'N/A'
             # 'vertex_info': None
         }
         if ia is not None and hasattr(ia, 'vertex'):
             out['vertex_x'] = ia.vertex[0]
             out['vertex_y'] = ia.vertex[1]
             out['vertex_z'] = ia.vertex[2]
+            out['vertex_mode'] = ia.vertex_mode
+        return out
+    
+    @staticmethod
+    @tag('true')
+    def truth_vertex(ia):
+        out = {
+            # 'has_vertex': False,
+            'truth_vertex_x': -sys.maxsize,
+            'truth_vertex_y': -sys.maxsize,
+            'truth_vertex_z': -sys.maxsize,
+            # 'vertex_info': None
+        }
+        if ia is not None and hasattr(ia, 'truth_vertex'):
+            out['truth_vertex_x'] = ia.truth_vertex[0]
+            out['truth_vertex_y'] = ia.truth_vertex[1]
+            out['truth_vertex_z'] = ia.truth_vertex[2]
         return out
     
     @staticmethod

@@ -93,7 +93,6 @@ class NodeKinematicsLoss(torch.nn.Module):
 
         self.group_col = loss_config.get('cluster_col', GROUP_COL)
         self.type_col = loss_config.get('type_col', PID_COL)
-        self.momentum_col = loss_config.get('momentum_col', MOM_COL)
         self.vtx_col = loss_config.get('vtx_col', VTX_COLS[0])
         self.vtx_positives_col = loss_config.get('vtx_positives_col', PGRP_COL)
 
@@ -138,6 +137,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         self.normalize_vtx_label = loss_config.get('normalize_vtx_label', True)
         self.use_anchor_points = loss_config.get('use_anchor_points', False)
         self.max_vertex_distance = loss_config.get('max_vertex_distance', 50)
+        self.type_num_classes = loss_config.get('type_num_classes', 5)
         self.type_loss_weight = loss_config.get('type_loss_weight', 1.0)
         self.type_high_purity = loss_config.get('type_high_purity', True)
         self.momentum_high_purity = loss_config.get('momentum_high_purity', True)
@@ -192,12 +192,15 @@ class NodeKinematicsLoss(torch.nn.Module):
                     node_pred_type = out['node_pred_type'][i][j]
                     node_assn_type = get_cluster_label(labels, clusts, column=self.type_col)
 
+                    # Set the labels for classes above the max number to -1
+                    node_assn_type[node_assn_type >= self.type_num_classes] = -1
+
                     # Do not apply loss to nodes labeled -1 (unknown class)
                     valid_mask_type = node_assn_type > -1
 
                     # Do not apply loss if the logit corresponding to the true class is -inf (forbidden prediction)
                     # Not a problem is node_assn_type is -1, as these rows will already be excluded by previous mask
-                    valid_mask_type &= (node_pred_type[np.arange(len(node_assn_type)),node_assn_type] != -float('inf')).detach().cpu().numpy()
+                    valid_mask_type &= (node_pred_type[np.arange(len(node_assn_type)), node_assn_type] != -float('inf')).detach().cpu().numpy()
 
                     # If high purity is requested, do not include broken particle in the loss
                     if self.type_high_purity:
@@ -210,7 +213,6 @@ class NodeKinematicsLoss(torch.nn.Module):
                     if len(valid_mask_type):
                         node_pred_type = node_pred_type[valid_mask_type]
                         node_assn_type = torch.tensor(node_assn_type[valid_mask_type], dtype=torch.long, device=node_pred_type.device, requires_grad=False)
-
                         if self.balance_classes:
                             vals, counts = torch.unique(node_assn_type, return_counts=True)
                             weights = len(node_assn_type)/len(counts)/counts
@@ -231,7 +233,7 @@ class NodeKinematicsLoss(torch.nn.Module):
                 if compute_momentum and out['node_pred_p'][i][j].shape[0]:
                     # Get the momentum predictions and true momenta from the specified columns
                     node_pred_p = out['node_pred_p'][i][j]
-                    node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+                    node_assn_p = get_momenta_label(labels, clusts)
 
                     # Do not apply loss to nodes labeled -1 (unknown class)
                     valid_mask_p = node_assn_p.detach().cpu().numpy() > -1
@@ -446,7 +448,7 @@ class NodeEvidentialKinematicsLoss(NodeKinematicsLoss):
 
     def compute_momentum(self, node_pred_p, labels, clusts, iteration=None):
 
-        node_assn_p = get_momenta_label(labels, clusts, column=self.momentum_col)
+        node_assn_p = get_momenta_label(labels, clusts)
         with torch.no_grad():
             p_acc = torch.pow(node_pred_p[:, 0]-node_assn_p, 2).sum()
         n_clusts_momentum = len(clusts)

@@ -128,11 +128,24 @@ class GraphSPICE(nn.Module):
     MODULES = ['constructor_cfg', 'embedder_cfg', 'kernel_cfg', 'gspice_fragment_manager']
 
     RETURNS = {
-        'coordinates': ['tensor'],
-        'edge_index': ['edge_tensor', ['edge_index', 'coordinates']],
-        'edge_score': ['edge_tensor', ['edge_index', 'coordinates']],
-        'edge_truth': ['edge_tensor', ['edge_index', 'coordinates']],
-        'graph_info': ['tensor']
+        'image_id'     : ['tensor'],
+        'coordinates'  : ['tensor'],
+        'batch'        : ['tensor', 'image_id'],
+        'x'            : ['tensor', 'image_id'],
+        'pos'          : ['tensor', 'image_id'],
+        'node_truth'   : ['tensor', 'image_id'],
+        'voxel_id'     : ['tensor', 'image_id'],
+        'graph_key'    : ['tensor'],
+        'graph_id'     : ['tensor', 'graph_key'],
+        'semantic_id'  : ['tensor', 'image_id'],
+        'full_edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_index'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_batch'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_image_id': ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_label'   : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_attr'    : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_pred'    : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'edge_prob'    : ['edge_tensor', ['full_edge_index', 'image_id']]
     }
 
     def __init__(self, cfg, name='graph_spice'):
@@ -146,6 +159,7 @@ class GraphSPICE(nn.Module):
 
         self.kernel_cfg = self.model_config.get('kernel_cfg', {})
         self.kernel_fn = gs_kernel_construct(self.kernel_cfg)
+        self.invert = self.model_config.get('invert', True)
 
         constructor_cfg = self.model_config.get('constructor_cfg', {})
 
@@ -154,8 +168,7 @@ class GraphSPICE(nn.Module):
         # Cluster Graph Manager
         # `training` needs to be set at forward time.
         # Before that, self.training is always True.
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                  batch_col=0)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
 
         self.RETURNS.update(self.embedder.RETURNS)
 
@@ -195,13 +208,11 @@ class GraphSPICE(nn.Module):
         # Build the graph
         graph = self.gs_manager(res,
                                 self.kernel_fn,
-                                labels)
-
-        res['edge_index'] = [graph.edge_index.T]
-        res['edge_score'] = [graph.edge_attr]
-        if hasattr(graph, 'edge_truth'):
-            res['edge_truth'] = [graph.edge_truth]
-        res['graph_info'] = [self.gs_manager.info.to_numpy()]
+                                labels,
+                                invert=self.invert)
+        
+        graph_state = self.gs_manager.save_state(unwrapped=False)
+        res.update(graph_state)
 
         return res
 
@@ -262,8 +273,7 @@ class GraphSPICELoss(nn.Module):
         self.RETURNS.update(self.loss_fn.RETURNS)
 
         constructor_cfg = self.model_config.get('constructor_cfg', {})
-        self.gs_manager = ClusterGraphConstructor(constructor_cfg,
-                                                  batch_col=0)
+        self.gs_manager = ClusterGraphConstructor(constructor_cfg)
 
         self.invert = self.loss_config.get('invert', True)
         # print("LOSS FN = ", self.loss_fn)
@@ -282,7 +292,8 @@ class GraphSPICELoss(nn.Module):
         '''
 
         '''
-        self.gs_manager.replace_state(result)
+        # self.gs_manager.replace_state(result)
+        self.gs_manager.load_state(result, unwrapped=False)
 
         # if self.invert:
         #     pred_labels = result['edge_score'][0] < 0.0

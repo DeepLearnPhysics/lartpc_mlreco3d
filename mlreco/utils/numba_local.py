@@ -96,6 +96,35 @@ def mean(x: nb.float32[:,:],
 
 
 @nb.njit(cache=True)
+def norm(x: nb.float32[:,:],
+         axis: nb.int32) -> nb.float32[:]:
+    """
+    Numba implementation of `np.linalg.norm(x, axis)`.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        (N,M) array of values
+    axis : int
+        Array axis ID
+
+    Returns
+    -------
+    np.ndarray
+        (N) or (M) array of `norm` values
+    """
+    assert axis == 0 or axis == 1
+    xnorm = np.empty(x.shape[1-axis], dtype=np.int32)
+    if axis == 0:
+        for i in range(len(xnorm)):
+            xnorm[i] = np.linalg.norm(x[:,i])
+    else:
+        for i in range(len(xnorm)):
+            xnorm[i] = np.linalg.norm(x[i])
+    return xnorm
+
+
+@nb.njit(cache=True)
 def argmin(x: nb.float32[:,:],
            axis: nb.int32) -> nb.int32[:]:
     """
@@ -274,7 +303,7 @@ def log_loss(label: nb.boolean[:],
              pred: nb.float32[:]) -> nb.float32:
     """
     Numba implementation of cross-entropy loss.
-    
+
     Parameters
     ----------
     label : np.ndarray
@@ -338,6 +367,35 @@ def cdist(x1: nb.float32[:,:],
         for i2 in range(x2.shape[0]):
             res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2+(x1[i1][1]-x2[i2][1])**2+(x1[i1][2]-x2[i2][2])**2)
     return res
+
+
+@nb.njit(cache=True)
+def principal_components(x: nb.float32[:,:]) -> nb.float32[:,:]:
+    '''
+    Computes the principal components of a point cloud by computing the
+    eigenvectors of the centered covariance matrix.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        (N, d) Coordinates in d dimensions
+
+    Returns
+    -------
+    np.ndarray
+        (d, d) List of principal components (row-ordered)
+    '''
+    # Center data
+    x = x - mean(x, 0)
+
+    # Get covariance matrix
+    A = np.dot(x.T, x)
+
+    # Get eigenvectors
+    _, v = np.linalg.eigh(A)
+    v = np.ascontiguousarray(np.fliplr(v).T)
+
+    return v
 
 
 @nb.njit(cache=True)
@@ -423,29 +481,42 @@ def closest_pair(x1: nb.float32[:,:],
     float
         Distance between the two points
     '''
+    # Find the two points in two sets of points that are closest to each other
     if algorithm == 'brute':
+        # Compute every pair-wise distances between the two sets
         dist_mat = cdist(x1, x2)
+
+        # Select the closest pair of point
         index = np.argmin(dist_mat)
         idxs = [index//dist_mat.shape[1], index%dist_mat.shape[1]]
         dist = dist_mat[idxs[0], idxs[1]]
+
     elif algorithm == 'recursive':
+        # Pick the point to start iterating from
         xarr = [x1, x2]
-        idxs, subidx, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
+        idxs, set_id, dist, tempdist = [0, 0], 0, 1e9, 1e9+1.
         if seed:
-            seed_idxs  = np.array(farthest_pair(xarr[~subidx], 'recursive')[:2])
-            seed_dists = cdist(xarr[~subidx][seed_idxs], xarr[subidx])
-            seed_argmins = argmin(seed_dists, axis=1)
-            seed_mins = np.array([seed_dists[0][seed_argmins[0]], seed_dists[1][seed_argmins[1]]])
-            seed_choice = np.argmin(seed_mins)
-            idxs[int(~subidx)] = seed_idxs[seed_choice]
-            idxs[int(subidx) ] = seed_argmins[seed_choice]
-            dist = seed_mins[seed_choice]
+            # Find the end points of the two sets
+            for i, x in enumerate(xarr):
+                seed_idxs    = np.array(farthest_pair(xarr[i], 'recursive')[:2])
+                seed_dists   = cdist(xarr[i][seed_idxs], xarr[~i])
+                seed_argmins = argmin(seed_dists, axis=1)
+                seed_mins    = np.array([seed_dists[0][seed_argmins[0]],
+                                         seed_dists[1][seed_argmins[1]]])
+                if np.min(seed_mins) < dist:
+                    set_id = ~i
+                    seed_choice = np.argmin(seed_mins)
+                    idxs[int(~set_id)] = seed_idxs[seed_choice]
+                    idxs[int(set_id)] = seed_argmins[seed_choice]
+                    dist = seed_mins[seed_choice]
+
+        # Find the closest point in the other set, repeat until convergence
         while dist < tempdist:
             tempdist = dist
-            dists = cdist(np.ascontiguousarray(xarr[subidx][idxs[subidx]]).reshape(1,-1), xarr[~subidx]).flatten()
-            idxs[~subidx] = np.argmin(dists)
-            dist = dists[idxs[~subidx]]
-            subidx = ~subidx
+            dists = cdist(np.ascontiguousarray(xarr[set_id][idxs[set_id]]).reshape(1,-1), xarr[~set_id]).flatten()
+            idxs[~set_id] = np.argmin(dists)
+            dist = dists[idxs[~set_id]]
+            subidx = ~set_id
     else:
         raise ValueError('Algorithm not supported')
 

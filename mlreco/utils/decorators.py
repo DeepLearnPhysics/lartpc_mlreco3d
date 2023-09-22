@@ -10,6 +10,11 @@ def timing(fn):
     '''
     Function which wraps any function and times it.
 
+    Parameters
+    ----------
+    fn : callable
+        Function to time
+
     Returns
     -------
     callable
@@ -24,6 +29,45 @@ def timing(fn):
           (fn.__name__, args, kwargs, te-ts))
         return result
     return wrap
+
+
+def inherit_docstring(parent):
+    '''
+    Inherits docstring attributes of a parent class.
+    Only handles numpy-style docstrings.
+
+    Parameters
+    ----------
+    parent : object
+        Parent class to inherit attributes from
+
+    Returns
+    -------
+    callable
+        Class with updated docstring
+    '''
+    def inherit(obj):
+        tab       = '    '
+        underline = '----'
+        header    = f'Attributes\n{tab}----------\n'
+
+        # If there is no attribute or method yet, add the header
+        if not header in obj.__doc__:
+            obj.__doc__ += f'\n\n{tab}{header}'
+
+        # Get the parent attribute docstring block
+        docstr = parent.__doc__
+        substr = docstr.split(header)[-1].rstrip() + '\n'
+        if len(substr.split(underline)) > 1:
+            substr = ''.join(substr.split(underline)[0].split('\n')[:-1]).rstrip()
+
+        # Append it to the relevant block
+        split_doc   = obj.__doc__.split(header)
+        obj.__doc__ = split_doc[0] + header + substr + split_doc[1]
+
+        return obj
+
+    return inherit
 
 
 def numbafy(cast_args=[], list_args=[], keep_torch=False, ref_arg=None):

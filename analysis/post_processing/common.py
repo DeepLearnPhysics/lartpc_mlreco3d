@@ -108,9 +108,8 @@ class PostProcessor:
                     msg = "Post processing script output key {} "\
                     "is already in result_dict, it will be overwritten "\
                     "unless you rename it.".format(key)
-                    # raise RuntimeError(msg)
-                else:
-                    self.result[key] = val
+                    # print(msg)
+                self.result[key] = val
 
 
 def extent(voxels):

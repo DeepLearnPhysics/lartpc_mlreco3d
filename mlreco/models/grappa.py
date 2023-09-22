@@ -215,16 +215,17 @@ class GNN(torch.nn.Module):
             if self.kinematics_type:
                 type_config = cfg[name].get('type_net', {})
                 type_net_mode = type_config.get('mode', 'standard')
+                type_net_num_classes = type_config.get('num_classes', 5)
                 if type_net_mode == 'linear':
-                    self.type_net = torch.nn.Linear(node_output_feats, 5)
+                    self.type_net = torch.nn.Linear(node_output_feats, type_net_num_classes)
                 elif type_net_mode == 'standard':
                     self.type_net = MomentumNet(node_output_feats,
-                                                num_output=5,
+                                                num_output=type_net_num_classes,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 positive_outputs=type_config.get('positive_outputs', False))
                 elif type_net_mode == 'edl':
                     self.type_net = MomentumNet(node_output_feats,
-                                                num_output=5,
+                                                num_output=type_net_num_classes,
                                                 num_hidden=type_config.get('num_hidden', 128),
                                                 positive_outputs=type_config.get('positive_outputs', True))
                 else:
@@ -272,8 +273,8 @@ class GNN(torch.nn.Module):
                 raise ValueError('Vertex MLP {} not recognized!'.format(vertex_config['name']))
 
         # Initialize encoders
-        self.node_encoder = node_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
-        self.edge_encoder = edge_encoder_construct(cfg[name], batch_col=self.batch_index, coords_col=self.coords_index)
+        self.node_encoder = node_encoder_construct(cfg[name])
+        self.edge_encoder = edge_encoder_construct(cfg[name])
 
         # Construct the GNN
         self.gnn_model = gnn_model_construct(cfg[name])
@@ -327,34 +328,35 @@ class GNN(torch.nn.Module):
 
         # If requested, merge images together within the batch
         if self.merge_batch:
-            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc, self.batch_index)
+            cluster_data, particles, batch_list = merge_batch(cluster_data, particles, self.merge_batch_size, self.merge_batch_fluc)
             batch_counts = np.unique(batch_list, return_counts=True)[1]
             result['batch_counts'] = [batch_counts]
-
-        # Update result with a list of clusters for each batch id
-        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
-        if not len(clusts):
-            return {**result,
-                    'clusts':    [[np.array([]) for _ in batches]],
-                    'batch_ids': [np.array([])]}
 
         # If an event is missing from the input data - e.g., deghosting
         # erased everything (extreme case but possible if very few voxels)
         # then we might be miscounting batches. Ensure that batches is the
         # same length as batch_size if specified.
+        batches, bcounts = np.unique(cluster_data[:,self.batch_index].detach().cpu().numpy(), return_counts=True)
         if batch_size is not None:
             new_bcounts = np.zeros(batch_size, dtype=np.int64)
             new_bcounts[batches.astype(np.int64)] = bcounts
             bcounts = new_bcounts
             batches = np.arange(batch_size)
 
-        batch_ids = get_cluster_batch(cluster_data, clusts, batch_index=self.batch_index)
+        # Update result with a list of clusters for each batch id
+        if not len(clusts):
+            return {**result,
+                    'clusts':    [[np.array([]) for _ in batches]],
+                    'batch_ids': [np.array([])]}
+
+        batch_ids = get_cluster_batch(cluster_data, clusts)
         clusts_split, cbids = split_clusts(clusts, batch_ids, batches, bcounts)
         result['clusts'] = [clusts_split]
         result['batch_ids'] = [batch_ids]
         if self.edge_max_count > -1:
             _, cnts = np.unique(batch_ids, return_counts=True)
             if np.sum([c*(c-1) for c in cnts]) > 2*self.edge_max_count:
+                print('The complete graph is too large, must skip batch') # TODO: use logging
                 return result
 
         # If necessary, compute the cluster distance matrix

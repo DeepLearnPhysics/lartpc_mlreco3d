@@ -90,7 +90,7 @@ def scatter_points(points, color=None, colorscale=None, cmin=None, cmax=None, op
         trace_dict['z'] = points[:,coord_cols[2]]
         return [go.Scatter3d(**trace_dict)]
     else:
-        return [go.Scatter(**trac_dict)]
+        return [go.Scatter(**trace_dict)]
 
 
 class Scatter3D:
@@ -225,6 +225,9 @@ class Scatter3D:
             raise ValueError(f'"{color}" is not a valid attribute for object type {type(objects[0])}!')
 
     def __call__(self, objects, color='id', mode='points', colorscale='rainbow', cmin=None, cmax=None, size=1, scatter_start_points=False, scatter_end_points=False, scatter_vertices=False, **kwargs):
+
+        if not len(objects):
+            return []
 
         self.check_attribute_name(objects, color)
         self.clear_state()
