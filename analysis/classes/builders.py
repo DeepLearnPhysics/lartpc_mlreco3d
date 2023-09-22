@@ -671,6 +671,10 @@ class InteractionBuilder(DataBuilder):
                     info['sources'] = result['input_rescaled_source'][0][mask]
                 ia = TruthInteraction(**info)
                 ia.id = len(out)
+                
+            # Handle matches
+            match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
+            ia._match_overlap = match_overlap
 
             out.append(ia)
         return out
