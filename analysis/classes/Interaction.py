@@ -34,9 +34,15 @@ class Interaction:
         (N) IDs of voxels that correspondn to the particle within the image coordinate tensor that
     points : np.dnarray, default np.array([], shape=(0,3))
         (N,3) Set of voxel coordinates that make up this interaction in the input tensor
+    sources : np.ndarray, default np.array([], shape=(0,2))
+        (N, 2) Set of voxel sources as (Module ID, TPC ID) pairs
     vertex : np.ndarray, optional
         (3) 3D coordinates of the predicted interaction vertex
         in reconstruction (used for debugging)
+    is_contained : bool
+        Indicator whether this interaction is contained or not
+    is_fiducial : bool, default False
+        Indicator whether the vertex is inside the fiducial volume or not
     units : str, default 'px'
         Units in which coordinates are expressed
     """
@@ -55,6 +61,7 @@ class Interaction:
                  is_neutrino: bool = False,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
+                 sources: np.ndarray = np.empty((0,2), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
                  crthit_matched: bool = False,
                  crthit_matched_particle_id: int = -1,
@@ -66,6 +73,7 @@ class Interaction:
                  flash_hypothesis: float = -1,
                  matched: bool = False,
                  is_contained: bool = False,
+                 is_fiducial: bool = False,
                  units: str = 'px'):
 
         # Initialize attributes
@@ -77,6 +85,8 @@ class Interaction:
         self.vertex_mode  = vertex_mode
         self.is_neutrino  = is_neutrino
         self._units       = units
+        if type(units) is bytes:
+            self._units = units.decode()
 
         # Initialize private attributes to be set by setter only
         self._particles  = None
@@ -84,7 +94,8 @@ class Interaction:
         # Invoke particles setter
         self._particle_counts = np.zeros(6, dtype=np.int64)
         self._primary_counts  = np.zeros(6, dtype=np.int64)
-        self.particles   = particles
+        if particles is not None:
+            self.particles   = particles
 
         # Aggregate individual particle information
         if self._particles is None:
@@ -93,6 +104,7 @@ class Interaction:
             self._num_primaries  = 0
             self.index           = np.atleast_1d(index)
             self.points          = np.atleast_1d(points)
+            self.sources         = np.atleast_1d(sources)
             self.depositions     = np.atleast_1d(depositions)
             self._particles      = particles
 
@@ -102,11 +114,13 @@ class Interaction:
         self.matched        = matched
         self._is_principal_match = False
 
+        # Quantities to be filled by the geometry post-processor
         self.is_contained   = is_contained
+        self.is_fiducial    = is_fiducial
 
         # Flash matching quantities
         self.flash_time     = flash_time
-        self.fmatched       = fmatched
+        self.fmatched       = bool(fmatched)
         self.flash_total_pE = flash_total_pE
         self.flash_id       = flash_id
         self.flash_hypothesis = flash_hypothesis
@@ -155,7 +169,7 @@ class Interaction:
         init_args = defaultdict(list)
         reserved_attributes = [
             'interaction_id', 'nu_id', 'volume_id',
-            'image_id', 'points', 'index', 'depositions'
+            'image_id', 'points', 'sources', 'index', 'depositions'
         ]
 
         processed_args = {'particles': []}
@@ -204,12 +218,13 @@ class Interaction:
             self._particles = {p.id : p for p in value}
             self._particle_ids = np.array(list(self._particles.keys()),
                                           dtype=np.int64)
-            id_list, index_list, points_list, depositions_list = [], [], [], []
+            id_list, index_list, points_list, sources_list, depositions_list = [], [], [], [], []
             for p in value:
                 self.check_particle_input(p)
                 id_list.append(p.id)
                 index_list.append(p.index)
                 points_list.append(p.points)
+                sources_list.append(p.sources)
                 depositions_list.append(p.depositions)
                 if p.pid >= 0:
                     self._particle_counts[p.pid] += 1
@@ -223,6 +238,7 @@ class Interaction:
             self._num_primaries = len([1 for p in value if p.is_primary])
             self.index = np.atleast_1d(np.concatenate(index_list))
             self.points = np.vstack(points_list)
+            self.sources = np.vstack(sources_list)
             self.depositions = np.atleast_1d(np.concatenate(depositions_list))
 
     def _update_particle_info(self):
@@ -358,9 +374,11 @@ def _process_interaction_attributes(init_args, processed_args, **kwargs):
 
     if len(init_args['index']) > 0:
         processed_args['points'] = np.vstack(init_args['points'])
+        processed_args['sources'] = np.vstack(init_args['sources'])
         processed_args['index'] = np.concatenate(init_args['index'])
         processed_args['depositions'] = np.concatenate(init_args['depositions'])
     else:
-        processed_args['points'] = np.empty(0, dtype=np.float32)
+        processed_args['points'] = np.empty((0, 3), dtype=np.float32)
+        processed_args['sources'] = np.empty((0, 2), dtype=np.float32)
         processed_args['index'] = np.empty(0, dtype=np.int64)
         processed_args['depositions'] = np.empty(0, dtype=np.float32)

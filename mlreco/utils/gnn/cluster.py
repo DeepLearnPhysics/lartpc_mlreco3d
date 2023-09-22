@@ -286,6 +286,8 @@ def get_cluster_features(data: nb.float64[:,:],
     Returns:
         np.ndarray: (C,16) tensor of cluster features (center, orientation, direction, size)
     """
+    if not len(clusts):
+        return np.empty((0, 16), dtype=data.dtype) # Cannot type empty list
     return _get_cluster_features(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
@@ -355,6 +357,9 @@ def get_cluster_features_extended(data, clusts, add_value=True, add_shape=True):
     Returns:
         np.ndarray: (C,3) tensor of cluster features (mean value, std value, major sem_type)
     """
+    assert add_value or add_shape
+    if not len(clusts):
+        return np.empty((0, add_value*2+add_shape), dtype=data.dtype)
     return _get_cluster_features_extended(data, clusts, add_value, add_shape)
 
 @nb.njit(parallel=True, cache=True)
@@ -362,7 +367,6 @@ def _get_cluster_features_extended(data: nb.float64[:,:],
                                    clusts: nb.types.List(nb.int64[:]),
                                    add_value: bool = True,
                                    add_shape: bool = True) -> nb.float64[:,:]:
-    assert add_value or add_shape
     feats = np.empty((len(clusts), add_value*2+add_shape), dtype=data.dtype)
     ids = np.arange(len(clusts)).astype(np.int64)
     for k in nb.prange(len(clusts)):
@@ -593,8 +597,8 @@ def cluster_direction(voxels: nb.float64[:,:],
 
         # Find the PCA relative secondary spread for each point
         labels = np.zeros(len(voxels), dtype=voxels.dtype)
-        meank = nbl.mean(voxels, 0)
-        covk = (np.transpose(voxels-meank) @ (voxels-meank))/3
+        meank = nbl.mean(voxels[:3], 0)
+        covk = (np.transpose(voxels[:3]-meank) @ (voxels[:3]-meank))/3
         for i in range(2, len(voxels)):
             # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
             w, _ = np.linalg.eigh(covk)
@@ -616,8 +620,9 @@ def cluster_direction(voxels: nb.float64[:,:],
     for i in range(len(voxels)):
         rel_voxels[i] = voxels[i]-start
     mean = nbl.mean(rel_voxels, 0)
-    if np.linalg.norm(mean):
-        return mean/np.linalg.norm(mean)
+    norm = np.sqrt(np.dot(mean, mean))
+    if norm:
+        return mean/norm
     return mean
 
 

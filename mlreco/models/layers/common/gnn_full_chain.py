@@ -3,8 +3,8 @@ import numpy as np
 from warnings import warn
 
 from mlreco.models.grappa import GNN, GNNLoss
+from mlreco.utils.globals import SHAPE_COL, TRACK_SHP
 from mlreco.utils.unwrap import prefix_unwrapper_rules
-from mlreco.utils.deghosting import adapt_labels_knn as adapt_labels
 from mlreco.utils.gnn.evaluation import (node_assignment_score,
                                          primary_assignment)
 from mlreco.utils.gnn.cluster import (form_clusters,
@@ -57,9 +57,6 @@ class FullChainGNN(torch.nn.Module):
                 if stage == 'inter':
                     self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
                     self._inter_use_shower_primary      = grappa_cfg.get('use_shower_primary', True)
-                    self._inter_enforce_semantics       = grappa_cfg.get('enforce_semantics', True)
-                    self._inter_enforce_semantics_shape = grappa_cfg.get('enforce_semantics_shape', (4,5))
-                    self._inter_enforce_semantics_map   = grappa_cfg.get('enforce_semantics_map', [[0,0,1,1,1,2,3],[0,1,2,3,4,1,1]])
 
                 # Add unwrapping rules
                 suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
@@ -129,15 +126,15 @@ class FullChainGNN(torch.nn.Module):
                 result[node_pred][0][b].detach().cpu().numpy(),
                 result[group_pred][0][b])
 
-        for g in np.unique(result[group_pred][0][b]):
-            group_mask = np.where(result[group_pred][0][b] == g)[0]
-            particles.append(
-                voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
-            if node_pred in result:
-                primary_id = group_mask[primary_labels[group_mask]][0]
-                part_primary_ids.append(primary_id)
-            else:
-                part_primary_ids.append(g)
+            for g in np.unique(result[group_pred][0][b]):
+                group_mask = np.where(result[group_pred][0][b] == g)[0]
+                particles.append(
+                    voxel_inds[np.concatenate(result[fragments][0][b][group_mask])])
+                if node_pred in result:
+                    primary_id = group_mask[primary_labels[group_mask]][0]
+                    part_primary_ids.append(primary_id)
+                else:
+                    part_primary_ids.append(g)
 
 
     def get_all_fragments(self, result, input):
@@ -301,28 +298,28 @@ class FullChainGNN(torch.nn.Module):
             particles.extend(fragments[mask])
             part_primary_ids.extend(-np.ones(np.sum(mask)).astype(int))
 
-        same_length = np.all([len(p) == len(particles[0]) for p in particles])
-        particles = np.array(particles,
-                             dtype=object if not same_length else np.int64)
+        particles_np    = np.empty(len(particles), dtype=object)
+        particles_np[:] = particles
 
-        part_batch_ids = get_cluster_batch(input[0], particles)
+        part_batch_ids = get_cluster_batch(input[0], particles_np)
         part_primary_ids = np.array(part_primary_ids, dtype=np.int32)
-        part_seg = np.empty(len(particles), dtype=np.int32)
 
+        # Get the particle shape. If it's a shower, pick the shape of the primary
+        part_seg = get_cluster_label(semantic_labels[:,None], particles, column=SHAPE_COL)
         for i, p in enumerate(particles):
-            vals, cnts = semantic_labels[p].unique(return_counts=True)
-            #assert len(vals) == 1
-            part_seg[i] = vals[torch.argmax(cnts)].item()
+            if part_seg[i] != TRACK_SHP and self._inter_use_shower_primary:
+                voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
+                             np.arange(counts[part_batch_ids[i]].item())
+                if len(voxel_inds) and len(result['shower_fragment_clusts'][0][part_batch_ids[i]]) > 0:
+                    p = voxel_inds[result['shower_fragment_clusts'][0]\
+                                  [part_batch_ids[i]][part_primary_ids[i]]]
+                    part_seg[i] = get_cluster_label(semantic_labels[:,None], [p], column=SHAPE_COL)[0]
 
         # Store in result the intermediate fragments
         bcids = [np.where(part_batch_ids == b)[0] for b in range(len(counts))]
-        same_length = [np.all([len(c) == len(particles[b][0]) \
-                    for c in particles[b]] ) for b in bcids]
-
-        parts = [np.array([vids[c].astype(np.int64) for c in particles[b]],
-                        dtype=object \
-                        if not same_length[idx] \
-                        else np.int64) for idx, b in enumerate(bcids)]
+        parts = [np.empty(len(b), dtype=object) for b in bcids]
+        for idx, b in enumerate(bcids):
+            parts[idx][:] = [vids[c] for c in particles_np[b]]
 
         parts_seg = [part_seg[b] for idx, b in enumerate(bcids)]
 
@@ -333,7 +330,7 @@ class FullChainGNN(torch.nn.Module):
         })
 
         part_result = {
-            'particles': particles,
+            'particles': particles_np,
             'part_seg': part_seg,
             'part_batch_ids': part_batch_ids,
             'part_primary_ids': part_primary_ids,
@@ -371,7 +368,7 @@ class FullChainGNN(torch.nn.Module):
             # For showers, select primary for extra feature extraction
             extra_feats_particles = []
             for i, p in enumerate(particles):
-                if part_seg[i] == 0 and not self._inter_use_true_particles and self._inter_use_shower_primary:
+                if part_seg[i] != TRACK_SHP and not self._inter_use_true_particles and self._inter_use_shower_primary:
                     voxel_inds = counts[:part_batch_ids[i]].sum().item() + \
                                  np.arange(counts[part_batch_ids[i]].item())
                     if len(voxel_inds) and len(result['shower_fragment_clusts'][0][part_batch_ids[i]]) > 0:
@@ -389,16 +386,12 @@ class FullChainGNN(torch.nn.Module):
                 extra_feats_particles.append(p)
 
             # result['extra_feats_particles'] = [extra_feats_particles]
-            same_length = np.all([len(p) == len(extra_feats_particles[0]) \
-                                 for p in extra_feats_particles])
-
-            extra_feats_particles = np.array(extra_feats_particles,
-                                             dtype=object \
-                                             if not same_length else np.int64)
+            extra_feats_particles_np    = np.empty(len(extra_feats_particles), dtype=object)
+            extra_feats_particles_np[:] = extra_feats_particles
 
             # Run interaction GrapPA: merges particle instances into interactions
             inter_mask, kwargs = self.get_extra_gnn_features(input, result,
-                    extra_feats_particles, part_seg, self._inter_ids,
+                    extra_feats_particles_np, part_seg, self._inter_ids,
                     add_points=self.use_ppn_in_gnn,
                     add_value=self._inter_add_value,
                     add_shape=self._inter_add_shape)
@@ -409,17 +402,6 @@ class FullChainGNN(torch.nn.Module):
                          particles[inter_mask],
                          'particle',
                          kwargs)
-
-            # If requested, enforce that particle PID predictions are compatible with semantics,
-            # i.e. set logits to -inf if they belong to incompatible PIDs
-            if self._inter_enforce_semantics and 'particle_node_pred_type' in result:
-                sem_pid_logic = -float('inf')*torch.ones(self._inter_enforce_semantics_shape, dtype=input[0].dtype, device=input[0].device)
-                sem_pid_logic[self._inter_enforce_semantics_map] = 0.
-                pid_logits = result['particle_node_pred_type']
-                for i in range(len(pid_logits)):
-                    for b in range(len(pid_logits[i])):
-                        pid_logits[i][b] += sem_pid_logic[part_seg[part_batch_ids==b]]
-                result['particle_node_pred_type'] = pid_logits
 
         # ---
         # 4. GNN for particle flow & kinematics
@@ -458,13 +440,11 @@ class FullChainGNN(torch.nn.Module):
                     self.select_particle_in_group(result, counts, b, interactions, inter_primary_ids,
                                                   None, 'particle_group_pred', 'particle_clusts')
 
-            same_length = np.all([len(inter) == len(interactions[0]) for inter in interactions])
-            interactions = [inter.astype(np.int64) for inter in interactions]
-            interactions = np.array(interactions,
-                                 dtype=object if not same_length else np.int64)
+            interactions_np    = np.empty(len(interations), dtype=object)
+            interactions_np[:] = interactions
 
-            inter_batch_ids = get_cluster_batch(input[0], interactions)
-            inter_cosmic_pred = torch.empty((len(interactions), 2), dtype=torch.float)
+            inter_batch_ids = get_cluster_batch(input[0], interactions_np)
+            inter_cosmic_pred = torch.empty((len(interactions_np), 2), dtype=torch.float)
 
             # Replace batch id column with a global "interaction id"
             # because ResidualEncoder uses the batch id column to shape its output
@@ -479,14 +459,12 @@ class FullChainGNN(torch.nn.Module):
                                                 else torch.cat([input[0][:, :4].float(), feature_map], dim=1)
 
             inter_data = torch.empty((0, inter_input_data.size(1)), dtype=torch.float, device=device)
-            for i, interaction in enumerate(interactions):
+            for i, interaction in enumerate(interactions_np):
                 inter_data = torch.cat([inter_data, inter_input_data[interaction]], dim=0)
                 inter_data[-len(interaction):, self.batch_col] = i * torch.ones(len(interaction)).to(device)
             inter_cosmic_pred = self.cosmic_discriminator(inter_data)
 
             # Reorganize into batches before storing in result dictionary
-            same_length = np.all([len(f) == len(interactions[0]) for f in interactions] )
-            interactions = np.array(interactions, dtype=object if not same_length else np.int64)
             inter_batch_ids = np.array(inter_batch_ids)
 
             batches, counts = torch.unique(input[0][:, self.batch_col], return_counts=True)
@@ -498,16 +476,15 @@ class FullChainGNN(torch.nn.Module):
 
             vids = np.concatenate([np.arange(n.item()) for n in counts])
             bcids = [np.where(inter_batch_ids == b)[0] for b in range(len(counts))]
-            same_length = [np.all([len(c) == len(interactions[b][0]) for c in interactions[b]] ) for b in bcids]
 
-            interactions_np = [np.array([vids[c].astype(np.int64) for c in interactions[b]],
-                               dtype=object if not same_length[idx] else np.int64) \
-                                   for idx, b in enumerate(bcids)]
+            inters = [np.empty(len(b), dtype=object) for b in enumerate(bcids)]
+            for idx, b in enumeate(bcids):
+                inters[idx][:] = [vids[c].astype(np.int64) for c in interactions_nb[b]]
 
             inter_cosmic_pred_np = [inter_cosmic_pred[b] for idx, b in enumerate(bcids)]
 
             result.update({
-                'interactions': [interactions_np],
+                'interactions': [inters],
                 'inter_cosmic_pred': [inter_cosmic_pred_np]
                 })
 
@@ -630,6 +607,10 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             accuracy += res_ppn['accuracy']
             loss += self.ppn_weight*res_ppn['loss']
 
+        # Fetch adapted labels
+        if cluster_label is not None:
+            cluster_label = out['cluster_label_adapted']
+
         if self.enable_ghost and 'ghost' in out \
                              and (self.enable_cnn_clust or \
                                   self.enable_gnn_track or \
@@ -644,10 +625,6 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
                 true_mask = deghost
             else:
                 true_mask = None
-
-            # Adapt to ghost points
-            if cluster_label is not None:
-                cluster_label = out['cluster_label_adapted']
 
             segment_label = seg_label[0][deghost][:, -1]
             seg_label = seg_label[0][deghost]

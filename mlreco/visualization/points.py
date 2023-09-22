@@ -168,7 +168,6 @@ class Scatter3D:
         if 'depositions' not in color:
             for entry in objects:
                 attribute = getattr(entry, color)
-                #print(attribute[0])
                 assert np.isscalar(attribute)
                 self._colors[int(entry.id)] = attribute \
                     * np.ones(getattr(entry, mode).shape[0], dtype=np.int64)
@@ -226,6 +225,9 @@ class Scatter3D:
             raise ValueError(f'"{color}" is not a valid attribute for object type {type(objects[0])}!')
 
     def __call__(self, objects, color='id', mode='points', colorscale='rainbow', cmin=None, cmax=None, size=1, scatter_start_points=False, scatter_end_points=False, scatter_vertices=False, **kwargs):
+
+        if not len(objects):
+            return []
 
         self.check_attribute_name(objects, color)
         self.clear_state()

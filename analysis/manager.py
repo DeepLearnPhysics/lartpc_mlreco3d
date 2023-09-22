@@ -17,6 +17,9 @@ from analysis.producers.common import ScriptProcessor
 from analysis.post_processing.pmt.FlashManager import FlashMatcherInterface
 from analysis.post_processing.crt.CRTTPCManager import CRTTPCMatcherInterface
 from analysis.classes.builders import ParticleBuilder, InteractionBuilder, FragmentBuilder
+from analysis.classes.matching import generate_match_pairs
+
+from pprint import pprint
 
 
 SUPPORTED_BUILDERS = ['ParticleBuilder', 'InteractionBuilder', 'FragmentBuilder']
@@ -47,14 +50,17 @@ class AnaToolsManager:
         Whether to print out execution times.
     
     """
-    def __init__(self, ana_cfg, verbose=True, cfg=None):
+    def __init__(self, ana_cfg, verbose=True, cfg=None, parent_path=None):
         self.config        = cfg
         self.ana_config    = ana_cfg
+        self.parent_path   = parent_path
         self.max_iteration = self.ana_config['analysis']['iteration']
         self.log_dir       = self.ana_config['analysis']['log_dir']
         self.ana_mode      = self.ana_config['analysis'].get('run_mode', 'all')
         self.convert_to_cm = self.ana_config['analysis'].get('convert_to_cm', False)
         self.force_build   = self.ana_config['analysis'].get('force_build', False)
+        
+        self.load_principal_matches = self.ana_config['analysis'].get('load_only_principal_matches', True)
 
         # Initialize data product builders
         self.data_builders = None
@@ -97,7 +103,7 @@ class AnaToolsManager:
         assert self.max_iteration <= len(dataset)
         
 
-    def initialize(self, event_list=None):
+    def initialize(self, event_list=None, data_keys=None, outfile=None):
         """Initializer for setting up inference mode full chain forwarding
         or reading data from HDF5. 
         """
@@ -110,6 +116,9 @@ class AnaToolsManager:
                     assert event_list[0] < event_list[1]
                     event_list = list(range(event_list[0], event_list[1]))
 
+            if data_keys is not None:
+                self.config['iotool']['dataset']['data_keys'] = data_keys
+
             loader = loader_factory(self.config, event_list=event_list)
             self._dataset = iter(cycle(loader))
             Trainer = trainval(self.config)
@@ -120,6 +129,8 @@ class AnaToolsManager:
             self._num_images = len(loader.dataset._event_list)
         else:
             # If there is a reader, simply load reconstructed data
+            if data_keys is not None:
+                self.ana_config['reader']['file_keys'] = data_keys
             file_keys = self.ana_config['reader']['file_keys']
             n_entry = self.ana_config['reader'].get('n_entry', -1)
             n_skip = self.ana_config['reader'].get('n_skip', -1)
@@ -132,6 +143,8 @@ class AnaToolsManager:
             
 
         if 'writer' in self.ana_config:
+            if outfile is not None:
+                self.ana_config['writer']['file_name'] = outfile
             writer_cfg = copy.deepcopy(self.ana_config['writer'])
             assert 'name' in writer_cfg
             writer_cfg.pop('name')
@@ -187,7 +200,7 @@ class AnaToolsManager:
         
         data_has_voxels = set([
             'input_data', 'segment_label', 
-            'particles_label', 'cluster_label', 'kinematics_label', 
+            'particles_label', 'cluster_label', 'kinematics_label', 'sed'
         ])
         result_has_voxels = set([
             'input_rescaled', 
@@ -302,7 +315,7 @@ class AnaToolsManager:
             lcheck_reco = self._build_reco_reps(data, result)
         elif mode == 'truth':
             lcheck_truth = self._build_truth_reps(data, result)
-        elif mode is None or mode == 'all':
+        elif mode == 'all':
             lcheck_reco = self._build_reco_reps(data, result)
             lcheck_truth = self._build_truth_reps(data, result)
         else:
@@ -311,6 +324,7 @@ class AnaToolsManager:
             assert lreco == num_batches
         for ltruth in lcheck_truth:
             assert ltruth == num_batches
+
             
             
     def _load_reco_reps(self, data, result):
@@ -330,18 +344,10 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            if ('particles' not in result) or self.force_build:
-                print("Building particles instead of loading...")
-                result['particles']         = self.builders['ParticleBuilder'].build(data, result, mode='reco')
-            else:
-                result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
+            result['particles']         = self.builders['ParticleBuilder'].load(data, result, mode='reco')
 
         if 'InteractionBuilder' in self.builders:
-            if ('interactions' not in result) or self.force_build:
-                print("Building interactions instead of loading...")
-                result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
-            else:
-                result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
+            result['interactions']      = self.builders['InteractionBuilder'].load(data, result, mode='reco')          
             
             
     def _load_truth_reps(self, data, result):
@@ -361,15 +367,9 @@ class AnaToolsManager:
             from DataBuilders, used for checking validity. 
         """
         if 'ParticleBuilder' in self.builders:
-            if 'truth_particles' not in result:
-                result['truth_particles']    = self.builders['ParticleBuilder'].build(data, result, mode='truth')
-            else:
-                result['truth_particles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
+            result['truth_particles']    = self.builders['ParticleBuilder'].load(data, result, mode='truth')
         if 'InteractionBuilder' in self.builders:
-            if 'truth_interactions' not in result:
-                result['truth_interactions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
-            else:
-                result['truth_interactions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
+            result['truth_interactions'] = self.builders['InteractionBuilder'].load(data, result, mode='truth')
             
     def load_representations(self, data, result, mode='all'):
         if self.ana_mode is not None:
@@ -381,6 +381,18 @@ class AnaToolsManager:
         elif mode is None or mode == 'all':
             self._load_reco_reps(data, result)
             self._load_truth_reps(data, result)
+            if 'ParticleBuilder' in self.builders:
+                matches = generate_match_pairs(result['truth_particles'][0],
+                        result['particles'][0], 'matched_particles', only_principal=self.load_principal_matches)
+                result.update({k:[v] for k, v in matches.items()})
+                result['particle_match_overlap_t2r'] = result.pop('matched_particles_t2r_values')
+                result['particle_match_overlap_r2t'] = result.pop('matched_particles_r2t_values')
+            if 'InteractionBuilder' in self.builders:
+                matches = generate_match_pairs(result['truth_interactions'][0],
+                        result['interactions'][0], 'matched_interactions', only_principal=self.load_principal_matches)
+                result.update({k:[v] for k, v in matches.items()})
+                result['interaction_match_overlap_t2r'] = result.pop('matched_interactions_t2r_values')
+                result['interaction_match_overlap_r2t'] = result.pop('matched_interactions_r2t_values')
         else:
             raise ValueError(f"DataBuilder mode {mode} is not supported!")
             
@@ -402,6 +414,10 @@ class AnaToolsManager:
             if isinstance(ADC_to_MeV, str):
                 ADC_to_MeV = eval(ADC_to_MeV)
             self.fm_config    = pp_flash_matching['fmatch_config']
+            if not os.path.isfile(self.fm_config):
+                self.fm_config = os.path.join(self.parent_path, self.fm_config)
+                if not os.path.isfile(self.fm_config):
+                    raise FileNotFoundError('Cannot find flash-matcher config')
 
             self.fm = FlashMatcherInterface(self.config, 
                                             self.fm_config, 
@@ -484,7 +500,7 @@ class AnaToolsManager:
             self.logger_dict.update(post_processor_interface._profile)
             
 
-    def run_ana_scripts(self, data, result):
+    def run_ana_scripts(self, data, result, iteration):
         """Run all registered analysis scripts (under producers/scripts)
 
         Parameters
@@ -505,6 +521,7 @@ class AnaToolsManager:
             script_processor = ScriptProcessor(data, result)
             for processor_name, pcfg in self.ana_config['scripts'].items():
                 priority = pcfg.pop('priority', -1)
+                pcfg['iteration'] = iteration
                 processor_name = processor_name.split('+')[0]
                 processor = getattr(scripts,str(processor_name))
                 script_processor.register_function(processor,
@@ -577,12 +594,13 @@ class AnaToolsManager:
             Iteration number for current step. 
         """
         # 1. Run forward
+        print(f"\nProcessing entry {iteration}")
         glob_start = time.time()
         start = time.time()
         data, res = self.forward(iteration=iteration)
         end = time.time()
         dt = end - start
-        print(f"\nForward took {dt:.3f} seconds.")
+        print(f"Forward took {dt:.3f} seconds.")
         self.logger_dict['forward_time'] = dt
         
         # 1-a. Convert units
@@ -601,14 +619,15 @@ class AnaToolsManager:
         
         if self.convert_to_cm and abs(rounding_error) > 1e-6:
             msg = "It looks like the input data has coordinates already "\
-                "translated to cm from pixels, and you are trying to convert "\
-                "coordinates again. You might want to set convert_to_cm = False."
-            raise AssertionError(msg)
+                  "translated to cm from pixels, and you are trying to convert "\
+                  "coordinates again. Will not convert again."
+            self.convert_to_cm = False
+            print(msg)
 
         # 2. Build data representations'
         if self.data_builders is not None:
             start = time.time()
-            if self._reader_state == 'hdf5':
+            if 'particles' in res:
                 self.load_representations(data, res)
             else:
                 self.build_representations(data, res)
@@ -638,7 +657,7 @@ class AnaToolsManager:
 
         # 5. Run scripts, if requested
         start = time.time()
-        ana_output = self.run_ana_scripts(data, res)
+        ana_output = self.run_ana_scripts(data, res, iteration)
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)
@@ -650,7 +669,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
-        # return data, res
+        return data, res
         
         
     def log(self, iteration):
@@ -670,6 +689,6 @@ class AnaToolsManager:
     def run(self):
         print(self.max_iteration)
         for iteration in range(self.max_iteration):
-            self.step(iteration)
+            data, res = self.step(iteration)
             if self.profile:
                 self.log(iteration)

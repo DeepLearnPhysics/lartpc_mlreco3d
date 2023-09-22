@@ -288,11 +288,16 @@ def _run_inference_data(data_blob, res, **kwargs):
 
     image_idxs = data_blob['index']
     meta       = data_blob['meta'][0]
+    run_id     = data_blob['run_info'][0][0]['run']
+    event_id   = data_blob['run_info'][0][0]['event']
 
     for idx, index in enumerate(image_idxs):
 
         index_dict = {
             'Index': index,
+            'iteration': kwargs['iteration'],
+            'run': run_id,
+            'event': event_id
         }
 
         # 1. Match Interactions and log interaction-level information

@@ -16,7 +16,7 @@ def reconstruct_vertex(data_dict, result_dict,
                        anchor_vertex = True,
                        touching_threshold = 2.0,
                        angle_threshold = 0.3,
-                       run_mode = 'reco'):
+                       run_mode = 'both'):
     '''
     Post-processor which reconstructs one vertex for each
     interaction in the provided list. It modifies the input list
@@ -42,7 +42,7 @@ def reconstruct_vertex(data_dict, result_dict,
     angle_threshold : float, default 0.3 radians
         Maximum angle between the vertex-to-start-point vector and a
         shower direction to consider that a shower originated from the vertex
-    run_mode : str
+    run_mode : str, default 'both'
         One of `reco`, `truth`, `both` to tell which interaction types to
         apply this algorithm to.
     '''
@@ -100,11 +100,13 @@ def reconstruct_vertex_single(interaction,
     # Selected the set of particles to use as a basis for vertex prediction
     if use_primaries:
         particles = [p for p in interaction.particles \
-            if p.is_primary and (p.semantic_type in include_semantics)]
+            if p.is_primary and (p.semantic_type in include_semantics) and p.size > 0]
     if not use_primaries or not len(particles):
         particles = [p for p in interaction.particles \
-            if p.semantic_type in include_semantics]
-        
+            if p.semantic_type in include_semantics and p.size > 0]
+    if not len(particles):
+        particles = [p for p in interaction.particles if p.size > 0]
+
     if len(particles) > 0:
         # Collapse particle objects to a set of start, end points and directions
         start_points = np.vstack([p.start_point for p in particles]).astype(np.float32)

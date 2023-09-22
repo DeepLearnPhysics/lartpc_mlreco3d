@@ -8,37 +8,17 @@ from sklearn.decomposition import PCA
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
 
+import numba as nb
 
-@post_processing(data_capture=['input_data'], result_capture=['input_rescaled',
-                                                              'particle_clusts',
-                                                              'particle_start_points',
-                                                              'particle_end_points'])
-def order_end_points(data_dict,
-                     result_dict,
-                     method='local_dedx',
-                     neighborhood_radius=5):
+from scipy.spatial.distance import cdist
+from sklearn.decomposition import PCA
 
-    assert method == 'local_dedx', 'Only method currently supported'
+from mlreco.utils.globals import COORD_COLS, TRACK_SHP
+from mlreco.utils.tracking import check_track_orientation
+from mlreco.utils.ppn import get_ppn_predictions, check_track_orientation_ppn
 
-    input_data   = data_dict['input_data'] if 'input_rescaled' not in result_dict else result_dict['input_rescaled']
-    particles    = result_dict['particle_clusts']
-    start_points = result_dict['particle_start_points']
-    end_points   = result_dict['particle_end_points']
+from analysis.post_processing import post_processing
 
-    start_dedxs, end_dedxs = np.empty(len(particles)), np.empty(len(particles))
-    for i, p in enumerate(particles):
-        dist_mat = cdist(start_points[i, COORD_COLS][None,:], input_data[p][:, COORD_COLS]).flatten()
-        de = np.sum(input_data[p][dist_mat < neighborhood_radius, VALUE_COL])
-        start_dedxs[i] = de/neighborhood_radius
-
-        dist_mat = cdist(end_points[i, COORD_COLS][None,:], input_data[p][:, COORD_COLS]).flatten()
-        de = np.sum(input_data[p][dist_mat < neighborhood_radius, VALUE_COL])
-        end_dedxs[i] = de/neighborhood_radius
-
-    switch_mask = start_dedxs > end_dedxs
-    temp_start_points = deepcopy(start_points)
-    start_points[switch_mask] = end_points[switch_mask]
-    end_points[switch_mask] = temp_start_points[switch_mask]
 
     update_dict = {
         'particle_start_points': start_points,
@@ -141,28 +121,9 @@ def compute_gap_lengths(data_dict,
         eps (float, optional): _description_. Defaults to 1.1.
         min_samples (int, optional): _description_. Defaults to 1.
     """
-    # if 'input_rescaled' not in result_dict:
-    #     input_data = data_dict['input_data']
-    # else:
-    #     input_data = result_dict['input_rescaled']
-    # particles    = result_dict['particle_clusts']
-    # start_points = result_dict['particle_start_points']
-    # end_points   = result_dict['particle_end_points']
     
     invalid_particle = Particle() #Get dummy start and end positions from class
-    # for i,p in enumerate(particles):
-    #     points = input_data[p][:, COORD_COLS]
-    #     start_point = start_points[i, COORD_COLS][None,:]
-    #     end_point = end_points[i, COORD_COLS][None,:]
-    #     if start_point != invalid_particle.start_point and end_point != invalid_particle.end_point: #Valid start and end point
-    #         p.gap_length = gap_length_calc_cheb(points,
-    #                                             start_point,
-    #                                             end_point,
-    #                                             norm_to_track_length=norm_to_track_length,
-    #                                             eps=eps,
-    #                                             min_samples=min_samples) #calc intercluster distance of points
-    #     else:
-    #         p.gap_length = -1 #dummy value assignment
+
     for key in ['particles','truth_particles']:
         for i,p in enumerate(result_dict[key]):
             points = p.points
@@ -179,3 +140,54 @@ def compute_gap_lengths(data_dict,
                 p.gap_length = -1 #dummy value assignment
         
     return {} #In place function
+=======
+@post_processing(data_capture=[], 
+                 result_capture=['particles'],
+                 result_capture_optional=['ppn_candidates'])
+def assign_particle_extrema(data_dict, result_dict,
+                            method='local',
+                            **kwargs):
+    '''
+    Assigns track start point and end point.
+    
+    Parameters
+    ----------
+    data_dict : dict
+        Input data dictionary
+    result_dict : dict
+        Chain output dictionary
+    method : algorithm to correct track startpoint/endpoint misplacement.
+        The following modes are available:
+        - local: computes local energy deposition density only at
+        the extrema and chooses the higher one as the endpoint.
+        - gradient: computes local energy deposition density throughout the
+        track, computes the overall slope (linear fit) of the energy density
+        variation to estimate the direction.
+        - ppn: uses ppn candidate predictions (classify_endpoints) to assign
+        start and endpoints.
+    kwargs : dict
+        Extra arguments to pass to the `check_track_orientation` or the
+        `check_track_orientation_ppn' functions
+    '''
+    for p in result_dict['particles']:
+        if p.semantic_type == TRACK_SHP:
+            # Check if the end points need to be flipped
+            if method in ['local', 'gradient']:
+                flip = not check_track_orientation(p.points, p.depositions,
+                        p.start_point, p.end_point, method, **kwargs)
+            elif method == 'ppn':
+                assert 'ppn_candidates' in result_dict, \
+                        'Must run the get_ppn_predictions post-processor '\
+                        'before using PPN predictions to assign track extrema'
+                flip = not check_track_orientation_ppn(p.start_point,
+                        p.end_point, result_dict['ppn_candidates'])
+            else:
+                raise ValueError(f'Point assignment method not recognized: {method}')
+
+            # If needed, flip en end points
+            if flip:
+                start_point, end_point = p.end_point, p.start_point
+                p.start_point = start_point
+                p.end_point   = end_point
+    
+    return {}

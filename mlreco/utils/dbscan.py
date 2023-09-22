@@ -14,8 +14,9 @@ def dbscan_points(voxels, epsilon = 1.01, minpts = 3):
                metric='euclidean'
               ).fit(voxels)
     clusters = [ index[np.where(res.labels_ == i)[0]].astype(np.int64) for i in range(np.max(res.labels_)+1) ]
-    same_length = np.all([len(c) == len(clusters[0]) for c in clusters] )
-    return np.array(clusters, dtype=object if not same_length else np.int64)
+    clusters_nb    = np.empty(len(clusters), dtype=object)
+    clusters_nb[:] = clusters
+    return clusters_nb
 
 
 def dbscan_types(voxels, types, epsilon = 1.01, minpts = 3, typemin=2, typemax=5):

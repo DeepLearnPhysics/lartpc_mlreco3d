@@ -180,8 +180,11 @@ def split_clusts(clusts, batch_ids, batches, counts):
     clusts_split, cbids = _split_clusts(clusts, batch_ids, batches, counts)
 
     # Cast the list of clusters to np.array (object type)
-    same_length = [np.all([len(c) == len(bclusts[0]) for c in bclusts]) for bclusts in clusts_split]
-    return [np.array(clusts_split[b], dtype=object if not sl else np.int64) for b, sl in enumerate(same_length)], cbids
+    clusts_split_nb = [np.empty(len(clusts_split[b]), dtype=object) for b in range(len(clusts_split))]
+    for b in range(len(clusts_split)):
+        clusts_split_nb[b][:] = clusts_split[b]
+
+    return clusts_split_nb, cbids
 
 @nb.njit(cache=True)
 def _split_clusts(clusts: nb.types.List(nb.int64[:]),

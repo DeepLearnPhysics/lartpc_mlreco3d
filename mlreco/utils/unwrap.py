@@ -315,9 +315,9 @@ class Unwrapper:
                                 for index in data[g][b*self.num_volumes+v]:
                                     index_list.append(index + offset)
 
-                        same_length = np.all([len(c) == len(index_list[0]) for c in index_list])
-                        index_list = np.array(index_list, dtype=object if not same_length else np.int64)
-                        unwrapped.append(index_list)
+                        index_list_nb    = np.empty(len(index_list), dtype=object)
+                        index_list_nb[:] = index_list
+                        unwrapped.append(index_list_nb)
 
         return unwrapped
 
