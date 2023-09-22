@@ -203,7 +203,6 @@ class TruthInteraction(Interaction):
             processed_args['particles'].append(p)
 
         _process_truth_interaction_attributes(init_args, processed_args, **kwargs)
-
         truth_interaction = cls(**processed_args)
         return truth_interaction
 

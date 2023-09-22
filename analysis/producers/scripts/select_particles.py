@@ -29,7 +29,7 @@ def select_particles(data_blob, res, **kwargs):
     image_idxs = data_blob['index']
     # Loop over images
     for idx, index in enumerate(image_idxs):
-        index_dict = {'Index': index}
+        index_dict = {'Iteration': kwargs['iteration'], 'Index': index}
         meta = data_blob['meta'][idx]
 
         # Retrieve data structures and prepare loggers
