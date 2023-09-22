@@ -159,6 +159,7 @@ NU_INT_TYPE = {
 ELECTRON_MASS = 0.511998  # [MeV/c^2]
 MUON_MASS     = 105.7     # [MeV/c^2]
 PROTON_MASS   = 938.272   # [MeV/c^2]
+PION_MASS     = 139.570   # [MeV/c^2]
 
 # Physical constants
 ARGON_DENSITY = 1.396     # [g/cm^3]

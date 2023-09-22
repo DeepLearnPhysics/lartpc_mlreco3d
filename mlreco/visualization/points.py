@@ -168,14 +168,15 @@ class Scatter3D:
         if 'depositions' not in color:
             for entry in objects:
                 attribute = getattr(entry, color)
+                #print(attribute[0])
                 assert np.isscalar(attribute)
                 self._colors[int(entry.id)] = attribute \
                     * np.ones(getattr(entry, mode).shape[0], dtype=np.int64)
 
-                if int(attribute) < cmin:
-                    cmin = int(attribute)
-                if int(attribute) > cmax:
-                    cmax = int(attribute)
+                if attribute < cmin:
+                    cmin = attribute
+                if attribute > cmax:
+                    cmax = attribute
         else:
             for entry in objects:
                 depositions = getattr(entry, color)
