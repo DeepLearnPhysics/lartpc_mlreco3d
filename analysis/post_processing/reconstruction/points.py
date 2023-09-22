@@ -7,10 +7,7 @@ from sklearn.decomposition import PCA
 
 from analysis.post_processing import post_processing
 from mlreco.utils.globals import *
-<<<<<<< HEAD
 
-=======
->>>>>>> 0ea86afc7e801453e37eded7d8bc91eb5cb4c4db
 import numba as nb
 
 from scipy.spatial.distance import cdist
@@ -143,7 +140,7 @@ def compute_gap_lengths(data_dict,
                 p.gap_length = -1 #dummy value assignment
         
     return {} #In place function
-=======
+
 @post_processing(data_capture=[], 
                  result_capture=['particles'],
                  result_capture_optional=['ppn_candidates'])
