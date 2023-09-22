@@ -458,8 +458,8 @@ def generate_match_pairs(truth, reco, prefix='matches', only_principal=False):
             idxmax = np.argmax(p.match_overlap)
             true_id = p.match[idxmax]
             pair = (p, true_dict[true_id])
-            out[prefix+'_t2r'].append(pair)
-            out[prefix+'_t2r_values'].append(p.match_overlap[idxmax])
+            out[prefix+'_r2t'].append(pair)
+            out[prefix+'_r2t_values'].append(p.match_overlap[idxmax])
         else:
             for i, true_id in enumerate(p.match):
                 pair = (p, true_dict[true_id])
