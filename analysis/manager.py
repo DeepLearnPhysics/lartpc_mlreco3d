@@ -527,7 +527,7 @@ class AnaToolsManager:
                 script_processor.register_function(processor,
                                                    priority,
                                                    script_cfg=pcfg)
-            fname_to_update_list = script_processor.process()
+            fname_to_update_list = script_processor.process(iteration)
             out[processor_name] = fname_to_update_list
         return out
     

@@ -48,6 +48,7 @@ def run_inference(data_blob, res, **kwargs):
         for idx, index in enumerate(image_idxs):
 
             index_dict = {
+                'Iteration': kwargs['iteration'],
                 'Index': index,
             }
 
@@ -151,6 +152,7 @@ def run_bidirectional_inference(data_blob, res, **kwargs):
     for idx, index in enumerate(image_idxs):
 
         index_dict = {
+            'Iteration': kwargs['iteration'],
             'Index': index,
         }
 
@@ -294,8 +296,8 @@ def _run_inference_data(data_blob, res, **kwargs):
     for idx, index in enumerate(image_idxs):
 
         index_dict = {
+            'Iteration': kwargs['iteration'],
             'Index': index,
-            'iteration': kwargs['iteration'],
             'run': run_id,
             'event': event_id
         }

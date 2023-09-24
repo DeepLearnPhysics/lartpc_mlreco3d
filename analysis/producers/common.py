@@ -28,14 +28,14 @@ class ScriptProcessor:
         pf._filenames = filenames
         self._funcs[priority].append(pf)
     
-    def process(self):
+    def process(self, iteration):
         """
         """
         fname_to_update_list = defaultdict(list)
         sorted_processors = sorted([x for x in self._funcs.items()], reverse=True)
         for priority, f_list in sorted_processors:
             for f in f_list:
-                dict_list = f(self.data, self.result)
+                dict_list = f(self.data, self.result, iteration=iteration)
                 filenames = f._filenames
                 for i, analysis_dict in enumerate(dict_list):
                     fname_to_update_list[filenames[i]].extend(analysis_dict)
