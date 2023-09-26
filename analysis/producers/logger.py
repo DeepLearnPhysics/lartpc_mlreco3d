@@ -522,6 +522,7 @@ class InteractionLogger(AnalysisLogger):
     def nu_info(ia):
         assert (ia is None) or (type(ia) is TruthInteraction)
         out = {
+            'nu_pdg_code': -1,
             'nu_interaction_type': 'N/A',
             'nu_interaction_mode': 'N/A',
             'nu_current_type': 'N/A',
@@ -529,6 +530,7 @@ class InteractionLogger(AnalysisLogger):
         }
         if ia is not None:
             if ia.nu_id == 1:
+                out['nu_pdg_code']         = ia.nu_pdg_code
                 out['nu_interaction_type'] = ia.nu_interaction_type
                 out['nu_interaction_mode'] = ia.nu_interaction_mode
                 out['nu_current_type']     = ia.nu_current_type
