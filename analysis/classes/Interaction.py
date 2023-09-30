@@ -87,6 +87,8 @@ class Interaction:
         self._units       = units
         if type(units) is bytes:
             self._units = units.decode()
+        if type(vertex_mode) is bytes:
+            self.vertex_mode = vertex_mode.decode()
 
         # Initialize private attributes to be set by setter only
         self._particles  = None
