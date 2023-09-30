@@ -1,6 +1,7 @@
 from functools import wraps
 
 def post_processing(data_capture, result_capture,
+                    data_capture_optional=[],
                     result_capture_optional=[]):
     """
     Decorator for common post-processing boilerplate.
@@ -25,6 +26,7 @@ def post_processing(data_capture, result_capture,
         
         wrapper._data_capture            = data_capture
         wrapper._result_capture          = result_capture
+        wrapper._data_capture_optional   = data_capture_optional
         wrapper._result_capture_optional = result_capture_optional
 
         return wrapper

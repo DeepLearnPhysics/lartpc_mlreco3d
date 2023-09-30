@@ -36,11 +36,13 @@ class PostProcessor:
                           profile=False,
                           verbose=False):
         data_capture, result_capture = f._data_capture, f._result_capture
+        data_capture_optional        = f._data_capture_optional
         result_capture_optional      = f._result_capture_optional
         pf                           = partial(f, **processor_cfg)
         pf.__name__                  = f.__name__
         pf._data_capture             = data_capture
         pf._result_capture           = result_capture
+        pf._data_capture_optional    = data_capture_optional
         pf._result_capture_optional  = result_capture_optional
         if profile:
             pf = self.profile(pf)
@@ -71,9 +73,14 @@ class PostProcessor:
                     msg = f"Unable to find {result_key} in result dictionary while "\
                         f"running post-processor {f.__name__}."
                     warnings.warn(msg)
+
+            for data_key in f._data_capture_optional:
+                if data_key in self.data:
+                    data_one_event[data_key] = self.data[data_key][image_id]
             for result_key in f._result_capture_optional:
                 if result_key in self.result:
                     result_one_event[result_key] = self.result[result_key][image_id]
+
             update_dict = f(data_one_event, result_one_event)
             for key, val in update_dict.items():
                 if key in image_dict:
