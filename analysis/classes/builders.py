@@ -606,6 +606,7 @@ class InteractionBuilder(DataBuilder):
             match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
             ia._match_overlap = match_overlap
             out.append(ia)
+
         return out
 
     def _build_truth(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
