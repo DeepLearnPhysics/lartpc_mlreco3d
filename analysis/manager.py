@@ -658,6 +658,7 @@ class AnaToolsManager:
         # 5. Run scripts, if requested
         start = time.time()
         ana_output = self.run_ana_scripts(data, res, iteration)
+
         if len(ana_output) == 0:
             print("No output from analysis scripts.")
         self.write(ana_output)

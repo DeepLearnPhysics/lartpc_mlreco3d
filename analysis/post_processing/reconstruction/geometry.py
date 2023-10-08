@@ -1,10 +1,9 @@
 import numpy as np
 
-from mlreco.utils.globals import *
-from mlreco.utils.gnn.cluster import cluster_direction
 from mlreco.utils.geometry import Geometry
+from mlreco.utils.gnn.cluster import cluster_direction
 
-from analysis.classes import TruthParticle, TruthInteraction
+from analysis.classes import TruthParticle, Interaction, TruthInteraction
 from analysis.post_processing import post_processing
 
 
@@ -51,17 +50,14 @@ def reconstruct_directions(data_dict,
                         'to reconstruct directions, currently in {}'.format(p.units))
 
             # Get point coordinates
-            if not isinstance(p, TruthParticle):
-                coords = p.points
-            else:
-                coords = getattr(p, truth_point_mode)
-            if not len(coords):
+            points = get_points(p, truth_point_mode)
+            if not len(points):
                 continue
 
             # Reconstruct directions from either end of the particle
-            p.start_dir = cluster_direction(coords, p.start_point,
+            p.start_dir = cluster_direction(points, p.start_point,
                     neighborhood_radius, optimize)
-            p.end_dir   = cluster_direction(coords, p.end_point,
+            p.end_dir   = cluster_direction(points, p.end_point,
                     neighborhood_radius, optimize)
 
     return {}
@@ -124,9 +120,8 @@ def check_containement(data_dict, result_dict,
     assert boundaries is not None, \
             'Must provide detector name or boundary file to check containment'
 
-    if not use_source:
-        sources = None
-    else:
+    sources = None
+    if use_source:
         sources = source_file if source_file is not None else detector
 
     # Initialize the geometry
@@ -148,17 +143,13 @@ def check_containement(data_dict, result_dict,
                         'to check containement, currently in {}'.format(p.units))
 
             # Get point coordinates
-            if not isinstance(p, TruthParticle) \
-                    and not isinstance(p, TruthInteraction):
-                coords = p.points
-            else:
-                coords = getattr(p, truth_point_mode)
-            if not len(coords):
+            points = get_points(p, truth_point_mode)
+            if not len(points):
                 continue
 
             # Check containment
             sources = p.sources if use_source and len(p.sources) else None
-            p.is_contained = geo.check_containment(coords, margin, sources, mode)
+            p.is_contained = geo.check_containment(points, margin, sources, mode)
 
     return {}
 
@@ -221,20 +212,20 @@ def check_fiducial(data_dict, result_dict,
 
     # Loop over interaction objects
     for k in key_list:
-        for p in result_dict[k]:
+        for ia in result_dict[k]:
             # Make sure the interaction coordinates are expressed in cm
-            if p.units != 'cm':
+            if ia.units != 'cm':
                 raise ValueError('Particle coordinates must be expressed in cm '
-                        'to check fiducial, currently in {}'.format(p.units))
+                        'to check fiducial, currently in {}'.format(ia.units))
 
             # Get point coordinates
-            if not isinstance(p, TruthInteraction):
-                vertex = p.vertex
+            if not isinstance(ia, TruthInteraction):
+                vertex = ia.vertex
             else:
-                vertex = getattr(p, truth_vertex_mode)
+                vertex = getattr(ia, truth_vertex_mode)
             vertex = vertex.reshape(-1,3)
 
             # Check containment
-            p.is_fiducial = geo.check_containment(vertex, margin, mode=mode)
+            ia.is_fiducial = geo.check_containment(vertex, margin, mode=mode)
 
     return {}

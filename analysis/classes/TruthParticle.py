@@ -149,7 +149,6 @@ class TruthParticle(Particle):
         if self.end_point[0] == -np.inf:
             self.end_point = self.start_point
             
-            
     def load_larcv_attributes(self, particle_dict):
         '''
         Extracts all the relevant attributes from the a
@@ -179,7 +178,27 @@ class TruthParticle(Particle):
             if type(attr) is bytes:
                 attr = attr.decode()
             setattr(self, attr_name, attr)
-            
+
+    def merge(self, particle):
+        '''
+        Merge another particle object into this one
+        '''
+        super(TruthParticle, self).merge(particle)
+
+        # Stack the two particle array attributes together
+        for attr in ['truth_index', 'truth_depositions', \
+                'sed_index', 'sed_depositions']:
+            val = np.concatenate([getattr(self, attr), getattr(particle, attr)])
+            setattr(self, attr, val)
+        for attr in ['truth_points', 'sed_points']:
+            val = np.vstack([getattr(self, attr), getattr(particle, attr)])
+            setattr(self, attr, val)
+
+        # Stack the two particle array attributes together
+        self.index = np.concatenate([self.index, particle.index])
+        self.points = np.vstack([self.points, particle.points])
+        self.sources = np.vstack([self.sources, particle.sources])
+        self.depositions = np.concatenate([self.depositions, particle.depositions])
 
     def __repr__(self):
         msg = super(TruthParticle, self).__repr__()

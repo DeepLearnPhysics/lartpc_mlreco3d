@@ -6,8 +6,8 @@ import time
 
 
 class PostProcessor:
-    """Manager for handling post-processing scripts.
-    
+    """
+    Manager for handling post-processing scripts.
     """
     def __init__(self, data, result, debug=True, profile=False):
         self._funcs = defaultdict(list)
@@ -16,23 +16,23 @@ class PostProcessor:
         self.data = data
         self.result = result
         self.debug = debug
-        
+
         self._profile = defaultdict(float)
-        
-    def profile(self, func): 
+
+    def profile(self, func):
         '''Decorator that reports the execution time. '''
         @wraps(func)
         def wrapper(*args, **kwargs):
             start = time.time()
-            result = func(*args, **kwargs) 
-            end = time.time() 
+            result = func(*args, **kwargs)
+            end = time.time()
             dt = end - start
             self._profile[func.__name__] += dt
             return result
         return wrapper
 
-    def register_function(self, f, priority, 
-                          processor_cfg={}, 
+    def register_function(self, f, priority,
+                          processor_cfg={},
                           profile=False,
                           verbose=False):
         data_capture, result_capture = f._data_capture, f._result_capture
@@ -53,7 +53,7 @@ class PostProcessor:
     def process_event(self, image_id, f_list):
 
         image_dict = {}
-        
+
         for f in f_list:
             data_one_event, result_one_event = {}, {}
             for data_key in f._data_capture:
@@ -92,10 +92,9 @@ class PostProcessor:
                     image_dict[key] = val
 
         return image_dict
-    
+
     def process_and_modify(self):
         """
-        
         """
         sorted_processors = sorted([x for x in self._funcs.items()], reverse=True)
         for priority, f_list in sorted_processors:
@@ -104,7 +103,7 @@ class PostProcessor:
                 image_dict = self.process_event(image_id, f_list)
                 for key, val in image_dict.items():
                     out_dict[key].append(val)
-            
+
             if self.debug:
                 for key, val in out_dict.items():
                     assert len(out_dict[key]) == self._num_batches
