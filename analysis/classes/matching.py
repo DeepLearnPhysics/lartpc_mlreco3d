@@ -377,31 +377,33 @@ def group_particles_to_interactions_fn(particles : List[Particle],
         Do not mix predicted interactions with TruthInteractions and
         interactions constructed from using labels with Interactions.
     """
-    interactions = defaultdict(list)
+    # Sort the particles by interactions
+    interactions = []
+    interaction_ids = np.array([p.interaction_id for p in particles])
+    for i, int_id in enumerate(np.unique(interaction_ids)):
+        # Get particles in interaction int_it
+        particle_ids = np.where(interaction_ids == int_id)[0]
+        parts = [particles[i] for i in particle_ids]
 
-    for p in particles:
-        interactions[p.interaction_id].append(p)
-
-    for i, (int_id, parts) in enumerate(interactions.items()):
-        # Reset the particle interaction ID to follow the arbitray interaction ordering
-        truth_int_ids = []
-        for p in parts:
-            truth_int_ids.append(p.interaction_id)
-            # p.interaction_id = i
-        truth_int_ids = np.unique(truth_int_ids)
-        assert len(truth_int_ids) == 1,\
-                'Particles in this interaction do not share an interaction ID'
-
+        # Build interactions
         if mode == 'pred':
-            interactions[int_id] = Interaction.from_particles(parts)
+            interaction = Interaction.from_particles(parts)
+            interaction.id = i
         elif mode == 'truth':
-            interactions[int_id] = TruthInteraction.from_particles(parts)
-            interactions[int_id].truth_id = truth_int_ids[0]
+            interaction = TruthInteraction.from_particles(parts)
+            interaction.id = i
+            interaction.truth_id = int_id
         else:
             raise ValueError(f"Unknown aggregation mode {mode}.")
 
+        # Reset the interaction ID of the constiuent particles
+        for j in particle_ids:
+            particles[j].interaction_id = i
 
-    return list(interactions.values())
+        # Append
+        interactions.append(interaction)
+
+    return interactions
 
 
 def check_particle_matches(loaded_particles, clear=False):
