@@ -1,6 +1,8 @@
 import numpy as np
 from larcv import larcv
 
+from mlreco.utils.globals import GHOST_SHP
+
 
 def parse_sparse2d(sparse_event_list):
     """
@@ -188,7 +190,8 @@ def parse_sparse3d_charge_rescaled(sparse_event_list, collection_only=False):
     from mlreco.utils.ghost import compute_rescaled_charge
     np_voxels, output = parse_sparse3d(sparse_event_list)
 
-    charges = compute_rescaled_charge(output[:, :-1], deghost,
+    deghost_mask = np.where(output[:, -1] < GHOST_SHP)[0]
+    charges = compute_rescaled_charge(output[:, :-1], deghost_mask,
             last_index=0, collection_only=collection_only, use_batch=False)
 
-    return np_voxels[deghost], charges.reshape(-1,1)
+    return np_voxels[deghost_mask], charges.reshape(-1,1)
