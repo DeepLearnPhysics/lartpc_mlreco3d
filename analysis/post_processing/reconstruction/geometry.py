@@ -229,3 +229,27 @@ def check_fiducial(data_dict, result_dict,
             ia.is_fiducial = geo.check_containment(vertex, margin, mode=mode)
 
     return {}
+
+
+def get_points(particle, truth_point_mode):
+    '''
+    Get the particle point coordinates of a Particle/Interaction or
+    TruthParticle/TruthInteraction object. The TruthParticle object points
+    are obtrained using the `truth_point_mode`.
+
+    Parameters
+    ----------
+    particle : Union[Particle, TruthParticle]
+        Particle object
+    truth_point_mode : str, default 'points'
+        Point attribute to use for true particles
+
+    Results
+    -------
+    np.ndarray
+       (N, 3) Point coordinates
+    '''
+    if not isinstance(particle, (TruthParticle, TruthInteraction)):
+        return particle.points
+    else:
+        return getattr(particle, truth_point_mode)
