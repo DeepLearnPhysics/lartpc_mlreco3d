@@ -32,6 +32,7 @@ class FullChainGNN(torch.nn.Module):
         setup_chain_cfg(self, cfg)
 
         # Initialize the particle aggregator modules
+        self._inter_use_shower_primary = True
         for stage in ['shower', 'track', 'particle', 'inter', 'kinematics']:
             if getattr(self, f'enable_gnn_{stage}'):
                 # Initialize the GNN model
@@ -56,7 +57,7 @@ class FullChainGNN(torch.nn.Module):
                 # Interaction specific attributes
                 if stage == 'inter':
                     self.inter_source_col = cfg.get('grappa_inter_loss', {}).get('edge_loss', {}).get('source_col', 6)
-                    self._inter_use_shower_primary      = grappa_cfg.get('use_shower_primary', True)
+                    self._inter_use_shower_primary = grappa_cfg.get('use_shower_primary', True)
 
                 # Add unwrapping rules
                 suffix = '_fragment' if stage not in ['inter','kinematics'] else ''
