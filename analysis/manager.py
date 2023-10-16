@@ -172,6 +172,9 @@ class AnaToolsManager:
         if self._reader_state == 'hdf5':
             assert iteration is not None
             data, res = self._data_reader.get(iteration, nested=True)
+            file_index = self._data_reader.file_index[iteration]
+            data['file_index'] = [file_index]
+            data['file_name'] = [self._data_reader.file_paths[file_index]]
         elif self._reader_state == 'trainval':
             data, res = self._data_reader.forward(self._dataset)
         else:

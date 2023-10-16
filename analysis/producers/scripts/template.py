@@ -50,6 +50,7 @@ def run_inference(data_blob, res, **kwargs):
             index_dict = {
                 'Iteration': kwargs['iteration'],
                 'Index': index,
+                'file_index': data_blob['file_index'][idx]
             }
 
             # 1. Match Interactions and log interaction-level information
@@ -145,6 +146,8 @@ def run_bidirectional_inference(data_blob, res, **kwargs):
 
     particle_fieldnames   = kwargs['logger'].get('particles', {})
     int_fieldnames        = kwargs['logger'].get('interactions', {})
+    
+    proton_visible_cut    = kwargs.get('proton_visibility_cut', 40)
 
     image_idxs = data_blob['index']
     meta       = data_blob['meta'][0]
@@ -154,6 +157,7 @@ def run_bidirectional_inference(data_blob, res, **kwargs):
         index_dict = {
             'Iteration': kwargs['iteration'],
             'Index': index,
+            'file_index': data_blob['file_index'][idx]
         }
 
         # 1. Match Interactions and log interaction-level information
@@ -179,6 +183,7 @@ def run_bidirectional_inference(data_blob, res, **kwargs):
                 true_int_dict = interaction_logger.produce(true_int, mode='true')
                 pred_int_dict = interaction_logger.produce(pred_int, mode='reco')
                 int_dict.update(true_int_dict)
+                int_dict['true_count_visible_protons'] = count_visible_protons(true_int)
                 int_dict.update(pred_int_dict)
                 interactions_t2r.append(int_dict)
 
@@ -228,6 +233,7 @@ def run_bidirectional_inference(data_blob, res, **kwargs):
                 true_int_dict = interaction_logger.produce(true_int, mode='true')
                 pred_int_dict = interaction_logger.produce(pred_int, mode='reco')
                 int_dict.update(true_int_dict)
+                int_dict['true_count_visible_protons'] = count_visible_protons(true_int)
                 int_dict.update(pred_int_dict)
                 interactions_r2t.append(int_dict)
 
@@ -299,7 +305,8 @@ def _run_inference_data(data_blob, res, **kwargs):
             'Iteration': kwargs['iteration'],
             'Index': index,
             'run': run_id,
-            'event': event_id
+            'event': event_id,
+            'file_index': data_blob['file_index'][idx]
         }
 
         # 1. Match Interactions and log interaction-level information
@@ -340,3 +347,13 @@ def _run_inference_data(data_blob, res, **kwargs):
                 particles.append(part_dict)
 
     return [interactions, particles]
+    
+def count_visible_protons(ia, threshold=40):
+    
+    count_protons = -1
+    if ia is not None:
+        count_protons = 0
+        for p in ia.particles:
+            if p.pid == 4 and p.is_primary and p.energy_deposit > threshold:
+                count_protons += 1
+    return count_protons
