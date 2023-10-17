@@ -585,9 +585,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['particles'][0]:
                     if p.interaction_id == bp['id']:
-                        p.interaction_id = len(out)
                         particles.append(p)
-                        continue
                 ia = Interaction.from_particles(particles,
                                                 verbose=False, **info)
             else:
@@ -600,12 +598,12 @@ class InteractionBuilder(DataBuilder):
                 if 'input_rescaled_source' in result:
                     info['sources'] = result['input_rescaled_source'][0][mask]
                 ia = Interaction(**info)
-                ia.id = len(out)
 
             # Handle matches
             match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
             ia._match_overlap = match_overlap
             out.append(ia)
+
         return out
 
     def _build_truth(self, entry: int, data: dict, result: dict) -> List[TruthInteraction]:
@@ -645,9 +643,7 @@ class InteractionBuilder(DataBuilder):
                 particles = []
                 for p in result['truth_particles'][entry]:
                     if p.interaction_id == bp['id']:
-                        p.interaction_id = len(out)
                         particles.append(p)
-                        # continue
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False,
                                                      **info)

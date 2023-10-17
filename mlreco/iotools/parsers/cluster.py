@@ -239,7 +239,8 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                     type_include_secondary = False,
                                     primary_include_mpr = True,
                                     break_clusters = False,
-                                    min_size = -1):
+                                    min_size = -1,
+                                    collection_only=False):
 
     # Produces cluster3d labels with sparse3d_reco_rescaled on the fly on datasets that do not have it
     np_voxels, np_features = parse_cluster3d(cluster_event,
@@ -258,7 +259,7 @@ def parse_cluster3d_charge_rescaled(cluster_event,
                                              min_size)
 
     from .sparse import parse_sparse3d_charge_rescaled
-    _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list)
+    _, val_features  = parse_sparse3d_charge_rescaled(sparse_value_event_list, collection_only)
     np_features[:,0] = val_features[:,-1]
 
     return np_voxels, np_features

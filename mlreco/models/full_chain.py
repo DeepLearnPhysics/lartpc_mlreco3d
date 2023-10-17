@@ -266,17 +266,13 @@ class FullChain(FullChainGNN):
             del result['segmentation']
 
             # Rescale the charge column, store it
-            charges = compute_rescaled_charge(input[0], deghost, last_index=last_index)
-            charges_coll = compute_rescaled_charge(input[0], deghost, last_index=last_index, collection_only=True)
-            input[0][deghost, VALUE_COL] = charges if not self.collection_charge_only else charges_coll
+            charges = compute_rescaled_charge(input[0], deghost, last_index=last_index, collection_only=self.collection_charge_only)
+            input[0][deghost, VALUE_COL] = charges
 
             input_rescaled = input[0][deghost,:5].clone()
             input_rescaled[:, VALUE_COL] = charges
-            input_rescaled_coll = input[0][deghost,:5].clone()
-            input_rescaled_coll[:, VALUE_COL] = charges_coll
 
             result.update({'input_rescaled':[input_rescaled]})
-            result.update({'input_rescaled_coll':[input_rescaled_coll]})
             if input[0].shape[1] == (last_index + 6 + 2):
                 result.update({'input_rescaled_source':[input[0][deghost,-2:]]})
 

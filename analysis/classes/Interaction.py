@@ -74,6 +74,8 @@ class Interaction:
                  matched: bool = False,
                  is_contained: bool = False,
                  is_fiducial: bool = False,
+                 is_ccrosser: bool = False,
+                 coffset: float = -np.inf,
                  units: str = 'px'):
 
         # Initialize attributes
@@ -119,6 +121,8 @@ class Interaction:
         # Quantities to be filled by the geometry post-processor
         self.is_contained   = is_contained
         self.is_fiducial    = is_fiducial
+        self.is_ccrosser    = is_ccrosser
+        self.coffset        = coffset
 
         # Flash matching quantities
         self.flash_time     = flash_time

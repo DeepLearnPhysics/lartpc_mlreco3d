@@ -5,6 +5,7 @@ from collections import OrderedDict
 
 from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, PID_TO_PDG
 from mlreco.utils.utils import pixel_to_cm
+from mlreco.utils.numba_local import cdist
 
 class Particle:
     '''
@@ -110,8 +111,10 @@ class Particle:
                  csda_ke: float = -1.,
                  mcs_ke: float = -1.,
                  matched: bool = False,
-                 is_contained: bool = False,
                  is_primary: bool = False,
+                 is_contained: bool = False,
+                 is_ccrosser: bool = False,
+                 coffset: float = -np.inf,
                  units: str = 'px', **kwargs):
 
         # Initialize private attributes to be assigned through setters only
@@ -156,6 +159,8 @@ class Particle:
         self.csda_ke      = csda_ke
         self.mcs_ke       = mcs_ke
         self.is_contained = is_contained
+        self.is_ccrosser  = is_ccrosser
+        self.coffset      = coffset
 
         # Quantities to be set by the particle matcher
         self.matched             = matched
@@ -164,6 +169,40 @@ class Particle:
         self._match_overlap       = kwargs.get('match_overlap', OrderedDict())
         if not isinstance(self._match_overlap, dict):
             raise ValueError(f"{type(self._match_overlap)}")
+
+    def merge(self, particle):
+        '''
+        Merge another particle object into this one
+        '''
+        # Stack the two particle array attributes together
+        for attr in ['index', 'depositions']:
+            val = np.concatenate([getattr(self, attr), getattr(particle, attr)])
+            setattr(self, attr, val)
+        for attr in ['points', 'sources']:
+            val = np.vstack([getattr(self, attr), getattr(particle, attr)])
+            setattr(self, attr, val)
+
+        # Select end points and end directions appropriately
+        points_i = np.vstack([self.start_point, self.end_point])
+        points_j = np.vstack([particle.start_point, particle.end_point])
+        dirs_i = np.vstack([self.start_dir, self.end_dir])
+        dirs_j = np.vstack([particle.start_dir, particle.end_dir])
+
+        dists = cdist(points_i, points_j)
+        max_i, max_j = np.unravel_index(np.argmax(dists), dists.shape)
+
+        self.start_point = points_i[max_i]
+        self.end_points = points_j[max_j]
+        self.start_dir = dirs_i[max_i]
+        self.end_dir = dirs_j[max_j]
+
+        # If one of the two particles is a primary, the new one is
+        if particle.primary_scores[-1] > self.primary_scores[-1]:
+            self.primary_scores = particle.primary_scores
+
+        # For PID, pick the most confident prediction (could be better...)
+        if np.max(particle.pid_scores) > np.max(self.pid_scores):
+            self.pid_scores = particle.pid_scores
 
     @property
     def is_principal_match(self):

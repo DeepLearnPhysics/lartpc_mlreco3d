@@ -8,8 +8,8 @@ from torch_cluster import knn
 from .globals import *
 
 
-def compute_rescaled_charge(input_data,
-        deghost_mask, last_index, collection_only=False):
+def compute_rescaled_charge(input_data, deghost_mask, last_index,
+        collection_only=False, use_batch=True):
     """
     Computes rescaled charge after deghosting.
 
@@ -27,6 +27,8 @@ def compute_rescaled_charge(input_data,
         Index where hit-related features start (4+N_f)
     collection_only : bool, default False
         Only use the collection plane to estimate the rescaled charge
+    use_batch : bool, default True
+        If true, use the default column to seprate batches
 
     Returns
     -------
@@ -46,12 +48,17 @@ def compute_rescaled_charge(input_data,
 
     # Count how many times each wire hit is used to form a space point
     hit_ids      = input_data[deghost_mask, last_index+3:last_index+6]
-    multiplicity = empty(hit_ids.shape)
-    for b in unique(input_data[:, BATCH_COL]):
-        batch_mask = input_data[deghost_mask, BATCH_COL] == b
-        _, inverse, counts = unique(hit_ids[batch_mask],
+    if use_batch:
+        multiplicity = empty(hit_ids.shape)
+        for b in unique(input_data[:, BATCH_COL]):
+            batch_mask = input_data[deghost_mask, BATCH_COL] == b
+            _, inverse, counts = unique(hit_ids[batch_mask],
+                    return_inverse=True, return_counts=True)
+            multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
+    else:
+        _, inverse, counts = unique(hit_ids,
                 return_inverse=True, return_counts=True)
-        multiplicity[batch_mask] = counts[inverse].reshape(-1,3)
+        multiplicity = counts[inverse].reshape(-1,3)
 
     # Rescale the charge on the basis of hit multiplicity
     hit_charges = input_data[deghost_mask, last_index  :last_index+3]
