@@ -49,9 +49,9 @@ def loader_factory(cfg, event_list=None):
     """
     params = cfg['iotool']
     minibatch_size = int(params['minibatch_size'])
-    shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
-    num_workers  = 1    if not 'num_workers' in params else int (params['num_workers'])
-    collate_fn   = None if not 'collate_fn' in params  else str (params['collate_fn' ])
+    shuffle      = False if not 'shuffle' in params     else bool(params['shuffle'    ])
+    num_workers  = 1     if not 'num_workers' in params else int (params['num_workers'])
+    collate_fn   = None  if not 'collate_fn' in params  else str (params['collate_fn' ])
     collate_kwargs = {}
 
     if collate_fn is None:
