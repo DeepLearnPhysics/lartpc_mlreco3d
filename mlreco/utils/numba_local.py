@@ -362,10 +362,20 @@ def cdist(x1: nb.float32[:,:],
     np.ndarray
         (N,M) array of pair-wise Euclidean distances
     """
+    dim = x1.shape[1]
+    assert dim == 2 or dim == 3, 'Only supports dimensions 2 and 3 points'
     res = np.empty((x1.shape[0], x2.shape[0]), dtype=x1.dtype)
-    for i1 in range(x1.shape[0]):
-        for i2 in range(x2.shape[0]):
-            res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2+(x1[i1][1]-x2[i2][1])**2+(x1[i1][2]-x2[i2][2])**2)
+    if dim == 2:
+        for i1 in range(x1.shape[0]):
+            for i2 in range(x2.shape[0]):
+                res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2 \
+                        + (x1[i1][1]-x2[i2][1])**2)
+    elif dim == 3:
+        for i1 in range(x1.shape[0]):
+            for i2 in range(x2.shape[0]):
+                res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2 \
+                        + (x1[i1][1]-x2[i2][1])**2 \
+                        + (x1[i1][2]-x2[i2][2])**2)
     return res
 
 
