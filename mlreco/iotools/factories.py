@@ -90,6 +90,32 @@ def loader_factory(cfg, event_list=None):
     return loader
 
 
+def reader_factory(cfg):
+    """
+    Instantiates writer based on type specified in configuration under
+    `iotool.reader.name`. The name must match the name of a class under
+    `mlreco.iotools.readers`.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary. Expects a field `iotool`.
+
+    Returns
+    -------
+    reader
+
+    Note
+    ----
+    Currently the choice is limited to `HDF5Reader` only.
+    """
+    import mlreco.iotools.readers
+    params = deepcopy(cfg)
+    name   = params.pop('name')
+    reader = getattr(mlreco.iotools.readers, name)(**params)
+    return reader
+
+
 def writer_factory(cfg):
     """
     Instantiates writer based on type specified in configuration under
@@ -109,11 +135,8 @@ def writer_factory(cfg):
     ----
     Currently the choice is limited to `HDF5Writer` only.
     """
-    if 'writer' not in cfg['iotool']:
-        return None
-
     import mlreco.iotools.writers
-    params = deepcopy(cfg['iotool']['writer'])
+    params = deepcopy(cfg)
     name   = params.pop('name')
     writer = getattr(mlreco.iotools.writers, name)(**params)
     return writer

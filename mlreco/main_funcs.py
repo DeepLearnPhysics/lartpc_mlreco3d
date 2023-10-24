@@ -147,7 +147,9 @@ def prepare(cfg, event_list=None):
     handlers.data_io_iter = iter(cycle(handlers.data_io))
 
     # IO writer
-    handlers.writer = writer_factory(cfg)
+    handlers.writer = None
+    if 'writer' in cfg['iotool']:
+        handlers.writer = writer_factory(cfg['iotool']['writer'])
 
     if 'trainval' in cfg:
         # Set random seed for reproducibility
