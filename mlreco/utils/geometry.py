@@ -12,7 +12,7 @@ class Geometry:
     ----------
     '''
 
-    def __init__(self, boundaries, sources=None):
+    def __init__(self, boundaries, sources=None, opdets=None):
         '''
         Convert a detector boundary file to useful detector attributes.
 
@@ -22,6 +22,14 @@ class Geometry:
         - D is the number of dimension (always 3)
         - 2 corresponds to the lower/upper boundaries along that axis
 
+        The sources file is a (N_m, N_t, N_s, 2) np.ndarray where:
+        - N_s is the number of contributing logical TPCs to a geometry TPC
+        - 2 corresponds to the [module ID, tpc ID] of a contributing pair
+
+        The opdets file is a (N_m[, N_t], N_p, 3) np.ndarray where:
+        - N_p is the number of optical detectors per module or TPC
+        - 3 corresponds to the [x, y, z] optical detector coordinates
+
         Parameters
         ----------
         boundaries : str
@@ -30,16 +38,27 @@ class Geometry:
         sources : str, optional
             Name of a recognized detector to get the sources from or path
             to a `.npy` source file to load the sources from.
+        opdets : str, optional
+            Name of a recognized detector to get the op detector locations from
+            or path to a `.npy` opdet file to load the opdet coordinates from.
         '''
         # If the boundaries are not a file, fetch a default boundary file
         if not os.path.isfile(boundaries):
             path = pathlib.Path(__file__).parent
-            boundaries = os.path.join(path, 'geo', f'{boundaries.lower()}_boundaries.npy')
+            boundaries = os.path.join(path, 'geo',
+                    f'{boundaries.lower()}_boundaries.npy')
 
         # If the source file is not a file, fetch the default source file
         if sources is not None and not os.path.isfile(sources):
             path = pathlib.Path(__file__).parent
-            sources = os.path.join(path, 'geo', f'{sources.lower()}_sources.npy')
+            sources = os.path.join(path, 'geo',
+                    f'{sources.lower()}_sources.npy')
+
+        # If the opdets file is not a file, fetch the default opdets file
+        if opdets is not None and not os.path.isfile(opdets):
+            path = pathlib.Path(__file__).parent
+            opdets = os.path.join(path, 'geo',
+                    f'{opdets.lower()}_opdets.npy')
 
         # Check that the boundary file exists, load it
         if not os.path.isfile(boundaries):
@@ -54,6 +73,17 @@ class Geometry:
             self.sources = np.load(sources)
             assert self.sources.shape[:2] == self.boundaries.shape[:2], \
                     'There should be one list of sources per TPC'
+
+        # Check that the optical detector file exists, load it
+        self.opdets = None
+        if opdets is not None:
+            if not os.path.isfile(opdets):
+                raise FileNotFoundError(f'Could not find opdets file: {opdets}')
+            self.opdets = np.load(opdets)
+            assert self.opdets.shape[:2] == self.boundaries.shape[:2] \
+                    or (self.opdets.shape[0] == self.boundaries.shape[0] \
+                    and len(self.opdets.shape) == 3), \
+                    'There should be one list of opdets per module or TPC'
 
         # Build TPCs
         self.build_tpcs()
