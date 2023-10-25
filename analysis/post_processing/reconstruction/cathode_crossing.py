@@ -67,16 +67,8 @@ class CathodeCrosserProcessor(PostProcessor):
         run_mode : str, default 'both'
             Which output to run on (one of 'both', 'reco' or 'truth')
         '''
-        # Define boundary and source files
-        boundaries = boundary_file if boundary_file is not None else detector
-        assert boundaries is not None, \
-                'Must provide detector name or boundary file to build geometry'
-        sources = source_file if source_file is not None else detector
-        assert boundaries is not None, \
-                'Must provide detector name or source file to build geometry'
-
         # Initialize the geometry
-        self.geo = Geometry(boundaries, sources)
+        self.geo = Geometry(detector, boundary_file, source_file)
 
         # Store the matching parameters
         self.crossing_point_tolerance = crossing_point_tolerance
@@ -123,6 +115,8 @@ class CathodeCrosserProcessor(PostProcessor):
                 points = self.get_points(p)
                 if not len(points):
                     continue
+                assert len(p.sources), \
+                        'Cannot identify cathode crossers without sources'
 
                 # If the particle is composed of points from multiple
                 # contributing TPCs in the same module, it is a cathode crosser
@@ -135,6 +129,7 @@ class CathodeCrosserProcessor(PostProcessor):
                 # module but not all of them or cross multiple cathodes
                 if p.is_ccrosser and self.adjust_crossers and len(tpcs) == 2:
                     # Adjust positions
+                    print(p.is_ccrosser)
                     self.adjust_positions(result_dict, i, truth=truth)
 
             # If we do not want to merge broken crossers, our job here is done

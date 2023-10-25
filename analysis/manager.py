@@ -62,7 +62,7 @@ class AnaToolsManager:
         analysis : dict
             Main analysis tools configuration dictionary
         reader : dict, optional
-            Reader configuration, if an prereconstructed file is to be injested
+            Reader configuration, if an prereconstructed file is to be ingested
         writer : dict, optional
             Writer configuration, if an output file is to be produced
         post_processing : dict, optional

@@ -35,8 +35,7 @@ def plotly_layout3d(ranges=None, meta=None, detector=None, titles=None,
     meta : np.ndarray, optional
         (9) Metadata information used to infer the full image range
     detector : str
-        Name of a recognized detector to get the geometry from or path to a
-        `.npy` boundary file to load the boundaries from.
+        Name of a recognized detector to get the geometry from
     titles : List[str], optional
         (3) Array of strings for (x,y,z) axis title respectively
     detector_coords : bool, default False

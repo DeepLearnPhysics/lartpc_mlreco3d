@@ -132,17 +132,8 @@ class ContainmentProcessor(PostProcessor):
         run_mode : str, default 'both'
             Which output to run on (one of 'both', 'reco' or 'truth')
         '''
-        # Define boundary and source files
-        boundaries = boundary_file if boundary_file is not None else detector
-        assert boundaries is not None, 'Must provide detector ' \
-                'name or boundary file to check containment'
-
-        sources = None
-        if use_source:
-            sources = source_file if source_file is not None else detector
-
         # Initialize the geometry
-        self.geo = Geometry(boundaries, sources)
+        self.geo = Geometry(detector, boundary_file, source_file)
 
         # Store containment checking parameters
         self.margin = margin
@@ -232,13 +223,8 @@ class FiducialProcessor(PostProcessor):
         run_mode : str, default 'both'
             Which output to run on (one of 'both', 'reco' or 'truth')
         '''
-        # Define boundary and source files
-        boundaries = boundary_file if boundary_file is not None else detector
-        assert boundaries is not None, 'Must provide detector ' \
-                'name or boundary file to check containment'
-
         # Initialize the geometry
-        self.geo = Geometry(boundaries)
+        self.geo = Geometry(detector, boundary_file)
 
         # Store the fiducial checking parameters
         self.margin = margin

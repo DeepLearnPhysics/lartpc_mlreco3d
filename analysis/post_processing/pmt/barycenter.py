@@ -40,15 +40,9 @@ class BarycenterFlashMatcher:
         boundary_file : str, optional
             Path to a detector boundary file. Supersedes `detector` if set
         '''
-        # Initialize the geometry
-        if detector is not None:
-            if boundary_file is None: boundary_file = detector
-            if source_file is None: source_file = detector
-            if opdets_file is None: opdets_file = detector
-
         self.geo = None
-        if boundary_file is not None:
-            self.geo = Geometry(boundary_file, source_file, opdets_file)
+        if detector is not None or boundary_file is not None:
+            self.geo = Geometry(detector, boundary_file, source_file)
 
         # Store the flash matching parameters
         self.match_method     = match_method

@@ -2,566 +2,410 @@ import os, sys
 import numpy as np
 import time
 
-from mlreco.utils.volumes import VolumeBoundaries
+from mlreco.utils.geometry import Geometry
 
 
 class LikelihoodFlashMatcher:
     '''
-    Adapter class between full chain outputs and FlashManager/OpT0Finder
+    Interface class between full chain outputs and OpT0Finder
+
+    See https://github.com/drinkingkazu/OpT0Finder for more details about it.
     '''
     def __init__(self,
                  fmatch_config,
-                 volume_boundaries=None,
-                 opflash_keys={},
-                 ADC_to_MeV=1.0,
-                 reflash_merging_window=None,
-                 detector_specs=None,
-                 use_depositions_MeV=None,
-                 cache=True, # TODO: `cache` must go
-                 parent_path=''): 
+                 parent_path = '',
+                 reflash_merging_window = None,
+                 detector = None,
+                 boundary_file = None,
+                 ADC_to_MeV = 1.0,
+                 use_depositions_MeV = False):
+        '''
+        Initialize the likelihood-based flash matching algorithm
 
+        Parameters
+        ----------
+        fmatch_config : str
+            Flash matching configuration file path
+        parent_path : str, optional
+            Path to the parent configuration file (allows for relative paths)
+        reflash_merging_window : float, optional
+            Maximum time between successive flashes to be considered a reflash
+        detector : str, optional
+            Detector to get the geometry from
+        boundary_file : str, optional
+            Path to a detector boundary file. Supersedes `detector` if set
+        ADC_to_MeV : float, default 1.0
+            Conversion factor between ADC and MeV
+        use_depositions_MeV, default `False`
+            If `True`, uses true energy depositions
+        '''
         # Initialize the flash manager (OpT0Finder wrapper)
-        self.cache = cache
-        self.opflash_keys = opflash_keys
-        self.fm = FlashManager(fmatch_config,
-                detector_specs, reflash_merging_window, parent_path)
+        self.initialize_backend(fmatch_config, parent_path)
 
-        # Get the detector boundaries (TODO: use Geometry)
-        self.boundaries = volume_boundaries
-        if self.boundaries is not None:
-            self.vb = VolumeBoundaries(self.boundaries)
-            self._num_volumes = self.vb.num_volumes()
-        else:
-            self.vb = None
-            self._num_volumes = 1
+        # Initialize the geometry
+        self.geo = Geometry(detector, boundary_file)
 
-        # Get the ADC to MeV conversion factor
+        # Get the external parameters
+        self.reflash_merging_window = reflash_merging_window
         self.use_depositions_MeV = use_depositions_MeV
         self.ADC_to_MeV = ADC_to_MeV
         if isinstance(self.ADC_to_MeV, str):
             self.ADC_to_MeV = eval(self.ADC_to_MeV)
 
-        # Initialize a dictionary of existing matches (TODO: must go)
-        self.flash_matches = {}
+        # Initialize flash matching attributes
+        self.matches = None
+        self.qcluster_v = None
+        self.flash_v = None
 
-    def get_matches(self,
-                    entry,
-                    interactions,
-                    opflashes,
-                    use_true_tpc_objects=False,
-                    volume=None,
-                    restrict_interactions=[]):
+    def initialize_backend(self,
+                           fmatch_config,
+                           parent_path):
         '''
-        If flash matches has not yet been computed for this volume, then it will
-        be run as part of this function. Otherwise, flash matching results are
-        cached in `self.flash_matches` per volume.
+        Initialize OpT0Finder (backend).
 
-        If `restrict_interactions` is specified, no caching is done.
-
-        Parameters
-        ==========
-        entry: int
-        use_true_tpc_objects: bool, default is False
-            Whether to use true or predicted interactions.
-        volume: int, default is None
-        use_depositions_MeV: bool, default is False
-            If using true interactions, whether to use true MeV depositions or reconstructed charge.
-        ADC_to_MEV: double, default is 1.
-            If using reconstructed interactions, this defines the conversion in OpT0Finder.
-            OpT0Finder computes the hypothesis flash using light yield and deposited charge in MeV.
-        restrict_interactions: list, default is []
-           If specified, the interactions to match will be whittle down to this subset of interactions.
-           Provide list of interaction ids.
-
-        Returns
-        =======
-        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
-        '''
-        # No caching done if matching a subset of interactions
-        if (entry, volume, use_true_tpc_objects) not in self.flash_matches \
-            or len(restrict_interactions):
-            out = self._run_flash_matching(entry,
-                interactions,
-                opflashes,
-                use_true_tpc_objects=use_true_tpc_objects,
-                volume=volume,
-                restrict_interactions=restrict_interactions)
-
-        if not self.cache:
-            tpc_v, pmt_v, matches = out
-        elif self.cache and len(restrict_interactions) == 0:
-            tpc_v, pmt_v, matches = self.flash_matches[(entry,
-                                                        volume,
-                                                        use_true_tpc_objects)]
-        else:
-            tpc_v, pmt_v, matches = out
-        return [(tpc_v[m.tpc_id], pmt_v[m.flash_id], m) for m in matches]
-
-
-    def _run_flash_matching(self, entry, interactions,
-            opflashes,
-            use_true_tpc_objects=False,
-            volume=None,
-            restrict_interactions=[]):
-        '''
-        Parameters
-        ==========
-        entry: int
-        use_true_tpc_objects: bool, default is False
-            Whether to use true or predicted interactions.
-        volume: int, default is None
-        '''
-        if use_true_tpc_objects:
-            if not hasattr(self, 'get_true_interactions'):
-                raise Exception('This Predictor does not know about truth info.')
-
-            tpc_v = [ia for ia in interactions if volume is None or ia.volume_id == volume]
-        else:
-            tpc_v = [ia for ia in interactions if volume is None or ia.volume_id == volume]
-
-        if len(restrict_interactions) > 0: # by default, use all interactions
-            tpc_v_select = []
-            for interaction in tpc_v:
-                if interaction.id in restrict_interactions:
-                    tpc_v_select.append(interaction)
-            tpc_v = tpc_v_select
-
-        # If we are not running flash matching over the entire volume at once,
-        # then we need to shift the coordinates that will be used for flash matching
-        # back to the reference of the first volume.
-        if volume is not None:
-            for tpc_object in tpc_v:
-                tpc_object.points = self._untranslate(tpc_object.points,
-                                                      volume)
-        input_tpc_v = self.fm.make_qcluster(
-            tpc_v,
-            use_depositions_MeV=self.use_depositions_MeV,
-            ADC_to_MeV=self.ADC_to_MeV)
-        if volume is not None:
-            for tpc_object in tpc_v:
-                tpc_object.points = self._translate(tpc_object.points,
-                                                    volume)
-
-        # Now making Flash_t objects
-        selected_opflash_keys = self.opflash_keys
-        if volume is not None:
-            assert isinstance(volume, int)
-            selected_opflash_keys = [self.opflash_keys[volume]]
-        pmt_v = []
-        for key in selected_opflash_keys:
-            pmt_v.extend(opflashes[key])
-
-        input_pmt_v = self.fm.make_flash([opflashes[key] for key in selected_opflash_keys])
-
-        # input_pmt_v might be a filtered version of pmt_v,
-        # and we want to store larcv::Flash objects not
-        # flashmatch::Flash_t objects in self.flash_matches
-        from larcv import larcv
-        new_pmt_v = []
-        for flash in input_pmt_v:
-            new_flash = larcv.Flash()
-            new_flash.time(flash.time)
-            new_flash.absTime(flash.time_true) # Hijacking this field
-            new_flash.timeWidth(flash.time_width)
-            new_flash.xCenter(flash.x)
-            new_flash.yCenter(flash.y)
-            new_flash.zCenter(flash.z)
-            new_flash.xWidth(flash.x_err)
-            new_flash.yWidth(flash.y_err)
-            new_flash.zWidth(flash.z_err)
-            new_flash.PEPerOpDet(flash.pe_v)
-            new_flash.id(flash.idx)
-            new_pmt_v.append(new_flash)
-
-        # Running flash matching and caching the results
-        start = time.time()
-        matches = self.fm.run_flash_matching()
-        #print('Actual flash matching took %0.3f s' % (time.time() - start))
-        if len(restrict_interactions) == 0:
-            if self.cache:
-                self.flash_matches[(entry, volume, use_true_tpc_objects)] = (tpc_v, new_pmt_v, matches)
-        return tpc_v, new_pmt_v, matches
-
-    def _translate(self, voxels, volume):
-        '''
-        Go from 1-volume-only back to full volume coordinates
-
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
-
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        '''
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.translate(voxels, volume)
-
-    def _untranslate(self, voxels, volume):
-        '''
-        Go from full volume to 1-volume-only coordinates
-
-        Parameters
-        ==========
-        voxels: np.ndarray
-            Shape (N, 3)
-        volume: int
-
-        Returns
-        =======
-        np.ndarray
-            Shape (N, 3)
-        '''
-        if self.vb is None or volume is None:
-            return voxels
-        else:
-            return self.vb.untranslate(voxels, volume)
-
-
-class FlashManager:
-    '''
-    Meant as an interface to OpT0finder, likelihood-based flash matching.
-
-    See https://github.com/drinkingkazu/OpT0Finder for more details about it.
-    '''
-    def __init__(self,
-                 cfg_fmatch,
-                 detector_specs=None,
-                 reflash_merging_window=None,
-                 parent_path=''):
-        '''
         Expects that the environment variable `FMATCH_BASEDIR` is set.
         You can either set it by hand (to the path where one can find
         OpT0Finder) or you can source `OpT0Finder/configure.sh` if you
         are running code from a command line.
 
         Parameters
-        ==========
-        cfg_fmatch: str
-            Path to config for OpT0Finder.
-        detector_specs: str, optional
-            Path to `detector_specs.cfg` file which defines some geometry
-            information about the detector PMT system. By default will look
-            into `OpT0Finder/dat/detector_specs.cfg`.
+        ----------
+        fmatch_config: str
+            Path to config for OpT0Finder
+        parent_path : str, optional
+            Path to the parent configuration file (allows for relative paths)
         '''
-
-        # Setup OpT0finder
+        # Add OpT0finder python interface to the python path
         basedir = os.getenv('FMATCH_BASEDIR')
         if basedir is None:
-            msg = "You need to source OpT0Finder configure.sh "\
-                "first, or set the FMATCH_BASEDIR environment variable."
+            msg = 'You need to source OpT0Finder configure.sh '\
+                'first, or set the FMATCH_BASEDIR environment variable.'
             raise Exception(msg)
-
         sys.path.append(os.path.join(basedir, 'python'))
-        os.environ['LD_LIBRARY_PATH'] = "%s:%s" % (os.path.join(basedir, 'build/lib'), os.environ['LD_LIBRARY_PATH'])
-        #os.environ['ROOT_INCLUDE_PATH'] = os.path.join(basedir, 'build/include')
-        if 'FMATCH_DATADIR' not in os.environ: # needed for loading detector specs
+
+        # Add the OpT0Finder library to the dynamic link loader
+        lib_path = os.path.join(basedir, 'build/lib')
+        os.environ['LD_LIBRARY_PATH'] = '%s:%s' \
+                % (lib_path, os.environ['LD_LIBRARY_PATH'])
+
+        # Add the OpT0Finder data directory if it is not yet set
+        if 'FMATCH_DATADIR' not in os.environ:
             os.environ['FMATCH_DATADIR'] = os.path.join(basedir, 'dat')
-        import ROOT
 
-        import flashmatch
+        # Load up the detector specifications
         from flashmatch import flashmatch
-
-        # Setup flash matching
-        #print('Setting up OpT0Finder for flash matching...')
-        if not os.path.isfile(cfg_fmatch):
-            cfg_fmatch = os.path.join(parent_path, cfg_fmatch)
-            if not os.path.isfile(cfg_fmatch):
-                raise FileNotFoundError('Cannot find flash-matcher config')
-        self.mgr = flashmatch.FlashMatchManager()
-        cfg = flashmatch.CreatePSetFromFile(cfg_fmatch)
-        if detector_specs is None:
-            self.det = flashmatch.DetectorSpecs.GetME(
+        flashmatch.DetectorSpecs.GetME(
                 os.path.join(basedir, 'dat/detector_specs.cfg'))
-        else:
-            assert isinstance(detector_specs, str)
-            if not os.path.exists(detector_specs):
-                raise Exception("Detector specs file not found")
 
-            self.det = flashmatch.DetectorSpecs.GetME(detector_specs)
+        # Fetch and initialize the OpT0Finder configuration
+        if not os.path.isfile(fmatch_config):
+            fmatch_config = os.path.join(parent_path, fmatch_config)
+            if not os.path.isfile(fmatch_config):
+                raise FileNotFoundError('Cannot find flash-matcher config')
+
+        cfg = flashmatch.CreatePSetFromFile(fmatch_config)
+
+        # Initialize The OpT0Finder flash match manager
+        self.mgr = flashmatch.FlashMatchManager()
         self.mgr.Configure(cfg)
-        #print('...done.')
 
-        self._qcluster_algo = flashmatch.CustomAlgoFactory.get().create("LightPath","ToyMCLightPath")
-        self._qcluster_algo.Configure(cfg.get['flashmatch::PSet']("LightPath"))
+        # Get the light path algorithm to produce QCluster_t objects
+        self.light_path = \
+                flashmatch.CustomAlgoFactory.get().create('LightPath',
+                        'ToyMCLightPath')
+        self.light_path.Configure(cfg.get['flashmatch::PSet']('LightPath'))
 
-        self.all_matches = None
-        self.pmt_v, self.tpc_v = None, None
+    def get_matches(self,
+                    interactions,
+                    opflashes):
+        '''
+        Find TPC interactions compatible with optical flashes.
 
-        self.reflash_merging_window = reflash_merging_window
+        Parameters
+        ----------
+        interactions : List[Union[Interaction, TruthInteraction]]
+            List of TPC interactions
+        opflashes : List[larcv.Flash]
+            List of optical flashes
 
-    def get_flash(self, flash_id, array=False):
+        Returns
+        -------
+        list of tuple (Interaction, larcv::Flash, flashmatch::FlashMatch_t)
+        '''
+        # If there's no interactions or no flashes, nothing to do
+        if not len(interactions) or not len(opflashes):
+            return []
+
+        # Get the volume ID in which the interactions live
+        volume_ids = np.empty(len(interactions), dtype=np.int64)
+        for i, ii in enumerate(interactions):
+            if len(ii.sources):
+                modules, tpcs = self.geo.get_contributors(ii.sources)
+                assert len(np.unique(modules)) == 1, 'Cannot match ' \
+                        'interactions that originate from > 1 optical volumes'
+                volume_ids[i] = modules[0]
+            else:
+                volume_ids[i] = ii.volume_id
+
+        assert len(np.unique(volume_ids)) == 1, \
+                'Should only provide interactions from a single optical volume'
+        self.volume_id = volume_ids[0]
+
+        # Build a list of QCluster_t (OpT0Finder interaction representation)
+        self.qcluster_v = self.make_qcluster_list(interactions)
+
+        # Build a list of Flash_t (OpT0Finder optical flash representation)
+        self.flash_v, opflashes = self.make_flash_list(opflashes)
+
+        # Running flash matching and caching the results
+        self.matches = self.run_flash_matching()
+
+        return [(interactions[m.tpc_id], opflashes[m.flash_id], m) \
+                for m in self.matches]
+
+    def make_qcluster_list(self, interactions):
+        '''
+        Converts a list of lartpc_mlreco3d interaction into a list of
+        OpT0Finder QCluster_t objects
+
+        Parameters
+        ----------
+        interactions : List[Union[Interaction, TruthInteraction]]
+            List of TPC interactions
+
+        Returns
+        -------
+        List[QCluster_t]
+           List of OpT0Finder flashmatch::QCluster_t objects
+        '''
+        # Loop over the interacions
         from flashmatch import flashmatch
-
-        if self.pmt_v is None:
-            raise Exception("self.pmt_v is None")
-
-        for flash in self.pmt_v:
-            if flash.idx != flash_id: continue
-            if array: return flashmatch.as_ndarray(flash)
-            else: return flash
-
-        raise Exception("Flash %d does not exist in self.pmt_v" % flash_id)
-
-    def get_qcluster(self, tpc_id, array=False):
-        from flashmatch import flashmatch
-
-        if self.tpc_v is None:
-            raise Exception("self.tpc_v is None")
-
-        for tpc in self.tpc_v:
-            if tpc.idx != tpc_id: continue
-            if array: return flashmatch.as_ndarray(tpc)
-            else: return tpc
-
-        raise Exception("TPC object %d does not exist in self.tpc_v" % tpc_id)
-
-    def make_qcluster(self, interactions,
-                      use_depositions_MeV=False,
-                      ADC_to_MeV=1.):
-        from flashmatch import flashmatch
-
-        if use_depositions_MeV:
-            conversion_factor = 1.
-        else:
-            conversion_factor = ADC_to_MeV
-
-        tpc_v = []
-        for ia in interactions:
-            qcluster = flashmatch.QCluster_t()
-            qcluster.idx = int(ia.id)
-            qcluster.time = 0
-            if ia.points.shape[0] < 2:
+        qcluster_v = []
+        for ii in interactions:
+            # If the interaction has less than 2 points, skip
+            if ii.points.shape[0] < 2:
                 continue
-            pytraj = np.hstack([ia.points, ia.depositions[..., None]])
-            traj = flashmatch.as_geoalgo_trajectory(pytraj)
-            qcluster += self._qcluster_algo.MakeQCluster(traj, conversion_factor)
-            tpc_v.append(qcluster)
 
-        self.tpc_v = tpc_v
-        #print('Made list of %d QCluster_t' % len(tpc_v))
-        return tpc_v
-
-    def make_qcluster_deprecated(self, interactions,
-                                 use_depositions_MeV=False, ADC_to_MeV=1.):
-        '''
-        Make flashmatch::QCluster_t objects from list of interactions.
-
-        Particle.points must be converted to cm units beforehand.
-
-        Parameters
-        ==========
-        interactions: list of Interaction/TruthInteraction
-            (Predicted or true) interaction objects.
-
-        Returns
-        =======
-        list of flashmatch::QCluster_t
-        '''
-
-        from flashmatch import flashmatch
-
-        tpc_v = []
-        for p in interactions:
+            # Initialize qcluster
             qcluster = flashmatch.QCluster_t()
-            qcluster.idx = int(p.id) # Assign a unique index
-            qcluster.time = 0  # assumed time w.r.t. trigger for reconstruction
-            for i in range(p.size):
-                # Create a geoalgo::QPoint_t
-                if not use_depositions_MeV:
-                    light_yield = p.depositions[i] * ADC_to_MeV * self.det.LightYield()
-                else:
-                    light_yield = p.depositions_MeV[i] * self.det.LightYield()
-                qpoint = flashmatch.QPoint_t(p.points[i, 0],
-                                             p.points[i, 1],
-                                             p.points[i, 2],
-                                             light_yield)
-                # Add it to geoalgo::QCluster_t
-                qcluster.push_back(qpoint)
-            tpc_v.append(qcluster)
+            qcluster.idx = int(ii.id)
+            qcluster.time = 0
 
-        self.tpc_v = tpc_v
-        #print('Made list of %d QCluster_t' % len(tpc_v))
-        return tpc_v
+            # Get the point coordinates
+            points = self.geo.translate(ii.points, self.volume_id, 0)
 
-    def make_flash(self, larcv_flashes):
+            # Get the depositions
+            if not self.use_depositions_MeV:
+                depositions = ii.depositions
+            else:
+                depositions = ii.depositions_MeV
+
+            # Fill the trajectory
+            pytraj = np.hstack([points, depositions[:, None]])
+            traj = flashmatch.as_geoalgo_trajectory(pytraj)
+            qcluster += self.light_path.MakeQCluster(traj, self.ADC_to_MeV)
+
+            # Append
+            qcluster_v.append(qcluster)
+
+        return qcluster_v
+
+    def make_flash_list(self, opflashes):
         '''
         Parameters
-        ==========
-        larcv_flashes: list of list of larcv::Flash
+        ----------
+        opflashes : List[larcv.Flash]
+            List of optical flashes
+
 
         Returns
-        =======
-        list of flashmatch::Flash_t
+        -------
+        List[Flash_t]
+            List of flashmatch::Flash_t objects
         '''
+        # If requested, merge flashes that are compatible in time
+        if self.reflash_merging_window is not None:
+            times = [f.time() for f in opflashes]
+            perm = np.argsort(times)
+            new_opflashes = [opflashes[perm[0]]]
+            for i in range(1, len(perm)):
+                if opflashes[perm[i]].time() - opflashes[perm[i-1]].time() \
+                        < self.reflash_merging_window:
+                    # If compatible, simply add up the PEs
+                    pe_v = np.array(opflashes[perm[i-1]].PEPerOpDet()) \
+                            + np.array(opflashes[perm[i]].PEPerOpDet())
+                    new_opflashes[-1].PEPerOpDet(pe_v)
+                else:
+                    new_opflashes.append(opflashes[perm[i]])
+
+            opflashes = new_opflashes
+
+        # Loop over the optical flashes
         from flashmatch import flashmatch
-
-        flashes = []
-        for branch in larcv_flashes:
-            flashes.extend(branch)
-
-        pmt_v, times = [], []
-        for idx, f in enumerate(flashes):
-            # f is an object of type larcv::Flash
+        flash_v = []
+        for idx, f in enumerate(opflashes):
+            # Initialize the Flash_t object
             flash = flashmatch.Flash_t()
             flash.idx = f.id()  # Assign a unique index
             flash.time = f.time()  # Flash timing, a candidate T0
-            flash.time_true = f.absTime() # Hijacking this field to store absolute time
-            times.append(flash.time)
 
             # Assign the flash position and error on this position
             flash.x, flash.y, flash.z = 0, 0, 0
             flash.x_err, flash.y_err, flash.z_err = 0, 0, 0
 
-            # PE distribution over the 360 photodetectors
+            # Assign the individual PMT optical hit PEs
             offset = 0 if len(f.PEPerOpDet()) == 180 else 180
             for i in range(180):
                 flash.pe_v.push_back(f.PEPerOpDet()[i + offset])
                 flash.pe_err_v.push_back(0.)
-            pmt_v.append(flash)
-        if self.reflash_merging_window is not None and len(pmt_v) > 0:
-            # then proceed to merging close flashes
-            perm = np.argsort(times)
-            pmt_v = np.array(pmt_v)[perm]
-            final_pmt_v = [pmt_v[0]]
-            for idx, flash in enumerate(pmt_v[1:]):
-                if flash.time - final_pmt_v[-1].time < self.reflash_merging_window:
-                    new_flash = self.merge_flashes(flash, final_pmt_v[-1])
-                    final_pmt_v[-1] = new_flash
-                else:
-                    final_pmt_v.append(flash)
-            #print("Merged", len(final_pmt_v), len(pmt_v))
-            pmt_v = final_pmt_v
 
-        self.pmt_v = pmt_v
-        return pmt_v
+            # Append
+            flash_v.append(flash)
 
-    def merge_flashes(self, a, b):
+        return flash_v, opflashes
+
+    def run_flash_matching(self):
         '''
-        Util to merge 2 flashmatch::Flash_t objects on the fly.
-
-        Final time is minimum of both times. Final PE count per
-        photodetectors is the sum between the 2 flashes.
-
-        Parameters
-        ==========
-        a: flashmatch::Flash_t
-        b: flashmatch::Flash_t
+        Drive the OpT0Finder flash matching
 
         Returns
-        =======
-        flashmatch::Flash_t
+        -------
+        List[flashmatch::FlashMatch_t]
+            List of matches
         '''
-        from flashmatch import flashmatch
-        flash = flashmatch.Flash_t()
-        flash.idx = min(a.idx, b.idx)
-        flash.time = min(a.time, b.time)
-        flash.time_true = min(a.time_true, b.time_true)
-        flash.x, flash.y, flash.z = min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)
-        flash.x_err = min(a.x_err, b.x_err)
-        flash.y_err = min(a.y_err, b.y_err)
-        flash.z_err = min(a.z_err, b.z_err)
-        for i in range(180):
-            flash.pe_v.push_back(a.pe_v[i] + b.pe_v[i])
-            flash.pe_err_v.push_back(a.pe_err_v[i] + b.pe_err_v[i])
-        return flash
+        # Make sure the interaction and flash objects were set
+        assert self.qcluster_v is not None and self.flash_v is not None, \
+                'Must make_qcluster_list and make_flash_list first'
 
-    def run_flash_matching(self, flashes=None, interactions=None, **kwargs):
-        if self.tpc_v is None:
-            if interactions is None:
-                msg = "You need to specify `interactions`, "\
-                    "or to run make_qcluster."
-                raise Exception(msg)
-        if interactions is not None:
-            self.make_qcluster(interactions, **kwargs)
-
-
-        if self.pmt_v is None:
-            if flashes is None:
-                msg = "PMT objects need to be defined. "\
-                    "Either specify `flashes`, or run make_flash."
-                raise Exception(msg)
-        if flashes is not None:
-            self.make_flash(flashes)
-
-        assert self.tpc_v is not None and self.pmt_v is not None
-
+        # Register all objects in the manager
         self.mgr.Reset()
-
-        # First register all objects in manager
-        for x in self.tpc_v:
+        for x in self.qcluster_v:
             self.mgr.Add(x)
-        for x in self.pmt_v:
+        for x in self.flash_v:
             self.mgr.Add(x)
 
         # Run the matching
-        self.all_matches = self.mgr.Match()
-        return self.all_matches
+        all_matches = self.mgr.Match()
 
-    def get_match(self, idx, matches=None):
+        return all_matches
+
+    def get_qcluster(self, idx, array=False):
         '''
+        Fetch a given flashmatch::QCluster_t object
+
         Parameters
-        ==========
-        idx: int
-            Index of TPC object for which we want to retrieve a match.
-        matches: list of flashmatch::FlashMatch_t, optional, default is None
+        ----------
+        idx : int
+            ID of the interaction to fetch
+        array : bool, default `False`
+            If `True`, The QCluster is returned as an np.ndarray
 
         Returns
-        =======
-        flashmatch::FlashMatch_t
+        -------
+        Union[flashmatch::QCluster_t, np.ndarray]
+            QCluster object
         '''
-        if matches is None:
-            if self.all_matches is None:
-                raise Exception("Need to run flash matching first with run_flash_matching.")
-            matches = self.all_matches
+        if self.qcluster_v is None:
+            raise Exception('self.qcluster_v is None')
 
-        for m in self.all_matches:
-            if self.tpc_v[m.tpc_id].idx != idx: continue
+        for qcluster in self.qcluster_v:
+            if qcluster.idx != idx: continue
+            if array: return flashmatch.as_ndarray(qcluster)
+            else: return qcluster
+
+        raise Exception(f'TPC object {idx} does not exist in self.qcluster_v')
+
+    def get_flash(self, idx, array=False):
+        '''
+        Fetch a given flashmatch::Flash object
+
+        Parameters
+        ----------
+        idx : int
+            ID of the flash to fetch
+        array : bool, default `False`
+            If `True`, The flash is returned as an np.ndarray
+
+        Returns
+        -------
+        Union[flashmatch::Flash, np.ndarray]
+            Flash object
+        '''
+        if self.flash_v is None:
+            raise Exception('self.flash_v is None')
+
+        for flash in self.flash_v:
+            if flash.idx != idx: continue
+            if array: return flashmatch.as_ndarray(flash)
+            else: return flash
+
+        raise Exception('Flash {idx} does not exist in self.flash_v')
+
+
+    def get_match(self, idx):
+        '''
+        Fetch a match for a given TPC interaction ID
+
+        Parameters
+        ----------
+        idx : int
+            Index of TPC object for which we want to retrieve a match
+
+        Returns
+        -------
+        flashmatch::FlashMatch_t
+            Flash match associated with interaction idx
+        '''
+        if self.matches is None:
+            raise Exception('Need to run flash matching first')
+
+        for m in self.matches:
+            if self.qcluster_v[m.tpc_id].idx != idx: continue
             return m
 
         return None
 
-    def get_matched_flash(self, idx, matches=None):
+    def get_matched_flash(self, idx):
         '''
+        Fetch a matched flash for a given TPC interaction ID
+
         Parameters
-        ==========
-        idx: int
-            Index of TPC object for which we want to retrieve a match.
-        matches: list of flashmatch::FlashMatch_t, optional, default is None
+        ----------
+        idx : int
+            Index of TPC object for which we want to retrieve a match
 
         Returns
-        =======
+        -------
         flashmatch::Flash_t
+            Optical flash that matches interaction idx
         '''
-        m = self.get_match(idx, matches=matches)
+        # Get a match, if any
+        m = self.get_match(idx)
         if m is None: return None
 
+        # Get the flash that corresponds to the match
         flash_id = m.flash_id
         if flash_id is None: return None
+        if flash_id > len(self.flash_v):
+            raise Exception('Flash {flash_id} does not exist in self.flash_v')
 
-        if flash_id > len(self.pmt_v):
-            raise Exception("Could not find flash id %d in self.pmt_v" % flash_id)
+        return self.flash_v[flash_id]
 
-        return self.pmt_v[flash_id]
-
-
-    def get_t0(self, idx, matches=None):
+    def get_t0(self, idx):
         '''
+        Fetch a matched flash time for a given TPC interaction ID
+
         Parameters
-        ==========
-        idx: int
-            Index of TPC object for which we want to retrieve a match.
-        matches: list of flashmatch::FlashMatch_t, optional, default is None
+        ----------
+        idx : int
+            Index of TPC object for which we want to retrieve a match
 
         Returns
-        =======
+        -------
         float
-            Time in us with respect to simulation time reference.
+            Time in us with respect to simulation time reference
         '''
-        flash = self.get_matched_flash(idx, matches=matches)
+        # Get the matched flash, if any
+        flash = self.get_matched_flash(idx)
+
         return None if flash is None else flash.time

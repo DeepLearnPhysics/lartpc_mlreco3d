@@ -6,9 +6,10 @@ from mlreco.utils.geometry import Geometry
 from .boxes import box_traces
 
 
-def detector_traces(boundaries, meta=None, detector_coords=True,
-        draw_faces=False, shared_legend=True, legend_prefix='Detector',
-        color='rgba(0,0,0,0.150)', linewidth=2, **kwargs):
+def detector_traces(detector=None, boundaries=None, meta=None,
+        detector_coords=True, draw_faces=False, shared_legend=True,
+        legend_prefix='Detector', color='rgba(0,0,0,0.150)',
+        linewidth=2, **kwargs):
     '''
     Function which takes loads a file with detector boundaries and
     produces a list of traces which represent them in a 3D event display.
@@ -25,7 +26,9 @@ def detector_traces(boundaries, meta=None, detector_coords=True,
 
     Parameters
     ----------
-    boundaries : str
+    detector : str, optional
+        Name of a recognized detector to the geometry from
+    boundaries : str, optional
         Name of a recognized detector to get the geometry from or path
         to a `.npy` boundary file to load the boundaries from.
     meta : np.ndarray, optional
@@ -49,7 +52,7 @@ def detector_traces(boundaries, meta=None, detector_coords=True,
         mlreco.viusalization.boxes.box_traces
     '''
     # Load the list of boundaries
-    boundaries = Geometry(boundaries).tpcs
+    boundaries = Geometry(detector, boundaries).tpcs
 
     # If required, convert to pixel coordinates
     if not detector_coords:

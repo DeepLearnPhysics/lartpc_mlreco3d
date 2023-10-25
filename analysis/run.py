@@ -44,7 +44,7 @@ def main(analysis_cfg_path, chain_cfg_path=None, data_keys=None, outfile=None):
     base_cfg = cfg['analysis']
 
     # Get parent path of the analysis configuration to support relative paths 
-    parent_path = pathlib.Path(analysis_cfg_path).parent
+    parent_path = str(pathlib.Path(analysis_cfg_path).parent)
     base_cfg['parent_path'] = parent_path
 
     # If a chain configuration is provided from the command line, override
