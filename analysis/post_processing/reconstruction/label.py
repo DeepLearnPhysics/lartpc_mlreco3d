@@ -62,4 +62,4 @@ class ChildrenProcessor(PostProcessor):
             for key, val in counter.items():
                 p.children_counts[key] = val
 
-        return {}
+        return {}, {}
