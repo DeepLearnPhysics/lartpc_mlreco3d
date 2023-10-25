@@ -12,9 +12,10 @@ class Geometry:
     ----------
     '''
 
-    def __init__(self, boundaries, sources=None):
+    def __init__(self, detector=None, boundaries=None,
+            sources=None, opdets=None):
         '''
-        Convert a detector boundary file to useful detector attributes.
+        Initializes a detector geometry object.
 
         The boundary file is a (N_m, N_t, D, 2) np.ndarray where:
         - N_m is the number of modules (or cryostat) in the detector
@@ -22,24 +23,44 @@ class Geometry:
         - D is the number of dimension (always 3)
         - 2 corresponds to the lower/upper boundaries along that axis
 
+        The sources file is a (N_m, N_t, N_s, 2) np.ndarray where:
+        - N_s is the number of contributing logical TPCs to a geometry TPC
+        - 2 corresponds to the [module ID, tpc ID] of a contributing pair
+
+        The opdets file is a (N_m[, N_t], N_p, 3) np.ndarray where:
+        - N_p is the number of optical detectors per module or TPC
+        - 3 corresponds to the [x, y, z] optical detector coordinates
+
         Parameters
         ----------
-        boundaries : str
-            Name of a recognized detector to get the geometry from or path
-            to a `.npy` boundary file to load the boundaries from.
+        detector : str, optional
+            Name of a recognized detector to the geometry from
+        boundaries : str, optional
+            Path to a `.npy` boundary file to load the boundaries from
         sources : str, optional
-            Name of a recognized detector to get the sources from or path
-            to a `.npy` source file to load the sources from.
+            Path to a `.npy` source file to load the sources from
+        opdets : str, optional
+            Path to a `.npy` opdet file to load the opdet coordinates from
         '''
-        # If the boundaries are not a file, fetch a default boundary file
-        if not os.path.isfile(boundaries):
+        # If the boundary file is not provided, fetch a default boundary file
+        assert detector is not None or boundaries is not None, \
+                'Must minimally provide a detector boundary file source'
+        if boundaries is None:
             path = pathlib.Path(__file__).parent
-            boundaries = os.path.join(path, 'geo', f'{boundaries.lower()}_boundaries.npy')
+            boundaries = os.path.join(path, 'geo',
+                    f'{detector.lower()}_boundaries.npy')
 
         # If the source file is not a file, fetch the default source file
-        if sources is not None and not os.path.isfile(sources):
+        if sources is None and detector is not None:
             path = pathlib.Path(__file__).parent
-            sources = os.path.join(path, 'geo', f'{sources.lower()}_sources.npy')
+            sources = os.path.join(path, 'geo',
+                    f'{detector.lower()}_sources.npy')
+
+        # If the opdets file is not a file, fetch the default opdets file
+        if opdets is None and detector is not None:
+            path = pathlib.Path(__file__).parent
+            opdets = os.path.join(path, 'geo',
+                    f'{detector.lower()}_opdets.npy')
 
         # Check that the boundary file exists, load it
         if not os.path.isfile(boundaries):
@@ -54,6 +75,17 @@ class Geometry:
             self.sources = np.load(sources)
             assert self.sources.shape[:2] == self.boundaries.shape[:2], \
                     'There should be one list of sources per TPC'
+
+        # Check that the optical detector file exists, load it
+        self.opdets = None
+        if opdets is not None:
+            if not os.path.isfile(opdets):
+                raise FileNotFoundError(f'Could not find opdets file: {opdets}')
+            self.opdets = np.load(opdets)
+            assert self.opdets.shape[:2] == self.boundaries.shape[:2] \
+                    or (self.opdets.shape[0] == self.boundaries.shape[0] \
+                    and len(self.opdets.shape) == 3), \
+                    'There should be one list of opdets per module or TPC'
 
         # Build TPCs
         self.build_tpcs()
@@ -80,8 +112,10 @@ class Geometry:
         a list of boundaries that encompass each module.
         '''
         self.modules = np.empty((len(self.boundaries), 3, 2))
+        self.centers = np.empty((len(self.boundaries), 3))
         for m, module in enumerate(self.boundaries):
             self.modules[m] = self.merge_volumes(module)
+            self.centers[m] = np.mean(self.modules[m], axis=1)
         self.ranges = np.abs(self.boundaries[...,1]-self.boundaries[...,0])
 
     def build_detector(self):
@@ -272,6 +306,34 @@ class Geometry:
 
         return contained
 
+    def translate(self, points, source_id, target_id):
+        '''
+        Moves a point cloud from one module to another one
+
+        Parameters
+        ----------
+        points : np.ndarray
+            (N, 3) Set of point coordinates
+        source_id: int
+            Module ID from which to move the point cloud
+        target_id : int
+            Module ID to which to move the point cloud
+
+        Returns
+        -------
+        np.ndarray
+            (N, 3) Set of translated point coordinates
+        '''
+        # If the source and target are the same, nothing to do here
+        if target_id == source_id:
+            return points
+
+        # Fetch the inter-module shift
+        offset = self.centers[target_id] - self.centers[source_id]
+
+        # Translate
+        return np.copy(points) + offset
+
     @staticmethod
     def merge_volumes(volumes):
         '''
@@ -291,4 +353,5 @@ class Geometry:
         volume = np.empty((3, 2))
         volume[:,0] = np.min(volumes, axis=0)[:,0]
         volume[:,1] = np.max(volumes, axis=0)[:,1]
+
         return volume

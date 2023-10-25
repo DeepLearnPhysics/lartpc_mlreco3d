@@ -1,11 +1,13 @@
-from .points import assign_particle_extrema
-from .geometry import reconstruct_directions, check_containement, check_fiducial
-from .calorimetry import reconstruct_calo_energy
-from .tracking import reconstruct_csda_energy
-# from .mcs import reconstruct_mcs_energy
-from .kinematics import enforce_particle_semantics, adjust_particle_properties, reconstruct_momentum
-from .vertex import reconstruct_vertex
-from .ppn import get_ppn_candidates, assign_ppn_candidates
-from .label import count_children
-# from .neutrino import reconstruct_nu_energy
-from .cathode_crossing import find_cathode_crossers
+from .points import ParticleExtremaProcessor
+from .geometry import DirectionProcessor, \
+        ContainmentProcessor, FiducialProcessor
+from .calorimetry import CalorimetricEnergyProcessor
+from .tracking import CSDAEnergyProcessor
+# from .mcs import MCSEnergyProcessor
+from .kinematics import ParticleSemanticsProcessor, \
+        ParticlePropertiesProcessor, MomentumProcessor
+from .vertex import VertexProcessor
+from .ppn import PPNProcessor
+from .label import ChildrenProcessor
+# from .neutrino import NeutrinoEnergyProcessor
+from .cathode_crossing import CathodeCrosserProcessor

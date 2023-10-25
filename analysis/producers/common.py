@@ -2,7 +2,6 @@ import numpy as np
 from functools import partial
 from collections import defaultdict, OrderedDict
 
-from pprint import pprint
 
 class ScriptProcessor:
     """Simple class for handling script functions used to
