@@ -50,10 +50,10 @@ class CalorimetricEnergyProcessor(PostProcessor):
                 if p.pid != -1 and p.pid not in PID_LABELS.keys():
                     raise ValueError(f'Particle species not recognized: ' \
                             '{p.pid}')
-                if p.pid not in conversion_factor.keys():
+                if p.pid not in self.factor.keys():
                     raise ValueError(f'Must specify a conversion factor ' \
                             'for particle {p.pid}')
-                factor = conversion_factor[p.pid]
+                factor = self.factor[p.pid]
 
             p.calo_ke = factor * p.depositions_sum
                 

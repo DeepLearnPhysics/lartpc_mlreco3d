@@ -89,6 +89,7 @@ class AnaToolsManager:
 
         # Initialize the analysis scripts
         self.scripts = scripts # TODO: make it a manager initialized once
+        self.csv_writers = None
 
     def initialize_base(self,
                         log_dir = './',
@@ -173,16 +174,16 @@ class AnaToolsManager:
         if reader is not None:
             # If there is a reader configuration, load reconstructed data
             reader['to_larcv'] = True # Expected by post-processors
-            self.data_reader   = reader_factory(reader)
+            self._data_reader   = reader_factory(reader)
             self.reader_state  = 'file'
-            self._set_iteration(self.data_reader)
+            self._set_iteration(self._data_reader)
         else:
             # If no reader is provided, run the the ML chain on the fly
             loader = loader_factory(self.config, event_list=event_list)
             self._dataset = iter(cycle(loader))
             Trainer = trainval(self.chain_config)
             Trainer.initialize()
-            self.data_reader = Trainer
+            self._data_reader = Trainer
             self.reader_state = 'trainval'
             self._set_iteration(loader.dataset)
 
@@ -305,9 +306,12 @@ class AnaToolsManager:
         '''
         if self.reader_state == 'file':
             assert iteration is not None
-            data, res = self.data_reader.get(iteration, nested=True)
-        elif self.reader_state == 'trainval':
-            data, res = self.data_reader.forward(self._dataset)
+            data, res = self._data_reader.get(iteration, nested=True)
+            file_index = self._data_reader.file_index[iteration]
+            data['file_index'] = [file_index]
+            data['file_name'] = [self._data_reader.file_paths[file_index]]
+        elif self._reader_state == 'trainval':
+            data, res = self._data_reader.forward(self._dataset)
         else:
             raise ValueError(f'Data reader {self._reader_state} '\
                     'is not supported!')
@@ -588,23 +592,26 @@ class AnaToolsManager:
 
         if self.scripts is None:
             self.scripts = {}
+        if self.csv_writers is None:
+            self.csv_writers = {}
 
         for script_name, fname_to_update_list in ana_output.items():
+            print("Script Name = ", script_name)
 
-            append  = self.ana_config['scripts'][script_name]['logger'].get('append', False)
+            append  = self.scripts[script_name]['logger'].get('append', False)
             filenames = list(fname_to_update_list.keys())
             if len(filenames) != len(set(filenames)):
                 msg = f'Duplicate filenames: {str(filenames)} in {script_name} '\
                 'detected. you need to change the output filename for '\
                 f'script {script_name} to something else.'
                 raise RuntimeError(msg)
-            if len(self.scripts) == 0:
+            if len(self.csv_writers) == 0:
                 for fname in filenames:
                     path = os.path.join(self.log_dir, fname+'.csv')
-                    self.scripts[fname] = CSVWriter(path, append)
+                    self.csv_writers[fname] = CSVWriter(path, append)
             for i, fname in enumerate(fname_to_update_list):
                 for row_dict in ana_output[script_name][fname]:
-                    self.scripts[fname].append(row_dict)
+                    self.csv_writers[fname].append(row_dict)
 
     def log(self, iteration):
         '''

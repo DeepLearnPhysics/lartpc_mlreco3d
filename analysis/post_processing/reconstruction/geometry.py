@@ -260,7 +260,7 @@ class FiducialProcessor(PostProcessor):
                 if not isinstance(ia, TruthInteraction):
                     vertex = ia.vertex
                 else:
-                    vertex = getattr(ia, truth_vertex_mode)
+                    vertex = getattr(ia, self.truth_vertex_mode)
                 vertex = vertex.reshape(-1,3)
 
                 # Check containment

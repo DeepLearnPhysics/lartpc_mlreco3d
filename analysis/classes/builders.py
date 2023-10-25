@@ -666,6 +666,8 @@ class InteractionBuilder(DataBuilder):
                 if 'input_rescaled_source' in result:
                     info['sources'] = result['input_rescaled_source'][0][mask]
                 ia = TruthInteraction(**info)
+                ia.id = len(out)
+                ia.load_larcv_neutrino(info)
                 
             # Handle matches
             match_overlap = OrderedDict({i: val for i, val in zip(bp['match'], bp['match_overlap'])})
@@ -698,6 +700,7 @@ class InteractionBuilder(DataBuilder):
                 if len(neutrinos) > 1 or len(neutrinos) == 0: continue
                 nu = neutrinos[0]
                 ia.is_neutrino = True
+                ia.register_larcv_neutrino(nu)
                 # nu_pos = np.array([nu.position().x(),
                 #                    nu.position().y(),
                 #                    nu.position().z()], dtype=np.float32)
@@ -705,11 +708,11 @@ class InteractionBuilder(DataBuilder):
                 #     pos = p.ancestor_position
                 #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
                     # if check_pos:
-                ia.nu_pdg_code             = nu.pdg_code()
-                ia.nu_interaction_type     = nu.interaction_type()
-                ia.nu_interaction_mode     = nu.interaction_mode()
-                ia.nu_current_type         = nu.current_type()
-                ia.nu_energy_init          = nu.energy_init()
+                # ia.nu_pdg_code             = nu.pdg_code()
+                # ia.nu_interaction_type     = nu.interaction_type()
+                # ia.nu_interaction_mode     = nu.interaction_mode()
+                # ia.nu_current_type         = nu.current_type()
+                # ia.nu_energy_init          = nu.energy_init()
 
         return interactions
 
