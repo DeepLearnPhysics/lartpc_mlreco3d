@@ -103,6 +103,9 @@ class Geometry:
         if self.boundaries.shape[1] == 2:
             self.build_cathodes()
 
+        # Containment volumes to be defined by the user
+        self.cont_volumes = None
+
     def build_tpcs(self):
         '''
         Flatten out the geometry array to a simple list of TPCs.
@@ -249,21 +252,85 @@ class Geometry:
 
         return offsets
 
-    def check_containment(self, points, margin, cathode_margin=None,
-            sources=None, mode='module'):
+    def translate(self, points, source_id, target_id):
         '''
-        Check whether a point cloud comes within some distance of the
-        boundaries of a certain subset of detector volumes, depending on
-        the mode.
-
-        If a list of sources is provided, the `mode` is ignored and the
-        containement is checked against the list of TPCs that contributed
-        to the point cloud only.
+        Moves a point cloud from one module to another one
 
         Parameters
         ----------
         points : np.ndarray
             (N, 3) Set of point coordinates
+        source_id: int
+            Module ID from which to move the point cloud
+        target_id : int
+            Module ID to which to move the point cloud
+
+        Returns
+        -------
+        np.ndarray
+            (N, 3) Set of translated point coordinates
+        '''
+        # If the source and target are the same, nothing to do here
+        if target_id == source_id:
+            return points
+
+        # Fetch the inter-module shift
+        offset = self.centers[target_id] - self.centers[source_id]
+
+        # Translate
+        return np.copy(points) + offset
+
+    def check_containment(self, points, sources = None):
+        '''
+        Check whether a point cloud comes within some distance of the
+        boundaries of a certain subset of detector volumes, depending on
+        the mode.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            (N, 3) Set of point coordinates
+        sources : np.ndarray, optional
+            (S, 2) : List of [module ID, tpc ID] pairs that created the
+            point cloud
+
+        Returns
+        -------
+        bool
+            `True` if the particle is contained, `False` if not
+        '''
+        # If the containment volumes are not defined, throw
+        if self.cont_volumes is None:
+            raise ValueError('Must call `define_containment_volumes` first')
+
+        # If sources are provided, only consider source volumes
+        if sources is not None and len(sources):
+            contributors = self.get_contributors(sources)
+            index = contributors[0]*self.boundaries.shape[1] + contributors[1]
+            volume  = self.merge_volumes(self.cont_volumes[index])
+            volumes = [volume]
+        else:
+            volumes = self.cont_volumes
+
+        # Loop over volumes, make sure the cloud is contained in at least one
+        contained = False
+        for v in volumes:
+            if (points > v[:,0]).all() and (points < v[:,1]).all():
+                contained = True
+                break
+
+        return contained
+
+    def define_containment_volumes(self, margin, \
+            cathode_margin = None, mode = 'module'):
+        '''
+        This function defines a list of volumes to check containment against.
+        If the containment is checked against a constant volume, it is more
+        efficient to call this function once and call `check_containment`
+        reapitedly after.
+
+        Parameters
+        ----------
         margin : Union[float, List[float], np.array]
             Minimum distance from a detector wall to be considered contained:
             - If float: distance buffer is shared between all 6 walls
@@ -273,9 +340,6 @@ class Geometry:
               specified individually of each wall.
         cathode_margin : float, optional
             If specified, sets a different margin for the cathode boundaries
-        sources : np.ndarray, optional
-            (S, 2) : List of [module ID, tpc ID] pairs that created the
-            point cloud
         mode : str, default 'module'
             Containement criterion (one of 'global', 'module', 'tpc'):
             - If 'tpc', makes sure it is contained within a single TPC
@@ -283,11 +347,6 @@ class Geometry:
             - If 'detector', makes sure it is contained within in the detector
             - If 'source', use the origin of voxels to determine which TPC(s)
               contributed to them, and define volumes accordingly
-
-        Returns
-        -------
-        bool
-            `True` if the particle is contained, `False` if not
         '''
         # Translate the margin parameter to a (3,2) matrix
         if np.isscalar(margin):
@@ -302,40 +361,24 @@ class Geometry:
             margin = np.copy(margin)
 
         # Establish the volumes to check against
-        volumes = []
-        if mode == 'tpc':
+        self.cont_volumes = []
+        if mode in ['tpc', 'source']:
             for m, module in enumerate(self.boundaries):
                 for t, tpc in enumerate(module):
-                    vol = self.adapt_volume(tpc, margin, cathode_margin, m, t)
-                    volumes.append(vol)
+                    vol = self.adapt_volume(tpc, margin, \
+                            cathode_margin, m, t)
+                    self.cont_volumes.append(vol)
         elif mode == 'module':
             for m in self.modules:
                 vol = self.adapt_volume(m, margin)
-                volumes.append(vol)
+                self.cont_volumes.append(vol)
         elif mode == 'detector':
             vol = self.adapt_volume(self.detector, margin)
-            volumes.append(vol)
-        elif mode == 'source':
-            assert sources is not None, \
-                    'Must provide sources to use the `source` method'
-            contributors = np.vstack(self.get_contributors(sources)).T
-            for m, t in contributors:
-                vol = self.adapt_volume(self.boundaries[m, t], margin,
-                        cathode_margin, m, t)
-                volumes.append(vol)
-            volume  = self.merge_volumes(volumes)
-            volumes = [volume]
+            self.cont_volumes.append(vol)
         else:
             raise ValueError(f'Containement check mode not recognized: {mode}')
 
-        # Loop over volumes, make sure the cloud is contained in at least one
-        contained = False
-        for v in volumes:
-            if (points > v[:,0]).all() and (points < v[:,1]).all():
-                contained = True
-                break
-
-        return contained
+        self.cont_volumes = np.array(self.cont_volumes)
 
     def adapt_volume(self, ref_volume, margin, cathode_margin = None,
             module_id = None, tpc_id = None):
@@ -375,34 +418,6 @@ class Geometry:
             volume[axis, side] += flip * (cathode_margin - margin[axis, side])
 
         return volume
-
-    def translate(self, points, source_id, target_id):
-        '''
-        Moves a point cloud from one module to another one
-
-        Parameters
-        ----------
-        points : np.ndarray
-            (N, 3) Set of point coordinates
-        source_id: int
-            Module ID from which to move the point cloud
-        target_id : int
-            Module ID to which to move the point cloud
-
-        Returns
-        -------
-        np.ndarray
-            (N, 3) Set of translated point coordinates
-        '''
-        # If the source and target are the same, nothing to do here
-        if target_id == source_id:
-            return points
-
-        # Fetch the inter-module shift
-        offset = self.centers[target_id] - self.centers[source_id]
-
-        # Translate
-        return np.copy(points) + offset
 
     @staticmethod
     def merge_volumes(volumes):

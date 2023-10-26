@@ -137,11 +137,8 @@ class ContainmentProcessor(PostProcessor):
         '''
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
-
-        # Store containment checking parameters
-        self.margin = margin
-        self.cathode_margin = cathode_margin
-        self.mode = mode
+        self.geo.define_containment_volumes(margin, cathode_margin, mode)
+        self.use_source = mode == 'source'
 
         # List objects for which to check containement
         self.key_list = []
@@ -174,11 +171,13 @@ class ContainmentProcessor(PostProcessor):
                 if not len(points):
                     continue
 
+                # If using sources, check that they are provided
+                assert not self.use_source or len(p.sources), \
+                        'If in `source` mode, must provide sources'
+                sources = p.sources if self.use_source else None
+
                 # Check containment
-                sources = p.sources if self.mode == 'source' \
-                    and len(p.sources) else None
-                p.is_contained = self.geo.check_containment(points,
-                        self.margin, self.cathode_margin, sources, self.mode)
+                p.is_contained = self.geo.check_containment(points, sources)
 
         return {}, {}
 
@@ -231,11 +230,7 @@ class FiducialProcessor(PostProcessor):
         '''
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file)
-
-        # Store the fiducial checking parameters
-        self.margin = margin
-        self.cathode_margin = cathode_margin
-        self.mode = mode
+        self.geo.define_containment_volumes(margin, cathode_margin, mode)
 
         # List objects for which to check containement
         self.key_list = []
@@ -270,7 +265,6 @@ class FiducialProcessor(PostProcessor):
                 vertex = vertex.reshape(-1,3)
 
                 # Check containment
-                ia.is_fiducial = self.geo.check_containment(vertex,
-                        self.margin, self.cathode_margin, mode=self.mode)
+                ia.is_fiducial = self.geo.check_containment(vertex)
 
         return {}, {}
