@@ -138,7 +138,6 @@ class ContainmentProcessor(PostProcessor):
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
         self.geo.define_containment_volumes(margin, cathode_margin, mode)
-        self.use_source = mode == 'source'
 
         # List objects for which to check containement
         self.key_list = []
@@ -171,13 +170,8 @@ class ContainmentProcessor(PostProcessor):
                 if not len(points):
                     continue
 
-                # If using sources, check that they are provided
-                assert not self.use_source or len(p.sources), \
-                        'If in `source` mode, must provide sources'
-                sources = p.sources if self.use_source else None
-
                 # Check containment
-                p.is_contained = self.geo.check_containment(points, sources)
+                p.is_contained = self.geo.check_containment(points, p.sources)
 
         return {}, {}
 

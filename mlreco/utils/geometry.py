@@ -105,6 +105,7 @@ class Geometry:
 
         # Containment volumes to be defined by the user
         self.cont_volumes = None
+        self.cont_use_source = False
 
     def build_tpcs(self):
         '''
@@ -304,7 +305,9 @@ class Geometry:
             raise ValueError('Must call `define_containment_volumes` first')
 
         # If sources are provided, only consider source volumes
-        if sources is not None and len(sources):
+        if self.cont_use_source:
+            assert len(points) == len(sources), \
+                    'Need to provide sources to make a source-based check'
             contributors = self.get_contributors(sources)
             index = contributors[0]*self.boundaries.shape[1] + contributors[1]
             volume  = self.merge_volumes(self.cont_volumes[index])
@@ -368,13 +371,16 @@ class Geometry:
                     vol = self.adapt_volume(tpc, margin, \
                             cathode_margin, m, t)
                     self.cont_volumes.append(vol)
+            self.cont_use_source = mode == 'source'
         elif mode == 'module':
             for m in self.modules:
                 vol = self.adapt_volume(m, margin)
                 self.cont_volumes.append(vol)
+            self.cont_use_source = False
         elif mode == 'detector':
             vol = self.adapt_volume(self.detector, margin)
             self.cont_volumes.append(vol)
+            self.cont_use_source = False
         else:
             raise ValueError(f'Containement check mode not recognized: {mode}')
 
