@@ -251,9 +251,9 @@ class TruthInteraction(Interaction):
         if neutrino is None:
             self.nu_track_id = -1
             for name in self._SCALAR_KEYS:
-                setattr(self, f'nu_name', self._SCALAR_KEYS[name])
+                setattr(self, f'nu_{name}', self._SCALAR_KEYS[name])
             for name in self._VECTOR_KEYS:
-                setattr(self, f'nu_name', self._VECTOR_KEYS[name])   
+                setattr(self, f'nu_{name}', self._VECTOR_KEYS[name])   
         else:
             self.nu_track_id = neutrino.nu_track_id()
             
