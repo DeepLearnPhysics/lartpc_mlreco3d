@@ -216,7 +216,7 @@ class AnaToolsManager:
         end = time.time()
         dt = end - start
         print(f'Forward took {dt:.3f} seconds.')
-        self.logger_dict['forward_time'] = dt
+        self.logger_dict['forward'] = dt
 
         # 1-a. Convert units
 
@@ -248,7 +248,7 @@ class AnaToolsManager:
                 self.build_representations(data, res)
             end = time.time()
             dt = end - start
-            self.logger_dict['build_reps_time'] = dt
+            self.logger_dict['build_representations'] = dt
         print(f'Building representations took {dt:.3f} seconds.')
 
         if self.convert_to_cm:
@@ -259,7 +259,7 @@ class AnaToolsManager:
         self.run_post_processing(data, res)
         end = time.time()
         dt = end - start
-        self.logger_dict['post_processing_time'] = dt
+        self.logger_dict['post_process'] = dt
         print(f'Post-processing took {dt:.3f} seconds.')
 
         # 4. Write updated results to file, if requested
@@ -268,6 +268,7 @@ class AnaToolsManager:
             self.data_writer.append(data, res)
         end = time.time()
         dt = end - start
+        self.logger_dict['write_hdf5'] = dt
         print(f'HDF5 writing took {dt:.3f} seconds.')
 
         # 5. Run scripts, if requested
@@ -280,7 +281,7 @@ class AnaToolsManager:
         end = time.time()
         dt = end - start
         print(f'Scripts took {dt:.3f} seconds.')
-        self.logger_dict['write_csv_time'] = dt
+        self.logger_dict['write_csv'] = dt
 
         glob_end = time.time()
         dt = glob_end - glob_start
