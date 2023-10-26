@@ -1,6 +1,6 @@
 import numpy as np
 
-from mlreco.utils.globals import PID_LABELS
+from mlreco.utils.globals import TRACK_SHP
 
 from analysis.post_processing import PostProcessor
 
@@ -14,7 +14,8 @@ class CalorimetricEnergyProcessor(PostProcessor):
     result_cap = ['particles']
 
     def __init__(self,
-                 conversion_factor=1.):
+                 ADC_to_MeV,
+                 shower_fudge=1.):
 
         '''
         Stores the ADC to MeV conversion factor.
@@ -24,13 +25,20 @@ class CalorimetricEnergyProcessor(PostProcessor):
 
         Parameters
         ----------
-        conversion_factor : Union[float, dict], default 1.
-            Voxel value to MeV conversion factor. If a single number, the same
-            scaling is used for every particle type. If a dictionary is
-            provided, applies different conversions for differnt PID.
+        ADC_to_MeV : Union[float, str]
+            Global ADC to MeV conversion factor (can be an expression)
+        shower_fudge : Union[float, str]
+            Shower energy fudge factor (accounts for missing cluster energy)
         '''
         # Store the conversion factor
-        self.factor = conversion_factor
+        self.factor = ADC_to_MeV
+        if isinstance(self.factor, str):
+            self.factor = eval(self.factor)
+
+        # Store the shower fudge factor
+        self.shower_fudge = shower_fudge
+        if isinstance(self.shower_fudge, str):
+            self.shower_fudge = eval(self.shower_fudge)
 
     def process(self, data_dict, result_dict):
         '''
@@ -46,14 +54,8 @@ class CalorimetricEnergyProcessor(PostProcessor):
         # Loop over reconstructed particles
         for p in result_dict['particles']:
             factor = self.factor
-            if isinstance(factor, dict):
-                if p.pid != -1 and p.pid not in PID_LABELS.keys():
-                    raise ValueError(f'Particle species not recognized: ' \
-                            '{p.pid}')
-                if p.pid not in self.factor.keys():
-                    raise ValueError(f'Must specify a conversion factor ' \
-                            'for particle {p.pid}')
-                factor = self.factor[p.pid]
+            if p.semantic_type != TRACK_SHP:
+                factor *= self.shower_fudge
 
             p.calo_ke = factor * p.depositions_sum
                 
