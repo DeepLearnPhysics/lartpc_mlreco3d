@@ -16,10 +16,10 @@ class DirectionProcessor(PostProcessor):
     result_cap_opt = ['truth_particles']
 
     def __init__(self,
-                 neighborhood_radius=5,
-                 optimize=True,
-                 truth_point_mode='points',
-                 run_mode='both'):
+                 neighborhood_radius = 5,
+                 optimize = True,
+                 truth_point_mode = 'points',
+                 run_mode = 'both'):
         '''
         Store the particle direction recosntruction parameters
 
@@ -90,19 +90,20 @@ class ContainmentProcessor(PostProcessor):
 
     def __init__(self,
                  margin,
-                 use_source=False,
-                 detector=None,
-                 boundary_file=None,
-                 source_file=None,
-                 mode='module',
-                 truth_point_mode='points',
-                 run_mode='both'):
+                 cathode_margin = None,
+                 detector = None,
+                 boundary_file = None,
+                 source_file = None,
+                 mode = 'module',
+                 truth_point_mode = 'points',
+                 run_mode = 'both'):
         '''
         Initialize the containment conditions.
 
-        If `use_source` is True, the cut will be based on the source of the
-        point cloud, i.e. if a point cloud was produced by TPCs i and j, it
-        must be contained within the volume bound by the set of TPCs i and j.
+        If the `source` method is used, the cut will be based on the source of
+        the point cloud, i.e. if a point cloud was produced by TPCs i and j, it
+        must be contained within the volume bound by the set of TPCs i and j,
+        and whichever volume is present between them.
 
         Parameters
         ----------
@@ -113,8 +114,8 @@ class ContainmentProcessor(PostProcessor):
               each other and perpendicular to a shared axis
             - If [[x_low,x_up], [y_low,y_up], [z_low,z_up]]: distance is
               specified individually of each wall.
-        use_source : bool, default False
-            If True, use the point sources to define a containment volume
+        cathode_margin : float, optional
+            If specified, sets a different margin for the cathode boundaries
         detector : str, optional
             Detector to get the geometry from
         boundary_file : str, optional
@@ -123,10 +124,12 @@ class ContainmentProcessor(PostProcessor):
             Path to a detector source file. Supersedes `detector` if set
         mode : str, default 'module'
             Containement criterion (one of 'global', 'module', 'tpc'):
-            - If 'detector', makes sure is is contained within the
-              outermost walls
-            - If 'module', makes sure it is contained within a single module
             - If 'tpc', makes sure it is contained within a single tpc
+            - If 'module', makes sure it is contained within a single module
+            - If 'detector', makes sure it is contained within the
+              outermost walls
+            - If 'source', use the origin of voxels to determine which TPC(s)
+              contributed to them, and define volumes accordingly
         truth_point_mode : str, default 'points'
             Point attribute to use to check containment of true particles
         run_mode : str, default 'both'
@@ -137,7 +140,7 @@ class ContainmentProcessor(PostProcessor):
 
         # Store containment checking parameters
         self.margin = margin
-        self.use_source = use_source
+        self.cathode_margin = cathode_margin
         self.mode = mode
 
         # List objects for which to check containement
@@ -172,10 +175,10 @@ class ContainmentProcessor(PostProcessor):
                     continue
 
                 # Check containment
-                sources = p.sources \
-                        if self.use_source and len(p.sources) else None
+                sources = p.sources if self.mode == 'source' \
+                    and len(p.sources) else None
                 p.is_contained = self.geo.check_containment(points,
-                        self.margin, sources, self.mode)
+                        self.margin, self.cathode_margin, sources, self.mode)
 
         return {}, {}
 
@@ -191,11 +194,12 @@ class FiducialProcessor(PostProcessor):
 
     def __init__(self,
                  margin,
-                 detector=None,
-                 boundary_file=None,
-                 mode='module',
-                 truth_vertex_mode='truth_vertex',
-                 run_mode='both'):
+                 cathode_margin = None,
+                 detector = None,
+                 boundary_file = None,
+                 mode = 'module',
+                 truth_vertex_mode = 'truth_vertex',
+                 run_mode = 'both'):
         '''
         Initialize the fiducial conditions
 
@@ -208,16 +212,18 @@ class FiducialProcessor(PostProcessor):
               each other and perpendicular to a shared axis
             - If [[x_low,x_up], [y_low,y_up], [z_low,z_up]]: distance is
               specified individually of each wall.
+        cathode_margin : float, optional
+            If specified, sets a different margin for the cathode boundaries
         detector : str, default 'icarus'
             Detector to get the geometry from
         boundary_file : str, optional
             Path to a detector boundary file. Supersedes `detector` if set
         mode : str, default 'module'
             Containement criterion (one of 'global', 'module', 'tpc'):
-            - If 'detector', makes sure is is contained within the
-              outermost walls
-            - If 'module', makes sure it is contained within a single module
             - If 'tpc', makes sure it is contained within a single tpc
+            - If 'module', makes sure it is contained within a single module
+            - If 'detector', makes sure it is contained within the
+              outermost walls
         truth_vertex_mode : str, default 'truth_vertex'
             Vertex attribute to use to check containment of true interactions
         run_mode : str, default 'both'
@@ -228,6 +234,7 @@ class FiducialProcessor(PostProcessor):
 
         # Store the fiducial checking parameters
         self.margin = margin
+        self.cathode_margin = cathode_margin
         self.mode = mode
 
         # List objects for which to check containement
@@ -249,7 +256,6 @@ class FiducialProcessor(PostProcessor):
         result_dict : dict
             Chain output dictionary
         '''
-
         # Loop over interaction objects
         for k in self.key_list:
             for ia in result_dict[k]:
@@ -265,6 +271,6 @@ class FiducialProcessor(PostProcessor):
 
                 # Check containment
                 ia.is_fiducial = self.geo.check_containment(vertex,
-                        self.margin, mode=self.mode)
+                        self.margin, self.cathode_margin, mode=self.mode)
 
         return {}, {}

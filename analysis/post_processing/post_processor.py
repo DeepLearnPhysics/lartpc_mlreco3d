@@ -77,7 +77,6 @@ class PostProcessor:
 
         # Run the post-processor
         start = time.time()
-        print(self.name)
         data_update, result_update = self.process(data_single, result_single)
         end = time.time()
         process_time = end-start

@@ -10,7 +10,7 @@ from analysis.classes.matching import (match_particles_fn,
 from analysis.classes.data import *
 
 
-class MatchParticlesPostProcessor(PostProcessor):
+class MatchParticlesProcessor(PostProcessor):
     
     name = 'match_particles'
     result_cap = ['particles', 'truth_particles']
@@ -105,7 +105,7 @@ class MatchParticlesPostProcessor(PostProcessor):
         return {}, out
     
     
-class MatchInteractionsPostProcessor(PostProcessor):
+class MatchInteractionsProcessor(PostProcessor):
     
     name = 'match_interactions'
     result_cap = ['interactions', 'truth_interactions']
