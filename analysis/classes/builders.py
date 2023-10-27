@@ -647,6 +647,7 @@ class InteractionBuilder(DataBuilder):
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False,
                                                      **info)
+                ia.load_larcv_neutrino(info)
             else:
                 mask = bp['index']
                 true_mask = bp['truth_index']
@@ -691,6 +692,10 @@ class InteractionBuilder(DataBuilder):
         vertices = self.get_truth_vertices(entry, data)
         if 'neutrinos' not in data:
             print("Neutrino truth information not found in label data!")
+            
+        print([ia.nu_id for ia in interactions])
+        assert False
+            
         for ia in interactions:
             if ia.truth_id in vertices:
                 ia.truth_vertex = vertices[ia.truth_id]
