@@ -64,16 +64,16 @@ class Geometry:
 
         # Check that the boundary file exists, load it
         if not os.path.isfile(boundaries):
-            raise FileNotFoundError(f'Could not find boundary ' \
-                    'file: {boundaries}')
+            raise FileNotFoundError('Could not find boundary ' \
+                    f'file: {boundaries}')
         self.boundaries = np.load(boundaries)
 
         # Check that the sources file exists, load it
         self.sources = None
         if sources is not None:
             if not os.path.isfile(sources):
-                raise FileNotFoundError(f'Could not find sources ' \
-                        'file: {sources}')
+                raise FileNotFoundError('Could not find sources ' \
+                        f'file: {sources}')
             self.sources = np.load(sources)
             assert self.sources.shape[:2] == self.boundaries.shape[:2], \
                     'There should be one list of sources per TPC'
@@ -82,8 +82,8 @@ class Geometry:
         self.opdets = None
         if opdets is not None:
             if not os.path.isfile(opdets):
-                raise FileNotFoundError(f'Could not find opdets ' \
-                        'file: {opdets}')
+                raise FileNotFoundError('Could not find opdets ' \
+                        f'file: {opdets}')
             self.opdets = np.load(opdets)
             assert self.opdets.shape[:2] == self.boundaries.shape[:2] \
                     or (self.opdets.shape[0] == self.boundaries.shape[0] \
