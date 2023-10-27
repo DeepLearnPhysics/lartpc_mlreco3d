@@ -1,2 +1,2 @@
-from .match import MatchParticlesPostProcessor
-from .match import MatchInteractionsPostProcessor
+from .match import MatchParticlesProcessor
+from .match import MatchInteractionsProcessor

@@ -101,7 +101,7 @@ class FlashMatchingProcessor(PostProcessor):
                 ii.flash_id = int(flash.id())
                 ii.flash_time = float(flash.time())
                 ii.flash_total_pE = float(flash.TotalPE())
-                if match is not None:
+                if hasattr(match, 'hypothesis'):
                     ii.flash_hypothesis = float(np.array(match.hypothesis,
                         dtype=np.float64).sum())
 

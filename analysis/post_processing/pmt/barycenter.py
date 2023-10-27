@@ -8,7 +8,9 @@ class BarycenterFlashMatcher:
     Matches interactions and flashes by matching the charge barycenter of
     TPC interactions with the light barycenter of optical flashes.
     '''
-    def __init__(self, match_method='threshold', dimensions=[0,1,2],
+    axes = ['x', 'y', 'z']
+
+    def __init__(self, match_method='threshold', dimensions=[1,2],
             charge_weighted=False, time_window=None, first_flash_only=False,
             min_inter_size=None, min_flash_pe=None, match_distance=None,
             detector=None, boundary_file=None, source_file=None):
@@ -46,7 +48,7 @@ class BarycenterFlashMatcher:
 
         # Store the flash matching parameters
         self.match_method     = match_method
-        self.dimensions       = dimensions
+        self.dims             = dimensions
         self.charge_weighted  = charge_weighted
         self.time_window      = time_window
         self.first_flash_only = first_flash_only
@@ -59,7 +61,6 @@ class BarycenterFlashMatcher:
             msg = f'Barycenter flash matching method not recognized: {match_method}'
             raise ValueError(msg)
         if self.match_method == 'threshold':
-            print(self.match_distance)
             assert self.match_distance is not None, \
                     'When using the `threshold` method, must specify `match_distance`'
 
@@ -76,16 +77,16 @@ class BarycenterFlashMatcher:
 
         Returns
         -------
-        List[[Interaction, larcv.Flash]]
-            List of [interaction, flash] pairs
+        List[[Interaction, larcv.Flash, float]]
+            List of [interaction, flash, distance] triplets
         '''
         # Restrict the flashes to those that fit the selection criteria
         flashes = np.asarray(flashes, dtype=object)
-        if time_window is not None:
+        if self.time_window is not None:
             t1, t2 = self.time_window
             mask = [(f.time() > t1 and f.time() < t2)  for f in flashes]
             flashes = flashes[mask]
-        if min_flash_pe is not None:
+        if self.min_flash_pe is not None:
             mask = [f.flash_total_pE > self.min_flash_pe for f in flashes]
             flashes = flashes[mask]
         if not len(flashes):
@@ -94,30 +95,32 @@ class BarycenterFlashMatcher:
             flashes = [flashes[0]]
 
         # Restrict the interactions to those that fit the selection criterion
-        interactions = [ia for ia in result['interactions'] \
-                if ia.size > self.min_inter_count]
+        if self.min_inter_size is not None:
+            interactions = [ia for ia in interactions \
+                    if ia.size > self.min_inter_size]
         if not len(interactions):
             return []
 
         # Get the flash centroids
-        op_centroids = np.empty((len(flashes), 3)),
-        op_widths = np.empty((len(flashes)), 3)
+        op_centroids = np.empty((len(flashes), len(self.dims)))
+        op_widths = np.empty((len(flashes), len(self.dims)))
         for i, f in enumerate(flashes):
-            op_centroids[i] = np.array([f[f'{a}Center'] for a in ['x','y','z']])
-            op_widths[i] = np.array([f[f'{a}Width'] for a in ['x','y','z']])
+            for j, d in enumerate(self.dims):
+                op_centroids[i, j] = getattr(f, f'{self.axes[d]}Center')()
+                op_widths[i, j] = getattr(f, f'{self.axes[d]}Width')()
 
         # Get interactions centroids
-        int_centroids = np.empty((len(interactions), 3))
+        int_centroids = np.empty((len(interactions), len(self.dims)))
         for i, ia in enumerate(interactions):
             if not self.charge_weighted:
-                int_centroids[i] = np.mean(ia.points, axis=0)
+                int_centroids[i] = np.mean(ia.points[:, self.dims], axis=0)
             else:
-                int_centroids[i] = np.sum(ia.depositions * ia.points, axis=0) \
-                        / np.sum(ia.depositions)
+                int_centroids[i] = np.sum(ia.depositions * \
+                        ia.points[:, self.dims], axis=0) \
+                            / np.sum(ia.depositions)
 
         # Compute the flash to interaction distance matrix
-        dist_mat = cdist(op_centroids[:, self.dimensions],
-                int_centroids[:, self.dimensions])
+        dist_mat = cdist(op_centroids, int_centroids)
 
         # Produce matches
         matches = []
@@ -125,13 +128,15 @@ class BarycenterFlashMatcher:
             # For each flash, select the best match, save attributes
             for i, f in enumerate(flashes):
                 best_match = np.argmin(dist_mat[i])
+                dist = dist_mat[i, best_match]
                 if self.match_distance is not None \
-                        and dist_mat[i, best_match] > self.match_distance:
+                        and dist > self.match_distance:
                             continue
-                match.append((f, interactions[best_match]))
+                match.append((interactions[best_match], f, dist))
         elif self.match_method == 'threshold':
             # Find all compatible pairs
             valid_pairs = np.vstack(np.where(dist_mat <= self.match_distance)).T
-            matches = [(flashes[i], interactions[j], None) for i, j in valid_pairs]
+            matches = [(interactions[j], flashes[i], dist_mat[i,j]) \
+                    for i, j in valid_pairs]
 
         return matches
