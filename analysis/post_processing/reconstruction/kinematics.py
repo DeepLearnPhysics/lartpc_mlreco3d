@@ -134,13 +134,19 @@ class ParticlePropertiesProcessor(PostProcessor):
             # Adjust the particle ID
             pid_thresholds = self.track_pid_thresholds \
                     if p.semantic_type == TRACK_SHP else self.em_pid_thresholds
-            assigned = False
-            for k, v in pid_thresholds.items():
-                if not assigned and p.pid_scores[k] >= v:
-                    p.pid = k
-                    assigned = True
-            assert assigned or not len(pid_thresholds), \
-                    'Must specify a PID threshold for all or no particle type'
+            if len(pid_thresholds):
+                assigned = False
+                scores = np.copy(p.pid_scores)
+                for k, v in pid_thresholds.items():
+                    if scores[k] >= v:
+                        p.pid = k
+                        assigned = True
+                        break
+                    else:
+                        scores *= 1./(1 - scores[k])
+
+                assert assigned, 'Must specify a ' \
+                        'PID threshold for all or no particle type'
 
             # Adjust the primary ID
             if self.primary_threshold is not None:
