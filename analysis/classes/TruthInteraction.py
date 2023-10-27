@@ -54,7 +54,7 @@ class TruthInteraction(Interaction):
                     'energy_deposit': -np.inf, 
                     'energy_init': -np.inf, 
                     'hadronic_invariant_mass': -np.inf,
-                    # 'id': -1,
+                    'id': -1,
                     'inelasticity': -np.inf,
                     'interaction_mode': -sys.maxsize,
                     'interaction_type': -sys.maxsize,
@@ -259,11 +259,10 @@ class TruthInteraction(Interaction):
                 setattr(self, f'nu_{name}', self._VECTOR_KEYS[name])   
         else:
             self.nu_track_id = neutrino.nu_track_id()
-            # self.neutrino_id = neutrino.id()
             
             for name in self._SCALAR_KEYS:
                 val = getattr(neutrino, name)()
-                if name != id:
+                if name != 'id':
                     setattr(self, f'nu_{name}', val)
                 else:
                     setattr(self, f'nu_truth_id', val)
@@ -293,7 +292,6 @@ class TruthInteraction(Interaction):
                 if type(attr) is bytes:
                     attr = attr.decode()
                 setattr(self, name, attr)
-        
 
     @property
     def depositions_MeV(self):
