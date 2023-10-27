@@ -1,4 +1,6 @@
 import numpy as np
+from larcv import larcv
+import sys
 
 from typing import List
 from collections import OrderedDict, defaultdict
@@ -43,6 +45,33 @@ class TruthInteraction(Interaction):
     # Attributes that specify coordinates
     _COORD_ATTRS = Interaction._COORD_ATTRS +\
 	['truth_points', 'sed_points', 'truth_vertex']
+ 
+    # Define placeholder values (-np.inf for float, -sys.maxsize for int)
+    _SCALAR_KEYS = {'bjorken_x': -np.inf, 
+                    'creation_process': 'N/A',
+                    'current_type': -1, 
+                    'distance_travel': -np.inf, 
+                    'energy_deposit': -np.inf, 
+                    'energy_init': -np.inf, 
+                    'hadronic_invariant_mass': -np.inf,
+                    'id': -1,
+                    'inelasticity': -np.inf,
+                    'interaction_mode': -sys.maxsize,
+                    'interaction_type': -sys.maxsize,
+                    'lepton_track_id': -sys.maxsize,
+                    'mcst_index': -sys.maxsize,
+                    'mct_index': -sys.maxsize,
+                    'momentum_transfer': -np.inf,
+                    # 'nu_track_id', # Exception
+                    'nucleon': -sys.maxsize,
+                    'num_voxels': -sys.maxsize,
+                    'p': -np.inf,
+                    'pdg_code': -sys.maxsize,
+                    'quark': -sys.maxsize,
+                    't': -np.inf,
+                    'target': -sys.maxsize,
+                    'theta': -np.inf}
+    _VECTOR_KEYS = {'position': np.full(3, -np.inf, dtype=np.float32)}
 
     def __init__(self,
                  interaction_id: int = -1,
@@ -62,6 +91,7 @@ class TruthInteraction(Interaction):
                  nu_current_type: int = -1,
                  nu_energy_init: float = -1.,
                  truth_vertex: np.ndarray = np.full(3, -np.inf),
+                 neutrino: object = None,
                  **kwargs):
 
         # Store the truth ID of the interaction
@@ -98,6 +128,7 @@ class TruthInteraction(Interaction):
 
         # TODO: Must fill this attribute with truth information
         self.truth_vertex = truth_vertex
+        self.register_larcv_neutrino()
 
     @property
     def particles(self):
@@ -205,6 +236,63 @@ class TruthInteraction(Interaction):
         _process_truth_interaction_attributes(init_args, processed_args, **kwargs)
         truth_interaction = cls(**processed_args)
         return truth_interaction
+    
+    def register_larcv_neutrino(self, neutrino=None):
+        '''
+        Extracts all the relevant attributes from the a
+        `larcv::Neutrino` and makes it its own.
+
+        Parameters
+        ----------
+        neutrino : larcv::Neutrino
+            True MC Neutrino Object
+        '''
+        
+        if neutrino is None:
+            self.nu_track_id = -1
+            for name in self._SCALAR_KEYS:
+                if name != 'id':
+                    setattr(self, f'nu_{name}', self._SCALAR_KEYS[name])
+                else:
+                    setattr(self, f'nu_truth_id', self._SCALAR_KEYS[name])
+            for name in self._VECTOR_KEYS:
+                setattr(self, f'nu_{name}', self._VECTOR_KEYS[name])   
+        else:
+            self.nu_track_id = neutrino.nu_track_id()
+            
+            for name in self._SCALAR_KEYS:
+                val = getattr(neutrino, name)()
+                if name != id:
+                    setattr(self, f'nu_{name}', val)
+                else:
+                    setattr(self, f'nu_truth_id', val)
+                
+            for name in self._VECTOR_KEYS:
+                larcv_vector = getattr(neutrino, name)()
+                vector = np.array(
+                    [getattr(larcv_vector, a)() for a in ['x', 'y', 'z']])
+                setattr(self, f'nu_{name}', vector)
+            
+        
+    def load_larcv_neutrino(self, neutrino_dict):
+        '''
+        Read saved neutrino information from h5 and restore attributes. 
+
+        Parameters
+        ----------
+        neutrino_dict : python dict containing larcv::Neutrino information.
+        '''
+        attribute_keys = list(self._SCALAR_KEYS.keys()) \
+                       + list(self._VECTOR_KEYS.keys())
+        attribute_keys += ['nu_track_id']
+        attribute_keys = [f'nu_{name}' for name in attribute_keys]
+        for name in attribute_keys:
+            if name in neutrino_dict:
+                attr = neutrino_dict[name]
+                if type(attr) is bytes:
+                    attr = attr.decode()
+                setattr(self, name, attr)
+        
 
     @property
     def depositions_MeV(self):

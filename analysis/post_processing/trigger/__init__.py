@@ -1,1 +1,1 @@
-from .trigger import parse_trigger
+from .trigger import TriggerProcessor

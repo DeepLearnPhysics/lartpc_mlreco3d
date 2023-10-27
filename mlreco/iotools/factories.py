@@ -49,9 +49,9 @@ def loader_factory(cfg, event_list=None):
     """
     params = cfg['iotool']
     minibatch_size = int(params['minibatch_size'])
-    shuffle      = True if not 'shuffle' in params     else bool(params['shuffle'    ])
-    num_workers  = 1    if not 'num_workers' in params else int (params['num_workers'])
-    collate_fn   = None if not 'collate_fn' in params  else str (params['collate_fn' ])
+    shuffle      = False if not 'shuffle' in params     else bool(params['shuffle'    ])
+    num_workers  = 1     if not 'num_workers' in params else int (params['num_workers'])
+    collate_fn   = None  if not 'collate_fn' in params  else str (params['collate_fn' ])
     collate_kwargs = {}
 
     if collate_fn is None:
@@ -90,6 +90,32 @@ def loader_factory(cfg, event_list=None):
     return loader
 
 
+def reader_factory(cfg):
+    """
+    Instantiates writer based on type specified in configuration under
+    `iotool.reader.name`. The name must match the name of a class under
+    `mlreco.iotools.readers`.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary. Expects a field `iotool`.
+
+    Returns
+    -------
+    reader
+
+    Note
+    ----
+    Currently the choice is limited to `HDF5Reader` only.
+    """
+    import mlreco.iotools.readers
+    params = deepcopy(cfg)
+    name   = params.pop('name')
+    reader = getattr(mlreco.iotools.readers, name)(**params)
+    return reader
+
+
 def writer_factory(cfg):
     """
     Instantiates writer based on type specified in configuration under
@@ -109,11 +135,8 @@ def writer_factory(cfg):
     ----
     Currently the choice is limited to `HDF5Writer` only.
     """
-    if 'writer' not in cfg['iotool']:
-        return None
-
     import mlreco.iotools.writers
-    params = deepcopy(cfg['iotool']['writer'])
+    params = deepcopy(cfg)
     name   = params.pop('name')
     writer = getattr(mlreco.iotools.writers, name)(**params)
     return writer

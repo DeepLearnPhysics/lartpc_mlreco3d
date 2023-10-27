@@ -16,7 +16,7 @@ class HDF5Reader:
 
         Parameters
         ----------
-        file_paths : list
+        file_keys : list
             List of paths to the HDF5 files to be read
         n_entry: int, optional
             Maximum number of entries to load
@@ -238,6 +238,9 @@ class HDF5Reader:
                     blob[key] = []
                     for i in range(len(array)):
                         blob[key].append(dict(zip(names, array[i])))
+                        for k in blob[key][-1].keys():
+                            if isinstance(blob[key][-1][k], bytes):
+                                blob[key][-1][k] = blob[key][-1][k].decode()
         else:
             # If the reference points at a group, unpack
             el_refs = group[key]['index'][region_ref].flatten()

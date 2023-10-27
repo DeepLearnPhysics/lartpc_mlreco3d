@@ -1,6 +1,8 @@
 import numpy as np
 
-class TrajectoryMCSFitter:
+from analysis.post_processing import PostProcessor
+
+class MCSEnergyProcessor(PostProcessor):
     
     def __init__(self, **kwargs):
         self._min_hits_per_segment = kwargs.get('min_hits_per_segment', 2)

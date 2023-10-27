@@ -2,7 +2,7 @@ from pprint import pprint
 
 import numpy as np
 
-from analysis.post_processing import post_processing
+from analysis.post_processing import PostProcessor
 from mlreco.utils.globals import *
 
 

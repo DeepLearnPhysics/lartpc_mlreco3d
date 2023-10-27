@@ -348,24 +348,39 @@ def pdist(x: nb.float32[:,:]) -> nb.float32[:,:]:
 def cdist(x1: nb.float32[:,:],
           x2: nb.float32[:,:]) -> nb.float32[:,:]:
     """
-    Numba implementation of Eucleadian `scipy.spatial.distance.cdist(x, p=2)` in 3D.
+    Numba implementation of Eucleadian `scipy.spatial.distance.cdist(x, p=2)`
+    in 1D, 2D or 3D.
 
     Parameters
     ----------
     x1 : np.ndarray
-        (N,3) array of point coordinates in the first set
+        (N,d) array of point coordinates in the first set
     x2 : np.ndarray
-        (M,3) array of point coordinates in the second set
+        (M,d) array of point coordinates in the second set
 
     Returns
     -------
     np.ndarray
         (N,M) array of pair-wise Euclidean distances
     """
+    dim = x1.shape[1]
+    assert dim and dim < 4, 'Only supports point dimensions up to 3'
     res = np.empty((x1.shape[0], x2.shape[0]), dtype=x1.dtype)
-    for i1 in range(x1.shape[0]):
-        for i2 in range(x2.shape[0]):
-            res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2+(x1[i1][1]-x2[i2][1])**2+(x1[i1][2]-x2[i2][2])**2)
+    if dim == 1:
+        for i1 in range(x1.shape[0]):
+            for i2 in range(x2.shape[0]):
+                res[i1,i2] = abs(x1[i1][0]-x2[i2][0])
+    elif dim == 2:
+        for i1 in range(x1.shape[0]):
+            for i2 in range(x2.shape[0]):
+                res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2 \
+                        + (x1[i1][1]-x2[i2][1])**2)
+    elif dim == 3:
+        for i1 in range(x1.shape[0]):
+            for i2 in range(x2.shape[0]):
+                res[i1,i2] = np.sqrt((x1[i1][0]-x2[i2][0])**2 \
+                        + (x1[i1][1]-x2[i2][1])**2 \
+                        + (x1[i1][2]-x2[i2][2])**2)
     return res
 
 

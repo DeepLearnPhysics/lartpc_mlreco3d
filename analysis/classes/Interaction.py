@@ -66,11 +66,11 @@ class Interaction:
                  crthit_matched: bool = False,
                  crthit_matched_particle_id: int = -1,
                  crthit_id: int = -1,
-                 flash_time: float = -np.inf,
                  fmatched: bool = False,
-                 flash_total_pE: float = -1,
                  flash_id: int = -1,
-                 flash_hypothesis: float = -1,
+                 flash_time: float = -np.inf,
+                 flash_total_pE: float = -1.0,
+                 flash_hypothesis: float = -1.0,
                  matched: bool = False,
                  is_contained: bool = False,
                  is_fiducial: bool = False,
@@ -125,10 +125,10 @@ class Interaction:
         self.coffset        = coffset
 
         # Flash matching quantities
-        self.flash_time     = flash_time
-        self.fmatched       = bool(fmatched)
-        self.flash_total_pE = flash_total_pE
-        self.flash_id       = flash_id
+        self.fmatched         = bool(fmatched)
+        self.flash_id         = flash_id
+        self.flash_time       = flash_time
+        self.flash_total_pE   = flash_total_pE
         self.flash_hypothesis = flash_hypothesis
 
         # CRT-TPC matching quantities
