@@ -262,7 +262,7 @@ class TruthInteraction(Interaction):
             
             for name in self._SCALAR_KEYS:
                 val = getattr(neutrino, name)()
-                if name != id:
+                if name != 'id':
                     setattr(self, f'nu_{name}', val)
                 else:
                     setattr(self, f'nu_truth_id', val)
@@ -292,7 +292,6 @@ class TruthInteraction(Interaction):
                 if type(attr) is bytes:
                     attr = attr.decode()
                 setattr(self, name, attr)
-        
 
     @property
     def depositions_MeV(self):

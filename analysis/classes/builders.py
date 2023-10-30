@@ -647,6 +647,7 @@ class InteractionBuilder(DataBuilder):
                 ia = TruthInteraction.from_particles(particles,
                                                      verbose=False,
                                                      **info)
+                ia.load_larcv_neutrino(info)
             else:
                 mask = bp['index']
                 true_mask = bp['truth_index']
@@ -691,6 +692,7 @@ class InteractionBuilder(DataBuilder):
         vertices = self.get_truth_vertices(entry, data)
         if 'neutrinos' not in data:
             print("Neutrino truth information not found in label data!")
+            
         for ia in interactions:
             if ia.truth_id in vertices:
                 ia.truth_vertex = vertices[ia.truth_id]
@@ -701,18 +703,6 @@ class InteractionBuilder(DataBuilder):
                 nu = neutrinos[0]
                 ia.is_neutrino = True
                 ia.register_larcv_neutrino(nu)
-                # nu_pos = np.array([nu.position().x(),
-                #                    nu.position().y(),
-                #                    nu.position().z()], dtype=np.float32)
-                # for p in ia.particles:
-                #     pos = p.ancestor_position
-                #     check_pos = np.linalg.norm(nu_pos - pos) > 1e-8
-                    # if check_pos:
-                # ia.nu_pdg_code             = nu.pdg_code()
-                # ia.nu_interaction_type     = nu.interaction_type()
-                # ia.nu_interaction_mode     = nu.interaction_mode()
-                # ia.nu_current_type         = nu.current_type()
-                # ia.nu_energy_init          = nu.energy_init()
 
         return interactions
 

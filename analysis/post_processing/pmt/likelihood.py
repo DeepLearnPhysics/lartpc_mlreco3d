@@ -182,8 +182,11 @@ class LikelihoodFlashMatcher:
         from flashmatch import flashmatch
         qcluster_v = []
         for ii in interactions:
+            # Produce a mask to remove negative value points (can happen)
+            valid_mask = np.where(ii.depositions > 0.)[0]
+
             # If the interaction has less than 2 points, skip
-            if ii.points.shape[0] < 2:
+            if len(valid_mask) < 2:
                 continue
 
             # Initialize qcluster
@@ -192,13 +195,14 @@ class LikelihoodFlashMatcher:
             qcluster.time = 0
 
             # Get the point coordinates
-            points = self.geo.translate(ii.points, self.volume_id, 0)
+            points = self.geo.translate(ii.points[valid_mask],
+                    self.volume_id, 0)
 
             # Get the depositions
             if not self.use_depositions_MeV:
-                depositions = ii.depositions
+                depositions = ii.depositions[valid_mask]
             else:
-                depositions = ii.depositions_MeV
+                depositions = ii.depositions_MeV[valid_mask]
 
             # Fill the trajectory
             pytraj = np.hstack([points, depositions[:, None]])

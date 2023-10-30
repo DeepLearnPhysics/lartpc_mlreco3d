@@ -76,7 +76,7 @@ class Interaction:
                  is_fiducial: bool = False,
                  is_ccrosser: bool = False,
                  coffset: float = -np.inf,
-                 units: str = 'px'):
+                 units: str = 'px', **kwargs):
 
         # Initialize attributes
         self.id           = int(interaction_id)
