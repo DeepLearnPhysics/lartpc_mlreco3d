@@ -224,8 +224,8 @@ class MomentumProcessor(PostProcessor):
                     ke = p.calo_ke
 
             if ke < 0.:
-                raise ValueError('Must fill the `*_ke` ' \
-                        'attributes to fill the momentum')
+                # TODO: Warn using the logging function at some point
+                continue
 
             # Get the direction
             direction = p.start_dir
