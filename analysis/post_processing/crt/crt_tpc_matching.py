@@ -1,5 +1,4 @@
 from analysis.post_processing import PostProcessor
-from matcha.match_candidate import MatchCandidate
 
 
 class CRTTPCMatchingProcessor(PostProcessor):
@@ -59,6 +58,7 @@ class CRTTPCMatchingProcessor(PostProcessor):
                                                               use_true_tpc_objects=False,
                                                               restrict_interactions=[])
 
+        from matcha.match_candidate import MatchCandidate
         assert all(isinstance(item, MatchCandidate) for item in crt_tpc_matches)
 
         # crt_tpc_matches is a list of matcha.MatchCandidates. Each MatchCandidate

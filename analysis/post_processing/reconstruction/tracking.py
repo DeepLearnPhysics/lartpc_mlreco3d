@@ -1,10 +1,9 @@
 import numpy as np
 
+from mlreco.utils.globals import TRACK_SHP
 from mlreco.utils.energy_loss import csda_table_spline
 from mlreco.utils.tracking import get_track_length
-from mlreco.utils.globals import *
 
-from analysis.classes import TruthParticle
 from analysis.post_processing import PostProcessor
 
 
@@ -28,15 +27,17 @@ class CSDAEnergyProcessor(PostProcessor):
 
         Parameters
         ----------
-        tracking_mode : str, default 'step'
+        tracking_mode : str, default 'bin_pca'
             Method used to compute the track length (one of 'displacement',
             'step', 'step_next', 'bin_pca' or 'spline')
         include_pids : list, default [2, 3, 4, 5]
-            Particle species to compute the kinetic energy from
+            Particle species to compute the kinetic energy for
         truth_point_mode : str, default 'points'
             Point attribute to use for true particles
         run_mode : str, default 'both'
             Which output to run on (one of 'both', 'reco' or 'truth')
+        **kwargs : dict, optiona
+            Additional arguments to pass to the tracking algorithm
         '''
         # Fetch the functions that map the range to a KE
         self.include_pids = include_pids
@@ -74,10 +75,10 @@ class CSDAEnergyProcessor(PostProcessor):
         for k in self.key_list:
             for p in result_dict[k]:
                 # Only run this algorithm on tracks that have a CSDA table
-                if not ((p.semantic_type == 1) \
+                if not ((p.semantic_type == TRACK_SHP) \
                         and (p.pid in self.include_pids)):
                     continue
-                
+
                 # Make sure the particle coordinates are expressed in cm
                 self.check_units(p)
 
