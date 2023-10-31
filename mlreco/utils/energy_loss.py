@@ -211,7 +211,7 @@ def bethe_bloch_lar(T, M, z = 1):
 
     #Bloch Correction
     y=alpha*z/beta
-    L2=-y-np.real(digamma(1+y*1j))
+    L2=-abs(y)-np.real(digamma(1+y*1j))
 
     
     LowE=-C/LAR_Z+z*L1+z**2*L2
