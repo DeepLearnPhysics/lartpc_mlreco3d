@@ -12,7 +12,7 @@ class VertexProcessor(PostProcessor):
     '''
     name = 'reconstruct_vertex'
     result_cap = ['interactions']
-    result_cap_optional = ['truth_interactions']
+    result_cap_opt = ['truth_interactions']
 
     def __init__(self,
                  include_semantics = [SHOWR_SHP, TRACK_SHP],
@@ -42,11 +42,10 @@ class VertexProcessor(PostProcessor):
         angle_threshold : float, default 0.3 radians
             Maximum angle between the vertex-to-start-point vector and a shower
             direction to consider that a shower originated from the vertex
-        truth_point_mode : str, default 'points'
-            Point attribute to use for true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Store the relevant parameters
         self.include_semantics = include_semantics
         self.use_primaries = use_primaries
@@ -54,18 +53,6 @@ class VertexProcessor(PostProcessor):
         self.anchor_vertex = anchor_vertex
         self.touching_threshold = touching_threshold
         self.angle_threshold = angle_threshold
-
-        # List objects for which to reconstruct the vertex
-        if run_mode not in ['reco', 'truth', 'both']:
-            raise ValueError('`run_mode` must be either `reco`, ' \
-                    '`truth` or `both`')
-
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['interactions']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_interactions']
-        self.truth_point_mode = truth_point_mode
 
     def process(self, data_dict, result_dict):
         '''
@@ -79,7 +66,7 @@ class VertexProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over interaction objects
-        for k in self.key_list:
+        for k in self.inter_keys:
             for ia in result_dict[k]:
                 self.reconstruct_vertex_single(ia)
 

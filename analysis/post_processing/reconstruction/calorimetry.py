@@ -12,10 +12,12 @@ class CalorimetricEnergyProcessor(PostProcessor):
     '''
     name = 'reconstruct_calo_energy'
     result_cap = ['particles']
+    result_cap_opt = ['truth_particles']
 
     def __init__(self,
                  ADC_to_MeV,
-                 shower_fudge=1.):
+                 shower_fudge=1.,
+                 run_mode='reco'):
 
         '''
         Stores the ADC to MeV conversion factor.
@@ -30,6 +32,9 @@ class CalorimetricEnergyProcessor(PostProcessor):
         shower_fudge : Union[float, str]
             Shower energy fudge factor (accounts for missing cluster energy)
         '''
+        # Initialize the parent class
+        super().__init__(run_mode)
+
         # Store the conversion factor
         self.factor = ADC_to_MeV
         if isinstance(self.factor, str):
@@ -51,12 +56,14 @@ class CalorimetricEnergyProcessor(PostProcessor):
         result_dict : dict
             Chain output dictionary
         '''
-        # Loop over reconstructed particles
-        for p in result_dict['particles']:
-            factor = self.factor
-            if p.semantic_type != TRACK_SHP:
-                factor *= self.shower_fudge
+        # Loop over particle types
+        for k in self.part_keys:
+            # Loop over particles
+            for p in result_dict[k]:
+                factor = self.factor
+                if p.semantic_type != TRACK_SHP:
+                    factor *= self.shower_fudge
 
-            p.calo_ke = factor * p.depositions_sum
+                p.calo_ke = factor * p.depositions_sum
                 
         return {}, {}

@@ -37,8 +37,6 @@ class TruthParticle(Particle):
         (N_s, 3) Set of voxel coordinates that make up this particle in the SED tensor
     sed_depositions_MeV : np.ndarray, default np.array([])
         (N_s) Array of energy deposition values for each SED voxel in MeV
-    direction : np.ndarray
-        (3) Unit vector corresponding to the true particle direction (normalized momentum)
     '''
 
     # Attributes that specify coordinates
@@ -56,6 +54,8 @@ class TruthParticle(Particle):
                  sed_index: np.ndarray = np.empty(0, dtype=np.int64),
                  sed_points: np.ndarray = np.empty((0, 3), dtype=np.float32),
                  sed_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 truth_momentum: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 truth_start_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  particle_asis: object = larcv.Particle(),
                  **kwargs):
 
@@ -87,9 +87,9 @@ class TruthParticle(Particle):
         # Quantity to be set with the children counting post-processor
         self.children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
-        # Quantities to be set with the direction estimator
-        self.truth_start_dir = np.zeros(3)
-        self.truth_end_dir   = np.zeros(3)
+        # Quantities derived from the LArCV particle
+        self.truth_momentum = truth_momentum
+        self.truth_start_dir = truth_start_dir
 
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng  = -1.
@@ -132,10 +132,11 @@ class TruthParticle(Particle):
             setattr(self, k, vector)
 
         # Load up the 3-momentum (stored in a peculiar way) and the direction
-        self.momentum  = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
-        self.direction = np.zeros(3)
-        if np.linalg.norm(self.momentum) > 0.:
-            self.direction = self.momentum/np.linalg.norm(self.momentum)
+        self.truth_momentum = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
+        self.truth_start_dir = np.full(3, -np.inf, dtype=np.float32)
+        if np.linalg.norm(self.truth_momentum):
+            self.truth_start_dir = \
+                    self.truth_momentum/np.linalg.norm(self.truth_momentum)
 
         # Set parent attributes based on the above
         self.semantic_type = self.shape

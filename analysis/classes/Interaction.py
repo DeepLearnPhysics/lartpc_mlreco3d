@@ -5,8 +5,9 @@ from collections import OrderedDict, Counter, defaultdict
 from functools import cached_property
 
 from . import Particle
+
+from mlreco.utils import pixel_to_cm
 from mlreco.utils.globals import PID_LABELS
-from mlreco.utils.utils import pixel_to_cm
 
 
 class Interaction:
@@ -96,8 +97,8 @@ class Interaction:
         self._particles  = None
         self._size       = None
         # Invoke particles setter
-        self._particle_counts = np.zeros(6, dtype=np.int64)
-        self._primary_counts  = np.zeros(6, dtype=np.int64)
+        self._particle_counts = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
+        self._primary_counts  = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
         if particles is not None:
             self.particles   = particles
 
@@ -248,17 +249,19 @@ class Interaction:
             self.depositions = np.atleast_1d(np.concatenate(depositions_list))
 
     def _update_particle_info(self):
-        self._particle_counts = np.zeros(6, dtype=np.int64)
-        self._primary_counts  = np.zeros(6, dtype=np.int64)
+        self._particle_counts = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
+        self._primary_counts  = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
         for p in self.particles:
+            if not p.is_valid: continue
             if p.pid >= 0:
                 self._particle_counts[p.pid] += 1
                 self._primary_counts[p.pid] += int(p.is_primary)
             else:
                 self._particle_counts[-1] += 1
                 self._primary_counts[-1] += int(p.is_primary)
-            self._num_particles = len(self.particles)
-            self._num_primaries = len([1 for p in self.particles if p.is_primary])
+
+        self._num_particles = np.sum(self._particle_counts)
+        self._num_primaries = np.sum(self._primary_counts)
 
     @property
     def particle_ids(self):
@@ -307,7 +310,7 @@ class Interaction:
     @property
     def topology(self):
         msg = ""
-        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
+        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: 'k', 6:'?'}
         for i, count in enumerate(self._primary_counts):
             if count > 0:
                 msg += f"{count}{encode[i]}"
