@@ -127,7 +127,7 @@ class TruthParticle(Particle):
 
         # Load up the 3-momentum (stored in a peculiar way) and the direction
         self.truth_momentum = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
-        self.truth_start_dir = np.zeros(3)
+        self.truth_start_dir = np.full(3, -np.inf, dtype=np.float32)
         if np.linalg.norm(self.truth_momentum) > 0.:
             self.truth_start_dir = \
                     self.truth_momentum/np.linalg.norm(self.truth_momentum)
@@ -165,7 +165,7 @@ class TruthParticle(Particle):
         # Load up all the 3-vector information
         vec_keys = ['position', 'end_position', 'parent_position',\
                 'ancestor_position', 'first_step', 'last_step',\
-                'start_point', 'end_point']
+                'start_point', 'end_point', 'truth_momentum', 'truth_start_dir']
         
         attribute_keys = scalar_keys + vec_keys
         for attr_name in attribute_keys:
