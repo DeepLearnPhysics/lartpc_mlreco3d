@@ -32,13 +32,12 @@ class CSDAEnergyProcessor(PostProcessor):
             'step', 'step_next', 'bin_pca' or 'spline')
         include_pids : list, default [2, 3, 4, 5]
             Particle species to compute the kinetic energy for
-        truth_point_mode : str, default 'points'
-            Point attribute to use for true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         **kwargs : dict, optiona
             Additional arguments to pass to the tracking algorithm
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Fetch the functions that map the range to a KE
         self.include_pids = include_pids
         self.splines = {ptype: csda_table_spline(ptype) \
@@ -46,19 +45,7 @@ class CSDAEnergyProcessor(PostProcessor):
 
         # Store the tracking parameters
         self.tracking_mode = tracking_mode
-        self.kwargs = kwargs
-
-        # List objects for which to reconstruct track KE
-        if run_mode not in ['reco', 'truth', 'both']:
-            raise ValueError('`run_mode` must be either `reco`, ' \
-                    '`truth` or `both`')
-
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['particles']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_particles']
-        self.truth_point_mode = truth_point_mode
+        self.tracking_kwargs = kwargs
 
     def process(self, data_dict, result_dict):
         '''
@@ -72,7 +59,7 @@ class CSDAEnergyProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over particle objects
-        for k in self.key_list:
+        for k in self.part_keys:
             for p in result_dict[k]:
                 # Only run this algorithm on tracks that have a CSDA table
                 if not ((p.semantic_type == TRACK_SHP) \
@@ -89,7 +76,7 @@ class CSDAEnergyProcessor(PostProcessor):
 
                 # Compute the length of the track
                 length = get_track_length(points, point=p.start_point,
-                        method=self.tracking_mode, **self.kwargs)
+                        method=self.tracking_mode, **self.tracking_kwargs)
 
                 # Store the length and the CSDA kinetic energy
                 p.length  = length

@@ -62,11 +62,10 @@ class CathodeCrosserProcessor(PostProcessor):
             Path to a detector boundary file. Supersedes `detector` if set
         source_file : str, optional
             Path to a detector source file. Supersedes `detector` if set
-        truth_point_mode : str, default 'points'
-            Point attribute to use to find cathode crossers of true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
 
@@ -76,14 +75,6 @@ class CathodeCrosserProcessor(PostProcessor):
         self.angle_tolerance = angle_tolerance
         self.adjust_crossers = adjust_crossers
         self.merge_crossers = merge_crossers
-
-        # List object types in which to look for cathode crossers
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['particles']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_particles']
-        self.truth_point_mode = truth_point_mode
 
     def process(self, data_dict, result_dict):
         '''
@@ -98,7 +89,7 @@ class CathodeCrosserProcessor(PostProcessor):
         '''
         # Loop over particle types
         update_dict = {}
-        for k in self.key_list:
+        for k in self.part_keys:
             # Find crossing particles already merged by the reconstruction
             truth = 'truth' in k
             prefix = 'truth_' if truth else ''

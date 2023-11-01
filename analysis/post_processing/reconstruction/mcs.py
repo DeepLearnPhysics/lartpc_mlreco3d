@@ -38,13 +38,12 @@ class MCSEnergyProcessor(PostProcessor):
             Particle species to compute the kinetic energy for
         only_uncontained : bool, default False
             Only run the algorithm on particles that are marked as not contained
-        truth_point_mode : str, default 'points'
-            Point attribute to use for true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         **kwargs : dict, optiona
             Additional arguments to pass to the tracking algorithm
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Store the general parameters
         self.include_pids = include_pids
         self.only_uncontained = only_uncontained
@@ -54,19 +53,7 @@ class MCSEnergyProcessor(PostProcessor):
                 'The tracking algorithm must provide segment angles'
         self.tracking_mode = tracking_mode
         self.segment_length = segment_length
-        self.kwargs = kwargs
-
-        # List objects for which to reconstruct track KE
-        if run_mode not in ['reco', 'truth', 'both']:
-            raise ValueError('`run_mode` must be either `reco`, ' \
-                    '`truth` or `both`')
-
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['particles']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_particles']
-        self.truth_point_mode = truth_point_mode
+        self.tracking_kwargs = kwargs
 
     def process(self, data_dict, result_dict):
         '''
@@ -80,7 +67,7 @@ class MCSEnergyProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over particle objects
-        for k in self.key_list:
+        for k in self.part_keys:
             for p in result_dict[k]:
                 # Only run this algorithm on particle species that are needed
                 if not ((p.semantic_type == TRACK_SHP) \
@@ -99,7 +86,8 @@ class MCSEnergyProcessor(PostProcessor):
 
                 # Get the list of segment directions
                 _, dirs, _ = get_track_segments(points, self.segment_length,
-                        p.start_point, method=self.tracking_mode, **self.kwargs)
+                        p.start_point, method=self.tracking_mode,
+                        **self.tracking_kwargs)
 
                 # Find the angles between successive segments
                 costh = np.sum(dirs[:-1] * dirs[1:], axis = 1)
