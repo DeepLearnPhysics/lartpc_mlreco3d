@@ -37,8 +37,6 @@ class TruthParticle(Particle):
         (N_s, 3) Set of voxel coordinates that make up this particle in the SED tensor
     sed_depositions_MeV : np.ndarray, default np.array([])
         (N_s) Array of energy deposition values for each SED voxel in MeV
-    direction : np.ndarray
-        (3) Unit vector corresponding to the true particle direction (normalized momentum)
     '''
 
     # Attributes that specify coordinates
@@ -87,10 +85,6 @@ class TruthParticle(Particle):
         # Quantity to be set with the children counting post-processor
         self.children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
-        # Quantities to be set with the direction estimator
-        self.truth_start_dir = np.zeros(3)
-        self.truth_end_dir   = np.zeros(3)
-
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng  = -1.
         self.csda_ke_tng = -1.
@@ -132,10 +126,11 @@ class TruthParticle(Particle):
             setattr(self, k, vector)
 
         # Load up the 3-momentum (stored in a peculiar way) and the direction
-        self.momentum  = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
-        self.direction = np.zeros(3)
-        if np.linalg.norm(self.momentum) > 0.:
-            self.direction = self.momentum/np.linalg.norm(self.momentum)
+        self.truth_momentum = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
+        self.truth_start_dir = np.zeros(3)
+        if np.linalg.norm(self.truth_momentum) > 0.:
+            self.truth_start_dir = \
+                    self.truth_momentum/np.linalg.norm(self.truth_momentum)
 
         # Set parent attributes based on the above
         self.semantic_type = self.shape

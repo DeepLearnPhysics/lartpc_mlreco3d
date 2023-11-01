@@ -10,6 +10,7 @@ from . import Interaction, TruthParticle
 from .Interaction import _process_interaction_attributes
 
 from mlreco.utils import pixel_to_cm
+from mlreco.utils.globals import PID_LABELS
 from mlreco.utils.decorators import inherit_docstring
 
 @inherit_docstring(Interaction)
@@ -99,10 +100,10 @@ class TruthInteraction(Interaction):
 
         # Initialize private attributes to be set by setter only
         self._particles  = None
-        self._particle_counts = np.zeros(6, dtype=np.int64)
-        self._primary_counts  = np.zeros(6, dtype=np.int64)
-        self._truth_particle_counts = np.zeros(6, dtype=np.int64)
-        self._truth_primary_counts  = np.zeros(6, dtype=np.int64)
+        self._particle_counts = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
+        self._primary_counts  = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
+        self._truth_particle_counts = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
+        self._truth_primary_counts  = np.zeros(len(PID_LABELS)+1, dtype=np.int64)
 
         if self._particles is None:
             self._depositions_MeV        = depositions_MeV
