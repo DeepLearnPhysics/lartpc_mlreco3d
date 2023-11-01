@@ -9,6 +9,7 @@ class PostProcessor:
     - Function that checks that the post-processor is provided
       the necessary information to do its job
     '''
+    # Shared public attributes of post-processors
     name = ''
     parent_path = ''
     data_cap = []
@@ -18,13 +19,47 @@ class PostProcessor:
     truth_point_mode = 'points'
     units = 'cm'
 
-    def __init__(self):
+    # Shared private attributes of post-processors
+    _run_modes = ['reco', 'truth', 'both', 'all']
+
+    def __init__(self, run_mode = None, truth_point_mode = None):
         '''
-        Initialize the post-processor object. This is a dummy method
-        which exists to give the option not to define an `__init__`
-        function in the children post-processor classes.
+        Initialize default post-processor object properties.
+
+        Parameters
+        ----------
+        run_mode : str, optional
+           If specified, tells whether the post-processor must run on
+           reconstructed ('reco'), true ('true) or both objects ('both', 'all')
+        truth_point_mode : str, optional
+           If specified, tells which attribute of the `TruthParticle` object
+           to use to fetch its point coordinates
         '''
-        pass
+        # If run mode is specified, process it
+        if run_mode is not None:
+            # Check that the run mode is recognized
+            assert run_mode in self._run_modes, \
+                    f'`run_mode` must be one of {self._run_modes}'
+
+            # Make a list of object keys to process
+            req_keys = self.result_cap + self.result_cap_opt
+            self.part_keys, self.inter_keys = [], []
+            if run_mode != 'truth':
+                if 'particles' in req_keys:
+                    self.part_keys.append('particles')
+                if 'interactions' in req_keys:
+                    self.inter_keys.append('interactions')
+            if run_mode != 'reco':
+                if 'truth_particles' in req_keys:
+                    self.part_keys.append('truth_particles')
+                if 'truth_interactions' in req_keys:
+                    self.inter_keys.append('truth_interactions')
+
+            self.all_keys = self.part_keys + self.inter_keys
+
+        # If a truth point mode is specified, store it
+        if truth_point_mode is not None:
+            self.truth_point_mode = truth_point_mode
 
     def run(self, data_dict, result_dict, image_id):
         '''

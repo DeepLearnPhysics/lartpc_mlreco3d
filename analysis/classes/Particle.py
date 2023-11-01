@@ -3,7 +3,8 @@ import numpy as np
 from typing import Counter, List, Union
 from collections import OrderedDict
 
-from mlreco.utils.globals import SHAPE_LABELS, PID_LABELS, PID_TO_PDG
+from mlreco.utils.globals import SHAPE_LABELS, TRACK_SHP, \
+        PID_LABELS, PID_MASSES, PID_TO_PDG
 from mlreco.utils.utils import pixel_to_cm
 from mlreco.utils.numba_local import cdist
 
@@ -64,10 +65,10 @@ class Particle:
         (3) Particle direction estimate w.r.t. the end point
     length : float, default -1
         Length of the particle (only assigned to track objects)
-    momentum : np.ndarray, default np.array([-inf, -inf, -inf])
-        (3) Particle 3-momentum estimate
     is_contained : bool
         Indicator whether this particle is contained or not
+    is_valid : bool, default True
+        Indicator whether this particle counts towards an interaction topology
     calo_ke : float, default -1
         Kinetic energy reconstructed from the energy depositions alone
     csda_ke : float, default -1
@@ -98,14 +99,12 @@ class Particle:
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  sources: np.ndarray = np.empty((0,2), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
-                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32), # TODO get it from somewhere
-                 #pid_scores: np.ndarray = -np.ones(5, dtype=np.float32), # TODO get it from somewhere
+                 pid_scores: np.ndarray = -np.ones(len(PID_LABELS), dtype=np.float32),
                  primary_scores: np.ndarray = -np.ones(2, dtype=np.float32),
                  start_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  end_point: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  start_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  end_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
-                 momentum: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  length: float = -1.,
                  calo_ke: float = -1.,
                  csda_ke: float = -1.,
@@ -113,6 +112,7 @@ class Particle:
                  matched: bool = False,
                  is_primary: bool = False,
                  is_contained: bool = False,
+                 is_valid: bool = True,
                  is_ccrosser: bool = False,
                  coffset: float = -np.inf,
                  units: str = 'px', **kwargs):
@@ -144,21 +144,21 @@ class Particle:
         self.depositions    = depositions
 
         self.pdg_code       = -1
-        
+
         self.pid_scores     = pid_scores
         self.primary_scores = primary_scores
-        
+
         # Quantities to be set during post_processing
         self._start_point = start_point
         self._end_point   = end_point
         self._start_dir   = start_dir
         self._end_dir     = end_dir
-        self.momentum     = momentum
         self.length       = length
         self.calo_ke      = calo_ke
         self.csda_ke      = csda_ke
         self.mcs_ke       = mcs_ke
         self.is_contained = is_contained
+        self.is_valid     = is_valid
         self.is_ccrosser  = is_ccrosser
         self.coffset      = coffset
 
@@ -364,9 +364,9 @@ class Particle:
         '''
         Particle ID scores getter/setter. The setter converts the
         scores to an particle ID prediction through argmax.
-        
+
         Warning: If <pid_scores> are provided by either the constructor or
-        the pid_scores.setter, it will override the current pid. 
+        the pid_scores.setter, it will override the current pid.
         '''
         return self._pid_scores
 
@@ -413,6 +413,37 @@ class Particle:
         # Store the PID scores and give a best guess
         self._primary_scores = primary_scores
         self._is_primary = bool(np.argmax(primary_scores))
+
+    @property
+    def ke(self):
+        '''
+        Best-guess kinetic energy in MeV
+        '''
+        if self.semantic_type != TRACK_SHP:
+            # If a particle is not a track, can only use calorimetry
+            return self.calo_ke
+        else:
+            # If a particle is a track, pick CSDA for contained tracks and
+            # pick MCS for uncontained tracks, unless specified otherwise
+            if self.is_contained and self.csda_ke > 0.:
+                return self.csda_ke
+            elif not self.is_contained and self.mcs_ke > 0.:
+                return self.mcs_ke
+            else:
+                return self.calo_ke
+
+    @property
+    def momentum(self):
+        '''
+        Best-guess momentum in MeV/c
+        '''
+        ke = self.ke
+        if ke > 0. and self.start_dir[0] != -np.inf:
+            mass = PID_MASSES[self.pid]
+            mom = np.sqrt(ke**2 + 2*ke*mass)
+            return mom * self.start_dir
+        else:
+            return np.full(3, -np.inf, dtype=np.float32)
 
     def convert_to_cm(self, meta):
         '''

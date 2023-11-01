@@ -53,14 +53,18 @@ class Geometry:
         # If the source file is not a file, fetch the default source file
         if sources is None and detector is not None:
             path = pathlib.Path(__file__).parent
-            sources = os.path.join(path, 'geo',
+            file_path = os.path.join(path, 'geo',
                     f'{detector.lower()}_sources.npy')
+            if os.path.isfile(file_path):
+                sources = file_path
 
         # If the opdets file is not a file, fetch the default opdets file
         if opdets is None and detector is not None:
             path = pathlib.Path(__file__).parent
-            opdets = os.path.join(path, 'geo',
+            file_path = os.path.join(path, 'geo',
                     f'{detector.lower()}_opdets.npy')
+            if os.path.isfile(file_path):
+                opdets = file_path
 
         # Check that the boundary file exists, load it
         if not os.path.isfile(boundaries):

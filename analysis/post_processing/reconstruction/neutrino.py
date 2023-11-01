@@ -1,9 +1,8 @@
-from pprint import pprint
-
 import numpy as np
 
-from analysis.post_processing import PostProcessor
 from mlreco.utils.globals import *
+
+from analysis.post_processing import PostProcessor
 
 
 # def reconstruct_nu_energy(ia,

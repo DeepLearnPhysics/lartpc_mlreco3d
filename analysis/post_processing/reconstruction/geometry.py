@@ -29,22 +29,13 @@ class DirectionProcessor(PostProcessor):
             Max distance between start voxel and other voxels
         optimize : bool, default True
             Optimizes the number of points involved in the estimate
-        truth_point_mode : str, default 'points'
-            Point attribute to use for true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Store the direction reconstruction parameters
         self.neighborhood_radius = neighborhood_radius
         self.optimize = optimize
-
-        # List objects for which to reconstruct direcions
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['particles']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_particles']
-        self.truth_point_mode = truth_point_mode
 
     def process(self, data_dict, result_dict):
         '''
@@ -58,7 +49,7 @@ class DirectionProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over particle objects
-        for k in self.key_list:
+        for k in self.part_keys:
             for p in result_dict[k]:
                 # Make sure the particle coordinates are expressed in cm
                 self.check_units(p)
@@ -130,22 +121,13 @@ class ContainmentProcessor(PostProcessor):
               outermost walls
             - If 'source', use the origin of voxels to determine which TPC(s)
               contributed to them, and define volumes accordingly
-        truth_point_mode : str, default 'points'
-            Point attribute to use to check containment of true particles
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
         '''
+        # Initialize the parent class
+        super().__init__(run_mode, truth_point_mode)
+
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
         self.geo.define_containment_volumes(margin, cathode_margin, mode)
-
-        # List objects for which to check containement
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['particles', 'interactions']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_particles', 'truth_interactions']
-        self.truth_point_mode = truth_point_mode
 
     def process(self, data_dict, result_dict):
         '''
@@ -159,7 +141,7 @@ class ContainmentProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over partcile/interaction objects
-        for k in self.key_list:
+        for k in self.all_keys:
             for p in result_dict[k]:
                 # Make sure the particle/interaction coordinates are
                 # expressed in cm
@@ -218,20 +200,16 @@ class FiducialProcessor(PostProcessor):
             - If 'detector', makes sure it is contained within the
               outermost walls
         truth_vertex_mode : str, default 'truth_vertex'
-            Vertex attribute to use to check containment of true interactions
-        run_mode : str, default 'both'
-            Which output to run on (one of 'both', 'reco' or 'truth')
+             Vertex attribute to use to check containment of true interactions
         '''
+        # Initialize the parent class
+        super().__init__(run_mode)
+
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file)
         self.geo.define_containment_volumes(margin, cathode_margin, mode)
 
-        # List objects for which to check containement
-        self.key_list = []
-        if run_mode in ['reco', 'both']:
-            self.key_list += ['interactions']
-        if run_mode in ['truth', 'both']:
-            self.key_list += ['truth_interactions']
+        # Store the true vertex source
         self.truth_vertex_mode = truth_vertex_mode
 
     def process(self, data_dict, result_dict):
@@ -246,7 +224,7 @@ class FiducialProcessor(PostProcessor):
             Chain output dictionary
         '''
         # Loop over interaction objects
-        for k in self.key_list:
+        for k in self.inter_keys:
             for ia in result_dict[k]:
                 # Make sure the interaction coordinates are expressed in cm
                 self.check_units(ia)

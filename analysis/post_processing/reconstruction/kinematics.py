@@ -159,37 +159,64 @@ class ParticlePropertiesProcessor(PostProcessor):
         return {}, {}
 
 
-class MomentumProcessor(PostProcessor):
+class InteractionTopologyProcessor(PostProcessor):
     '''
-    Combines kinetic energy estimates with direction estimates
-    to provide the best guess of 3-momentum
+    Adjust the topology of interactions by applying thresholds
+    on the minimum kinetic energy of particles.
     '''
-    name = 'reconstruct_momentum'
-    result_cap = ['particles']
+    name = 'adjust_interaction_topology'
+    result_cap = ['interactions']
+    result_cap_opt = ['truth_interactions']
 
     def __init__(self,
-                 method='best'):
+                 ke_thresholds,
+                 reco_ke_mode='ke',
+                 truth_ke_mode='energy_deposit',
+                 run_mode='both'):
         '''
-        Check which method is to be used to reconstruct momentum
+        Store the new thresholds to be used to update the PID
+        and primary information of particles.
 
         Parameters
         ----------
-        method : str, defualt 'best'
-            Kinematic energy reconstruction method to use
-            - 'best': Pick the most appropriate KE source
-            - 'csda': Always pick CSDA if available
-            - 'calo": Use calorimetry exclusively
-            - 'mcs': Pick MCS if available
+        ke_thresholds : Union[float, dict]
+            If a scalr, it specifies a blanket KE cut to apply to all
+            paritcles. If it is a Dictionary, it maps an PID to a KE threshold.
+            If a 'default' key is provided, it is used for all particles,
+            unless a number is provided for a specific PID.
+        reco_ke_mode : str, default 'ke'
+            Which `Particle` attribute to use to apply the KE thresholds
+        truth_ke_mode : str, default 'energy_deposit'
+            Which `TruthParticle` attribute to use to apply the KE thresholds
         '''
-        # Check the method is recognized
-        if method not in ['best', 'csda', 'calo', 'mcs']:
-            raise ValueError(f'Momentum reconstruction method not ' \
-                    'recognized: {method}')
-        self.method = method
+        # Initialize the run mode
+        super().__init__(run_mode)
+
+        # Store the attributes that should be used to evaluate the KE
+        self.reco_ke_mode = reco_ke_mode
+        self.truth_ke_mode = truth_ke_mode
+
+        # Check that there is something to do, throw otherwise
+        if not len(ke_thresholds):
+            msg = ('Specify `ke_thresholds for this function to do anything.')
+            raise ValueError(msg)
+
+        # Store the thresholds in a dictionary
+        if np.isscalar(ke_thresholds):
+            ke_thresholds = {'default': float(ke_thresholds)}
+
+        self.ke_thresholds = {}
+        for pid in PID_MASSES.keys():
+            if pid in ke_thresholds:
+                self.ke_thresholds[pid] = ke_thresholds[pid]
+            elif 'default' in ke_thresholds:
+                self.ke_thresholds[pid] = ke_thresholds['default']
+            else:
+                self.ke_thresholds[pid] = 0.
 
     def process(self, data_dict, result_dict):
         '''
-        Set the momentum of all particles in one entry
+        Update PID and primary predictions of one entry
 
         Parameters
         ----------
@@ -198,47 +225,21 @@ class MomentumProcessor(PostProcessor):
         result_dict : dict
             Chain output dictionary
         '''
-        # Loop over reconstructed particles
-        for p in result_dict['particles']:
-            # Check the PID is supported, otherwise momentum cannot be computed
-            if p.pid < 0:
-                continue
-            if p.pid not in PID_MASSES.keys():
-                raise ValueError('PID not supported, ' \
-                        'cannot reconstruct momentum')
+        # Loop over the interaction types
+        for k in self.inter_keys:
+            # Check which attribute should be used for KE
+            ke_attr = self.reco_ke_mode \
+                    if 'truth' not in k else self.truth_ke_mode
 
-            # Get the reconstructed kinetic energy
-            if p.semantic_type != TRACK_SHP:
-                # If a particle is not a track, can only use calorimetry
-                ke = p.calo_ke
-            else:
-                # If a particle is a track, pick csda for contained tracks and
-                # pick mcs for uncontained tracks, unless specified otherwise
-                if (self.method == 'csda' or p.is_contained) \
-                        and p.csda_ke > 0.:
-                    ke = p.csda_ke
-                elif (self.method == 'mcs' or not p.is_contained) and \
-                        p.mcs_ke > 0.:
-                    ke = p.mcs_ke
-                else:
-                    ke = p.calo_ke
+            # Loop over interactions
+            for ii in result_dict[k]:
+                # Loop over particles, select the ones that pass a threshold
+                for p in ii.particles:
+                    ke = getattr(p, ke_attr)
+                    if p.pid > 0 and ke < self.ke_thresholds[p.pid]:
+                        p.is_valid = False
 
-            if ke < 0.:
-                # TODO: Warn using the logging function at some point
-                continue
+                # Update the interaction particle counts
+                ii._update_particle_info()
 
-            # Get the direction
-            direction = p.start_dir
-            if direction[0] == -np.inf:
-                raise ValueError('Must fill the `start_dir` ' \
-                        'attribute to fill the momentum')
-
-            # Convert the kinetic energy to an absolute momentum value
-            mass = PID_MASSES[p.pid]
-            momentum = np.sqrt((ke+mass)**2-mass**2)
-
-            # Fill momentum
-            p.momentum = momentum * direction
-                
         return {}, {}
-

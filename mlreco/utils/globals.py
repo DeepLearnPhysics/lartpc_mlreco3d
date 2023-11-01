@@ -51,13 +51,13 @@ SHAPE_PREC = [TRACK_SHP, MICHL_SHP, SHOWR_SHP, DELTA_SHP, LOWES_SHP, UNKWN_SHP]
 
 # Shape labels
 SHAPE_LABELS = {
-   0:  'Shower',
-   1:  'Track',
-   2:  'Michel',
-   3:  'Delta',
-   4:  'Low Energy',
-   5:  'Ghost',
-   6:  'Unknown'
+   SHOWR_SHP: 'Shower',
+   TRACK_SHP: 'Track',
+   MICHL_SHP: 'Michel',
+   DELTA_SHP: 'Delta',
+   LOWES_SHP: 'Low Energy',
+   GHOST_SHP: 'Ghost',
+   UNKWN_SHP: 'Unknown'
 }
 
 # Invalid larcv.Particle labels
@@ -65,56 +65,72 @@ INVAL_ID   = larcv.kINVALID_INSTANCEID # Particle group/parent/interaction ID
 INVAL_TID  = larcv.kINVALID_UINT       # Particle Geant4 track ID
 INVAL_PDG  = 0                         # Particle PDG code
 
+# Particle ID of each recognized particle species
+PHOT_PID = 0
+ELEC_PID = 1
+MUON_PID = 2
+PION_PID = 3
+PROT_PID = 4
+KAON_PID = 5
+
 # Mapping between particle PDG code and particle ID labels
+PHOT_PID = 0
 PDG_TO_PID = defaultdict(lambda: -1)
 PDG_TO_PID.update({
-    22:   0,  # photon
-    11:   1,  # e-
-    -11:  1,  # e+
-    13:   2,  # mu-
-    -13:  2,  # mu+
-    211:  3,  # pi+
-    -211: 3,  # pi-
-    2212: 4,  # protons
-    321:  5,  # K+
-    -321: 5   # K-
+    22:   PHOT_PID,
+    11:   ELEC_PID,
+    -11:  ELEC_PID,
+    13:   MUON_PID,
+    -13:  MUON_PID,
+    211:  PION_PID,
+    -211: PION_PID,
+    2212: PROT_PID,
+    321:  KAON_PID,
+    -321: KAON_PID
 })
 
 PID_TO_PDG = {v : abs(k) for k, v in PDG_TO_PID.items()}
 
 # Particle type labels
 PID_LABELS = {
-    0: 'Photon',
-    1: 'Electron',
-    2: 'Muon',
-    3: 'Pion',
-    4: 'Proton',
-    5: 'Kaon'
+    PHOT_PID: 'Photon',
+    ELEC_PID: 'Electron',
+    MUON_PID: 'Muon',
+    PION_PID: 'Pion',
+    PROT_PID: 'Proton',
+    KAON_PID: 'Kaon'
 }
 
 # Map between shape and allowed PID/primary labels
 SHP_TO_PID = {
-    SHOWR_SHP: np.array([0,1]),
-    TRACK_SHP: np.array([2,3,4,5]),
-    DELTA_SHP: np.array([1]),
-    MICHL_SHP: np.array([1])
+    SHOWR_SHP: np.array([PHOT_PID, ELEC_PID]),
+    TRACK_SHP: np.array([MUON_PID, PION_PID, PROT_PID, KAON_PID]),
+    DELTA_SHP: np.array([ELEC_PID]),
+    MICHL_SHP: np.array([ELEC_PID])
 }
 
 SHP_TO_PRIMARY = {
-    SHOWR_SHP: np.array([0,1]),
-    TRACK_SHP: np.array([0,1]),
+    SHOWR_SHP: np.array([0, 1]),
+    TRACK_SHP: np.array([0, 1]),
     DELTA_SHP: np.array([0]),
     MICHL_SHP: np.array([0])
 }
 
 # Particle masses
+PHOT_MASS = 0.       # [MeV/c^2]
+ELEC_MASS = 0.511998 # [MeV/c^2]
+MUON_MASS = 105.658  # [MeV/c^2]
+PION_MASS = 139.570  # [MeV/c^2]
+PROT_MASS = 938.272  # [MeV/c^2]
+KAON_MASS = 483.677  # [MeV/c^2]
+
 PID_MASSES = {
-    0: 0.,
-    1: 0.511998, # [MeV/c^2]
-    2: 105.658,  # [MeV/c^2]
-    3: 139.570,  # [MeV/c^2]
-    4: 938.272,  # [MeV/c^2]
-    5: 493.677   # [MeV/c^2]
+    PHOT_PID: PHOT_MASS,
+    ELEC_PID: ELEC_MASS,
+    MUON_PID: MUON_MASS,
+    PION_PID: PION_MASS,
+    PROT_PID: PROT_MASS,
+    KAON_PID: KAON_MASS
 }
 
 # Neutrino current type
@@ -191,5 +207,17 @@ NU_INT_TYPE = {
     1100: 'MEC2p2h'
 }
 
-# Physical constants
-ARGON_DENSITY = 1.396     # [g/cm^3]
+# Liquid argon properties
+LAR_DENSITY = 1.396        # Density [g/cm^3]
+LAR_Z       = 18           # Nuclear number
+LAR_A       = 39.9481      # Nuclear mass [g/mol]
+LAR_MEE     = 188.0 * 1e-6 # Mean excitation energy [MeV]
+LAR_X0      = 14.0         # Radiation length [cm]
+
+# Sternheimer parametrization of density effects in liquid argon
+LAR_a      = 0.19559
+LAR_k      = 3.0000
+LAR_x0     = 0.2000
+LAR_x1     = 3.0000
+LAR_Cbar   = 5.2146
+LAR_delta0 = 0.00
