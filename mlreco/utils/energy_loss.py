@@ -8,10 +8,10 @@ from scipy.interpolate import CubicSpline
 from scipy.integrate import quad
 from scipy.optimize import fsolve
 from scipy.special import digamma
-
+from scipy.constants import fine_structure
 
 from .globals import MUON_PID, PION_PID, KAON_PID, PROT_PID, \
-        ELEC_MASS,MUON_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE, \
+        ELEC_MASS, MUON_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE, \
         LAR_a, LAR_k, LAR_x0, LAR_x1, LAR_Cbar, LAR_delta0
 
 
@@ -154,6 +154,28 @@ def step_energy_loss_lar(T0, M, dx, z = 1, num_steps=None):
 
 
 @nb.njit(cache=True)
+def inv_bethe_bloch_lar(T, M, z = 1):
+    '''
+    Inverse Bethe-Bloch energy loss function for liquid argon
+
+    Parameters
+    ----------
+    T : float
+       Kinetic energy in MeV
+    M : float
+       Impinging particle mass in MeV/c^2
+    z : int, default 1
+       Impinging partile charge in multiples of electron charge
+
+    Returns
+    -------
+    float
+       Value of the inverse energy loss rate in liquid argon in MeV/cm
+    '''
+    return 1./bethe_bloch_lar(T, M, z)
+
+
+@nb.njit(cache=True)
 def bethe_bloch_lar(T, M, z = 1):
     '''
     Bethe-Bloch energy loss function for liquid argon 
@@ -190,55 +212,22 @@ def bethe_bloch_lar(T, M, z = 1):
     # Compute the max energy transfer
     W = W_max(beta, gamma, M)
 
-    #f.s. constant
-    alpha=1/137
+    # Compute the density effects
+    delta = delta_lar(bg)
 
-    #compute Bremm correction 
-    del_dedx=K*(LAR_Z/LAR_A)/(4*np.pi)*alpha*\
-        (np.log(2*gamma)-1./3*(np.log(2*W/ELEC_MASS)))*\
-            np.log(2*W/ELEC_MASS)**2
+    # Compute the low energy corrections
+    le_corr = 0. # le_corr_lar(beta, z)
+
+    # Compute the Bremsstrahlung correction
+    del_dedx = - K * fine_structure * (LAR_Z/LAR_A) / (4 * np.pi) * \
+            (np.log(2 * gamma) - 1./3*(np.log(2 * W/ELEC_MASS))) * \
+            np.log(2 * W/ELEC_MASS)**2
+
+    # Compute the muon-specific spin correction
+    spin_corr_muon = (1./8) * (W/gamma/M)**2 * (M==MUON_MASS)
     
-    spin_corr_muon=1./8*(W/gamma/M)**2*(M==MUON_MASS)
-
-
-    #Low energy corrections
-
-    #shell corrections (ignored)
-    C=0
-
-    #Barkas Correction (ignored)
-    L1=0
-
-    #Bloch Correction
-    y=alpha*z/beta
-    L2=-abs(y)-np.real(digamma(1+y*1j))
-
-    
-    LowE=-C/LAR_Z+z*L1+z**2*L2
-    
-    return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) - beta**2 - 0.5 * delta(bg)+spin_corr_muon+LowE)+del_dedx
-
-
-@nb.njit(cache=True)
-def inv_bethe_bloch_lar(T, M, z = 1):
-    '''
-    Inverse Bethe-Bloch energy loss function for liquid argon
-
-    Parameters
-    ----------
-    T : float
-       Kinetic energy in MeV
-    M : float
-       Impinging particle mass in MeV/c^2
-    z : int, default 1
-       Impinging partile charge in multiples of electron charge
-
-    Returns
-    -------
-    float
-       Value of the inverse energy loss rate in liquid argon in MeV/cm
-    '''
-    return 1./bethe_bloch_lar(T, M, z)
+    return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) \
+            - beta**2 - 0.5 * delta + le_corr + spin_corr_muon) + del_dedx
 
 
 @nb.njit(cache=True)
@@ -266,7 +255,7 @@ def W_max(beta, gamma, M):
 
 
 @nb.njit(cache=True)
-def delta(bg):
+def delta_lar(bg):
     '''
     Density correction
 
@@ -287,3 +276,34 @@ def delta(bg):
         return 2 * np.log(10) * x - LAR_Cbar + LAR_a * (LAR_x1 - x)**LAR_k
     else:
         return 2 * np.log(10) * x - LAR_Cbar
+
+
+#@nb.njit(cache=True) # Find an alternative to scipy's digamma to support njit
+def le_corr_lar(beta, z = 1):
+    '''
+    Low energy corrections to the Bethe-Bloch formula
+
+    Parameters
+    ----------
+    beta : float
+        Lorentz beta (v/c)
+    z : int, default 1
+        Impinging partile charge in multiples of electron charge
+
+    Returns
+    -------
+    float
+        Low energy correction to the energy loss function
+    '''
+    # Shell corrections (tabulated, ignored for now)
+    C = 0
+
+    # Barkas Correction (tabulated, ignored for now)
+    L1 = 0
+
+    # Bloch Correction
+    y = fine_structure*z/beta
+    L2 = -abs(y) - np.real(digamma(1 + y*1j))
+
+    # Low energy correction
+    return -C/LAR_Z + z * L1 + z**2 * L2
