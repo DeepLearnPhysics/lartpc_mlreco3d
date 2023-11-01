@@ -7,9 +7,11 @@ import pandas as pd
 from scipy.interpolate import CubicSpline
 from scipy.integrate import quad
 from scipy.optimize import fsolve
+from scipy.special import digamma
+
 
 from .globals import MUON_PID, PION_PID, KAON_PID, PROT_PID, \
-        ELEC_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE, \
+        ELEC_MASS,MUON_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE, \
         LAR_a, LAR_k, LAR_x0, LAR_x1, LAR_Cbar, LAR_delta0
 
 
@@ -154,7 +156,11 @@ def step_energy_loss_lar(T0, M, dx, z = 1, num_steps=None):
 @nb.njit(cache=True)
 def bethe_bloch_lar(T, M, z = 1):
     '''
-    Bethe-Bloch energy loss function for liquid argon
+    Bethe-Bloch energy loss function for liquid argon 
+
+    https://pdg.lbl.gov/2019/reviews/rpp2018-rev-passage-particles-matter.pdf
+
+    Corrections taken from https://pdg.lbl.gov/2023/AtomicNuclearProperties/adndt.pdf
 
     Parameters
     ----------
@@ -184,8 +190,33 @@ def bethe_bloch_lar(T, M, z = 1):
     # Compute the max energy transfer
     W = W_max(beta, gamma, M)
 
-    return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) \
-            - beta**2 - 0.5 * delta(bg))
+    #f.s. constant
+    alpha=1/137
+
+    #compute Bremm correction 
+    del_dedx=K*(LAR_Z/LAR_A)/(4*np.pi)*alpha*\
+        (np.log(2*gamma)-1./3*(np.log(2*W/ELEC_MASS)))*\
+            np.log(2*W/ELEC_MASS)**2
+    
+    spin_corr_muon=1./8*(W/gamma/M)**2*(M==MUON_MASS)
+
+
+    #Low energy corrections
+
+    #shell corrections (ignored)
+    C=0
+
+    #Barkas Correction (ignored)
+    L1=0
+
+    #Bloch Correction
+    y=alpha*z/beta
+    L2=-abs(y)-np.real(digamma(1+y*1j))
+
+    
+    LowE=-C/LAR_Z+z*L1+z**2*L2
+    
+    return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) - beta**2 - 0.5 * delta(bg)+spin_corr_muon+LowE)+del_dedx
 
 
 @nb.njit(cache=True)
