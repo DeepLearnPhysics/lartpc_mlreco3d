@@ -12,7 +12,7 @@ class VertexProcessor(PostProcessor):
     '''
     name = 'reconstruct_vertex'
     result_cap = ['interactions']
-    result_cap_optional = ['truth_interactions']
+    result_cap_opt = ['truth_interactions']
 
     def __init__(self,
                  include_semantics = [SHOWR_SHP, TRACK_SHP],

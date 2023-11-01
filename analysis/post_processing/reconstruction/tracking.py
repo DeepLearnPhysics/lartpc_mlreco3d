@@ -14,7 +14,7 @@ class CSDAEnergyProcessor(PostProcessor):
     '''
     name = 'reconstruct_csda_energy'
     result_cap = ['particles']
-    result_cap_optional = ['truth_particles']
+    result_cap_opt = ['truth_particles']
 
     def __init__(self,
                  tracking_mode='bin_pca',
@@ -32,7 +32,7 @@ class CSDAEnergyProcessor(PostProcessor):
             'step', 'step_next', 'bin_pca' or 'spline')
         include_pids : list, default [2, 3, 4, 5]
             Particle species to compute the kinetic energy for
-        **kwargs : dict, optiona
+        **kwargs : dict, optional
             Additional arguments to pass to the tracking algorithm
         '''
         # Initialize the parent class
