@@ -120,7 +120,6 @@ class CathodeCrosserProcessor(PostProcessor):
                 # module but not all of them or cross multiple cathodes
                 if p.is_ccrosser and self.adjust_crossers and len(tpcs) == 2:
                     # Adjust positions
-                    print(p.is_ccrosser)
                     self.adjust_positions(result_dict, i, truth=truth)
 
             # If we do not want to merge broken crossers, our job here is done
@@ -395,7 +394,6 @@ class CathodeCrosserProcessor(PostProcessor):
         # xing_point[daxis] = cpos
         # for i, t in enumerate(tpcs):
         #     end_dir = -cluster_direction(points, closest_points[i])
-        #     print(end_dir)
         #     factor = (cpos - closest_points[i, daxis])/end_dir[daxis]
         #     intersection = closest_points[i] + factor * end_dir
         #     vplane = dvector - end_dir/end_dir[daxis] if end_dir[daxis] else -end_dir
