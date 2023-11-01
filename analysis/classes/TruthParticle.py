@@ -54,6 +54,8 @@ class TruthParticle(Particle):
                  sed_index: np.ndarray = np.empty(0, dtype=np.int64),
                  sed_points: np.ndarray = np.empty((0, 3), dtype=np.float32),
                  sed_depositions_MeV: np.ndarray = np.empty(0, dtype=np.float32),
+                 truth_momentum: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
+                 truth_start_dir: np.ndarray = np.full(3, -np.inf, dtype=np.float32),
                  particle_asis: object = larcv.Particle(),
                  **kwargs):
 
@@ -84,6 +86,10 @@ class TruthParticle(Particle):
 
         # Quantity to be set with the children counting post-processor
         self.children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
+
+        # Quantities derived from the LArCV particle
+        self.truth_momentum = truth_momentum
+        self.truth_start_dir = truth_start_dir
 
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng  = -1.
@@ -128,7 +134,7 @@ class TruthParticle(Particle):
         # Load up the 3-momentum (stored in a peculiar way) and the direction
         self.truth_momentum = np.array([getattr(particle, f'p{a}')() for a in ['x', 'y', 'z']])
         self.truth_start_dir = np.full(3, -np.inf, dtype=np.float32)
-        if np.linalg.norm(self.truth_momentum) > 0.:
+        if np.linalg.norm(self.truth_momentum):
             self.truth_start_dir = \
                     self.truth_momentum/np.linalg.norm(self.truth_momentum)
 
@@ -165,7 +171,7 @@ class TruthParticle(Particle):
         # Load up all the 3-vector information
         vec_keys = ['position', 'end_position', 'parent_position',\
                 'ancestor_position', 'first_step', 'last_step',\
-                'start_point', 'end_point', 'truth_momentum', 'truth_start_dir']
+                'start_point', 'end_point']
         
         attribute_keys = scalar_keys + vec_keys
         for attr_name in attribute_keys:
