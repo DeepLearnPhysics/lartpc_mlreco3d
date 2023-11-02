@@ -352,6 +352,13 @@ class ParticleLogger(AnalysisLogger):
         return out
 
     @staticmethod
+    def is_valid(particle):
+        out = {'particle_is_valid': False}
+        if particle is not None:
+            out['particle_is_valid'] = particle.is_valid
+        return out
+
+    @staticmethod
     def depositions_sum(particle):
         out = {'particle_depositions_sum': -1}
         if particle is not None:
@@ -490,6 +497,13 @@ class InteractionLogger(AnalysisLogger):
         out = {'interaction_is_contained': False}
         if ia is not None:
             out['interaction_is_contained'] = ia.is_contained
+        return out
+
+    @staticmethod
+    def is_fiducial(ia):
+        out = {'interaction_is_fiducial': False}
+        if ia is not None:
+            out['interaction_is_fiducial'] = ia.is_fiducial
         return out
     
     @staticmethod

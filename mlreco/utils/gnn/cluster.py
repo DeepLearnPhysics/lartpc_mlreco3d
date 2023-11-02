@@ -84,6 +84,7 @@ def _reform_clusters(data: nb.float64[:,:],
     clusts = []
     for i in range(len(batch_ids)):
         clusts.append(np.where((data[:, BATCH_COL] == batch_ids[i]) & (data[:, column] == clust_ids[i]))[0])
+
     return clusts
 
 
@@ -99,10 +100,10 @@ def get_cluster_batch(data, clusts):
     Returns:
         np.ndarray: (C) List of batch IDs
     """
-    if len(clusts) > 0:
-        return _get_cluster_batch(data, clusts)
-    else:
-        return np.empty((0,), dtype=np.int32)
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
+    return _get_cluster_batch(data, clusts)
 
 @nb.njit(cache=True)
 def _get_cluster_batch(data: nb.float64[:,:],
@@ -128,6 +129,9 @@ def get_cluster_label(data, clusts, column=CLUST_COL):
     Returns:
         np.ndarray: (C) List of cluster labels
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_label(data, clusts, column)
 
 @nb.njit(cache=True)
@@ -139,6 +143,7 @@ def _get_cluster_label(data: nb.float64[:,:],
     for i, c in enumerate(clusts):
         v, cts = nbl.unique(data[c, column])
         labels[i] = v[np.argmax(cts)]
+
     return labels
 
 
@@ -160,6 +165,9 @@ def get_cluster_primary_label(data, clusts, column, cluster_column=CLUST_COL, gr
     Returns:
         np.ndarray: (C) List of cluster primary labels
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_primary_label(data, clusts, column, cluster_column, group_column)
 
 @nb.njit(cache=True)
@@ -193,6 +201,9 @@ def get_momenta_label(data, clusts):
     Returns:
         np.ndarray: (C) List of cluster IDs
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_momenta_label(data, clusts)
 
 @nb.njit(cache=True)
@@ -201,6 +212,7 @@ def _get_momenta_label(data: nb.float64[:,:],
     labels = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
         labels[i] = np.mean(data[c, MOM_COL])
+
     return labels
 
 
@@ -216,6 +228,9 @@ def get_cluster_centers(data, clusts):
     Returns:
         np.ndarray: (C,3) tensor of cluster centers
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_centers(data, clusts)
 
 @nb.njit(cache=True)
@@ -224,6 +239,7 @@ def _get_cluster_centers(data: nb.float64[:,:],
     centers = np.empty((len(clusts), 3), dtype=data.dtype)
     for i, c in enumerate(clusts):
         centers[i] = np.sum(data[c][:, COORD_COLS], axis=0)/len(c)
+
     return centers
 
 
@@ -239,6 +255,9 @@ def get_cluster_sizes(data, clusts):
     Returns:
         np.ndarray: (C) List of cluster sizes
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_sizes(data, clusts)
 
 @nb.njit(cache=True)
@@ -247,6 +266,7 @@ def _get_cluster_sizes(data: nb.float64[:,:],
     sizes = np.empty(len(clusts), dtype=np.int64)
     for i, c in enumerate(clusts):
         sizes[i] = len(c)
+
     return sizes
 
 
@@ -262,6 +282,9 @@ def get_cluster_energies(data, clusts):
     Returns:
         np.ndarray: (C) List of cluster energies
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_energies(data, clusts)
 
 @nb.njit(cache=True)
@@ -270,6 +293,7 @@ def _get_cluster_energies(data: nb.float64[:,:],
     energies = np.empty(len(clusts), dtype=data.dtype)
     for i, c in enumerate(clusts):
         energies[i] = np.sum(data[c, VALUE_COL])
+
     return energies
 
 
@@ -288,6 +312,7 @@ def get_cluster_features(data: nb.float64[:,:],
     """
     if not len(clusts):
         return np.empty((0, 16), dtype=data.dtype) # Cannot type empty list
+
     return _get_cluster_features(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
@@ -360,6 +385,7 @@ def get_cluster_features_extended(data, clusts, add_value=True, add_shape=True):
     assert add_value or add_shape
     if not len(clusts):
         return np.empty((0, add_value*2+add_shape), dtype=data.dtype)
+
     return _get_cluster_features_extended(data, clusts, add_value, add_shape)
 
 @nb.njit(parallel=True, cache=True)
@@ -404,6 +430,9 @@ def get_cluster_points_label(data, particles, clusts, random_order=True):
     Returns:
         np.ndarray: (N,6) cluster-wise start and end points (in RANDOMIZED ORDER by default)
     """
+    if not len(clusts):
+        return np.empty((0, 6), dtype=data.dtype)
+
     return _get_cluster_points_label(data, particles, clusts, random_order)
 
 @nb.njit(cache=True)
@@ -447,6 +476,9 @@ def get_cluster_start_points(data, clusts):
     Returns:
         np.ndarray: (C,3) tensor of cluster start points
     """
+    if not len(clusts):
+        return np.empty((0, 3), dtype=data.dtype)
+
     return _get_cluster_start_points(data, clusts)
 
 @nb.njit(parallel=True, cache=True)
@@ -473,6 +505,9 @@ def get_cluster_directions(data, starts, clusts, max_dist=-1, optimize=False):
     Returns:
         torch.tensor: (3) Orientation
     """
+    if not len(clusts):
+        return np.empty(starts.shape, dtype=data.dtype)
+
     return _get_cluster_directions(data, starts, clusts, max_dist, optimize)
 
 @nb.njit(parallel=True, cache=True)
@@ -505,6 +540,9 @@ def get_cluster_dedxs(data, values, starts, clusts, max_dist=-1):
     Returns:
         torch.tensor: (N) dEdx values for each cluster
     """
+    if not len(clusts):
+        return np.empty(0, dtype=data.dtype)
+
     return _get_cluster_dedxs(data, values, starts, clusts, max_dist)
 
 @nb.njit(parallel=True, cache=True)

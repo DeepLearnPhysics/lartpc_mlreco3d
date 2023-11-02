@@ -288,7 +288,7 @@ class AnaToolsManager:
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
         return data, res
 
-    def forward(self, iteration=None):
+    def forward(self, iteration=None, run=None, event=None):
         '''
         Read one minibatch worth of image from dataset.
 
@@ -297,6 +297,10 @@ class AnaToolsManager:
         iteration : int, optional
             Iteration number, needed for reading entries from
             HDF5 files, by default None.
+        run : int, optional
+            Run number
+        event : int, optional
+            Event number
 
         Returns
         -------
@@ -306,7 +310,10 @@ class AnaToolsManager:
             Result dictionary containing full chain outputs
         '''
         if self.reader_state == 'file':
-            assert iteration is not None
+            assert (iteration is not None) \
+                    ^ (run is not None and event is not None)
+            if iteration is None:
+                iteration = self._data_reader.get_run_event_index(run, event)
             data, res = self._data_reader.get(iteration, nested=True)
             file_index = self._data_reader.file_index[iteration]
             data['file_index'] = [file_index]

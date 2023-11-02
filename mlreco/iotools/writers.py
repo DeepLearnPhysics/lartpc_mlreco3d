@@ -30,8 +30,10 @@ class HDF5Writer:
 
     # Analysis object array attributes which have a fixed length
     ANA_FIXED_LENGTH = [
-        'start_point', 'end_point', 'start_dir', 'end_dir', 'start_position', 'end_position',
-        'vertex', 'truth_vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
+        'start_point', 'end_point', 'start_dir', 'truth_start_dir', 'end_dir',
+        'start_position', 'end_position', 'vertex', 'truth_vertex', 'momentum',
+        'truth_momentum', 'pid_scores', 'primary_scores', 'particle_counts',
+        'primary_counts'
     ]
 
     # Object attributes that do not need to be stored to HDF5
@@ -127,10 +129,8 @@ class HDF5Writer:
             Dictionary containing the ML chain configuration
         '''
         # Make sure there is something to store
-        assert data_blob or result_blob, 'Must provide a non-empty data blob or result blob'
-
-        # Get the expected batch_size (index is alaways provided by the reco. chain)
-        self.batch_size = len(data_blob['index'])
+        assert data_blob or result_blob, \
+                'Must provide a non-empty data blob or result blob'
 
         # Initialize a dictionary to store keys and their properties (dtype and shape)
         self.key_dict = defaultdict(lambda: {'category': None, 'dtype':None, 'width':0, 'merge':False, 'scalar':False, 'larcv':False})
@@ -185,19 +185,15 @@ class HDF5Writer:
         self.key_dict[key]['category'] = category
         if np.isscalar(blob[key]):
             # Single scalar
-            self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key], str) else type(blob[key])
+            self.key_dict[key]['dtype']  = h5py.string_dtype() \
+                    if isinstance(blob[key], str) else type(blob[key])
             self.key_dict[key]['scalar'] = True
 
         else:
-            if len(blob[key]) != self.batch_size: # TODO: Get rid of this possibility upstream
-                # List with a single scalar, regardless of batch_size
-                assert len(blob[key]) == 1 and np.isscalar(blob[key][0]),\
-                        'If there is an array of length mismatched with batch_size, '+\
-                        'it must contain a single scalar.'
-
             if np.isscalar(blob[key][0]):
                 # List containing a single scalar per batch ID
-                self.key_dict[key]['dtype']  = h5py.string_dtype() if isinstance(blob[key][0], str) else type(blob[key][0])
+                self.key_dict[key]['dtype']  = h5py.string_dtype() \
+                        if isinstance(blob[key][0], str) else type(blob[key][0])
                 self.key_dict[key]['scalar'] = True
 
             else:
@@ -414,9 +410,10 @@ class HDF5Writer:
             self.ready = True
 
         # Append file
+        self.batch_size = len(data_blob['index'])
         with h5py.File(self.file_name, 'a') as out_file:
             # Loop over batch IDs
-            for batch_id in range(len(data_blob['index'])):
+            for batch_id in range(self.batch_size):
                 # Initialize a new event
                 event = np.empty(1, self.event_dtype)
 
@@ -466,9 +463,10 @@ class HDF5Writer:
                 # If an output is a scalar, nest it
                 array = blob[key]
             else:
-                # If an output is a nest scalar, get it for every batch ID
-                # TODO: Must get rid of this option
-                array = blob[key][batch_id] if len(blob[key]) == self.batch_size else blob[key][0]
+                # If an output is a nested scalar, get it for every batch ID
+                assert len(blob[key]) == self.batch_size or len(blob[key]) == 1
+                array = blob[key][batch_id] \
+                        if len(blob[key]) != 1 else blob[key][0]
 
             if not hasattr(array, '__len__'):
                 array = [array]
