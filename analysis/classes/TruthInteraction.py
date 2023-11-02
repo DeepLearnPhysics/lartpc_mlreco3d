@@ -325,7 +325,7 @@ class TruthInteraction(Interaction):
     @cached_property
     def truth_topology(self):
         msg = ""
-        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: '?'}
+        encode = {0: 'g', 1: 'e', 2: 'mu', 3: 'pi', 4: 'p', 5: 'k', 6:'?'}
         for i, count in enumerate(self._truth_primary_counts):
             if count > 0:
                 msg += f"{count}{encode[i]}"

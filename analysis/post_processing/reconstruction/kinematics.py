@@ -238,6 +238,8 @@ class InteractionTopologyProcessor(PostProcessor):
                     ke = getattr(p, ke_attr)
                     if p.pid > 0 and ke < self.ke_thresholds[p.pid]:
                         p.is_valid = False
+                    else:
+                        p.is_valid = True
 
                 # Update the interaction particle counts
                 ii._update_particle_info()

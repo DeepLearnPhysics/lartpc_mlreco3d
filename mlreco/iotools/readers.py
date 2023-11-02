@@ -1,7 +1,9 @@
 import yaml
 import h5py
 import glob
+import warnings
 import numpy as np
+
 
 class HDF5Reader:
     '''
@@ -9,8 +11,8 @@ class HDF5Reader:
 
     More documentation to come.
     '''
-
-    def __init__(self, file_keys, n_entry=-1, n_skip=-1, entry_list=[], skip_entry_list=[], to_larcv=False):
+    def __init__(self, file_keys, n_entry=-1, n_skip=-1, entry_list=[],
+            skip_entry_list=[], create_run_map=False, to_larcv=False):
         '''
         Load up the HDF5 file.
 
@@ -26,6 +28,8 @@ class HDF5Reader:
             Entry IDs to be accessed. If not specified, expose all entries
         skip_entry_list: list(int), optional
             Entry IDs to be skipped
+        create_run_map : bool, default True
+            Initialize a map between [run, event] pairs and entries
         to_larcv : bool, default False
             Convert dictionary of LArCV object properties to LArCV objects
         '''
@@ -35,38 +39,71 @@ class HDF5Reader:
             file_keys = [file_keys]
         for file_key in file_keys:
             file_paths = glob.glob(file_key)
-            assert len(file_paths), f'File key {file_key} yielded no compatible path'
+            assert len(file_paths), \
+                    f'File key {file_key} yielded no compatible path'
             self.file_paths.extend(file_paths)
+
         self.file_paths = sorted(self.file_paths)
 
         # Loop over the input files, build a map from index to file ID
         self.num_entries  = 0
         self.file_index   = []
+        self.run_info     = []
         self.split_groups = None
         self.max_print    = 10
         for i, path in enumerate(self.file_paths):
             with h5py.File(path, 'r') as in_file:
                 # Check that there are events in the file and the storage mode
-                assert 'events' in in_file, 'File does not contain an event tree'
+                assert 'events' in in_file, \
+                        'File does not contain an event tree'
 
                 split_groups = 'data' in in_file and 'result' in in_file
-                assert self.split_groups is None or self.split_groups == split_groups,\
+                assert self.split_groups is None \
+                        or self.split_groups == split_groups, \
                         'Cannot load files with different storing schemes'
                 self.split_groups = split_groups
 
-                self.num_entries += len(in_file['events'])
-                self.file_index.append(i*np.ones(len(in_file['events']), dtype=np.int32))
+                # If requested, register the [run, event] information pair
+                if create_run_map:
+                    source = in_file['data'] if split_groups else in_file
+                    assert 'run_info' in source, \
+                            'Must provide run info to create run map'
+                    run_info = source['run_info']
+                    for r, e in zip(run_info['run'], run_info['event']):
+                        self.run_info.append([r, e])
 
+                # Update the total number of entries
+                num_entries = len(in_file['events'])
+                self.num_entries += num_entries
+                self.file_index.append(i*np.ones(num_entries, dtype=np.int32))
+
+                # Print
                 if i < self.max_print:
                     print('Registered', path)
                 elif i == self.max_print:
                     print('...')
+
         print(f'Registered {len(self.file_paths)} file(s)')
 
+        # Turn file index and run info into np.ndarray, check for duplicates
         self.file_index = np.concatenate(self.file_index)
+        if len(self.run_info):
+            assert len(self.run_info) == self.num_entries
+            self.run_info = np.vstack(self.run_info)
+            has_duplicates = not np.all(np.unique(self.run_info,
+                axis = 0, return_counts=True)[-1] == 1)
+            if has_duplicates:
+                warnings.warn('There are duplicated [run, event] pairs',
+                        RuntimeWarning)
 
         # Build an entry index to access, modify file index accordingly
-        self.entry_index = self.get_entry_list(n_entry, n_skip, entry_list, skip_entry_list)
+        self.entry_index = self.initialize_entry_list(n_entry,
+                n_skip, entry_list, skip_entry_list)
+
+        # If run_info is set, flip it into a map from info to entry
+        self.run_map = None
+        if len(self.run_info):
+            self.run_map = {tuple(v):i for i, v in enumerate(self.run_info)}
 
         # Set whether or not to initialize LArCV objects as such
         self.to_larcv = to_larcv
@@ -135,7 +172,48 @@ class HDF5Reader:
         else:
             return dict(data_blob, **result_blob)
 
-    def get_entry_list(self, n_entry, n_skip, entry_list, skip_entry_list):
+    def get_event(self, run, event, nested=False):
+        '''
+        Returns an entry corresponding to a specific (run, event) pair
+
+        Parameters
+        ----------
+        run : int
+            Run number
+        event : int
+            Event number
+        nested : bool, default `False`
+            If true, nest the output in an array of length 1 (for analysis tools)
+
+        Returns
+        -------
+        data_blob : dict
+            Ditionary of input data products corresponding to one event
+        result_blob : dict
+            Ditionary of result data products corresponding to one event
+        '''
+        return self.get(self.get_event_index(run, event), nested)
+
+    def get_event_index(self, run, event):
+        '''
+        Returns an entry index corresponding to a specific (run, event) pair
+
+        Parameters
+        ----------
+        run : int
+            Run number
+        event : int
+            Event number
+        '''
+        # Get the appropriate entry index
+        assert self.run_map is not None, \
+                'Must build a run map to get entries by [run, event]'
+        assert (run, event) in self.run_map, \
+                f'Could not find (run={run}, event={event}) pair'
+
+        return self.run_map[(run, event)]
+
+    def initialize_entry_list(self, n_entry, n_skip, entry_list, skip_entry_list):
         '''
         Create a list of events that can be accessed by `self.get`
 
@@ -188,6 +266,7 @@ class HDF5Reader:
         if len(entry_list):
             entry_index = entry_index[entry_list]
             self.file_index = self.file_index[entry_list]
+            self.run_info = self.run_info[entry_list]
 
         assert len(entry_index), 'Must at least have one entry to load'
 
