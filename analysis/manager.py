@@ -313,7 +313,7 @@ class AnaToolsManager:
             assert (iteration is not None) \
                     ^ (run is not None and event is not None)
             if iteration is None:
-                iteration = self._data_reader.get_event_index(run, event)
+                iteration = self._data_reader.get_run_event_index(run, event)
             data, res = self._data_reader.get(iteration, nested=True)
             file_index = self._data_reader.file_index[iteration]
             data['file_index'] = [file_index]

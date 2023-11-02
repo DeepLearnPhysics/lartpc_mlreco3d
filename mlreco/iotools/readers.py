@@ -1,3 +1,4 @@
+import os
 import yaml
 import h5py
 import glob
@@ -11,8 +12,9 @@ class HDF5Reader:
 
     More documentation to come.
     '''
-    def __init__(self, file_keys, n_entry=-1, n_skip=-1, entry_list=[],
-            skip_entry_list=[], create_run_map=False, to_larcv=False):
+    def __init__(self, file_keys, n_entry=None, n_skip=None, entry_list=None,
+            skip_entry_list=None, run_event_list=None,
+            skip_run_event_list=None, create_run_map=False, to_larcv=False):
         '''
         Load up the HDF5 file.
 
@@ -24,10 +26,14 @@ class HDF5Reader:
             Maximum number of entries to load
         n_skip: int, optional
             Number of entries to skip at the beginning
-        entry_list: list(int), optional
-            Entry IDs to be accessed. If not specified, expose all entries
-        skip_entry_list: list(int), optional
-            Entry IDs to be skipped
+        entry_list : list
+            List of integer entry IDs to add to the index
+        skip_entry_list : list
+            List of integer entry IDs to skip from the index
+        run_event_list: list((int, int)), optional
+            List of [run, event] pairs to add to the index
+        skip_run_event_list: list((int, int)), optional
+            List of [run, event] pairs to skip from the index
         create_run_map : bool, default True
             Initialize a map between [run, event] pairs and entries
         to_larcv : bool, default False
@@ -96,14 +102,15 @@ class HDF5Reader:
                 warnings.warn('There are duplicated [run, event] pairs',
                         RuntimeWarning)
 
-        # Build an entry index to access, modify file index accordingly
-        self.entry_index = self.initialize_entry_list(n_entry,
-                n_skip, entry_list, skip_entry_list)
-
         # If run_info is set, flip it into a map from info to entry
         self.run_map = None
         if len(self.run_info):
             self.run_map = {tuple(v):i for i, v in enumerate(self.run_info)}
+
+        # Build an entry index to access, modify file index accordingly
+        self.entry_index = self.initialize_entry_list(n_entry,
+                n_skip, entry_list, skip_entry_list,
+                run_event_list, skip_run_event_list)
 
         # Set whether or not to initialize LArCV objects as such
         self.to_larcv = to_larcv
@@ -145,8 +152,8 @@ class HDF5Reader:
         ----------
         idx : int
             Integer entry ID to access
-        nested : bool
-            If true, nest the output in an array of length 1 (for analysis tools)
+        nested : bool, default `False`
+            Whether to nest the output in an array or not (for analysis tools)
 
         Returns
         -------
@@ -165,14 +172,15 @@ class HDF5Reader:
         with h5py.File(self.file_paths[file_idx], 'r') as in_file:
             event = in_file['events'][entry_idx]
             for key in event.dtype.names:
-                self.load_key(in_file, event, data_blob, result_blob, key, nested)
+                self.load_key(in_file, event,
+                        data_blob, result_blob, key, nested)
 
         if self.split_groups:
             return data_blob, result_blob
         else:
             return dict(data_blob, **result_blob)
 
-    def get_event(self, run, event, nested=False):
+    def get_run_event(self, run, event, nested=False):
         '''
         Returns an entry corresponding to a specific (run, event) pair
 
@@ -183,7 +191,7 @@ class HDF5Reader:
         event : int
             Event number
         nested : bool, default `False`
-            If true, nest the output in an array of length 1 (for analysis tools)
+            Whether to nest the output in an array or not (for analysis tools)
 
         Returns
         -------
@@ -194,7 +202,7 @@ class HDF5Reader:
         '''
         return self.get(self.get_event_index(run, event), nested)
 
-    def get_event_index(self, run, event):
+    def get_run_event_index(self, run, event):
         '''
         Returns an entry index corresponding to a specific (run, event) pair
 
@@ -213,7 +221,8 @@ class HDF5Reader:
 
         return self.run_map[(run, event)]
 
-    def initialize_entry_list(self, n_entry, n_skip, entry_list, skip_entry_list):
+    def initialize_entry_list(self, n_entry, n_skip, entry_list,
+            skip_entry_list, run_event_list, skip_run_event_list):
         '''
         Create a list of events that can be accessed by `self.get`
 
@@ -227,6 +236,10 @@ class HDF5Reader:
             List of integer entry IDs to add to the index
         skip_entry_list : list
             List of integer entry IDs to skip from the index
+        run_event_list: list((int, int)), optional
+            List of [run, event] pairs to add to the index
+        skip_run_event_list: list((int, int)), optional
+            List of [run, event] pairs to skip from the index
 
         Returns
         -------
@@ -234,12 +247,26 @@ class HDF5Reader:
             List of integer entry IDs in the index
         '''
         # Make sure the parameters are sensible
-        assert not ((n_entry > 0 or n_skip > 0) and (entry_list or skip_entry_list)),\
-                'Cannot specify both n_entry or n_skip at the same time as entry_list or skip_entry_list'
-        assert min(0, n_entry) + min(0, n_skip) < self.num_entries,\
-                'Mismatch between n_entry, n_skip and the available number of entries'
-        assert not len(entry_list) or not len(skip_entry_list),\
-                'Cannot specify both entry_list and skip_entry_list at the same time'
+        if np.any([n_entry, n_skip, entry_list, skip_entry_list,
+            run_event_list, skip_run_event_list]):
+            assert bool(n_entry or n_skip) \
+                    ^ bool(entry_list or skip_entry_list) \
+                    ^ bool(run_event_list or skip_run_event_list), \
+                    'Cannot specify n_entry or n_skip ' \
+                    'at the same time as entry_list or skip_entry_list or ' \
+                    'at the same time as run_event_list or skip_run_event_list'
+        if n_entry is not None or n_skip is not None:
+            n_skip = n_skip if n_skip else 0
+            n_entry = n_entry if n_entry else self.num_entries - n_skip
+            assert n_skip + n_entry <= self.num_entries, \
+                'Mismatch between n_entry, n_skip and the ' \
+                'available number of entries in the files'
+        assert not entry_list or not skip_entry_list,\
+                'Cannot specify both entry_list and ' \
+                'skip_entry_list at the same time'
+        assert not run_event_list or not skip_run_event_list,\
+                'Cannot specify both run_event_list and ' \
+                'skip_run_event_list at the same time'
 
         # Create a list of entry indices within each file in the file list
         entry_index = np.empty(self.num_entries, dtype=int)
@@ -247,30 +274,45 @@ class HDF5Reader:
             file_mask = np.where(self.file_index==i)[0]
             entry_index[file_mask] = np.arange(len(file_mask))
 
-        # Create a list of entries to be loaded based on the function parameters
-        if n_entry > 0 or n_skip > 0:
+        # Create a list of entries to be loaded
+        if n_entry or n_skip:
             entry_list = np.arange(self.num_entries)
             if n_skip > 0: entry_list = entry_list[n_skip:]
             if n_entry > 0: entry_list = entry_list[:n_entry]
-        elif len(entry_list):
+        elif entry_list:
+            entry_list = self.parse_entry_list(entry_list)
             assert np.all(np.asarray(entry_list) < self.num_entries),\
                     'Values in entry_list outside of bounds'
-        elif len(skip_entry_list):
-            assert np.all(np.asarray(skip_entry_list) < self.num_entries),\
-                    'Values in skip_entry_list outside of bounds'
+        elif run_event_list:
+            run_event_list = self.parse_run_event_list(run_event_list)
+            entry_list = [self.get_run_event_index(r, e) \
+                    for r, e in run_event_list]
+        elif skip_entry_list or skip_run_event_list:
+            if skip_entry_list:
+                skip_entry_list = self.parse_entry_list(skip_entry_list)
+                assert np.all(np.asarray(skip_entry_list) < self.num_entries),\
+                        'Values in skip_entry_list outside of bounds'
+            else:
+                skip_run_event_list = \
+                        self.parse_run_event_list(skip_run_event_list)
+                skip_entry_list = [self.get_run_event_index(r, e) \
+                        for r, e in skip_run_event_list]
             entry_mask = np.ones(self.num_entries, dtype=bool)
             entry_mask[skip_entry_list] = False
             entry_list = np.where(entry_mask)[0]
 
         # Apply entry list to the indexes
-        if len(entry_list):
+        if entry_list is not None:
             entry_index = entry_index[entry_list]
             self.file_index = self.file_index[entry_list]
-            self.run_info = self.run_info[entry_list]
+            if len(self.run_info):
+                self.run_info = self.run_info[entry_list]
+                self.run_map = {tuple(v):i for i, v in enumerate(self.run_info)}
 
         assert len(entry_index), 'Must at least have one entry to load'
 
         return entry_index
+
 
     def load_key(self, in_file, event, data_blob, result_blob, key, nested):
         '''
@@ -338,6 +380,66 @@ class HDF5Reader:
 
         if nested:
             blob[key] = [blob[key]]
+
+    @staticmethod
+    def parse_entry_list(list_source):
+        '''
+        Parses a list into an np.ndarray. The list can be passed as a simple
+        python list or a path to a file which contains space or comma separated
+        numbers (can be on multiple lines or not)
+
+        Parameters
+        ----------
+        list_source : Union[list, str]
+            List as a python list or a text file path
+
+        Returns
+        -------
+        np.ndarray
+            List as a numpy array
+        '''
+        if list_source is None:
+            return np.empty(0, dtype=np.int64)
+        elif not np.isscalar(list_source):
+            return np.asarray(list_source, dtype=np.int64)
+        elif isinstance(list_source, str):
+            assert os.path.isfile(list_source), \
+                    'The list source file does not exist'
+            lines = open(list_source, 'r').read().splitlines()
+            list_source = [w for l in lines for w in l.replace(',', ' ').split()]
+            return np.array(list_source, dtype=np.int64)
+        else:
+            raise ValueError('list format not recognized')
+
+    @staticmethod
+    def parse_run_event_list(list_source):
+        '''
+        Parses a list of [run, event] pairs into an np.ndarray. The list can be
+        passed as a simple python list or a path to a file which contains
+        one [run, event] pair per line.
+
+        Parameters
+        ----------
+        list_source : Union[list, str]
+            List as a python list or a text file path
+
+        Returns
+        -------
+        np.ndarray
+            List as a numpy array
+        '''
+        if list_source is None:
+            return np.empty((0,2), dtype=np.int64)
+        elif not np.isscalar(list_source):
+            return np.asarray(list_source, dtype=np.int64).reshape(-1, 2)
+        elif isinstance(list_source, str):
+            assert os.path.isfile(list_source), \
+                    'The list source file does not exist'
+            lines = open(list_source, 'r').read().splitlines()
+            list_source = [l.replace(',', ' ').split() for l in lines]
+            return np.array(list_source, dtype=np.int64)
+        else:
+            raise ValueError('list format not recognized')
 
     @staticmethod
     def make_larcv_objects(array, names):

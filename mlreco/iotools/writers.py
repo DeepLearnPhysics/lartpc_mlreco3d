@@ -30,8 +30,10 @@ class HDF5Writer:
 
     # Analysis object array attributes which have a fixed length
     ANA_FIXED_LENGTH = [
-        'start_point', 'end_point', 'start_dir', 'end_dir', 'start_position', 'end_position',
-        'vertex', 'truth_vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
+        'start_point', 'end_point', 'start_dir', 'truth_start_dir', 'end_dir',
+        'start_position', 'end_position', 'vertex', 'truth_vertex', 'momentum',
+        'truth_momentum', 'pid_scores', 'primary_scores', 'particle_counts',
+        'primary_counts'
     ]
 
     # Object attributes that do not need to be stored to HDF5
