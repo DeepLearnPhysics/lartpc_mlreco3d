@@ -200,7 +200,7 @@ class HDF5Reader:
         result_blob : dict
             Ditionary of result data products corresponding to one event
         '''
-        return self.get(self.get_event_index(run, event), nested)
+        return self.get(self.get_run_event_index(run, event), nested)
 
     def get_run_event_index(self, run, event):
         '''
@@ -305,6 +305,7 @@ class HDF5Reader:
         if entry_list is not None:
             entry_index = entry_index[entry_list]
             self.file_index = self.file_index[entry_list]
+            self.num_entries = len(entry_list)
             if len(self.run_info):
                 self.run_info = self.run_info[entry_list]
                 self.run_map = {tuple(v):i for i, v in enumerate(self.run_info)}
