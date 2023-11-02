@@ -462,7 +462,7 @@ class HDF5Writer:
                 array = blob[key]
             else:
                 # If an output is a nested scalar, get it for every batch ID
-                # TODO: Must get rid of this option
+                assert len(blob[key]) == self.batch_size or len(blob[key]) == 1
                 array = blob[key][batch_id] \
                         if len(blob[key]) != 1 else blob[key][0]
 

@@ -222,10 +222,12 @@ class trainval(object):
             self.tspent_sum['io'] += self._watch.time('io')
 
             # Run forward
+            self._model.batch_size = len(input_data['index'][0]) * self._num_volumes
             res = self._forward(input_train, input_loss, iteration=iteration)
 
             # Unwrap output, if requested
             if unwrap:
+                unwrapper.batch_size = len(input_data['index'][0]) * self._num_volumes
                 input_data, res = unwrapper(input_data, res)
             else:
                 if 'index' in input_data:
@@ -270,7 +272,6 @@ class trainval(object):
 
             if not len(self._gpus):
                 train_blob = train_blob[0]
-            #print(not self._net.device_ids)
             result = self._net(train_blob)
 
             if not len(self._gpus):
@@ -488,8 +489,8 @@ class trainval(object):
 
         self._model = model(module_config)
 
-        num_volumes = 1 if not self._boundaries else np.prod([len(b)+1 for b in self._boundaries if b != 'None'])
-        self._model.batch_size = self._minibatch_size * num_volumes
+        self._num_volumes = 1 if not self._boundaries else np.prod([len(b)+1 for b in self._boundaries if b != 'None'])
+        self._model.batch_size = self._minibatch_size * self._num_volumes
 
         self._net = DataParallel(self._model, device_ids=self._gpus)
 
