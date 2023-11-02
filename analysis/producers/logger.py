@@ -337,6 +337,14 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    # @tag('reco')
+    def ke(particle):
+        out = {'ke': -1}
+        if particle is not None:
+            out['ke'] = particle.ke
+        return out
+    
+    @staticmethod
     def is_contained(particle):
         out = {'particle_is_contained': False}
         if particle is not None:
