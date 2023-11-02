@@ -12,7 +12,7 @@ class HDF5Reader:
     More documentation to come.
     '''
     def __init__(self, file_keys, n_entry=-1, n_skip=-1, entry_list=[],
-            skip_entry_list=[], create_run_map=True, to_larcv=False):
+            skip_entry_list=[], create_run_map=False, to_larcv=False):
         '''
         Load up the HDF5 file.
 
