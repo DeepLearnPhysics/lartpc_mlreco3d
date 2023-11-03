@@ -53,6 +53,7 @@ class HDF5Writer:
         larcv.Neutrino: LARCV_SKIP_ATTRS,
         larcv.Flash:    ['wireCenters', 'wireWidths'],
         larcv.CRTHit:   ['feb_id', 'pesmap'],
+        larcv.Trigger:  ['clear'],
         analysis.ParticleFragment:      ANA_SKIP_ATTRS,
         analysis.TruthParticleFragment: ANA_SKIP_ATTRS,
         analysis.Particle:              ANA_SKIP_ATTRS,
@@ -74,7 +75,7 @@ class HDF5Writer:
 
     # List of recognized objects
     DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
-    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
+    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit, larcv.Trigger)
 
     def __init__(self,
                  file_name: str = 'output.h5',

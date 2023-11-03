@@ -38,6 +38,9 @@ List of existing parsers
     ``parse_meta2d``, Get the meta information to translate into real world coordinates (2D)
     ``parse_meta3d``, Get the meta information to translate into real world coordinates (3D)
     ``parse_run_info``, Parse run info (run, subrun, event number)
+    ``parse_opflash``, Parse optical flashes
+    ``parse_crthits``, Parse cosmic ray tagger hits
+    ``parse_trigger``, Parse trigger information
 
 
 What does a typical parser configuration look like?
@@ -100,5 +103,6 @@ from mlreco.iotools.parsers.misc import (
     parse_meta3d,
     parse_run_info,
     parse_opflash,
-    parse_crthits
+    parse_crthits,
+    parse_trigger
 )

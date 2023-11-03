@@ -446,7 +446,8 @@ class HDF5Reader:
     def make_larcv_objects(array, names):
         '''
         Rebuild `larcv` objects from the stored information. Supports
-        `larcv.Particle`, `larcv.Neutrino`, `larcv.Flash` and `larcv.CRTHit`
+        `larcv.Particle`, `larcv.Neutrino`, `larcv.Flash`, `larcv.CRTHit`
+        and `larcv.Trigger`.
 
         Parameters
         ----------
@@ -466,6 +467,7 @@ class HDF5Reader:
             if 'bjorken_x' in names: obj_class = larcv.Neutrino
             elif 'TotalPE' in names: obj_class = larcv.Flash
             elif 'tagger'  in names: obj_class = larcv.CRTHit
+            elif 'time_ns' in names: obj_class = larcv.Trigger
 
         ret = []
         for i in range(len(array)):

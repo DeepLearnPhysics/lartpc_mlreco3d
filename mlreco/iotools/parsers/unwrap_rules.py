@@ -23,7 +23,8 @@ RULES = {
     'parse_meta3d': ['list'],
     'parse_run_info': ['list'],
     'parse_opflash': ['list'],
-    'parse_crthits': ['list']
+    'parse_crthits': ['list'],
+    'parse_trigger': ['list']
 }
 
 def input_unwrap_rules(schemas):

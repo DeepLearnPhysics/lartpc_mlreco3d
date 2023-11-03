@@ -60,10 +60,10 @@ class TriggerProcessor(PostProcessor):
         trigger_info = self.trigger_dict[trigger_mask]
         if not len(trigger_info):
             raise KeyError(f'Could not find run {run_id} ' \
-                    'event {event_id} in the trigger file')
+                    f'event {event_id} in the trigger file')
         elif len(trigger_info) > 1:
-            raise KeyError(f'Found more than one trigger associated ' \
-                    'with {run_id} event {event_id} in the trigger file')
+            raise KeyError('Found more than one trigger associated ' \
+                    f'with {run_id} event {event_id} in the trigger file')
 
         trigger_info = trigger_info.to_dict(orient='records')[0]
         del trigger_info['run_number'], trigger_info['event_no']
