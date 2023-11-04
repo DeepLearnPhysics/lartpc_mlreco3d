@@ -60,6 +60,8 @@ class HDF5Writer:
         analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index'],
         analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
+    if hasattr(larcv, 'Trigger'): # TMP until a new singularity
+        SKIP_ATTRS.update({larcv.Trigger:  ['clear']})
 
     # Output with default types. TODO: move this, make it not name-dependant
     DEFAULT_OBJS = {
@@ -74,12 +76,10 @@ class HDF5Writer:
 
     # List of recognized objects
     DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
-    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
-
-    # Until Trigger makes it to a singularity
-    if hasattr(larcv, 'Trigger'):
-        SKIP_ATTRS.update({larcv.Trigger:  ['clear']})
+    LARCV_OBJS = [larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit]
+    if hasattr(larcv, 'Trigger'): # TMP until a new singularity
         LARCV_OBJS.append(larcv.Trigger)
+    LARCV_OBJS = tuple(LARCV_OBJS)
 
     def __init__(self,
                  file_name: str = 'output.h5',
