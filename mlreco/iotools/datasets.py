@@ -4,26 +4,31 @@ from torch.utils.data import Dataset
 import mlreco.iotools.parsers
 
 class LArCVDataset(Dataset):
-    """
+    '''
     A generic interface for LArCV data files.
 
     This Dataset is designed to produce a batch of arbitrary number
-    of data chunks (e.g. input data matrix, segmentation label, point proposal target, clustering labels, etc.).
-    Each data chunk is processed by parser functions defined in the iotools.parsers module. LArCVDataset object
-    can be configured with arbitrary number of parser functions where each function can take arbitrary number of
-    LArCV event data objects. The assumption is that each data chunk respects the LArCV event boundary.
-    """
-    def __init__(self, data_schema, data_keys, limit_num_files=0, limit_num_samples=0, event_list=None, skip_event_list=None):
-        """
+    of data chunks (e.g. input data matrix, segmentation label, point proposal
+    target, clustering labels, etc.). Each data chunk is processed by parser
+    functions defined in the iotools.parsers module. LArCVDataset object can be
+    configured with arbitrary number of parser functions where each function
+    can take arbitrary number of LArCV event data objects. The assumption is
+    that each data chunk respects the LArCV event boundary.
+    '''
+    def __init__(self, data_schema, data_keys, limit_num_files=0,
+            limit_num_samples=0, event_list=None, skip_event_list=None):
+        '''
         Instantiates the LArCVDataset.
 
         Parameters
         ----------
         data_schema : dict
-            A dictionary of (string, dictionary) pairs. The key is a unique name of
-            a data chunk in a batch and the associated dictionary must include:
+            A dictionary of (string, dictionary) pairs. The key is a unique
+            name of a data chunk in a batch and the associated dictionary
+            must include:
               - parser: name of the parser
-              - args: (key, value) pairs that correspond to parser argument names and their values
+              - args: (key, value) pairs that correspond to parser argument
+                names and their values
             The nested dictionaries can replaced be lists, in which case
             they will be considered as parser argument values, in order.
         data_keys : list
@@ -36,7 +41,7 @@ class LArCVDataset(Dataset):
             a list of integers to specify which event (ttree index) to process
         skip_event_list : list
             a list of integers to specify which events (ttree index) to skip
-        """
+        '''
 
         # Create file list
         self._files = []

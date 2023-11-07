@@ -81,15 +81,13 @@ class TruthParticle(Particle):
         self._children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
 
         # Load truth information from the true particle object
+        self.truth_momentum = truth_momentum
+        self.truth_start_dir = truth_start_dir
         if particle_asis is not None:
             self.register_larcv_particle(particle_asis)
 
         # Quantity to be set with the children counting post-processor
         self.children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
-
-        # Quantities derived from the LArCV particle
-        self.truth_momentum = truth_momentum
-        self.truth_start_dir = truth_start_dir
 
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng  = -1.

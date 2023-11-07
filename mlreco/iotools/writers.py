@@ -30,8 +30,10 @@ class HDF5Writer:
 
     # Analysis object array attributes which have a fixed length
     ANA_FIXED_LENGTH = [
-        'start_point', 'end_point', 'start_dir', 'end_dir', 'start_position', 'end_position',
-        'vertex', 'truth_vertex', 'momentum', 'pid_scores', 'primary_scores', 'particle_counts', 'primary_counts'
+        'start_point', 'end_point', 'start_dir', 'truth_start_dir', 'end_dir',
+        'start_position', 'end_position', 'vertex', 'truth_vertex', 'momentum',
+        'truth_momentum', 'pid_scores', 'primary_scores', 'particle_counts',
+        'primary_counts'
     ]
 
     # Object attributes that do not need to be stored to HDF5
@@ -58,6 +60,8 @@ class HDF5Writer:
         analysis.Interaction:           ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index'],
         analysis.TruthInteraction:      ANA_SKIP_ATTRS + ['index', 'truth_index', 'sed_index']
     }
+    if hasattr(larcv, 'Trigger'): # TMP until a new singularity
+        SKIP_ATTRS.update({larcv.Trigger:  ['clear']})
 
     # Output with default types. TODO: move this, make it not name-dependant
     DEFAULT_OBJS = {
@@ -72,7 +76,10 @@ class HDF5Writer:
 
     # List of recognized objects
     DATA_OBJS  = tuple(list(SKIP_ATTRS.keys()))
-    LARCV_OBJS = (larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit)
+    LARCV_OBJS = [larcv.Particle, larcv.Neutrino, larcv.Flash, larcv.CRTHit]
+    if hasattr(larcv, 'Trigger'): # TMP until a new singularity
+        LARCV_OBJS.append(larcv.Trigger)
+    LARCV_OBJS = tuple(LARCV_OBJS)
 
     def __init__(self,
                  file_name: str = 'output.h5',

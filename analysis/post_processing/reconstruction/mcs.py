@@ -17,12 +17,15 @@ class MCSEnergyProcessor(PostProcessor):
     result_cap_optional = ['truth_particles']
 
     def __init__(self,
-                 tracking_mode='bin_pca',
-                 segment_length=5,
-                 include_pids=[2,3,4,5],
-                 only_uncontained=False,
-                 truth_point_mode='points',
-                 run_mode = 'both',
+                 tracking_mode = 'bin_pca',
+                 segment_length = 5,
+                 split_angle = False,
+                 res_a = 0.25,
+                 res_b = 1.25,
+                 include_pids = [2,3,4,5],
+                 only_uncontained = False,
+                 truth_point_mode = 'points',
+                 run_mode = 'reco',
                  **kwargs):
         '''
         Store the necessary attributes to do MCS-based estimations
@@ -34,10 +37,16 @@ class MCSEnergyProcessor(PostProcessor):
             'step_next' or 'bin_pca')
         segment_length : float, default 5 cm
             Segment length in the units that specify the coordinates
+        split_angle : bool, default False
+            Whether or not to project the 3D angle onto two 2D planes
+        res_a : float, default 0.25 rad*cm^res_b
+            Parameter a in the a/dx^b which models the angular uncertainty
+        res_b : float, default 1.25
+            Parameter b in the a/dx^b which models the angular uncertainty
         include_pids : list, default [2, 3, 4, 5]
             Particle species to compute the kinetic energy for
         only_uncontained : bool, default False
-            Only run the algorithm on particles that are marked as not contained
+            Only run the algorithm on particles that are not contained
         **kwargs : dict, optiona
             Additional arguments to pass to the tracking algorithm
         '''
@@ -53,6 +62,9 @@ class MCSEnergyProcessor(PostProcessor):
                 'The tracking algorithm must provide segment angles'
         self.tracking_mode = tracking_mode
         self.segment_length = segment_length
+        self.split_angle = split_angle
+        self.res_a = res_a
+        self.res_b = res_b
         self.tracking_kwargs = kwargs
 
     def process(self, data_dict, result_dict):
@@ -97,6 +109,7 @@ class MCSEnergyProcessor(PostProcessor):
 
                 # Store the length and the MCS kinetic energy
                 mass = PID_MASSES[p.pid]
-                p.mcs_ke = mcs_fit(theta, mass, self.segment_length)
+                p.mcs_ke = mcs_fit(theta, mass, self.segment_length, 1,
+                        self.split_angle, self.res_a, self.res_b)
 
         return {}, {}

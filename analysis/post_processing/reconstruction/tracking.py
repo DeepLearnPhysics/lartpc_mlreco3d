@@ -17,7 +17,7 @@ class CSDAEnergyProcessor(PostProcessor):
     result_cap_opt = ['truth_particles']
 
     def __init__(self,
-                 tracking_mode='bin_pca',
+                 tracking_mode='step_next',
                  include_pids=[2,3,4,5],
                  truth_point_mode='points',
                  run_mode = 'both',
@@ -27,7 +27,7 @@ class CSDAEnergyProcessor(PostProcessor):
 
         Parameters
         ----------
-        tracking_mode : str, default 'bin_pca'
+        tracking_mode : str, default 'step_next'
             Method used to compute the track length (one of 'displacement',
             'step', 'step_next', 'bin_pca' or 'spline')
         include_pids : list, default [2, 3, 4, 5]
