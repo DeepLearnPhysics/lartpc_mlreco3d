@@ -6,7 +6,8 @@ from .globals import LAR_X0
 from .energy_loss import step_energy_loss_lar
 
 
-def mcs_fit(theta, M, dx, z = 1, split_angle=True, res_a=0.25, res_b=1.25):
+def mcs_fit(theta, M, dx, z = 1, \
+        split_angle = False, res_a = 0.25, res_b = 1.25):
     '''
     Finds the kinetic energy which best fits a set of scattering angles
     measured between successive segments along a particle track.
@@ -21,7 +22,7 @@ def mcs_fit(theta, M, dx, z = 1, split_angle=True, res_a=0.25, res_b=1.25):
         Step length in cm
     z : int, default 1
         Impinging partile charge in multiples of electron charge
-    split_angle : bool, default True
+    split_angle : bool, default False
         Whether or not to project the 3D angle onto two 2D planes
     res_a : float, default 0.25 rad*cm^res_b
         Parameter a in the a/dx^b which models the angular uncertainty
@@ -38,7 +39,7 @@ def mcs_fit(theta, M, dx, z = 1, split_angle=True, res_a=0.25, res_b=1.25):
 
 @nb.njit(cache=True)
 def mcs_nll_lar(T0, theta, M, dx, z = 1,
-        split_angle = True, res_a = 0.25, res_b = 1.25):
+        split_angle = False, res_a = 0.25, res_b = 1.25):
     '''
     Computes the MCS negative log likelihood for a given list of segment angles
     and an initial momentum. This function checks the agreement between the
@@ -56,7 +57,7 @@ def mcs_nll_lar(T0, theta, M, dx, z = 1,
         Step length in cm
     z : int, default 1
        Impinging partile charge in multiples of electron charge
-    split_angle : bool, default True
+    split_angle : bool, default False
         Whether or not to project the 3D angle onto two 2D planes
     res_a : float, default 0.25 rad*cm^res_b
         Parameter a in the a/dx^b which models the angular uncertainty
@@ -79,8 +80,11 @@ def mcs_nll_lar(T0, theta, M, dx, z = 1,
     mom_steps = np.sqrt(mom_array[1:] * mom_array[:-1])
 
     # Get the expected scattering angle for each step
-    theta0 = highland(mom_steps, M, dx, z, split_angle)
-    theta0 = np.sqrt(theta0**2 + (res_a/dx**res_b)**2)
+    theta0 = highland(mom_steps, M, dx, z)
+
+    # Update the expected scattering angle to account for angular resolution
+    res = res_a/dx**res_b
+    theta0 = np.sqrt(theta0**2 + res**2)
 
     # Compute the negative log likelihood, return
     if not split_angle:
@@ -94,7 +98,7 @@ def mcs_nll_lar(T0, theta, M, dx, z = 1,
 
 
 @nb.njit(cache=True)
-def highland(p, M, dx, z = 1, projected = False, X0 = LAR_X0):
+def highland(p, M, dx, z = 1, X0 = LAR_X0):
     '''
     Highland scattering formula
 
@@ -108,8 +112,6 @@ def highland(p, M, dx, z = 1, projected = False, X0 = LAR_X0):
         Step length in cm
     z : int, default 1
        Impinging partile charge in multiples of electron charge
-    projected : int, default `False`
-       If `True`, returns the expectation in a projected 2D plane
     X0 : float, default LAR_X0
        Radiation length in the material of interest in cm
 
@@ -120,7 +122,7 @@ def highland(p, M, dx, z = 1, projected = False, X0 = LAR_X0):
     '''
     # Highland formula
     beta = p / np.sqrt(p**2 + M**2)
-    prefactor = np.sqrt(2)**(not projected) * 13.6 * z / beta / p
+    prefactor = 13.6 * z / beta / p
 
     return prefactor * np.sqrt(dx/LAR_X0) * \
             (1. + 0.038*np.log(z**2 * dx / LAR_X0 / beta**2))
