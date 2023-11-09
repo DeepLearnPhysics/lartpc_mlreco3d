@@ -103,6 +103,6 @@ class FlashMatchingProcessor(PostProcessor):
                 ii.flash_total_pE = float(flash.TotalPE())
                 if hasattr(match, 'hypothesis'):
                     ii.flash_hypothesis = float(np.array(match.hypothesis,
-                        dtype=np.float64).sum())
+                        dtype=np.float32).sum())
 
         return {}, {}

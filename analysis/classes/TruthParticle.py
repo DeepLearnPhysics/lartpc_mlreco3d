@@ -114,6 +114,10 @@ class TruthParticle(Particle):
         for k in scalar_keys:
             val = getattr(particle, k)()
             setattr(self, k, val)
+
+        # TODO: Move this to main list once this is in every LArCV file
+        if hasattr(particle, 'gen_id'):
+            setattr(self, 'gen_id', particle.gen_id())
             
         # Exception for particle_id
         self.truth_id = particle.id()
@@ -177,6 +181,10 @@ class TruthParticle(Particle):
             if type(attr) is bytes:
                 attr = attr.decode()
             setattr(self, attr_name, attr)
+
+        # TODO: Move this to main list once this is in every LArCV file
+        if 'gen_id' in particle_dict:
+            setattr(self, 'gen_id', particle_dict['gen_id'])
 
     def merge(self, particle):
         '''

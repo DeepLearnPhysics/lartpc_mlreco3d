@@ -227,7 +227,7 @@ class trainval(object):
 
             # Unwrap output, if requested
             if unwrap:
-                unwrapper.batch_size = len(input_data['index'][0]) * self._num_volumes
+                unwrapper.batch_size = len(input_data['index'][0])
                 input_data, res = unwrapper(input_data, res)
             else:
                 if 'index' in input_data:
