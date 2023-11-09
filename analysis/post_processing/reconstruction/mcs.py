@@ -61,11 +61,13 @@ class MCSEnergyProcessor(PostProcessor):
         assert tracking_mode in ['step', 'step_next', 'bin_pca'], \
                 'The tracking algorithm must provide segment angles'
         self.tracking_mode = tracking_mode
+        self.tracking_kwargs = kwargs
+
+        # Store the MCS parameters
         self.segment_length = segment_length
         self.split_angle = split_angle
         self.res_a = res_a
         self.res_b = res_b
-        self.tracking_kwargs = kwargs
 
     def process(self, data_dict, result_dict):
         '''
@@ -103,6 +105,7 @@ class MCSEnergyProcessor(PostProcessor):
 
                 # Find the angles between successive segments
                 costh = np.sum(dirs[:-1] * dirs[1:], axis = 1)
+                costh = np.clip(costh, -1, 1)
                 theta = np.arccos(costh)
                 if len(theta) < 1:
                     continue
