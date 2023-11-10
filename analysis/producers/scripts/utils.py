@@ -151,15 +151,19 @@ class InteractionTopologyManager:
         """
         self._df_intrs = df_intrs
         self._df_parts = df_parts
+        # self._df_parts = df_parts.query(f'{mode}_particle_interaction_id >= 0')
         
         print(f"Total Number of Interactions = {df_intrs.shape[0]}")
         print(f"Total Number of Particles = {df_parts.shape[0]}")
         
-        self.df = pd.merge(df_intrs, df_parts, 
+        self.df = pd.merge(self._df_intrs, self._df_parts, 
                            left_on=['Index', 'file_index', f'{mode}_interaction_id'], 
                            right_on=['Index', 'file_index', f'{mode}_particle_interaction_id'])
         
-        assert (self.df.shape[0] == self.df_parts.shape[0])
+        non_matches = df_parts.query(f'{mode}_particle_interaction_id < 0').shape[0]
+        
+        if (self.df.shape[0] != self.df_parts.shape[0]):
+            print(f"There are {non_matches} {mode}_particles that do not have any match.")
         
         self.df_altered = False
         self._mode = mode
@@ -243,12 +247,22 @@ class InteractionTopologyManager:
                 = df_intrs_mgd[f'{self.mode}_num_primary_{self._MAPPING[pid]}_new'].fillna(0).astype(int)
             self.df[f'true_num_primary_{self._MAPPING[pid]}'] \
                 = df_parts_mgd[f'{self.mode}_num_primary_{self._MAPPING[pid]}_new'].fillna(0).astype(int)
+        
+        self.df_altered = False
                 
     def update_interaction_df(self, df_other, pids=[0,1,2,3,4]):
+        if self.df_altered:
+            raise AssertionError("It looks like you applied a cut and did not update/recounted topologies. Try update() before doing anything else. ")
+        
+        df_small = self.df_intrs[['Index', 'file_index', f'{self.mode}_interaction_id']]
+        for pid in pids:
+            df_small[f'{self.mode}_num_primary_{self._MAPPING[pid]}_new'] = self.df_intrs[f'{self.mode}_num_primary_{self._MAPPING[pid]}']
+        
         df_intrs_mgd = pd.merge(df_other,
-                                self.df_intrs,
+                                df_small,
                                 on=['Index', 'file_index', f'{self.mode}_interaction_id'],
                                 how='left')
+
         for pid in pids:
             self.df_intrs[f'{self.mode}_num_primary_{self._MAPPING[pid]}'] \
                 = df_intrs_mgd[f'{self.mode}_num_primary_{self._MAPPING[pid]}_new'].fillna(0).astype(int)

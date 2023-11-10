@@ -279,6 +279,7 @@ class ParticleBuilder(DataBuilder):
 
             if (sed_mask is not None) and ('sed' in data):
                 prepared_bp['sed_points'] = true_sed[sed_mask][:, COORD_COLS]
+                prepared_bp['sed_depositions_MeV'] = true_sed[sed_mask][:, VALUE_COL]
             if 'input_rescaled_source' in result:
                 prepared_bp['sources'] = result['input_rescaled_source'][0][mask]
 
