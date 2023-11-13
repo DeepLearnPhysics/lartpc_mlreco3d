@@ -326,12 +326,14 @@ def _get_cluster_features(data: nb.float64[:,:],
         clust = clusts[ids[k]]
         x = data[clust][:, COORD_COLS]
 
-        # Center data
+        # Get cluster center
         center = nbl.mean(x, 0)
-        x = x - center
 
         # Get orientation matrix
-        A = np.dot(x.T, x)
+        A = np.cov(x.T, ddof = len(x) - 1).astype(x.dtype)
+
+        # Center data
+        x = x - center
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
         # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
