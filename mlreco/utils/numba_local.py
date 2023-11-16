@@ -400,11 +400,8 @@ def principal_components(x: nb.float32[:,:]) -> nb.float32[:,:]:
     np.ndarray
         (d, d) List of principal components (row-ordered)
     '''
-    # Center data
-    x = x - mean(x, 0)
-
     # Get covariance matrix
-    A = np.dot(x.T, x)
+    A = np.cov(x.T, ddof = len(x) - 1).astype(x.dtype) # Casting needed...
 
     # Get eigenvectors
     _, v = np.linalg.eigh(A)

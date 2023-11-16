@@ -3,7 +3,7 @@ from larcv import larcv
 
 
 def parse_meta2d(sparse_event, projection_id = 0):
-    """
+    '''
     Get the meta information to translate into real world coordinates (2D).
 
     Each entry in a dataset is a cube, where pixel coordinates typically go
@@ -38,7 +38,7 @@ def parse_meta2d(sparse_event, projection_id = 0):
     Note
     ----
     TODO document how to specify projection id.
-    """
+    '''
 
     tensor2d = sparse_event.sparse_tensor_2d(projection_id)
     meta = tensor2d.meta()
@@ -53,7 +53,7 @@ def parse_meta2d(sparse_event, projection_id = 0):
 
 
 def parse_meta3d(sparse_event):
-    """
+    '''
     Get the meta information to translate into real world coordinates (3D).
 
     Each entry in a dataset is a cube, where pixel coordinates typically go
@@ -82,7 +82,7 @@ def parse_meta3d(sparse_event):
         * `max_x`, `max_y`, `max_z` (real world coordinates)
         * `size_voxel_x`, `size_voxel_y`, `size_voxel_z` the size of each voxel
         in real world units
-    """
+    '''
     meta = sparse_event.meta()
     return [
         meta.min_x(),
@@ -98,7 +98,7 @@ def parse_meta3d(sparse_event):
 
 
 def parse_run_info(sparse_event):
-    """
+    '''
     Parse run info (run, subrun, event number)
 
     .. code-block:: yaml
@@ -118,14 +118,14 @@ def parse_run_info(sparse_event):
     -------
     tuple
          (run, subrun, event)
-    """
+    '''
     return [dict(run    = sparse_event.run(),
                  subrun = sparse_event.subrun(),
                  event  = sparse_event.event())]
 
 
 def parse_opflash(opflash_event):
-    """
+    '''
     Copy construct OpFlash and return an array of larcv::Flash.
 
     .. code-block:: yaml
@@ -141,7 +141,7 @@ def parse_opflash(opflash_event):
     Returns
     -------
     list
-    """
+    '''
     if not isinstance(opflash_event, list):
         opflash_event = [opflash_event]
 
@@ -154,13 +154,13 @@ def parse_opflash(opflash_event):
 
 
 def parse_crthits(crthit_event):
-    """
+    '''
     Copy construct CRTHit and return an array of larcv::CRTHit.
 
     .. code-block:: yaml
         schema:
           crthits:
-            parser:parse_crthit
+            parser: parse_crthits
             crthit_event: crthit_crthit
 
     Configuration
@@ -170,6 +170,28 @@ def parse_crthits(crthit_event):
     Returns
     -------
     list
-    """
+    '''
     crthits = [larcv.CRTHit(c) for c in crthit_event.as_vector()]
     return crthits
+
+
+def parse_trigger(trigger_event):
+    '''
+    Copy construct Trigger and return an array of larcv::Trigger.
+
+    .. code-block:: yaml
+        schema:
+          trigger:
+            parser: parse_trigger
+            trigger_event: trigger_base
+
+    Configuration
+    -------------
+    trigger_event: larcv::TriggerEvent
+
+    Returns
+    -------
+    list
+    '''
+    trigger = [larcv.Trigger(trigger_event)]
+    return trigger
