@@ -43,25 +43,29 @@ class TopologySelector:
     
     def _generate_mask(self, config):
         
-        mask_eff = np.ones(self.df_t2r.shape[0], dtype=bool)
-        mask_pur = np.ones(self.df_r2t.shape[0], dtype=bool)
+        mask_eff = np.zeros(self.df_t2r.shape[0], dtype=bool)
+        mask_pur = np.zeros(self.df_r2t.shape[0], dtype=bool)
+        
+        mask_eff[self.df_t2r.query(config).index.values] = True
+        mask_pur[self.df_r2t.query(config).index.values] = True
 
-        for key, val in config.items():
-            operator, value = val.split(' ')
-            if operator == '==':
-                mask_eff &= (self.df_t2r[key] == eval(value)).values
-                mask_pur &= (self.df_r2t[key] == eval(value)).values
-            elif operator == '>=':
-                mask_eff &= (self.df_t2r[key] >= eval(value)).values
-                mask_pur &= (self.df_r2t[key] >= eval(value)).values
-            elif operator == '<=':
-                mask_eff &= (self.df_t2r[key] <= eval(value)).values
-                mask_pur &= (self.df_r2t[key] <= eval(value)).values
-            elif operator == '!=':
-                mask_eff &= (self.df_t2r[key] != eval(value)).values
-                mask_pur &= (self.df_r2t[key] != eval(value)).values
-            else:
-                raise ValueError("Selection operator may only be one of '==', '<=', or '>='.")
+        # for key, val in config.items():
+        #     operator, value = val.split(' ')
+        #     if operator == '==':
+        #         mask_eff &= (self.df_t2r[key] == eval(value)).values
+        #         mask_pur &= (self.df_r2t[key] == eval(value)).values
+        #     elif operator == '>=':
+        #         mask_eff &= (self.df_t2r[key] >= eval(value)).values
+        #         mask_pur &= (self.df_r2t[key] >= eval(value)).values
+        #     elif operator == '<=':
+        #         mask_eff &= (self.df_t2r[key] <= eval(value)).values
+        #         mask_pur &= (self.df_r2t[key] <= eval(value)).values
+        #     elif operator == '!=':
+        #         mask_eff &= (self.df_t2r[key] != eval(value)).values
+        #         mask_pur &= (self.df_r2t[key] != eval(value)).values
+        #     else:
+        #         raise ValueError("Selection operator may only be one of '==', '<=', or '>='.")
+        #     print(key, mask_eff.sum(), mask_pur.sum(), self.df_t2r[key].value_counts())
         return mask_eff, mask_pur
         
         
