@@ -53,13 +53,13 @@ class LifetimeCalibrator:
                 'Must specify static values of the lifetime and drift ' \
                 'velocity or paths to databases that provide it.'
 
-        # If static values are specified, map [cryo, tpc] pairs to constants
+        # If static values are specified, store them
         if lifetime:
             # Set the method
             self.use_db = False
 
             # Inititalize lifetime
-            if not isinstance(lifetime, dict):
+            if np.issclar(lifetime):
                 self.lifetime = np.full(self.geo.num_tpcs, lifetime)
             else:
                 assert len(lifetime) == self.geo.num_tpcs, \
@@ -67,7 +67,7 @@ class LifetimeCalibrator:
                 self.lifetime = lifetime
 
             # Initialize electron drift velocity
-            if not isinstance(lifetime, dict):
+            if np.isscalar(driftv):
                 self.driftv = np.full(self.geo.num_tpcs, driftv)
             else:
                 assert len(driftv) == self.geo.num_tpcs, \
@@ -107,28 +107,18 @@ class LifetimeCalibrator:
             (N) array of corrected values
         '''
         # Get the corrections lifetimes/drift velocities
-        if not self.use_db:
-            lifetime = self.lifetime
-            driftv = self.driftv
-        else:
+        lifetime = self.lifetime
+        driftv = self.driftv
+        if self.use_db:
             assert run_id is not None, \
                     'When using the database, must provide a run ID'
             lifetime = self.lifetime[run_id]
             driftv = self.driftv[run_id]
 
-        # If there is no source, assign TPC with the closest anode as source
-        tpc_indexes = []
+        # If there is no source and the lifetime is specified separately for
+        # each TPC, assign TPC which is closest the each point
         if sources is None:
-            distances = np.empty((self.geo.num_tpcs, len(points)))
-            for t in range(self.geo.num_tpcs):
-                module_id = t // self.geo.num_modules
-                tpc_id = t % self.geo.num_modules
-                daxis, apos = self.geo.anodes[module_id, tpc_id]
-                distances[t] = np.abs(points[:,daxis] - apos)
-            
-            argmins = np.argmin(distances, axis=0)
-            for t in range(self.geo.num_tpcs):
-                tpc_indexes.append(np.where(argmins == t)[0])
+            tpc_indexes = self.geo.get_closest_tpc_indexes(points)
 
         # Loop over the unique TPCs, correct individually
         corrections = np.empty(len(values), dtype=values.dtype)

@@ -246,7 +246,67 @@ class Geometry:
 
         return np.where(mask)[0]
 
-    def get_tpc_offset(self, points, module_id, tpc_id):
+    def get_closest_tpc_indexes(self, points):
+        '''
+        For each TPC, get the list of points that live closer to it
+        than any other TPC in the detector.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            (N, 3) Set of point coordinates
+
+        Returns
+        -------
+        List[np.ndarray]
+            List of index of points that belong to each TPC
+        '''
+        # Compute the distance from the points to each TPC
+        distances = np.empty((self.num_tpcs, len(points)))
+        for t in range(self.num_tpcs):
+            module_id, tpc_id = t // self.num_modules, t % self.num_modules
+            offsets = self.get_tpc_offsets(points, module_id, tpc_id)
+            distances[t] = np.linalg.norm(offsets, axis=1)
+
+        # For each TPC, append the list of point indices associated with it
+        tpc_indexes = []
+        argmins = np.argmin(distances, axis=0)
+        for t in range(self.num_tpcs):
+            tpc_indexes.append(np.where(argmins == t)[0])
+
+        return tpc_indexes
+
+    def get_tpc_offsets(self, points, module_id, tpc_id):
+        '''
+        Compute how far each point is from a TPC volume.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            (N, 3) : Point coordinates
+        module_id : int
+            ID of the module
+        tpc_id : int
+            ID of the TPC within the module
+
+        Returns
+        -------
+        np.ndarray
+            (N, 3) Offsets w.r.t. to the TPC location
+        '''
+        # Compute the axis-wise distances of each point to each boundary
+        tpc = self.boundaries[module_id, tpc_id]
+        ranges = self.ranges[module_id, tpc_id]
+        dists = points[..., None] - tpc
+
+        # If a point is between two boundaries, the distance is 0. If it is
+        # outside, the distance is that of the closest boundary
+        signs = (np.sign(dists[..., 0]) + np.sign(dists[..., 1]))/2
+        offsets = signs * np.min(np.abs(dists), axis=-1)
+
+        return offsets
+
+    def get_min_tpc_offset(self, points, module_id, tpc_id):
         '''
         Get the minimum offset to apply to a point cloud to bring it
         within the boundaries of a TPC.
@@ -265,19 +325,9 @@ class Geometry:
         np.ndarray
             (3) Offsets w.r.t. to the TPC location
         '''
-        # Compute the axis-wise distances of each point to each boundary
-        tpc = self.boundaries[module_id, tpc_id]
-        ranges = self.ranges[module_id, tpc_id]
-        dists = points[..., None] - tpc
-
-        # Pick the farthest away point for each axis, restrict distances
-        max_ids = np.argmax(np.max(np.abs(dists), axis=-1), axis=0)
-        dists = dists[max_ids, np.arange(3)]
-
-        # Compute the necessary offsets
-        max_ids = np.argmax(np.abs(dists), axis=-1)
-        offsets = dists[np.arange(3), max_ids]
-        offsets = np.sign(offsets) * np.clip(np.abs(offsets)-ranges, 0., np.inf)
+        # Compute the distance for each point, get the maximum necessary offset
+        offsets = self.get_tpc_offsets(points, module_id, tpc_id)
+        offsets = offsets[np.argmax(np.abs(offsets), axis=0), np.arange(3)]
 
         return offsets
 
