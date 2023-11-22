@@ -640,7 +640,7 @@ def cluster_direction(voxels: nb.float64[:,:],
         for i in range(2, len(voxels)):
             # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
             w, _ = np.linalg.eigh(covk)
-            labels[i] = np.sqrt(w[2]/(w[0]+w[1])) if (w[0]+w[1]) else 0.
+            labels[i] = np.sqrt(w[2]/(w[0]+w[1])) if (w[0]+w[1])/w[2] > 1e-9 else 0.
             if dist_mat[i] == dist_mat[i-1]:
                 labels[i-1] = 0.
 
