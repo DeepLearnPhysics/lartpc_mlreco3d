@@ -47,7 +47,7 @@ class LifetimeCalibrator:
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
 
-        # Load the database, which maps run numbers onto 
+        # Load the database, which maps run numbers onto a lifetime/drift v
         assert (lifetime is not None and driftv is not None) \
                 ^ (lifetime_db is not None and driftv_db is not None), \
                 'Must specify static values of the lifetime and drift ' \
@@ -89,8 +89,8 @@ class LifetimeCalibrator:
         '''
         Apply the lifetime correction.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         points : np.ndarray
             (N, 3) array of point coordinates
         values : np.ndarray
@@ -121,7 +121,7 @@ class LifetimeCalibrator:
             tpc_indexes = self.geo.get_closest_tpc_indexes(points)
 
         # Loop over the unique TPCs, correct individually
-        corrections = np.empty(len(values), dtype=values.dtype)
+        new_values = np.empty(len(values), dtype=values.dtype)
         for t in range(self.geo.num_tpcs):
             # Get the set of points associated with this TPC
             module_id = t // self.geo.num_modules
@@ -143,7 +143,8 @@ class LifetimeCalibrator:
             drifts = np.clip(drifts, 0., max_drift)
 
             # Convert the drift distances to correction factors
-            corrections[tpc_index] = np.exp(drifts/lifetime[t]/driftv[t])
+            corrections = np.exp(drifts/lifetime[t]/driftv[t])
+            new_values[tpc_index] = corrections * values
 
         # Scale and return
-        return values * corrections
+        return new_values
