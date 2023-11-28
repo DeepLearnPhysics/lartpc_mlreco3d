@@ -58,7 +58,7 @@ def csda_table_spline(particle_type, table_dir='csda_tables'):
     return f
 
 
-def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3):
+def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically optimizes the kinetic energy necessary to observe the
     range of a particle that has been measured, under the CSDA.
@@ -75,17 +75,19 @@ def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3):
         Starting estimate in MeV
     epsrel : float, default 1e-3
         Relative error tolerance
+    epsabs : float, default 1e-3
+        Asbolute error tolerance
 
     Returns
     -------
     float
         CSDA kinetic energy in MeV
     '''
-    func = lambda x: csda_range_lar(x, M, z, epsrel) - R
+    func = lambda x: csda_range_lar(x, M, z, epsrel, epsabs) - R
     return fsolve(func, start)[0]
 
 
-def csda_range_lar(T0, M, z = 1, epsrel=1e-3):
+def csda_range_lar(T0, M, z = 1, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically integrates the inverse Bethe-Bloch formula to find the
     CSDA range of a particle for a given initial kinetic energy.
@@ -100,6 +102,8 @@ def csda_range_lar(T0, M, z = 1, epsrel=1e-3):
         Impinging partile charge in multiples of electron charge
     epsrel : float, default 1e-3
         Relative error tolerance
+    epsabs : float, default 1e-3
+        Asbolute error tolerance
 
     Returns
     -------
@@ -109,7 +113,8 @@ def csda_range_lar(T0, M, z = 1, epsrel=1e-3):
     if T0 <= 0.:
         return 0.
 
-    return -quad(inv_bethe_bloch_lar, 0., T0, args=(M, z), epsrel=epsrel)[0]
+    return -quad(inv_bethe_bloch_lar, 0., T0,
+            args=(M, z), epsrel=epsrel, epsabs=epsabs)[0]
 
 
 @nb.njit(cache=True)
