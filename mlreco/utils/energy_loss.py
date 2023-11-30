@@ -187,7 +187,7 @@ def inv_bethe_bloch_lar(T, M, z = 1):
 @nb.njit(cache=True)
 def bethe_bloch_lar(T, M, z = 1):
     '''
-    Bethe-Bloch energy loss function for liquid argon 
+    Bethe-Bloch energy loss function for liquid argon
 
     https://pdg.lbl.gov/2019/reviews/rpp2018-rev-passage-particles-matter.pdf
 
@@ -234,7 +234,7 @@ def bethe_bloch_lar(T, M, z = 1):
 
     # Compute the muon-specific spin correction
     spin_corr_muon = (1./8) * (W/gamma/M)**2 * (M==MUON_MASS)
-    
+
     return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) \
             - beta**2 - 0.5 * delta + le_corr + spin_corr_muon) + del_dedx
 
@@ -305,10 +305,10 @@ def le_corr_lar(beta, z = 1):
         Low energy correction to the energy loss function
     '''
     # Shell corrections (tabulated, ignored for now)
-    C = 0
+    C = 0.
 
     # Barkas Correction (tabulated, ignored for now)
-    L1 = 0
+    L1 = 0.
 
     # Bloch Correction
     y = fine_structure*z/beta
