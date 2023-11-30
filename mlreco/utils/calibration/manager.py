@@ -92,6 +92,7 @@ class CalibrationManager:
                 module_id = t // self.geo.num_modules
                 tpc_id = t % self.geo.num_modules
                 tpc_index = self.geo.get_tpc_index(sources, module_id, tpc_id)
+                tpc_indexes.append(tpc_index)
         else:
             assert points is not None, \
                     'If sources are not given, must provide points instead'
