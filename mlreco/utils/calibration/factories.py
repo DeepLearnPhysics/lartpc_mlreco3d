@@ -36,6 +36,5 @@ def calibrator_factory(name, cfg, parent_path=''):
     CALIBRATOR_DICT[name].parent_path = parent_path
 
     # Initialize
-    print(name)
     return CALIBRATOR_DICT[name](**cfg)
 
