@@ -25,13 +25,14 @@ def get_track_length(coordinates: nb.float32[:,:],
         Segment length in the units that specify the coordinates
     point : np.ndarray, optional
         (3) An end point of the track
-    method : str, default 'step'
+    method : str, default 'bin_pca'
         Method used to compute the track length (one of 'displacement', 'step',
         'step_next', 'bin_pca' or 'spline')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 10
-        Minimum number of points in a segment to use it in the stepping function
+        Minimum number of points in a segment to use it to evaluate the
+        direction of the next step along the track.
     spline_smooth : float, optional
         The smoothing factor to be used in spline regression, when used
 
@@ -49,17 +50,18 @@ def get_track_length(coordinates: nb.float32[:,:],
 
     if method in ['step', 'step_next', 'bin_pca']:
         # Segment the track and sum the segment lengths
-        segment_lengths = get_track_segments(coordinates, segment_length,
+        seg_lengths = get_track_segments(coordinates, segment_length,
                 point, method, anchor_point, min_count)[-1]
 
-        return np.sum(segment_lengths)
+        return np.sum(seg_lengths)
 
     elif method == 'splines':
         # Fit point along the track with a spline, compute spline length
         return get_track_spline(coordinates, segment_length, spline_smooth)[-1]
 
     else:
-        raise ValueError(f'Track length estimation method ({method}) not recognized')
+        raise ValueError('Track length estimation method ' \
+                f'not recognized: {method}')
 
 
 @nb.njit(cache=True)
@@ -70,7 +72,7 @@ def check_track_orientation(coordinates: nb.float32[:,:],
                             method: str = 'local',
                             anchor_points: bool = True,
                             local_radius: nb.float32 = 5,
-                            segment_method: str = 'step',
+                            segment_method: str = 'step_next',
                             segment_length: nb.float32 = 5,
                             segment_min_count: int = 10) -> bool:
     '''
@@ -94,7 +96,7 @@ def check_track_orientation(coordinates: nb.float32[:,:],
         Radius around the end points to used to evaluate the local dE/dx
     anchor_points : bool, default True
         Weather or not to collapse end point onto the closest track point
-    segment_method : str, default 'step'
+    segment_method : str, default 'step_next'
         Method used to segment the track when using the 'gradient' method
     segment_length : float, default 5
         Segment length when using the 'gradient' method
@@ -144,9 +146,11 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
                                   values: nb.float32[:],
                                   start_point: nb.float32[:],
                                   segment_length: nb.float32 = 5.,
-                                  method: str = 'step',
+                                  method: str = 'step_next',
                                   anchor_point: bool = True,
-                                  min_count: int = 10) -> (nb.float32, nb.float32[:], nb.float32[:], nb.float32[:]):
+                                  min_count: int = 10) -> (nb.float32,
+                                          nb.float32[:], nb.float32[:],
+                                          nb.float32[:]):
     '''
     Given a set of point coordinates and their values associated with a track
     and a start point, compute the deposition gradient with respect to the
@@ -162,13 +166,14 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
         (3) End point of the track
     segment_length : float, default 5
         Segment length in the units that specify the coordinates
-    method : str, default 'step'
+    method : str, default 'step_next'
         Method used to segment the track (one of 'step', 'step_next'
         or 'bin_pca')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 10
-        Minimum number of points in a segment for it to be valid
+        Minimum number of points in a segment for it to be valid. If not valid,
+        the dedx value for that segment is not used to compute the gradient.
 
     Returns
     -------
@@ -182,31 +187,34 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
        (S) Array of segment lengths
     '''
     # Compute the track segment dedxs
-    dedxs, dists, lengths = get_track_segment_dedxs(coordinates, values, start_point,
-            segment_length, method, anchor_point, min_count)
+    seg_dedxs, seg_rrs, _, _, seg_lengths = \
+            get_track_segment_dedxs(coordinates, values, start_point,
+                    segment_length, method, anchor_point, min_count)
 
-    valid_index = np.where(dedxs > -1)[0]
+    valid_index = np.where(seg_dedxs > -1)[0]
     if not len(valid_index):
-        return 0., dedxs, dists, lengths
+        return 0., seg_dedxs, seg_rrs, seg_lengths
 
-    dedxs = dedxs[valid_index]
-    dists = dists[valid_index]
+    seg_dedxs = seg_dedxs[valid_index]
+    seg_rrs = seg_rrs[valid_index]
 
     # Compute the dE/dx gradient
-    gradient = np.cov(dists, dedxs)[0,1]/np.std(dists)**2 \
-            if np.std(dists) > 0. else 0.
+    gradient = np.cov(seg_rrs, seg_dedxs)[0,1]/np.std(seg_rrs)**2 \
+            if np.std(seg_rrs) > 0. else 0.
 
-    return gradient, dedxs, dists, lengths
+    return gradient, seg_dedxs, seg_rrs, seg_lengths
 
 
 @nb.njit(cache=True)
 def get_track_segment_dedxs(coordinates: nb.float32[:,:],
                             values: nb.float32[:],
-                            end_point: nb.float32[:],
+                            end_point: nb.float32[:] = None,
                             segment_length: nb.float32 = 5.,
-                            method: str = 'step',
+                            method: str = 'step_next',
                             anchor_point: bool = True,
-                            min_count: int = 10) -> (nb.float32[:], nb.float32[:], nb.float32[:]):
+                            min_count: int = 10) -> (nb.float32[:],
+                                    nb.float32[:], nb.float32[:],
+                                    nb.float32[:], nb.float32[:]):
     '''
     Given a set of point coordinates and their values associated with a track
     and one of its end points, compute the energy/charge deposition rate as
@@ -218,59 +226,65 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
         (N, 3) Coordinates of the points that make up the track
     values : np.ndarray
         (N) Values associated with each point
-    end_point : np.ndarray
+    end_point : np.ndarray, optional
         (3) End point of the track
     segment_length : float, default 5.
         Segment length in the units that specify the coordinates
-    method : str, default 'step'
+    method : str, default 'step_next'
         Method used to segment the track (one of 'step', 'step_next'
         or 'bin_pca')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 10
-        Minimum number of points in a segment for it to be valid
+        Minimum number of points in a segment for it to be valid. If not valid,
+        the dedx value returned for the segment is -1.
 
     Returns
     -------
-    segment_dedxs : np.ndarray
+    seg_dedxs : np.ndarray
        (S) Array of energy/charge deposition rate values
-    segment_rrs : np.ndarray
+    seg_rrs : np.ndarray
        (S) Array of residual ranges (center of the segment w.r.t. end point)
-    segment_lengths : np.ndarray
+    seg_clusts : List[np.ndarray]
+       (S) List of indexes which correspond to each segment cluster of points
+    seg_dirs : np.ndarray
+       (S, 3) Array of segment direction vectors
+    seg_lengths : np.ndarray
        (S) Array of segment lengths
     '''
     # Get the segment indexes and their lengths
-    segment_clusts, _, segment_lengths = get_track_segments(coordinates,
+    seg_clusts, seg_dirs, seg_lengths = get_track_segments(coordinates,
             segment_length, end_point, method, anchor_point, min_count)
 
     # Compute the dQdxs and residual ranges
-    segment_dedxs = np.empty(len(segment_clusts), dtype=np.float32)
-    segment_rrs   = np.empty(len(segment_clusts), dtype=np.float32)
+    seg_dedxs = np.empty(len(seg_clusts), dtype=np.float32)
+    seg_rrs  = np.empty(len(seg_clusts), dtype=np.float32)
     residual_range = 0.
-    for i, segment in enumerate(segment_clusts):
+    for i, seg in enumerate(seg_clusts):
         # Compute the rate of energy/charge deposition
         # If the segment has insufficient content, return dummy values
-        dx = segment_lengths[i]
-        if len(segment) >= min_count and dx > 0.:
-            de = np.sum(values[segment])
-            segment_dedxs[i] = de/dx
+        dx = seg_lengths[i]
+        if len(seg) >= min_count and dx > 0.:
+            de = np.sum(values[seg])
+            seg_dedxs[i] = de/dx
         else:
-            segment_dedxs[i] = -1.
+            seg_dedxs[i] = -1.
 
         # Compute the residual_range
-        segment_rrs[i]  = residual_range + dx/2.
+        seg_rrs[i]  = residual_range + dx/2.
         residual_range += dx
 
-    return segment_dedxs, segment_rrs, segment_lengths
+    return seg_dedxs, seg_rrs, seg_clusts, seg_dirs, seg_lengths
 
 
 @nb.njit(cache=True)
 def get_track_segments(coordinates: nb.float32[:,:],
                        segment_length: nb.float32,
                        point: nb.float32[:] = None,
-                       method: str = 'step',
+                       method: str = 'step_next',
                        anchor_point: bool = True,
-                       min_count: int = 10) -> (nb.types.List(nb.int64[:]), nb.float32[:], nb.float32):
+                       min_count: int = 10) -> (nb.types.List(nb.int64[:]),
+                               nb.float32[:], nb.float32):
     '''
     Given a set of point coordinates associated with a track and one of its end
     points, divide the track into segments of the requested length.
@@ -283,13 +297,14 @@ def get_track_segments(coordinates: nb.float32[:,:],
         Segment length in the units that specify the coordinates
     point : np.ndarray, optional
         (3) A preferred end point of the track from which to start
-    method : str, default 'step'
+    method : str, default 'step_next'
         Method used to segment the track (one of 'step', 'step_next'
         or 'bin_pca')
     anchor_point : bool, default True
         Weather or not to collapse end point onto the closest track point
     min_count : int, default 10
-        Minimum number of point in segment to use segment to direct the next step
+        Minimum number of points in a segment to use it to evaluate the
+        direction of the next step along the track.
 
     Returns
     -------
@@ -305,7 +320,8 @@ def get_track_segments(coordinates: nb.float32[:,:],
         if point is not None:
             start_point = point
             if anchor_point:
-                start_id    = np.argmin(nbl.cdist(np.atleast_2d(point), coordinates))
+                start_id    = np.argmin(nbl.cdist(np.atleast_2d(point),
+                    coordinates))
                 start_point = coordinates[start_id]
         else:
             # If not specified, pick a random end point of the track
@@ -313,39 +329,51 @@ def get_track_segments(coordinates: nb.float32[:,:],
             start_point = coordinates[start_id]
 
         # Step through the track iteratively
-        segment_start     = np.copy(start_point)
-        segment_clusts    = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
-        segment_dirs_l    = nb.typed.List.empty_list(np.empty(0, dtype=coordinates.dtype))
-        segment_lengths_l = nb.typed.List.empty_list(np.empty((), dtype=coordinates.dtype).item())
+        empty_list    = nb.typed.List.empty_list
+        seg_start     = np.copy(start_point)
+        seg_clusts    = empty_list(np.empty(0, dtype=np.int64))
+        seg_dirs_l    = empty_list(np.empty(0, dtype=coordinates.dtype))
+        seg_lengths_l = empty_list(np.empty(1, dtype=coordinates.dtype).item())
         left_index = np.arange(len(coordinates))
         while len(left_index):
-            # Compute distances from the segment start point to the leftover points
-            dists = nbl.cdist(np.atleast_2d(segment_start), coordinates[left_index]).flatten()
+            # Compute distances from the segment start point to the all
+            # the leftover points
+            dists = nbl.cdist(np.atleast_2d(seg_start),
+                    coordinates[left_index]).flatten()
 
             # Select the points that belong to this segment
-            dist_mask     = dists <= segment_length
-            pass_index    = np.where(dist_mask)[0]
-            fail_index    = np.where(~dist_mask)[0]
-            segment_index = left_index[pass_index]
+            dist_mask  = dists <= segment_length
+            pass_index = np.where(dist_mask)[0]
+            fail_index = np.where(~dist_mask)[0]
+            seg_index  = left_index[pass_index]
 
             # If the next closest point is backwards, make it the last segment
             if len(fail_index):
-                next_closest = coordinates[left_index[fail_index][np.argmin(dists[fail_index])]]
-                if np.dot(next_closest - segment_start, segment_start - start_point) < 0.:
+                next_id = np.argmin(dists[fail_index])
+                next_index = left_index[fail_index][next_id]
+                next_closest = coordinates[next_index]
+                if np.dot(next_closest - seg_start,
+                        seg_start - start_point) < 0.:
                     fail_index = fail_index[:0]
                     if not len(pass_index): break
 
             # Estimate the direction of the segment
-            if method == 'step' and len(segment_index) > min_count and np.max(dists[pass_index]) > 0.:
-                # Estimate the direction w.r.t. the segment start point ('step')
-                direction = nbl.mean(coordinates[segment_index] - segment_start, axis=0)
+            seg_coords = coordinates[seg_index]
+            if method == 'step' \
+                    and len(seg_index) > min_count \
+                    and np.max(dists[pass_index]) > 0.:
+                # Estimate direction w.r.t. the segment start point ('step')
+                direction = nbl.mean(seg_coords - seg_start, axis=0)
             elif len(fail_index):
-                # Take the direction as the vector joining the next closest point ('step_next')
-                # Also apply this method is the `min_count` is not satisfied
-                direction = next_closest - segment_start
+                # Take direction as the vector joining the next closest point
+                # ('step_next'). Also apply this method is the `min_count`
+                # condition is not satisfied for this segment.
+                direction = next_closest - seg_start
             else:
-                # If this is the last segment, find the farthest point from its start
-                direction = coordinates[segment_index[np.argmax(dists[pass_index])]] - segment_start
+                # If this is the last segment, find the farthest point from
+                # its start and make it the last point.
+                last_id = np.argmax(dists[pass_index])
+                direction = seg_coords[last_id] - seg_start
 
             if np.linalg.norm(direction):
                 direction /= np.linalg.norm(direction)
@@ -357,28 +385,30 @@ def get_track_segments(coordinates: nb.float32[:,:],
             if len(fail_index):
                 length = segment_length
             else:
-                to_end = coordinates[segment_index[np.argmax(dists[pass_index])]] - segment_start
+                last_id = np.argmax(dists[pass_index])
+                to_end = seg_coords[last_id] - seg_start
                 length = np.dot(to_end, direction)
 
             # Step the segment start point in the direction of the segment
-            segment_start += length * direction
+            seg_start += length * direction
 
             # Update the leftover index
             left_index = left_index[fail_index]
 
             # Store the segment information
-            segment_clusts.append(segment_index)
-            segment_dirs_l.append(direction)
-            segment_lengths_l.append(length)
+            seg_clusts.append(seg_index)
+            seg_dirs_l.append(direction)
+            seg_lengths_l.append(length)
 
         # Convert lists of directions and lengths to numpy.ndarray objects
-        segment_dirs    = np.empty((len(segment_dirs_l), coordinates.shape[1]), dtype=coordinates.dtype)
-        segment_lengths = np.empty(len(segment_lengths_l), dtype=np.float64)
-        for i in range(len(segment_clusts)):
-            segment_dirs[i]    = segment_dirs_l[i]
-            segment_lengths[i] = segment_lengths_l[i]
+        shape = (len(seg_dirs_l), coordinates.shape[1])
+        seg_dirs    = np.empty(shape, dtype=coordinates.dtype)
+        seg_lengths = np.empty(shape[0], dtype=coordinates.dtype)
+        for i in range(len(seg_clusts)):
+            seg_dirs[i]    = seg_dirs_l[i]
+            seg_lengths[i] = seg_lengths_l[i]
 
-        return segment_clusts, segment_dirs, segment_lengths
+        return seg_clusts, seg_dirs, seg_lengths
 
     elif method == 'bin_pca':
         # Find the principal component of the whole track
@@ -389,49 +419,54 @@ def get_track_segments(coordinates: nb.float32[:,:],
         pcoordinates = np.dot(coordinates, track_dir)
         if point is not None:
             pstart = np.dot(point, track_dir)
-            if np.abs(np.min(pcoordinates) - pstart) > np.abs(np.max(pcoordinates) - pstart):
+            if np.abs(np.min(pcoordinates) - pstart) \
+                    > np.abs(np.max(pcoordinates) - pstart):
                 pstart = -pstart
                 pcoordinates = -pcoordinates
 
         # Bin the track along the principal component vector
         if point is not None:
-            boundaries = np.arange(min(pstart, np.min(pcoordinates)), np.max(pcoordinates), segment_length)
+            boundaries = np.arange(min(pstart, np.min(pcoordinates)),
+                    np.max(pcoordinates), segment_length)
         else:
-            boundaries = np.arange(np.min(pcoordinates), np.max(pcoordinates), segment_length)
+            boundaries = np.arange(np.min(pcoordinates),
+                    np.max(pcoordinates), segment_length)
 
-        segment_labels = np.digitize(pcoordinates, boundaries)
-        segment_clusts = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
+        seg_labels = np.digitize(pcoordinates, boundaries)
+        seg_clusts = nb.typed.List.empty_list(np.empty(0, dtype=np.int64))
         for l in range(len(boundaries)):
-            segment_clusts.append(np.where(segment_labels == l+1)[0])
+            seg_clusts.append(np.where(seg_labels == l+1)[0])
 
         # Compute the segment directions and lengths
-        segment_dirs    = np.empty((len(segment_clusts), coordinates.shape[1]), dtype=coordinates.dtype)
-        segment_lengths = np.empty(len(segment_clusts), dtype=np.float64)
-        for i, segment in enumerate(segment_clusts):
+        seg_dirs    = np.empty((len(seg_clusts), coordinates.shape[1]),
+                dtype=coordinates.dtype)
+        seg_lengths = np.empty(len(seg_clusts), dtype=coordinates.dtype)
+        for i, seg in enumerate(seg_clusts):
             # If this segment is empty, use track-level information
-            if not len(segment):
-                segment_dirs[i]    = track_dir
-                segment_lengths[i] = segment_length
+            if not len(seg):
+                seg_dirs[i]    = track_dir
+                seg_lengths[i] = segment_length
                 continue
 
-            # Compute the principal component of the segment, use it as direction
-            if len(segment) > min_count:
-                direction = nbl.principal_components(coordinates[segment])[0]
+            # Compute principal component of the segment, use it as direction
+            if len(seg) > min_count:
+                direction = nbl.principal_components(coordinates[seg])[0]
                 if np.dot(direction, track_dir) < 0.:
                     direction = -direction
             else:
                 direction = track_dir
-            segment_dirs[i] = direction
+            seg_dirs[i] = direction
 
-            # Evaluate the length of the segment as constrained by the track
+            # Evaluate length of the segment as constrained by the track
             # principal axis bin that defines it
-            if i < len(segment_clusts) - 1:
+            if i < len(seg_clusts) - 1:
                 length = segment_length/np.dot(direction, track_dir)
             else:
-                length = (np.max(pcoordinates)-boundaries[-1])/np.dot(direction, track_dir)
-            segment_lengths[i] = length
+                length = (np.max(pcoordinates)-boundaries[-1]) \
+                        / np.dot(direction, track_dir)
+            seg_lengths[i] = length
 
-        return segment_clusts, segment_dirs, segment_lengths
+        return seg_clusts, seg_dirs, seg_lengths
 
     else:
         raise ValueError('Track segmentation method not recognized')

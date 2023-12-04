@@ -7,8 +7,8 @@ from .factories import post_processor_factory
 
 class PostProcessorManager:
     '''
-    Manager for handling post-processing scripts. It loads all the
-    post-processor objects once and feeds them data.
+    Manager in charge of handling post-processing scripts. It loads all
+    the post-processor objects once and feeds them data.
     '''
     def __init__(self, cfg, parent_path=''):
         '''
@@ -18,12 +18,15 @@ class PostProcessorManager:
         ----------
         cfg : dict
             Post-processor configurations
+        parent_path : str, optional
+            Path to the analysis tools configuration file
         '''
         # Loop over the post-processor modules and get their priorities
         keys = np.array(list(cfg.keys()))
         priorities = np.empty(len(cfg))
         for i, k in enumerate(keys):
-            priorities[i] = cfg[k].pop('priority') if 'priority' in cfg[k] else -1
+            priorities[i] = \
+                    cfg[k].pop('priority') if 'priority' in cfg[k] else -1
 
         # Add the modules to a processor list in decreasing order of priority
         self.modules   = OrderedDict()

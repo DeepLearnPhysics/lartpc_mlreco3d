@@ -326,12 +326,14 @@ def _get_cluster_features(data: nb.float64[:,:],
         clust = clusts[ids[k]]
         x = data[clust][:, COORD_COLS]
 
-        # Center data
+        # Get cluster center
         center = nbl.mean(x, 0)
-        x = x - center
 
         # Get orientation matrix
-        A = np.dot(x.T, x)
+        A = np.cov(x.T, ddof = len(x) - 1).astype(x.dtype)
+
+        # Center data
+        x = x - center
 
         # Get eigenvectors, normalize orientation matrix and eigenvalues to largest
         # If points are superimposed, i.e. if the largest eigenvalue != 0, no need to keep going
@@ -618,15 +620,14 @@ def cluster_direction(voxels: nb.float64[:,:],
     Returns:
         torch.tensor: (3) Orientation
     """
-    # If max_dist is set, limit the set of voxels to those within a sphere of radius max_dist
-    if not optimize and max_dist > 0:
+    # If max_dist is set, limit the set of voxels to those within a sphere
+    # of radius max_dist
+    if max_dist > 0:
         dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         voxels = voxels[dist_mat <= max_dist]
-        if len(voxels) < 2:
-            return np.zeros(3, dtype=voxels.dtype)
 
     # If optimize is set, select the radius by minimizing the transverse spread
-    elif optimize:
+    if optimize and len(voxels) > 2:
         # Order the cluster points by increasing distance to the start point
         dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
         order = np.argsort(dist_mat)
@@ -634,33 +635,44 @@ def cluster_direction(voxels: nb.float64[:,:],
         dist_mat = dist_mat[order]
 
         # Find the PCA relative secondary spread for each point
-        labels = np.zeros(len(voxels), dtype=voxels.dtype)
+        labels = -np.ones(len(voxels), dtype=voxels.dtype)
         meank = nbl.mean(voxels[:3], 0)
-        covk = (np.transpose(voxels[:3]-meank) @ (voxels[:3]-meank))/3
+        covk = (np.transpose(voxels[:3] - meank) @ (voxels[:3] - meank))/3
         for i in range(2, len(voxels)):
-            # Get the eigenvalues and eigenvectors, identify point of minimum secondary spread
+            # Get the eigenvalues, compute relative transverse spread
             w, _ = np.linalg.eigh(covk)
-            labels[i] = np.sqrt(w[2]/(w[0]+w[1])) if (w[0]+w[1]) else 0.
+            labels[i] = np.sqrt(w[2] / (w[0] + w[1])) \
+                    if (w[0] + w[1]) / w[2] > 1e-9 else 0.
+
+            # If the value is the same as the previous, choose this one
             if dist_mat[i] == dist_mat[i-1]:
-                labels[i-1] = 0.
+                labels[i-1] = -1.
 
             # Increment mean and matrix
-            if i != len(voxels)-1:
-                meank = ((i+1)*meank+voxels[i+1])/(i+2)
-                covk = (i+1)*covk/(i+2) + (voxels[i+1]-meank).reshape(-1,1)*(voxels[i+1]-meank)/(i+1)
+            if i != len(voxels) - 1:
+                meank = ((i + 1) * meank + voxels[i+1]) / (i + 2)
+                covk = (i + 1) * covk / (i + 2) \
+                        + (voxels[i+1] - meank).reshape(-1,1) \
+                        * (voxels[i+1] - meank) / (i + 1)
 
         # Subselect voxels that are most track-like
         max_id = np.argmax(labels)
         voxels = voxels[:max_id+1]
 
+    # If no voxels were selected, return dummy value
+    if not len(voxels) or (len(voxels) == 1 and np.all(voxels[0] == start)):
+        return np.full(3, -np.inf, dtype=voxels.dtype)
+
     # Compute mean direction with respect to start point, normalize it
     rel_voxels = np.empty((len(voxels), 3), dtype=voxels.dtype)
     for i in range(len(voxels)):
-        rel_voxels[i] = voxels[i]-start
+        rel_voxels[i] = voxels[i] - start
+
     mean = nbl.mean(rel_voxels, 0)
-    norm = np.sqrt(np.dot(mean, mean))
+    norm = np.sqrt(np.sum(mean**2))
     if norm:
         return mean/norm
+
     return mean
 
 

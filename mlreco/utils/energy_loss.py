@@ -58,7 +58,7 @@ def csda_table_spline(particle_type, table_dir='csda_tables'):
     return f
 
 
-def csda_ke_lar(R, M, z = 1, start = 1000):
+def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically optimizes the kinetic energy necessary to observe the
     range of a particle that has been measured, under the CSDA.
@@ -73,17 +73,21 @@ def csda_ke_lar(R, M, z = 1, start = 1000):
        Impinging partile charge in multiples of electron charge
     start : float, default 1000
         Starting estimate in MeV
+    epsrel : float, default 1e-3
+        Relative error tolerance
+    epsabs : float, default 1e-3
+        Asbolute error tolerance
 
     Returns
     -------
     float
         CSDA kinetic energy in MeV
     '''
-    func = lambda x: csda_range_lar(x, M, z) - R
+    func = lambda x: csda_range_lar(x, M, z, epsrel, epsabs) - R
     return fsolve(func, start)[0]
 
 
-def csda_range_lar(T0, M, z = 1):
+def csda_range_lar(T0, M, z = 1, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically integrates the inverse Bethe-Bloch formula to find the
     CSDA range of a particle for a given initial kinetic energy.
@@ -95,7 +99,11 @@ def csda_range_lar(T0, M, z = 1):
     M : float
         Particle mass in MeV/c^2
     z : int, default 1
-       impinging partile charge in multiples of electron charge
+        Impinging partile charge in multiples of electron charge
+    epsrel : float, default 1e-3
+        Relative error tolerance
+    epsabs : float, default 1e-3
+        Asbolute error tolerance
 
     Returns
     -------
@@ -105,7 +113,8 @@ def csda_range_lar(T0, M, z = 1):
     if T0 <= 0.:
         return 0.
 
-    return -quad(inv_bethe_bloch_lar, 0., T0, args=(M, z))[0]
+    return -quad(inv_bethe_bloch_lar, 0., T0,
+            args=(M, z), epsrel=epsrel, epsabs=epsabs)[0]
 
 
 @nb.njit(cache=True)
@@ -124,9 +133,9 @@ def step_energy_loss_lar(T0, M, dx, z = 1, num_steps=None):
     dx : float
         Step size in cm
     z : int, default 1
-       impinging partile charge in multiples of electron charge
+        Impinging partile charge in multiples of electron charge
     num_steps : int, optional
-       If specified, only step a maximum of `num_steps` times
+        If specified, only step a maximum of `num_steps` times
 
     Returns
     -------
@@ -178,7 +187,7 @@ def inv_bethe_bloch_lar(T, M, z = 1):
 @nb.njit(cache=True)
 def bethe_bloch_lar(T, M, z = 1):
     '''
-    Bethe-Bloch energy loss function for liquid argon 
+    Bethe-Bloch energy loss function for liquid argon
 
     https://pdg.lbl.gov/2019/reviews/rpp2018-rev-passage-particles-matter.pdf
 
@@ -225,7 +234,7 @@ def bethe_bloch_lar(T, M, z = 1):
 
     # Compute the muon-specific spin correction
     spin_corr_muon = (1./8) * (W/gamma/M)**2 * (M==MUON_MASS)
-    
+
     return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) \
             - beta**2 - 0.5 * delta + le_corr + spin_corr_muon) + del_dedx
 
@@ -296,10 +305,10 @@ def le_corr_lar(beta, z = 1):
         Low energy correction to the energy loss function
     '''
     # Shell corrections (tabulated, ignored for now)
-    C = 0
+    C = 0.
 
     # Barkas Correction (tabulated, ignored for now)
-    L1 = 0
+    L1 = 0.
 
     # Bloch Correction
     y = fine_structure*z/beta
