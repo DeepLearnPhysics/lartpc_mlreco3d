@@ -191,7 +191,7 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
             get_track_segment_dedxs(coordinates, values, start_point,
                     segment_length, method, anchor_point, min_count)
 
-    valid_index = np.where(dedxs > -1)[0]
+    valid_index = np.where(seg_dedxs > -1)[0]
     if not len(valid_index):
         return 0., seg_dedxs, seg_rrs, seg_lengths
 
@@ -440,7 +440,7 @@ def get_track_segments(coordinates: nb.float32[:,:],
         # Compute the segment directions and lengths
         seg_dirs    = np.empty((len(seg_clusts), coordinates.shape[1]),
                 dtype=coordinates.dtype)
-        seg_lengths = np.empty(len(seg_clusts), dtype=np.float64)
+        seg_lengths = np.empty(len(seg_clusts), dtype=coordinates.dtype)
         for i, seg in enumerate(seg_clusts):
             # If this segment is empty, use track-level information
             if not len(seg):
