@@ -223,9 +223,12 @@ class CalibrationLUT:
         # Get the bin the position belongs to:
         offsets = points[:,self.dims] - self.range[:,0]
         bin_ids = (offsets/self.bin_sizes).astype(int)
+
+        # Collapse to the closest bin if it is outisde of range
         #assert np.all(bin_ids > -1) and np.all(bin_ids < self.bins), \
         #        'Some of the points fall outside of the look-up table'
-
+        bad_mask = np.where(bin_ids < 0)
+        bin_ids[bad_mask] = 0
         bad_mask = np.where(bin_ids >= self.bins)
         bin_ids[bad_mask] = self.bins[bad_mask[-1]] - 1
 
