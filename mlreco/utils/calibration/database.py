@@ -4,63 +4,6 @@ import sqlite3 as sql
 from pathlib import Path
 
 
-class CalibrationLUT:
-    '''
-    Look-up table for calibration values. Given a set of coordinates,
-    returns a calibration value.
-    '''
-    def __init__(self, dims, bins, range, values):
-        '''
-        Initialize the calibration map
-
-        Parameters
-        ----------
-        dims : List[int]
-            List of dimensions (0: x, 1: y, 2: z)
-        bins : List[int]
-            Number of bins in each dimension
-        range : List[List[float]]
-            Axis range in each dimension
-        values : np.ndarray
-            Values in each bin
-        '''
-        # Store metadata information
-        assert len(range) == len(dims) and len(bins) == len(dims), \
-                'Must provide a bin count and range per dimension'
-        self.dims = dims
-        self.range = np.array(range)
-        self.bins = np.array(bins)
-        self.bin_sizes = (self.range[:,1]-self.range[:,0])/self.bins
-
-        # Store the values in each bin. Should be a dense matrix
-        assert np.all(values.shape == self.bins), \
-                'Must provide one calibration value per bin'
-        self.values = values
-
-    def query(self, points):
-        '''
-        Queries the LUT to get the calibration values for a set of points.
-
-        Parameters
-        ----------
-        points: np.ndarry
-            (N, 3) Coordinates of the points to query a calibration for
-
-        Returns
-        -------
-        np.ndarray
-            Calibration constants
-        '''
-        # Get the bin the position belongs to:
-        offsets = points[:,self.dims] - self.range[:,0]
-        bin_ids = (offsets/self.bin_sizes).astype(int)
-        assert np.all(bin_ids > -1) and np.all(bin_ids < self.bins), \
-                'Some of the points fall outside of the look-up table'
-
-        # Get the corrections
-        return self.values[tuple(bin_ids.T)]
-
-
 class CalibrationDatabase:
     '''
     Wraps basic SQLite loading/querying functions to provide a more
@@ -228,3 +171,63 @@ class CalibrationDatabase:
         closest_run = self.runs[np.where(self.runs <= run_id)[0][-1]]
 
         return self.dict[closest_run]
+
+
+class CalibrationLUT:
+    '''
+    Look-up table for calibration values. Given a set of coordinates,
+    returns a calibration value.
+    '''
+    def __init__(self, dims, bins, range, values):
+        '''
+        Initialize the calibration map
+
+        Parameters
+        ----------
+        dims : List[int]
+            List of dimensions (0: x, 1: y, 2: z)
+        bins : List[int]
+            Number of bins in each dimension
+        range : List[List[float]]
+            Axis range in each dimension
+        values : np.ndarray
+            Values in each bin
+        '''
+        # Store metadata information
+        assert len(range) == len(dims) and len(bins) == len(dims), \
+                'Must provide a bin count and range per dimension'
+        self.dims = dims
+        self.range = np.array(range)
+        self.bins = np.array(bins)
+        self.bin_sizes = (self.range[:,1]-self.range[:,0])/self.bins
+
+        # Store the values in each bin. Should be a dense matrix
+        assert np.all(values.shape == self.bins), \
+                'Must provide one calibration value per bin'
+        self.values = values
+
+    def query(self, points):
+        '''
+        Queries the LUT to get the calibration values for a set of points.
+
+        Parameters
+        ----------
+        points: np.ndarry
+            (N, 3) Coordinates of the points to query a calibration for
+
+        Returns
+        -------
+        np.ndarray
+            Calibration constants
+        '''
+        # Get the bin the position belongs to:
+        offsets = points[:,self.dims] - self.range[:,0]
+        bin_ids = (offsets/self.bin_sizes).astype(int)
+        #assert np.all(bin_ids > -1) and np.all(bin_ids < self.bins), \
+        #        'Some of the points fall outside of the look-up table'
+
+        bad_mask = np.where(bin_ids >= self.bins)
+        bin_ids[bad_mask] = self.bins[bad_mask[-1]] - 1
+
+        # Get the corrections
+        return self.values[tuple(bin_ids.T)]
