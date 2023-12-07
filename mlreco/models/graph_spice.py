@@ -276,6 +276,7 @@ class GraphSPICELoss(nn.Module):
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
 
         self.invert = self.loss_config.get('invert', True)
+        self.evaluate_true_accuracy = self.loss_config.get('evaluate_true_accuracy', False)
         # print("LOSS FN = ", self.loss_fn)
 
     def filter_class(self, segment_label, cluster_label):
@@ -311,4 +312,10 @@ class GraphSPICELoss(nn.Module):
 
         slabel, clabel = self.filter_class(segment_label, cluster_label)
         res = self.loss_fn(result, slabel, clabel)
+        
+        if self.evaluate_true_accuracy:
+            self.gs_manager.fit_predict()
+            acc_out = self.gs_manager.evaluate()
+            for key, val in acc_out.items():
+                res[key] = val
         return res

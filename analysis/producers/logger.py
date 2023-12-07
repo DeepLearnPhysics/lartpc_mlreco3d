@@ -337,6 +337,21 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    # @tag('reco')
+    def ke(particle):
+        out = {'ke': -1}
+        if particle is not None:
+            out['ke'] = particle.ke
+        return out
+    
+    @staticmethod
+    def mcs_ke(particle):
+        out = {'mcs_ke': -1}
+        if particle is not None:
+            out['mcs_ke'] = particle.ke
+        return out
+    
+    @staticmethod
     def is_contained(particle):
         out = {'particle_is_contained': False}
         if particle is not None:
@@ -366,6 +381,15 @@ class ParticleLogger(AnalysisLogger):
         return out
     
     @staticmethod
+    @tag('true')
+    def sed_depositions_sum(particle):
+        out = {'particle_sed_depositions_sum': -1}
+        if particle is not None and type(particle) is TruthParticle:
+            # print(particle.sed_depositions_MeV_sum)
+            out['particle_sed_depositions_sum'] = particle.sed_depositions_MeV_sum
+        return out
+    
+    @staticmethod
     def matched(particle):
         out = {'matched': False}
         if particle is not None:
@@ -377,6 +401,13 @@ class ParticleLogger(AnalysisLogger):
         out = {'is_principal_match': False}
         if particle is not None:
             out['is_principal_match'] = particle.is_principal_match
+        return out
+    
+    @staticmethod
+    def is_ccrosser(particle):
+        out = {'is_ccrosser': False}
+        if particle is not None:
+            out['is_ccrosser'] = particle.is_ccrosser
         return out
     
 

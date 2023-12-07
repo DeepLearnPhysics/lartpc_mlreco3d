@@ -17,6 +17,7 @@ from mlreco.utils.metrics import *
 from mlreco.utils.globals import *
 from torch_geometric.data import Data, Batch
 
+from mlreco.utils.metrics import ARI, SBD, purity, efficiency
 from .helpers import ConnectedComponents, knn_sklearn
 
 class ClusterGraphConstructor:
@@ -463,6 +464,53 @@ class ClusterGraphConstructor:
         self._data = graphs
 
         return graphs
+    
+    
+    def evaluate(self):
+        
+        out = {
+            'ARI': [],
+            'PUR': [],
+            'EFF': []
+        }
+        
+        for c in SHAPE_LABELS:
+            if c < 4:
+                out[f'ARI_{c}'] = []
+                out[f'PUR_{c}'] = []
+                out[f'EFF_{c}'] = []
+        
+        with torch.no_grad():
+            
+            for data in self._data.to_data_list():
+                
+                batch_id, semantic_type = data.graph_key
+
+                node_truth = data.node_truth.detach().cpu().numpy().squeeze()
+                node_pred = data.node_pred.detach().cpu().numpy().squeeze()
+            
+                assert node_truth.shape[0] == node_pred.shape[0]
+                
+                ari = ARI(node_pred, node_truth)
+                pur = purity(node_pred, node_truth)
+                eff = efficiency(node_pred, node_truth)
+                
+                out['ARI'].append(ari)
+                out['PUR'].append(pur)
+                out['EFF'].append(eff)
+                
+                out[f'ARI_{semantic_type}'].append(ari)
+                out[f'PUR_{semantic_type}'].append(pur)
+                out[f'EFF_{semantic_type}'].append(eff)
+                
+        for key, l in out.items():
+            if len(l) == 0:
+                out[key] = 1.0
+            else:
+                # Batch-averaged classwise accuracies
+                out[key] = sum(l) / len(l)
+            
+        return out
         
     
     def __call__(self, res: dict,
@@ -489,3 +537,37 @@ class ClusterGraphConstructor:
             data={self._data.__repr__()})
         """
         return msg
+
+
+#-------------------HELPER FUNCTIONS----------------------
+
+def num_true_clusters(pred, truth):
+    return len(np.unique(truth))
+
+def num_pred_clusters(pred, truth):
+    return len(np.unique(pred))
+
+def num_small_clusters(pred, truth, threshold=5):
+    val, cnts = np.unique(pred, return_counts=True)
+    return np.count_nonzero(cnts < threshold)
+
+def modified_ARI(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return ARI(pred[mask & mask2], truth[mask & mask2])
+
+def modified_purity(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return purity(pred[mask & mask2], truth[mask & mask2])
+
+def modified_efficiency(pred, truth, threshold = 5):
+    val, cnts = np.unique(pred, return_counts=True)
+    mask = np.isin(pred, val[cnts >= threshold])
+    val, cnts = np.unique(truth, return_counts=True)
+    mask2 = np.isin(truth, val[cnts >= threshold])
+    return efficiency(pred[mask & mask2], truth[mask & mask2])
