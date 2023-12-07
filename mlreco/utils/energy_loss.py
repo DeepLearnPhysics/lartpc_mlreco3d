@@ -6,7 +6,7 @@ import pandas as pd
 
 from scipy.interpolate import CubicSpline
 from scipy.integrate import quad
-from scipy.optimize import fsolve
+from scipy.optimize import brentq
 from scipy.special import digamma
 from scipy.constants import fine_structure
 
@@ -58,7 +58,7 @@ def csda_table_spline(particle_type, table_dir='csda_tables'):
     return f
 
 
-def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3, epsabs=1e-3):
+def csda_ke_lar(R, M, z = 1, T_max=1e6, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically optimizes the kinetic energy necessary to observe the
     range of a particle that has been measured, under the CSDA.
@@ -70,9 +70,9 @@ def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3, epsabs=1e-3):
     M : float
         Particle mass in MeV/c^2
     z : int, default 1
-       Impinging partile charge in multiples of electron charge
-    start : float, default 1000
-        Starting estimate in MeV
+        Impinging partile charge in multiples of electron charge
+    T_max : float, default 1e6
+        Maximum allowed kinetic energy
     epsrel : float, default 1e-3
         Relative error tolerance
     epsabs : float, default 1e-3
@@ -84,7 +84,7 @@ def csda_ke_lar(R, M, z = 1, start = 1000, epsrel=1e-3, epsabs=1e-3):
         CSDA kinetic energy in MeV
     '''
     func = lambda x: csda_range_lar(x, M, z, epsrel, epsabs) - R
-    return fsolve(func, start)[0]
+    return brentq(func, 0., T_max, rtol=epsrel, xtol=epsabs)
 
 
 def csda_range_lar(T0, M, z = 1, epsrel=1e-3, epsabs=1e-3):
