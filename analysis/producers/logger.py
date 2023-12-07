@@ -463,9 +463,35 @@ class InteractionLogger(AnalysisLogger):
             out = {mapping[pid] : -1 for pid in ptypes}
 
         if ia is not None:
-            if type(ia) is Interaction:
-                for pid in ptypes:
-                    out[mapping[pid]] = ia.primary_counts[pid]
+            # if type(ia) is Interaction:
+            for pid in ptypes:
+                out[mapping[pid]] = ia.primary_counts[pid]
+            # if type(ia) is TruthInteraction:
+            #     for pid in ptypes:
+            #         out[mapping[pid]] = ia.truth_primary_counts[pid]
+            
+        return out
+    
+    
+    @staticmethod
+    @tag('true')
+    def count_truth_primary_particles(ia, ptypes=None):
+        
+        mapping = {
+            0: 'num_truth_primary_photons',
+            1: 'num_truth_primary_electrons',
+            2: 'num_truth_primary_muons',
+            3: 'num_truth_primary_pions',
+            4: 'num_truth_primary_protons'
+        }
+        
+        if ptypes is not None:
+            out = {mapping[pid] : -1 for pid in ptypes}
+        else:
+            ptypes = list(mapping.keys())
+            out = {mapping[pid] : -1 for pid in ptypes}
+
+        if ia is not None:
             if type(ia) is TruthInteraction:
                 for pid in ptypes:
                     out[mapping[pid]] = ia.truth_primary_counts[pid]

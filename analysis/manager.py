@@ -274,13 +274,18 @@ class AnaToolsManager:
         # 5. Run scripts, if requested
         start = time.time()
         ana_output = self.run_ana_scripts(data, res, iteration)
-
+        end = time.time()
+        dt = end - start
+        self.logger_dict['ana_scripts'] = dt
+        print(f'Scripts took {dt:.3f} seconds.')
         if len(ana_output) == 0:
             print('No output from analysis scripts.')
+
+        start = time.time()
         self.write(ana_output)
         end = time.time()
         dt = end - start
-        print(f'Scripts took {dt:.3f} seconds.')
+        print(f'Writing to csv took {dt:.3f} seconds.')
         self.logger_dict['write_csv'] = dt
 
         glob_end = time.time()
