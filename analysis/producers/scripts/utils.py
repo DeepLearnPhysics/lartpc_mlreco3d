@@ -3,6 +3,8 @@ import pandas as pd
 from functools import partial
 import numba as nb
 
+from scipy.stats import beta
+
 class TopologySelector:
     
     _LABEL_DICT = {
@@ -270,3 +272,145 @@ class InteractionTopologyManager:
         for pid in pids:
             self.df_intrs[f'{self.mode}_num_primary_{self._MAPPING[pid]}'] \
                 = df_intrs_mgd[f'{self.mode}_num_primary_{self._MAPPING[pid]}_new'].fillna(0).astype(int)
+                
+
+@nb.njit(cache=True)
+def intrinsic_loss_nb_fn(interval : nb.float32[:], 
+                         intrinsic_disc : nb.float32[:,:], 
+                         pdf : nb.float32[:],
+                         n):
+    
+    mesh_size = interval.shape[0]
+    output = np.zeros(mesh_size)
+
+    for i, eps in enumerate(interval):
+        val, valid = 0.0, False
+        for j in range(mesh_size-1):
+            dx = interval[j+1] - interval[j]
+            f1 = intrinsic_disc[i, j] * pdf[j]
+            f2 = intrinsic_disc[i, j+1] * pdf[j+1]
+            integrand = 0.5 * (f1 + f2) * dx
+            if not np.isnan(integrand):
+                valid = True
+                val += integrand
+        if valid:
+            output[i] = val
+        else:
+            output[i] = np.inf
+            
+    return output * n
+
+def intrinsic_loss_approx(k, n, interval):
+
+    a_n = (n + 4) / (4 * n + 10)
+    mu = np.sqrt( (k + a_n) / (n + 2 * a_n) )
+    
+    output = 0.5 + 2 * n * np.power(np.arcsin(np.sqrt(interval)) - np.arcsin(mu), 2)
+    
+    return output
+
+
+class BayesianBinomialEstimator:
+    '''
+    Helper class for estimating selection uncertainties
+    (i.e., uncertainties on efficiency/purity) using Bayesian inference.
+    '''
+    
+    _LARGE_N_CRITERION = 20
+    
+    def __init__(self, k, n, mesh_size=200, mode=None):
+        self.index = np.arange(mesh_size)
+        self.interval = np.linspace(0, 1, mesh_size)
+        self.pdf = np.zeros(mesh_size)
+        self.cdf = np.zeros(mesh_size)
+        self.intrinsic_disc = np.zeros((mesh_size, mesh_size))
+        self.intrinsic_loss = np.zeros(mesh_size)
+        
+        self.k = k
+        self.n = n
+        self.mesh_size = mesh_size
+        
+        self.pdf_fn = self.reference_posterior(self.k, self.n)
+        self.cdf_fn = self.reference_cumulative(self.k, self.n)
+        
+        self.out = {'eps': None, 'intrinsic_loss': None}
+        
+        if mode is None:
+            if n < self._LARGE_N_CRITERION:
+                self.mode = 'brute_force'
+            else:
+                self.mode = 'arcsin'
+        else:
+            self.mode = mode
+        
+    def kl_divergence(self, p, q):
+        return q * np.log(q / p) + (1 - q) * np.log((1-q) / (1-p))
+
+    def intrinsic_discrepancy(self, p, q, n=1):
+        return np.minimum(self.kl_divergence(p,q), self.kl_divergence(q,p))
+    
+    @staticmethod
+    def reference_posterior(k, n):
+        return partial(beta.pdf, a=(k+0.5), b=(n-k+0.5))
+
+    @staticmethod
+    def reference_cumulative(k, n):
+        return partial(beta.cdf, a=(k+0.5), b=(n-k+0.5))
+        
+    def precompute_functions(self):
+
+        for i, x1 in enumerate(self.interval):
+            self.intrinsic_disc[i] = self.intrinsic_discrepancy(x1, self.interval)
+
+        for i, x in enumerate(self.interval):
+            self.pdf[i] = self.pdf_fn(x)
+            self.cdf[i] = self.cdf_fn(x)
+            
+    def compute_intrinsic_loss(self):
+        
+        if self.mode == 'brute_force':
+            output = intrinsic_loss_nb_fn(self.interval, 
+                                          self.intrinsic_disc, 
+                                          self.pdf,
+                                          self.n)
+        elif self.mode == 'arcsin':
+            output = intrinsic_loss_approx(self.k,
+                                           self.n, 
+                                           self.interval)
+        min_index = np.argmin(output)
+        centroids = 0.5 * (self.interval[1:] + self.interval[:-1])
+        
+        self.intrinsic_loss = output
+        self.out['eps'] = centroids[min_index]
+        self.out['intrinsic_loss'] = output[min_index]
+        self.out['index'] = min_index
+        
+    def compute_q_credible_interval(self, q=0.683, tol=1e-4):
+        
+        self.q_intvs = []
+        
+        for i in range(0, self.out['index']+1):
+            for j in range(self.out['index'], self.mesh_size):
+                prob = self.cdf[j] - self.cdf[i]
+                if np.abs(prob - q) < tol:
+                    loss = self.intrinsic_loss[i:j].sum()
+                    qintv = {
+                        'lb': self.interval[i],
+                        'lb_index': i,
+                        'ub': self.interval[j],
+                        'ub_index': j,
+                        'length': self.interval[j] - self.interval[i],
+                        'q': prob,
+                        'loss': loss,
+                        'estimator': self.out['eps']
+                    }
+                    self.q_intvs.append(qintv)
+                    
+        min_loss, min_idx = np.inf, 0
+        for i, qintv in enumerate(self.q_intvs):
+            if qintv['loss'] < min_loss:
+                min_idx = i
+                min_loss = qintv['loss']
+        if len(self.q_intvs) == 0:
+            raise AssertionError("No q-credible interval was found.")
+        return self.q_intvs[min_idx]

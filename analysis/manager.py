@@ -143,7 +143,7 @@ class AnaToolsManager:
         # Load the full chain configuration, if it is provided
         self.chain_config = None
         if chain_config is not None:
-            self.chain_config = process_config(chain_cfg)
+            self.chain_config = process_config(chain_config)
 
         # Initialize data product builders
         self.builders = {}
