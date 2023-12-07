@@ -385,7 +385,7 @@ class BayesianBinomialEstimator:
         self.out['intrinsic_loss'] = output[min_index]
         self.out['index'] = min_index
         
-    def compute_q_credible_interval(self, q=0.683, tol=1e-4):
+    def compute_q_credible_interval(self, q=0.683, tol=1e-4, mode='length'):
         
         self.q_intvs = []
         
@@ -406,11 +406,11 @@ class BayesianBinomialEstimator:
                     }
                     self.q_intvs.append(qintv)
                     
-        min_loss, min_idx = np.inf, 0
+        min_val, min_idx = np.inf, 0
         for i, qintv in enumerate(self.q_intvs):
-            if qintv['loss'] < min_loss:
+            if qintv[mode] < min_val:
                 min_idx = i
-                min_loss = qintv['loss']
+                min_val = qintv[mode]
         if len(self.q_intvs) == 0:
             raise AssertionError("No q-credible interval was found.")
         return self.q_intvs[min_idx]
