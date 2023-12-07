@@ -1,7 +1,6 @@
 import numpy as np
 
 from mlreco.utils.globals import LAR_DENSITY, LAR_WION
-from mlreco.utils.geometry import Geometry
 from mlreco.utils.tracking import get_track_segment_dedxs
 
 
@@ -20,9 +19,8 @@ class RecombinationCalibrator:
     name = 'recombination'
 
     def __init__(self,
-                 Efield,
-                 detector = None,
-                 boundary_file = None,
+                 efield,
+                 drift_dir,
                  model = 'mbox',
                  A = 0.800,
                  k = 0.0486,
@@ -36,12 +34,10 @@ class RecombinationCalibrator:
 
         Parameters
         ----------
-        Efield : float
+        efield : float
             Electric field in kV/cm
-        detector : str, optional
-            Detector to get the geometry from
-        boundary_file : str, optional
-            Path to a detector boundary file. Supersedes `detector` if set
+        drift_dir : np.ndarray
+            (3) three-vector indicating the direction of the drift field
         model : str, default 'mbox'
             Recombination model name (one of 'birks', 'mbox' or 'mbox_ell')
         A : float, default 0.800 (ICARUS CNGS fit)
@@ -57,19 +53,19 @@ class RecombinationCalibrator:
         **kwargs : dict, optional
             Additional arguments to pass to the tracking algorithm
         '''
-        # Initialize the geometry
-        self.geo = Geometry(detector, boundary_file)
+        # Store the drift direction
+        self.drift_dir = drift_dir
 
         # Initialize the model parameters
         self.use_angles = False
         if model == 'birks':
             self.model = 'birks'
             self.A = A
-            self.k = k/Efield/LAR_DENSITY # cm/MeV
+            self.k = k/efield/LAR_DENSITY # cm/MeV
         elif model in ['mbox', 'mbox_ell']:
             self.model = 'mbox'
             self.alpha = alpha
-            self.beta = beta/Efield/LAR_DENSITY # cm/MeV
+            self.beta = beta/efield/LAR_DENSITY # cm/MeV
             self.R = None
             if model == 'mbox_ell':
                 self.use_angles = True
@@ -97,7 +93,7 @@ class RecombinationCalibrator:
         Union[float, np.ndarray]
            Quenching factors in electrons/MeV
         '''
-        return self.A / (1. + self.k * dedx) / LAR_WION
+        return self.A / (1. + self.k * dedx)
 
     def inv_birks(self, dqdx):
         '''
@@ -138,7 +134,7 @@ class RecombinationCalibrator:
         if cosphi is not None:
             Beta /= np.sqrt(1 - (1 - 1./self.R**2)*cosphi**2)
 
-        return np.log(self.alpha + Beta * dedx) / Beta / LAR_WION / dedx
+        return np.log(self.alpha + Beta * dedx) / Beta / dedx
 
     def inv_mbox(self, dqdx, cosphi=None):
         '''
@@ -238,11 +234,13 @@ class RecombinationCalibrator:
             assert dedx is not None, \
                     'If the object is not tracked, must specify a flat dE/dx'
             recomb = self.recombination_factor(dedx)
-            return values / recomb
+            return values * LAR_WION / recomb
 
         # If the object is a track, segment the track use each segment to
         # compute a local dQ/dx (+ angle w.r.t. to the drift direction, if
         # requested) and assign a correction for all points in the segment.
+        assert points is not None, \
+                'Cannot track the object without point coordinates'
         seg_dqdxs, _, seg_clusts, seg_dirs, _ = get_track_segment_dedxs(points,
                 values, method=self.tracking_mode, **self.tracking_kwargs)
 
@@ -251,8 +249,7 @@ class RecombinationCalibrator:
             if not self.use_angles:
                 corr = self.inv_recombination_factor(seg_dqdxs[i])
             else:
-                seg_cosphi = np.abs(np.dot(seg_dirs[i],
-                        self.geo.drift_dirs[0,0]))
+                seg_cosphi = np.abs(np.dot(seg_dirs[i], self.drift_dir))
                 corr = self.inv_recombination_factor(seg_dqdxs[i], seg_cosphi)
 
             corr_values[c] = corr * values[c]

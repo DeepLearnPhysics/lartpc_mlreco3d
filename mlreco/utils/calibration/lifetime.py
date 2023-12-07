@@ -13,9 +13,7 @@ class LifetimeCalibrator:
     name = 'lifetime'
 
     def __init__(self,
-                 detector = None,
-                 boundary_file = None,
-                 source_file = None,
+                 num_tpcs,
                  lifetime = None,
                  driftv = None,
                  lifetime_db = None,
@@ -25,12 +23,8 @@ class LifetimeCalibrator:
 
         Parameters
         ----------
-        detector : str, optional
-            Detector to get the geometry from
-        boundary_file : str, optional
-            Path to a detector boundary file. Supersedes `detector` if set
-        source_file : str, optional
-            Path to a detector source file. Supersedes `detector` if set
+        num_tpcs : int
+            Number of TPCs in the detector
         lifetime : Union[float, list], optional
             Specifies the electron lifetime in microseconds. If `list`, it
             should map a tpc ID onto a specific value.
@@ -44,10 +38,7 @@ class LifetimeCalibrator:
             Path to a SQLite db file which maps [run, cryo, tpc] sets onto
             a specific electron drift velocity value in cm/us.
         '''
-        # Initialize the geometry
-        self.geo = Geometry(detector, boundary_file, source_file)
-
-        # Load the database, which maps run numbers onto 
+        # Load the database, which maps run numbers onto a lifetime/drift v
         assert (lifetime is not None and driftv is not None) \
                 ^ (lifetime_db is not None and driftv_db is not None), \
                 'Must specify static values of the lifetime and drift ' \
@@ -60,17 +51,17 @@ class LifetimeCalibrator:
 
             # Inititalize lifetime
             if np.issclar(lifetime):
-                self.lifetime = np.full(self.geo.num_tpcs, lifetime)
+                self.lifetime = np.full(num_tpcs, lifetime)
             else:
-                assert len(lifetime) == self.geo.num_tpcs, \
+                assert len(lifetime) == num_tpcs, \
                         '`lifetime` list must provide one value per TPC'
                 self.lifetime = lifetime
 
             # Initialize electron drift velocity
             if np.isscalar(driftv):
-                self.driftv = np.full(self.geo.num_tpcs, driftv)
+                self.driftv = np.full(num_tpcs, driftv)
             else:
-                assert len(driftv) == self.geo.num_tpcs, \
+                assert len(driftv) == num_tpcs, \
                         '`driftv` list must provide one value per TPC'
                 self.drift = driftv
 
@@ -80,24 +71,25 @@ class LifetimeCalibrator:
             self.use_db = True
 
             # Inialize lifetime database
-            self.lifetime = CalibrationDatabase(lifetime_db, self.geo.num_tpcs)
+            self.lifetime = CalibrationDatabase(lifetime_db, num_tpcs)
 
             # Initialize electron drift velocity database
-            self.driftv = CalibrationDatabase(driftv_db, self.geo.num_tpcs)
+            self.driftv = CalibrationDatabase(driftv_db, num_tpcs)
 
-    def process(self, points, values, sources=None, run_id=None):
+    def process(self, points, values, geo, tpc_id, run_id=None):
         '''
         Apply the lifetime correction.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         points : np.ndarray
             (N, 3) array of point coordinates
         values : np.ndarray
             (N) array of values associated with each point
-        sources : np.ndarray, optional
-            (N) array of [cryo, tpc] specifying which TPC produced each hit. If
-            not specified, uses the closest anode as a sensitive plane.
+        geo : Geometry
+            Detector geometry object
+        tpc_id : int
+            ID of the TPC to use
         run_id : int, optional
             If provided, used to get the appropriate lifetime/drift velocities
 
@@ -115,35 +107,15 @@ class LifetimeCalibrator:
             lifetime = self.lifetime[run_id]
             driftv = self.driftv[run_id]
 
-        # If there is no source and the lifetime is specified separately for
-        # each TPC, assign TPC which is closest the each point
-        if sources is None:
-            tpc_indexes = self.geo.get_closest_tpc_indexes(points)
+        # Compute the distance to the anode plane
+        m, t = tpc_id // geo.num_modules, tpc_id % geo.num_modules
+        daxis, position = geo.anodes[m, t]
+        drifts = np.abs(points[:, daxis] - position)
 
-        # Loop over the unique TPCs, correct individually
-        corrections = np.empty(len(values), dtype=values.dtype)
-        for t in range(self.geo.num_tpcs):
-            # Get the set of points associated with this TPC
-            module_id = t // self.geo.num_modules
-            tpc_id = t % self.geo.num_modules
-            if sources is not None:
-                tpc_index = self.geo.get_tpc_index(sources, module_id, tpc_id)
-            else:
-                tpc_index = tpc_indexes[t]
+        # Clip down to the physical range of possible drift distances
+        max_drift = geo.ranges[m, t][daxis]
+        drifts = np.clip(drifts, 0., max_drift)
 
-            if not len(tpc_index):
-                continue
-
-            # Compute the distance to the anode plane
-            daxis, position = self.geo.anodes[module_id, tpc_id]
-            drifts = np.abs(points[tpc_index, daxis] - position)
-
-            # Clip down to the physical range of possible drift distances
-            max_drift = self.geo.ranges[module_id, tpc_id][daxis]
-            drifts = np.clip(drifts, 0., max_drift)
-
-            # Convert the drift distances to correction factors
-            corrections[tpc_index] = np.exp(drifts/lifetime[t]/driftv[t])
-
-        # Scale and return
-        return values * corrections
+        # Convert the drift distances to correction factors
+        corrections = np.exp(drifts/lifetime[tpc_id]/driftv[tpc_id])
+        return corrections * values
