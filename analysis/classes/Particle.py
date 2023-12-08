@@ -150,7 +150,11 @@ class Particle:
 
         # Quantities to be set during post_processing
         self._start_point = start_point
-        self._end_point   = end_point
+        if self.semantic_type == TRACK_SHP:
+            self._end_point = end_point
+        else:
+            self._end_point = np.full(3, -np.inf, dtype=np.float32)
+
         self._start_dir   = start_dir
         self._end_dir     = end_dir
         self.length       = length
@@ -172,8 +176,18 @@ class Particle:
 
     def merge(self, particle):
         '''
-        Merge another particle object into this one
+        Merge another particle object into this one.
+
+        Info
+        ----
+        This scrip can only merge two track objects with well
+        defined start and end points.
         '''
+        # Check that both particles being merged are tracks
+        assert self.semantic_type == TRACK_SHP \
+                and particle.semantic_type == TRACK_SHP, \
+                'Can only merge two track particles'
+
         # Stack the two particle array attributes together
         for attr in ['index', 'depositions']:
             val = np.concatenate([getattr(self, attr), getattr(particle, attr)])
@@ -192,7 +206,7 @@ class Particle:
         max_i, max_j = np.unravel_index(np.argmax(dists), dists.shape)
 
         self.start_point = points_i[max_i]
-        self.end_points = points_j[max_j]
+        self.end_point = points_j[max_j]
         self.start_dir = dirs_i[max_i]
         self.end_dir = dirs_j[max_j]
 
