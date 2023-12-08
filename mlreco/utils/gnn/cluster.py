@@ -624,7 +624,7 @@ def cluster_direction(voxels: nb.float64[:,:],
     # of radius max_dist
     if max_dist > 0:
         dist_mat = nbl.cdist(start.reshape(1,-1), voxels).flatten()
-        voxels = voxels[dist_mat <= max_dist]
+        voxels = voxels[dist_mat <= max(max_dist, np.min(dist_mat))]
 
     # If optimize is set, select the radius by minimizing the transverse spread
     if optimize and len(voxels) > 2:

@@ -1,5 +1,6 @@
 import numpy as np
 
+from mlreco.utils.globals import TRACK_SHP
 from mlreco.utils.geometry import Geometry
 from mlreco.utils.gnn.cluster import cluster_direction
 
@@ -16,7 +17,7 @@ class DirectionProcessor(PostProcessor):
     result_cap_opt = ['truth_particles']
 
     def __init__(self,
-                 neighborhood_radius = 5,
+                 neighborhood_radius = -1,
                  optimize = True,
                  truth_point_mode = 'points',
                  run_mode = 'both'):
@@ -60,11 +61,11 @@ class DirectionProcessor(PostProcessor):
                     continue
 
                 # Reconstruct directions from either end of the particle
-                # TODO: do not run twice on EM showers (only start point)
                 p.start_dir = cluster_direction(points, p.start_point,
                         self.neighborhood_radius, self.optimize)
-                p.end_dir   = cluster_direction(points, p.end_point,
-                        self.neighborhood_radius, self.optimize)
+                if p.semantic_type == TRACK_SHP:
+                    p.end_dir   = cluster_direction(points, p.end_point,
+                            self.neighborhood_radius, self.optimize)
 
         return {}, {}
 
