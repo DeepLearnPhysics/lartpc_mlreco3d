@@ -318,7 +318,7 @@ class BayesianBinomialEstimator:
     
     _LARGE_N_CRITERION = 20
     
-    def __init__(self, k, n, mesh_size=200, mode=None):
+    def __init__(self, k, n, mesh_size=2000, mode=None):
         self.index = np.arange(mesh_size)
         self.interval = np.linspace(0, 1, mesh_size)
         self.pdf = np.zeros(mesh_size)
@@ -342,6 +342,9 @@ class BayesianBinomialEstimator:
                 self.mode = 'arcsin'
         else:
             self.mode = mode
+            
+        self.precompute_functions()
+        self.compute_intrinsic_loss()
         
     def kl_divergence(self, p, q):
         return q * np.log(q / p) + (1 - q) * np.log((1-q) / (1-p))
@@ -385,10 +388,11 @@ class BayesianBinomialEstimator:
         self.out['intrinsic_loss'] = output[min_index]
         self.out['index'] = min_index
         
-    def compute_q_credible_interval(self, q=0.683, tol=1e-4, mode='length'):
+    def compute_q_credible_interval(self, q=0.683, tol=1e-3, mode='length'):
         
         self.q_intvs = []
         
+        # Collect possible q-intervals
         for i in range(0, self.out['index']+1):
             for j in range(self.out['index'], self.mesh_size):
                 prob = self.cdf[j] - self.cdf[i]
@@ -406,6 +410,7 @@ class BayesianBinomialEstimator:
                     }
                     self.q_intvs.append(qintv)
                     
+        # Pick q-interval according to criterion
         min_val, min_idx = np.inf, 0
         for i, qintv in enumerate(self.q_intvs):
             if qintv[mode] < min_val:
