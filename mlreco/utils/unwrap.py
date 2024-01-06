@@ -1,283 +1,385 @@
 import numpy as np
+from dataclasses import dataclass
+from copy import deepcopy
 
-def unwrap_2d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
-    """
-    See unwrap_scn
-    """
-    return unwrap_scn(data_blob, outputs, 2, main_key, data_keys, output_keys)
-
-
-def unwrap_3d_scn(data_blob, outputs, main_key=None, data_keys=None, output_keys=None):
-    """
-    See unwrap_scn
-    """
-    return unwrap_scn(data_blob, outputs, 3, main_key, data_keys, output_keys)
+from .globals import *
+from .volumes import VolumeBoundaries
 
 
-def unwrap_scn(data_blob, outputs, data_dim, main_key=None, data_keys=None, output_keys=None):
-    """
-    Break down the data_blob and outputs dictionary into events for sparseconvnet formatted tensors.
-    Need to account for: multi-gpu, minibatching, multiple outputs, batches.
-    INPUTS:
-        data_blob: a dictionary of array of array of minibatch data [key][num_minibatch][num_device]
-        outputs: results dictionary, output of trainval.forward, [key][num_minibatch*num_device]
-        data_dim: 2 for 2D, 3 for 3D,,, and indicate the location of "batch id"
-        main_key: used to identify a unique set of batch ids to be parsed
-        data_keys: a list of string keys to specify, if needed, a subset of data to be returned
-        output_keys: a list of string keys to specify, if needed, a subset of output to be returned
-    OUTPUT:
-        two un-wrapped arrays of dictionaries where array length = num_minibatch*num_device*minibatch_size
-    ASSUMES:
-        the shape of data_blob and outputs as explained above
-    """
+class Unwrapper:
+    '''
+    Tools to break down the input and output dictionaries into individual events.
+    '''
 
-    # Handle data
-    result_data = {}
-    unwrap_map  = {} # dict of [#pts][batch_id] = where
-    # a-0) Find the target keys
-    target_array_keys = []
-    target_list_keys  = []
-    for key,data in data_blob.items():
-        if not key in result_data: result_data[key]=[]
-        if isinstance(data[0],np.ndarray) and len(data[0].shape) == 2:
-            target_array_keys.append(key)
-        elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape) == 2:
-            target_list_keys.append(key)
-        elif isinstance(data[0],list):
-            for d in data: result_data[key].extend(d)
+    def __init__(self, num_gpus, batch_size, rules={}, boundaries=None, remove_batch_col=False):
+        '''
+        Translate rule arrays and boundaries into instructions.
+
+        Parameters
+        ----------
+        batch_size : int
+             Number of events in the batch
+        rules : dict
+             Dictionary which contains a set of unwrapping rules for each
+             output key of the reconstruction chain. If there is no rule
+             associated with a key, the list is concatenated.
+        boundaries : list
+             List of detector volume boundaries
+        remove_batch_col : bool
+             Remove column which specifies batch ID from the unwrapped tensors
+        '''
+        self.num_gpus = num_gpus
+        self.batch_size = batch_size
+        self.remove_batch_col = remove_batch_col
+        self.merger = VolumeBoundaries(boundaries) if boundaries else None
+        self.num_volumes = self.merger.num_volumes() if self.merger else 1
+        self.rules = self._parse_rules(rules)
+
+    def __call__(self, data_blob, result_blob):
+        '''
+        Main unwrapping function. Loops over the data and result keys
+        and applies the unwrapping rules. Returns the unwrapped versions
+        of the two dictionaries
+
+        Parameters
+        ----------
+        data_blob : dict
+            Dictionary of array of array of minibatch data [key][num_gpus][batch_size]
+        result_blob : dict
+            Results dictionary, output of trainval.forward [key][num_gpus][batch_size]
+        '''
+        self._build_batch_masks(data_blob, result_blob)
+        data_unwrapped, result_unwrapped = {}, {}
+        for key, value in data_blob.items():
+            data_unwrapped[key] = self._unwrap(key, value)
+        for key, value in result_blob.items():
+            result_unwrapped[key] = self._unwrap(key, value)
+
+        return data_unwrapped, result_unwrapped
+
+    @dataclass
+    class Rule:
+        '''
+        Simple dataclass which stores the relevant
+        unwrapping rule attributes for a speicific
+        data product human-readable names.
+
+        Attributes
+        ----------
+        method : str
+            Unwrapping scheme
+        ref_key : str
+            Key of the data product that supplies the batch mapping
+        done : bool
+            True if the unwrapping is done by the model internally
+        translate : tuple
+            List of column indices that correspond to coordinates to correct
+        '''
+        method    : str = None
+        ref_key   : str = None
+        done      : bool = False
+        translate : bool = False
+
+    def _parse_rules(self, rules):
+        '''
+        Translate rule arrays into Rule objects. Do the
+        necessary checks to ensure rule sanity.
+
+        Parameters
+        ----------
+        rules : dict
+             Dictionary which contains a set of unwrapping rules for each
+             output key of the reconstruction chain. If there is no rule
+             associated with a key, the list is concatenated.
+        '''
+        valid_methods = [None, 'scalar', 'list', 'tensor', 'tensor_list', 'edge_tensor', 'index_tensor', 'index_list']
+        parsed_rules = {}
+        for key, rule in rules.items():
+            parsed_rules[key] = self.Rule(*rule)
+            if not parsed_rules[key].ref_key:
+                parsed_rules[key].ref_key = key
+
+            assert parsed_rules[key].method in valid_methods,\
+                    f'Unwrapping method {parsed_rules[key].method} for {key} not valid'
+
+        return parsed_rules
+
+    def _build_batch_masks(self, data_blob, result_blob):
+        '''
+        For all the returned data objects that require a batch mask:
+        build it and store it. Also store the index offsets within that
+        batch, wherever necessary to unwrap.
+
+        Parameters
+        ----------
+        data_blob : dict
+            Dictionary of array of array of minibatch data [key][num_gpus][batch_size]
+        result_blob : dict
+            Results dictionary, output of trainval.forward [key][num_gpus][batch_size]
+        '''
+        comb_blob = dict(data_blob, **result_blob)
+        self.masks, self.offsets = {}, {}
+        for key in comb_blob.keys():
+            # Skip outputs with no rule
+            if key not in self.rules:
+                continue
+
+            # For tensors and lists of tensors, build one mask per reference tensor
+            if not self.rules[key].done and self.rules[key].method in ['tensor', 'tensor_list']:
+                ref_key = self.rules[key].ref_key
+                if ref_key not in self.masks:
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
+                    assert self.rules[key].method == self.rules[ref_key].method, f'Reference ({ref_key}) must be of same type as {key}'
+                    if self.rules[key].method == 'tensor':
+                        self.masks[ref_key] = [self._batch_masks(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
+                    elif self.rules[key].method == 'tensor_list':
+                        self.masks[ref_key] = [[self._batch_masks(v) for v in comb_blob[ref_key][g]] for g in range(self.num_gpus)]
+
+            # For edge tensors, build one mask from each tensor (must figure out batch IDs of edges)
+            elif self.rules[key].method == 'edge_tensor':
+                assert len(self.rules[key].ref_key) == 2, 'Must provide a reference to the edge_index and the node batch ids'
+                for ref_key in self.rules[key].ref_key:
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
+                ref_edge, ref_node = self.rules[key].ref_key
+                edge_index, batch_ids = comb_blob[ref_edge], comb_blob[ref_node]
+                if not self.rules[key].done and ref_edge not in self.masks:
+                    self.masks[ref_edge] = [self._batch_masks(batch_ids[g][edge_index[g][:,0]]) for g in range(self.num_gpus)]
+                if ref_node not in self.offsets:
+                    self.offsets[ref_node] = [self._batch_offsets(batch_ids[g]) for g in range(self.num_gpus)]
+
+            # For an index tensor, only need to record the batch offsets within the wrapped tensor
+            elif self.rules[key].method == 'index_tensor':
+                ref_key = self.rules[key].ref_key
+                assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
+                if not self.rules[key].done and ref_key not in self.masks:
+                    self.masks[ref_key] = [self._batch_masks(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
+                if ref_key not in self.offsets:
+                    self.offsets[ref_key] = [self._batch_offsets(comb_blob[ref_key][g]) for g in range(self.num_gpus)]
+
+            # For lists of tensor indices, only need to record the offsets within the wrapped tensor
+            elif self.rules[key].method == 'index_list':
+                assert len(self.rules[key].ref_key) == 2, 'Must provide a reference to indexed tensor and the index batch ids'
+                for ref_key in self.rules[key].ref_key:
+                    assert ref_key in comb_blob, f'Must provide reference tensor ({ref_key}) to unwrap {key}'
+                ref_tensor, ref_index = self.rules[key].ref_key
+                if not self.rules[key].done and ref_index not in self.masks:
+                    self.masks[ref_index] = [self._batch_masks(comb_blob[ref_index][g]) for g in range(self.num_gpus)]
+                if ref_tensor not in self.offsets:
+                    self.offsets[ref_tensor] = [self._batch_offsets(comb_blob[ref_tensor][g]) for g in range(self.num_gpus)]
+
+    def _batch_masks(self, tensor):
+        '''
+        Makes a list of masks for each batch entry, for a specific tensor.
+
+        Parameters
+        ----------
+        tensor : np.ndarray
+            Tensor with a batch ID column
+
+        Returns
+        -------
+        list
+            List of batch masks
+        '''
+        # Create batch masks
+        masks = []
+        for b in range(self.batch_size*self.num_volumes):
+            if len(tensor.shape) == 1:
+                masks.append(np.where(tensor == b)[0])
+            else:
+                masks.append(np.where(tensor[:, BATCH_COL] == b)[0])
+
+        return masks
+
+    def _batch_offsets(self, tensor):
+        '''
+        Computes the index of the first element in a tensor
+        for each entry in the batch.
+
+        Parameters
+        ----------
+        tensor : np.ndarray
+            Tensor with a batch ID column
+
+        Returns
+        -------
+        np.ndarray
+            Array of batch offsets
+        '''
+        # Compute batch offsets
+        offsets = np.zeros(self.batch_size*self.num_volumes, np.int64)
+        for b in range(1, self.batch_size*self.num_volumes):
+            if len(tensor.shape) == 1:
+                offsets[b] = offsets[b-1] + np.sum(tensor == b-1)
+            else:
+                offsets[b] = offsets[b-1] + np.sum(tensor[:, BATCH_COL] == b-1)
+
+        return offsets
+
+    def _unwrap(self, key, data):
+        '''
+        Routes set of data to the appropriate unwrapping scheme
+
+        Parameters
+        ----------
+        key : str
+            Name of the data product to unwrap
+        data : list
+            Data product
+        '''
+        # Scalars and lists are trivial to unwrap
+        if key not in self.rules or self.rules[key].method in [None, 'scalar', 'list']:
+            unwrapped = self._concatenate(data)
         else:
-            print('Un-interpretable input data...')
-            print('key:',key)
-            print('data:',data)
-            raise TypeError
-    # a-1) Handle the list of ndarrays
-    for target in target_array_keys:
-        data = data_blob[target]
-        for d in data:
-            # check if batch map is available, and create if not
-            if not d.shape[0] in unwrap_map:
-                batch_map = {}
-                batch_idx = np.unique(d[:,data_dim])
-                for b in batch_idx:
-                    batch_map[b] = d[:,data_dim] == b
-                unwrap_map[d.shape[0]]=batch_map
+            ref_key = self.rules[key].ref_key
+            unwrapped = []
+            for g in range(self.num_gpus):
+                for b in range(self.batch_size):
+                    # Tensor unwrapping
+                    if self.rules[key].method == 'tensor':
+                        tensors = []
+                        for v in range(self.num_volumes):
+                            if not self.rules[key].done:
+                                tensor = data[g][self.masks[ref_key][g][b*self.num_volumes+v]]
+                                if key == ref_key:
+                                    if len(tensor.shape) == 2:
+                                        tensor[:, BATCH_COL] = v
+                                    else:
+                                        tensor[:] = v
+                                if self.rules[key].translate:
+                                    if v > 0:
+                                        tensor[:, COORD_COLS] = self.merger.translate(tensor[:,COORD_COLS], v)
+                                tensors.append(tensor)
+                            else:
+                                tensors.append(data[g][b*self.num_volumes+v])
+                        unwrapped.append(np.concatenate(tensors))
 
-            batch_map = unwrap_map[d.shape[0]]
-            for where in batch_map.values():
-                result_data[target].append(d[where])
+                    # Tensor list unwrapping
+                    elif self.rules[key].method == 'tensor_list':
+                        tensors = []
+                        for i, d in enumerate(data[g]):
+                            subtensors = []
+                            for v in range(self.num_volumes):
+                                subtensor = d[self.masks[ref_key][g][i][b*self.num_volumes+v]]
+                                if key == ref_key:
+                                    if len(subtensor.shape) == 2:
+                                        subtensor[:, BATCH_COL] = v
+                                    else:
+                                        subtensor[:] = v
+                                if self.rules[key].translate:
+                                    if v > 0:
+                                        subtensor[:, COORD_COLS] = self.merger.translate(subtensor[:,COORD_COLS], v)
+                                subtensors.append(subtensor)
+                            tensors.append(np.concatenate(subtensors))
+                        unwrapped.append(tensors)
 
-    # a-2) Handle the list of list of ndarrays
-    #for target in target_list_keys:
-    #    data = data_blob[target]
-    #    num_elements = len(data[0])
-    #    for list_idx in range(num_elements):
-    #        combined_list = []
-    #        for d in data:
-    #            target_data = d[list_idx]
-    #
-    #            if not target_data.shape[0] in unwrap_map:
-    #                batch_map = {}
-    #                batch_idx = np.unique(target_data[:,data_dim])
-    #                for b in batch_idx:
-    #                    batch_map[b] = target_data[:,data_dim] == b
-    #                unwrap_map[target_data.shape[0]]=batch_map
-    #
-    #            batch_map = unwrap_map[target_data.shape[0]]
-    #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
-    #        result_data[target].append(combined_list)
+                    # Edge tensor unwrapping
+                    elif self.rules[key].method == 'edge_tensor':
+                        ref_edge, ref_node = ref_key
+                        tensors = []
+                        for v in range(self.num_volumes):
+                            if not self.rules[key].done:
+                                tensor = data[g][self.masks[ref_edge][g][b*self.num_volumes+v]]
+                                offset = (key == ref_edge) * self.offsets[ref_node][g][b*self.num_volumes]
+                            else:
+                                tensor = data[g][b*self.num_volumes+v]
+                                offset = (key == ref_edge) *\
+                                        (self.offsets[ref_node][g][b*self.num_volumes+v]-self.offsets[ref_node][g][b*self.num_volumes])
+                            tensors.append(tensor + offset)
+                        unwrapped.append(np.concatenate(tensors))
 
-    # a-2) Handle the list of list of ndarrays
-    for target in target_list_keys:
-        data = data_blob[target]
-        for dlist in data:
-            # construct a list of batch ids
-            batch_ids = []
-            for d in dlist:
-                batch_ids.extend([n for n in np.unique(d[:,data_dim]) if not n in batch_ids])
-            batch_ids.sort()
-            for b in batch_ids:
-                result_data[target].append([ d[d[:,data_dim] == b] for d in dlist ])
+                    # Index tensor unwrapping
+                    elif self.rules[key].method == 'index_tensor':
+                        tensors = []
+                        for v in range(self.num_volumes):
+                            if not self.rules[key].done:
+                                offset = self.offsets[ref_key][g][b*self.num_volumes]
+                                tensors.append(data[self.masks[ref_key][g][b*self.num_volumes+v]] - offset)
+                            else:
+                                offset = self.offsets[ref_key][g][b*self.num_volumes+v]-self.offsets[ref_key][g][b*self.num_volumes]
+                                tensors.append(data[g][b*self.num_volumes+v] + offset)
 
-    # Handle output
-    result_outputs = {}
-    # b-0) Find the target keys
-    target_array_keys = []
-    target_list_keys  = []
-    for key, data in outputs.items():
-        if not key in result_outputs: result_outputs[key]=[]
-        if not isinstance(data,list): result_outputs[key].append(data)
-        elif isinstance(data[0],np.ndarray) and len(data[0].shape)==2:
-            target_array_keys.append(key)
-        elif isinstance(data[0],list) and isinstance(data[0][0],np.ndarray) and len(data[0][0].shape)==2:
-            target_list_keys.append(key)
-        elif isinstance(data[0],list):
-            for d in data: result_outputs[key].extend(d)
+                        unwrapped.append(np.concatenate(tensors))
+
+                    # Index list unwrapping
+                    elif self.rules[key].method == 'index_list':
+                        ref_tensor, ref_index = ref_key
+                        index_list = []
+                        for v in range(self.num_volumes):
+                            if not self.rules[key].done:
+                                offset = self.offsets[ref_tensor][g][b*self.num_volumes]
+                                for i in self.masks[ref_index][g][b*self.num_volumes+v]:
+                                    index_list.append(data[g][i] - offset)
+                            else:
+                                offset = self.offsets[ref_tensor][g][b*self.num_volumes+v]-self.offsets[ref_tensor][g][b*self.num_volumes]
+                                for index in data[g][b*self.num_volumes+v]:
+                                    index_list.append(index + offset)
+
+                        index_list_nb    = np.empty(len(index_list), dtype=object)
+                        index_list_nb[:] = index_list
+                        unwrapped.append(index_list_nb)
+
+        return unwrapped
+
+    def _concatenate(self, data):
+        '''
+        Simply concatenates the lists coming from each GPU
+
+        Parameters
+        ----------
+        key : str
+            Name of the data product to unwrap
+        data : list
+            Data product
+        '''
+        if isinstance(data[0], (int, float)):
+            if len(data) == 1:
+                return [data[g] for g in range(self.num_gpus) for i in range(self.batch_size)]
+            else:
+                return data
+            # elif len(data) == self.batch_count:
+            #     return data
+            # else:
+            #     raise ValueError('Only accept scalar arrays of size 1 or batch_size: '+\
+            #                      f'{len(data)} != {self.batch_size}')
+        if isinstance(data[0], list):
+            concat_data = []
+            for d in data:
+                concat_data += d
+            return concat_data
+        elif isinstance(data[0], np.ndarray):
+            return np.concatenate(data)
         else:
-            result_outputs[key].extend(data)
-            #print('Un-interpretable output data...')
-            #print('key:',key)
-            #print('data:',data)
-            #raise TypeError
-
-    # b-1) Handle the list of ndarrays
-    if target_array_keys is not None:
-        target_array_keys.sort(reverse=True)
-    #print(target_array_keys)
-    for target in target_array_keys:
-        #print(target)
-        data = outputs[target]
-        for d in data:
-            # check if batch map is available, and create if not
-            if not d.shape[0] in unwrap_map:
-                batch_map = {}
-                batch_idx = np.unique(d[:,data_dim])
-                # ensure these are integer values
-                # print(batch_idx)
-                assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
-                for b in batch_idx:
-                    batch_map[b] = d[:,data_dim] == b
-                unwrap_map[d.shape[0]]=batch_map
-
-            batch_map = unwrap_map[d.shape[0]]
-            for where in batch_map.values():
-                result_outputs[target].append(d[where])
-
-    # b-2) Handle the list of list of ndarrays
-    #for target in target_list_keys:
-    #    data = outputs[target]
-    #    num_elements = len(data[0])
-    #    for list_idx in range(num_elements):
-    #        combined_list = []
-    #        for d in data:
-    #            target_data = d[list_idx]
-    #            if not target_data.shape[0] in unwrap_map:
-    #                batch_map = {}
-    #                batch_idx = np.unique(target_data[:,data_dim])
-    #                for b in batch_idx:
-    #                    batch_map[b] = target_data[:,data_dim] == b
-    #                unwrap_map[target_data.shape[0]]=batch_map
-
-    #            batch_map = unwrap_map[target_data.shape[0]]
-    #            combined_list.extend([ target_data[where] for where in batch_map.values() ])
-    #            #combined_list.extend([ target_data[target_data[:,data_dim] == b] for b in batch_idx])
-    #        result_outputs[target].append(combined_list)
-
-    # b-2) Handle the list of list of ndarrays
-
-    # ensure outputs[key] length is same for all key in target_list_keys
-    # for target in target_list_keys:
-    #     print(target,len(outputs[target]))
-    num_elements = np.unique([len(outputs[target]) for target in target_list_keys])
-    assert len(num_elements)<1 or len(num_elements) == 1
-    num_elements = 0 if len(num_elements) < 1 else int(num_elements[0])
-
-    # construct unwrap mapping
-    list_unwrap_map = []
-    list_batch_ctrs = []
-    for data_index in range(num_elements):
-        element_map = {}
-        batch_ctrs  = []
-        for target in target_list_keys:
-            dlist = outputs[target][data_index]
-            for d in dlist:
-                if not d.shape[0] in element_map:
-                    batch_idx = np.unique(d[:,data_dim])
-                    batch_ctrs.append(int(np.max(batch_idx)+1))
-                    assert(len(batch_idx) == len(np.unique(batch_idx.astype(np.int32))))
-                    where = [d[:,data_dim] == b for b in range(batch_ctrs[-1])]
-                    element_map[d.shape[0]] = where
-        assert len(np.unique(batch_ctrs)) == 1
-        list_unwrap_map.append(element_map)
-        list_batch_ctrs.append(batch_ctrs[0])
-
-    for target in target_list_keys:
-        data = outputs[target]
-        for data_index, dlist in enumerate(data):
-            batch_ctrs  = list_batch_ctrs[data_index]
-            element_map = list_unwrap_map[data_index]
-            for b in range(batch_ctrs):
-                result_outputs[target].append([ d[element_map[d.shape[0]][b]] for d in dlist])
-
-    return result_data, result_outputs
+            raise TypeError('Unexpected data type', type(data[0]))
 
 
-def unwrap_scn2(data_blob, outputs, data_dim, main_key=None, data_keys=None, output_keys=None):
-    """
-    Break down the data_blob and outputs dictionary into events for sparseconvnet formatted tensors.
-    Need to account for: multi-gpu, minibatching, multiple outputs, batches.
-    INPUTS:
-        data_blob: a dictionary of array of array of minibatch data [key][num_minibatch][num_device]
-        outputs: results dictionary, output of trainval.forward, [key][num_minibatch*num_device]
-        data_dim: 2 for 2D, 3 for 3D,,, and indicate the location of "batch id"
-        main_key: used to identify a unique set of batch ids to be parsed
-        data_keys: a list of string keys to specify, if needed, a subset of data to be returned
-        output_keys: a list of string keys to specify, if needed, a subset of output to be returned
-    OUTPUT:
-        two un-wrapped arrays of dictionaries where array length = num_minibatch*num_device*minibatch_size
-    ASSUMES:
-        the shape of data_blob and outputs as explained above
-    """
-    if data_keys   is None: data_keys   = list(data_blob.keys())
-    if output_keys is None: output_keys = list(outputs.keys()  )
-    if main_key    is None: main_key    = data_keys[0]
+def prefix_unwrapper_rules(rules, prefix):
+    '''
+    Modifies the default rules of a module to account for
+    a prefix being added to its standard set of outputs
 
-    parsed_data_blob = []
-    parsed_outputs   = []
+    Parameters
+    ----------
+    rules : dict
+        Dictionary which contains a set of unwrapping rules for each
+        output key of a given module in the reconstruction chain.
+    prefix : str
+        Prefix to add in front of all output names
 
-    #for key in data_blob.keys(): parsed_data_blob[key]=[]
-    #for key in outputs.keys()  : parsed_outputs[key]=[]
+    Returns
+    -------
+    dict
+        Dictionary of rules containing the appropriate names
+    '''
+    prules = {}
+    for key, value in rules.items():
+        pkey = f'{prefix}_{key}'
+        prules[pkey] = deepcopy(rules[key])
+        if len(value) > 1:
+            if isinstance(value[1], str):
+                prules[pkey][1] = f'{prefix}_{value[1]}'
+            else:
+                for i in range(len(value[1])):
+                    prules[pkey][1][i] = f'{prefix}_{value[1][i]}'
 
-    num_forward = len(data_blob[main_key])
-    # Only unwrap those elements of data_blob that have the correct dimension: [key][num_forward][num_gpu]
-    tmp=[]
-    for key in data_keys:
-        if not len(data_blob[key]) == num_forward: continue
-        if not isinstance(data_blob[key],list): continue
-        if not isinstance(data_blob[key][0],list): continue
-        if not len(data_blob[key][0]) == len(data_blob[main_key][0]): continue
-        tmp.append(key)
-    data_keys = tmp
-
-    # Only unwrap those elements of outputs that have the correct dimension: [key][num_forwards*num_gpu]
-    tmp=[]
-    num_total_element = 0
-    for i in range(num_forward):
-        num_total_element += len(data_blob[main_key][i])
-    for key in output_keys:
-        if len(outputs[key]) == num_total_element:
-            tmp.append(key)
-    output_keys = tmp
-    output_index = 0
-    for i in range(num_forward):
-        num_gpus = len(data_blob[main_key][i])
-        for j in range(num_gpus):
-            batch_idx = np.unique(data_blob[main_key][i][j][:, data_dim])
-            for b in batch_idx:
-                data_index = data_blob[main_key][i][j][:, data_dim] == b
-                data_blob_element = {}
-                output_element    = {}
-                for key in data_keys:
-                    #print('Unwrapping input',key)
-                    if isinstance(data_blob[key][i][j], np.ndarray) and len(data_blob[key][i][j].shape) == 2:
-                        data_blob_element[key] = data_blob[key][i][j][data_blob[key][i][j][:, data_dim] == b]
-                    elif isinstance(data_blob[key][i][j], list):
-                        data_blob_element[key] = data_blob[key][i][j][int(b)]
-                        #print('skipping',key)
-                #print(outputs['segmentation'])
-                #print('---')
-                #print(outputs['segmentation'][output_index])
-                for key in output_keys:
-                    #print('Unwrapping output',key)
-                    target = outputs[key][output_index]
-                    if isinstance(target, np.ndarray):
-                        if target.shape[0] == data_index.shape[0]:
-                            output_element[key] = target[data_index]
-                        else:
-                            output_element[key] = target[target[:,data_dim] == b]
-                    elif isinstance(target, list) and isinstance(target[0], np.ndarray) and len(target[0].shape) == 2:
-                        output_element[key] = [ list_element[list_element[:,data_dim] == b] for list_element in target ]
-                parsed_data_blob.append(data_blob_element)
-                parsed_outputs.append(output_element)
-            output_index += 1
-
-    return parsed_data_blob, parsed_outputs
+    return prules

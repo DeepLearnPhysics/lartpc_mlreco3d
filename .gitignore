@@ -1,9 +1,11 @@
 # typical files made in repo
 log*
+!logger.py
 weights*
 *.txt
 *.csv
 *.root
+*.rst
 *.hdf5
 *.h5
 *.ipynb
@@ -12,7 +14,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 config
-
+analysis/config
+mlreco/models/cluster_cnn/deprecated
 # C extensions
 *.so
 
@@ -78,6 +81,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/_static/
+docs/_templates/
 
 # PyBuilder
 target/
@@ -115,3 +120,5 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+*.dat
+*.png

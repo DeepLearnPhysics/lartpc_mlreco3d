@@ -1,132 +1,111 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 import numpy as np
 import torch
-import sparseconvnet as scn
-import time
 
-def to_numpy(s):
-    if isinstance(s, np.ndarray):
-        return s
-    if isinstance(s, torch.Tensor):
-        return s.cpu().detach().numpy()
-    elif isinstance(s, scn.SparseConvNetTensor):
-        return torch.cat([s.get_spatial_locations().float(), s.features.cpu()], dim=1).detach().numpy()
+from .globals import COORD_COLS
+
+
+def to_numpy(array):
+    '''
+    Function which casts an array-like object
+    to a `numpy.ndarray`.
+
+    Parameters
+    ----------
+    array : object
+        Array-like object (can be either `np.ndarray`, `torch.Tensor` or `ME.SparseTensor`)
+
+    Returns
+    -------
+    np.ndarray
+        Array cast to np.ndarray
+    '''
+    import MinkowskiEngine as ME
+
+    if isinstance(array, np.ndarray):
+        return array
+    elif isinstance(array, torch.Tensor):
+        return array.cpu().detach().numpy()
+    elif isinstance(array, tuple):
+        return np.array(array)
+    elif isinstance(array, ME.SparseTensor):
+        return torch.cat([array.C.float(), array.F], dim=1).detach().cpu().numpy()
     else:
-        raise TypeError("Unknown return type %s" % type(s))
+        raise TypeError('Unknown return type %s' % type(array))
 
 
-def round_decimals(val, digits):
-    factor = float(np.power(10, digits))
-    return int(val * factor+0.5) / factor
+def local_cdist(v1, v2):
+    '''
+    Function which computes the pairwise distances between two
+    collections of points stored as `torch.Tensor` objects.
+
+    This is necessary because the torch.cdist implementation is either
+    slower (with the `donot_use_mm_for_euclid_dist` option) or produces
+    dramatically wrong answers under certain situations (with the
+    `use_mm_for_euclid_dist_if_necessary` option).
+
+    Parameters
+    ----------
+    v1 : torch.Tensor
+        (N, D) tensor of coordinates
+    v2 : torch.Tensor
+        (M, D) tensor of coordinates
+
+    Returns
+    -------
+    torch.Tensor
+        (N, M) tensor of pairwise distances
+    '''
+    v1_2 = v1.unsqueeze(1).expand(v1.size(0), v2.size(0), v1.size(1))
+    v2_2 = v2.unsqueeze(0).expand(v1.size(0), v2.size(0), v1.size(1))
+    return torch.sqrt(torch.pow(v2_2 - v1_2, 2).sum(2))
 
 
-# Compute moving average
-def moving_average(a, n=3) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
+def pixel_to_cm(coords, meta, translate=True):
+    '''
+    Converts the pixel indices in a tensor to detector coordinates
+    using the metadata information.
+
+    The metadata is assumed to have the following structure:
+    [lower_x, lower_y(, lower_z), upper_x, upper_y, (upper_z), size_x, size_y(, size_z)],
+    i.e. lower and upper bounds of the volume and pixel/voxel size.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        (N, 2/3) Input pixel indices
+    meta : np.ndarray
+        (6/9) Array of metadata information
+    translate : bool, default True
+        If set to `False`, this function returns the input unchanged
+    '''
+    if not translate or not len(coords):
+        return coords
+
+    lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
+    out = lower + (coords + .5) * size
+    return out.astype(np.float32)
 
 
-# Decorative progress bar
-def progress_bar(count, total, message=''):
-    """
-    Args: count .... int/float, current progress counter
-          total .... int/float, total counter
-          message .. string, appended after the progress bar
-    """
-    from IPython.display import HTML, display,clear_output
-    return HTML("""
-        <progress
-            value='{count}'
-            max='{total}',
-            style='width: 30%'
-        >
-            {count}
-        </progress> {frac}% {message}
-    """.format(count=count,total=total,frac=int(float(count)/float(total)*100.),message=message))
+def cm_to_pixel(coords, meta, translate=True):
+    '''
+    Converts the detector coordinates in a tensor to pixel indices
+    using the metadata information.
 
+    The metadata is assumed to have the following structure:
+    [lower_x, lower_y(, lower_z), upper_x, upper_y, (upper_z), size_x, size_y(, size_z)],
+    i.e. lower and upper bounds of the volume and pixel/voxel size.
 
-# Memory usage print function
-def print_memory(msg=''):
-    max_allocated = round_decimals(torch.cuda.max_memory_allocated()/1.e9, 3)
-    allocated = round_decimals(torch.cuda.memory_allocated()/1.e9, 3)
-    max_cached = round_decimals(torch.cuda.max_memory_cached()/1.e9, 3)
-    cached = round_decimals(torch.cuda.memory_cached()/1.e9, 3)
-    print(max_allocated, allocated, max_cached, cached, msg)
+    Parameters
+    ----------
+    coords : np.ndarray
+        (N, 2/3) Input detector coordinates
+    meta : np.ndarray
+        (6/9) Array of metadata information
+    translate : bool, default True
+        If set to `False`, this function returns the input unchanged
+    '''
+    if not translate or not len(coords):
+        return coords
 
-
-# simple stopwatch class
-class stopwatch(object):
-    """
-    Simple stopwatch class to organize various time measurement.
-    Not very precise but good enough for a millisecond level precision
-    """
-    def __init__(self):
-        self._watch={}
-
-    def start(self,key):
-        """
-        Starts a stopwatch for a unique key
-        INPUT
-         - key can be any object but typically a string to tag a time measurement
-        """
-        self._watch[key] = [-1,time.time()]
-
-    def stop(self,key):
-        """
-        Stops a stopwatch for a unique key
-        INPUT
-         - key can be any object but typically a string to tag a time measurement
-        """
-        data = self._watch[key]
-        if data[0]<0 : data[0] = time.time() - data[1]
-
-    def time(self,key):
-        """
-        Returns the time recorded or past so far (if not stopped)
-        INPUT
-         - key can be any object but typically a string to tag a time measurement
-        """
-        if not key in self._watch: return 0
-        data = self._watch[key]
-        return data[0] if data[0]>0 else time.time() - data[1]
-
-
-    
-
-# Dumb class to organize output csv file
-class CSVData:
-
-    def __init__(self,fout):
-        self.name  = fout
-        self._fout = None
-        self._str  = None
-        self._dict = {}
-
-    def record(self, keys, vals):
-        for i, key in enumerate(keys):
-            self._dict[key] = vals[i]
-
-    def write(self):
-        if self._str is None:
-            self._fout=open(self.name,'w')
-            self._str=''
-            for i,key in enumerate(self._dict.keys()):
-                if i:
-                    self._fout.write(',')
-                    self._str += ','
-                self._fout.write(key)
-                self._str+='{:f}'
-            self._fout.write('\n')
-            self._str+='\n'
-
-        self._fout.write(self._str.format(*(self._dict.values())))
-
-    def flush(self):
-        if self._fout: self._fout.flush()
-
-    def close(self):
-        if self._str is not None:
-            self._fout.close()
+    lower, upper, size = np.split(np.asarray(meta).reshape(-1), 3)
+    return (coords - lower) / size - .5

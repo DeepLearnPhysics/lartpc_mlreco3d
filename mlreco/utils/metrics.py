@@ -8,14 +8,14 @@ import numpy as np
 def unique_with_batch(label, bid):
     """
     merge 1D arrays of label and bid into array of new labels for unique (label, bid) pairs
-    
+
     Parameters
     ----------
     label : array_like
         input labels
     bid : array_like
         input batch ids
-    
+
     Returns
     -------
     labels2 : ndarray
@@ -88,7 +88,7 @@ def SBD(pred, truth, bid=None):
         truth, = unique_with_batch(truth, bid)
     pred_clusters, pred_counts = np.unique(pred, return_counts=True)
     truth_clusters, truth_counts = np.unique(truth, return_counts=True)
-    
+
     bd1 = BD(pred, pred_clusters, pred_counts, truth, truth_clusters, truth_counts)
     bd2 = BD(truth, truth_clusters, truth_counts, pred, pred_clusters, pred_counts)
     sbd = np.minimum(bd1, bd2)
@@ -105,7 +105,7 @@ def contingency_table(a, b, na=None, nb=None):
         na = np.max(a)
     if not nb:
         nb = np.max(b)
-    table = np.zeros((na, nb), dtype=np.int)
+    table = np.zeros((na, nb), dtype=int)
     for i, j in zip(a,b):
         table[i,j] += 1
     return table
@@ -115,7 +115,7 @@ def purity(pred, truth, bid=None):
     """
     cluster purity:
     intersection(pred, truth)/pred
-    number in [0,1] - 1 indicates everything in the cluster is in the same ground-truth cluster 
+    number in [0,1] - 1 indicates everything in the cluster is in the same ground-truth cluster
     """
     if bid:
         pred, pcts = unique_with_batch(pred, bid)
@@ -126,6 +126,22 @@ def purity(pred, truth, bid=None):
     table = contingency_table(pred, truth, len(pcts), len(tcts))
     purities = table.max(axis=1) / pcts
     return purities.mean()
+
+
+def global_purity(pred, truth, bid=None):
+    """
+    cluster purity as defined in https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-clustering-1.html:
+    intersection(pred, truth)/pred
+    number in [0,1] - 1 indicates everything in the cluster is in the same ground-truth cluster
+    """
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    return np.sum(table.max(axis=1))/len(pred)
 
 
 def efficiency(pred, truth, bid=None):
@@ -144,7 +160,24 @@ def efficiency(pred, truth, bid=None):
     efficiencies = table.max(axis=0) / tcts
     return efficiencies.mean()
 
-def purity_efficiency(pred, truth, bid=None):
+
+def global_efficiency(pred, truth, bid=None):
+    """
+    cluster efficiency as defined in https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-clustering-1.html:
+    intersection(pred, truth)/truth
+    number in [0,1] - 1 indicates everything is found in cluster
+    """
+    if bid:
+        pred, pcts = unique_with_batch(pred, bid)
+        truth, tcts = unique_with_batch(truth, bid)
+    else:
+        pred, pcts = unique_label(pred)
+        truth, tcts = unique_label(truth)
+    table = contingency_table(pred, truth, len(pcts), len(tcts))
+    return np.sum(table.max(axis=0))/len(pred)
+
+
+def purity_efficiency(pred, truth, bid=None, mean=True):
     """
     function that combines purity and efficiency calculation into one go
     """
@@ -157,8 +190,7 @@ def purity_efficiency(pred, truth, bid=None):
     table = contingency_table(pred, truth, len(pcts), len(tcts))
     efficiencies = table.max(axis=0) / tcts
     purities = table.max(axis=1) / pcts
-    return purities.mean(), efficiencies.mean()
-    
-    
-    
-    
+    if mean:
+        return purities.mean(), efficiencies.mean()
+    else:
+        return purities, efficiencies
