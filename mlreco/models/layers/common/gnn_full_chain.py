@@ -609,7 +609,7 @@ class FullChainLoss(torch.nn.modules.loss._Loss):
             loss += self.ppn_weight*res_ppn['loss']
 
         # Fetch adapted labels
-        if cluster_label is not None:
+        if cluster_label is not None and 'cluster_label_adapted' in out:
             cluster_label = out['cluster_label_adapted']
 
         if self.enable_ghost and 'ghost' in out \
