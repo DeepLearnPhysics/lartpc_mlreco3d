@@ -269,14 +269,12 @@ def match_particles_all(particles_x : Union[List[Particle], List[TruthParticle]]
     matches = OrderedDict()
     out_counts = []
     
+    # Reset the matches
     for px in particles_x:
         px.match_overlap = OrderedDict()
-    #for py in particles_y:
-    #    py.match_overlap = OrderedDict()
 
     # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
-        #select_idx = idx[j]
         match_idxs = np.where(overlap_matrix[:,j] > min_overlap)[0]
         out_counts.append(match_idxs)
         if not len(match_idxs):
@@ -285,10 +283,11 @@ def match_particles_all(particles_x : Union[List[Particle], List[TruthParticle]]
             px.matched = False
         else:
             px.matched = True
+            overlaps   = overlap_matrix[match_idxs, j]
+            match_idxs = match_idxs[np.argsort(overlaps)][::-1]
             for idx in match_idxs:
                 matched = particles_y[idx]
-                px._match_overlap[matched.id] = overlap_matrix[idx,j]
-                # matched._match_overlap[px.id] = intersections[j]
+                px._match_overlap[matched.id] = overlap_matrix[idx, j]
                 key = (px.id, matched.id)
                 matches[key] = (px, matched)
 
@@ -316,10 +315,9 @@ def match_particles_principal(particles_x : Union[List[Particle], List[TruthPart
     matches = OrderedDict()
     out_counts = []
     
+    # Reset the matches
     for px in particles_x:
         px.match_overlap = OrderedDict()
-    #for py in particles_y:
-    #    py.match_overlap = OrderedDict()
 
     # For each particle in x, choose one in y
     for j, px in enumerate(particles_x):
