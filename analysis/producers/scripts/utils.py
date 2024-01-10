@@ -417,5 +417,17 @@ class BayesianBinomialEstimator:
                 min_idx = i
                 min_val = qintv[mode]
         if len(self.q_intvs) == 0:
-            raise AssertionError("No q-credible interval was found.")
+            print("No q-credible interval was found.")
+            index = self.out['index']
+            null_result = {
+                'lb': self.interval[index-1],
+                'lb_index': index-1,
+                'ub': self.interval[index+1],
+                'ub_index': index+1,
+                'length': self.interval[index+1] - self.interval[index-1],
+                'q': self.cdf[index+1] - self.cdf[index-1],
+                'loss': 0.0,
+                'estimator': self.out['eps']
+            }
+            return null_result
         return self.q_intvs[min_idx]
