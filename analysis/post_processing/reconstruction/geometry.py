@@ -87,6 +87,7 @@ class ContainmentProcessor(PostProcessor):
                  boundary_file = None,
                  source_file = None,
                  mode = 'module',
+                 allow_multi_module = False,
                  truth_point_mode = 'points',
                  run_mode = 'both'):
         '''
@@ -129,6 +130,7 @@ class ContainmentProcessor(PostProcessor):
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
         self.geo.define_containment_volumes(margin, cathode_margin, mode)
+        self.allow_multi_module = allow_multi_module
 
     def process(self, data_dict, result_dict):
         '''
@@ -154,7 +156,8 @@ class ContainmentProcessor(PostProcessor):
                     continue
 
                 # Check containment
-                p.is_contained = self.geo.check_containment(points, p.sources)
+                p.is_contained = self.geo.check_containment(points, p.sources,
+                        self.allow_multi_module)
 
         return {}, {}
 
