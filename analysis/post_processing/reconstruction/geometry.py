@@ -123,6 +123,8 @@ class ContainmentProcessor(PostProcessor):
               outermost walls
             - If 'source', use the origin of voxels to determine which TPC(s)
               contributed to them, and define volumes accordingly
+        allow_multi_module : bool, default False
+            Whether to allow particles/interactions to span multiple modules
         '''
         # Initialize the parent class
         super().__init__(run_mode, truth_point_mode)
