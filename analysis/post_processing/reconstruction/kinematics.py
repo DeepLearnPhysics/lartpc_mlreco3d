@@ -104,7 +104,7 @@ class ParticlePropertiesProcessor(PostProcessor):
             Dictionary which maps a track PID output to a threshold value,
             in order
         primary_treshold : float, optional
-            Primary score above which a paricle is considered a primary
+            Primary score above which a particle is considered a primary
         '''
         # Check that there is something to do, throw otherwise
         if not len(em_pid_thresholds) and not len(track_pid_thresholds) and \
@@ -181,7 +181,7 @@ class InteractionTopologyProcessor(PostProcessor):
         ----------
         ke_thresholds : Union[float, dict]
             If a scalr, it specifies a blanket KE cut to apply to all
-            paritcles. If it is a Dictionary, it maps an PID to a KE threshold.
+            particles. If it is a dictionary, it maps an PID to a KE threshold.
             If a 'default' key is provided, it is used for all particles,
             unless a number is provided for a specific PID.
         reco_ke_mode : str, default 'ke'
@@ -198,7 +198,7 @@ class InteractionTopologyProcessor(PostProcessor):
 
         # Check that there is something to do, throw otherwise
         if not len(ke_thresholds):
-            msg = ('Specify `ke_thresholds for this function to do anything.')
+            msg = 'Specify `ke_thresholds` for this function to do anything.'
             raise ValueError(msg)
 
         # Store the thresholds in a dictionary
