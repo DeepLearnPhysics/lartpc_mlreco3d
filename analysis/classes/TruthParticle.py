@@ -5,7 +5,8 @@ from typing import Counter, List, Union
 from . import Particle
 
 from mlreco.utils import pixel_to_cm
-from mlreco.utils.globals import PDG_TO_PID, TRACK_SHP, SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import PDG_TO_PID, TRACK_SHP, SHAPE_LABELS, \
+        PID_LABELS, PID_MASSES
 from mlreco.utils.decorators import inherit_docstring
 
 @inherit_docstring(Particle)
@@ -145,6 +146,11 @@ class TruthParticle(Particle):
         self.start_point   = self.first_step.astype(np.float32)
         self.end_point     = self.last_step.astype(np.float32)
 
+        # Set the initial kinematic energy from the initial total energy
+        self.ke_init = -1.
+        if self.pid in PID_MASSES:
+            self.ke_init = self.energy_init - PID_MASSES[self.pid]
+
         # Patch to deal with bad LArCV input, TODO: fix it upstream
         if self.start_point[0] == -np.inf and self.end_point[0] == -np.inf:
             self.start_point = self.end_point = np.zeros(3, dtype=self.start_point.dtype)
@@ -165,7 +171,7 @@ class TruthParticle(Particle):
         shared_keys  = ['track_id', 'creation_process', 'pdg_code', 't']
         scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
-                'parent_id', 'group_id', 'interaction_id',\
+                'ke_init', 'parent_id', 'group_id', 'interaction_id',\
                 'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape',\
                 'pid', 'semantic_type']
 
