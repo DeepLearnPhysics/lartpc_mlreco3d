@@ -1,6 +1,6 @@
 import numpy as np
 
-from mlreco.utils.globals import TRACK_SHP
+from mlreco.utils.globals import TRACK_SHP, PID_LABELS
 from mlreco.utils.geometry import Geometry
 from mlreco.utils.gnn.cluster import cluster_direction
 
@@ -88,6 +88,7 @@ class ContainmentProcessor(PostProcessor):
                  source_file = None,
                  mode = 'module',
                  allow_multi_module = False,
+                 min_particle_sizes = 0,
                  truth_point_mode = 'points',
                  run_mode = 'both'):
         '''
@@ -125,6 +126,10 @@ class ContainmentProcessor(PostProcessor):
               contributed to them, and define volumes accordingly
         allow_multi_module : bool, default False
             Whether to allow particles/interactions to span multiple modules
+        min_particle_sizes : Union[int, dict], default 0
+            When checking interaction containment, ignore particles below the
+            size (in voxel count) specified by this parameter. If specified
+            as a dictionary, it maps a specific particle type to its own cut.
         '''
         # Initialize the parent class
         super().__init__(run_mode, truth_point_mode)
@@ -132,7 +137,22 @@ class ContainmentProcessor(PostProcessor):
         # Initialize the geometry
         self.geo = Geometry(detector, boundary_file, source_file)
         self.geo.define_containment_volumes(margin, cathode_margin, mode)
+
+        # Store parameters
         self.allow_multi_module = allow_multi_module
+
+        # Store the particle size thresholds in a dictionary
+        if np.isscalar(min_particle_sizes):
+            min_particle_sizes = {'default': min_particle_sizes}
+
+        self.min_particle_sizes = {}
+        for pid in PID_LABELS.keys():
+            if pid in min_particle_sizes:
+                self.min_particle_sizes[pid] = min_particle_sizes[pid]
+            elif 'default' in min_particle_sizes:
+                self.min_particle_sizes[pid] = min_particle_sizes['default']
+            else:
+                self.min_particle_sizes[pid] = 0
 
     def process(self, data_dict, result_dict):
         '''
@@ -145,11 +165,10 @@ class ContainmentProcessor(PostProcessor):
         result_dict : dict
             Chain output dictionary
         '''
-        # Loop over partcile/interaction objects
-        for k in self.all_keys:
+        # Loop over particle objects
+        for k in self.part_keys:
             for p in result_dict[k]:
-                # Make sure the particle/interaction coordinates are
-                # expressed in cm
+                # Make sure the particle coordinates are expressed in cm
                 self.check_units(p)
 
                 # Get point coordinates
@@ -157,9 +176,24 @@ class ContainmentProcessor(PostProcessor):
                 if not len(points):
                     continue
 
-                # Check containment
-                p.is_contained = self.geo.check_containment(points, p.sources,
-                        self.allow_multi_module)
+                # Check particle containment
+                p.is_contained = self.geo.check_containment(points,
+                        p.sources, self.allow_multi_module)
+
+        # Loop over interaction objects
+        for k in self.inter_keys:
+            for ii in result_dict[k]:
+                # Check that all the particles in the interaction are contained
+                ii.is_contained = True
+                for p in ii.particles:
+                    if not p.is_contained:
+                        # Do not account for particles below a certain size
+                        if p.pid > 0 \
+                                and p.size < self.min_particle_sizes[p.pid]:
+                            continue
+
+                        ii.is_contained = False
+                        break
 
         return {}, {}
 
