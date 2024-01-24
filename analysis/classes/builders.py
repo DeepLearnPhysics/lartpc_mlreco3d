@@ -13,8 +13,6 @@ from mlreco.utils.globals import (BATCH_COL,
                                   VALUE_COL,
                                   INTER_COL,
                                   GROUP_COL,
-                                  PSHOW_COL,
-                                  CLUST_COL,
                                   NU_COL,
                                   TRACK_SHP,
                                   SHAPE_COL,
@@ -23,9 +21,7 @@ from mlreco.utils.globals import (BATCH_COL,
 from analysis.classes import (Particle,
                               TruthParticle,
                               Interaction,
-                              TruthInteraction,
-                              ParticleFragment,
-                              TruthParticleFragment)
+                              TruthInteraction)
 from analysis.classes.matching import group_particles_to_interactions_fn
 from mlreco.utils.vertex import get_truth_vertex
 
@@ -197,16 +193,16 @@ class ParticleBuilder(DataBuilder):
             List of restored particle instances built from HDF5 blueprints.
         """
         if 'input_rescaled' in result:
-            point_cloud = result['input_rescaled'][0]
+            point_cloud = result['input_rescaled'][entry]
         elif 'input_data' in data:
-            point_cloud = data['input_data'][0]
+            point_cloud = data['input_data'][entry]
         else:
             msg = "To build Particle objects from HDF5 data, need either "\
                 "input_data inside data dictionary or input_rescaled inside"\
                 " result dictionary."
             raise KeyError(msg)
         out  = []
-        blueprints = result['particles'][0]
+        blueprints = result['particles'][entry]
         for i, bp in enumerate(blueprints):
             mask = bp['index']
             prepared_bp = copy.deepcopy(bp)
@@ -224,7 +220,7 @@ class ParticleBuilder(DataBuilder):
                 'depositions': point_cloud[mask][:, VALUE_COL],
             })
             if 'input_rescaled_source' in result:
-                prepared_bp['sources'] = result['input_rescaled_source'][0][mask]
+                prepared_bp['sources'] = result['input_rescaled_source'][entry][mask]
 
             particle = Particle(**prepared_bp)
             particle.pid = bp['pid']
@@ -725,208 +721,6 @@ class InteractionBuilder(DataBuilder):
             new_vtx = points[mask][np.linalg.norm(points[mask] - vtx, axis=1).argmin()]
             out[inter_idx] = new_vtx
         return out
-
-
-class FragmentBuilder(DataBuilder):
-    """Builder for constructing Particle and TruthParticle instances
-    from full chain output dicts.
-
-    Required result keys:
-
-        reco:
-            - input_rescaled
-            - fragment_clusts
-            - fragment_seg
-            - shower_fragment_start_points
-            - track_fragment_start_points
-            - track_fragment_end_points
-            - shower_fragment_group_pred
-            - track_fragment_group_pred
-            - shower_fragment_node_pred
-        truth:
-            - cluster_label
-            - cluster_label_adapted
-            - input_rescaled
-    """
-    def __init__(self, builder_cfg={}):
-        self.cfg = builder_cfg
-        self.allow_nodes         = self.cfg.get('allow_nodes', [0,2,3])
-        self.min_voxel_cut       = self.cfg.get('min_voxel_cut', -1)
-        self.only_primaries      = self.cfg.get('only_primaries', False)
-        self.include_semantics   = self.cfg.get('include_semantics', None)
-        self.attaching_threshold = self.cfg.get('attaching_threshold', 5.0)
-        self.verbose             = self.cfg.get('verbose', False)
-
-    def _build_reco(self, entry,
-                    data: dict,
-                    result: dict):
-
-        volume_labels = result['input_rescaled'][entry][:, BATCH_COL]
-        point_cloud = result['input_rescaled'][entry][:, COORD_COLS]
-        depositions = result['input_rescaled'][entry][:, VALUE_COL]
-        fragments = result['fragment_clusts'][entry]
-        fragments_seg = result['fragment_seg'][entry]
-
-        shower_mask = np.isin(fragments_seg, self.allow_nodes)
-        shower_frag_primary = np.argmax(
-            result['shower_fragment_node_pred'][entry], axis=1)
-
-        shower_start_points = result['shower_fragment_start_points'][entry][:, COORD_COLS]
-        track_start_points = result['track_fragment_start_points'][entry][:, COORD_COLS]
-        track_end_points = result['track_fragment_end_points'][entry][:, COORD_COLS]
-
-        assert len(fragments_seg) == len(fragments)
-
-        temp = []
-
-        shower_group = result['shower_fragment_group_pred'][entry]
-        track_group = result['track_fragment_group_pred'][entry]
-
-        group_ids = np.ones(len(fragments)).astype(int) * -1
-        inter_ids = np.ones(len(fragments)).astype(int) * -1
-
-        for i, p in enumerate(fragments):
-            voxels = point_cloud[p]
-            seg_label = fragments_seg[i]
-            volume_id, cts = np.unique(volume_labels[p], return_counts=True)
-            volume_id = int(volume_id[cts.argmax()])
-
-            part = ParticleFragment(fragment_id=i,
-                                    group_id=group_ids[i],
-                                    interaction_id=inter_ids[i],
-                                    image_id=entry,
-                                    volume_id=volume_id,
-                                    semantic_type=seg_label,
-                                    index=p,
-                                    points=point_cloud[p],
-                                    depositions=depositions[p],
-                                    is_primary=False)
-            temp.append(part)
-
-        # Label shower fragments as primaries and attach start_point
-        shower_counter = 0
-        for p in np.array(temp)[shower_mask]:
-            is_primary = shower_frag_primary[shower_counter]
-            p.is_primary = bool(is_primary)
-            p.start_point = shower_start_points[shower_counter]
-            # p.group_id = int(shower_group_pred[shower_counter])
-            shower_counter += 1
-        assert shower_counter == shower_frag_primary.shape[0]
-
-        # Attach end_point to track fragments
-        track_counter = 0
-        for p in temp:
-            if p.semantic_type == 1:
-                # p.group_id = int(track_group_pred[track_counter])
-                p.start_point = track_start_points[track_counter]
-                p.end_point = track_end_points[track_counter]
-                track_counter += 1
-        # assert track_counter == track_group_pred.shape[0]
-
-        # Apply fragment voxel cut
-        out = []
-        for p in temp:
-            if p.size < self.min_particle_voxel_count:
-                continue
-            out.append(p)
-
-        # Check primaries
-        if self.only_primaries:
-            out = [p for p in out if p.is_primary]
-
-        if self.include_semantics is not None:
-            out = [p for p in out if p.semantic_type in self.include_semantics]
-
-        return out
-
-    def _build_truth(self, entry, data: dict, result: dict):
-
-        fragments = []
-
-        labels = result['cluster_label_adapted'][entry]
-        rescaled_input_charge = result['input_rescaled'][entry][:, VALUE_COL]
-        fragment_ids = set(list(np.unique(labels[:, CLUST_COL]).astype(int)))
-
-        for fid in fragment_ids:
-            mask = labels[:, CLUST_COL] == fid
-
-            semantic_type, counts = np.unique(labels[:, -1][mask].astype(int),
-                                              return_counts=True)
-            if semantic_type.shape[0] > 1:
-                if self.verbose:
-                    print("Semantic Type of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(semantic_type),
-                                                str(counts)))
-                perm = counts.argmax()
-                semantic_type = semantic_type[perm]
-            else:
-                semantic_type = semantic_type[0]
-
-            points = labels[mask][:, COORD_COLS]
-            size = points.shape[0]
-            depositions = rescaled_input_charge[mask]
-            depositions_MeV = labels[mask][:, VALUE_COL]
-            voxel_indices = np.where(mask)[0]
-
-            volume_id, cts = np.unique(labels[:, BATCH_COL][mask].astype(int),
-                                       return_counts=True)
-            volume_id = int(volume_id[cts.argmax()])
-
-            group_id, counts = np.unique(labels[:, GROUP_COL][mask].astype(int),
-                                         return_counts=True)
-            if group_id.shape[0] > 1:
-                if self.verbose:
-                    print("Group ID of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(group_id),
-                                                str(counts)))
-                perm = counts.argmax()
-                group_id = group_id[perm]
-            else:
-                group_id = group_id[0]
-
-            interaction_id, counts = np.unique(labels[:, INTER_COL][mask].astype(int),
-                                               return_counts=True)
-            if interaction_id.shape[0] > 1:
-                if self.verbose:
-                    print("Interaction ID of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(interaction_id),
-                                                str(counts)))
-                perm = counts.argmax()
-                interaction_id = interaction_id[perm]
-            else:
-                interaction_id = interaction_id[0]
-
-
-            is_primary, counts = np.unique(labels[:, PSHOW_COL][mask].astype(bool),
-                                           return_counts=True)
-            if is_primary.shape[0] > 1:
-                if self.verbose:
-                    print("Primary label of Fragment {} is not "\
-                        "unique: {}, {}".format(fid,
-                                                str(is_primary),
-                                                str(counts)))
-                perm = counts.argmax()
-                is_primary = is_primary[perm]
-            else:
-                is_primary = is_primary[0]
-
-            part = TruthParticleFragment(fragment_id=fid,
-                                         group_id=group_id,
-                                         interaction_id=interaction_id,
-                                         semantic_type=semantic_type,
-                                         image_id=entry,
-                                         volume_id=volume_id,
-                                         index=voxel_indices,
-                                         points=points,
-                                         depositions=depositions,
-                                         depositions_MeV=depositions_MeV,
-                                         is_primary=is_primary)
-
-            fragments.append(part)
-        return fragments
 
 
 # --------------------------Helper functions---------------------------
