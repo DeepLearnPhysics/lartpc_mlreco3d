@@ -20,6 +20,11 @@ def get_valid_mask(particles):
     np.ndarray
         (P) Boolean list of validity, one per true particle instance
     '''
+    # If there are no particles, nothing to do here
+    if not len(particles):
+        return np.empty(0, dtype=bool)
+
+    # Otherwise, check that the ancestor track ID and creation process are valid
     mask  = np.array([p.ancestor_track_id() != INVAL_TID for p in particles])
     mask &= np.array([bool(len(p.ancestor_creation_process())) for p in particles])
     return mask
@@ -45,6 +50,10 @@ def get_interaction_ids(particles):
     np.ndarray
         (P) List of interaction IDs, one per true particle instance
     '''
+    # If there are no particles, nothing to do here
+    if not len(particles):
+        return np.empty(0, dtype=np.int32)
+
     # If the interaction IDs are set in the particle tree, simply use that
     inter_ids = np.array([p.interaction_id() for p in particles], dtype=np.int32)
     if np.any(inter_ids != INVAL_ID):
@@ -92,7 +101,7 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
         List of neutrino IDs, one per true particle instance
     '''
     # Make sure there is only either MPV particles or neutrinos specified, not both
-    assert particles_mpv is None or neutrinos is None,\
+    assert particles_mpv is None or neutrinos is None, \
             'Do not specify both particle_mpv_event and neutrino_event in parse_cluster3d'
 
     # Initialize neutrino IDs

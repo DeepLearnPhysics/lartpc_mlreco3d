@@ -37,4 +37,3 @@ def post_processor_factory(name, cfg, parent_path=''):
 
     # Initialize
     return POST_PROCESSOR_DICT[name](**cfg)
-
