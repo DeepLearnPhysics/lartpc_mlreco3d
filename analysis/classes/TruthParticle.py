@@ -171,7 +171,7 @@ class TruthParticle(Particle):
         shared_keys  = ['track_id', 'creation_process', 'pdg_code', 't']
         scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
-                'ke_init', 'parent_id', 'group_id', 'interaction_id',\
+                'parent_id', 'group_id', 'interaction_id',\
                 'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape',\
                 'pid', 'semantic_type']
 
@@ -190,6 +190,8 @@ class TruthParticle(Particle):
         # TODO: Move this to main list once this is in every LArCV file
         if 'gen_id' in particle_dict:
             setattr(self, 'gen_id', particle_dict['gen_id'])
+        if 'ke_init' in particle_dict:
+            setattr(self, 'ke_init', particle_dict['ke_init'])
 
     def merge(self, particle):
         '''
