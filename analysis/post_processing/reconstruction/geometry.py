@@ -174,6 +174,7 @@ class ContainmentProcessor(PostProcessor):
                 # Get point coordinates
                 points = self.get_points(p)
                 if not len(points):
+                    p.is_contained = True
                     continue
 
                 # Check particle containment

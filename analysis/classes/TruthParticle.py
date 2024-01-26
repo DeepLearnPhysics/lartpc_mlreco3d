@@ -5,7 +5,8 @@ from typing import Counter, List, Union
 from . import Particle
 
 from mlreco.utils import pixel_to_cm
-from mlreco.utils.globals import PDG_TO_PID, TRACK_SHP, SHAPE_LABELS, PID_LABELS
+from mlreco.utils.globals import PDG_TO_PID, TRACK_SHP, SHAPE_LABELS, \
+        PID_LABELS, PID_MASSES
 from mlreco.utils.decorators import inherit_docstring
 
 @inherit_docstring(Particle)
@@ -145,6 +146,11 @@ class TruthParticle(Particle):
         self.start_point   = self.first_step.astype(np.float32)
         self.end_point     = self.last_step.astype(np.float32)
 
+        # Set the initial kinematic energy from the initial total energy
+        self.ke_init = -1.
+        if self.pid in PID_MASSES:
+            self.ke_init = self.energy_init - PID_MASSES[self.pid]
+
         # Patch to deal with bad LArCV input, TODO: fix it upstream
         if self.start_point[0] == -np.inf and self.end_point[0] == -np.inf:
             self.start_point = self.end_point = np.zeros(3, dtype=self.start_point.dtype)
@@ -184,6 +190,8 @@ class TruthParticle(Particle):
         # TODO: Move this to main list once this is in every LArCV file
         if 'gen_id' in particle_dict:
             setattr(self, 'gen_id', particle_dict['gen_id'])
+        if 'ke_init' in particle_dict:
+            setattr(self, 'ke_init', particle_dict['ke_init'])
 
     def merge(self, particle):
         '''
