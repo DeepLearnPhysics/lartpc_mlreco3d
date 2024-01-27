@@ -186,10 +186,11 @@ class ContainmentProcessor(PostProcessor):
             for ii in result_dict[k]:
                 # Check that all the particles in the interaction are contained
                 ii.is_contained = True
+
                 for p in ii.particles:
                     if not p.is_contained:
                         # Do not account for particles below a certain size
-                        if p.pid > 0 \
+                        if p.pid > -1 \
                                 and p.size < self.min_particle_sizes[p.pid]:
                             continue
 
