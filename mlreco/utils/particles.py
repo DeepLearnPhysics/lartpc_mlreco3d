@@ -73,7 +73,7 @@ def get_interaction_ids(particles):
 
 def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     '''
-    A function which gets the neutrino-like ID (0 for cosmic, 1 for
+    A function which gets the neutrino-like ID (-1 for cosmics, index for
     neutrino) of each of the particle in the input particle list.
 
     If `particles_mpv` and `neutrinos` are not specified, it assumes that
@@ -105,11 +105,13 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
             'Do not specify both particle_mpv_event and neutrino_event in parse_cluster3d'
 
     # Initialize neutrino IDs
-    nu_ids = np.zeros(len(inter_ids), dtype=inter_ids.dtype)
+    nu_ids = -np.ones(len(inter_ids), dtype=inter_ids.dtype)
     nu_ids[inter_ids == -1] = -1
     if particles_mpv is None and neutrinos is None:
         # Loop over the interactions
+        # TODO: Warn that this is dangerous
         primary_ids = get_group_primary_ids(particles)
+        nu_id = 0
         for i in np.unique(inter_ids):
             # If the interaction ID is invalid, skip
             if i < 0: continue
@@ -117,12 +119,14 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
             # If there are at least two primaries, the interaction is neutrino-like
             inter_index = np.where(inter_ids == i)[0]
             if np.sum(primary_ids[inter_index] == 1) > 1:
-                nu_ids[inter_index] = 1
+                nu_ids[inter_index] = nu_id
+                nu_id += 1
     else:
         # Find the reference positions to gauge if a particle comes from a neutrino-like interaction
         ref_pos = None
         if particles_mpv:
             ref_pos = np.vstack([[getattr(p, a)() for a in ['x', 'y', 'z']] for p in particles_mpv])
+            ref_pos = np.unique(ref_pos, axis=0)
         elif neutrinos:
             ref_pos = np.vstack([[getattr(n, a)() for a in ['x', 'y', 'z']] for n in neutrinos])
 
@@ -133,9 +137,9 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
             for i in np.unique(inter_ids):
                 inter_index = np.where(inter_ids == i)[0]
                 if i < 0: continue
-                for pos in ref_pos:
+                for ref_id, pos in enumerate(ref_pos):
                     if np.any((anc_pos[inter_index] == pos).all(axis=1)):
-                        nu_ids[inter_index] = 1
+                        nu_ids[inter_index] = ref_id
                         break
 
     return nu_ids
@@ -259,7 +263,7 @@ def get_group_primary_ids(particles, nu_ids=None, include_mpr=True):
             continue
 
         # If MPR particles are not included and the nu_id < 1, assign invalid
-        if not include_mpr and nu_ids is not None and nu_ids[i] < 1:
+        if not include_mpr and nu_ids is not None and nu_ids[i] < 0:
             primary_ids[i] = -1
             continue
 
