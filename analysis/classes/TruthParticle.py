@@ -173,7 +173,7 @@ class TruthParticle(Particle):
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
                 'parent_id', 'group_id', 'interaction_id',\
                 'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape',\
-                'pid', 'semantic_type']
+                'pid', 'semantic_type', 'truth_id']
 
         # Load up all the 3-vector information
         vec_keys = ['position', 'end_position', 'parent_position',\
