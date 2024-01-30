@@ -57,7 +57,8 @@ def get_interaction_ids(particles):
     # If the interaction IDs are set in the particle tree, simply use that
     inter_ids = np.array([p.interaction_id() for p in particles], dtype=np.int32)
     if np.any(inter_ids != INVAL_ID):
-        inter_ids[inter_ids == INVAL_ID] = -1
+        invalid_mask = (inter_ids == INVAL_ID) | ~get_valid_mask(particles)
+        inter_ids[invalid_mask] = -1
         return inter_ids
 
     # Otherwise, define interaction IDs on the basis of sharing an ancestor vertex position
@@ -65,8 +66,7 @@ def get_interaction_ids(particles):
     inter_ids = np.unique(anc_pos, axis=0, return_inverse=True)[-1]
 
     # Now set the interaction ID of particles with an undefined ancestor to -1
-    if len(particles):
-        inter_ids[get_valid_mask(particles)] = -1
+    inter_ids[~get_valid_mask(particles)] = -1
 
     return inter_ids
 
