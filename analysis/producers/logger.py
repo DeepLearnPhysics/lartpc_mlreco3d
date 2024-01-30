@@ -600,7 +600,7 @@ class InteractionLogger(AnalysisLogger):
             'nu_energy_init': 'N/A'
         }
         if ia is not None:
-            if ia.nu_id == 1:
+            if ia.nu_id > -1:
                 out['nu_pdg_code']         = ia.nu_pdg_code
                 out['nu_interaction_type'] = ia.nu_interaction_type
                 out['nu_interaction_mode'] = ia.nu_interaction_mode
