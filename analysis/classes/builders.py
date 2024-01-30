@@ -698,10 +698,9 @@ class InteractionBuilder(DataBuilder):
             if ia.truth_id in vertices:
                 ia.truth_vertex = vertices[ia.truth_id]
 
-            if 'neutrinos' in data and ia.nu_id == 1:
+            if 'neutrinos' in data and ia.nu_id > -1:
                 neutrinos = data['neutrinos'][entry]
-                if len(neutrinos) > 1 or len(neutrinos) == 0: continue
-                nu = neutrinos[0]
+                nu = neutrinos[ia.nu_id]
                 ia.is_neutrino = True
                 ia.register_larcv_neutrino(nu)
 

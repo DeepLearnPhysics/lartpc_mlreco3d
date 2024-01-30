@@ -73,7 +73,7 @@ def pid_metrics(data_dict, result_dict,
         # Apply restrictions, if requested
         if primary_only and not true_p.is_primary:
             continue
-        if mpv_only and not true_p.nu_id > 0:
+        if mpv_only and not true_p.nu_id > -1:
             continue
 
         # Build dictionary
