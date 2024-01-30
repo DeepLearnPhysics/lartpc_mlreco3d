@@ -57,7 +57,7 @@ def get_interaction_ids(particles):
     # If the interaction IDs are set in the particle tree, simply use that
     inter_ids = np.array([p.interaction_id() for p in particles], dtype=np.int32)
     if np.any(inter_ids != INVAL_ID):
-        inter_ids[inter_ids == INVAL_ID] == -1
+        inter_ids[inter_ids == INVAL_ID] = -1
         return inter_ids
 
     # Otherwise, define interaction IDs on the basis of sharing an ancestor vertex position
