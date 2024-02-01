@@ -109,8 +109,8 @@ class TruthParticle(Particle):
         shared_keys  = ['track_id', 'creation_process', 'pdg_code', 't']
         scalar_keys  = [pre + k for pre in ['', 'parent_', 'ancestor_'] for k in shared_keys]
         scalar_keys += ['distance_travel', 'energy_deposit', 'energy_init',\
-                'parent_id', 'group_id', 'interaction_id',\
-                'mcst_index', 'mct_index', 'num_voxels', 'p', 'shape']
+                'parent_id', 'group_id', 'mcst_index', 'mct_index',\
+                'num_voxels', 'p', 'shape']
         for k in scalar_keys:
             val = getattr(particle, k)()
             setattr(self, k, val)
