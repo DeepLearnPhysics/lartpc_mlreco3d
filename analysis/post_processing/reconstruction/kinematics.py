@@ -238,7 +238,7 @@ class InteractionTopologyProcessor(PostProcessor):
                     ke = getattr(p, ke_attr)
                     if ke_attr == 'energy_init' and p.pid > 0:
                         ke -= PID_MASSES[p.pid]
-                    if p.pid > 0 and ke < self.ke_thresholds[p.pid]:
+                    if p.pid > -1 and ke < self.ke_thresholds[p.pid]:
                         p.is_valid = False
                     else:
                         p.is_valid = True

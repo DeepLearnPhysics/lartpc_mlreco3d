@@ -179,7 +179,7 @@ class TruthInteraction(Interaction):
                 sed_points_list.append(p.sed_points)
                 sed_depositions_MeV_list.append(p.sed_depositions_MeV)
 
-                if p.pid >= 0:
+                if p.pid > -1:
                     self._truth_particle_counts[p.pid] += 1
                     self._truth_primary_counts[p.pid] += int(p.is_primary)
                     if len(p.index) > 0:

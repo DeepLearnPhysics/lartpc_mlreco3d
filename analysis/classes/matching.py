@@ -378,7 +378,9 @@ def group_particles_to_interactions_fn(particles : List[Particle],
     # Sort the particles by interactions
     interactions = []
     interaction_ids = np.array([p.interaction_id for p in particles])
-    for i, int_id in enumerate(np.unique(interaction_ids)):
+    unique_ids = np.unique(interaction_ids)
+    valid_unique_ids = unique_ids[unique_ids > -1]
+    for i, int_id in enumerate(valid_unique_ids):
         # Get particles in interaction int_it
         particle_ids = np.where(interaction_ids == int_id)[0]
         parts = [particles[i] for i in particle_ids]
