@@ -7,7 +7,7 @@ import numpy as np
 
 from scipy.spatial.distance import cosine
 from sklearn.metrics import adjusted_rand_score
-from .utils import chamfer_distance, twopoint_iou
+from .utils import twopoint_iou
 import sys
 
 from collections import Counter

@@ -437,6 +437,32 @@ class BayesianBinomialEstimator:
             return null_result
         return self.q_intvs[min_idx]
 
+
+def twopoint_iou(reco_pair, true_pair):
+    
+    reco_1, reco_2 = reco_pair
+    true_1, true_2 = true_pair
+    
+    if reco_1 is None or true_1 is None:
+        iou_1 = 0
+    else:
+        cap_1 = np.intersect1d(true_1.index, reco_1.index)
+        cup_1 = np.union1d(true_1.index, reco_1.index)
+        iou_1 = float(cap_1.shape[0]) / float(cup_1.shape[0])
+        
+    if reco_2 is None or true_2 is None:
+        iou_2 = 0
+    else:
+        cap_2 = np.intersect1d(true_2.index, reco_2.index)
+        cup_2 = np.union1d(true_2.index, reco_2.index)
+        iou_2 = float(cap_2.shape[0]) / float(cup_2.shape[0])
+    
+    mean_iou = (iou_1 + iou_2) / 2.0
+    max_iou = max(iou_1, iou_2)
+    
+    return mean_iou, max_iou
+
+
 # From https://gist.github.com/sergeyprokudin/c4bf4059230da8db8256e36524993367
 # Author: @sergeyprokudin
 
@@ -480,28 +506,3 @@ def chamfer_distance(x, y, metric='l2', direction='bi'):
         raise ValueError("Invalid direction type. Supported types: \'y_x\', \'x_y\', \'bi\'")
         
     return chamfer_dist
-
-
-def twopoint_iou(reco_pair, true_pair):
-    
-    reco_1, reco_2 = reco_pair
-    true_1, true_2 = true_pair
-    
-    if reco_1 is None or true_1 is None:
-        iou_1 = 0
-    else:
-        cap_1 = np.intersect1d(true_1.index, reco_1.index)
-        cup_1 = np.union1d(true_1.index, reco_1.index)
-        iou_1 = float(cap_1.shape[0]) / float(cup_1.shape[0])
-        
-    if reco_2 is None or true_2 is None:
-        iou_2 = 0
-    else:
-        cap_2 = np.intersect1d(true_2.index, reco_2.index)
-        cup_2 = np.union1d(true_2.index, reco_2.index)
-        iou_2 = float(cap_2.shape[0]) / float(cup_2.shape[0])
-    
-    mean_iou = (iou_1 + iou_2) / 2.0
-    max_iou = max(iou_1, iou_2)
-    
-    return mean_iou, max_iou
