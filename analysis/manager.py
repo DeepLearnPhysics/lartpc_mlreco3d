@@ -8,8 +8,8 @@ from mlreco.iotools.writers import CSVWriter
 from mlreco.utils import pixel_to_cm
 from mlreco.utils.globals import COORD_COLS
 
-from analysis.classes.builders import ParticleBuilder, \
-        InteractionBuilder, FragmentBuilder
+from analysis.classes.builders import ParticleBuilder, InteractionBuilder
+from analysis.classes.FragmentBuilder import FragmentBuilder
 from analysis.post_processing.manager import PostProcessorManager
 from analysis.producers import scripts
 from analysis.producers.common import ScriptProcessor
@@ -100,7 +100,8 @@ class AnaToolsManager:
                         load_only_principal_matches = True,
                         profile = True,
                         chain_config = None,
-                        data_builders = None):
+                        data_builders = None,
+                        event_list = None):
         '''
         Initialize the main analysis tool parameters
 
@@ -132,6 +133,7 @@ class AnaToolsManager:
         self.convert_to_cm = convert_to_cm
         self.load_principal_matches = load_only_principal_matches
         self.profile = profile
+        self.event_list = event_list
 
         # Create the log directory if it does not exist and initialize log file
         if not os.path.isdir(log_dir):
@@ -141,9 +143,11 @@ class AnaToolsManager:
         self.logger_dict = {}
 
         # Load the full chain configuration, if it is provided
-        self.chain_config = None
+        self.chain_config = chain_config
         if chain_config is not None:
-            self.chain_config = process_config(chain_config)
+            cfg = yaml.safe_load(open(chain_config, 'r').read())
+            process_config(cfg, verbose=False)
+            self.chain_config = cfg
 
         # Initialize data product builders
         self.builders = {}
@@ -179,7 +183,7 @@ class AnaToolsManager:
             self._set_iteration(self._data_reader)
         else:
             # If no reader is provided, run the the ML chain on the fly
-            loader = loader_factory(self.config, event_list=event_list)
+            loader = loader_factory(self.chain_config, event_list=self.event_list)
             self._dataset = iter(cycle(loader))
             Trainer = trainval(self.chain_config)
             Trainer.initialize()
@@ -208,6 +212,7 @@ class AnaToolsManager:
         iteration : int
             Iteration number for current step.
         '''
+        
         # 1. Run forward
         print(f'\nProcessing entry {iteration}')
         glob_start = time.time()
@@ -291,6 +296,7 @@ class AnaToolsManager:
         glob_end = time.time()
         dt = glob_end - glob_start
         print(f'Took total of {dt:.3f} seconds for one iteration of inference.')
+        
         return data, res
 
     def forward(self, iteration=None, run=None, event=None):
@@ -323,10 +329,10 @@ class AnaToolsManager:
             file_index = self._data_reader.file_index[iteration]
             data['file_index'] = [file_index]
             data['file_name'] = [self._data_reader.file_paths[file_index]]
-        elif self._reader_state == 'trainval':
+        elif self.reader_state == 'trainval':
             data, res = self._data_reader.forward(self._dataset)
         else:
-            raise ValueError(f'Data reader {self._reader_state} '\
+            raise ValueError(f'Data reader {self.reader_state} '\
                     'is not supported!')
 
         return data, res
@@ -404,8 +410,8 @@ class AnaToolsManager:
             result['interactions']      = self.builders['InteractionBuilder'].build(data, result, mode='reco')
             length_check.append(len(result['interactions']))
         if 'FragmentBuilder' in self.builders:
-            result['ParticleFragments']      = self.builders['FragmentBuilder'].build(data, result, mode='reco')
-            length_check.append(len(result['ParticleFragments']))
+            result['particle_fragments'] = self.builders['FragmentBuilder'].build(data, result, mode='reco')
+            length_check.append(len(result['particle_fragments']))
         return length_check
 
     def _build_truth_reps(self, data, result):
@@ -433,8 +439,8 @@ class AnaToolsManager:
             result['truth_interactions'] = self.builders['InteractionBuilder'].build(data, result, mode='truth')
             length_check.append(len(result['truth_interactions']))
         if 'FragmentBuilder' in self.builders:
-            result['TruthParticleFragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
-            length_check.append(len(result['TruthParticleFragments']))
+            result['truth_particle_fragments'] = self.builders['FragmentBuilder'].build(data, result, mode='truth')
+            length_check.append(len(result['truth_particle_fragments']))
         return length_check
 
     def build_representations(self, data, result, mode='all'):

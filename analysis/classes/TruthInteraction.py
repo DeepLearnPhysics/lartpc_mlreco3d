@@ -128,7 +128,7 @@ class TruthInteraction(Interaction):
         self.nu_energy_init      = nu_energy_init
 
         # TODO: Must fill this attribute with truth information
-        self.truth_vertex = truth_vertex
+        self.truth_vertex = np.copy(truth_vertex)
         self.register_larcv_neutrino()
 
     @property

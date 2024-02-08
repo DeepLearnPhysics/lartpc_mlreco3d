@@ -19,6 +19,7 @@ from torch_geometric.data import Data, Batch
 
 from mlreco.utils.metrics import ARI, SBD, purity, efficiency
 from .helpers import ConnectedComponents, knn_sklearn
+import sys
 
 class ClusterGraphConstructor:
     """Manager class for handling per-batch, per-semantic type predictions
@@ -489,6 +490,8 @@ class ClusterGraphConstructor:
                 node_truth = data.node_truth.detach().cpu().numpy().squeeze()
                 node_pred = data.node_pred.detach().cpu().numpy().squeeze()
             
+                if len(node_truth.shape) == 0 or len(node_pred.shape) == 0:
+                    continue
                 assert node_truth.shape[0] == node_pred.shape[0]
                 
                 ari = ARI(node_pred, node_truth)
@@ -505,7 +508,7 @@ class ClusterGraphConstructor:
                 
         for key, l in out.items():
             if len(l) == 0:
-                out[key] = 1.0
+                out[key] = -sys.maxsize
             else:
                 # Batch-averaged classwise accuracies
                 out[key] = sum(l) / len(l)

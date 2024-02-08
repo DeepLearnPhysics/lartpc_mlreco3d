@@ -5,7 +5,6 @@ from numba.typed import List
 from typing import List, Union
 from collections import defaultdict, OrderedDict, Counter
 
-from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from . import Particle, TruthParticle, Interaction, TruthInteraction
 
