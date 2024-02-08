@@ -83,10 +83,10 @@ class ParticleFragment:
 
         self.is_primary     = is_primary
 
-        self._start_point    = start_point
-        self._end_point      = end_point
-        self._start_dir      = start_dir
-        self._end_dir        = end_dir
+        self._start_point    = np.copy(start_point)
+        self._end_point      = np.copy(end_point)
+        self._start_dir      = np.copy(start_dir)
+        self._end_dir        = np.copy(end_dir)
         self.length         = length
         
         # Quantities to be set by the particle matcher

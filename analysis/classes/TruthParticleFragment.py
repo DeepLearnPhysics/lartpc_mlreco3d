@@ -44,7 +44,7 @@ class TruthParticleFragment(ParticleFragment):
         # Set attributes
         self._depositions_MeV       = np.atleast_1d(depositions_MeV)
 
-        self.truth_index            = truth_index
+        self.truth_index            = np.copy(truth_index)
         self._truth_points          = truth_points
         self._truth_depositions     = np.atleast_1d(truth_depositions)     # Must be ADC
         self._truth_depositions_MeV = np.atleast_1d(truth_depositions_MeV) # Must be MeV
@@ -55,12 +55,12 @@ class TruthParticleFragment(ParticleFragment):
         
         # Load truth information from the true particle object
         self.truth_momentum = truth_momentum
-        self.truth_start_dir = truth_start_dir
+        self.truth_start_dir = np.copy(truth_start_dir)
         if particle_asis is not None:
             self.register_larcv_particle(particle_asis)
             
         # Quantity to be set with the children counting post-processor
-        self.children_counts = children_counts
+        self.children_counts = np.copy(children_counts)
         
     def register_larcv_particle(self, particle):
         '''

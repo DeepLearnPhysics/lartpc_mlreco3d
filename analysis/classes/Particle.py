@@ -138,25 +138,25 @@ class Particle:
         self.volume_id      = int(volume_id)
         self.semantic_type  = int(semantic_type)
 
-        self.index          = index
+        self.index          = np.copy(index)
         self.points         = points
         self.sources        = sources
         self.depositions    = depositions
 
         self.pdg_code       = -1
 
-        self.pid_scores     = pid_scores
-        self.primary_scores = primary_scores
+        self.pid_scores     = np.copy(pid_scores)
+        self.primary_scores = np.copy(primary_scores)
 
         # Quantities to be set during post_processing
-        self._start_point = start_point
+        self._start_point = np.copy(start_point)
         if self.semantic_type == TRACK_SHP:
-            self._end_point = end_point
+            self._end_point = np.copy(end_point)
         else:
             self._end_point = np.full(3, -np.inf, dtype=np.float32)
 
-        self._start_dir   = start_dir
-        self._end_dir     = end_dir
+        self._start_dir   = np.copy(start_dir)
+        self._end_dir     = np.copy(end_dir)
         self.length       = length
         self.calo_ke      = calo_ke
         self.csda_ke      = csda_ke

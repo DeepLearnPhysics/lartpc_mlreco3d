@@ -81,13 +81,13 @@ class TruthParticle(Particle):
         self._sed_depositions_MeV   = np.atleast_1d(sed_depositions_MeV)
 
         # Load truth information from the true particle object
-        self.truth_momentum = truth_momentum
-        self.truth_start_dir = truth_start_dir
+        self.truth_momentum = np.copy(truth_momentum)
+        self.truth_start_dir = np.copy(truth_start_dir)
         if particle_asis is not None:
             self.register_larcv_particle(particle_asis)
 
         # Quantity to be set with the children counting post-processor
-        self.children_counts = children_counts
+        self.children_counts = np.copy(children_counts)
 
         # Quantities to be set with track range reconstruction post-processor
         self.length_tng  = -1.
