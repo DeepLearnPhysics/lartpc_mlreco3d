@@ -44,7 +44,7 @@ class TruthParticleFragment(ParticleFragment):
         # Set attributes
         self._depositions_MeV       = np.atleast_1d(depositions_MeV)
 
-        self.truth_index            = np.copy(truth_index)
+        self.truth_index            = truth_index
         self._truth_points          = truth_points
         self._truth_depositions     = np.atleast_1d(truth_depositions)     # Must be ADC
         self._truth_depositions_MeV = np.atleast_1d(truth_depositions_MeV) # Must be MeV

@@ -138,7 +138,7 @@ class Particle:
         self.volume_id      = int(volume_id)
         self.semantic_type  = int(semantic_type)
 
-        self.index          = np.copy(index)
+        self.index          = index
         self.points         = points
         self.sources        = sources
         self.depositions    = depositions
