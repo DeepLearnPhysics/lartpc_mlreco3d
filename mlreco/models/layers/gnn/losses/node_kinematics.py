@@ -166,6 +166,7 @@ class NodeKinematicsLoss(torch.nn.Module):
         if not self.compute_momentum_switch:
             compute_momentum = False
         compute_vtx = 'node_pred_vtx' in out
+        compute_vtx_pos = False # TODO: make this cleaner
 
         vtx_anchors, vtx_labels = [], []
 
