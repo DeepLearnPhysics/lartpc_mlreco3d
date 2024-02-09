@@ -661,7 +661,7 @@ def cluster_direction(voxels: nb.float64[:,:],
 
     # If no voxels were selected, return dummy value
     if not len(voxels) or (len(voxels) == 1 and np.all(voxels[0] == start)):
-        return np.full(3, -np.inf, dtype=voxels.dtype)
+        return np.array([1., 0., 0.], dtype=voxels.dtype)
 
     # Compute mean direction with respect to start point, normalize it
     rel_voxels = np.empty((len(voxels), 3), dtype=voxels.dtype)
