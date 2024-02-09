@@ -43,8 +43,6 @@ class ChildrenProcessor(PostProcessor):
         '''
         # Build a directed graph on the true particles
         G = nx.DiGraph()
-        # graph = data_dict['graph']
-        print(data_dict['index'])
 
         particles = result_dict['truth_particles']
         for p in particles:
@@ -56,6 +54,7 @@ class ChildrenProcessor(PostProcessor):
             if parent in G and int(parent) != int(p.id):
                 edges.append((parent, p.id))
         G.add_edges_from(edges)
+        G.remove_edges_from(nx.selfloop_edges(G))
 
         for p in particles:
             successors = list(G.successors(p.id))
@@ -63,8 +62,6 @@ class ChildrenProcessor(PostProcessor):
             counter.update([G.nodes[succ]['attr'] for succ in successors])
             children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
             for key, val in counter.items():
-                # if key == 1:
-                #     print(val)
                 children_counts[key] = val
             p.children_counts = children_counts
 
