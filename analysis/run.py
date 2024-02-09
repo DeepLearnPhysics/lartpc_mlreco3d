@@ -50,9 +50,9 @@ def main(analysis_cfg_path, chain_cfg_path=None, data_keys=None, outfile=None):
     # If a chain configuration is provided from the command line, override
     if chain_cfg_path is not None:
         base_cfg['chain_config'] = chain_cfg_path
-    if 'chain_config' in base_cfg:
-        base_cfg['chain_config'] = \
-                yaml.safe_load(open(base_cfg['chain_config'], 'r'))
+    # if 'chain_config' in base_cfg:
+    #     base_cfg['chain_config'] = \
+    #             yaml.safe_load(open(base_cfg['chain_config'], 'r'))
 
     # If data keys are provided, override input configuration
     if data_keys is not None:

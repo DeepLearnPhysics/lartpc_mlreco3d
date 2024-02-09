@@ -9,7 +9,8 @@ from mlreco.models.layers.cluster_cnn.graph_spice_embedder import GraphSPICEEmbe
 
 from pprint import pprint
 from mlreco.utils.cluster.cluster_graph_constructor import ClusterGraphConstructor
-
+from mlreco.utils.cluster.fragmenter import GraphSPICEFragmentManager
+from mlreco.utils.globals import SHAPE_COL
 
 class GraphSPICE(nn.Module):
     '''
@@ -145,7 +146,12 @@ class GraphSPICE(nn.Module):
         'edge_label'   : ['edge_tensor', ['full_edge_index', 'image_id']],
         'edge_attr'    : ['edge_tensor', ['full_edge_index', 'image_id']],
         'edge_pred'    : ['edge_tensor', ['full_edge_index', 'image_id']],
-        'edge_prob'    : ['edge_tensor', ['full_edge_index', 'image_id']]
+        'edge_prob'    : ['edge_tensor', ['full_edge_index', 'image_id']],
+        'filtered_input': ['tensor'],
+        'gspice_output': ['tensor'],
+        'fragment_batch_ids' : ['tensor'],
+        'fragment_clusts': ['tensor', 'fragment_batch_ids'],
+        'fragment_seg' : ['tensor', 'fragment_batch_ids'],
     }
 
     def __init__(self, cfg, name='graph_spice'):
@@ -169,6 +175,13 @@ class GraphSPICE(nn.Module):
         # `training` needs to be set at forward time.
         # Before that, self.training is always True.
         self.gs_manager = ClusterGraphConstructor(constructor_cfg)
+        
+        self.make_fragments = self.model_config.get('make_fragments', False)
+        self.batch_col = 0
+        if self.make_fragments:
+            self._gspice_fragment_manager = GraphSPICEFragmentManager(
+                cfg.get('graph_spice', {}).get('gspice_fragment_manager', {}), 
+                batch_col=self.batch_col)
 
         self.RETURNS.update(self.embedder.RETURNS)
 
@@ -190,6 +203,30 @@ class GraphSPICE(nn.Module):
         mask = ~np.isin(label[:, -1].detach().cpu().numpy(), self.skip_classes)
         x = [point_cloud[mask], label[mask]]
         return x
+    
+
+    def construct_fragments(self, input):
+        
+        frags = {}
+        
+        device = input[0].device
+        semantic_labels = input[1][:, SHAPE_COL]
+        filtered_semantic = ~(semantic_labels[..., None] == \
+                                torch.tensor(self.skip_classes, device=device)).any(-1)
+        graphs = self.gs_manager.fit_predict()
+        perm = torch.argsort(graphs.voxel_id)
+        cluster_predictions = graphs.node_pred[perm]
+        filtered_input = torch.cat([input[0][filtered_semantic][:, :4],
+                                    semantic_labels[filtered_semantic].view(-1, 1),
+                                    cluster_predictions.view(-1, 1)], dim=1)
+
+        fragments = self._gspice_fragment_manager(filtered_input, input[0], filtered_semantic)
+        frags['filtered_input'] = [filtered_input]
+        frags['fragment_batch_ids'] = [np.array(fragments[1])]
+        frags['fragment_clusts'] = [np.array(fragments[0])]
+        frags['fragment_seg'] = [np.array(fragments[2]).astype(int)]
+        
+        return frags
 
 
     def forward(self, input):
@@ -210,6 +247,10 @@ class GraphSPICE(nn.Module):
                                 self.kernel_fn,
                                 labels,
                                 invert=self.invert)
+        
+        if self.make_fragments:
+            frags = self.construct_fragments(input)
+            res.update(frags)
         
         graph_state = self.gs_manager.save_state(unwrapped=False)
         res.update(graph_state)

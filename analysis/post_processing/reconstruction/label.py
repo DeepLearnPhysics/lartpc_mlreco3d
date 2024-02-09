@@ -1,9 +1,10 @@
 import networkx as nx
+import numpy as np
 
 from collections import Counter
 
 from analysis.post_processing import PostProcessor
-
+from mlreco.utils.globals import SHAPE_LABELS
 
 class ChildrenProcessor(PostProcessor):
     '''
@@ -11,7 +12,7 @@ class ChildrenProcessor(PostProcessor):
     hierarchy information from parse_particle_graph.
     '''
     name = 'count_children'
-    data_cap = ['graph']
+    data_cap = ['index']
     result_cap = ['truth_particles']
 
     def __init__(self,
@@ -42,7 +43,8 @@ class ChildrenProcessor(PostProcessor):
         '''
         # Build a directed graph on the true particles
         G = nx.DiGraph()
-        graph = data_dict['graph']
+        # graph = data_dict['graph']
+        print(data_dict['index'])
 
         particles = result_dict['truth_particles']
         for p in particles:
@@ -59,7 +61,11 @@ class ChildrenProcessor(PostProcessor):
             successors = list(G.successors(p.id))
             counter = Counter()
             counter.update([G.nodes[succ]['attr'] for succ in successors])
+            children_counts = np.zeros(len(SHAPE_LABELS), dtype=np.int64)
             for key, val in counter.items():
-                p.children_counts[key] = val
+                # if key == 1:
+                #     print(val)
+                children_counts[key] = val
+            p.children_counts = children_counts
 
         return {}, {}

@@ -84,7 +84,7 @@ class Interaction:
         self.nu_id        = int(nu_id)
         self.volume_id    = int(volume_id)
         self.image_id     = int(image_id)
-        self.vertex       = vertex
+        self.vertex       = np.copy(vertex)
         self.vertex_mode  = vertex_mode
         self.is_neutrino  = is_neutrino
         self._units       = units
