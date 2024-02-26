@@ -110,6 +110,10 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     np.ndarray
         List of neutrino IDs, one per true particle instance
     '''
+    # If there are no particles, nothing to do here
+    if not len(particles):
+        return np.empty(0, dtype=np.int32)
+
     # Make sure there is only either MPV particles or neutrinos specified, not both
     assert particles_mpv is None or neutrinos is None, \
             'Do not specify both particle_mpv_event and neutrino_event in parse_cluster3d'
@@ -133,15 +137,15 @@ def get_nu_ids(particles, inter_ids, particles_mpv=None, neutrinos=None):
     else:
         # Find the reference positions to gauge if a particle comes from a neutrino-like interaction
         ref_pos = None
-        if particles_mpv:
+        if particles_mpv and len(particles_mpv):
             ref_pos = np.vstack([[getattr(p, a)() for a in ['x', 'y', 'z']] for p in particles_mpv])
             ref_pos = np.unique(ref_pos, axis=0)
-        elif neutrinos:
+        elif neutrinos and len(neutrinos):
             ref_pos = np.vstack([[getattr(n, a)() for a in ['x', 'y', 'z']] for n in neutrinos])
 
         # If any particle in an interaciton shares its ancestor position with an MPV particle
         # or a neutrino, the whole interaction is a neutrino-like interaction.
-        if ref_pos is not None and len(ref_pos):
+        if ref_pos is not None:
             anc_pos = np.vstack([[getattr(p, f'ancestor_{a}')() for a in ['x', 'y', 'z']] for p in particles])
             for i in np.unique(inter_ids):
                 if i < 0: continue
