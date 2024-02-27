@@ -1,4 +1,4 @@
-from .points import ParticleExtremaProcessor
+from .points import ParticleExtremaProcessor, GapLengthProcessor
 from .geometry import DirectionProcessor, \
         ContainmentProcessor, FiducialProcessor
 from .calorimetry import CalorimetricEnergyProcessor
