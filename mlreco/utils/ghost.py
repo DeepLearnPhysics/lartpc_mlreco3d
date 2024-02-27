@@ -144,25 +144,45 @@ def adapt_labels(cluster_label, segment_label, segmentation, deghost_mask=None,
     dbscan = DBSCAN(eps=1.1, min_samples=1, metric='chebyshev')
 
     # Loop over individual images in the batch
+    num_cols = cluster_label.shape[1]
     new_cluster_label = []
     for batch_id in unique(coords[:, BATCH_COL]):
-        # Restrict tensors to a specific batch_id
-        batch_mask      = where(coords[:, BATCH_COL] == batch_id)[0]
+        # Get the set of input which correspond to this batch ID
+        batch_mask = where(coords[:, BATCH_COL] == batch_id)[0]
+
+        # If there are no points in this event, nothing to do
         if not len(batch_mask):
-            new_cluster_label.append(-1 * ones((0, clusts_label.shape[1])))
+            new_cluster_label.append(-1 * ones((0, num_cols)))
+            continue
+
+        # If there are no points after deghosting, nothing to do
         if deghost_mask is not None:
-            deghost_mask_b = deghost_mask[batch_mask]
-            if not deghost_mask_b.sum():
-                new_cluster_label.append(-1. * ones((0, cluster_label.shape[1])))
+            deghost_mask_b = where(deghost_mask[batch_mask])[0]
+            if not len(deghost_mask_b):
+                new_cluster_label.append(-1. * ones((0, num_cols)))
                 continue
 
-        coords_b        = coords[batch_mask]
+        # If there are no labels for this event, return dummy labels
+        coords_b = coords[batch_mask]
         cluster_label_b = cluster_label[cluster_label[:, BATCH_COL] == batch_id]
+        if not len(cluster_label_b):
+            if deghost_mask is None:
+                shape = (len(batch_mask), num_cols)
+                dummy_labels = -1 * ones(shape)
+                dummy_labels[:, :VALUE_COL] = coords_b
+            else:
+                shape = (len(deghost_mask_b), num_cols)
+                dummy_labels = -1 * ones(shape)
+                dummy_labels[:, :VALUE_COL] = coords_b[deghost_mask_b]
+            new_cluster_label.append(dummy_labels)
+            continue
+
+        # Restrict segmentation prediction/truth to this batch ID
         segment_label_b = segment_label[batch_mask, VALUE_COL]
         segment_pred_b  = segment_pred[batch_mask]
 
         # Prepare new labels
-        new_label = -1. * ones((coords_b.shape[0], cluster_label_b.shape[1]))
+        new_label = -1. * ones((coords_b.shape[0], num_cols))
         new_label[:, :VALUE_COL] = coords_b
 
         # Check if the segment labels and predictions are compatible.
