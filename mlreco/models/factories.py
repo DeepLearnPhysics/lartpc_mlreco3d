@@ -17,6 +17,7 @@ def model_dict():
     from . import graph_spice
     from . import grappa
     from . import bayes_uresnet
+    from . import uppn_gspice
 
     from . import vertex
     from . import transformer
@@ -29,6 +30,8 @@ def model_dict():
         "uresnet": (uresnet.UResNet_Chain, uresnet.SegmentationLoss),
         # UResNet + PPN
         'uresnet_ppn_chain': (uresnet_ppn_chain.UResNetPPN, uresnet_ppn_chain.UResNetPPNLoss),
+        # UResNet + PPN + GSPICE
+        'uppn_gspice': (uppn_gspice.UResNetPPNGSPICE, uppn_gspice.UResNetPPNGSPICELoss),
         # Single Particle Classifier
         "singlep": (singlep.ParticleImageClassifier, singlep.ParticleTypeLoss),
         # Multi Particle Classifier
