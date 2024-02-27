@@ -19,48 +19,55 @@ class PointMLPConv(MessagePassing):
     def __init__(self, in_features, out_features, k=24, fps_ratio=0.5):
         super(PointMLPConv, self).__init__(aggr='max')
 
-        self.phi = PreBlock(in_features, out_features)
-        self.gamma = PosBlock(out_features)
+        self.pre_block = PreBlock(in_features, out_features)
+        self.pos_block = PosBlock(out_features)
 
-        self.alpha = nn.Parameter(torch.ones(out_features))
-        self.beta = nn.Parameter(torch.zeros(out_features))
+        self.alpha = nn.Parameter(torch.ones(in_features))
+        self.beta = nn.Parameter(torch.zeros(in_features))
 
         self.k = k
         self.ratio = fps_ratio
 
     def reset_parameters(self):
+        
         super().reset_parameters()
-        self.phi.reset_parameters()
-        self.gamma.reset_parameters()
+        
+        self.pre_block.reset_parameters()
+        self.pos_block.reset_parameters()
+        
         self.alpha.fill(1.0)
         self.beta.zero_()
 
-    def message(self, x_i, x_j, norm):
-        # print(norm.shape, norm.view(1, -1).shape)
-        return norm.view(1, -1) * (x_i - x_j)
-
     def forward(self, x, pos, batch):
-
-        x = self.phi(x)
 
         n, d = x.shape
 
         idx = fps(pos, batch, ratio=self.ratio)
+
         # row (runs over x[idx]), col (runs over x)
-        row, col = knn(pos, pos[idx], self.k, batch, batch[idx])
+        # For each element in pos[idx] (anchors), find self.k nearest
+        # neighbors in pos (all points)
+        
+        # row, col = knn(pos, pos[idx], self.k, batch, batch[idx])
+        
+        anchors, neighbors = knn(pos, pos[idx], self.k, batch, batch[idx])
 
         # msgs from edge_index[0] are sent to edge_index[1]
-        edge_index = torch.stack([idx[row], col], dim=0)
-        x_dst = x[idx]
+        edge_index = torch.stack([neighbors, anchors], dim=0)
 
         # Compute norm (Geometric Affine Module)
-        var_dst = scatter((x[col] - x_dst[row])**2 / (self.k * n * d), row, reduce='sum')
+        var_dst = scatter((x[neighbors] - x[anchors])**2 / (self.k * n * d), anchors, reduce='sum')
         sigma = torch.sqrt(torch.clamp(var_dst.sum(), min=1e-6))
-        norm = self.alpha / sigma
-        out = self.propagate(edge_index, x=x, norm=norm)
+        norm = self.alpha / (sigma + 1e-5)
+        
+        x = x * norm + self.beta
+        x = self.pre_block(x)
+        
+        # Max-pooling
+        out = self.propagate(edge_index, x=x) # n_anchors
 
-        # Apply Second Residual (Pos)
-        out = self.gamma(out[idx])
+        # Apply Second Residual (PosBlock)
+        out = self.pos_block(out[idx])
 
         return out, pos[idx], batch[idx]
 
