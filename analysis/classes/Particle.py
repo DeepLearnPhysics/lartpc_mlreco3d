@@ -115,7 +115,10 @@ class Particle:
                  is_valid: bool = True,
                  is_ccrosser: bool = False,
                  coffset: float = -np.inf,
-                 units: str = 'px', **kwargs):
+                 units: str = 'px', 
+                 run: int = -1,
+                 subrun: int = -1,
+                 event: int = -1, **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._num_fragments   = None
@@ -173,6 +176,11 @@ class Particle:
         self._match_overlap       = kwargs.get('match_overlap', OrderedDict())
         if not isinstance(self._match_overlap, dict):
             raise ValueError(f"{type(self._match_overlap)}")
+        
+        # Run Info
+        self.run = int(run)
+        self.subrun = int(subrun)
+        self.event = int(event)
 
     def merge(self, particle):
         '''
