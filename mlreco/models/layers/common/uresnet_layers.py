@@ -112,9 +112,6 @@ class UResNetEncoder(torch.nn.Module):
         -------
         dict
         '''
-        # print('input' , self.input_layer)
-        # for name, param in self.input_layer.named_parameters():
-        #     print(name, param.shape, param)
         x = self.input_layer(x)
         encoderTensors = [x]
         features_ppn = [x]
