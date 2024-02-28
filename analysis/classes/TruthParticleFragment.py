@@ -23,6 +23,11 @@ class TruthParticleFragment(ParticleFragment):
         Similar as `depositions`, i.e. using adapted true labels.
         Using true MeV energy deposits instead of rescaled ADC units.
     """
+    
+    # Attributes that specify coordinates
+    _COORD_ATTRS = ParticleFragment._COORD_ATTRS + \
+	['truth_points', 'sed_points', 'position', 'end_position', \
+	'parent_position', 'ancestor_position', 'first_step', 'last_step']
 
     def __init__(self, 
                  *args,
@@ -108,6 +113,7 @@ class TruthParticleFragment(ParticleFragment):
 
         # Set parent attributes based on the above
         # self.semantic_type = self.shape
+        self.pid           = PDG_TO_PID[int(self.pdg_code)]
         self.start_point   = self.first_step.astype(np.float32)
         self.end_point     = self.last_step.astype(np.float32)
 

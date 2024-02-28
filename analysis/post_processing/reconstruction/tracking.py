@@ -21,6 +21,7 @@ class CSDAEnergyProcessor(PostProcessor):
                  include_pids=[2,3,4,5],
                  truth_point_mode='points',
                  run_mode = 'both',
+                 fragments=False,
                  **kwargs):
         '''
         Store the necessary attributes to do CSDA range-based estimations
@@ -35,6 +36,9 @@ class CSDAEnergyProcessor(PostProcessor):
         **kwargs : dict, optional
             Additional arguments to pass to the tracking algorithm
         '''
+        if fragments:
+            self.result_cap = ['particle_fragments']
+            self.result_cap_opt = ['truth_particle_fragments']
         # Initialize the parent class
         super().__init__(run_mode, truth_point_mode)
 

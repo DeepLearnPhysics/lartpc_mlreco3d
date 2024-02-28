@@ -21,15 +21,15 @@ class MatchParticlesProcessor(PostProcessor):
                  weight=False,
                  list_principal_matches=True,
                  fragments=False):
+        self.fragments     = fragments
+        if self.fragments:
+            self.result_cap = ['particle_fragments', 'truth_particle_fragments']
         
         self.matching_mode = matching_mode
         self.min_overlap   = min_overlap
         self.overlap_mode  = overlap_mode
         self.weight        = weight
         self.list_principal_matches = list_principal_matches
-        self.fragments     = fragments
-        if self.fragments:
-            self.result_cap = ['particle_fragments', 'truth_particle_fragments']
         
     def process(self, data_dict, result_dict):
         

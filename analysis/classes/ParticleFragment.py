@@ -43,30 +43,39 @@ class ParticleFragment:
         a primary ionization trajectory within the group of fragments that
         compose a particle.
     '''
+    
+    _COORD_ATTRS = ['points', 'start_point', 'end_point']
+    
     def __init__(self,
                  fragment_id: int = -1,
                  group_id: int = -1,
                  interaction_id: int = -1,
                  image_id: int = -1,
                  volume_id: int = -1,
+                 pid: int = -1,
                  nu_id: int = -1,
                  semantic_type: int = -1,
                  index: np.ndarray = np.empty(0, dtype=np.int64),
                  points: np.ndarray = np.empty((0,3), dtype=np.float32),
                  depositions: np.ndarray = np.empty(0, dtype=np.float32),
-                 is_primary: int = -1,
+                 is_primary: bool = False,
                  start_point: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_point: np.ndarray = -np.ones(3, dtype=np.float32),
                  start_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  end_dir: np.ndarray = -np.ones(3, dtype=np.float32),
                  length: float = -1.,
                  matched: bool = False,
+                 is_contained: bool = False,
+                 units: str = 'px',
                  **kwargs):
 
         # Initialize private attributes to be assigned through setters only
         self._size = None
         self._index = None
         self._depositions = None
+        self._units           = units
+        if type(units) is bytes:
+            self._units = units.decode()
 
         # Initialize attributes
         self.id             = int(fragment_id)
@@ -76,12 +85,14 @@ class ParticleFragment:
         self.volume_id      = volume_id
         self.semantic_type  = int(semantic_type)
         self.nu_id          = int(nu_id)
+        self.pid            = int(pid)
 
         self.index          = index
         self.points         = points
         self.depositions    = depositions
 
         self.is_primary     = is_primary
+        self.is_contained   = is_contained
 
         self._start_point    = np.copy(start_point)
         self._end_point      = np.copy(end_point)
@@ -220,3 +231,17 @@ class ParticleFragment:
     @property
     def is_principal_match(self):
         return self._is_principal_match
+    
+    def convert_to_cm(self, meta):
+        '''
+        Converts the units of all coordinate attributes to cm.
+        '''
+        assert self._units == 'px'
+        for attr in self._COORD_ATTRS:
+            setattr(self, attr, pixel_to_cm(getattr(self, attr), meta))
+        self._units = 'cm'
+    
+    @property
+    def units(self):
+        return self._units
+
