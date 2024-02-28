@@ -11,7 +11,7 @@ class FileIOPlaceHolder(nn.Module):
 
     def forward(self, x):
         out = {
-            'x': x
+            # 'x': x
         }
         return out
     
