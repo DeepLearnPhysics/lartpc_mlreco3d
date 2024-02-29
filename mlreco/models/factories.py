@@ -17,7 +17,6 @@ def model_dict():
     from . import graph_spice
     from . import grappa
     from . import bayes_uresnet
-    from . import uppn_gspice
 
     from . import vertex
     from . import file_io
