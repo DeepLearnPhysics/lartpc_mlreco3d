@@ -8,7 +8,6 @@ from torch_geometric.data import Batch, Data
 
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 from mlreco.models.experimental.layers.pointnet import PointNetEncoder
-from mlreco.models.experimental.layers.pointmlp import PointMLPEncoder
 
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
@@ -38,8 +37,6 @@ class ParticleImageClassifier(nn.Module):
             self.encoder = SparseResidualEncoder(cfg)
         elif self.encoder_type == 'pointnet':
             self.encoder = PointNetEncoder(cfg)
-        elif self.encoder_type == 'pointmlp':
-            self.encoder = PointMLPEncoder(cfg)
         else:
             raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
 
