@@ -77,10 +77,7 @@ class Interaction:
                  is_fiducial: bool = False,
                  is_ccrosser: bool = False,
                  coffset: float = -np.inf,
-                 units: str = 'px', 
-                 run: int = -1,
-                 subrun: int = -1,
-                 event: int = -1, **kwargs):
+                 units: str = 'px', **kwargs):
 
         # Initialize attributes
         self.id           = int(interaction_id)
@@ -139,11 +136,6 @@ class Interaction:
         self.crthit_matched = crthit_matched
         self.crthit_matched_particle_id = crthit_matched_particle_id
         self.crthit_id = crthit_id
-        
-        # Run Info
-        self.run = int(run)
-        self.subrun = int(subrun)
-        self.event = int(event)
 
     @property
     def size(self):

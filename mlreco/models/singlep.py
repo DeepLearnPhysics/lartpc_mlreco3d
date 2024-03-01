@@ -66,6 +66,7 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         model_cfg = cfg.get(name, {})
         self.batch_col = model_cfg.get('batch_col', 0)
         self.split_col = model_cfg.get('split_col', 6)
+        self.num_classes = model_cfg.get('num_classes', 5)
 
         self.skip_invalid = model_cfg.get('skip_invalid', True)
         self.target_col   = model_cfg.get('target_col', 9)
@@ -130,7 +131,7 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         # It is possible that pid = 5 appears in the 9th column.
         # In that case, it is observed that the training crashses with a
         # integer overflow numel error. 
-        mask = point_cloud[:, 9] <= 4
+        mask = point_cloud[:, 9] < self.num_classes
         valid_points = point_cloud[mask]
         
         if self.split_input_mode:
@@ -430,7 +431,7 @@ class MultiParticleTypeLoss(nn.Module):
 
     def forward(self, out, type_labels):
     
-        valid_labels = type_labels[0][type_labels[0][:, 9] <= 4]
+        valid_labels = type_labels[0][type_labels[0][:, 9] < self.num_classes]
 
         if self.split_input_mode:
             logits, labels = self.forward_tg(out, valid_labels)

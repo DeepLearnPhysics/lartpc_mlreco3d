@@ -336,13 +336,6 @@ class ParticleBuilder(DataBuilder):
         pid_scores     = softmax(type_logits, axis=1)
         primary_scores = softmax(primary_logits, axis=1)
         
-        run, subrun, event = -1, -1, -1
-        
-        if 'run_info' in data:
-            run = data['run_info'][entry]['run']
-            subrun = data['run_info'][entry]['subrun']
-            event = data['run_info'][entry]['event']
-
         for i, p in enumerate(particles):
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
@@ -363,10 +356,7 @@ class ParticleBuilder(DataBuilder):
                             pid_scores=pid_scores[i],
                             primary_scores=primary_scores[i],
                             start_point = np.ascontiguousarray(particle_start_points[i], dtype=np.float32),
-                            end_point = np.ascontiguousarray(particle_end_points[i], dtype=np.float32),
-                            run=run,
-                            subrun=subrun,
-                            event=event)
+                            end_point = np.ascontiguousarray(particle_end_points[i], dtype=np.float32))
             out.append(part)
 
         return out
@@ -422,14 +412,6 @@ class ParticleBuilder(DataBuilder):
 
         # point_labels   = data['point_labels'][entry]
         # unit_convert = lambda x: pixel_to_cm_1d(x, meta) if self.convert_to_cm == True else x
-        
-        # Add run info
-        run, subrun, event = -1, -1, -1
-        
-        if 'run_info' in data:
-            run = data['run_info'][entry]['run']
-            subrun = data['run_info'][entry]['subrun']
-            event = data['run_info'][entry]['event']
 
         # For debugging
         voxel_counts = 0
@@ -460,10 +442,6 @@ class ParticleBuilder(DataBuilder):
                 particle.start_point = particle.first_step
                 if particle.semantic_type == TRACK_SHP:
                     particle.end_point = particle.last_step
-                    
-                particle.run = run
-                particle.subrun = subrun
-                particle.event = event
 
                 out.append(particle)
                 continue
@@ -522,9 +500,6 @@ class ParticleBuilder(DataBuilder):
                                      points=coords,
                                      sources=input_source[mask] if len(input_source) else input_source,
                                      depositions=depositions,
-                                     run=run,
-                                     subrun=subrun,
-                                     event=event,
                                      is_primary=bool(is_primary),
                                      depositions_MeV=np.empty(0, dtype=np.float32),
                                      truth_index=true_voxel_indices,
@@ -716,14 +691,6 @@ class InteractionBuilder(DataBuilder):
         for ia in interactions:
             if ia.truth_id in vertices:
                 ia.truth_vertex = vertices[ia.truth_id]
-                
-            if 'run_info' in data:
-                run = data['run_info'][entry]['run']
-                subrun = data['run_info'][entry]['subrun']
-                event = data['run_info'][entry]['event']
-                ia.run = run
-                ia.subrun = subrun
-                ia.event = event
 
             if 'neutrinos' in data and ia.nu_id > -1:
                 neutrinos = data['neutrinos'][entry]
