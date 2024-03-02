@@ -16,7 +16,8 @@ class ChildrenProcessor(PostProcessor):
     result_cap = ['truth_particles']
 
     def __init__(self,
-                 mode='semantic_type'):
+                 mode='semantic_type',
+                 fragments=False):
         '''
         Initialize the counting parameters
 
@@ -29,6 +30,9 @@ class ChildrenProcessor(PostProcessor):
         '''
         # Store the counting mode
         self.mode = mode
+        if fragments:
+            self.result_cap = ['truth_particle_fragments']
+        self.fragments = fragments
 
     def process(self, data_dict, result_dict):
         '''
@@ -44,7 +48,10 @@ class ChildrenProcessor(PostProcessor):
         # Build a directed graph on the true particles
         G = nx.DiGraph()
 
-        particles = result_dict['truth_particles']
+        if self.fragments:
+            particles = result_dict['truth_particle_fragments']
+        else:
+            particles = result_dict['truth_particles']
         for p in particles:
             G.add_node(p.id, attr=getattr(p, self.mode))
 

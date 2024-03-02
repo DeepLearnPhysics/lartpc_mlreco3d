@@ -19,7 +19,7 @@ def model_dict():
     from . import bayes_uresnet
 
     from . import vertex
-    from . import transformer
+    from . import file_io
 
     # Make some models available (not all of them, e.g. PPN is not standalone)
     models = {
@@ -55,8 +55,8 @@ def model_dict():
         'vertex_ppn': (vertex.VertexPPNChain, vertex.UResNetVertexLoss),
         # Vertex Pointnet
         'vertex_pointnet': (vertex.VertexPointNet, vertex.VertexPointNetLoss),
-        # TransformerSPICE
-        'mask3d': (transformer.Mask3DModel, transformer.Mask3dLoss)
+        # File I/O placeholder
+        'file_io': (file_io.FileIOPlaceHolder, file_io.FileIOPlaceHolderLoss),
     }
     return models
 

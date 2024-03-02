@@ -335,7 +335,7 @@ class ParticleBuilder(DataBuilder):
 
         pid_scores     = softmax(type_logits, axis=1)
         primary_scores = softmax(primary_logits, axis=1)
-
+        
         for i, p in enumerate(particles):
             volume_id, cts = np.unique(volume_labels[p], return_counts=True)
             volume_id = int(volume_id[cts.argmax()])
@@ -489,8 +489,7 @@ class ParticleBuilder(DataBuilder):
             if energy_label is not None:
                 truth_depositions_MeV = energy_label[mask_nonghost].squeeze()
 
-            particle = TruthParticle(#group_id=id,
-                                     group_id=len(out),
+            particle = TruthParticle(group_id=len(out),
                                      interaction_id=interaction_id,
                                      nu_id=nu_id,
                                      pid=pid,
@@ -501,6 +500,7 @@ class ParticleBuilder(DataBuilder):
                                      points=coords,
                                      sources=input_source[mask] if len(input_source) else input_source,
                                      depositions=depositions,
+                                     is_primary=bool(is_primary),
                                      depositions_MeV=np.empty(0, dtype=np.float32),
                                      truth_index=true_voxel_indices,
                                      truth_points=coords_noghost,
@@ -509,8 +509,6 @@ class ParticleBuilder(DataBuilder):
                                      sed_index=sed_index.astype(np.int64),
                                      sed_points=sed_points,
                                      sed_depositions_MeV=sed_depositions_MeV,
-                                     is_primary=bool(is_primary),
-                                    #  pid=pdg,
                                      particle_asis=lpart)
 
             particle.start_point = particle.first_step

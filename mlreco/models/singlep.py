@@ -8,7 +8,6 @@ from torch_geometric.data import Batch, Data
 
 from mlreco.models.layers.common.cnn_encoder import SparseResidualEncoder
 from mlreco.models.experimental.layers.pointnet import PointNetEncoder
-from mlreco.models.experimental.layers.pointmlp import PointMLPEncoder
 
 from collections import defaultdict, Counter, OrderedDict
 from mlreco.models.layers.common.activation_normalization_factories import activations_construct
@@ -19,6 +18,7 @@ from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 
 from mlreco.utils.gnn.data import split_clusts
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label
+from mlreco.utils.globals import PID_COL
 
 class ParticleImageClassifier(nn.Module):
 
@@ -38,8 +38,6 @@ class ParticleImageClassifier(nn.Module):
             self.encoder = SparseResidualEncoder(cfg)
         elif self.encoder_type == 'pointnet':
             self.encoder = PointNetEncoder(cfg)
-        elif self.encoder_type == 'pointmlp':
-            self.encoder = PointMLPEncoder(cfg)
         else:
             raise ValueError('Unrecognized encoder type: {}'.format(self.encoder_type))
 
@@ -69,6 +67,7 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         model_cfg = cfg.get(name, {})
         self.batch_col = model_cfg.get('batch_col', 0)
         self.split_col = model_cfg.get('split_col', 6)
+        self.num_classes = model_cfg.get('num_classes', 5)
 
         self.skip_invalid = model_cfg.get('skip_invalid', True)
         self.target_col   = model_cfg.get('target_col', 9)
@@ -129,17 +128,24 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
     def forward(self, input, clusts=None):
         res = {}
         point_cloud, = input
+        
+        # It is possible that pid = 5 appears in the 9th column.
+        # In that case, it is observed that the training crashses with a
+        # integer overflow numel error. 
+        mask = point_cloud[:, PID_COL] < self.num_classes
+        valid_points = point_cloud[mask]
+        
         if self.split_input_mode:
-            batch, clusts = self.split_input_as_tg_batch(point_cloud, clusts)
+            batch, clusts = self.split_input_as_tg_batch(valid_points, clusts)
             out = self.encoder(batch)
             out = self.final_layer(out)
             res['clusts'] = [clusts]
             res['logits'] = [out]
         else:
-            point_cloud, clusts_split, cbids = self.split_input(point_cloud, clusts)
+            out, clusts_split, cbids = self.split_input(valid_points, clusts)
             res['clusts'] = [clusts_split]
 
-            out = self.encoder(point_cloud)
+            out = self.encoder(out)
             out = self.final_layer(out)
             res['logits'] = [[out[b] for b in cbids]]
 
@@ -414,36 +420,39 @@ class MultiParticleTypeLoss(nn.Module):
 
         self.split_input_mode = loss_cfg.get('split_input_as_tg_batch', False)
 
-    def forward_tg(self, out, type_labels):
+    def forward_tg(self, out, valid_labels):
 
         logits = out['logits'][0]
         clusts = out['clusts'][0]
 
-        labels = get_cluster_label(type_labels[0], clusts, self.target_col)
+        labels = get_cluster_label(valid_labels, clusts, self.target_col)
+
         return [logits], [labels]
 
 
     def forward(self, out, type_labels):
+    
+        valid_labels = type_labels[0][type_labels[0][:, 9] < self.num_classes]
 
         if self.split_input_mode:
-            logits, labels = self.forward_tg(out, type_labels)
+            logits, labels = self.forward_tg(out, valid_labels)
 
         else:
             logits = out['logits'][0]
             clusts = out['clusts'][0]
-            labels = [get_cluster_label(type_labels[0][type_labels[0][:, self.batch_col] == b], 
+            labels = [get_cluster_label(valid_labels[valid_labels[:, self.batch_col] == b], 
                         clusts[b], self.target_col) for b in range(len(clusts)) if len(clusts[b])]
 
         if not len(labels):
             res = {
-                'loss': torch.tensor(0., requires_grad=True, device=type_labels[0].device),
+                'loss': torch.tensor(0., requires_grad=True, device=valid_labels.device),
                 'accuracy': 1.
             }
             for c in range(self.num_classes):
                 res[f'accuracy_class_{c}'] = 1.
             return res
 
-        labels = torch.tensor(np.concatenate(labels), dtype=torch.long, device=type_labels[0].device)
+        labels = torch.tensor(np.concatenate(labels), dtype=torch.long, device=valid_labels.device)
         logits = torch.cat(logits, axis=0)
 
         if not self.balance_classes:

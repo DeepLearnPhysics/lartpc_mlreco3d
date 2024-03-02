@@ -357,7 +357,7 @@ class ParticleLogger(AnalysisLogger):
     def is_contained(particle):
         out = {'particle_is_contained': False}
         if particle is not None:
-            out['particle_is_contained'] = particle.is_contained
+            out['particle_is_contained'] = bool(particle.is_contained)
         return out
 
     @staticmethod
@@ -395,21 +395,21 @@ class ParticleLogger(AnalysisLogger):
     def matched(particle):
         out = {'matched': False}
         if particle is not None:
-            out['matched'] = particle.matched
+            out['matched'] = bool(particle.matched)
         return out
     
     @staticmethod
     def is_principal_match(particle):
         out = {'is_principal_match': False}
         if particle is not None:
-            out['is_principal_match'] = particle.is_principal_match
+            out['is_principal_match'] = bool(particle.is_principal_match)
         return out
     
     @staticmethod
     def is_ccrosser(particle):
         out = {'is_ccrosser': False}
         if particle is not None:
-            out['is_ccrosser'] = particle.is_ccrosser
+            out['is_ccrosser'] = bool(particle.is_ccrosser)
         return out
     
 
@@ -547,14 +547,14 @@ class InteractionLogger(AnalysisLogger):
     def is_contained(ia):
         out = {'interaction_is_contained': False}
         if ia is not None:
-            out['interaction_is_contained'] = ia.is_contained
+            out['interaction_is_contained'] = bool(ia.is_contained)
         return out
 
     @staticmethod
     def is_fiducial(ia):
         out = {'interaction_is_fiducial': False}
         if ia is not None:
-            out['interaction_is_fiducial'] = ia.is_fiducial
+            out['interaction_is_fiducial'] = bool(ia.is_fiducial)
         return out
     
     @staticmethod

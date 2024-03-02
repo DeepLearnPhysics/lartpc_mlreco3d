@@ -143,6 +143,7 @@ class ParticlePropertiesProcessor(PostProcessor):
                         assigned = True
                         break
                     else:
+                        # Re-normalize softmax probabilities
                         scores *= 1./(1 - scores[k])
 
                 assert assigned, 'Must specify a ' \

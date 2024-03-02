@@ -224,7 +224,10 @@ class Scatter3D:
         if color not in attr_list:
             raise ValueError(f'"{color}" is not a valid attribute for object type {type(objects[0])}!')
 
-    def __call__(self, objects, color='id', mode='points', colorscale='rainbow', cmin=None, cmax=None, size=1, scatter_start_points=False, scatter_end_points=False, scatter_vertices=False, **kwargs):
+    def __call__(self, objects, color='id', mode='points', colorscale='rainbow', 
+                 legend_name=None,
+                 cmin=None, cmax=None, size=1, scatter_start_points=False, 
+                 scatter_end_points=False, scatter_vertices=False, **kwargs):
 
         if not len(objects):
             return []
@@ -239,12 +242,17 @@ class Scatter3D:
                 continue
             c = self._colors[int(entry.id)].tolist()
             hovertext = [f'{color}: {ci}' for ci in c]
+            
+            if legend_name is None:
+                name = type(entry).__name__
+            else:
+                name = legend_name
 
             plot = scatter_points(getattr(entry, mode)[:, :3],
                                   color = c, colorscale = self._colorscale,
                                   cmin = self._color_bounds[0], cmax = self._color_bounds[1],
                                   markersize = size, hovertext = hovertext,
-                                  name = '{} {}'.format(type(entry).__name__, entry.id), **kwargs)
+                                  name = '{} {}'.format(name, entry.id), **kwargs)
 
             self._traces += plot
 

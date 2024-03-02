@@ -44,16 +44,35 @@ class PostProcessor:
             # Make a list of object keys to process
             req_keys = self.result_cap + self.result_cap_opt
             self.part_keys, self.inter_keys = [], []
-            if run_mode != 'truth':
-                if 'particles' in req_keys:
-                    self.part_keys.append('particles')
-                if 'interactions' in req_keys:
-                    self.inter_keys.append('interactions')
-            if run_mode != 'reco':
+            if run_mode == 'truth':
                 if 'truth_particles' in req_keys:
                     self.part_keys.append('truth_particles')
                 if 'truth_interactions' in req_keys:
                     self.inter_keys.append('truth_interactions')
+                if 'truth_particle_fragments' in req_keys:
+                    self.part_keys.append('truth_particle_fragments')
+            elif run_mode == 'reco':
+                if 'particles' in req_keys:
+                    self.part_keys.append('particles')
+                if 'interactions' in req_keys:
+                    self.inter_keys.append('interactions')
+                if 'particle_fragments' in req_keys:
+                    self.part_keys.append('particle_fragments')
+            elif run_mode == 'both' or run_mode == 'all':
+                if 'particles' in req_keys:
+                    self.part_keys.append('particles')
+                if 'interactions' in req_keys:
+                    self.inter_keys.append('interactions')
+                if 'truth_particles' in req_keys:
+                    self.part_keys.append('truth_particles')
+                if 'truth_interactions' in req_keys:
+                    self.inter_keys.append('truth_interactions')
+                if 'particle_fragments' in req_keys:
+                    self.part_keys.append('particle_fragments')
+                if 'truth_particle_fragments' in req_keys:
+                    self.part_keys.append('truth_particle_fragments')
+            else:
+                raise ValueError('Unrecognized run mode')
 
             self.all_keys = self.part_keys + self.inter_keys
 
@@ -87,7 +106,10 @@ class PostProcessor:
         data_single, result_single = {}, {}
         for data_key in self.data_cap:
             if data_key in data_dict.keys():
-                data_single[data_key] = data_dict[data_key][image_id]
+                if data_key == 'meta':
+                    data_single[data_key] = data_dict[data_key]
+                else:
+                    data_single[data_key] = data_dict[data_key][image_id]
             else:
                 msg = f'Unable to find {data_key} in data dictionary while '\
                         f'running post-processor {self.name}.'

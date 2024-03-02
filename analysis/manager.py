@@ -366,7 +366,8 @@ class AnaToolsManager:
         ])
 
         data_products = set([
-            'particles', 'truth_particles', 'interactions', 'truth_interactions'
+            'particles', 'truth_particles', 'interactions', 'truth_interactions',
+            'particle_fragments', 'truth_particle_fragments'
         ])
 
         meta = data['meta'][0]
