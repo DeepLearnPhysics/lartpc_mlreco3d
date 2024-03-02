@@ -18,6 +18,7 @@ from mlreco.models.layers.cluster_cnn.losses.lovasz import StableBCELoss
 
 from mlreco.utils.gnn.data import split_clusts
 from mlreco.utils.gnn.cluster import form_clusters, get_cluster_label
+from mlreco.utils.globals import PID_COL
 
 class ParticleImageClassifier(nn.Module):
 
@@ -131,7 +132,7 @@ class MultiParticleImageClassifier(ParticleImageClassifier):
         # It is possible that pid = 5 appears in the 9th column.
         # In that case, it is observed that the training crashses with a
         # integer overflow numel error. 
-        mask = point_cloud[:, 9] < self.num_classes
+        mask = point_cloud[:, PID_COL] < self.num_classes
         valid_points = point_cloud[mask]
         
         if self.split_input_mode:
