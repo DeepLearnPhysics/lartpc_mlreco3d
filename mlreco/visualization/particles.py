@@ -68,6 +68,7 @@ def scatter_particles(cluster_label, particles, particles_mpv=None, neutrinos=No
                           'Parent PDG code': p.parent_pdg_code(),
                           'Anc. PDG code': p.ancestor_pdg_code(),
                           'Process': p.creation_process(),
+                          'Time': p.t(),
                           'Parent process': p.parent_creation_process(),
                           'Anc. process': p.ancestor_creation_process(),
                           'Initial E': f'{p.energy_init():0.1f} MeV',
