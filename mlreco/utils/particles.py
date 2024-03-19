@@ -245,7 +245,8 @@ def get_shower_primary_ids(particles):
 
         # If a shower group's parent fragment the first in time, it is a valid primary
         group_index = np.where(group_ids == g)[0]
-        clust_times = np.array([particles[i].first_step().t() for i in group_index])
+        #clust_times = np.array([particles[i].first_step().t() for i in group_index])
+        clust_times = np.array([particles[i].t() for i in group_index])
         min_id = np.argmin(clust_times)
         if group_index[min_id] == g:
             primary_ids[g] = 1

@@ -170,7 +170,8 @@ def parse_particle_coords(particle_event, cluster_event):
         start_point = last_point = [p.first_step().x(), p.first_step().y(), p.first_step().z()]
         if p.shape() == 1: # End point only meaningful and thought out for tracks
             last_point  = [p.last_step().x(), p.last_step().y(), p.last_step().z()]
-        particle_feats.append(np.concatenate((start_point, last_point, [p.first_step().t(), p.shape()])))
+        #particle_feats.append(np.concatenate((start_point, last_point, [p.first_step().t(), p.shape()])))
+        particle_feats.append(np.concatenate((start_point, last_point, [p.t(), p.shape()])))
 
     particle_feats = np.vstack(particle_feats)
     return particle_feats[:,:3], particle_feats[:,3:]
