@@ -187,7 +187,7 @@ def get_track_deposition_gradient(coordinates: nb.float32[:,:],
        (S) Array of segment lengths
     '''
     # Compute the track segment dedxs
-    seg_dedxs, seg_rrs, _, _, seg_lengths = \
+    seg_dedxs, _, seg_rrs, _, _, seg_lengths = \
             get_track_segment_dedxs(coordinates, values, start_point,
                     segment_length, method, anchor_point, min_count)
 
@@ -212,7 +212,8 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
                             segment_length: nb.float32 = 5.,
                             method: str = 'step_next',
                             anchor_point: bool = True,
-                            min_count: int = 10) -> (nb.float32[:],
+                            min_count: int = 10) -> (
+                                    nb.float32[:], nb.float32[:],
                                     nb.float32[:], nb.float32[:],
                                     nb.float32[:], nb.float32[:]):
     '''
@@ -243,6 +244,8 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
     -------
     seg_dedxs : np.ndarray
        (S) Array of energy/charge deposition rate values
+    seg_errs : np.ndarray
+       (S) Array of uncertainties on the energy/charge deposition rate
     seg_rrs : np.ndarray
        (S) Array of residual ranges (center of the segment w.r.t. end point)
     seg_clusts : List[np.ndarray]
@@ -258,6 +261,7 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
 
     # Compute the dQdxs and residual ranges
     seg_dedxs = np.empty(len(seg_clusts), dtype=np.float32)
+    seg_errs = np.empty(len(seg_clusts), dtype=np.float32)
     seg_rrs  = np.empty(len(seg_clusts), dtype=np.float32)
     residual_range = 0.
     for i, seg in enumerate(seg_clusts):
@@ -266,15 +270,18 @@ def get_track_segment_dedxs(coordinates: nb.float32[:,:],
         dx = seg_lengths[i]
         if len(seg) >= min_count and dx > 0.:
             de = np.sum(values[seg])
+            dde = np.std(values[seg])*np.sqrt(len(seg))
             seg_dedxs[i] = de/dx
+            seg_errs[i] = dde/dx
         else:
             seg_dedxs[i] = -1.
+            seg_errs[i] = -1.
 
         # Compute the residual_range
         seg_rrs[i]  = residual_range + dx/2.
         residual_range += dx
 
-    return seg_dedxs, seg_rrs, seg_clusts, seg_dirs, seg_lengths
+    return seg_dedxs, seg_errs, seg_rrs, seg_clusts, seg_dirs, seg_lengths
 
 
 @nb.njit(cache=True)
