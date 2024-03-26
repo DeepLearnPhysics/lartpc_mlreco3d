@@ -10,29 +10,37 @@ from scipy.optimize import brentq
 from scipy.special import digamma
 from scipy.constants import fine_structure
 
-from .globals import MUON_PID, PION_PID, KAON_PID, PROT_PID, \
-        ELEC_MASS, MUON_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE, \
-        LAR_a, LAR_k, LAR_x0, LAR_x1, LAR_Cbar, LAR_delta0
+from .globals import (
+        MUON_PID, PION_PID, KAON_PID, PROT_PID, ELEC_MASS,
+        MUON_MASS, LAR_DENSITY, LAR_Z, LAR_A, LAR_MEE,
+        LAR_a, LAR_k, LAR_x0, LAR_x1, LAR_Cbar, LAR_delta0)
 
 
-def csda_table_spline(particle_type, table_dir='csda_tables'):
+def csda_table_spline(particle_type, value='T', table_dir='csda_tables'):
     '''
     Interpolates a CSDA table to form a spline which maps
-    a range to a kinematic energy estimate.
+    a range to a kinematic energy estimate or dE/dx value.
 
     Parameters
     ----------
     particle_type : int
         Particle type ID to construct splines. Maps are
         avaible for muons, pions, kaons and protons.
+    value : str, default 'T'
+        Value to provide for each range value (one of 'T' or 'dE/dx')
     table_dir : str, default 'csda_tables'
         Relative path to the CSDA range tables
 
     Returns
     -------
     callable
-        Function mapping range (cm) to Kinetic E (MeV)
+        Function mapping range (cm) to Kinetic E (MeV) or dE/dx (MeV/cm)
     '''
+    # Assert that the request value is recognized
+    assert value in ['T', 'dE/dx'], (
+            "Can only provide the kinetic energy or dE/dx for a given range.")
+    factor = 1.0 if value == 'T' else LAR_DENSITY
+
     # Check that the table for the requested PID exists
     path = pathlib.Path(__file__).parent
     suffix = 'E_liquid_argon'
@@ -53,12 +61,12 @@ def csda_table_spline(particle_type, table_dir='csda_tables'):
         path = f'{file_name}_bethe.txt'
 
     tab = pd.read_csv(path, delimiter=' ', index_col=False)
-    f = CubicSpline(tab['CSDARange'] / LAR_DENSITY, tab['T'])
+    f = CubicSpline(tab['CSDARange'] / LAR_DENSITY, tab[value]*factor)
 
     return f
 
 
-def csda_ke_lar(R, M, z = 1, T_max=1e6, epsrel=1e-3, epsabs=1e-3):
+def csda_ke_lar(R, M, z=1, T_max=1e6, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically optimizes the kinetic energy necessary to observe the
     range of a particle that has been measured, under the CSDA.
@@ -87,7 +95,7 @@ def csda_ke_lar(R, M, z = 1, T_max=1e6, epsrel=1e-3, epsabs=1e-3):
     return brentq(func, 0., T_max, rtol=epsrel, xtol=epsabs)
 
 
-def csda_range_lar(T0, M, z = 1, epsrel=1e-3, epsabs=1e-3):
+def csda_range_lar(T0, M, z=1, epsrel=1e-3, epsabs=1e-3):
     '''
     Numerically integrates the inverse Bethe-Bloch formula to find the
     CSDA range of a particle for a given initial kinetic energy.
@@ -118,7 +126,7 @@ def csda_range_lar(T0, M, z = 1, epsrel=1e-3, epsabs=1e-3):
 
 
 @nb.njit(cache=True)
-def step_energy_loss_lar(T0, M, dx, z = 1, num_steps=None):
+def step_energy_loss_lar(T0, M, dx, z=1, num_steps=None):
     '''
     Steps the initial energy of a particle down by pushing it through
     steps of dx of liquid argon. If `num_steps` is not specified, it
@@ -163,7 +171,7 @@ def step_energy_loss_lar(T0, M, dx, z = 1, num_steps=None):
 
 
 @nb.njit(cache=True)
-def inv_bethe_bloch_lar(T, M, z = 1):
+def inv_bethe_bloch_lar(T, M, z=1):
     '''
     Inverse Bethe-Bloch energy loss function for liquid argon
 
@@ -185,7 +193,7 @@ def inv_bethe_bloch_lar(T, M, z = 1):
 
 
 @nb.njit(cache=True)
-def bethe_bloch_lar(T, M, z = 1):
+def bethe_bloch_lar(T, M, z=1):
     '''
     Bethe-Bloch energy loss function for liquid argon
 
@@ -207,8 +215,8 @@ def bethe_bloch_lar(T, M, z = 1):
     float
        Value of the energy loss rate in liquid argon in MeV/cm
     '''
-    # Constants
-    K = 0.307075 # Bethe-Bloch constant [MeV/mol/cm^2]
+    # Constant
+    K = 0.307075 # Bethe-Bloch constant [MeV*cm^2/mol]
 
     # Kinematics
     gamma = 1. + T/M
@@ -237,6 +245,48 @@ def bethe_bloch_lar(T, M, z = 1):
 
     return F * (0.5*np.log((2 * ELEC_MASS * bg**2 * W)/ LAR_MEE**2) \
             - beta**2 - 0.5 * delta + le_corr + spin_corr_muon) + del_dedx
+
+
+@nb.njit(cache=True)
+def bethe_bloch_mpv_lar(T, M, x, z=1):
+    '''
+    Most-probable value of energy loss through a thin layer of liquid argon.
+
+    https://pdg.lbl.gov/2019/reviews/rpp2018-rev-passage-particles-matter.pdf
+
+    Parameters
+    ----------
+    T : float
+       Kinetic energy in MeV
+    M : float
+       Impinging particle mass in MeV/c^2
+    x : float
+       Material thickness in cm
+    z : int, default 1
+       Impinging partile charge in multiples of electron charge
+
+    Returns
+    -------
+    float
+       Value of the energy loss in liquid argon in MeV
+    '''
+    # Constants
+    K = 0.307075 # Bethe-Bloch constant [MeV*cm^2/mol]
+    j = 0.200
+
+    # Kinematics
+    gamma = 1. + T/M
+    beta = np.sqrt(1. - 1./gamma**2)
+    bg = beta*gamma
+
+    # Prefactor
+    xi = (K/2) * z**2 * (LAR_Z/LAR_A) * LAR_DENSITY * x / beta**2
+
+    # Compute the density effects
+    delta = delta_lar(bg)
+
+    return -xi * (np.log(2 * ELEC_MASS * (bg**2)/LAR_MEE) + np.log(xi/LAR_MEE)
+            + j - beta**2 - delta)
 
 
 @nb.njit(cache=True)
@@ -288,7 +338,7 @@ def delta_lar(bg):
 
 
 #@nb.njit(cache=True) # Find an alternative to scipy's digamma to support njit
-def le_corr_lar(beta, z = 1):
+def le_corr_lar(beta, z=1):
     '''
     Low energy corrections to the Bethe-Bloch formula
 
